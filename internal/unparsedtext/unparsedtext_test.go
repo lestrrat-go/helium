@@ -304,7 +304,7 @@ func TestReadURI(t *testing.T) {
 
 	t.Run("http 404", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(404)
+			w.WriteHeader(http.StatusNotFound)
 		}))
 		defer srv.Close()
 
@@ -443,7 +443,7 @@ func TestLoadTextHTTP(t *testing.T) {
 			_, _ = w.Write([]byte("hello from http"))
 			return
 		}
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 

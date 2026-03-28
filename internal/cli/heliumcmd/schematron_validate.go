@@ -100,10 +100,10 @@ func (c *schematronValidateCommand) parseArgs(args []string) (*schematronValidat
 	cfg := &schematronValidateConfig{}
 	var positional []string
 
-	for i := 0; i < len(args); i++ {
+	for i := range args {
 		arg := args[i]
 		switch arg {
-		case "--version":
+		case flagVersion:
 			cfg.version = true
 		case "--timing":
 			cfg.timing = true

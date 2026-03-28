@@ -285,7 +285,7 @@ func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 	// groups[last] is the rightmost (primary) group
 	if len(groups) > 1 {
 		pp.GroupingSizes = make([]int, len(groups)-1)
-		for i := 0; i < len(groups)-1; i++ {
+		for i := range len(groups) - 1 {
 			pp.GroupingSizes[i] = groups[len(groups)-1-i]
 		}
 	}
@@ -556,10 +556,7 @@ func adjustMantissaPP(pp ParsedPicture, m int) ParsedPicture {
 
 	if m == 0 {
 		// Integer # slots become optional fractional digits
-		effMaxFrac := pp.MaxFracDigits
-		if pp.MaxIntDigits > effMaxFrac {
-			effMaxFrac = pp.MaxIntDigits
-		}
+		effMaxFrac := max(pp.MaxFracDigits, pp.MaxIntDigits)
 		r.MaxFracDigits = effMaxFrac
 		if effMaxFrac > 0 {
 			r.HasDecimalPoint = true
@@ -783,7 +780,7 @@ func FormatFrac(frac float64, minDigits, maxDigits int, df DecimalFormat) string
 	// Build fractional digits
 	var digits []byte
 	remaining := frac
-	for i := 0; i < maxDigits; i++ {
+	for range maxDigits {
 		remaining *= 10
 		d := int(remaining)
 		digits = append(digits, byte('0'+d))
@@ -808,7 +805,7 @@ func FormatRatFrac(frac *big.Rat, minDigits, maxDigits int, df DecimalFormat) st
 	ten := big.NewInt(10)
 	rem := new(big.Rat).Set(frac)
 
-	for i := 0; i < maxDigits; i++ {
+	for range maxDigits {
 		rem.Mul(rem, new(big.Rat).SetInt(ten))
 		intPart := new(big.Int).Quo(rem.Num(), rem.Denom())
 		digits = append(digits, byte('0'+intPart.Int64()))
@@ -851,10 +848,7 @@ func applyFractionGrouping(frac string, groups []int, df DecimalFormat) string {
 		if pos >= len(runes) {
 			break
 		}
-		end := pos + groupSize
-		if end > len(runes) {
-			end = len(runes)
-		}
+		end := min(pos+groupSize, len(runes))
 		b.WriteString(string(runes[pos:end]))
 		pos = end
 		if pos < len(runes) && i < len(groups)-1 {

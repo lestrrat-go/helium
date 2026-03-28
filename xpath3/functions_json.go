@@ -203,7 +203,7 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 					switch opts.duplicates {
 					case "reject":
 						return nil, &XPathError{Code: errCodeFOJS0003, Message: fmt.Sprintf("duplicate key in JSON object: %q", key)}
-					case "use-first": //nolint:goconst
+					case "use-first":
 						continue
 					case "use-last":
 						entries[prev].Value = value

@@ -79,7 +79,7 @@ func evalCastExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, 
 				// Validate facets for user-defined types using Q{ns}local format.
 				s, _ := AtomicToString(result)
 				annName := QAnnotation(ns, e.Type.Name)
-				if facetErr := ec.schemaDeclarations.ValidateCast(s, annName); facetErr != nil {
+				if facetErr := ec.schemaDeclarations.ValidateCast(goCtx, s, annName); facetErr != nil {
 					return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 				}
 				result.TypeName = targetType
@@ -167,13 +167,13 @@ func evalCastableExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalConte
 					av.TypeName == TypeQName || av.TypeName == TypeNOTATION || isQV
 				if srcOK {
 					s, _ := AtomicToString(av)
-					castErr = ec.schemaDeclarations.ValidateCastWithNS(s, annName, ec.namespaces)
+					castErr = ec.schemaDeclarations.ValidateCastWithNS(goCtx, s, annName, ec.namespaces)
 				}
 			} else {
 				result, baseErr := CastAtomic(av, builtinBase)
 				if baseErr == nil {
 					s, _ := AtomicToString(result)
-					castErr = ec.schemaDeclarations.ValidateCast(s, annName)
+					castErr = ec.schemaDeclarations.ValidateCast(goCtx, s, annName)
 				} else {
 					castErr = baseErr
 				}
@@ -225,7 +225,7 @@ func evalTreatAsExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContex
 func resolveToBuiltinBase(local, ns string, decls SchemaDeclarations) string {
 	current := local
 	currentNS := ns
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		baseType, ok := decls.LookupSchemaType(current, currentNS)
 		if !ok {
 			return ""
@@ -1035,9 +1035,9 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 	s := strings.TrimSpace(v.StringVal())
 	prefix := ""
 	local := s
-	if idx := strings.IndexByte(s, ':'); idx >= 0 {
-		prefix = s[:idx]
-		local = s[idx+1:]
+	if p, l, ok := strings.Cut(s, ":"); ok {
+		prefix = p
+		local = l
 	}
 
 	if !xmlchar.IsValidNCName(local) || (prefix != "" && !xmlchar.IsValidNCName(prefix)) {

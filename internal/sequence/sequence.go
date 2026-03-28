@@ -20,8 +20,8 @@ type Interface[T any] interface {
 // Slice is a sequence backed by a plain slice.
 type Slice[T any] []T
 
-func (s Slice[T]) Len() int        { return len(s) }
-func (s Slice[T]) Get(i int) T     { return s[i] }
+func (s Slice[T]) Len() int         { return len(s) }
+func (s Slice[T]) Get(i int) T      { return s[i] }
 func (s Slice[T]) Materialize() []T { return []T(s) }
 func (s Slice[T]) Items() iter.Seq[T] {
 	return func(yield func(T) bool) {

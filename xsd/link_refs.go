@@ -187,7 +187,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// Only check when the derived type has element content (not empty/attribute-only).
 		if td.BaseType.ContentType == ContentTypeSimple && (td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed) {
 			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
-				component := "local complex type" //nolint:goconst
+				component := componentLocalComplexType
 				if !src.isLocal {
 					component = "complex type '" + td.Name.Local + "'"
 				}
@@ -227,7 +227,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			for _, au := range td.Attributes {
 				if baseAttrNames[au.Name.Local] {
 					if src, ok := c.typeDefSources[td]; ok {
-						component := "local complex type"
+						component := componentLocalComplexType
 						if !src.isLocal {
 							component = td.Name.Local
 						}
@@ -291,7 +291,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		return
 	}
 
-	component := "local complex type"
+	component := componentLocalComplexType
 	if !src.isLocal {
 		component = "complex type '" + td.Name.Local + "'"
 	}
@@ -418,7 +418,7 @@ func wildcardNSSet(wc *Wildcard) map[string]bool {
 		s[wc.TargetNS] = true
 	default:
 		// Space-separated list of URIs, possibly including ##local and ##targetNamespace.
-		for _, token := range strings.Fields(wc.Namespace) {
+		for token := range strings.FieldsSeq(wc.Namespace) {
 			switch token {
 			case WildcardNSLocal:
 				s[""] = true
@@ -605,7 +605,7 @@ func (c *compiler) checkFinalOnTypes(ctx context.Context) {
 			if td.Derivation == DerivationExtension && baseFinal&FinalExtension != 0 {
 				component := td.Name.Local
 				if src.isLocal {
-					component = "local complex type"
+					component = componentLocalComplexType
 				}
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
 					"Derivation by extension is forbidden by the base type '"+td.BaseType.Name.Local+"'."), helium.ErrorLevelFatal))
@@ -614,7 +614,7 @@ func (c *compiler) checkFinalOnTypes(ctx context.Context) {
 			if td.Derivation == DerivationRestriction && baseFinal&FinalRestriction != 0 {
 				component := td.Name.Local
 				if src.isLocal {
-					component = "local complex type"
+					component = componentLocalComplexType
 				}
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
 					"Derivation by restriction is forbidden by the base type '"+td.BaseType.Name.Local+"'."), helium.ErrorLevelFatal))
@@ -689,11 +689,11 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName
 // using the namespace declarations in scope on the given element.
-func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref string) QName {
+func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref string) QName { //nolint:unparam // ctx threaded through for API consistency
 	local := ref
 	ns := c.schema.targetNamespace
 
-	for i := 0; i < len(ref); i++ {
+	for i := range len(ref) {
 		if ref[i] == ':' {
 			prefix := ref[:i]
 			local = ref[i+1:]

@@ -60,7 +60,7 @@ func fnAvailableEnvVars(_ context.Context, _ []Sequence) (Sequence, error) {
 	}
 	for _, env := range os.Environ() {
 		if eq := len(env); eq > 0 {
-			for i := 0; i < len(env); i++ {
+			for i := range len(env) {
 				if env[i] == '=' {
 					names[env[:i]] = struct{}{}
 					break

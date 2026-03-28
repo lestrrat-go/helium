@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -24,9 +25,9 @@ func newElementContent(name string, ctype ElementContentType) (*ElementContent, 
 		if name == "" {
 			return nil, errors.New("ElementContent (element) must have name")
 		}
-		if i := strings.IndexByte(name, ':'); i > -1 {
-			prefix = name[:i]
-			local = name[i+1:]
+		if p, l, ok := strings.Cut(name, ":"); ok {
+			prefix = p
+			local = l
 		} else {
 			local = name
 		}
@@ -144,7 +145,7 @@ func validateAttributeValueInternal(_ *Document, typ enum.AttributeType, defvalu
 		}
 	case enum.AttrIDRefs, enum.AttrEntities:
 		// Must match Names production: Name (S Name)*
-		for _, tok := range strings.Fields(defvalue) {
+		for tok := range strings.FieldsSeq(defvalue) {
 			if !isValidName(tok) {
 				return fmt.Errorf("value %q is not a valid Name", tok)
 			}
@@ -157,7 +158,7 @@ func validateAttributeValueInternal(_ *Document, typ enum.AttributeType, defvalu
 			return fmt.Errorf("value %q is not a valid NMTOKEN", defvalue)
 		}
 	case enum.AttrNmtokens:
-		for _, tok := range strings.Fields(defvalue) {
+		for tok := range strings.FieldsSeq(defvalue) {
 			if !isValidNmtoken(tok) {
 				return fmt.Errorf("value %q is not a valid NMTOKEN", tok)
 			}
@@ -337,14 +338,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 
 				// Check enumeration value against declared tokens
 				if adecl.atype == enum.AttrEnumeration && len(adecl.tree) > 0 {
-					inEnum := false
-					for _, token := range adecl.tree {
-						if token == val {
-							inEnum = true
-							break
-						}
-					}
-					if !inEnum {
+					if !slices.Contains(adecl.tree, val) {
 						vctx.addf(ctx, "element %s: attribute %s value %q is not among the enumerated set", ename, aname, val)
 					}
 				}
@@ -360,7 +354,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 				case enum.AttrIDRef:
 					vctx.idrefs[val] = true
 				case enum.AttrIDRefs:
-					for _, ref := range strings.Fields(val) {
+					for ref := range strings.FieldsSeq(val) {
 						vctx.idrefs[ref] = true
 					}
 				case enum.AttrEntity:
@@ -371,7 +365,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 						vctx.addf(ctx, "element %s: attribute %s references entity %q which is not unparsed", ename, aname, val)
 					}
 				case enum.AttrEntities:
-					for _, entName := range strings.Fields(val) {
+					for entName := range strings.FieldsSeq(val) {
 						ent, ok := doc.GetEntity(entName)
 						if !ok {
 							vctx.addf(ctx, "element %s: attribute %s references undeclared entity %q", ename, aname, entName)

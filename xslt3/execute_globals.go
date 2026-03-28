@@ -31,7 +31,7 @@ func checkGlobalVarsStreamingContext(ss *Stylesheet) error {
 
 // Params with caller-provided values are set immediately; all others are
 // evaluated on first access to support arbitrary declaration order.
-func (ec *execContext) initGlobalVars(_ context.Context, cfg *transformConfig) error {
+func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig) error {
 	ec.transformConfig = cfg
 	ec.globalVarDefs = make(map[string]*variable, len(ec.stylesheet.globalVars))
 	ec.globalParamDefs = make(map[string]*param, len(ec.stylesheet.globalParams))
@@ -44,7 +44,7 @@ func (ec *execContext) initGlobalVars(_ context.Context, cfg *transformConfig) e
 				if seq, ok := cfg.sequenceParams[p.Name]; ok {
 					if p.As != "" {
 						st := parseSequenceType(p.As)
-						checked, err := checkSequenceType(seq, st, errCodeXTTE0590, "param $"+p.Name, ec)
+						checked, err := checkSequenceType(ctx, seq, st, errCodeXTTE0590, "param $"+p.Name, ec)
 						if err != nil {
 							return err
 						}
@@ -393,7 +393,7 @@ func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpat
 	// Type check against the declared as type
 	if v.As != "" {
 		st := parseSequenceType(v.As)
-		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "variable $"+v.Name, ec)
+		checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "variable $"+v.Name, ec)
 		if err != nil {
 			return nil, err
 		}
@@ -485,7 +485,7 @@ func (ec *execContext) evaluateGlobalParam(ctx context.Context, p *param) (xpath
 	// Type check against the declared as type
 	if p.As != "" {
 		st := parseSequenceType(p.As)
-		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "param $"+p.Name, ec)
+		checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "param $"+p.Name, ec)
 		if err != nil {
 			return nil, err
 		}

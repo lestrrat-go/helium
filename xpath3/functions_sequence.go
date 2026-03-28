@@ -612,11 +612,8 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		ki := pairs[i].key
 		kj := pairs[j].key
-		minLen := seqLen(ki)
-		if seqLen(kj) < minLen {
-			minLen = seqLen(kj)
-		}
-		for idx := 0; idx < minLen; idx++ {
+		minLen := min(seqLen(ki), seqLen(kj))
+		for idx := range minLen {
 			ai, err1 := AtomizeItem(ki.Get(idx))
 			aj, err2 := AtomizeItem(kj.Get(idx))
 			if err1 != nil || err2 != nil {

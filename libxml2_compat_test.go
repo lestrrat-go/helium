@@ -45,7 +45,7 @@ func TestLibxml2Compat(t *testing.T) {
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_LIBXML2_TEST_FILES"); v != "" {
-		for _, f := range strings.Split(v, ",") {
+		for f := range strings.SplitSeq(v, ",") {
 			only[strings.TrimSpace(f)] = struct{}{}
 		}
 	}
@@ -451,7 +451,7 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_LIBXML2_SAX2_TEST_FILES"); v != "" {
-		for _, f := range strings.Split(v, ",") {
+		for f := range strings.SplitSeq(v, ",") {
 			only[strings.TrimSpace(f)] = struct{}{}
 		}
 	}

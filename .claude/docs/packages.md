@@ -132,8 +132,8 @@ XML Schema (XSD) 1.0 compilation and validation.
 - **NewValidator(schema) → Validator** — create fluent builder for validation
   - `Label(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)` — builder methods
   - `Validate(ctx, *Document) → error` — terminal method
-- **(*TypeDef).Validate(value, nsMap) → error** — validate a lexical value against a simple type; nsMap (prefix→URI) may be nil
-- **(*TypeDef).ValidateElement(elem, schema) → error** — validate an element's content against a type
+- **(*TypeDef).Validate(ctx, value, nsMap) → error** — validate a lexical value against a simple type; nsMap (prefix→URI) may be nil
+- **(*TypeDef).ValidateElement(ctx, elem, schema) → error** — validate an element's content against a type
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.NamedTypes()`, `Schema.TargetNamespace()`
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
 - `ErrValidationFailed` — sentinel error returned by `Validate()` on failure; individual errors delivered via `ErrorHandler`

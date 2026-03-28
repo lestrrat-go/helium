@@ -921,7 +921,6 @@ func TestIssue5880Stdlib(t *testing.T) {
 }
 
 func TestIssue8535Stdlib(t *testing.T) {
-
 	type ExampleConflict struct {
 		XMLName  Name   `xml:"example"`
 		Link     string `xml:"link"`
@@ -965,7 +964,6 @@ func TestEncodeXMLNSStdlib(t *testing.T) {
 }
 
 func encodeXMLNS1Stdlib() ([]byte, error) {
-
 	type T struct {
 		XMLName Name   `xml:"Test"`
 		Ns      string `xml:"xmlns,attr"`
@@ -977,7 +975,6 @@ func encodeXMLNS1Stdlib() ([]byte, error) {
 }
 
 func encodeXMLNS2Stdlib() ([]byte, error) {
-
 	type Test struct {
 		Body string `xml:"http://example.com/ns body"`
 	}
@@ -987,7 +984,6 @@ func encodeXMLNS2Stdlib() ([]byte, error) {
 }
 
 func encodeXMLNS3Stdlib() ([]byte, error) {
-
 	type Test struct {
 		XMLName Name `xml:"http://example.com/ns Test"`
 		Body    string
@@ -998,7 +994,6 @@ func encodeXMLNS3Stdlib() ([]byte, error) {
 }
 
 func encodeXMLNS4Stdlib() ([]byte, error) {
-
 	type Test struct {
 		Ns   string `xml:"xmlns,attr"`
 		Body string
@@ -1117,7 +1112,6 @@ func TestIssue7113Stdlib(t *testing.T) {
 }
 
 func TestIssue20396Stdlib(t *testing.T) {
-
 	var attrError = UnmarshalError("XML syntax error on line 1: expected attribute name in element")
 
 	testCases := []struct {

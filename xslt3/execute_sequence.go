@@ -2,10 +2,11 @@ package xslt3
 
 import (
 	"context"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // checkAtomizable returns FOTY0013 if the sequence contains any map or
@@ -158,20 +159,21 @@ func mergeAdjacentTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 			continue
 		}
 		// Merge consecutive text nodes
-		merged := string(ni.Node.Content())
 		j := i + 1
+		var sb strings.Builder
+		sb.Write(ni.Node.Content())
 		for j < seqLen {
 			nj, ok := seq.Get(j).(xpath3.NodeItem)
 			if !ok || nj.Node.Type() != helium.TextNode {
 				break
 			}
-			merged += string(nj.Node.Content())
+			sb.Write(nj.Node.Content())
 			j++
 		}
 		if j > i+1 {
 			// Create a merged text node
 			doc := ni.Node.OwnerDocument()
-			text := doc.CreateText([]byte(merged))
+			text := doc.CreateText([]byte(sb.String()))
 			result = append(result, xpath3.NodeItem{Node: text})
 			i = j - 1
 		} else {

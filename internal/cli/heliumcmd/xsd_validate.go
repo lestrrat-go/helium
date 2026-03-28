@@ -109,10 +109,10 @@ func (c *xsdValidateCommand) parseArgs(args []string) (*xsdValidateConfig, []str
 	cfg := &xsdValidateConfig{}
 	var positional []string
 
-	for i := 0; i < len(args); i++ {
+	for i := range args {
 		arg := args[i]
 		switch arg {
-		case "--version":
+		case flagVersion:
 			cfg.version = true
 		case "--timing":
 			cfg.timing = true

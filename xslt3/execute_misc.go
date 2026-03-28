@@ -846,7 +846,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 
 	// Handle base-uri
 	if inst.BaseURI != nil {
-		baseURI, buErr := inst.BaseURI.evaluate(dynCtx, ec.contextNode) //nolint:contextcheck
+		baseURI, buErr := inst.BaseURI.evaluate(dynCtx, ec.contextNode)
 		if buErr != nil {
 			return buErr
 		}
@@ -890,7 +890,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		evalNode = ec.contextNode
 	}
 
-	result, evalErr := eval.Evaluate(dynCtx, dynExpr, evalNode) //nolint:contextcheck
+	result, evalErr := eval.Evaluate(dynCtx, dynExpr, evalNode)
 	if evalErr != nil {
 		return evalErr
 	}

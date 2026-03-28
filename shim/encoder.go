@@ -83,7 +83,7 @@ func (enc *Encoder) writeIndent(depth int) error {
 			return err
 		}
 	}
-	for i := 0; i < depth; i++ {
+	for range depth {
 		if _, err := enc.w.WriteString(enc.indent); err != nil {
 			return err
 		}

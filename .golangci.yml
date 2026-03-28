@@ -50,6 +50,8 @@ linters:
     - wsl
     - wsl_v5
   settings:
+    goconst:
+      min-occurrences: 5
     govet:
       disable:
         - shadow
@@ -93,6 +95,9 @@ linters:
           - forbidigo
         path: /*_test.go
       - linters:
+          - misspell
+        path: html/entities.go
+      - linters:
           - godoclint
         path: (^|/)internal/
     paths:
@@ -112,3 +117,4 @@ formatters:
       - third_party$
       - builtin$
       - examples$
+      - html/entities.go

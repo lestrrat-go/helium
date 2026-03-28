@@ -1,6 +1,8 @@
 package xslt3
 
 import (
+	"slices"
+
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -323,12 +325,10 @@ func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
 			return false
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if fc.Prefix == "" && (fc.Name == "reverse" || fc.Name == "innermost") { //nolint:goconst
-				for _, arg := range fc.Args {
-					if argHasStreamingCrawl(arg) {
-						found = true
-						return false
-					}
+			if fc.Prefix == "" && (fc.Name == "reverse" || fc.Name == "innermost") {
+				if slices.ContainsFunc(fc.Args, argHasStreamingCrawl) {
+					found = true
+					return false
 				}
 			}
 		}
@@ -669,7 +669,7 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 // function (produces grounded, non-streaming output).
 func isGroundingFuncName(name string) bool {
 	switch name {
-	case "snapshot", "copy-of", "copy", "current-group", //nolint:goconst
+	case "snapshot", "copy-of", "copy", "current-group",
 		"outermost", "innermost", "parse-xml", "parse-xml-fragment",
 		"doc", "document", "sort", "reverse", "head":
 		return true
@@ -742,7 +742,7 @@ func isAtomicResultExpr(expr xpath3.Expr) bool {
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
 		if fc.Prefix == "" {
 			switch fc.Name {
-			case "tokenize", "string", "data", "number", "boolean", //nolint:goconst
+			case "tokenize", "string", "data", "number", "boolean",
 				"name", "local-name", "namespace-uri", "string-length",
 				"normalize-space", "count", "sum", "avg", "min", "max",
 				"string-join", "concat", "contains", "starts-with",

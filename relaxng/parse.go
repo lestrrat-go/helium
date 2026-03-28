@@ -5,10 +5,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+)
+
+const (
+	combineInterleave = "interleave"
+	combineChoice     = "choice"
 )
 
 // compiler holds state during schema compilation.
@@ -35,7 +41,6 @@ type defineEntry struct {
 	combine   string // "choice" or "interleave", or "" for none
 	noCombine int    // count of definitions with no combine attribute
 }
-
 
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Grammar, error) { //nolint:unparam // error always nil but callers check for future-proofing
 	var eh helium.ErrorHandler = helium.NilErrorHandler{}
@@ -64,7 +69,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	root := findDocumentElement(doc)
 	if root == nil {
 		msg := rngParserError("xmlRelaxNGParse: could not find root element")
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(msg, helium.ErrorLevelFatal)) //nolint:contextcheck
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(msg, helium.ErrorLevelFatal))
 		c.errorCount++
 		return c.grammar, nil
 	}
@@ -73,36 +78,36 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 	var startPat *pattern
 	if isRNG(root, "grammar") {
-		c.parseGrammarContent(ctx, root) //nolint:contextcheck
+		c.parseGrammarContent(ctx, root)
 		startPat = c.resolveStart(ctx)
 	} else {
 		// Bare pattern (e.g. <element> at root)
-		startPat = c.parsePattern(ctx, root) //nolint:contextcheck
+		startPat = c.parsePattern(ctx, root)
 	}
 
 	c.resolveRefs(ctx)
-	c.checkRefCycles(ctx) //nolint:contextcheck
+	c.checkRefCycles(ctx)
 	c.popGrammar(ctx)
 
 	c.grammar.start = startPat
-	c.checkRules(ctx) //nolint:contextcheck
+	c.checkRules(ctx)
 
 	return c.grammar, nil
 }
 
-func (c *compiler) pushGrammar(ctx context.Context) {
+func (c *compiler) pushGrammar(ctx context.Context) { //nolint:unparam // ctx threaded through for API consistency
 	c.grammarStack = append(c.grammarStack, &grammarScope{
 		defines: make(map[string]*defineEntry),
 	})
 }
 
-func (c *compiler) popGrammar(ctx context.Context) {
+func (c *compiler) popGrammar(ctx context.Context) { //nolint:unparam // ctx threaded through for API consistency
 	if len(c.grammarStack) > 0 {
 		c.grammarStack = c.grammarStack[:len(c.grammarStack)-1]
 	}
 }
 
-func (c *compiler) currentGrammar(ctx context.Context) *grammarScope {
+func (c *compiler) currentGrammar(ctx context.Context) *grammarScope { //nolint:unparam // ctx threaded through for API consistency
 	if len(c.grammarStack) == 0 {
 		return nil
 	}
@@ -152,7 +157,7 @@ func (c *compiler) checkRefCycles(ctx context.Context) {
 // findCycleInPattern walks a pattern tree looking for ref cycles.
 // Element patterns break the chain (refs inside elements don't create content cycles).
 // Returns the offending ref pattern if a cycle is found.
-func (c *compiler) findCycleInPattern(ctx context.Context, pat *pattern, visiting map[string]bool) *pattern {
+func (c *compiler) findCycleInPattern(ctx context.Context, pat *pattern, visiting map[string]bool) *pattern { //nolint:unparam // ctx threaded through for API consistency
 	if pat == nil {
 		return nil
 	}
@@ -200,14 +205,13 @@ func (c *compiler) parseGrammarContent(ctx context.Context, grammarElem *helium.
 		}
 
 		switch elem.LocalName() {
-		case "start": //nolint:goconst
+		case "start":
 			c.parseStart(ctx, elem)
-		case "define": //nolint:goconst
+		case "define":
 			c.parseDefine(ctx, elem)
 		case "include":
 			c.parseInclude(ctx, elem)
-		case "div": //nolint:goconst
-			// <div> is transparent — recurse into its children
+		case "div": // <div> is transparent — recurse into its children
 			c.parseGrammarContent(ctx, elem)
 		}
 	}
@@ -306,12 +310,12 @@ func (c *compiler) parseDefine(ctx context.Context, elem *helium.Element) {
 // combinePatterns combines two patterns with the given combine mode.
 func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 	switch mode {
-	case "interleave": //nolint:goconst
+	case combineInterleave:
 		return &pattern{
 			kind:     patternInterleave,
 			children: []*pattern{existing, incoming},
 		}
-	case "choice": //nolint:goconst
+	case combineChoice:
 		return &pattern{
 			kind:     patternChoice,
 			children: []*pattern{existing, incoming},
@@ -328,7 +332,7 @@ func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 // resolveHref resolves a relative href against xml:base ancestors and the
 // compiler's baseDir. This mirrors libxml2's xmlRelaxNGCleanupTree xml:base
 // fixup for <include> and <externalRef> hrefs.
-func (c *compiler) resolveHref(ctx context.Context, elem *helium.Element, href string) string {
+func (c *compiler) resolveHref(ctx context.Context, elem *helium.Element, href string) string { //nolint:unparam // ctx threaded through for API consistency
 	if filepath.IsAbs(href) {
 		return href
 	}
@@ -356,13 +360,11 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 	path := c.resolveHref(ctx, elem, href)
 
 	// Recursion guard
-	for _, p := range c.includeStack {
-		if p == path {
-			msg := fmt.Sprintf("Detected an Include recursion for %s", href)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
-			c.errorCount++
-			return
-		}
+	if slices.Contains(c.includeStack, path) {
+		msg := fmt.Sprintf("Detected an Include recursion for %s", href)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
+		return
 	}
 	if len(c.includeStack) >= c.includeLimit {
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError("Include limit reached"), helium.ErrorLevelFatal))
@@ -495,7 +497,7 @@ func (c *compiler) parsePattern(ctx context.Context, node *helium.Element) *patt
 		p := &pattern{kind: patternOptional, line: node.Line()}
 		p.children = c.parsePatternChildren(ctx, node)
 		return p
-	case "choice":
+	case combineChoice:
 		p := &pattern{kind: patternChoice, line: node.Line()}
 		p.children = c.parsePatternChildren(ctx, node)
 		return p
@@ -606,7 +608,7 @@ func (c *compiler) parseElement(ctx context.Context, node *helium.Element) *patt
 
 	// Check: attribute name class conflicts
 	allAttrs := collectAttrPatternsFlat(append(p.attrs, contentChildren...))
-	for i := 0; i < len(allAttrs); i++ {
+	for i := range allAttrs {
 		for j := i + 1; j < len(allAttrs); j++ {
 			if nameClassesOverlap(allAttrs[i].nameClass, allAttrs[j].nameClass) {
 				c.addSchemaError(ctx, node, "Attributes conflicts in group")
@@ -730,7 +732,7 @@ func (c *compiler) parseData(ctx context.Context, node *helium.Element) *pattern
 }
 
 // parseValue parses a <value> pattern.
-func (c *compiler) parseValue(ctx context.Context, node *helium.Element) *pattern {
+func (c *compiler) parseValue(ctx context.Context, node *helium.Element) *pattern { //nolint:unparam // ctx threaded through for API consistency
 	p := &pattern{kind: patternValue, line: node.Line()}
 
 	typeName := getAttr(node, "type")
@@ -766,13 +768,11 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 	path := c.resolveHref(ctx, node, href)
 
 	// Recursion guard
-	for _, p := range c.includeStack {
-		if p == path {
-			msg := fmt.Sprintf("Detected an externalRef recursion for %s", href)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
-			c.errorCount++
-			return nil
-		}
+	if slices.Contains(c.includeStack, path) {
+		msg := fmt.Sprintf("Detected an externalRef recursion for %s", href)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
+		return nil
 	}
 	if len(c.includeStack) >= c.includeLimit {
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError("Include limit reached"), helium.ErrorLevelFatal))
@@ -1072,12 +1072,7 @@ func hasDataContent(pats []*pattern) bool {
 
 // hasElementContent checks if any pattern in the slice contains an element pattern.
 func hasElementContent(pats []*pattern) bool {
-	for _, p := range pats {
-		if containsElement(p) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(pats, containsElement)
 }
 
 func containsElement(p *pattern) bool {
@@ -1087,12 +1082,7 @@ func containsElement(p *pattern) bool {
 	if p.kind == patternElement {
 		return true
 	}
-	for _, child := range p.children {
-		if containsElement(child) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(p.children, containsElement)
 }
 
 // resolveQName resolves a QName from a schema element, returning the local name
@@ -1100,9 +1090,8 @@ func containsElement(p *pattern) bool {
 // is resolved using the namespace declarations in scope on the schema element.
 // If the name has no prefix, the ns is determined by the "ns" attribute (inherited).
 func resolveQName(schemaElem *helium.Element, qname string) (localName, ns string) {
-	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
-		prefix := qname[:idx]
-		localName = qname[idx+1:]
+	if prefix, ln, ok := strings.Cut(qname, ":"); ok {
+		localName = ln
 		// Walk the schema element and ancestors to find the namespace URI for this prefix.
 		var node helium.Node = schemaElem
 		for node != nil {

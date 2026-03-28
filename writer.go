@@ -117,7 +117,7 @@ func (s *writeSession) writeIndent(out io.Writer) {
 		return
 	}
 	str := s.indentStr()
-	for i := 0; i < s.indent; i++ {
+	for range s.indent {
 		_, _ = io.WriteString(out, str)
 	}
 }

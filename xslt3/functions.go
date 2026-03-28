@@ -237,8 +237,7 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 		// If the URI has a fragment identifier, select the element with
 		// that ID from the loaded document (XSLT spec 14.1).
 		var resultNode helium.Node = doc
-		if fragIdx := strings.IndexByte(uri, '#'); fragIdx >= 0 {
-			frag := uri[fragIdx+1:]
+		if _, frag, ok := strings.Cut(uri, "#"); ok {
 			if frag != "" {
 				if elem := findElementByID(doc, frag); elem != nil {
 					resultNode = elem
@@ -484,4 +483,3 @@ func nodeHasDocumentRoot(n helium.Node) bool {
 	}
 	return false
 }
-

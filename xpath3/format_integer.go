@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -484,7 +485,7 @@ func formatWords(n *big.Int, lang, caseStyle string) string {
 
 func applyCase(s, caseStyle string) string {
 	switch caseStyle {
-	case "upper": //nolint:goconst
+	case "upper":
 		return strings.ToUpper(s)
 	case "title":
 		return toTitleCase(s)
@@ -518,7 +519,7 @@ var tensWords = []string{
 
 func intToEnglishWords(n *big.Int) string {
 	if n.Sign() == 0 {
-		return "zero" //nolint:goconst
+		return "zero"
 	}
 	if n.Sign() < 0 {
 		return "minus " + intToEnglishWords(new(big.Int).Neg(n))
@@ -732,10 +733,8 @@ func formatIntegerDecimal(n *big.Int, picture string) (string, error) {
 	groups = append(groups, currentSize) // last group
 
 	// Validate: no empty groups (adjacent separators or trailing separator)
-	for _, g := range groups {
-		if g == 0 {
-			return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
-		}
+	if slices.Contains(groups, 0) {
+		return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
 	}
 
 	// Validate: # cannot appear after 0 (in left-to-right order)
@@ -1007,7 +1006,7 @@ func int64ToFrenchWords(n int64) string {
 	}
 	ones := []string{"", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix",
 		"onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf"}
-	tens := []string{"", "", "vingt", "trente", "quarante", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"}
+	tens := []string{"", "", "vingt", "trente", "quarantine", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"}
 
 	if n < 20 {
 		return ones[n]

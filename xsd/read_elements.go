@@ -62,7 +62,7 @@ func readProcessContents(elem *helium.Element) ProcessContentsKind {
 	}
 }
 
-func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wildcard {
+func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wildcard { //nolint:unparam // ctx threaded through for API consistency
 	namespace := getAttr(elem, attrNamespace)
 	if namespace == "" {
 		namespace = WildcardNSAny
@@ -351,7 +351,7 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 }
 
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
-func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
+func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint { //nolint:unparam // ctx threaded through for API consistency
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return nil

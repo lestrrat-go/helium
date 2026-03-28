@@ -614,7 +614,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 						err = pctx.error(ctx, err)
 						return
 					}
-					for i := 0; i < len(rep); i++ {
+					for i := range len(rep) {
 						switch rep[i] {
 						case 0xD, 0xA, 0x9:
 							_ = b.WriteByte(0x20)
@@ -645,10 +645,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 		default:
 			inSpace = false
 			b.WriteRune(c)
-			w := utf8.RuneLen(c)
-			if w < 1 {
-				w = 1
-			}
+			w := max(utf8.RuneLen(c), 1)
 			if err := cur.Advance(w); err != nil {
 				return "", 0, err
 			}

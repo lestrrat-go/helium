@@ -386,9 +386,9 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 
 	var prefix string
 	var local string
-	if i := strings.IndexByte(attrName, ':'); i > -1 {
-		prefix = attrName[:i]
-		local = attrName[i+1:]
+	if p, l, ok := strings.Cut(attrName, ":"); ok {
+		prefix = p
+		local = l
 	} else {
 		local = attrName
 	}

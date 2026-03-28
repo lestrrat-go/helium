@@ -196,9 +196,7 @@ func (e Evaluator) AdditionalNamespaces(ns map[string]string) Evaluator {
 	if out.cfg.namespaces == nil {
 		out.cfg.namespaces = make(map[string]string, len(ns))
 	}
-	for k, v := range ns {
-		out.cfg.namespaces[k] = v
-	}
+	maps.Copy(out.cfg.namespaces, ns)
 	return out
 }
 
@@ -217,9 +215,7 @@ func (e Evaluator) AdditionalVariables(vars map[string]any) Evaluator {
 	if out.cfg.variables == nil {
 		out.cfg.variables = make(map[string]any, len(vars))
 	}
-	for k, v := range vars {
-		out.cfg.variables[k] = v
-	}
+	maps.Copy(out.cfg.variables, vars)
 	return out
 }
 

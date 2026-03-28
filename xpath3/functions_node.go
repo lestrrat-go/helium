@@ -477,7 +477,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		if errors.As(err, &xpErr) && xpErr.Code == "FOTY0013" {
 			return nil, err
 		}
-		return SingleDouble(math.NaN()), nil //nolint:nilerr // fn:number returns NaN on atomization failure per spec
+		return SingleDouble(math.NaN()), nil
 	}
 	dbl, err := CastAtomic(a, TypeDouble)
 	if err != nil {
@@ -825,7 +825,7 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 			if !isIDRef {
 				continue
 			}
-			for _, token := range strings.Fields(attr.Value()) {
+			for token := range strings.FieldsSeq(attr.Value()) {
 				if _, ok := wanted[token]; ok {
 					nodes = append(nodes, attr)
 					break
@@ -842,7 +842,7 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 				}
 			}
 			if isIDRef {
-				for _, token := range strings.Fields(strings.TrimSpace(ixpath.StringValue(elem))) {
+				for token := range strings.FieldsSeq(strings.TrimSpace(ixpath.StringValue(elem))) {
 					if _, ok := wanted[token]; ok {
 						nodes = append(nodes, elem)
 						break
@@ -1096,7 +1096,7 @@ func idLookupTokens(seq Sequence) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, token := range strings.Fields(s) {
+		for token := range strings.FieldsSeq(s) {
 			if xmlchar.IsValidNCName(token) {
 				tokens = append(tokens, token)
 			}

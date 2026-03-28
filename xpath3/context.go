@@ -76,11 +76,11 @@ type SchemaDeclarations interface {
 	// ValidateCast checks whether a string value is valid for a user-defined
 	// schema type (including facet constraints). Returns nil if valid or the
 	// type is not found; returns an error if the value violates facets.
-	ValidateCast(value, typeName string) error
+	ValidateCast(ctx context.Context, value, typeName string) error
 	// ValidateCastWithNS validates a string value against a schema type that
 	// requires namespace context for QName/NOTATION resolution. The nsMap
 	// provides prefix-to-URI bindings for resolving prefixes in the value.
-	ValidateCastWithNS(value, typeName string, nsMap map[string]string) error
+	ValidateCastWithNS(ctx context.Context, value, typeName string, nsMap map[string]string) error
 	// ListItemType returns the item type name for a list type. If the type
 	// is not a list, returns ("", false).
 	ListItemType(typeName string) (itemType string, ok bool)
@@ -122,4 +122,3 @@ type DocOrderCache = ixpath.DocOrderCache
 func NewDocOrderCache() *DocOrderCache {
 	return &ixpath.DocOrderCache{}
 }
-

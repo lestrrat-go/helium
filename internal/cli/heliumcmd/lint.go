@@ -212,7 +212,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		}
 
 		switch arg {
-		case "--version":
+		case flagVersion:
 			cfg.version = true
 		case "--recover":
 			cfg.parser = cfg.parser.RecoverOnError(true)
@@ -340,12 +340,12 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	return cfg, files
 }
 
-func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) { //nolint:unparam // error always nil but may fail in future
+func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) {
 	envFiles := os.Getenv("XML_CATALOG_FILES")
 	if envFiles == "" {
 		return nil, nil //nolint:nilnil
 	}
-	for _, f := range strings.Split(envFiles, " ") {
+	for f := range strings.SplitSeq(envFiles, " ") {
 		f = strings.TrimSpace(f)
 		if f == "" {
 			continue
@@ -382,7 +382,7 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 	}
 
 	var doc *helium.Document
-	for rep := 0; rep < cfg.repeat; rep++ {
+	for range cfg.repeat {
 		var t0 time.Time
 		if cfg.timing {
 			t0 = time.Now()

@@ -116,7 +116,7 @@ func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string
 	effectiveCalendar := calendar
 	if effectiveCalendar != "" && !isISOCalendar(effectiveCalendar) {
 		b.WriteString("[Calendar: AD]")
-		effectiveCalendar = "ISO" //nolint:goconst
+		effectiveCalendar = "ISO"
 	}
 
 	i := 0
@@ -410,7 +410,7 @@ func formatDateTimeValue(value int64, comp byte, p dtPresentation, w dtWidth, la
 		return applyTextWidth(formatRoman(n, format == "I"), w)
 	case "W", "w", "Ww":
 		n := new(big.Int).SetInt64(numericValue)
-		style := "lower" //nolint:goconst
+		style := "lower"
 		switch format {
 		case "W":
 			style = "upper"
@@ -518,7 +518,7 @@ func normalizeDateNumericValue(value int64, comp byte, w dtWidth) int64 {
 
 	if w.maxWidth > 0 {
 		mod := int64(1)
-		for i := 0; i < w.maxWidth; i++ {
+		for range w.maxWidth {
 			mod *= 10
 		}
 		value %= mod

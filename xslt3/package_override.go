@@ -149,9 +149,7 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 		uri := name[2:closeBrace]
 		local := name[closeBrace+1:]
 		qn = xpath3.QualifiedName{URI: uri, Name: local}
-	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local := name[idx+1:]
+	} else if prefix, local, ok := strings.Cut(name, ":"); ok {
 		uri := c.nsBindings[prefix]
 		if uri == "" {
 			uri = c.stylesheet.namespaces[prefix]
@@ -563,7 +561,7 @@ func (c *compiler) compileOverrideAttributeSet(ctx context.Context, elem *helium
 
 	var useAttrSets []string
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
-		for _, n := range strings.Fields(uas) {
+		for n := range strings.FieldsSeq(uas) {
 			resolved := resolveQName(n, c.nsBindings)
 			asd.UseAttrSets = append(asd.UseAttrSets, resolved)
 			useAttrSets = append(useAttrSets, resolved)

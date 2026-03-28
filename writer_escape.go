@@ -139,7 +139,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 		case '\t':
 			esc = esc_tab
 		default:
-			if escapeNonASCII && !(0x20 <= r && r < 0x80) { // nolint:staticcheck
+			if escapeNonASCII && !(0x20 <= r && r < 0x80) { //nolint:staticcheck
 				if r < 0x100 {
 					esc = hexCharRef(&hbuf, r)
 					break
@@ -201,7 +201,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 		case '\r':
 			esc = esc_cr
 		default:
-			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
+			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { //nolint:staticcheck
 				if r < 0x100 {
 					esc = hexCharRef(&hbuf, r)
 					break

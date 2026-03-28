@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -144,11 +145,10 @@ func isBuiltinXSDTypeName(typeName string, ns map[string]string) bool {
 	if strings.HasPrefix(typeName, "xs:") || strings.HasPrefix(typeName, "xsd:") {
 		return true
 	}
-	idx := strings.IndexByte(typeName, ':')
-	if idx < 0 {
+	prefix, _, ok := strings.Cut(typeName, ":")
+	if !ok {
 		return false
 	}
-	prefix := typeName[:idx]
 	uri, ok := ns[prefix]
 	return ok && uri == lexicon.NamespaceXSD
 }
@@ -298,10 +298,8 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 	if elem.URI() == lexicon.NamespaceXSLT {
 		if eep := getAttr(elem, "extension-element-prefixes"); eep != "" {
 			newExtURIs := make(map[string]struct{})
-			for k, v := range c.extensionURIs {
-				newExtURIs[k] = v
-			}
-			for _, prefix := range strings.Fields(eep) {
+			maps.Copy(newExtURIs, c.extensionURIs)
+			for prefix := range strings.FieldsSeq(eep) {
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExtURIs[uri] = struct{}{}
 				}
@@ -310,10 +308,8 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 		}
 	} else if eep, ok := elem.GetAttributeNS("extension-element-prefixes", lexicon.NamespaceXSLT); ok {
 		newExtURIs := make(map[string]struct{})
-		for k, v := range c.extensionURIs {
-			newExtURIs[k] = v
-		}
-		for _, prefix := range strings.Fields(eep) {
+		maps.Copy(newExtURIs, c.extensionURIs)
+		for prefix := range strings.FieldsSeq(eep) {
 			if uri, uriOK := c.nsBindings[prefix]; uriOK && uri != "" {
 				newExtURIs[uri] = struct{}{}
 			}
@@ -428,7 +424,7 @@ func (c *compiler) validateDescendantUseWhen(ctx context.Context, parent *helium
 				return err
 			}
 		}
-		if err := c.validateDescendantUseWhen(ctx,childElem); err != nil {
+		if err := c.validateDescendantUseWhen(ctx, childElem); err != nil {
 			return err
 		}
 	}
@@ -481,8 +477,7 @@ func (c *compiler) useWhenFunctionAvailable(_ context.Context, args []xpath3.Seq
 	}
 
 	// Check for undeclared prefix (XTDE1400)
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
+	if prefix, _, ok := strings.Cut(name, ":"); ok {
 		if _, ok := c.nsBindings[prefix]; !ok {
 			return nil, dynamicError(errCodeXTDE1400,
 				"undeclared namespace prefix %q in function-available(%q)", prefix, name)
@@ -501,9 +496,8 @@ func (c *compiler) useWhenFunctionAvailable(_ context.Context, args []xpath3.Seq
 	// XPath built-in functions: resolve prefixed names to namespace URI.
 	localName := name
 	ns := ""
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		localName = name[idx+1:]
+	if prefix, ln, ok := strings.Cut(name, ":"); ok {
+		localName = ln
 		ns = c.nsBindings[prefix] // already validated above
 	} else if strings.HasPrefix(name, "Q{") {
 		// EQName: Q{uri}local
@@ -623,9 +617,7 @@ func (c *compiler) pushElementNamespaces(_ context.Context, elem *helium.Element
 	}
 	saved := c.nsBindings
 	newBindings := make(map[string]string, len(saved)+len(nsList))
-	for k, v := range saved {
-		newBindings[k] = v
-	}
+	maps.Copy(newBindings, saved)
 	for _, ns := range nsList {
 		prefix := ns.Prefix()
 		uri := ns.URI()
@@ -769,7 +761,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
 		}
 		if ucm := getAttr(elem, paramUseCharacterMaps); ucm != "" {
-			for _, n := range strings.Fields(ucm) {
+			for n := range strings.FieldsSeq(ucm) {
 				inst.UseCharacterMaps = append(inst.UseCharacterMaps, resolveQName(n, c.nsBindings))
 			}
 		}
@@ -912,7 +904,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 		// when we reach here the parent was recognized, so skip.
 		// But we still need to validate use-when XPath on descendant elements
 		// since use-when is evaluated during static analysis (XPST0003).
-		if err := c.validateDescendantUseWhen(ctx,elem); err != nil {
+		if err := c.validateDescendantUseWhen(ctx, elem); err != nil {
 			return nil, err
 		}
 		return nil, nil //nolint:nilnil

@@ -218,7 +218,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 
 	// Validate content of each matched child element.
 	var contentErr error
-	for i := 0; i < consumed; i++ {
+	for i := range consumed {
 		child := children[pos+i]
 		childQN := QName{Local: child.name, NS: child.ns}
 		idx, ok := nameToIdx[childQN]
@@ -240,7 +240,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			continue
 		}
 		if td != nil && td.Abstract {
-			msg := "The type definition is abstract." //nolint:goconst
+			msg := "The type definition is abstract."
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("abstract type")
 			continue
@@ -350,7 +350,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 	// For substitution group members, use the member's declaration (type + default/fixed).
 	// xsi:type overrides the declared type for polymorphism.
 	var contentErr error
-	for i := 0; i < count; i++ {
+	for i := range count {
 		child := children[pos+i]
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
 		td := actualDecl.Type
@@ -418,7 +418,7 @@ func (vc *validationContext) tryMatchParticle(ctx context.Context, p *Particle, 
 	return 0, nil
 }
 
-func (vc *validationContext) tryMatchElementParticle(ctx context.Context, p *Particle, edecl *ElementDecl, children []childElem, pos int) (int, error) {
+func (vc *validationContext) tryMatchElementParticle(ctx context.Context, p *Particle, edecl *ElementDecl, children []childElem, pos int) (int, error) { //nolint:unparam // ctx threaded through for API consistency
 	count := 0
 	for pos+count < len(children) && elemMatchesDeclOrSubst(children[pos+count], edecl, vc.schema) {
 		count++
@@ -466,7 +466,7 @@ func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup,
 	return 0, fmt.Errorf("no choice matched")
 }
 
-func (vc *validationContext) tryMatchAll(ctx context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) {
+func (vc *validationContext) tryMatchAll(ctx context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) { //nolint:unparam // ctx threaded through for API consistency
 	seen := make([]bool, len(mg.Particles))
 	nameToIdx := make(map[QName]int, len(mg.Particles))
 	for i, p := range mg.Particles {
@@ -528,7 +528,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 	// Validate matched elements per processContents.
 	if wc.ProcessContents != ProcessSkip {
 		var contentErr error
-		for i := 0; i < count; i++ {
+		for i := range count {
 			child := children[pos+i]
 			edecl := lookupElemDecl(child.elem, vc.schema)
 			if edecl == nil {
@@ -572,7 +572,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 }
 
 // tryMatchWildcardParticle is the try version (no error reporting).
-func (vc *validationContext) tryMatchWildcardParticle(ctx context.Context, p *Particle, wc *Wildcard, children []childElem, pos int) (int, error) {
+func (vc *validationContext) tryMatchWildcardParticle(ctx context.Context, p *Particle, wc *Wildcard, children []childElem, pos int) (int, error) { //nolint:unparam // ctx threaded through for API consistency
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]
@@ -607,7 +607,7 @@ func wildcardMatches(wc *Wildcard, elemNS string) bool {
 		return elemNS != ""
 	default:
 		// Space-separated list that may include ##local, ##targetNamespace, and URIs.
-		for _, part := range strings.Split(ns, " ") {
+		for part := range strings.SplitSeq(ns, " ") {
 			switch part {
 			case WildcardNSLocal:
 				if elemNS == "" {

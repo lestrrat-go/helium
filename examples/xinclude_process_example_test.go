@@ -30,7 +30,7 @@ func Example_xinclude_process() {
 		fmt.Printf("failed to create temp dir: %s\n", err)
 		return
 	}
-	defer os.RemoveAll(dir) //nolint:errcheck
+	defer os.RemoveAll(dir)
 
 	// Convert to absolute path so the XInclude processor can correctly
 	// resolve relative hrefs without path-doubling issues.

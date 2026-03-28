@@ -91,7 +91,7 @@ func (w Writer) Indent(indent string) Writer {
 }
 
 // QuoteChar returns a copy of the Writer with the attribute value
-// quote character set to q. Must be '"' or '\''. Any other value
+// quote character set to q. Must be '"' or '\”. Any other value
 // is silently ignored. The default is '"'.
 func (w Writer) QuoteChar(q byte) Writer {
 	if q == '\'' || q == '"' {
@@ -142,7 +142,7 @@ func (w *Writer) writeEscaped(s string, escape escapeMode) {
 		return
 	}
 	start := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		replacement := ""
 		writeRawByte := false
 		switch s[i] {
@@ -226,7 +226,7 @@ func (w *Writer) writeIndent() {
 		// newline, so skip the extra newline that writeIndent would add.
 		w.writeStr("\n")
 	}
-	for i := 0; i < w.depth; i++ {
+	for range w.depth {
 		w.writeStr(w.indent)
 	}
 }
@@ -241,7 +241,7 @@ func (w *Writer) writeEndIndent() {
 	} else {
 		w.writeStr("\n")
 	}
-	for i := 0; i < w.depth; i++ {
+	for range w.depth {
 		w.writeStr(w.indent)
 	}
 }

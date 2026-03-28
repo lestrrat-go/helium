@@ -216,8 +216,7 @@ func parseUCAParams(query string) (ucaParams, error) {
 		return p, nil
 	}
 
-	params := strings.Split(query, ";")
-	for _, param := range params {
+	for param := range strings.SplitSeq(query, ";") {
 		if param == "" {
 			continue
 		}
@@ -266,14 +265,14 @@ func parseUCAParams(query string) (ucaParams, error) {
 			switch val {
 			case "non-ignorable":
 				p.alternate = ""
-			case "blanked", "shifted": //nolint:goconst
+			case "blanked", "shifted":
 				p.alternate = val
 				unsupported = true
 			default:
 				invalid = true
 			}
 		case "caseFirst":
-			if val == "upper" || val == "lower" { //nolint:goconst
+			if val == "upper" || val == "lower" {
 				p.caseFirst = val
 			} else {
 				invalid = true
@@ -297,7 +296,7 @@ func parseUCAParams(query string) (ucaParams, error) {
 			default:
 				invalid = true
 			}
-		case "numeric": //nolint:goconst
+		case "numeric":
 			switch val {
 			case lexicon.ValueYes:
 				p.collateOpts = append(p.collateOpts, collate.Numeric)
@@ -395,12 +394,9 @@ func ucaIndexOfRange(cmp func(a, b string) int, s, substr string, numeric bool) 
 	subRuneLen := len([]rune(substr))
 	sRunes := []rune(s)
 
-	for i := 0; i < len(sRunes); i++ {
+	for i := range sRunes {
 		// Try match lengths from subRuneLen to end of string
-		minLen := subRuneLen
-		if minLen > len(sRunes)-i {
-			minLen = len(sRunes) - i
-		}
+		minLen := min(subRuneLen, len(sRunes)-i)
 		maxLen := len(sRunes) - i
 		for matchLen := minLen; matchLen <= maxLen; matchLen++ {
 			candidate := string(sRunes[i : i+matchLen])
@@ -568,7 +564,7 @@ func ucaVariableHasSuffix(cmp func(a, b string) int, s, suffix string, numeric b
 func foldASCIIString(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c >= 'A' && c <= 'Z' {
 			c += 'a' - 'A'
@@ -641,8 +637,8 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 			return cached.(*collationImpl), nil //nolint:forcetypeassert
 		}
 		params := ""
-		if idx := strings.Index(uri, "?"); idx >= 0 {
-			params = uri[idx+1:]
+		if _, after, ok := strings.Cut(uri, "?"); ok {
+			params = after
 		}
 		cl, err := makeUCACollation(params)
 		if err != nil {
@@ -686,11 +682,11 @@ func CollationHasUnsupportedOptions(uri string) bool {
 	if !strings.HasPrefix(uri, lexicon.CollationUCA) {
 		return false
 	}
-	idx := strings.Index(uri, "?")
-	if idx < 0 {
+	_, query, found := strings.Cut(uri, "?")
+	if !found {
 		return false
 	}
-	params, err := parseUCAParams(uri[idx+1:])
+	params, err := parseUCAParams(query)
 	if err != nil {
 		return true // parse error = unsupported
 	}

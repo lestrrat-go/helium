@@ -523,7 +523,7 @@ func validateStringDerivedType(s, targetType string) error {
 		if s == "" {
 			return castError(s, targetType)
 		}
-		for _, tok := range strings.Fields(s) {
+		for tok := range strings.FieldsSeq(s) {
 			if !reNMTOKEN.MatchString(tok) {
 				return castError(s, targetType)
 			}
@@ -533,7 +533,7 @@ func validateStringDerivedType(s, targetType string) error {
 		if s == "" {
 			return castError(s, targetType)
 		}
-		for _, tok := range strings.Fields(s) {
+		for tok := range strings.FieldsSeq(s) {
 			if !reNCName.MatchString(tok) {
 				return castError(s, targetType)
 			}

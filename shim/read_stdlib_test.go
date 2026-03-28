@@ -1107,5 +1107,5 @@ func TestCVE202230633Stdlib(t *testing.T) {
 	var example struct {
 		Things []string
 	}
-	_ = Unmarshal(bytes.Repeat([]byte("<a>"), 17_000_000), &example) //nolint:errcheck // intentionally ignored
+	_ = Unmarshal(bytes.Repeat([]byte("<a>"), 17_000_000), &example)
 }

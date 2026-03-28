@@ -51,7 +51,7 @@ type Decoder struct {
 	tokenReader     TokenReader
 	events          chan tokenEvent
 	done            <-chan struct{} // cancellation signal from cancel context; avoids storing context.Context
-	ctxErr          func() error   // returns cancel context's error; avoids storing context.Context
+	ctxErr          func() error    // returns cancel context's error; avoids storing context.Context
 	cancel          context.CancelFunc
 	startSAX        func(io.Reader) // deferred SAX emitter start; captures cancel context in closure
 	lastToken       Token
@@ -544,11 +544,10 @@ func (d *Decoder) checkProcInstEncoding(data string) error {
 
 // procInstValue extracts the value of an attribute from a processing instruction's data.
 func procInstValue(data, param string) string {
-	idx := strings.Index(data, param)
-	if idx < 0 {
+	_, s, found := strings.Cut(data, param)
+	if !found {
 		return ""
 	}
-	s := data[idx+len(param):]
 	s = strings.TrimSpace(s)
 	if s == "" || s[0] != '=' {
 		return ""

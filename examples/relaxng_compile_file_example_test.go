@@ -18,7 +18,7 @@ func Example_relaxng_compile_file() {
 		fmt.Printf("create temp file failed: %s\n", err)
 		return
 	}
-	defer os.Remove(f.Name()) //nolint:errcheck
+	defer os.Remove(f.Name())
 
 	if _, err := f.WriteString(`<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start><element name="book"><element name="title"><text/></element></element></start></grammar>`); err != nil {
 		fmt.Printf("write temp file failed: %s\n", err)

@@ -13,10 +13,10 @@ var ncNameByteClass = buildNCNameByteClass()
 
 func buildCharDataByteClass() [256]uint8 {
 	var tbl [256]uint8
-	for i := 0; i < 0x80; i++ {
+	for i := range 0x80 {
 		tbl[i] = 0
 	}
-	for i := 0; i < 0x20; i++ {
+	for i := range 0x20 {
 		tbl[i] = 1
 	}
 	tbl['\t'] = 0
@@ -33,7 +33,7 @@ func buildCharDataByteClass() [256]uint8 {
 
 func buildNCNameByteClass() [256]uint8 {
 	var tbl [256]uint8
-	for i := 0; i < 0x100; i++ {
+	for i := range 0x100 {
 		tbl[i] = 1
 	}
 	for i := 'A'; i <= 'Z'; i++ {
@@ -343,7 +343,7 @@ func (c *UTF8Cursor) HasPrefixString(s string) bool {
 			data[7] == s[7] &&
 			data[8] == s[8]
 	default:
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if data[i] != s[i] {
 				return false
 			}
@@ -406,7 +406,7 @@ func (c *UTF8Cursor) ConsumeString(s string) bool {
 			return false
 		}
 	default:
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if data[i] != s[i] {
 				return false
 			}
@@ -554,7 +554,7 @@ func (c *UTF8Cursor) ScanQNameBytes() (prefix, local []byte, nBytes int, ok bool
 	colon := -1
 	for {
 		if c.bufpos+off >= c.buflen {
-			if c.fillBuffer(off + 1) != nil {
+			if c.fillBuffer(off+1) != nil {
 				break
 			}
 			if c.bufpos+off >= c.buflen {
@@ -574,7 +574,7 @@ func (c *UTF8Cursor) ScanQNameBytes() (prefix, local []byte, nBytes int, ok bool
 			off++
 
 			if c.bufpos+off >= c.buflen {
-				if c.fillBuffer(off + 1) != nil {
+				if c.fillBuffer(off+1) != nil {
 					return nil, nil, 0, false
 				}
 				if c.bufpos+off >= c.buflen {
@@ -669,7 +669,7 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 			off += runLen
 		}
 		if off >= dlen {
-			if c.fillBuffer(off + 1) != nil {
+			if c.fillBuffer(off+1) != nil {
 				break
 			}
 			data = c.buf[c.bufpos:c.buflen]
@@ -745,7 +745,7 @@ func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
 
 	for {
 		if c.bufpos+off >= c.buflen {
-			if c.fillBuffer(off + 1) != nil {
+			if c.fillBuffer(off+1) != nil {
 				break
 			}
 			if c.bufpos+off >= c.buflen {

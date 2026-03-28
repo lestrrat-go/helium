@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -66,7 +67,9 @@ func visibilityLevel(vis string) int {
 // isVisibilityIncrease returns true if changing from 'from' to 'to' is
 // considered an increase in accessibility (which is not allowed by xsl:expose).
 // The ordering (from most restricted to most accessible) is:
-//   hidden < private < final < public
+//
+//	hidden < private < final < public
+//
 // abstract is special and handled separately.
 func isVisibilityIncrease(from, to string) bool {
 	order := map[string]int{
@@ -86,8 +89,8 @@ func isVisibilityIncrease(from, to string) bool {
 // checkExposeVisibility validates whether setting a component's visibility via
 // xsl:expose is allowed. Returns an error code and message, or "" if valid.
 // Rules:
-// - XTSE3010: declared visibility is explicitly set and expose tries to change
-//   it to a different "kind" (e.g., public→abstract) or to a higher level.
+//   - XTSE3010: declared visibility is explicitly set and expose tries to change
+//     it to a different "kind" (e.g., public→abstract) or to a higher level.
 func checkExposeVisibility(name, newVis, declaredVis string) (string, string) {
 	effectiveVis := declaredVis
 	if effectiveVis == "" {
@@ -135,7 +138,7 @@ func parseAcceptRules(usePackageElem *helium.Element, nsBindings map[string]stri
 		names := getAttr(elem, xslAttrNames)
 		vis := getAttr(elem, xslAttrVisibility)
 		// Resolve namespace prefixes in names
-		for _, name := range strings.Fields(names) {
+		for name := range strings.FieldsSeq(names) {
 			resolvedName := resolveComponentName(name, nsBindings, elem)
 			rules = append(rules, acceptRule{
 				component:  comp,
@@ -173,9 +176,7 @@ func resolveComponentName(name string, nsBindings map[string]string, elem *heliu
 	}
 
 	// Handle prefix:* or prefix:local
-	if idx := strings.Index(name, ":"); idx >= 0 {
-		prefix := name[:idx]
-		local := name[idx+1:]
+	if prefix, local, ok := strings.Cut(name, ":"); ok {
 		// Look up namespace URI for prefix
 		uri := ""
 		if nsBindings != nil {
@@ -471,7 +472,7 @@ func (c *compiler) compileExpose(ctx context.Context, elem *helium.Element) erro
 	// Collect namespace bindings from the element's context
 	nsBindings := c.collectElemNamespaces(ctx, elem)
 
-	for _, name := range strings.Fields(names) {
+	for name := range strings.FieldsSeq(names) {
 		resolvedName := resolveComponentName(name, nsBindings, elem)
 
 		switch component {
@@ -526,11 +527,9 @@ func (c *compiler) compileExpose(ctx context.Context, elem *helium.Element) erro
 }
 
 // collectElemNamespaces gathers namespace bindings from an element and its ancestors.
-func (c *compiler) collectElemNamespaces(ctx context.Context, elem *helium.Element) map[string]string {
+func (c *compiler) collectElemNamespaces(ctx context.Context, elem *helium.Element) map[string]string { //nolint:unparam // ctx threaded through for API consistency
 	bindings := make(map[string]string)
-	for k, v := range c.nsBindings {
-		bindings[k] = v
-	}
+	maps.Copy(bindings, c.nsBindings)
 	for n := helium.Node(elem); n != nil; n = n.Parent() {
 		if e, ok := n.(*helium.Element); ok {
 			for _, ns := range e.Namespaces() {
@@ -543,7 +542,7 @@ func (c *compiler) collectElemNamespaces(ctx context.Context, elem *helium.Eleme
 	return bindings
 }
 
-func (c *compiler) applyExposeToTemplates(ctx context.Context, pattern, visibility string, isWildcardComponent bool) error {
+func (c *compiler) applyExposeToTemplates(ctx context.Context, pattern, visibility string, isWildcardComponent bool) error { //nolint:unparam // ctx threaded through for API consistency
 	matched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.templateVisibility {
@@ -555,7 +554,6 @@ func (c *compiler) applyExposeToTemplates(ctx context.Context, pattern, visibili
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-	
 			} else {
 				// For wildcard patterns, XTSE3025 (abstract) is still a
 				// hard error, but XTSE3010 (visibility increase) silently
@@ -578,7 +576,7 @@ func (c *compiler) applyExposeToTemplates(ctx context.Context, pattern, visibili
 	return nil
 }
 
-func (c *compiler) applyExposeToFunctions(ctx context.Context, pattern, visibility string) error {
+func (c *compiler) applyExposeToFunctions(ctx context.Context, pattern, visibility string) error { //nolint:unparam // ctx threaded through for API consistency
 	matched := false
 	isWild := isWildcard(pattern)
 	for key := range c.stylesheet.functionVisibility {
@@ -589,7 +587,6 @@ func (c *compiler) applyExposeToFunctions(ctx context.Context, pattern, visibili
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-	
 			} else {
 				code, msg := checkExposeVisibility(key, visibility, declared)
 				if code != "" {
@@ -610,7 +607,7 @@ func (c *compiler) applyExposeToFunctions(ctx context.Context, pattern, visibili
 // applyExposeToFunctionsStrict is like applyExposeToFunctions but reports
 // XTSE3010 when a non-wildcard pattern has no match. Used when the expose
 // element has component="function" (not component="*").
-func (c *compiler) applyExposeToFunctionsStrict(ctx context.Context, pattern, visibility string) error {
+func (c *compiler) applyExposeToFunctionsStrict(ctx context.Context, pattern, visibility string) error { //nolint:unparam // ctx threaded through for API consistency
 	matched := false
 	isWild := isWildcard(pattern)
 	for key := range c.stylesheet.functionVisibility {
@@ -621,7 +618,6 @@ func (c *compiler) applyExposeToFunctionsStrict(ctx context.Context, pattern, vi
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-
 			} else {
 				code, msg := checkExposeVisibility(key, visibility, declared)
 				if code != "" {
@@ -641,7 +637,7 @@ func (c *compiler) applyExposeToFunctionsStrict(ctx context.Context, pattern, vi
 	return nil
 }
 
-func (c *compiler) applyExposeToVariables(ctx context.Context, pattern, visibility string) error {
+func (c *compiler) applyExposeToVariables(ctx context.Context, pattern, visibility string) error { //nolint:unparam // ctx threaded through for API consistency
 	matched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.variableVisibility {
@@ -652,7 +648,6 @@ func (c *compiler) applyExposeToVariables(ctx context.Context, pattern, visibili
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-	
 			} else {
 				// For wildcard patterns, XTSE3025 (abstract) is still a
 				// hard error, but XTSE3010 (visibility increase) silently
@@ -677,7 +672,6 @@ func (c *compiler) applyExposeToVariables(ctx context.Context, pattern, visibili
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-	
 			} else {
 				// For wildcard patterns, XTSE3025 (abstract) is still a
 				// hard error, but XTSE3010 (visibility increase) silently
@@ -700,7 +694,7 @@ func (c *compiler) applyExposeToVariables(ctx context.Context, pattern, visibili
 
 // applyExposeToVariablesStrict is like applyExposeToVariables but reports
 // XTSE3010 when a non-wildcard pattern has no match.
-func (c *compiler) applyExposeToVariablesStrict(ctx context.Context, pattern, visibility string) error {
+func (c *compiler) applyExposeToVariablesStrict(ctx context.Context, pattern, visibility string) error { //nolint:unparam // ctx threaded through for API consistency
 	varMatched := false
 	paramMatched := false
 	isWild := isWildcard(pattern)
@@ -712,7 +706,6 @@ func (c *compiler) applyExposeToVariablesStrict(ctx context.Context, pattern, vi
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-
 			} else {
 				// For wildcard patterns, XTSE3025 (abstract) is still a
 				// hard error, but XTSE3010 (visibility increase) silently
@@ -745,7 +738,6 @@ func (c *compiler) applyExposeToVariablesStrict(ctx context.Context, pattern, vi
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-
 			} else {
 				// For wildcard patterns, XTSE3025 (abstract) is still a
 				// hard error, but XTSE3010 (visibility increase) silently
@@ -768,7 +760,7 @@ func (c *compiler) applyExposeToVariablesStrict(ctx context.Context, pattern, vi
 	return nil
 }
 
-func (c *compiler) applyExposeToAttrSets(ctx context.Context, pattern, visibility string, strict bool) error {
+func (c *compiler) applyExposeToAttrSets(ctx context.Context, pattern, visibility string, strict bool) error { //nolint:unparam // ctx threaded through for API consistency
 	matched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.attrSetVisibility {
@@ -779,7 +771,6 @@ func (c *compiler) applyExposeToAttrSets(ctx context.Context, pattern, visibilit
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-	
 			} else {
 				// For wildcard patterns, XTSE3025 (abstract) is still a
 				// hard error, but XTSE3010 (visibility increase) silently
@@ -802,7 +793,7 @@ func (c *compiler) applyExposeToAttrSets(ctx context.Context, pattern, visibilit
 	return nil
 }
 
-func (c *compiler) applyExposeToModes(ctx context.Context, pattern, visibility string, strict bool) error {
+func (c *compiler) applyExposeToModes(ctx context.Context, pattern, visibility string, strict bool) error { //nolint:unparam // ctx threaded through for API consistency
 	if c.stylesheet.modeDefs == nil {
 		c.stylesheet.modeDefs = make(map[string]*modeDef)
 	}
@@ -879,7 +870,7 @@ func functionVisKey(qn xpath3.QualifiedName, arity int) string {
 
 // collectOverrideNames scans xsl:override children of xsl:use-package and returns
 // a set of "type:name" keys for components being overridden.
-func (c *compiler) collectOverrideNames(ctx context.Context, usePackageElem *helium.Element, nsBindings map[string]string) map[string]struct{} {
+func (c *compiler) collectOverrideNames(ctx context.Context, usePackageElem *helium.Element, nsBindings map[string]string) map[string]struct{} { //nolint:unparam // ctx threaded through for API consistency
 	names := make(map[string]struct{})
 	for child := range helium.Children(usePackageElem) {
 		elem, ok := child.(*helium.Element)

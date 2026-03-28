@@ -77,7 +77,7 @@ func collapseSpaces(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	inSpace := true // treat start as space to trim leading
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == ' ' {
 			inSpace = true
 		} else {

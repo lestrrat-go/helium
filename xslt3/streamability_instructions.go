@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -259,10 +260,8 @@ func bodyUsesCurrentGroupOutsideFEG(body []instruction) bool {
 				}
 			}
 		}
-		for _, children := range getChildInstructions(bi) {
-			if bodyUsesCurrentGroupOutsideFEG(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(bi), bodyUsesCurrentGroupOutsideFEG) {
+			return true
 		}
 	}
 	return false
@@ -439,10 +438,8 @@ func forEachBodyConsumesContext(body []instruction) bool {
 				return true
 			}
 		}
-		for _, children := range getChildInstructions(inst) {
-			if forEachBodyConsumesContext(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(inst), forEachBodyConsumesContext) {
+			return true
 		}
 	}
 	return false
@@ -642,15 +639,11 @@ func checkSourceDocCurrentGroup(body []instruction) error {
 // body uses current-group().
 func sourceDocBodyUsesCurrentGroup(body []instruction) bool {
 	for _, inst := range body {
-		for _, expr := range getInstructionExprs(inst) {
-			if exprUsesCurrentGroup(expr) {
-				return true
-			}
+		if slices.ContainsFunc(getInstructionExprs(inst), exprUsesCurrentGroup) {
+			return true
 		}
-		for _, children := range getChildInstructions(inst) {
-			if sourceDocBodyUsesCurrentGroup(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(inst), sourceDocBodyUsesCurrentGroup) {
+			return true
 		}
 	}
 	return false
@@ -679,11 +672,9 @@ func patternHasNonMotionlessPredicate(pat *pattern) bool {
 					}
 				}
 			case xpath3.FilterExpr:
-				for _, pred := range v.Predicates {
-					if xpathstream.PredicateIsNonMotionless(pred) {
-						nonMotionless = true
-						return false
-					}
+				if slices.ContainsFunc(v.Predicates, xpathstream.PredicateIsNonMotionless) {
+					nonMotionless = true
+					return false
 				}
 			}
 			return true
@@ -758,10 +749,8 @@ func bodyUsesCurrentGroup(body []instruction) bool {
 				return true
 			}
 		}
-		for _, children := range getChildInstructions(bi) {
-			if bodyUsesCurrentGroup(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(bi), bodyUsesCurrentGroup) {
+			return true
 		}
 	}
 	return false
@@ -789,7 +778,7 @@ func exprUsesCurrentGroupConsumingly(expr *xpath3.Expression) bool {
 				return
 			}
 			// snapshot() grounds its arguments — current-group() inside is not consuming.
-			if v.Prefix == "" && v.Name == "snapshot" { //nolint:goconst
+			if v.Prefix == "" && v.Name == "snapshot" {
 				for _, arg := range v.Args {
 					walk(arg, true)
 				}

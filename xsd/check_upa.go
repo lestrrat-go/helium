@@ -7,6 +7,8 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
+const componentLocalComplexType = "local complex type"
+
 // checkUPA checks that a content model is deterministic (Unique Particle Attribution).
 // A non-deterministic model means that when an element arrives, there's ambiguity
 // about which particle it belongs to.
@@ -15,7 +17,7 @@ func (c *compiler) checkUPA(ctx context.Context, td *TypeDef, src typeDefSource)
 		return
 	}
 	if !modelGroupIsDeterministic(td.ContentModel, c.schema) {
-		component := "local complex type" //nolint:goconst
+		component := componentLocalComplexType
 		if !src.isLocal {
 			component = td.Name.Local
 		}
@@ -39,7 +41,7 @@ func modelGroupIsDeterministic(mg *ModelGroup, schema *Schema) bool {
 // choiceIsDeterministic checks that no two particles in a choice can match the same element.
 func choiceIsDeterministic(mg *ModelGroup, schema *Schema) bool {
 	// Check each pair of particles for first-set overlap.
-	for i := 0; i < len(mg.Particles); i++ {
+	for i := range len(mg.Particles) {
 		for j := i + 1; j < len(mg.Particles); j++ {
 			if particleFirstSetsOverlap(mg.Particles[i], mg.Particles[j], schema) {
 				return false
@@ -57,7 +59,7 @@ func choiceIsDeterministic(mg *ModelGroup, schema *Schema) bool {
 
 // sequenceIsDeterministic checks that adjacent particles in a sequence don't create ambiguity.
 func sequenceIsDeterministic(mg *ModelGroup, schema *Schema) bool {
-	for i := 0; i < len(mg.Particles); i++ {
+	for i := range len(mg.Particles) {
 		p := mg.Particles[i]
 		// Recurse into nested model groups.
 		if nested, ok := p.Term.(*ModelGroup); ok {
@@ -298,7 +300,7 @@ func upaWildcardNSSet(wcNS, targetNS string) map[string]bool {
 		return map[string]bool{"": true}
 	default:
 		result := make(map[string]bool)
-		for _, part := range strings.Fields(wcNS) {
+		for part := range strings.FieldsSeq(wcNS) {
 			switch part {
 			case WildcardNSLocal:
 				result[""] = true
@@ -322,7 +324,7 @@ func wildcardMatchesNS(wcNS, wcTargetNS, elemNS string) bool {
 	case WildcardNSNotAbsent:
 		return elemNS != ""
 	default:
-		for _, part := range strings.Fields(wcNS) {
+		for part := range strings.FieldsSeq(wcNS) {
 			switch part {
 			case WildcardNSLocal:
 				if elemNS == "" {

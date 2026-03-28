@@ -368,8 +368,8 @@ func addVarNamePrefixCheck(plan *prefixPlanBuilder, varName string) {
 	if strings.HasPrefix(varName, "Q{") {
 		return
 	}
-	if idx := strings.IndexByte(varName, ':'); idx >= 0 {
-		addPrefixCheck(plan, varName[:idx])
+	if prefix, _, ok := strings.Cut(varName, ":"); ok {
+		addPrefixCheck(plan, prefix)
 	}
 }
 
@@ -391,8 +391,7 @@ func addCatchCodePrefixCheck(plan *prefixPlanBuilder, code string) {
 	if strings.HasPrefix(code, "Q{") {
 		return // URIQualifiedName, no prefix to validate
 	}
-	if idx := strings.IndexByte(code, ':'); idx >= 0 {
-		prefix := code[:idx]
+	if prefix, _, ok := strings.Cut(code, ":"); ok {
 		if prefix != "*" {
 			addPrefixCheck(plan, prefix)
 		}

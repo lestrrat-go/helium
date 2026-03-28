@@ -41,7 +41,7 @@ func mapErrorMessage(pe helium.ErrParseError) string {
 		if tag := extractEndElement(pe.Line); tag != "" {
 			return fmt.Sprintf("unexpected end element </%s>", tag)
 		}
-		return "expected element name after <" //nolint:goconst
+		return "expected element name after <"
 	}
 
 	switch {
@@ -101,9 +101,8 @@ func convertEndTagMismatch(expectedTag, contextLine string) string {
 	// Try to find the closing tag name from context
 	closeTag := ""
 	if idx := strings.LastIndex(contextLine, "</"); idx >= 0 {
-		rest := contextLine[idx+2:]
-		if end := strings.IndexByte(rest, '>'); end >= 0 {
-			closeTag = rest[:end]
+		if tag, _, ok := strings.Cut(contextLine[idx+2:], ">"); ok {
+			closeTag = tag
 		}
 	}
 
@@ -146,10 +145,8 @@ func convertNamespaceError(ns, contextLine string) string {
 			openPrefix, openLocal := splitPrefixLocal(openTag)
 
 			// Look for close tag
-			if closeIdx := strings.Index(contextLine, "</"); closeIdx >= 0 {
-				closeRest := contextLine[closeIdx+2:]
-				if closeEnd := strings.IndexByte(closeRest, '>'); closeEnd >= 0 {
-					closeTag := closeRest[:closeEnd]
+			if _, closeRest, ok2 := strings.Cut(contextLine, "</"); ok2 {
+				if closeTag, _, ok3 := strings.Cut(closeRest, ">"); ok3 {
 					closePrefix, closeLocal := splitPrefixLocal(closeTag)
 					if openLocal == closeLocal && openPrefix != closePrefix {
 						return fmt.Sprintf("element <%s> in space %s closed by </%s> in space %s",
@@ -168,11 +165,10 @@ func convertNamespaceError(ns, contextLine string) string {
 // extractEndElement checks if the context line contains a </tag> pattern
 // and returns the tag name. Used to detect "unexpected end element" errors.
 func extractEndElement(line string) string {
-	idx := strings.Index(line, "</")
-	if idx < 0 {
+	_, rest, found := strings.Cut(line, "</")
+	if !found {
 		return ""
 	}
-	rest := line[idx+2:]
 	end := strings.IndexAny(rest, "> \t\n\r")
 	if end < 0 {
 		if len(rest) > 0 {
@@ -187,8 +183,8 @@ func extractEndElement(line string) string {
 }
 
 func splitPrefixLocal(name string) (string, string) {
-	if i := strings.IndexByte(name, ':'); i >= 0 {
-		return name[:i], name[i+1:]
+	if prefix, local, ok := strings.Cut(name, ":"); ok {
+		return prefix, local
 	}
 	return "", name
 }

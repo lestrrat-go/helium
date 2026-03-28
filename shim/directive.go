@@ -308,17 +308,17 @@ func (s *prologScanner) scanDirective() (Token, error) {
 			match := "!--"
 			matched := true
 			var i int
-			for i = 0; i < len(match); i++ {
+			for i = range len(match) {
 				nb, err := s.readByte()
 				if err != nil {
-					for j := 0; j < i; j++ {
+					for j := range i {
 						content.WriteByte(match[j])
 					}
 					return Directive(content.Bytes()), err
 				}
 				if nb != match[i] {
 					// Not a comment. Write prefix, then process nb through handleB.
-					for j := 0; j < i; j++ {
+					for j := range i {
 						content.WriteByte(match[j])
 					}
 					depth++

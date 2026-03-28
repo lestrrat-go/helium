@@ -159,7 +159,7 @@ func TestUnmarshalRepeatedConsistency(t *testing.T) {
 	var want payload
 	require.NoError(t, stdxml.Unmarshal(input, &want))
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		var got payload
 		require.NoError(t, shim.Unmarshal(input, &got))
 		require.Equal(t, want, got)
@@ -183,11 +183,9 @@ func TestUnmarshalConcurrentConsistency(t *testing.T) {
 
 	errCh := make(chan error, workers*iterations)
 	var wg sync.WaitGroup
-	for w := 0; w < workers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < iterations; i++ {
+	for range workers {
+		wg.Go(func() {
+			for range iterations {
 				var got payload
 				if err := shim.Unmarshal(input, &got); err != nil {
 					errCh <- err
@@ -198,7 +196,7 @@ func TestUnmarshalConcurrentConsistency(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)
@@ -825,8 +823,8 @@ func TestUnmarshalTagPathConflictMatchStdlib(t *testing.T) {
 	// Build a struct type with duplicate xml:"a>b" tags at runtime
 	// to avoid go vet's static duplicate-tag check.
 	typ := reflect.StructOf([]reflect.StructField{
-		{Name: "A", Type: reflect.TypeOf(""), Tag: `xml:"a>b"`},
-		{Name: "B", Type: reflect.TypeOf(""), Tag: `xml:"a>b"`},
+		{Name: "A", Type: reflect.TypeFor[string](), Tag: `xml:"a>b"`},
+		{Name: "B", Type: reflect.TypeFor[string](), Tag: `xml:"a>b"`},
 	})
 
 	input := []byte(`<root><a><b>x</b></a></root>`)
@@ -1018,8 +1016,8 @@ func TestDecoderDecodeInvalidTargetMatchStdlib(t *testing.T) {
 
 	// non-pointer
 	nonPtr := any("hello")
-	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr)  //nolint:staticcheck // intentional non-pointer to test error behavior
-	shimErr := shim.NewDecoder(context.Background(), bytes.NewReader(input)).Decode(nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
+	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
+	shimErr := shim.NewDecoder(context.Background(), bytes.NewReader(input)).Decode(nonPtr)
 	require.Error(t, stdErr)
 	require.Error(t, shimErr)
 	require.Equal(t, stdErr.Error(), shimErr.Error())
@@ -1046,7 +1044,7 @@ func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
 	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 	shimTok, _ := shimDec.Token()
 	shimStart := shimTok.(stdxml.StartElement)
-	shimErr := shimDec.DecodeElement(nonPtr, &shimStart) //nolint:staticcheck // intentional non-pointer to test error behavior
+	shimErr := shimDec.DecodeElement(nonPtr, &shimStart)
 
 	require.Error(t, stdErr)
 	require.Error(t, shimErr)
@@ -1154,7 +1152,7 @@ func TestInputOffsetAndPosMatchStdlib(t *testing.T) {
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
 	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, err := stdDec.Token()
 		require.NoError(t, err)
 		_, err = shimDec.Token()

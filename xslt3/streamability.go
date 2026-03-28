@@ -1,6 +1,8 @@
 package xslt3
 
 import (
+	"slices"
+
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -295,10 +297,10 @@ func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 		if fc, ok := e.(xpath3.FunctionCall); ok {
 			if fc.Prefix == "" {
 				switch fc.Name {
-				case "head", "tail", "copy-of", "snapshot", "string-join", //nolint:goconst
-					"serialize", "deep-equal", "sort", "reverse", //nolint:goconst
+				case "head", "tail", "copy-of", "snapshot", "string-join",
+					"serialize", "deep-equal", "sort", "reverse",
 					"empty", "exists", "count", "sum", "avg", "min", "max",
-					"string", "data", lexicon.TypeBoolean: //nolint:goconst
+					"string", "data", lexicon.TypeBoolean:
 					for _, arg := range fc.Args {
 						if ve, ok := arg.(xpath3.VariableExpr); ok {
 							if ve.Name == paramName {
@@ -346,11 +348,9 @@ func exprConsumesParam(expr *xpath3.Expression, params []*param) bool {
 			if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
 				if paramNames[ve.Name] && len(fe.Predicates) > 0 {
 					// Check if any predicate is non-motionless (accesses "." etc.)
-					for _, pred := range fe.Predicates {
-						if predicateIsNonMotionless(pred) {
-							found = true
-							return false
-						}
+					if slices.ContainsFunc(fe.Predicates, predicateIsNonMotionless) {
+						found = true
+						return false
 					}
 				}
 			}
@@ -635,11 +635,9 @@ func patternHasCurrentOnElementStep(expr xpath3.Expr) bool {
 				if !stepMatchesElements(step) {
 					continue
 				}
-				for _, pred := range step.Predicates {
-					if exprUsesCurrent(pred) {
-						found = true
-						return false
-					}
+				if slices.ContainsFunc(step.Predicates, exprUsesCurrent) {
+					found = true
+					return false
 				}
 			}
 		}

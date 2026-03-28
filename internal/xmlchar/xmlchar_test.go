@@ -47,8 +47,8 @@ func TestIsNCNameStartChar(t *testing.T) {
 		{'A', true},
 		{'z', true},
 		{'_', true},
-		{'\u00C0', true},  // Latin capital A with grave
-		{'\u3001', true},  // CJK
+		{'\u00C0', true}, // Latin capital A with grave
+		{'\u3001', true}, // CJK
 		{'0', false},
 		{'-', false},
 		{'.', false},
@@ -76,7 +76,7 @@ func TestIsNCNameChar(t *testing.T) {
 		{'9', true},
 		{'-', true},
 		{'.', true},
-		{'\u00B7', true},  // middle dot (combining)
+		{'\u00B7', true}, // middle dot (combining)
 		{':', false},
 		{' ', false},
 	}

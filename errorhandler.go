@@ -39,7 +39,7 @@ type leveledError struct {
 	level ErrorLevel
 }
 
-func (e *leveledError) Error() string         { return e.msg }
+func (e *leveledError) Error() string          { return e.msg }
 func (e *leveledError) ErrorLevel() ErrorLevel { return e.level }
 
 // NewLeveledError creates an error that implements ErrorLeveler.

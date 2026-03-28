@@ -77,7 +77,7 @@ func TestXIncludeBasicXML(t *testing.T) {
 	var found bool
 	for c := root.FirstChild(); c != nil; c = c.NextSibling() {
 		if c.Type() == helium.ElementNode {
-			if c.(*helium.Element).LocalName() == "chapter" { //nolint:goconst
+			if c.(*helium.Element).LocalName() == "chapter" {
 				found = true
 				require.Equal(t, "Hello", string(c.Content()))
 			}
@@ -430,7 +430,7 @@ func TestXIncludeDepthLimit(t *testing.T) {
 	t.Parallel()
 	// Create a chain that would exceed maxDepth (40)
 	resolver := &stringResolver{files: make(map[string]string)}
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		next := i + 1
 		resolver.files[fmt.Sprintf("level%d.xml", i)] = fmt.Sprintf(
 			`<level xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="level%d.xml"/></level>`, next)

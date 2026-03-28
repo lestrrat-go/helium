@@ -1,6 +1,8 @@
 package xslt3
 
 import (
+	"slices"
+
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -176,7 +178,6 @@ func streamabilityModeNameForTemplate(tmpl *template) (string, bool) {
 	}
 	return tmpl.Mode, true
 }
-
 
 // checkStreamableTemplateBody checks a template body (or source-document body)
 // for non-streamable constructs.
@@ -538,10 +539,8 @@ func bodyHasDownwardNavigation(body []instruction) bool {
 				return true
 			}
 		}
-		for _, children := range getChildInstructions(inst) {
-			if bodyHasDownwardNavigation(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(inst), bodyHasDownwardNavigation) {
+			return true
 		}
 	}
 	return false

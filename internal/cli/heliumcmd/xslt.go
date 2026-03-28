@@ -126,7 +126,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}
-		defer f.Close() //nolint:errcheck
+		defer f.Close()
 		out = f
 	}
 
@@ -245,9 +245,9 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "--version": //nolint:goconst
+		case flagVersion:
 			cfg.version = true
-		case "--timing": //nolint:goconst
+		case flagTiming:
 			cfg.timing = true
 		case "--noout":
 			cfg.noout = true

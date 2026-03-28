@@ -783,4 +783,3 @@ func stringToNumber(s string) float64 {
 	}
 	return f
 }
-

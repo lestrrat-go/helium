@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -92,12 +93,8 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 	savedTunnel := ec.tunnelParams
 	if newTunnelParams != nil {
 		merged := make(map[string]xpath3.Sequence)
-		for k, v := range ec.tunnelParams {
-			merged[k] = v
-		}
-		for k, v := range newTunnelParams {
-			merged[k] = v
-		}
+		maps.Copy(merged, ec.tunnelParams)
+		maps.Copy(merged, newTunnelParams)
 		ec.tunnelParams = merged
 	}
 
@@ -316,7 +313,7 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *withParam) (xp
 	// Type check against the declared as type
 	if wp.As != "" {
 		st := parseSequenceType(wp.As)
-		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "with-param $"+wp.Name, ec)
+		checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "with-param $"+wp.Name, ec)
 		if err != nil {
 			return nil, err
 		}
@@ -407,9 +404,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 		if wp.Tunnel {
 			if !hasTunnelOverrides {
 				merged := make(map[string]xpath3.Sequence)
-				for k, v := range ec.tunnelParams {
-					merged[k] = v
-				}
+				maps.Copy(merged, ec.tunnelParams)
 				ec.tunnelParams = merged
 				hasTunnelOverrides = true
 			}
@@ -523,7 +518,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 			if fromCaller {
 				errCode = errCodeXTTE0590
 			}
-			checked, err := checkSequenceType(val, st, errCode, "param $"+p.Name, ec)
+			checked, err := checkSequenceType(ctx, val, st, errCode, "param $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -563,9 +558,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 		}
 		if hasTunnel {
 			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
-			for k, v := range ec.tunnelParams {
-				newTunnel[k] = v
-			}
+			maps.Copy(newTunnel, ec.tunnelParams)
 			ec.tunnelParams = newTunnel
 		}
 		for _, wp := range inst.Params {
@@ -677,9 +670,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 		}
 		if hasTunnel {
 			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
-			for k, v := range ec.tunnelParams {
-				newTunnel[k] = v
-			}
+			maps.Copy(newTunnel, ec.tunnelParams)
 			ec.tunnelParams = newTunnel
 		}
 		for _, wp := range inst.Params {

@@ -125,6 +125,7 @@ func TestParseCharRefReplacementCharacter(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
+	//nolint:dupword // "L\nL" is intentional XML content
 	const input = `<?xml version="1.0"?>
 <root foo="bar">
 	<!-- this is a sample comment -->
@@ -1229,7 +1230,7 @@ func parseWithDTDAttributeType(t *testing.T, typ enum.AttributeType, value strin
 
 	switch typ {
 	case enum.AttrID:
-		docDecl = "<!ELEMENT doc EMPTY>" //nolint:goconst
+		docDecl = "<!ELEMENT doc EMPTY>"
 		body = fmt.Sprintf(`<doc attr=%q/>`, value)
 		typeName = "ID"
 	case enum.AttrNmtoken:

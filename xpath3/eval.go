@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"time"
 
@@ -89,9 +90,7 @@ func scopeWithBindings(parent *variableScope, bindings map[string]Sequence) *var
 		}
 	}
 	values := make(map[string]Sequence, len(bindings))
-	for name, seq := range bindings {
-		values[name] = seq
-	}
+	maps.Copy(values, bindings)
 	return &variableScope{parent: parent, values: values}
 }
 

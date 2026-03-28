@@ -3,6 +3,8 @@ package xslt3
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -292,9 +294,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 		if c.staticVars == nil {
 			c.staticVars = make(map[string]xpath3.Sequence, len(c.externalStaticParams))
 		}
-		for name, seq := range c.externalStaticParams {
-			c.staticVars[name] = seq
-		}
+		maps.Copy(c.staticVars, c.externalStaticParams)
 	}
 
 	// Resolve only the _static shadow attribute on params/variables before
@@ -373,9 +373,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 	// Merge externally supplied static params again so external values
 	// override any select="..." defaults evaluated above.
 	if len(c.externalStaticParams) > 0 {
-		for name, seq := range c.externalStaticParams {
-			c.staticVars[name] = seq
-		}
+		maps.Copy(c.staticVars, c.externalStaticParams)
 	}
 
 	// Fix up importPrec for namespace-alias declarations added in Pass 1.
@@ -636,9 +634,7 @@ func (c *compiler) compileNamespaceAlias(ctx context.Context, elem *helium.Eleme
 	// namespace context of the xsl:namespace-alias element itself, not the
 	// stylesheet root (test namespace-alias-0903).
 	localNS := make(map[string]string)
-	for prefix, uri := range c.nsBindings {
-		localNS[prefix] = uri
-	}
+	maps.Copy(localNS, c.nsBindings)
 	for _, ns := range elem.Namespaces() {
 		localNS[ns.Prefix()] = ns.URI()
 	}
@@ -695,14 +691,7 @@ func (c *compiler) sortTemplates(_ context.Context) {
 			}
 			existing := c.stylesheet.modeTemplates[mode]
 			for _, at := range allTemplates {
-				found := false
-				for _, et := range existing {
-					if et == at {
-						found = true
-						break
-					}
-				}
-				if !found {
+				if !slices.Contains(existing, at) {
 					c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], at)
 				}
 			}

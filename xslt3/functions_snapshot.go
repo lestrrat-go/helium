@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -260,7 +261,7 @@ func (ec *execContext) snapshotNode(ctx context.Context, node helium.Node) (heli
 		// The ancestor chain was built bottom-up, so the corresponding shell
 		// is: copied.Parent() for i=0, copied.Parent().Parent() for i=1, etc.
 		shell := copied.Parent()
-		for j := 0; j < i; j++ {
+		for range i {
 			if shell != nil {
 				shell = shell.Parent()
 			}
@@ -310,18 +311,14 @@ func (ec *execContext) transferAccumulatorNode(orig, dst helium.Node) {
 	if ec.accumulatorBeforeErrorByNode != nil {
 		if errs, ok := ec.accumulatorBeforeErrorByNode[orig]; ok {
 			cloned := make(map[string]error, len(errs))
-			for k, v := range errs {
-				cloned[k] = v
-			}
+			maps.Copy(cloned, errs)
 			ec.accumulatorBeforeErrorByNode[dst] = cloned
 		}
 	}
 	if ec.accumulatorAfterErrorByNode != nil {
 		if errs, ok := ec.accumulatorAfterErrorByNode[orig]; ok {
 			cloned := make(map[string]error, len(errs))
-			for k, v := range errs {
-				cloned[k] = v
-			}
+			maps.Copy(cloned, errs)
 			ec.accumulatorAfterErrorByNode[dst] = cloned
 		}
 	}

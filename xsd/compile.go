@@ -112,7 +112,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {
 		if !isValidBlock(v) && c.filename != "" {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),				root.LocalName(), elemSchema, attrBlockDefault,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(), root.LocalName(), elemSchema, attrBlockDefault,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
@@ -123,7 +123,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Parse finalDefault attribute.
 	if v := getAttr(root, attrFinalDefault); v != "" {
 		if !isValidFinalDefault(v) && c.filename != "" {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),				root.LocalName(), elemSchema, attrFinalDefault,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(), root.LocalName(), elemSchema, attrFinalDefault,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {

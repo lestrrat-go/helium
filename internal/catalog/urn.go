@@ -9,17 +9,17 @@ const urnPrefix = "urn:publicid:"
 //
 // Decoding rules:
 //
-//	+   → ' ' (space)
-//	:   → //
-//	;   → ::
-//	%2B → +
-//	%3A → :
-//	%2F → /
-//	%3B → ;
-//	%27 → '
-//	%3F → ?
-//	%23 → #
-//	%25 → %
+//   - → ' ' (space)
+//     :   → //
+//     ;   → ::
+//     %2B → +
+//     %3A → :
+//     %2F → /
+//     %3B → ;
+//     %27 → '
+//     %3F → ?
+//     %23 → #
+//     %25 → %
 func UnwrapURN(urn string) string {
 	if !strings.HasPrefix(urn, urnPrefix) {
 		return ""

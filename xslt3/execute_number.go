@@ -10,8 +10,8 @@ import (
 	"unicode"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
@@ -193,7 +193,7 @@ func (ec *execContext) numberNodeMatches(ctx context.Context, inst *numberInst, 
 		return false
 	}
 	if target.Type() == helium.ElementNode {
-		te := target.(*helium.Element) //nolint:forcetypeassert
+		te := target.(*helium.Element)      //nolint:forcetypeassert
 		ce := contextNode.(*helium.Element) //nolint:forcetypeassert
 		return te.LocalName() == ce.LocalName() && te.URI() == ce.URI()
 	}

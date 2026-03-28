@@ -32,7 +32,7 @@ func (c *compiler) compileSourceDocument(ctx context.Context, elem *helium.Eleme
 		inst.TypeName = resolveQName(typeName, c.nsBindings)
 	}
 	if useAccumulators := getAttr(elem, "use-accumulators"); useAccumulators != "" {
-		for _, name := range strings.Fields(useAccumulators) {
+		for name := range strings.FieldsSeq(useAccumulators) {
 			inst.UseAccumulators = append(inst.UseAccumulators, resolveQName(name, c.nsBindings))
 		}
 	}
@@ -595,7 +595,7 @@ func containsVarRef(s, name string) bool {
 	ref := "$" + name
 	inSingle := false
 	inDouble := false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		switch s[i] {
 		case '\'':
 			if !inDouble {
@@ -897,7 +897,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 	}
 
 	if useAccumulators := getAttr(elem, "use-accumulators"); useAccumulators != "" {
-		for _, name := range strings.Fields(useAccumulators) {
+		for name := range strings.FieldsSeq(useAccumulators) {
 			src.UseAccumulators = append(src.UseAccumulators, resolveQName(name, c.nsBindings))
 		}
 	}

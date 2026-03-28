@@ -50,10 +50,7 @@ func rngParserError(msg string) string {
 //	{caret}
 func formatXMLParseError(filename string, pe helium.ErrParseError) string {
 	line := strings.TrimRight(pe.Line, "\n")
-	caretPos := pe.Column - 1
-	if caretPos < 0 {
-		caretPos = 0
-	}
+	caretPos := max(pe.Column-1, 0)
 	return fmt.Sprintf("%s:%d: parser error : %s\n%s\n%s^\n",
 		filename, pe.LineNumber, pe.Err.Error(), line, strings.Repeat(" ", caretPos))
 }

@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -34,7 +35,7 @@ func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element
 	}
 
 	if ucm := getAttr(elem, paramUseCharacterMaps); ucm != "" {
-		for _, n := range strings.Fields(ucm) {
+		for n := range strings.FieldsSeq(ucm) {
 			cm.UseCharacterMaps = append(cm.UseCharacterMaps, resolveQName(n, c.nsBindings))
 		}
 	}
@@ -76,9 +77,7 @@ func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element
 		// Merge: later-compiled mappings override earlier ones for the
 		// same character. Since imports compile before the importing
 		// module, the importing module's mappings naturally take precedence.
-		for r, s := range cm.Mappings {
-			existing.Mappings[r] = s
-		}
+		maps.Copy(existing.Mappings, cm.Mappings)
 		existing.UseCharacterMaps = append(existing.UseCharacterMaps, cm.UseCharacterMaps...)
 	} else {
 		c.stylesheet.characterMaps[name] = cm
@@ -299,7 +298,7 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 	if v := getAttr(elem, paramStandalone); v != "" {
 		v = strings.TrimSpace(v)
 		switch v {
-		case lexicon.ValueYes, lexicon.ValueNo, "omit": //nolint:goconst
+		case lexicon.ValueYes, lexicon.ValueNo, "omit":
 			// valid as-is
 		case lexicon.ValueTrue, "1":
 			v = lexicon.ValueYes
@@ -343,7 +342,7 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 	}
 
 	if ucm := getAttr(elem, paramUseCharacterMaps); ucm != "" {
-		for _, n := range strings.Fields(ucm) {
+		for n := range strings.FieldsSeq(ucm) {
 			outDef.UseCharacterMaps = append(outDef.UseCharacterMaps, resolveQName(n, c.nsBindings))
 		}
 	}
@@ -543,7 +542,7 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 			if outDef.StandaloneRaw == "" && val != "" {
 				v := strings.TrimSpace(val)
 				switch v {
-				case lexicon.ValueYes, lexicon.ValueNo, "omit": //nolint:goconst
+				case lexicon.ValueYes, lexicon.ValueNo, "omit":
 					outDef.Standalone = v
 				}
 			}
@@ -686,7 +685,7 @@ func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element
 	}
 
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
-		for _, n := range strings.Fields(uas) {
+		for n := range strings.FieldsSeq(uas) {
 			asd.UseAttrSets = append(asd.UseAttrSets, resolveQName(n, c.nsBindings))
 		}
 	}
@@ -834,9 +833,7 @@ func (c *compiler) compileDecimalFormat(ctx context.Context, elem *helium.Elemen
 			return staticError(errCodeXTSE0020, "invalid name %q on xsl:decimal-format", name)
 		}
 		qn = xpath3.QualifiedName{Name: name}
-		if idx := strings.IndexByte(name, ':'); idx >= 0 {
-			prefix := name[:idx]
-			local := name[idx+1:]
+		if prefix, local, ok := strings.Cut(name, ":"); ok {
 			if uri, ok := c.nsBindings[prefix]; ok {
 				qn = xpath3.QualifiedName{URI: uri, Name: local}
 			} else {
@@ -883,7 +880,6 @@ func (c *compiler) compileDecimalFormat(ctx context.Context, elem *helium.Elemen
 	// If current declaration has higher or equal import precedence, merge properties.
 	// Lower precedence declarations' explicitly-set properties are inherited.
 	if !exists || c.importPrec >= existingPrec {
-
 		// Merge explicitly-set properties
 		if v := getAttr(elem, "decimal-separator"); v != "" {
 			df.DecimalSeparator = firstRune(v)
@@ -968,7 +964,7 @@ func checkDecimalFormatCharConflicts(df xpath3.DecimalFormat) error {
 		{df.PatternSeparator, "pattern-separator"},
 		{df.ExponentSeparator, "exponent-separator"},
 	}
-	for i := 0; i < len(roles); i++ {
+	for i := range roles {
 		for j := i + 1; j < len(roles); j++ {
 			if roles[i].char == roles[j].char {
 				return staticError(errCodeXTSE1300,
@@ -1066,7 +1062,7 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 	}
 	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
 
-	for _, name := range strings.Fields(elements) {
+	for name := range strings.FieldsSeq(elements) {
 		nt := nameTest{}
 		// Handle EQName syntax: Q{uri}local
 		if strings.HasPrefix(name, "Q{") {
@@ -1076,9 +1072,9 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 			} else {
 				nt.Local = name
 			}
-		} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
-			nt.Prefix = name[:idx]
-			nt.Local = name[idx+1:]
+		} else if prefix, local, ok := strings.Cut(name, ":"); ok {
+			nt.Prefix = prefix
+			nt.Local = local
 			// XTSE0280: check that the prefix is declared (skip EQName and wildcards)
 			if !strings.HasPrefix(nt.Prefix, "Q{") && nt.Prefix != "*" {
 				if _, ok := c.nsBindings[nt.Prefix]; !ok {
@@ -1104,7 +1100,7 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 
 // nameTestKey returns a canonical key for a nameTest by resolving the prefix
 // to a URI. EQName prefixes of the form "Q{uri}" are used as-is.
-func (c *compiler) nameTestKey(ctx context.Context, nt nameTest) string {
+func (c *compiler) nameTestKey(ctx context.Context, nt nameTest) string { //nolint:unparam // ctx threaded through for API consistency
 	uri := ""
 	if strings.HasPrefix(nt.Prefix, "Q{") {
 		uri = nt.Prefix[2 : len(nt.Prefix)-1]

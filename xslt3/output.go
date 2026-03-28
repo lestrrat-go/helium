@@ -113,7 +113,7 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.D
 			default:
 				if v.Node.Type() == helium.CommentNode {
 					buf.WriteString("<!--")
-					buf.WriteString(string(v.Node.Content()))
+					buf.Write(v.Node.Content())
 					buf.WriteString("-->")
 				} else if v.Node.Type() == helium.ProcessingInstructionNode {
 					buf.WriteString("<?")
@@ -124,7 +124,7 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.D
 					}
 					buf.WriteString("?>")
 				} else {
-					buf.WriteString(string(v.Node.Content()))
+					buf.Write(v.Node.Content())
 				}
 			}
 			if _, err := w.Write(buf.Bytes()); err != nil {
@@ -188,7 +188,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 
 	// Check if we need encoding conversion (non-UTF-8)
 	enc := strings.ToLower(outDef.Encoding)
-	isUTF16 := enc == lexicon.EncodingUTF16 || enc == "utf16"                                        //nolint:goconst
+	isUTF16 := enc == lexicon.EncodingUTF16 || enc == "utf16"
 	needsEncodingConversion := enc != "" && enc != lexicon.EncodingUTF8 && enc != "utf8" && !isUTF16 //nolint:goconst
 
 	// Check if we need Unicode normalization
@@ -326,7 +326,7 @@ func serializeNodeWithMethod(node helium.Node, method string) string {
 		case *helium.Element, *helium.Document:
 			_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, node)
 		default:
-			buf.WriteString(string(node.Content()))
+			buf.Write(node.Content())
 		}
 		return buf.String()
 	}

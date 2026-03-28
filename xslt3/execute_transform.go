@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"time"
 
@@ -21,9 +22,7 @@ func cloneOutputDef(src *OutputDef) *OutputDef {
 	cp := *src
 	if src.ResolvedCharMap != nil {
 		cp.ResolvedCharMap = make(map[rune]string, len(src.ResolvedCharMap))
-		for k, v := range src.ResolvedCharMap {
-			cp.ResolvedCharMap[k] = v
-		}
+		maps.Copy(cp.ResolvedCharMap, src.ResolvedCharMap)
 	}
 	if src.UseCharacterMaps != nil {
 		cp.UseCharacterMaps = append([]string(nil), src.UseCharacterMaps...)

@@ -67,7 +67,7 @@ func (l *parserLocator) GetPublicID() string { return "" }
 // GetSystemID returns the system identifier (URI/filename) of the document being parsed (libxml2: xmlSAXLocator.getSystemId).
 func (l *parserLocator) GetSystemID() string { return "" }
 
-func newParser(ctx context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser {
+func newParser(ctx context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser { //nolint:unparam // ctx threaded through for API consistency
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
 	normalized := normalizeNewlines(input)
 
@@ -199,10 +199,7 @@ func replaceInvalidUTF8(data []byte, info *invalidByteInfo) ([]byte, bool) {
 			buf.WriteRune('\uFFFD')
 			if !found && info != nil {
 				info.offset = i
-				end := i + 4
-				if end > len(data) {
-					end = len(data)
-				}
+				end := min(i+4, len(data))
 				info.nBytes = copy(info.rawBytes[:], data[i:end])
 			}
 			found = true
@@ -259,7 +256,7 @@ func (p *parser) peekAt(offset int) byte {
 
 // advance moves forward by n bytes, updating line/col tracking.
 func (p *parser) advance(n int) {
-	for i := 0; i < n; i++ {
+	for range n {
 		if p.pos >= len(p.input) {
 			break
 		}
@@ -296,7 +293,7 @@ func (p *parser) currentName() string {
 
 // pushName pushes an element name onto the stack and tracks insert mode.
 func (p *parser) pushName(name string) {
-	if name == "html" { //nolint:goconst
+	if name == "html" {
 		p.sawRoot = true
 	}
 	if p.mode < insertInHead && name == "head" { //nolint:goconst

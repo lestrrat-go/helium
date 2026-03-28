@@ -213,7 +213,7 @@ func (ctx *parserCtx) parseVersionNum(_ byte) (string, error) {
 			b := bufferPool.Get()
 			defer releaseBuffer(b)
 
-			for x := 0; x < i; x++ {
+			for x := range i {
 				_ = b.WriteByte(cur.PeekAt(x))
 			}
 			if err := cur.Advance(i); err != nil {
@@ -326,14 +326,14 @@ func (pctx *parserCtx) parseEncodingName(ctx context.Context, _ byte) (string, e
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
-	if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') { // nolint:staticcheck
+	if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') { //nolint:staticcheck
 		return "", pctx.error(ctx, ErrInvalidEncodingName)
 	}
 	_ = buf.WriteByte(c)
 
 	i := 1
 	for c = cur.PeekAt(i); c != 0; c = cur.PeekAt(i) {
-		if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '.' && c != '_' && c != '-' { // nolint:staticcheck
+		if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '.' && c != '_' && c != '-' { //nolint:staticcheck
 			break
 		}
 		_ = buf.WriteByte(c)

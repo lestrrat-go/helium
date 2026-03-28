@@ -88,7 +88,7 @@ func (c *xpathCommand) parseArgs(args []string) (*xpathConfig, []string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "--version":
+		case flagVersion:
 			cfg.version = true
 		case "--engine":
 			i++

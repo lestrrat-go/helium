@@ -56,14 +56,13 @@ func (vc *validationContext) reportValidityErrorAttr(ctx context.Context, file s
 
 // Validate validates a lexical value against this simple type definition.
 // nsMap provides prefix-to-URI mappings for QName/NOTATION resolution and may be nil.
-func (td *TypeDef) Validate(value string, nsMap map[string]string) error {
+func (td *TypeDef) Validate(ctx context.Context, value string, nsMap map[string]string) error {
 	if td == nil {
 		return fmt.Errorf("nil type definition")
 	}
 	if td.ContentType != ContentTypeSimple {
 		return fmt.Errorf("type %q is not a simple type", typeQualifiedName(td))
 	}
-	ctx := context.Background()
 	vc := &validationContext{
 		errorHandler: helium.NilErrorHandler{},
 	}
@@ -73,11 +72,10 @@ func (td *TypeDef) Validate(value string, nsMap map[string]string) error {
 // ValidateElement validates an element's content against this type definition.
 // This is used by XSLT xsl:type validation where the element is constructed
 // in the result tree and must conform to the given type.
-func (td *TypeDef) ValidateElement(elem *helium.Element, schema *Schema) error {
+func (td *TypeDef) ValidateElement(ctx context.Context, elem *helium.Element, schema *Schema) error {
 	if td == nil {
 		return fmt.Errorf("nil type definition")
 	}
-	ctx := context.Background()
 	collector := &validationErrors{}
 	vc := newValidationContext(schema, &validateConfig{}, "", collector)
 	err := vc.validateElementContent(ctx, elem, nil, td)
@@ -198,7 +196,7 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 		td = edecl.Type // fall back to declared type
 	}
 	if td != nil && td.Abstract {
-		msg := "The type definition is abstract." //nolint:goconst
+		msg := "The type definition is abstract."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 		return fmt.Errorf("abstract type")
 	}
@@ -408,7 +406,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			if au.TypeName.Local != "" {
 				attrTD, tdOK := vc.schema.LookupType(au.TypeName.Local, au.TypeName.NS)
 				if tdOK && attrTD.ContentType == ContentTypeSimple {
-					if err := attrTD.Validate(a.Value(), collectNSContext(elem)); err != nil {
+					if err := attrTD.Validate(ctx, a.Value(), collectNSContext(elem)); err != nil {
 						ad := attrDisplayName(a)
 						msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
 						vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -652,9 +650,8 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 	// Parse QName value: may be "prefix:local" or just "local".
 	local := xsiTypeVal
 	var ns string
-	if idx := strings.IndexByte(xsiTypeVal, ':'); idx >= 0 {
-		prefix := xsiTypeVal[:idx]
-		local = xsiTypeVal[idx+1:]
+	if prefix, rest, ok := strings.Cut(xsiTypeVal, ":"); ok {
+		local = rest
 		ns = lookupNS(elem, prefix)
 	} else {
 		// No prefix — use the default namespace (empty prefix) or schema target namespace.
@@ -720,7 +717,7 @@ func xsdTypeName(td *TypeDef) string {
 }
 
 // annotateElement records a type annotation for an element node.
-func (vc *validationContext) annotateElement(ctx context.Context, elem *helium.Element, td *TypeDef) {
+func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef) {
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
@@ -728,7 +725,7 @@ func (vc *validationContext) annotateElement(ctx context.Context, elem *helium.E
 }
 
 // annotateAttrUse records a type annotation for an attribute node based on its AttrUse declaration.
-func (vc *validationContext) annotateAttrUse(ctx context.Context, a *helium.Attribute, au *AttrUse) {
+func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attribute, au *AttrUse) {
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}

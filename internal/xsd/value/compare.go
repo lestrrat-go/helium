@@ -124,12 +124,10 @@ func parseXSDDateTime(s string) (xsdDateTime, bool) {
 		s = s[1:]
 	}
 	// Find 'T' separator.
-	tIdx := strings.IndexByte(s, 'T')
-	if tIdx < 0 {
+	datePart, timePart, found := strings.Cut(s, "T")
+	if !found {
 		return dt, false
 	}
-	datePart := s[:tIdx]
-	timePart := s[tIdx+1:]
 
 	// Parse date: YYYY-MM-DD
 	dParts := strings.SplitN(datePart, "-", 3)

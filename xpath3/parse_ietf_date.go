@@ -287,10 +287,7 @@ func (p *ietfDateParser) parseTZ() (*time.Location, error) {
 		// Remove trailing colon (e.g., "-05:")
 		offsetStr = strings.TrimRight(offsetStr, ":")
 		var h, m int
-		if colonIdx := strings.IndexByte(offsetStr, ':'); colonIdx >= 0 {
-			// Format with colon: H:MM or HH:MM
-			hPart := offsetStr[:colonIdx]
-			mPart := offsetStr[colonIdx+1:]
+		if hPart, mPart, ok := strings.Cut(offsetStr, ":"); ok {
 			if len(hPart) < 1 || len(hPart) > 2 {
 				return nil, fmt.Errorf("invalid timezone offset hours")
 			}

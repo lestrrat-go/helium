@@ -20,7 +20,7 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	escapeCtrl := effectiveHTMLVersion5(outDef)
 
 	if hasDoctypeAttrs {
-		rootName := "html" //nolint:goconst
+		rootName := "html"
 		if root := doc.DocumentElement(); root != nil {
 			rootName = root.Name()
 		}
@@ -304,8 +304,8 @@ func fixXHTMLSelfClosing(xml string) string {
 			elemName := tag[nameStart:nameEnd]
 			// Check for namespace prefix — use local name
 			localName := elemName
-			if idx := strings.IndexByte(elemName, ':'); idx >= 0 {
-				localName = elemName[idx+1:]
+			if _, after, ok := strings.Cut(elemName, ":"); ok {
+				localName = after
 			}
 			if _, isVoid := xhtmlVoidElements[strings.ToLower(localName)]; isVoid {
 				// Void element: add space before />
@@ -407,7 +407,7 @@ func escapeURIAttrsInTag(tag string) string {
 func percentEncodeNonASCII(s string) string {
 	var buf strings.Builder
 	b := []byte(s)
-	for i := 0; i < len(b); i++ {
+	for i := range b {
 		c := b[i]
 		if c > 0x7E {
 			fmt.Fprintf(&buf, "%%%02X", c)

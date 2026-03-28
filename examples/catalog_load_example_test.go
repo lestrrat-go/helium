@@ -27,7 +27,7 @@ func Example_catalog_load() {
 		fmt.Printf("failed to create temp dir: %s\n", err)
 		return
 	}
-	defer os.RemoveAll(dir) //nolint:errcheck
+	defer os.RemoveAll(dir)
 
 	catalogPath := filepath.Join(dir, "catalog.xml")
 	if err := os.WriteFile(catalogPath, []byte(catalogSrc), 0644); err != nil {

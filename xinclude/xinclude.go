@@ -1117,13 +1117,10 @@ func commonAncestorDir(a, b string) string {
 	aParts := strings.Split(aDir, string(filepath.Separator))
 	bParts := strings.Split(bDir, string(filepath.Separator))
 
-	n := len(aParts)
-	if len(bParts) < n {
-		n = len(bParts)
-	}
+	n := min(len(aParts), len(bParts))
 
 	common := 0
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if aParts[i] != bParts[i] {
 			break
 		}

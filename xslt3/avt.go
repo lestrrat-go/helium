@@ -223,14 +223,14 @@ func (a *avt) evaluate(ctx context.Context, node helium.Node) (string, error) {
 
 // evaluateStatic evaluates the avt at compile time using the given Evaluator.
 // This avoids the deprecated Expression.Evaluate(ctx, node) path.
-func (a *avt) evaluateStatic(eval xpath3.Evaluator, node helium.Node) (string, error) {
+func (a *avt) evaluateStatic(ctx context.Context, eval xpath3.Evaluator, node helium.Node) (string, error) {
 	if a == nil {
 		return "", nil
 	}
 	var sb strings.Builder
 	for _, p := range a.parts {
 		if p.expr != nil {
-			result, err := eval.Evaluate(context.Background(), p.expr, node)
+			result, err := eval.Evaluate(ctx, p.expr, node)
 			if err != nil {
 				return "", &XSLTError{Code: errCodeXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
 			}
@@ -337,7 +337,7 @@ func removeEmptyTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 	}
 	seqLen := sequence.Len(seq)
 	result := make(xpath3.ItemSlice, 0, seqLen)
-	for i := 0; i < seqLen; i++ {
+	for i := range seqLen {
 		item := seq.Get(i)
 		ni, ok := item.(xpath3.NodeItem)
 		if ok && ni.Node.Type() == helium.TextNode && len(ni.Node.Content()) == 0 {

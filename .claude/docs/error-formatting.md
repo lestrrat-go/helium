@@ -160,8 +160,8 @@ XSD, RelaxNG, Schematron, and DTD all use sentinel error + ErrorHandler pattern.
 
 ### TypeDef Validation Methods (`xsd/typedef_validate.go`)
 
-- `(*TypeDef).Validate(value string, nsMap map[string]string) error` — validates a lexical value against a simple type; uses `NilErrorHandler` (pass/fail only)
-- `(*TypeDef).ValidateElement(elem *helium.Element, schema *Schema) error` — validates an element's content against the type; uses internal `validationErrors` collector for error messages
+- `(*TypeDef).Validate(ctx context.Context, value string, nsMap map[string]string) error` — validates a lexical value against a simple type; uses `NilErrorHandler` (pass/fail only)
+- `(*TypeDef).ValidateElement(ctx context.Context, elem *helium.Element, schema *Schema) error` — validates an element's content against the type; uses internal `validationErrors` collector for error messages
 
 ## Compilation vs Validation Errors
 

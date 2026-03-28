@@ -32,7 +32,7 @@ func TestHeliumLintGolden(t *testing.T) {
 	// Allow testing only specific files via environment variable
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_LINT_TEST_FILES"); v != "" {
-		for _, f := range strings.Split(v, ",") {
+		for f := range strings.SplitSeq(v, ",") {
 			n := strings.TrimSpace(f)
 			only[n] = struct{}{}
 		}

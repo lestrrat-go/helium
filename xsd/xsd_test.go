@@ -443,7 +443,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 
 	t.Run("element_fixed_empty", func(t *testing.T) {
 		t.Parallel()
-		xmlStr := `<root/>` //nolint:goconst
+		xmlStr := `<root/>`
 		err := compileAndValidate(t, fixedHelloSchema, xmlStr, nil)
 		require.NoError(t, err)
 	})

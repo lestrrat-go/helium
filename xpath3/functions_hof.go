@@ -119,13 +119,10 @@ func fnForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
 	if fi.Arity >= 0 && fi.Arity != 2 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
-	size := seqLen(seq1)
-	if seqLen(seq2) < size {
-		size = seqLen(seq2)
-	}
+	size := min(seqLen(seq1), seqLen(seq2))
 	var result ItemSlice
 	callArgs := make([]Sequence, 2)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		callArgs[0] = ItemSlice{seq1.Get(i)}
 		callArgs[1] = ItemSlice{seq2.Get(i)}
 		r, err := fi.Invoke(ctx, callArgs)
@@ -231,7 +228,7 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 	capturedCtx := ctx
 	if ec := getFnContext(ctx); ec != nil {
 		capturedECValue := *ec
-		capturedCtx = withFnContext(ctx, &capturedECValue) //nolint:contextcheck
+		capturedCtx = withFnContext(ctx, &capturedECValue)
 	}
 
 	var paramTypes []SequenceType

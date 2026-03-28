@@ -329,9 +329,9 @@ func catchCodeMatches(catchCode string, errQName QNameValue) bool {
 	// Extract local part from catch code (strip prefix)
 	catchLocal := catchCode
 	catchPrefix := ""
-	if idx := strings.IndexByte(catchCode, ':'); idx >= 0 {
-		catchPrefix = catchCode[:idx]
-		catchLocal = catchCode[idx+1:]
+	if p, l, ok := strings.Cut(catchCode, ":"); ok {
+		catchPrefix = p
+		catchLocal = l
 	}
 
 	// Wildcard forms

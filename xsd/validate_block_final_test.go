@@ -146,7 +146,7 @@ func TestBlockOnElement(t *testing.T) {
     </xs:complexType>
   </xs:element>
 </xs:schema>`
-		instanceXML := `<root><member>hello</member></root>` //nolint:goconst
+		instanceXML := `<root><member>hello</member></root>`
 		err := compileAndValidate(t, schemaXML, instanceXML, nil)
 		require.Error(t, err)
 	})

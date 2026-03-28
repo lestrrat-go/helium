@@ -9,6 +9,11 @@ import (
 	"github.com/lestrrat-go/helium/internal/cliutil"
 )
 
+const (
+	flagVersion = "--version"
+	flagTiming  = "--timing"
+)
+
 type ioContextKey struct{}
 
 type ioContext struct {
@@ -122,7 +127,7 @@ func runRelaxNG(ctx context.Context, stderr io.Writer, stdin io.Reader, stdinTTY
 	}
 
 	switch args[0] {
-	case "validate": //nolint:goconst
+	case "validate":
 		return newRelaxNGValidateCommandWithIO("helium relaxng validate", stdin, stderr, stdinTTY).runContext(ctx, args[1:])
 	default:
 		_, _ = fmt.Fprintf(stderr, "helium relaxng: unknown subcommand %q\n", args[0])

@@ -134,11 +134,11 @@ func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart
 // formatXPathError converts XPath error messages to libxml2-compatible format.
 func formatXPathError(err error) string {
 	msg := err.Error()
-	if strings.HasPrefix(msg, "xpath: unknown function: ") {
-		return "Unregistered function: " + strings.TrimPrefix(msg, "xpath: unknown function: ")
+	if after, ok := strings.CutPrefix(msg, "xpath: unknown function: "); ok {
+		return "Unregistered function: " + after
 	}
-	if strings.HasPrefix(msg, "unknown function: ") {
-		return "Unregistered function: " + strings.TrimPrefix(msg, "unknown function: ")
+	if after, ok := strings.CutPrefix(msg, "unknown function: "); ok {
+		return "Unregistered function: " + after
 	}
 	return msg
 }

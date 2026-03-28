@@ -10,7 +10,7 @@ func NormalizePublicID(pubID string) string {
 	var b strings.Builder
 	b.Grow(len(pubID))
 	inSpace := true // treat leading whitespace as a run
-	for i := 0; i < len(pubID); i++ {
+	for i := range len(pubID) {
 		c := pubID[i]
 		switch c {
 		case ' ', '\t', '\n', '\r':

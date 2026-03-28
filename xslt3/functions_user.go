@@ -185,7 +185,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 			val := args[i]
 			if param.As != "" {
 				st := parseSequenceType(param.As)
-				checked, err := checkSequenceType(val, st, errCodeXTTE0790, "param $"+param.Name, ec)
+				checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0790, "param $"+param.Name, ec)
 				if err != nil {
 					return nil, err
 				}
@@ -264,7 +264,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	// Type check against the declared as type
 	if f.def.As != "" {
 		st := parseSequenceType(f.def.As)
-		checked, err := checkSequenceType(result, st, errCodeXTTE0780, "function "+f.def.Name.Name, ec)
+		checked, err := checkSequenceType(ctx, result, st, errCodeXTTE0780, "function "+f.def.Name.Name, ec)
 		if err != nil {
 			return nil, err
 		}

@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -85,7 +86,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		return staticError(errCodeXTSE0020, "invalid name %q on xsl:template", nameAttr)
 	}
 	if nameAttr != "" {
-		if err := c.checkQNamePrefix(ctx,nameAttr, "xsl:template"); err != nil {
+		if err := c.checkQNamePrefix(ctx, nameAttr, "xsl:template"); err != nil {
 			return err
 		}
 	}
@@ -161,17 +162,17 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 			return staticError(errCodeXTSE0550, "#all must not appear with other modes in xsl:template/@mode")
 		}
 		// Resolve mode QNames to Clark notation for namespace-aware matching
-		tmpl.Mode = c.resolveMode(ctx,modeAttr)
+		tmpl.Mode = c.resolveMode(ctx, modeAttr)
 	}
 	// XSLT 3.0 §6.7: if the stylesheet (or an included/imported module) has
 	// default-mode, templates without an explicit mode attribute belong to it.
 	if tmpl.Mode == "" && c.defaultMode != "" {
-		tmpl.Mode = c.resolveMode(ctx,c.defaultMode)
+		tmpl.Mode = c.resolveMode(ctx, c.defaultMode)
 	}
 
 	// Record mode usage for XTSE3085 checking (only match templates have modes)
 	if matchAttr != "" {
-		c.recordModeUsage(ctx,tmpl.Mode)
+		c.recordModeUsage(ctx, tmpl.Mode)
 	}
 
 	hasExplicitPriority := false
@@ -196,9 +197,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	savedExcludes := c.localExcludes
 	if erp := getAttr(elem, "exclude-result-prefixes"); erp != "" {
 		newExcludes := make(map[string]struct{})
-		for k, v := range c.localExcludes {
-			newExcludes[k] = v
-		}
+		maps.Copy(newExcludes, c.localExcludes)
 		if erp == lexicon.ModeAll {
 			for prefix := range c.stylesheet.namespaces {
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
@@ -206,7 +205,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 				}
 			}
 		} else {
-			for _, prefix := range strings.Fields(erp) {
+			for prefix := range strings.FieldsSeq(erp) {
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExcludes[uri] = struct{}{}
 				}
@@ -255,7 +254,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		tmpl.ContextItemUse = ctxDecl.use
 	}
 	tmplAs := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(ctx,tmplAs, "xsl:template"); err != nil {
+	if err := c.validateAsSequenceType(ctx, tmplAs, "xsl:template"); err != nil {
 		return err
 	}
 	tmpl.As = tmplAs
@@ -310,7 +309,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 
 		mode := tmpl.Mode
 		for _, t := range templates {
-			c.registerTemplateInModes(ctx,t, mode)
+			c.registerTemplateInModes(ctx, t, mode)
 		}
 	}
 
@@ -423,7 +422,7 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 					return nil, nil, nil, staticError(errCodeXTSE0020,
 						"xsl:param %q: static attribute is not allowed on template/function parameters", pname)
 				}
-				p, err := c.compileParamDef(ctx,v)
+				p, err := c.compileParamDef(ctx, v)
 				if err != nil {
 					return nil, nil, nil, err
 				}
@@ -453,7 +452,7 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 			if !pastDecls && strings.TrimSpace(text) == "" {
 				continue
 			}
-			if !c.shouldStripText(ctx,text) {
+			if !c.shouldStripText(ctx, text) {
 				inParams = false
 				sawContent = true
 				inst := &literalTextInst{Value: text}
@@ -538,7 +537,7 @@ func (c *compiler) validateContextItem(ctx context.Context, elem *helium.Element
 			return staticError(errCodeXTSE0010, "xsl:context-item must be empty")
 		}
 		if child.Type() == helium.TextNode {
-			if !c.shouldStripText(ctx,string(child.Content())) {
+			if !c.shouldStripText(ctx, string(child.Content())) {
 				return staticError(errCodeXTSE0010, "xsl:context-item must be empty")
 			}
 		}
@@ -630,7 +629,7 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 	}
 
 	asAttr := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(ctx,asAttr, "xsl:param "+name); err != nil {
+	if err := c.validateAsSequenceType(ctx, asAttr, "xsl:param "+name); err != nil {
 		return nil, err
 	}
 
@@ -709,7 +708,7 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 	}
 
 	asAttr := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(ctx,asAttr, "xsl:variable "+name); err != nil {
+	if err := c.validateAsSequenceType(ctx, asAttr, "xsl:variable "+name); err != nil {
 		return err
 	}
 
@@ -786,7 +785,7 @@ func (c *compiler) compileGlobalParam(ctx context.Context, elem *helium.Element)
 	if getAttr(elem, "tunnel") == lexicon.ValueYes {
 		return staticError(errCodeXTSE0020, "tunnel=\"yes\" is not allowed on a stylesheet parameter")
 	}
-	p, err := c.compileParamDef(ctx,elem)
+	p, err := c.compileParamDef(ctx, elem)
 	if err != nil {
 		return err
 	}
@@ -819,9 +818,9 @@ func xpathExprReferencesVar(expr xpath3.Expr, name string, _ map[string]string) 
 	// In XPath AST, VariableExpr stores Prefix and Name separately.
 	rawLocal := name
 	var rawPrefix string
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		rawPrefix = name[:idx]
-		rawLocal = name[idx+1:]
+	if p, l, ok := strings.Cut(name, ":"); ok {
+		rawPrefix = p
+		rawLocal = l
 	}
 
 	return xpathExprRefsVarWalk(expr, rawLocal, rawPrefix)

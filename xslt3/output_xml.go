@@ -14,7 +14,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// always outputs UTF-8. The encoding conversion is handled by
 	// serializeResult's transcoding layer.
 	targetEnc := strings.ToLower(outDef.Encoding)
-	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8" //nolint:goconst
+	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8"
 	// When the document has no document element (e.g., result-document
 	// producing only comments and text), use the stream-based serializer
 	// which does not inject newlines between top-level children.
@@ -23,7 +23,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 		return serializeXMLWithCharMap(w, doc, outDef, charMap)
 	}
 	// Set encoding on the document so the XML declaration includes it.
-	if outDef.Encoding != "" && doc.Encoding() == "utf8" { //nolint:goconst
+	if outDef.Encoding != "" && doc.Encoding() == "utf8" {
 		doc.SetEncoding(outDef.Encoding)
 	}
 	// Per XSLT spec, doctype-public without doctype-system is ignored for xml method.
@@ -33,7 +33,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// Add DOCTYPE if doctype-system is specified and
 	// the document doesn't already have a DTD.
 	if outDef.DoctypeSystem != "" && doc.IntSubset() == nil {
-		rootName := "html" // default //nolint:goconst
+		rootName := "html" // default
 		if root := doc.DocumentElement(); root != nil {
 			rootName = root.Name()
 		}
@@ -124,7 +124,7 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 
 	// Add DOCTYPE if doctype-system is specified (doctype-public alone is ignored for xml).
 	if outDef.DoctypeSystem != "" {
-		rootName := "html" //nolint:goconst
+		rootName := "html"
 		if root := doc.DocumentElement(); root != nil {
 			rootName = root.Name()
 		}

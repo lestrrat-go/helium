@@ -143,7 +143,7 @@ func serializeMessageSequence(seq xpath3.Sequence) string {
 			buf.WriteString("?>")
 		default:
 			// Text, CDATA, etc. — use string value
-			sb.WriteString(string(ni.Node.Content()))
+			sb.Write(ni.Node.Content())
 			continue
 		}
 		sb.WriteString(strings.TrimSpace(buf.String()))
@@ -460,8 +460,8 @@ func catchMatches(clause *catchClause, errClark string) bool {
 	// Extract local name from Clark notation for wildcard matching.
 	errLocal := errClark
 	if strings.HasPrefix(errClark, "{") {
-		if idx := strings.IndexByte(errClark, '}'); idx >= 0 {
-			errLocal = errClark[idx+1:]
+		if _, after, ok := strings.Cut(errClark, "}"); ok {
+			errLocal = after
 		}
 	}
 

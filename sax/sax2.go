@@ -284,32 +284,32 @@ func (f WarningFunc) Handle(ctx context.Context, err error) error {
 // SAX2 is a callback-based SAX2 handler.
 // (libxml2: xmlSAXHandler with function pointers)
 type SAX2 struct {
-	onAttributeDecl AttributeDecl
-	onCDataBlock CDataBlock
-	onCharacters Characters
-	onComment Comment
-	onElementDecl ElementDecl
-	onEndDocument EndDocument
-	onEndElementNS EndElementNS
-	onEntityDecl EntityDecl
-	onError Error
-	onExternalSubset ExternalSubset
-	onGetEntity GetEntity
-	onGetParameterEntity GetParameterEntity
-	onHasExternalSubset HasExternalSubset
-	onHasInternalSubset HasInternalSubset
-	onIgnorableWhitespace IgnorableWhitespace
-	onInternalSubset InternalSubset
-	onIsStandalone IsStandalone
-	onNotationDecl NotationDecl
+	onAttributeDecl         AttributeDecl
+	onCDataBlock            CDataBlock
+	onCharacters            Characters
+	onComment               Comment
+	onElementDecl           ElementDecl
+	onEndDocument           EndDocument
+	onEndElementNS          EndElementNS
+	onEntityDecl            EntityDecl
+	onError                 Error
+	onExternalSubset        ExternalSubset
+	onGetEntity             GetEntity
+	onGetParameterEntity    GetParameterEntity
+	onHasExternalSubset     HasExternalSubset
+	onHasInternalSubset     HasInternalSubset
+	onIgnorableWhitespace   IgnorableWhitespace
+	onInternalSubset        InternalSubset
+	onIsStandalone          IsStandalone
+	onNotationDecl          NotationDecl
 	onProcessingInstruction ProcessingInstruction
-	onReference Reference
-	onResolveEntity ResolveEntity
-	onSetDocumentLocator SetDocumentLocator
-	onStartDocument StartDocument
-	onStartElementNS StartElementNS
-	onUnparsedEntityDecl UnparsedEntityDecl
-	onWarning Warning
+	onReference             Reference
+	onResolveEntity         ResolveEntity
+	onSetDocumentLocator    SetDocumentLocator
+	onStartDocument         StartDocument
+	onStartElementNS        StartElementNS
+	onUnparsedEntityDecl    UnparsedEntityDecl
+	onWarning               Warning
 }
 
 // New creates a new instance of SAX2. All callbacks are
@@ -629,4 +629,3 @@ func (s *SAX2) Warning(ctx context.Context, err error) error {
 	}
 	return ErrHandlerUnspecified
 }
-

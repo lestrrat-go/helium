@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -218,9 +219,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			var clauseNS map[string]string
 			if len(c.nsBindings) > 0 {
 				clauseNS = make(map[string]string, len(c.nsBindings))
-				for k, v := range c.nsBindings {
-					clauseNS[k] = v
-				}
+				maps.Copy(clauseNS, c.nsBindings)
 			}
 			whenCollation := getAttr(childElem, "default-collation")
 			body, err := c.compileChildren(ctx, childElem)
@@ -714,13 +713,11 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 			if errAttr := getAttr(childElem, "errors"); errAttr != "" {
 				// Build a merged namespace map including catch-element bindings
 				catchNS := make(map[string]string, len(c.nsBindings))
-				for k, v := range c.nsBindings {
-					catchNS[k] = v
-				}
+				maps.Copy(catchNS, c.nsBindings)
 				for _, ns := range childElem.Namespaces() {
 					catchNS[ns.Prefix()] = ns.URI()
 				}
-				for _, code := range strings.Fields(errAttr) {
+				for code := range strings.FieldsSeq(errAttr) {
 					clause.Errors = append(clause.Errors, resolveQName(code, catchNS))
 				}
 			}

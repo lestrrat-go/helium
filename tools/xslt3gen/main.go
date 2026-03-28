@@ -412,7 +412,7 @@ func main() {
 			// Find primary and secondary stylesheets
 			for _, ss := range tc.Test.Stylesheets {
 				relPath := filepath.Join(tsDir, ss.File)
-				if ss.Role == "secondary" { //nolint:goconst
+				if ss.Role == "secondary" {
 					gt.SecondaryStylesheets = append(gt.SecondaryStylesheets, relPath)
 				} else {
 					gt.StylesheetPath = relPath
@@ -457,7 +457,7 @@ func main() {
 					// (embedded via <?xml-stylesheet?> PI).
 					sourceDefinesStylesheet := false
 					for _, src := range env.Sources {
-						if src.Role == "." && src.DefinesStylesheet == "true" { //nolint:goconst
+						if src.Role == "." && src.DefinesStylesheet == "true" {
 							sourceDefinesStylesheet = true
 							gt.EmbeddedStylesheet = true
 							break
@@ -867,7 +867,7 @@ func getDepsSkipReason(deps *xslDependencies) string {
 				return fmt.Sprintf("unsupported spec: %s", d.Value)
 			}
 		case "feature":
-			if d.Satisfied == "false" { //nolint:goconst
+			if d.Satisfied == "false" {
 				// Test requires the feature to be absent. Skip if we support it.
 				if featureSupported(d.Value) {
 					return fmt.Sprintf("feature present but test requires absent: %s", d.Value)
@@ -949,7 +949,7 @@ func getVersionResolution(setDeps *xslDependencies, caseDeps *xslDependencies) s
 }
 
 func specSupported(spec string) bool {
-	for _, s := range strings.Fields(spec) {
+	for s := range strings.FieldsSeq(spec) {
 		switch s {
 		// Our processor is XSLT 3.0.
 		// "X+" means "version X or later" — we satisfy 1.0+, 2.0+, 3.0+.
@@ -1025,9 +1025,7 @@ func resolveQNameWithAttrs(name string, attrs []xml.Attr) string {
 	if name == "" {
 		return ""
 	}
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local := name[idx+1:]
+	if prefix, local, ok := strings.Cut(name, ":"); ok {
 		for _, attr := range attrs {
 			if attr.Name.Space == "xmlns" && attr.Name.Local == prefix {
 				return helium.ClarkName(attr.Value, local)
@@ -1084,7 +1082,7 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		isXSD := se.Name.Space == "" || se.Name.Space == "http://www.w3.org/2001/XMLSchema"
 
 		// xsl:import / xsl:include → follow href recursively
-		if isXSLT && (se.Name.Local == "import" || se.Name.Local == "include") { //nolint:goconst
+		if isXSLT && (se.Name.Local == "import" || se.Name.Local == "include") {
 			for _, attr := range se.Attr {
 				if attr.Name.Local == "href" {
 					depPath := filepath.Join(dir, attr.Value)
@@ -1205,7 +1203,7 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 	}
 
 	switch xa.XMLName.Local {
-	case "assert-xml": //nolint:goconst
+	case "assert-xml":
 		if xa.File != "" {
 			// Read the .out file content at gen time and embed it
 			outPath := filepath.Join(tsDir, xa.File)
@@ -1220,9 +1218,9 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 		}
 	case "error":
 		a.Value = xa.Code
-	case "assert-string-value": //nolint:goconst
+	case "assert-string-value":
 		a.Value = decodeXMLText(string(xa.Inner))
-	case "all-of", "any-of": //nolint:goconst
+	case "all-of", "any-of":
 		for _, child := range xa.Children {
 			a.Children = append(a.Children, convertAssertion(child, tsDir))
 		}
@@ -1235,7 +1233,7 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 		for _, child := range xa.Children {
 			a.Children = append(a.Children, convertAssertion(child, tsDir))
 		}
-	case "assert-serialization": //nolint:goconst
+	case "assert-serialization":
 		a.Method = xa.Method
 		if xa.File != "" {
 			outPath := filepath.Join(tsDir, xa.File)
@@ -1244,7 +1242,7 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 				a.Value = fmt.Sprintf("ERROR: cannot read %s: %v", xa.File, err)
 			} else if !utf8.Valid(data) {
 				// Non-UTF-8 serialization output cannot be embedded in Go source.
-				a.Type = "assert-posture-and-sweep" //nolint:goconst
+				a.Type = "assert-posture-and-sweep"
 				a.Value = "skip: non-UTF-8 serialization comparison"
 			} else {
 				a.Value = string(data)
@@ -1255,12 +1253,12 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 	case "assert-serialization-error":
 		a.Type = "error"
 		a.Value = xa.Code
-	case "serialization-matches": //nolint:goconst
+	case "serialization-matches":
 		a.Value = decodeXMLText(string(xa.Inner))
 		a.Flags = xa.Flags
-	case "assert-type", "assert-count", "assert-deep-eq", "assert-empty", "assert-eq": //nolint:goconst
+	case "assert-type", "assert-count", "assert-deep-eq", "assert-empty", "assert-eq":
 		a.Value = decodeXMLText(string(xa.Inner))
-	case "not": //nolint:goconst
+	case "not":
 		for _, child := range xa.Children {
 			a.Children = append(a.Children, convertAssertion(child, tsDir))
 		}
@@ -1318,7 +1316,7 @@ func classifyUnsupportedAssertions(gt *generatedTest) {
 		return
 	}
 	for _, e := range exprs {
-		if e != "w3cAssertSkip()" { //nolint:goconst
+		if e != "w3cAssertSkip()" {
 			return
 		}
 	}
@@ -1378,7 +1376,7 @@ func loadSchemaKnownFailures(repoRoot string) map[string]struct{} {
 		return nil
 	}
 	result := make(map[string]struct{})
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		name := strings.TrimSpace(line)
 		if name != "" && !strings.HasPrefix(name, "#") {
 			result[name] = struct{}{}

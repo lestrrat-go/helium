@@ -21,6 +21,7 @@ import (
 	"go/format"
 	"io"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -429,7 +430,7 @@ func parseTestSet(path string) *testSetFile {
 func mergeDeps(setDeps, caseDeps []dependency) []dependency {
 	caseHasSpec := false
 	for _, d := range caseDeps {
-		if d.Type == "spec" { //nolint:goconst
+		if d.Type == "spec" {
 			caseHasSpec = true
 			break
 		}
@@ -459,7 +460,7 @@ func isXPathApplicable(deps []dependency) bool {
 			continue
 		}
 		hasSpecDep = true
-		for _, v := range strings.Fields(d.Value) {
+		for v := range strings.FieldsSeq(d.Value) {
 			if !strings.HasPrefix(v, "XP") {
 				continue
 			}
@@ -526,7 +527,7 @@ func getSkipReason(deps []dependency) string {
 			}
 		}
 		if d.Type == "spec" {
-			for _, v := range strings.Fields(d.Value) {
+			for v := range strings.FieldsSeq(d.Value) {
 				if v == "XP20" && d.Satisfied != "false" {
 					return "requires XPath 2.0 only behavior"
 				}
@@ -713,12 +714,8 @@ func envNamedDecimalFormats(env *environment) []namedDecimalFormat {
 			continue
 		}
 		dfNS := make(map[string]string, len(ns))
-		for k, v := range ns {
-			dfNS[k] = v
-		}
-		for k, v := range decimalFormatNamespaces(df) {
-			dfNS[k] = v
-		}
+		maps.Copy(dfNS, ns)
+		maps.Copy(dfNS, decimalFormatNamespaces(df))
 		uri, local, ok := resolveEnvQName(name, dfNS)
 		if !ok {
 			continue
@@ -757,13 +754,12 @@ func resolveEnvQName(name string, ns map[string]string) (string, string, bool) {
 		return name[2:end], name[end+1:], true
 	}
 
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
+	if prefix, local, ok := strings.Cut(name, ":"); ok {
 		uri := ns[prefix]
 		if uri == "" {
 			return "", "", false
 		}
-		return uri, name[idx+1:], true
+		return uri, local, true
 	}
 
 	return "", name, true
@@ -825,7 +821,7 @@ func convertAssertion(xa xmlAssertion) assertion {
 	// Decode the raw inner XML to preserve character references like &#xD;
 	// that Go's xml:",chardata" would normalize away.
 	value := decodeXMLText(string(xa.Inner))
-	if xa.XMLName.Local != "assert-string-value" { //nolint:goconst
+	if xa.XMLName.Local != "assert-string-value" {
 		value = strings.TrimSpace(value)
 	}
 	a := assertion{
@@ -1038,8 +1034,7 @@ func assertionsExpectError(assertions []assertion) bool {
 		if a.Type == "error" { //nolint:goconst
 			return true
 		}
-		if a.Type == "any-of" { //nolint:goconst
-			// Only treat as error-only if ALL children are errors.
+		if a.Type == "any-of" { // Only treat as error-only if ALL children are errors.
 			// If any-of has both error and non-error children,
 			// the non-error result is also acceptable (XP31 behavior).
 			allError := true

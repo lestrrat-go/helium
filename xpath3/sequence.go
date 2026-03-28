@@ -125,8 +125,7 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 			}
 			if listItem != "" {
 				s := ixpath.StringValue(ni.Node)
-				tokens := strings.Fields(s)
-				for _, tok := range tokens {
+				for tok := range strings.FieldsSeq(s) {
 					cast, err := CastFromString(tok, listItem)
 					if err != nil {
 						// For user-defined schema types (Q{ns}local),

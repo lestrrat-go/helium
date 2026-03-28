@@ -250,11 +250,10 @@ func parseXSDTime(s string) (time.Time, error) {
 // a midnight-24 value. The caller must advance the date by one day.
 // 24:00:00.nnn is valid only when the fractional part is all zeros.
 func normalizeMidnight24DateTime(s string) (string, bool) {
-	idx := strings.Index(s, "T24:00:00")
-	if idx < 0 {
+	before, rest, found := strings.Cut(s, "T24:00:00")
+	if !found {
 		return s, false
 	}
-	rest := s[idx+len("T24:00:00"):]
 	// Allow fractional seconds only if all digits are zero (e.g. .000)
 	if len(rest) > 0 && rest[0] == '.' {
 		i := 1
@@ -270,7 +269,7 @@ func normalizeMidnight24DateTime(s string) (string, bool) {
 		// Strip the all-zero fractional part
 		rest = rest[i:]
 	}
-	return s[:idx] + "T00:00:00" + rest, true
+	return before + "T00:00:00" + rest, true
 }
 
 // normalizeMidnight24Time checks if a time string starts with 24:00:00 and

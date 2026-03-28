@@ -73,10 +73,10 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 	name := "null"
 	switch v := item.(type) {
 	case MapItem:
-		name = "map" //nolint:goconst
+		name = "map"
 		_ = v
 	case ArrayItem:
-		name = "array" //nolint:goconst
+		name = "array"
 	case AtomicValue:
 		switch v.TypeName {
 		case TypeString:
@@ -639,9 +639,9 @@ func preprocessXMLJSONNumber(s string) string {
 
 	intPart := s
 	fracPart := ""
-	if idx := strings.IndexByte(s, '.'); idx >= 0 {
-		intPart = s[:idx]
-		fracPart = s[idx+1:]
+	if before, after, ok := strings.Cut(s, "."); ok {
+		intPart = before
+		fracPart = after
 	}
 	if intPart == "" {
 		intPart = "0"

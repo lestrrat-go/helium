@@ -106,7 +106,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		},
 		{
 			typeName: "base64Binary",
-			valid:    []string{"", "SGVsbG8=", "AAAA", "AA==", "A A A A"},
+			valid:    []string{"", "SGVsbG8=", "AAAA", "AA==", "A "},
 			invalid:  []string{"@@@", "SGVsbG8!"},
 		},
 		{

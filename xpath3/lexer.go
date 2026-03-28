@@ -558,4 +558,3 @@ func (l *lexer) PrettyTokens() string {
 	}
 	return b.String()
 }
-

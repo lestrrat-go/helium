@@ -163,9 +163,9 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 func parseLexicalQName(qname string) (string, string, error) {
 	prefix := ""
 	local := qname
-	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
-		prefix = qname[:idx]
-		local = qname[idx+1:]
+	if p, l, ok := strings.Cut(qname, ":"); ok {
+		prefix = p
+		local = l
 		if prefix == "" {
 			return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid QName: " + qname}
 		}

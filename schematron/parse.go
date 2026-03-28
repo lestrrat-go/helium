@@ -282,7 +282,7 @@ func splitTopLevelUnion(s string) []string {
 	var quote byte // tracks ' or " literal state
 	start := 0
 
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		ch := s[i]
 		switch {
 		case quote != 0:
@@ -345,8 +345,8 @@ func detectNamespace(root *helium.Element) string {
 
 // stripPrefix removes any namespace prefix from a name (e.g. "sch:schema" -> "schema").
 func stripPrefix(name string) string {
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		return name[idx+1:]
+	if _, after, ok := strings.Cut(name, ":"); ok {
+		return after
 	}
 	return name
 }

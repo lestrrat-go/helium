@@ -10,4 +10,3 @@ import (
 func traverseAxis(axis AxisType, node helium.Node) ([]helium.Node, error) {
 	return ixpath.TraverseAxis(axis, node, maxNodeSetLength)
 }
-

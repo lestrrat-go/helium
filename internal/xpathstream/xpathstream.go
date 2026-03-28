@@ -5,6 +5,7 @@ package xpathstream
 
 import (
 	"math/big"
+	"slices"
 
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -410,11 +411,9 @@ func ExprTreeHasNonMotionlessPredicate(expr xpath3.Expr) bool {
 				}
 			}
 		case xpath3.FilterExpr:
-			for _, pred := range v.Predicates {
-				if PredicateIsNonMotionless(pred) {
-					found = true
-					return false
-				}
+			if slices.ContainsFunc(v.Predicates, PredicateIsNonMotionless) {
+				found = true
+				return false
 			}
 		}
 		return true

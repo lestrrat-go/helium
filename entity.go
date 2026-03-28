@@ -12,12 +12,12 @@ import (
 // Entity represents an XML entity declaration (libxml2: xmlEntity).
 type Entity struct {
 	node
-	orig       string     // content without substitution
-	content    string     // content or ndata if unparsed
+	orig       string          // content without substitution
+	content    string          // content or ndata if unparsed
 	entityType enum.EntityType // the entity type
-	externalID string     // external identifier for PUBLIC
-	systemID   string     // URI for a SYSTEM or PUBLIC entity
-	uri        string     // the full URI as computed
+	externalID string          // external identifier for PUBLIC
+	systemID   string          // URI for a SYSTEM or PUBLIC entity
+	uri        string          // the full URI as computed
 	// owner      bool       // does the entity own children
 	checked      int   // was the entity content checked
 	expanding    bool  // guard against recursive expansion (mirrors XML_ENT_EXPANDING)
@@ -133,7 +133,7 @@ func newEntity(name string, typ enum.EntityType, publicID, systemID, notation, o
 // Checked reports whether this entity's content has been parsed and validated,
 // used to prevent infinite recursion during entity expansion (libxml2: ent->checked).
 func (e *Entity) Checked() bool {
-	return e.checked & 1 == 1
+	return e.checked&1 == 1
 }
 
 // MarkChecked marks this entity as having been parsed and validated (libxml2: ent->checked).

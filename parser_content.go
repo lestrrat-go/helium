@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -209,10 +210,8 @@ func (pctx *parserCtx) parsePITarget(ctx context.Context) (string, error) {
 		return "", errors.New("XML declaration allowed only at the start of the document")
 	}
 
-	for _, knownpi := range knownPIs {
-		if knownpi == name {
-			return name, nil
-		}
+	if slices.Contains(knownPIs, name) {
+		return name, nil
 	}
 
 	if strings.IndexByte(name, ':') > -1 {

@@ -45,9 +45,9 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 					return nil, err
 				}
 				switch s {
-				case "use-first": //nolint:goconst
+				case "use-first":
 					duplicates = MergeUseFirst
-				case "use-last": //nolint:goconst
+				case "use-last":
 					duplicates = MergeUseLast
 				case "reject":
 					duplicates = MergeReject

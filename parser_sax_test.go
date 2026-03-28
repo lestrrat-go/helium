@@ -292,13 +292,7 @@ func (r *parserChunkedReader) Read(p []byte) (int, error) {
 	if len(r.data) == 0 {
 		return 0, io.EOF
 	}
-	n := r.chunk
-	if n > len(r.data) {
-		n = len(r.data)
-	}
-	if n > len(p) {
-		n = len(p)
-	}
+	n := min(r.chunk, len(r.data), len(p))
 	copy(p, r.data[:n])
 	r.data = r.data[n:]
 	return n, nil

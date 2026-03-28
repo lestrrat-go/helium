@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -64,7 +65,7 @@ func (c *compiler) compileValueOf(ctx context.Context, elem *helium.Element) (*v
 	return inst, nil
 }
 
-func (c *compiler) compileText(ctx context.Context, elem *helium.Element) (*textInst, error) {
+func (c *compiler) compileText(ctx context.Context, elem *helium.Element) (*textInst, error) { //nolint:unparam // ctx threaded through for API consistency
 	// xsl:text must contain only text and CDATA sections — no child elements (XTSE0010)
 	var sb strings.Builder
 	for child := range helium.Children(elem) {
@@ -141,9 +142,7 @@ func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*e
 	// Capture compile-time namespace bindings for runtime name resolution.
 	if len(c.nsBindings) > 0 {
 		inst.NSBindings = make(map[string]string, len(c.nsBindings))
-		for k, v := range c.nsBindings {
-			inst.NSBindings[k] = v
-		}
+		maps.Copy(inst.NSBindings, c.nsBindings)
 	}
 
 	typeAttr := getAttr(elem, "type")
@@ -174,7 +173,7 @@ func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*e
 	}
 
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
-		for _, name := range strings.Fields(uas) {
+		for name := range strings.FieldsSeq(uas) {
 			resolved := resolveQName(name, c.nsBindings)
 			inst.UseAttrSets = append(inst.UseAttrSets, resolved)
 			c.usedAttrSetRefs = append(c.usedAttrSetRefs, resolved)
@@ -388,7 +387,7 @@ func (c *compiler) compileCopy(ctx context.Context, elem *helium.Element) (*copy
 	}
 
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
-		for _, name := range strings.Fields(uas) {
+		for name := range strings.FieldsSeq(uas) {
 			resolved := resolveQName(name, c.nsBindings)
 			inst.UseAttrSets = append(inst.UseAttrSets, resolved)
 			c.usedAttrSetRefs = append(c.usedAttrSetRefs, resolved)
@@ -404,7 +403,7 @@ func (c *compiler) compileCopy(ctx context.Context, elem *helium.Element) (*copy
 	return inst, nil
 }
 
-func (c *compiler) compileCopyOf(ctx context.Context, elem *helium.Element) (*copyOfInst, error) {
+func (c *compiler) compileCopyOf(ctx context.Context, elem *helium.Element) (*copyOfInst, error) { //nolint:unparam // ctx threaded through for API consistency
 	// XTSE0260: xsl:copy-of must have no significant content
 	for child := range helium.Children(elem) {
 		switch child.Type() {
@@ -481,7 +480,7 @@ func (c *compiler) compileCopyOf(ctx context.Context, elem *helium.Element) (*co
 	return inst, nil
 }
 
-func (c *compiler) compileNumber(ctx context.Context, elem *helium.Element) (*numberInst, error) {
+func (c *compiler) compileNumber(ctx context.Context, elem *helium.Element) (*numberInst, error) { //nolint:unparam // ctx threaded through for API consistency
 	inst := &numberInst{
 		Level: getAttr(elem, "level"),
 	}
@@ -558,7 +557,7 @@ func (c *compiler) compileNumber(ctx context.Context, elem *helium.Element) (*nu
 		}
 		// Validate static start-at: must be a space-separated list of integers
 		if !strings.Contains(sa, "{") {
-			for _, part := range strings.Fields(sa) {
+			for part := range strings.FieldsSeq(sa) {
 				if _, err := strconv.Atoi(part); err != nil {
 					return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:number/@start-at", sa)
 				}
@@ -731,9 +730,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 	}
 	if needNewExcludes {
 		newExcludes := make(map[string]struct{})
-		for k, v := range c.localExcludes {
-			newExcludes[k] = v
-		}
+		maps.Copy(newExcludes, c.localExcludes)
 		// Resolve prefixes to URIs at the declaration point so that
 		// exclude-result-prefixes applies to URIs, not prefixes.
 		// When a child element rebinds a prefix to a different URI,
@@ -746,7 +743,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 					}
 				}
 			} else {
-				for _, prefix := range strings.Fields(erp) {
+				for prefix := range strings.FieldsSeq(erp) {
 					if prefix == lexicon.ModeDefault {
 						if uri, ok := c.nsBindings[""]; ok && uri != "" {
 							newExcludes[uri] = struct{}{}
@@ -767,7 +764,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 			}
 		}
 		if eep, ok := elem.GetAttributeNS("extension-element-prefixes", lexicon.NamespaceXSLT); ok {
-			for _, prefix := range strings.Fields(eep) {
+			for prefix := range strings.FieldsSeq(eep) {
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExcludes[uri] = struct{}{}
 				} else {
@@ -784,10 +781,8 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 	savedExtURIs := c.extensionURIs
 	if eep, ok := elem.GetAttributeNS("extension-element-prefixes", lexicon.NamespaceXSLT); ok {
 		newExtURIs := make(map[string]struct{})
-		for k, v := range c.extensionURIs {
-			newExtURIs[k] = v
-		}
-		for _, prefix := range strings.Fields(eep) {
+		maps.Copy(newExtURIs, c.extensionURIs)
+		for prefix := range strings.FieldsSeq(eep) {
 			if uri, uriOK := c.nsBindings[prefix]; uriOK && uri != "" {
 				newExtURIs[uri] = struct{}{}
 			}
@@ -937,7 +932,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 
 	// Handle xsl:use-attribute-sets
 	if uas, ok := elem.GetAttributeNS("use-attribute-sets", lexicon.NamespaceXSLT); ok {
-		for _, name := range strings.Fields(uas) {
+		for name := range strings.FieldsSeq(uas) {
 			resolved := resolveQName(name, c.nsBindings)
 			lre.UseAttrSets = append(lre.UseAttrSets, resolved)
 			c.usedAttrSetRefs = append(c.usedAttrSetRefs, resolved)

@@ -786,9 +786,7 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 	if strings.HasPrefix(raw, "xs:") {
 		return raw
 	}
-	if idx := strings.IndexByte(raw, ':'); idx >= 0 {
-		prefix := raw[:idx]
-		local := raw[idx+1:]
+	if prefix, local, ok := strings.Cut(raw, ":"); ok {
 		if prefix == "xsd" {
 			return "xs:" + local
 		}

@@ -63,7 +63,7 @@ func isValidFinalDefault(v string) bool {
 func splitSpace(s string) []string {
 	var parts []string
 	start := -1
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r' {
 			if start >= 0 {
 				parts = append(parts, s[start:i])

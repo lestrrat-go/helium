@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/xsd/value"
@@ -73,12 +74,7 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 				}
 			}
 		} else {
-			for _, ev := range fs.Enumeration {
-				if value == ev {
-					found = true
-					break
-				}
-			}
+			found = slices.Contains(fs.Enumeration, value)
 		}
 		if !found {
 			set := "'" + strings.Join(fs.Enumeration, "', '") + "'"

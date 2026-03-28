@@ -51,9 +51,7 @@ func resolveDecimalFormatName(ctx context.Context, name string) (QualifiedName, 
 		return QualifiedName{URI: name[2:end], Name: name[end+1:]}, nil
 	}
 
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local := name[idx+1:]
+	if prefix, local, ok := strings.Cut(name, ":"); ok {
 		uri := ""
 		if ec := getFnContext(ctx); ec != nil && ec.namespaces != nil {
 			uri = ec.namespaces[prefix]

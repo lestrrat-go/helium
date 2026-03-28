@@ -955,8 +955,8 @@ func schemaAnnotationParts(name string) (local, ns string, ok bool) {
 	if strings.HasPrefix(name, "xs:") || strings.HasPrefix(name, "xsd:") {
 		return "", "", false
 	}
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		return name[idx+1:], "", true
+	if _, local, ok := strings.Cut(name, ":"); ok {
+		return local, "", true
 	}
 	if name == "" {
 		return "", "", false
@@ -969,9 +969,9 @@ func schemaAnnotationParts(name string) (local, ns string, ok bool) {
 func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
 	s = strings.TrimSpace(s)
 	prefix, local := "", s
-	if idx := strings.IndexByte(s, ':'); idx >= 0 {
-		prefix = s[:idx]
-		local = s[idx+1:]
+	if p, l, ok2 := strings.Cut(s, ":"); ok2 {
+		prefix = p
+		local = l
 	}
 	var uri string
 	scope := node
@@ -1045,7 +1045,7 @@ func atomizedTypeForAnnotation(annotation string, decls SchemaDeclarations) stri
 	}
 
 	current := annotation
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		local, ns, ok := schemaAnnotationParts(current)
 		if !ok {
 			return ""

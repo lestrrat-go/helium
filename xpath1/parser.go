@@ -12,10 +12,10 @@ import (
 const maxParseDepth = 5000
 
 var (
-	errExpectedRParenAfterNode   = errors.New("expected ')' after node(")
-	errExpectedRParenAfterText   = errors.New("expected ')' after text(")
+	errExpectedRParenAfterNode    = errors.New("expected ')' after node(")
+	errExpectedRParenAfterText    = errors.New("expected ')' after text(")
 	errExpectedRParenAfterComment = errors.New("expected ')' after comment(")
-	errExpectedRParenAfterPI     = errors.New("expected ')' after processing-instruction(")
+	errExpectedRParenAfterPI      = errors.New("expected ')' after processing-instruction(")
 )
 
 // parser builds an AST from a token stream.
@@ -183,7 +183,7 @@ func (p *parser) parseUnaryExpr() (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := 0; i < negate; i++ {
+	for range negate {
 		expr = UnaryExpr{Operand: expr}
 	}
 	return expr, nil
@@ -679,7 +679,7 @@ func (p *parser) looksLikeStep() bool {
 			}
 			p.lexer.Backup() // ':'
 			p.lexer.Backup() // prefix
-			return true // prefix:* or similar
+			return true      // prefix:* or similar
 		}
 		return true // plain name test
 	}

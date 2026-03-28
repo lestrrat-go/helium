@@ -185,7 +185,7 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *copyInst, 
 			if ok {
 				typeName := normalizeTypeName(inst.TypeName, ec)
 				content := string(attr.Content())
-				if castErr := ec.validateAttributeValueForType(content, typeName); castErr != nil {
+				if castErr := ec.validateAttributeValueForType(ctx, content, typeName); castErr != nil {
 					return dynamicError(errCodeXTTE1510,
 						"xsl:copy: attribute value %q does not match type %s: %v", content, inst.TypeName, castErr)
 				}
@@ -194,7 +194,7 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *copyInst, 
 		}
 		copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 		if copiedElem != nil {
-			if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil { //nolint:contextcheck
+			if err := ec.validateAndNormalizeElementContent(ctx, copiedElem, inst.TypeName); err != nil {
 				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 					return dynamicError(errCodeXTTE1540,
 						"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
@@ -525,7 +525,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 					}
 					if attr, ok := v.Node.(*helium.Attribute); ok {
 						typeName := normalizeTypeName(inst.TypeName, ec)
-						if castErr := ec.validateAttributeValueForType(attr.Value(), typeName); castErr != nil {
+						if castErr := ec.validateAttributeValueForType(ctx, attr.Value(), typeName); castErr != nil {
 							return dynamicError(errCodeXTTE1510,
 								"copy-of: attribute value %q is not valid for type %s: %v", attr.Value(), inst.TypeName, castErr)
 						}
@@ -534,7 +534,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 				// Type validation: validate the copied element against the declared type.
 				copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 				if copiedElem != nil {
-					if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil { //nolint:contextcheck
+					if err := ec.validateAndNormalizeElementContent(ctx, copiedElem, inst.TypeName); err != nil {
 						if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 							return dynamicError(errCodeXTTE1540,
 								"copy-of: element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
@@ -1171,7 +1171,7 @@ func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
 		return nil
 	}
 	allowed := make(map[string]struct{})
-	for _, n := range strings.Fields(ua) {
+	for n := range strings.FieldsSeq(ua) {
 		allowed[n] = struct{}{}
 	}
 	for name := range accumulators {
@@ -1257,7 +1257,7 @@ func (ec *execContext) isComplexTypeName(typeName string) bool {
 // a type name. For built-in XSD types it uses xpath3.CastFromString; for
 // user-defined types (list, union, restriction) it falls back to the schema
 // registry's ValidateCast. Returns nil when the value is valid.
-func (ec *execContext) validateAttributeValueForType(value, typeName string) error {
+func (ec *execContext) validateAttributeValueForType(ctx context.Context, value, typeName string) error {
 	_, castErr := xpath3.CastFromString(value, typeName)
 	if castErr == nil {
 		return nil
@@ -1274,5 +1274,5 @@ func (ec *execContext) validateAttributeValueForType(value, typeName string) err
 	if errors.As(castErr, &xe) && xe.Code != "XPTY0004" {
 		return castErr
 	}
-	return ec.schemaRegistry.ValidateCast(value, typeName)
+	return ec.schemaRegistry.ValidateCast(ctx, value, typeName)
 }

@@ -376,7 +376,7 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 
 		if p.As != "" && val != nil && sequence.Len(val) > 0 {
 			st := parseSequenceType(p.As)
-			checked, err := checkSequenceType(val, st, errCodeXTTE0570, "param $"+p.Name, ec)
+			checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "param $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -561,7 +561,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 			if fromCaller {
 				errCode = errCodeXTTE0590
 			}
-			checked, err := checkSequenceType(val, st, errCode, "param $"+p.Name, ec)
+			checked, err := checkSequenceType(ctx, val, st, errCode, "param $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -596,7 +596,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 	stripped, doeTextIndices := stripDOEMarkers(seq)
 
 	st := parseSequenceType(tmpl.As)
-	checked, err := checkSequenceType(stripped, st, errCodeXTTE0505, "template", ec)
+	checked, err := checkSequenceType(ctx, stripped, st, errCodeXTTE0505, "template", ec)
 	if err != nil {
 		return err
 	}

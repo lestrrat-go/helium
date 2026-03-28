@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -393,7 +394,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 			td.Variety = TypeVarietyUnion
 			// Parse memberTypes attribute (space-separated QNames).
 			if memberTypesAttr := getAttr(ce, attrMemberTypes); memberTypesAttr != "" {
-				for _, ref := range strings.Fields(memberTypesAttr) {
+				for ref := range strings.FieldsSeq(memberTypesAttr) {
 					qn := c.resolveQName(ctx, ce, ref)
 					c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{owner: td, name: qn})
 				}
@@ -419,7 +420,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 }
 
 // parseFacets extracts facet constraints from an xs:restriction element.
-func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element) *FacetSet {
+func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element) *FacetSet { //nolint:unparam // ctx threaded through for API consistency
 	var fs *FacetSet
 
 	for child := range helium.Children(restriction) {
@@ -440,9 +441,7 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			fs.Enumeration = append(fs.Enumeration, val)
 			nsCtx := collectNSContext(ce)
 			nsCopy := make(map[string]string, len(nsCtx))
-			for prefix, uri := range nsCtx {
-				nsCopy[prefix] = uri
-			}
+			maps.Copy(nsCopy, nsCtx)
 			fs.EnumerationNS = append(fs.EnumerationNS, nsCopy)
 		case "minInclusive":
 			if fs == nil {

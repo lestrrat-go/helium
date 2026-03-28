@@ -28,12 +28,12 @@ type Notation struct {
 	systemID string
 }
 
-func (n *Notation) AddChild(cur Node) error  { return addChild(n, cur) }
-func (n *Notation) AppendText(b []byte) error { return appendText(n, b) }
-func (n *Notation) AddSibling(cur Node) error { return addSibling(n, cur) }
+func (n *Notation) AddChild(cur Node) error     { return addChild(n, cur) }
+func (n *Notation) AppendText(b []byte) error   { return appendText(n, b) }
+func (n *Notation) AddSibling(cur Node) error   { return addSibling(n, cur) }
 func (n *Notation) Replace(nodes ...Node) error { return replaceNode(n, nodes...) }
-func (n *Notation) SetTreeDoc(doc *Document)  { setTreeDoc(n, doc) }
-func (n *Notation) Free()                     {}
+func (n *Notation) SetTreeDoc(doc *Document)    { setTreeDoc(n, doc) }
+func (n *Notation) Free()                       {}
 
 func newDTD() *DTD {
 	dtd := &DTD{

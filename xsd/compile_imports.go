@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -477,34 +478,16 @@ func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
 	// Merge ref maps from the sub-compiler into the parent compiler.
 	// This defers resolution to the parent's resolveRefs(), which has
 	// access to all merged declarations (handles circular imports).
-	for edecl, qn := range impC.elemRefs {
-		c.elemRefs[edecl] = qn
-	}
-	for edecl, src := range impC.elemRefSources {
-		c.elemRefSources[edecl] = src
-	}
-	for td, qn := range impC.typeRefs {
-		c.typeRefs[td] = qn
-	}
-	for td, src := range impC.typeDefSources {
-		c.typeDefSources[td] = src
-	}
-	for mg, qn := range impC.groupRefs {
-		c.groupRefs[mg] = qn
-	}
-	for td, qns := range impC.attrGroupRefs {
-		c.attrGroupRefs[td] = qns
-	}
-	for edecl, src := range impC.globalElemSources {
-		c.globalElemSources[edecl] = src
-	}
-	for td, qn := range impC.itemTypeRefs {
-		c.itemTypeRefs[td] = qn
-	}
+	maps.Copy(c.elemRefs, impC.elemRefs)
+	maps.Copy(c.elemRefSources, impC.elemRefSources)
+	maps.Copy(c.typeRefs, impC.typeRefs)
+	maps.Copy(c.typeDefSources, impC.typeDefSources)
+	maps.Copy(c.groupRefs, impC.groupRefs)
+	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
+	maps.Copy(c.globalElemSources, impC.globalElemSources)
+	maps.Copy(c.itemTypeRefs, impC.itemTypeRefs)
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
-	for au, qn := range impC.attrRefs {
-		c.attrRefs[au] = qn
-	}
+	maps.Copy(c.attrRefs, impC.attrRefs)
 
 	return nil
 }

@@ -163,7 +163,7 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 
 // findImportSchema looks up a pre-compiled schema by target namespace from
 // the import schemas provided at compile time.
-func (c *compiler) findImportSchema(ctx context.Context, ns string) *xsd.Schema {
+func (c *compiler) findImportSchema(ctx context.Context, ns string) *xsd.Schema { //nolint:unparam // ctx threaded through for API consistency
 	for _, s := range c.importSchemas {
 		if s.TargetNamespace() == ns {
 			return s
@@ -332,9 +332,7 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 		}
 	}
 	// Handle prefix:local
-	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
-		prefix := qname[:idx]
-		local := qname[idx+1:]
+	if prefix, local, ok := strings.Cut(qname, ":"); ok {
 		if prefix == "xs" || prefix == "xsd" {
 			return "xs:" + local
 		}
@@ -359,7 +357,7 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 //
 // This covers the most common case where compile-time static errors arise:
 // using schema-element() or schema-attribute() with an undeclared name.
-func (c *compiler) validateAsSequenceType(ctx context.Context, as string, context string) error {
+func (c *compiler) validateAsSequenceType(ctx context.Context, as string, context string) error { //nolint:unparam // ctx threaded through for API consistency
 	if as == "" {
 		return nil
 	}
@@ -433,9 +431,7 @@ func resolveQNameToLocalNS(qname string, nsBindings map[string]string) (local, n
 		}
 		return "", ""
 	}
-	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
-		prefix := qname[:idx]
-		loc := qname[idx+1:]
+	if prefix, loc, ok := strings.Cut(qname, ":"); ok {
 		uri, ok := nsBindings[prefix]
 		if !ok {
 			return loc, ""

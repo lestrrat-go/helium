@@ -171,7 +171,7 @@ func readURIWithEncoding(ctx context.Context, cfg *Config, uri string) ([]byte, 
 			return nil, "", err
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK {
 			return nil, "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
 		}
 		data, err := io.ReadAll(resp.Body)
@@ -200,7 +200,7 @@ func extractHTTPCharset(contentType string) string {
 	if contentType == "" {
 		return ""
 	}
-	for _, part := range strings.Split(contentType, ";") {
+	for part := range strings.SplitSeq(contentType, ";") {
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(strings.ToLower(part), "charset=") {
 			charset := part[len("charset="):]
@@ -241,7 +241,7 @@ func ReadURI(ctx context.Context, cfg *Config, uri string) ([]byte, error) {
 			return nil, err
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
 		}
 		return io.ReadAll(resp.Body)
@@ -330,11 +330,10 @@ func detectXMLDeclEncoding(data []byte) string {
 	}
 	decl := string(data[:end])
 	// Look for encoding="..." or encoding='...'.
-	idx := strings.Index(decl, "encoding")
-	if idx < 0 {
+	_, rest, found := strings.Cut(decl, "encoding")
+	if !found {
 		return ""
 	}
-	rest := decl[idx+len("encoding"):]
 	rest = strings.TrimLeft(rest, " \t\r\n")
 	if len(rest) == 0 || rest[0] != '=' {
 		return ""
@@ -348,12 +347,11 @@ func detectXMLDeclEncoding(data []byte) string {
 	if quote != '"' && quote != '\'' {
 		return ""
 	}
-	rest = rest[1:]
-	endQ := strings.IndexByte(rest, quote)
-	if endQ < 0 {
+	encVal, _, found2 := strings.Cut(rest[1:], string(quote))
+	if !found2 {
 		return ""
 	}
-	return rest[:endQ]
+	return encVal
 }
 
 // resolveEncoding determines the effective encoding from the user-specified

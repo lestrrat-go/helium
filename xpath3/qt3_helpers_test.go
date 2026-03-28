@@ -286,7 +286,7 @@ func qt3TestDataDir() string {
 
 func qt3DefaultBaseURI(tc qt3Test) string {
 	if qt3NeedsParseXMLBaseURI(tc.XPath) {
-		return "http://www.w3.org/fots/fn/" //nolint:goconst
+		return "http://www.w3.org/fots/fn/"
 	}
 	if qt3NeedsRelativeUnparsedTextBaseURI(tc.XPath) && (tc.NeedsHTTP || len(tc.ResourceMap) > 0) {
 		// Relative QT3 unparsed-text fixtures live under testdata/qt3ts/testdata/fn/.
@@ -366,12 +366,10 @@ func qt3RelativeResourceBase(relPath, uri string) string {
 func qt3NeedsRelativeUnparsedTextBaseURI(expr string) bool {
 	const name = "unparsed-text"
 
-	idx := strings.Index(expr, name)
-	if idx < 0 {
+	_, rest, found := strings.Cut(expr, name)
+	if !found {
 		return false
 	}
-
-	rest := expr[idx+len(name):]
 	return strings.HasPrefix(rest, "(") ||
 		strings.HasPrefix(rest, "-lines(") ||
 		strings.HasPrefix(rest, "-available(")
@@ -911,12 +909,9 @@ func qt3InitSharedServer() {
 func qt3RegisterResources(resourceMap map[string]string) {
 	dataDir := qt3TestDataDir()
 	for uri, relPath := range resourceMap {
-		idx := strings.Index(uri, "://")
-		if idx >= 0 {
-			rest := uri[idx+3:]
-			slashIdx := strings.Index(rest, "/")
-			if slashIdx >= 0 {
-				qt3SharedServer.pathMap.Store(rest[slashIdx:], filepath.Join(dataDir, relPath))
+		if _, afterScheme, ok := strings.Cut(uri, "://"); ok {
+			if slashIdx := strings.Index(afterScheme, "/"); slashIdx >= 0 {
+				qt3SharedServer.pathMap.Store(afterScheme[slashIdx:], filepath.Join(dataDir, relPath))
 			}
 		}
 	}

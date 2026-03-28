@@ -207,7 +207,7 @@ func (c *compiler) recordModeUsage(_ context.Context, mode string) {
 	if c.usedModes == nil {
 		c.usedModes = make(map[string]struct{})
 	}
-	for _, m := range strings.Fields(mode) {
+	for m := range strings.FieldsSeq(mode) {
 		c.usedModes[m] = struct{}{}
 	}
 	if mode == "" {
@@ -243,7 +243,7 @@ func (c *compiler) resolveMode(_ context.Context, mode string) string {
 // (as specified by XSLT's default-collation attribute) and returns the first
 // URI that is supported by the XPath engine.  Returns "" if none is supported.
 func resolveDefaultCollation(list string) string {
-	for _, uri := range strings.Fields(list) {
+	for uri := range strings.FieldsSeq(list) {
 		if xpath3.IsCollationSupported(uri) {
 			return uri
 		}
@@ -265,7 +265,7 @@ func (c *compiler) shouldStripText(_ context.Context, text string) bool {
 // isXMLWhitespaceOnly returns true if s is empty or contains only XML
 // whitespace characters: space (#x20), tab (#x9), CR (#xD), LF (#xA).
 func isXMLWhitespaceOnly(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		switch s[i] {
 		case ' ', '\t', '\r', '\n':
 			continue
@@ -463,12 +463,10 @@ func resolveQName(qname string, nsBindings map[string]string) string {
 			return helium.ClarkName(uri, local)
 		}
 	}
-	idx := strings.IndexByte(qname, ':')
-	if idx < 0 {
+	prefix, local, ok := strings.Cut(qname, ":")
+	if !ok {
 		return qname
 	}
-	prefix := qname[:idx]
-	local := qname[idx+1:]
 	if uri, ok := nsBindings[prefix]; ok {
 		return helium.ClarkName(uri, local)
 	}
@@ -863,7 +861,7 @@ func (c *compiler) resolveShadowAttributes(ctx context.Context, elem *helium.Ele
 		// Evaluate using static variables and XSLT static functions
 		// (system-property, function-available, etc. per XSLT 3.0 §3.5.2)
 		eval := c.useWhenEvaluator(ctx)
-		val, err := avt.evaluateStatic(eval, nil)
+		val, err := avt.evaluateStatic(ctx, eval, nil)
 		if err != nil {
 			return staticError(errCodeXTSE0020,
 				"error evaluating shadow attribute _%s: %v", realName, err)
@@ -891,7 +889,7 @@ func (c *compiler) resolveSingleShadowAttribute(ctx context.Context, elem *heliu
 			"invalid AVT in shadow attribute _%s: %v", name, err)
 	}
 	eval := c.useWhenEvaluator(ctx)
-	val, err := avt.evaluateStatic(eval, nil)
+	val, err := avt.evaluateStatic(ctx, eval, nil)
 	if err != nil {
 		return staticError(errCodeXTSE0020,
 			"error evaluating shadow attribute _%s: %v", name, err)
@@ -913,9 +911,7 @@ func (c *compiler) staticEvaluator(_ context.Context) xpath3.Evaluator {
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
 	ns := make(map[string]string, len(c.nsBindings)+1)
-	for k, v := range c.nsBindings {
-		ns[k] = v
-	}
+	maps.Copy(ns, c.nsBindings)
 	if c.xpathDefaultNS != "" {
 		ns[""] = c.xpathDefaultNS
 	}
@@ -985,9 +981,7 @@ func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
 	if len(c.nsBindings) > 0 || c.xpathDefaultNS != "" {
 		ns := make(map[string]string, len(c.nsBindings)+1)
-		for k, v := range c.nsBindings {
-			ns[k] = v
-		}
+		maps.Copy(ns, c.nsBindings)
 		if c.xpathDefaultNS != "" {
 			ns[""] = c.xpathDefaultNS
 		}
@@ -1193,7 +1187,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 				c.stylesheet.excludePrefixes[prefix] = struct{}{}
 			}
 		} else {
-			for _, prefix := range strings.Fields(erp) {
+			for prefix := range strings.FieldsSeq(erp) {
 				if prefix == lexicon.ModeDefault {
 					c.stylesheet.excludePrefixes[""] = struct{}{}
 					continue
@@ -1212,7 +1206,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// extension-element-prefixes are also excluded from output.
 	// XTSE0800: reserved namespaces must not be used as extension namespaces.
 	if eep := getAttr(root, "extension-element-prefixes"); eep != "" {
-		for _, prefix := range strings.Fields(eep) {
+		for prefix := range strings.FieldsSeq(eep) {
 			uri := c.nsBindings[prefix]
 			if isReservedNamespace(uri) {
 				return nil, staticError(errCodeXTSE0800,

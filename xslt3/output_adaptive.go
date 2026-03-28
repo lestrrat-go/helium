@@ -122,10 +122,10 @@ func serializeItemAdaptive(item xpath3.Item, charMap map[rune]string) string {
 			attr := v.Node.(*helium.Attribute) //nolint:forcetypeassert
 			buf.WriteString(attr.Name())
 			buf.WriteString("=\"")
-			buf.WriteString(string(attr.Content()))
+			buf.Write(attr.Content())
 			buf.WriteString("\"")
 		default:
-			buf.WriteString(string(v.Node.Content()))
+			buf.Write(v.Node.Content())
 		}
 		return maybeApply(buf.String())
 	case xpath3.AtomicValue:

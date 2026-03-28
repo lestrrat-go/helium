@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -136,11 +137,9 @@ func checkShallowDescentFunction(fn *xslFunction) error {
 
 	// Check if descendant/descendant-or-self axes are used.
 	for _, inst := range fn.Body {
-		for _, expr := range getInstructionExprs(inst) {
-			if xpathstream.ExprUsesDescendantOrSelf(expr) {
-				return staticError(errCodeXTSE3430,
-					"shallow-descent function %q uses descendant axis, violating its declared streamability", fn.Name.Name)
-			}
+		if slices.ContainsFunc(getInstructionExprs(inst), xpathstream.ExprUsesDescendantOrSelf) {
+			return staticError(errCodeXTSE3430,
+				"shallow-descent function %q uses descendant axis, violating its declared streamability", fn.Name.Name)
 		}
 	}
 
@@ -419,7 +418,7 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 // streaming analysis.
 func isConsumingBuiltinFunc(name string) bool {
 	switch name {
-	case "string", "data", "number", "boolean", "normalize-space": //nolint:goconst
+	case "string", "data", "number", "boolean", "normalize-space":
 		return true
 	}
 	return false

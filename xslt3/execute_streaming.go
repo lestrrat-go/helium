@@ -186,7 +186,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 		// Apply type coercion if as= is declared.
 		if p.As != "" && val != nil && sequence.Len(val) > 0 {
 			st := parseSequenceType(p.As)
-			coerced, err := checkSequenceType(val, st, errCodeXTTE0570, "xsl:iterate parameter $"+p.Name, ec)
+			coerced, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "xsl:iterate parameter $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -257,7 +257,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 						// Apply type coercion if as= is declared.
 						if asType, ok := paramTypes[name]; ok && asType != "" && val != nil && sequence.Len(val) > 0 {
 							st := parseSequenceType(asType)
-							coerced, coerceErr := checkSequenceType(val, st, errCodeXTTE0570, "xsl:next-iteration parameter $"+name, ec)
+							coerced, coerceErr := checkSequenceType(ctx, val, st, errCodeXTTE0570, "xsl:next-iteration parameter $"+name, ec)
 							if coerceErr != nil {
 								return coerceErr
 							}
@@ -1093,7 +1093,7 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 				state[name] = xpath3.EmptySequence()
 				continue
 			}
-			checked, err := ec.checkAccumulatorType(def, result.Sequence())
+			checked, err := ec.checkAccumulatorType(ctx, def, result.Sequence())
 			if err != nil {
 				stateErr[name] = err
 				state[name] = xpath3.EmptySequence()
@@ -1107,7 +1107,7 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 				state[name] = xpath3.EmptySequence()
 				continue
 			}
-			checked, err := ec.checkAccumulatorType(def, seq)
+			checked, err := ec.checkAccumulatorType(ctx, def, seq)
 			if err != nil {
 				stateErr[name] = err
 				state[name] = xpath3.EmptySequence()
@@ -1244,7 +1244,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 				ec.accumulatorStateError[name] = err
 				break
 			}
-			checked, err := ec.checkAccumulatorType(def, newValue)
+			checked, err := ec.checkAccumulatorType(ctx, def, newValue)
 			if err != nil {
 				if ec.accumulatorStateError == nil {
 					ec.accumulatorStateError = make(map[string]error)
@@ -1259,11 +1259,11 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 	return nil
 }
 
-func (ec *execContext) checkAccumulatorType(def *accumulatorDef, seq xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) checkAccumulatorType(ctx context.Context, def *accumulatorDef, seq xpath3.Sequence) (xpath3.Sequence, error) {
 	if def == nil || def.As == "" {
 		return seq, nil
 	}
-	return checkSequenceType(seq, parseSequenceType(def.As), "XPTY0004", "accumulator "+def.Name, ec)
+	return checkSequenceType(ctx, seq, parseSequenceType(def.As), "XPTY0004", "accumulator "+def.Name, ec)
 }
 
 // loadMergeDocument loads an XML document from a URI, resolving it relative

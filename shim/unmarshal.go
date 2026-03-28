@@ -15,6 +15,8 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
+const xmlNameField = "XMLName"
+
 type fieldBinding struct {
 	fieldName    string
 	index        []int
@@ -108,11 +110,11 @@ func stripXMLDecl(data []byte) ([]byte, bool) {
 	if len(data) < 5 || string(data[:5]) != "<?xml" {
 		return data, false
 	}
-	end := bytes.Index(data, []byte("?>"))
-	if end < 0 {
+	_, after, found := bytes.Cut(data, []byte("?>"))
+	if !found {
 		return data, false
 	}
-	return trimLeadingSpace(data[end+2:]), true
+	return trimLeadingSpace(after), true
 }
 
 // validateXMLDeclFields checks the parsed document's version and encoding
@@ -498,12 +500,12 @@ func assignFromAttr(field reflect.Value, attr *helium.Attribute) error {
 		return nil
 	}
 
-	if field.Kind() == reflect.Slice && field.Type().Elem() == reflect.TypeOf(stdxml.Attr{}) {
+	if field.Kind() == reflect.Slice && field.Type().Elem() == reflect.TypeFor[stdxml.Attr]() {
 		field.Set(reflect.Append(field, reflect.ValueOf(toStdAttr(attr))))
 		return nil
 	}
 
-	if field.Type() == reflect.TypeOf(stdxml.Attr{}) {
+	if field.Type() == reflect.TypeFor[stdxml.Attr]() {
 		field.Set(reflect.ValueOf(toStdAttr(attr)))
 		return nil
 	}
@@ -820,12 +822,9 @@ func pathConflicts(a, b []string) bool {
 		return false
 	}
 
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
+	n := min(len(a), len(b))
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if a[i] != b[i] {
 			return false
 		}
@@ -922,7 +921,7 @@ func validateXMLNameExpectation(bindings []fieldBinding, elem *helium.Element) e
 		}
 
 		spec := strings.TrimSpace(binding.rawName)
-		if spec == "" || spec == "XMLName" { //nolint:goconst
+		if spec == "" || spec == xmlNameField {
 			return nil
 		}
 
@@ -987,7 +986,7 @@ func collectFieldBindings(t reflect.Type, parentIndex []int, out *[]fieldBinding
 		delete(seen, t)
 	}()
 
-	for i := 0; i < t.NumField(); i++ {
+	for i := range t.NumField() {
 		f := t.Field(i)
 		idx := append(append([]int(nil), parentIndex...), i)
 
@@ -1081,7 +1080,7 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 		fieldExport: f.PkgPath == "",
 	}
 
-	if f.Name == "XMLName" {
+	if f.Name == xmlNameField {
 		b.isXMLName = true
 	}
 
@@ -1160,9 +1159,8 @@ func structXMLNameTag(t reflect.Type) string {
 	if t.Kind() != reflect.Struct {
 		return ""
 	}
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if f.Name != "XMLName" {
+	for f := range t.Fields() {
+		if f.Name != xmlNameField {
 			continue
 		}
 		if !isXMLNameType(derefType(f.Type)) {
@@ -1174,7 +1172,7 @@ func structXMLNameTag(t reflect.Type) string {
 		}
 		parts := strings.Split(tag, ",")
 		name := strings.TrimSpace(parts[0])
-		if name != "" && name != "XMLName" {
+		if name != "" && name != xmlNameField {
 			return name
 		}
 		return ""
@@ -1387,8 +1385,8 @@ func parseTagNameSpec(tag string) (space, local string, hasSpace bool) {
 }
 
 func localName(name string) string {
-	if i := strings.IndexByte(name, ':'); i >= 0 {
-		return name[i+1:]
+	if _, after, ok := strings.Cut(name, ":"); ok {
+		return after
 	}
 	return name
 }
@@ -1436,8 +1434,8 @@ func setXMLName(field reflect.Value, elem *helium.Element) {
 	}
 }
 
-var xmlNameType = reflect.TypeOf(stdxml.Name{})
-var attrSliceType = reflect.TypeOf([]stdxml.Attr{})
+var xmlNameType = reflect.TypeFor[stdxml.Name]()
+var attrSliceType = reflect.TypeFor[[]stdxml.Attr]()
 
 func isXMLNameType(t reflect.Type) bool {
 	return t == xmlNameType

@@ -49,10 +49,7 @@ func ToString(f float64) string {
 	} else {
 		// Fixed notation matching libxml2's %0.*f branch.
 		intPlace := 1 + int(math.Log10(abs))
-		fracPlace := (dblDig - 1) - intPlace
-		if fracPlace < 0 {
-			fracPlace = 0
-		}
+		fracPlace := max((dblDig-1)-intPlace, 0)
 		s = strconv.FormatFloat(f, 'f', fracPlace, 64)
 	}
 

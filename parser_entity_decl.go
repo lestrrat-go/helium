@@ -318,22 +318,22 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 	}
 
 	if hasOrig {
-		var curent sax.Entity
+		var current sax.Entity
 		if isParameter {
 			if s := pctx.sax; s != nil {
-				curent, _ = s.GetParameterEntity(ctx, name)
+				current, _ = s.GetParameterEntity(ctx, name)
 			}
 		} else {
 			if s := pctx.sax; s != nil {
-				curent, _ = s.GetEntity(ctx, name)
-				if curent == nil {
+				current, _ = s.GetEntity(ctx, name)
+				if current == nil {
 					e, _ := pctx.getEntity(name)
-					curent = e
+					current = e
 				}
 			}
 		}
-		if curent != nil {
-			if ent, ok := curent.(*Entity); ok && ent != nil && ent.orig == "" {
+		if current != nil {
+			if ent, ok := current.(*Entity); ok && ent != nil && ent.orig == "" {
 				ent.SetOrig(literal)
 			}
 		}

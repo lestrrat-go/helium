@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 	"unicode/utf8"
 
@@ -114,7 +115,6 @@ type htmlDumper struct {
 	// Used to find URIs for attribute namespace prefixes.
 	nsAvailable map[string]string
 }
-
 
 func (d *htmlDumper) dumpNode(out io.Writer, n helium.Node) error {
 	switch n.Type() {
@@ -244,7 +244,7 @@ func htmlEscapeText(w io.Writer, s []byte, escCtrl bool) error {
 func htmlEscapeAttrValue(w io.Writer, s string, isURI bool, noEntityEnc bool) error {
 	last := 0
 	for i := 0; i < len(s); {
-		r, width := utf8.DecodeRune([]byte(s[i:]))
+		r, width := utf8.DecodeRuneInString(s[i:])
 		var esc []byte
 		switch {
 		case r == '&':
@@ -540,9 +540,7 @@ func (d *htmlDumper) emitAttrNSDecls(out io.Writer, e *helium.Element) {
 // an empty map.
 func copyMap(src map[string]string) map[string]string {
 	m := make(map[string]string, len(src))
-	for k, v := range src {
-		m[k] = v
-	}
+	maps.Copy(m, src)
 	return m
 }
 
@@ -564,7 +562,7 @@ func uriEscapeStr(s string) string {
 		} else if c >= 0x80 {
 			// Multi-byte UTF-8: percent-encode each byte
 			_, width := utf8.DecodeRuneInString(s[i:])
-			for j := 0; j < width; j++ {
+			for j := range width {
 				fmt.Fprintf(&b, "%%%02X", s[i+j])
 			}
 			i += width

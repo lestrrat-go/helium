@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -57,7 +58,7 @@ func allowsEmptySequence(as string) bool {
 
 // checkSequenceType checks that a sequence matches the declared type.
 // Returns the (possibly coerced) sequence on success, or an error on type mismatch.
-func checkSequenceType(seq xpath3.Sequence, st sequenceType, errCode string, context string, ec ...*execContext) (xpath3.Sequence, error) {
+func checkSequenceType(ctx context.Context, seq xpath3.Sequence, st sequenceType, errCode string, context string, ec ...*execContext) (xpath3.Sequence, error) {
 	var execCtx *execContext
 	if len(ec) > 0 {
 		execCtx = ec[0]
@@ -110,7 +111,7 @@ func checkSequenceType(seq xpath3.Sequence, st sequenceType, errCode string, con
 	// Check/coerce item types
 	result := make(xpath3.ItemSlice, 0, count)
 	for item := range sequence.Items(seq) {
-		coerced, err := coerceItem(item, st.ItemType, execCtx)
+		coerced, err := coerceItem(ctx, item, st.ItemType, execCtx)
 		if err != nil {
 			return nil, dynamicError(errCode, "%s: %v", context, err)
 		}
@@ -146,16 +147,16 @@ func isAtomicTargetType(itemType string) bool {
 
 // coerceItem checks that a single item matches the expected type, applying
 // atomization and casting as needed per the XSLT function conversion rules.
-func coerceItem(item xpath3.Item, itemType string, ec ...*execContext) (xpath3.Item, error) {
+func coerceItem(ctx context.Context, item xpath3.Item, itemType string, ec ...*execContext) (xpath3.Item, error) {
 	var execCtx *execContext
 	if len(ec) > 0 {
 		execCtx = ec[0]
 	}
-	return coerceItemWithContext(item, itemType, execCtx)
+	return coerceItemWithContext(ctx, item, itemType, execCtx)
 }
 
 // coerceItemWithContext is the inner implementation of coerceItem with an explicit exec context.
-func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (xpath3.Item, error) {
+func coerceItemWithContext(ctx context.Context, item xpath3.Item, itemType string, ec *execContext) (xpath3.Item, error) {
 	// Strip outer parentheses from the type (e.g., "(function(...) as ...)" → "function(...) as ...")
 	if len(itemType) > 2 && itemType[0] == '(' && itemType[len(itemType)-1] == ')' {
 		itemType = itemType[1 : len(itemType)-1]
@@ -241,7 +242,7 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 			return nil, fmt.Errorf("expected %s: document has no root element", itemType)
 		}
 		rootItem := xpath3.NodeItem{Node: rootElem}
-		if _, err := coerceItemWithContext(rootItem, inner, ec); err != nil {
+		if _, err := coerceItemWithContext(ctx, rootItem, inner, ec); err != nil {
 			return nil, fmt.Errorf("expected %s: root element mismatch: %w", itemType, err)
 		}
 		return item, nil
@@ -447,14 +448,14 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 	}
 
 	// Atomic type — need to atomize and potentially cast
-	return coerceToAtomicType(item, itemType, ec)
+	return coerceToAtomicType(ctx, item, itemType, ec)
 }
 
 // coerceToAtomicType atomizes a node/value and casts to the target atomic type.
-func coerceToAtomicType(item xpath3.Item, targetType string, ec *execContext) (xpath3.Item, error) {
+func coerceToAtomicType(ctx context.Context, item xpath3.Item, targetType string, ec *execContext) (xpath3.Item, error) {
 	// If already an atomic value, check/cast the type
 	if av, ok := item.(xpath3.AtomicValue); ok {
-		return castAtomicToType(av, targetType, ec)
+		return castAtomicToType(ctx, av, targetType, ec)
 	}
 
 	// Node item — atomize first
@@ -468,11 +469,11 @@ func coerceToAtomicType(item xpath3.Item, targetType string, ec *execContext) (x
 		return nil, fmt.Errorf("cannot atomize node for type %s: %w", targetType, err)
 	}
 
-	return castAtomicToType(av, targetType, ec)
+	return castAtomicToType(ctx, av, targetType, ec)
 }
 
 // castAtomicToType casts an atomic value to the specified target type.
-func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execContext) (xpath3.Item, error) {
+func castAtomicToType(ctx context.Context, av xpath3.AtomicValue, targetType string, ec ...*execContext) (xpath3.Item, error) {
 	// Normalize target type
 	target := normalizeTypeName(targetType, ec...)
 
@@ -518,7 +519,7 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 		cast, err := xpath3.CastFromString(s, target)
 		if err != nil {
 			// Try schema-aware cast for user-defined types.
-			if schemaCast, ok := trySchemaCast(s, target, ec...); ok {
+			if schemaCast, ok := trySchemaCast(ctx, s, target, ec...); ok {
 				return schemaCast, nil
 			}
 			return nil, fmt.Errorf("cannot cast %q to %s: %w", s, targetType, err)
@@ -576,7 +577,7 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 // trySchemaCast attempts to cast a string to a user-defined schema type by
 // resolving to the built-in base type, casting to that, validating facets,
 // and returning the result with the user-defined type name.
-func trySchemaCast(s, target string, ec ...*execContext) (xpath3.Item, bool) {
+func trySchemaCast(ctx context.Context, s, target string, ec ...*execContext) (xpath3.Item, bool) {
 	if len(ec) == 0 || ec[0] == nil || ec[0].schemaRegistry == nil {
 		return nil, false
 	}
@@ -591,7 +592,7 @@ func trySchemaCast(s, target string, ec ...*execContext) (xpath3.Item, bool) {
 		}
 		// Validate facets.
 		castStr, _ := xpath3.AtomicToString(cast)
-		if facetErr := reg.ValidateCast(castStr, target); facetErr != nil {
+		if facetErr := reg.ValidateCast(ctx, castStr, target); facetErr != nil {
 			return nil, false
 		}
 		cast.TypeName = target
@@ -617,7 +618,7 @@ func trySchemaCast(s, target string, ec ...*execContext) (xpath3.Item, bool) {
 // find the ultimate built-in XSD base type.
 func resolveToBuiltin(local, ns string, reg *schemaRegistry) string {
 	current, currentNS := local, ns
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		baseType, ok := reg.LookupType(current, currentNS)
 		if !ok {
 			return ""
@@ -766,16 +767,15 @@ func isAnyURIType(typeName string, ec ...*execContext) bool {
 // resolveSchemaQName resolves a QName string (e.g. "my:userNode" or "localName")
 // to (localName, namespace) using the stylesheet's namespace bindings.
 func resolveSchemaQName(qname string, ec *execContext) (local, ns string) {
-	idx := strings.IndexByte(qname, ':')
-	if idx < 0 {
+	prefix, l, ok := strings.Cut(qname, ":")
+	if !ok {
 		// Unprefixed: use xpath-default-namespace if set.
 		if ec != nil && ec.hasXPathDefaultNS {
 			return qname, ec.xpathDefaultNS
 		}
 		return qname, ""
 	}
-	prefix := qname[:idx]
-	local = qname[idx+1:]
+	local = l
 	if ec != nil && ec.stylesheet != nil {
 		ns = ec.stylesheet.namespaces[prefix]
 	}

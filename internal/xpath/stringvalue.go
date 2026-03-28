@@ -58,8 +58,8 @@ func LocalNameOf(n helium.Node) string {
 		return v.LocalName()
 	case *helium.Attribute:
 		ln := v.LocalName()
-		if i := strings.IndexByte(ln, ':'); i >= 0 {
-			return ln[i+1:]
+		if _, after, ok := strings.Cut(ln, ":"); ok {
+			return after
 		}
 		return ln
 	case *helium.ProcessingInstruction:

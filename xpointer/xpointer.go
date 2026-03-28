@@ -190,14 +190,13 @@ func parseScheme(expr string) (scheme, body, remaining string, err error) {
 	}
 
 	// Look for scheme(body) pattern
-	idx := strings.IndexByte(expr, '(')
-	if idx < 0 {
+	schemePart, rest, found := strings.Cut(expr, "(")
+	if !found {
 		// No parenthesis: shorthand pointer (bare name)
 		return "", expr, "", nil
 	}
 
-	scheme = expr[:idx]
-	rest := expr[idx+1:]
+	scheme = schemePart
 
 	// Find matching closing paren using balanced parenthesis counting.
 	// Circumflex (^) escapes the next character per the XPointer framework:

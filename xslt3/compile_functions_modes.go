@@ -99,9 +99,7 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 			return staticError(errCodeXTSE0010, "xsl:function name %q must be in a non-null namespace", name)
 		}
 		qn = xpath3.QualifiedName{URI: uri, Name: local}
-	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local := name[idx+1:]
+	} else if prefix, local, ok := strings.Cut(name, ":"); ok {
 		if !xmlchar.IsValidNCName(prefix) || !xmlchar.IsValidNCName(local) {
 			return staticError(errCodeXTSE0020, "xsl:function name %q is not a valid QName", name)
 		}
@@ -370,7 +368,7 @@ func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error 
 	var useAccumulators *string
 	if hasUseAccumulators {
 		var resolvedParts []string
-		for _, tok := range strings.Fields(rawUA) {
+		for tok := range strings.FieldsSeq(rawUA) {
 			if tok == "#all" {
 				resolvedParts = append(resolvedParts, tok)
 			} else {
@@ -487,11 +485,11 @@ func sameAccumulatorSet(a, b string) bool {
 		return true
 	}
 	as := make(map[string]struct{})
-	for _, s := range strings.Fields(a) {
+	for s := range strings.FieldsSeq(a) {
 		as[s] = struct{}{}
 	}
 	bs := make(map[string]struct{})
-	for _, s := range strings.Fields(b) {
+	for s := range strings.FieldsSeq(b) {
 		bs[s] = struct{}{}
 	}
 	if len(as) != len(bs) {

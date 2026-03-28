@@ -135,7 +135,6 @@ func (d *Document) Free() {
 	d.textContentSlab = nil
 }
 
-
 func (d *Document) AddChild(cur Node) error {
 	return addChild(d, cur)
 }
@@ -526,13 +525,7 @@ func (d *Document) growOwnedTextContent(cur []byte, extra int) []byte {
 		return cur
 	}
 
-	newCap := cap(cur) * 2
-	if newCap < need {
-		newCap = need
-	}
-	if newCap < 64 {
-		newCap = 64
-	}
+	newCap := max(cap(cur)*2, need, 64)
 
 	next := d.allocTextContent(newCap)
 	next = next[:len(cur)]
@@ -689,7 +682,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			return
 		}
 
-		// if this is not any sort of an entity , just go go go
+		// if this is not any sort of an entity , just go
 		if r != '&' {
 			_, _ = buf.WriteRune(r)
 			continue

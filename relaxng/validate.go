@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -279,7 +280,6 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 // against the instance attributes and content state.
 func (v *validator) validateElementBody(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, contentState *validState) int {
-
 	// Validate direct attr patterns
 	for _, attrPat := range pat.attrs {
 		if !v.matchOneAttr(attrPat, attrs, attrUsed, elem) {
@@ -302,7 +302,6 @@ func (v *validator) validateElementBody(pat *pattern, elem *helium.Element,
 // that appear in mixed-mode (attributes inside groups/choices within elements).
 func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
-
 	if pat == nil {
 		return -1
 	}
@@ -685,7 +684,6 @@ func (b *groupBound) restore(state *validState, attrUsed []bool, v *validator) {
 // we try reducing the flexible child's consumption.
 func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
-
 	children := pat.children
 	if len(children) == 0 {
 		return 0
@@ -764,7 +762,6 @@ func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 	elem *helium.Element, attrs []*helium.Attribute, attrUsed []bool,
 	state *validState, bounds []groupBound) bool {
-
 	for j := failIdx - 1; j >= 0; j-- {
 		child := children[j]
 		isZeroFlex := child.kind == patternZeroOrMore || child.kind == patternOptional
@@ -801,7 +798,7 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 
 			// Run 'iter' iterations of the flexible child.
 			iterOK := true
-			for k := 0; k < iter; k++ {
+			for range iter {
 				savedSt := state.clone()
 				v.suppressDepth++
 				ret := v.validateContentPat(content, elem, attrs, attrUsed, state)
@@ -1902,12 +1899,7 @@ func (v *validator) isNullable(pat *pattern) bool {
 		}
 		return true
 	case patternChoice:
-		for _, child := range pat.children {
-			if v.isNullable(child) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(pat.children, v.isNullable)
 	case patternGroup, patternInterleave:
 		for _, child := range pat.children {
 			if !v.isNullable(child) {

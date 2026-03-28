@@ -30,9 +30,9 @@ func stAtomic(typeName string, occ Occurrence) SequenceType {
 	// typeName is like "xs:numeric" — split into prefix and name
 	prefix := "xs"
 	name := typeName
-	if idx := strings.IndexByte(typeName, ':'); idx >= 0 {
-		prefix = typeName[:idx]
-		name = typeName[idx+1:]
+	if p, n, ok := strings.Cut(typeName, ":"); ok {
+		prefix = p
+		name = n
 	}
 	return SequenceType{ItemTest: AtomicOrUnionType{Prefix: prefix, Name: name}, Occurrence: occ}
 }

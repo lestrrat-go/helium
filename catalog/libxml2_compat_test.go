@@ -100,7 +100,7 @@ type scriptCmd struct {
 // parseScript parses xmlcatalog --shell commands from a .script file.
 func parseScript(s string) []scriptCmd {
 	var cmds []scriptCmd
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimRight(line, "\r")
 		if line == "" {
 			continue
@@ -161,8 +161,7 @@ func parseArg(s string) (string, string) {
 // trailing "> " (the shell exit prompt) is excluded.
 func parseResults(s string) []string {
 	var results []string
-	lines := strings.Split(s, "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimRight(line, "\r")
 		if !strings.HasPrefix(line, "> ") {
 			continue

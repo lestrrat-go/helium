@@ -230,7 +230,7 @@ func evalNamedFunctionRef(goCtx context.Context, ec *evalContext, e NamedFunctio
 	return ItemSlice{fi}, nil
 }
 
-func evalInlineFunctionExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e InlineFunctionExpr) (Sequence, error) {
+func evalInlineFunctionExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e InlineFunctionExpr) (Sequence, error) { //nolint:unparam // goCtx threaded through for API consistency
 	// Capture current variable scope snapshot
 	closedVars := ec.vars
 	// Collect parameter types for subtype checking

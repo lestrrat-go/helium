@@ -170,7 +170,7 @@ const (
 )
 
 func (pctx *parserCtx) fireSAXCallback(ctx context.Context, typ int, args ...any) error {
-	// This is ugly, but I *REALLY* wanted to catch all occurences of
+	// This is ugly, but I *REALLY* wanted to catch all occurrences of
 	// SAX callbacks being fired in one shot. optimize it later
 
 	s := pctx.sax
@@ -460,10 +460,7 @@ func (pctx *parserCtx) deliverCharacters(ctx context.Context, handler func(conte
 			}
 			if end == 0 {
 				// Should not happen with valid UTF-8, but avoid infinite loop.
-				end = bufSize
-				if end > len(data) {
-					end = len(data)
-				}
+				end = min(bufSize, len(data))
 			}
 		}
 

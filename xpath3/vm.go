@@ -141,7 +141,6 @@ func compileVMProgramWithOptions(ast Expr, reuseInput bool) (*vmProgram, prefixV
 	}, builder.prefixPlan.plan(), nil
 }
 
-
 type vmBuilder struct {
 	instructions []vmInstruction
 	prefixPlan   prefixPlanBuilder

@@ -470,7 +470,7 @@ loop:
 		// Pure unary plus: wrap to enforce numeric type check
 		expr = UnaryExpr{Operand: expr, Negate: false}
 	}
-	for i := 0; i < negate; i++ {
+	for range negate {
 		expr = UnaryExpr{Operand: expr, Negate: true}
 	}
 	return expr, nil
@@ -1575,7 +1575,7 @@ func (p *parser) parseTryCatchExpr() (Expr, error) {
 		p.lexer.Next()
 		// Parse error codes (NameTest ("|" NameTest)*)
 		// NameTest ::= EQName | Wildcard
-		// Wildcard ::= "*" | NCName ":*" | "*:" NCName | "BracedURILiteral" "*"
+		// ::= "*" | NCName ":*" | "*:" NCName | "BracedURILiteral" "*"
 		var codes []string
 		for {
 			code, err := p.parseCatchCode()
@@ -2125,8 +2125,8 @@ func variableExprFromToken(name string) VariableExpr {
 		return VariableExpr{Name: name}
 	}
 	prefix := ""
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix = name[:idx]
+	if p2, _, ok := strings.Cut(name, ":"); ok {
+		prefix = p2
 	}
 	return VariableExpr{Prefix: prefix, Name: name}
 }

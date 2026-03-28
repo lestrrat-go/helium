@@ -106,7 +106,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 	// (XSLT 2.0+ §16.3.2).
 	seen := make(map[helium.Node]struct{})
 	var seq xpath3.ItemSlice
-	for item := range sequence.Items(args[1]) { //nolint:contextcheck
+	for item := range sequence.Items(args[1]) {
 		valAV, err := xpath3.AtomizeItem(item)
 		if err != nil {
 			return nil, err
@@ -194,9 +194,8 @@ func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Seque
 			ns = name[2:end]
 			local = name[end+1:]
 		}
-	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local = name[idx+1:]
+	} else if prefix, l, ok := strings.Cut(name, ":"); ok {
+		local = l
 		// Resolve prefix via stylesheet-level namespaces.
 		resolved := false
 		if uri, ok := ec.stylesheet.namespaces[prefix]; ok {

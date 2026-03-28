@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -1171,18 +1172,14 @@ func (ec *execContext) collectAllVars(ctx context.Context) map[string]xpath3.Seq
 
 	vars := make(map[string]xpath3.Sequence, len(ec.globalVars))
 	// Start with globals
-	for k, v := range ec.globalVars {
-		vars[k] = v
-	}
+	maps.Copy(vars, ec.globalVars)
 	// Walk from outermost to innermost scope so inner scopes override
 	var scopes []*varScope
 	for s := ec.localVars; s != nil; s = s.parent {
 		scopes = append(scopes, s)
 	}
 	for i := len(scopes) - 1; i >= 0; i-- {
-		for k, v := range scopes[i].vars {
-			vars[k] = v
-		}
+		maps.Copy(vars, scopes[i].vars)
 	}
 
 	// When executing in a used package, remove variables that the

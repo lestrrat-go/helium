@@ -167,12 +167,9 @@ var ebcdicInvariantToASCII = [256]byte{
 // Returns "" if no encoding declaration is found.
 func ExtractEBCDICEncoding(raw []byte) string {
 	// Translate to ASCII using invariant positions.
-	limit := len(raw)
-	if limit > 200 {
-		limit = 200
-	}
+	limit := min(len(raw), 200)
 	ascii := make([]byte, limit)
-	for i := 0; i < limit; i++ {
+	for i := range limit {
 		ascii[i] = ebcdicInvariantToASCII[raw[i]]
 	}
 

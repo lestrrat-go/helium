@@ -535,9 +535,9 @@ func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName s
 	}
 	var prefix string
 	var local string
-	if i := strings.IndexByte(aName, ':'); i > -1 {
-		prefix = aName[:i]
-		local = aName[i+1:]
+	if p, l, ok := strings.Cut(aName, ":"); ok {
+		prefix = p
+		local = l
 	} else {
 		local = aName
 	}

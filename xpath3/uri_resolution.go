@@ -79,7 +79,7 @@ func isHexDigit(b byte) bool {
 }
 
 func indexScheme(raw string) int {
-	for i := 0; i < len(raw); i++ {
+	for i := range len(raw) {
 		switch raw[i] {
 		case ':':
 			return i

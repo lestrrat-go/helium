@@ -1,4 +1,4 @@
-// +build !darwin,!windows,!freebsd,!openbsd,!netbsd,!dragonfly
+//go:build !darwin && !windows && !freebsd && !openbsd && !netbsd && !dragonfly
 
 package cliutil
 

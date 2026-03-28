@@ -734,7 +734,7 @@ func (ec *execContext) execVariable(ctx context.Context, inst *variableInst) err
 	// Type check against the declared as type
 	if inst.As != "" {
 		st := parseSequenceType(inst.As)
-		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "variable $"+inst.Name, ec)
+		checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "variable $"+inst.Name, ec)
 		if err != nil {
 			return err
 		}

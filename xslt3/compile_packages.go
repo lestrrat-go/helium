@@ -578,9 +578,9 @@ func isAcceptVisibilityCompatible(declared, accepted string) bool {
 
 // splitOverrideKey splits an override key "type:name" into its components.
 func splitOverrideKey(key string) []string {
-	idx := strings.Index(key, ":")
-	if idx < 0 {
+	typ, name, ok := strings.Cut(key, ":")
+	if !ok {
 		return nil
 	}
-	return []string{key[:idx], key[idx+1:]}
+	return []string{typ, name}
 }

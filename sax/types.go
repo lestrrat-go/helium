@@ -44,13 +44,13 @@ type Entity interface {
 // ATTLIST declaration (libxml2: xmlEnumeration). The helium root
 // package provides the concrete []string implementation; this
 // interface allows the SAX layer to pass it without a circular import.
-type Enumeration interface{}
+type Enumeration any
 
 // ElementContent represents a content model from an ELEMENT declaration
 // (libxml2: xmlElementContent). The helium root package provides the
 // concrete implementation; this interface allows the SAX layer to pass
 // it without a circular import.
-type ElementContent interface{}
+type ElementContent any
 
 type Namespace interface {
 	Prefix() string

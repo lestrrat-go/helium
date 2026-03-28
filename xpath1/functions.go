@@ -353,11 +353,11 @@ func fnSubstringBefore(_ *evalContext, args []*Result) (*Result, error) {
 	}
 	s := resultToString(args[0])
 	sep := resultToString(args[1])
-	idx := strings.Index(s, sep)
-	if idx < 0 {
+	before, _, found := strings.Cut(s, sep)
+	if !found {
 		return &Result{Type: StringResult}, nil
 	}
-	return &Result{Type: StringResult, String: s[:idx]}, nil
+	return &Result{Type: StringResult, String: before}, nil
 }
 
 func fnSubstringAfter(_ *evalContext, args []*Result) (*Result, error) {
@@ -366,11 +366,11 @@ func fnSubstringAfter(_ *evalContext, args []*Result) (*Result, error) {
 	}
 	s := resultToString(args[0])
 	sep := resultToString(args[1])
-	idx := strings.Index(s, sep)
-	if idx < 0 {
+	_, after, found := strings.Cut(s, sep)
+	if !found {
 		return &Result{Type: StringResult}, nil
 	}
-	return &Result{Type: StringResult, String: s[idx+len(sep):]}, nil
+	return &Result{Type: StringResult, String: after}, nil
 }
 
 func fnSubstring(_ *evalContext, args []*Result) (*Result, error) {

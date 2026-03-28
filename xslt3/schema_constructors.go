@@ -32,7 +32,7 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 	typeName := ec.schemaTypeName(td.Name.NS, td.Name.Local)
 	baseType := schemaBuiltinXPathType(td)
 	variety := schemaTypeVariety(td)
-	return func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	return func(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 		av, empty, err := schemaConstructorArg(args[0], typeName)
 		if err != nil {
 			return nil, err
@@ -46,7 +46,7 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 			return nil, err
 		}
 		if baseType == xpath3.TypeQName || baseType == xpath3.TypeNOTATION {
-			if err := td.Validate(lexical, ec.stylesheet.namespaces); err != nil {
+			if err := td.Validate(ctx, lexical, ec.stylesheet.namespaces); err != nil {
 				return nil, &xpath3.XPathError{
 					Code:    "FORG0001",
 					Message: fmt.Sprintf("cannot cast %q to %s", lexical, typeName),
@@ -61,7 +61,7 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 				Value:    qv,
 			}), nil
 		}
-		if err := td.Validate(lexical, nil); err != nil {
+		if err := td.Validate(ctx, lexical, nil); err != nil {
 			return nil, &xpath3.XPathError{
 				Code:    "FORG0001",
 				Message: fmt.Sprintf("cannot cast %q to %s", lexical, typeName),
@@ -117,9 +117,9 @@ func resolveQNameFromMap(s string, ns map[string]string) (xpath3.QNameValue, err
 	s = strings.TrimSpace(s)
 	prefix := ""
 	local := s
-	if idx := strings.IndexByte(s, ':'); idx >= 0 {
-		prefix = s[:idx]
-		local = s[idx+1:]
+	if p, l, ok := strings.Cut(s, ":"); ok {
+		prefix = p
+		local = l
 	}
 	if !xmlchar.IsValidNCName(local) || (prefix != "" && !xmlchar.IsValidNCName(prefix)) {
 		return xpath3.QNameValue{}, &xpath3.XPathError{

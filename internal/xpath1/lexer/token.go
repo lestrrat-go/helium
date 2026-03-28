@@ -10,28 +10,28 @@ type TokenType int
 // TokenSlash through TokenDiv represent operators.
 // TokenLParen through TokenColon represent punctuation symbols.
 const (
-	TokenEOF        TokenType = iota // end of input
-	TokenNumber                      // 42, 3.14
-	TokenString                      // "hello", 'hello'
-	TokenName                        // NCName (foo, bar)
-	TokenStar                        // * (wildcard name test or multiply)
-	TokenVariableRef                 // $name
+	TokenEOF         TokenType = iota // end of input
+	TokenNumber                       // 42, 3.14
+	TokenString                       // "hello", 'hello'
+	TokenName                         // NCName (foo, bar)
+	TokenStar                         // * (wildcard name test or multiply)
+	TokenVariableRef                  // $name
 
-	TokenSlash       // /
-	TokenSlashSlash  // //
-	TokenPipe        // |
-	TokenPlus        // +
-	TokenMinus       // -
-	TokenEquals      // =
-	TokenNotEquals   // !=
-	TokenLess        // <
-	TokenLessEq      // <=
-	TokenGreater     // >
-	TokenGreaterEq   // >=
-	TokenAnd         // and
-	TokenOr          // or
-	TokenMod         // mod
-	TokenDiv         // div
+	TokenSlash      // /
+	TokenSlashSlash // //
+	TokenPipe       // |
+	TokenPlus       // +
+	TokenMinus      // -
+	TokenEquals     // =
+	TokenNotEquals  // !=
+	TokenLess       // <
+	TokenLessEq     // <=
+	TokenGreater    // >
+	TokenGreaterEq  // >=
+	TokenAnd        // and
+	TokenOr         // or
+	TokenMod        // mod
+	TokenDiv        // div
 
 	TokenLParen     // (
 	TokenRParen     // )

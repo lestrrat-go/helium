@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 	"unicode/utf8"
 
@@ -117,7 +118,7 @@ func normalizeXMLContent(data []byte, nf norm.Form) []byte {
 					cdataEnd := i + end
 					out.Write(data[i:cdataStart])
 					out.Write(nf.Bytes(data[cdataStart:cdataEnd]))
-					out.Write([]byte("]]>"))
+					out.WriteString("]]>")
 					i += end + 3
 					continue
 				}
@@ -504,7 +505,7 @@ func writeCDATAWithEncoding(sw *stream.Writer, text, encoding, normForm string) 
 // for non-representable characters.
 func needsCDATASplit(encoding string) bool {
 	switch encoding {
-	case "", "utf-8", "utf8", "utf-16", "utf16": //nolint:goconst
+	case "", "utf-8", "utf8", "utf-16", "utf16":
 		return false
 	default:
 		return true
@@ -559,9 +560,7 @@ func resolveCharacterMaps(ss *Stylesheet, names []string) map[rune]string {
 			resolve(ref)
 		}
 		// This map's entries override
-		for r, s := range cm.Mappings {
-			merged[r] = s
-		}
+		maps.Copy(merged, cm.Mappings)
 	}
 	for _, name := range names {
 		resolve(name)
