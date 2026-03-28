@@ -150,8 +150,8 @@ type dependency struct {
 }
 
 type resultSpec struct {
-	XMLName xml.Name
-	Inner   []byte `xml:",innerxml"`
+	XMLName xml.Name `xml:""`
+	Inner   []byte   `xml:",innerxml"`
 }
 
 type assertion struct {
@@ -802,7 +802,7 @@ type xmlResult struct {
 }
 
 type xmlAssertion struct {
-	XMLName        xml.Name
+	XMLName        xml.Name       `xml:""`
 	Code           string         `xml:"code,attr"`
 	NormalizeSpace string         `xml:"normalize-space,attr"`
 	Inner          []byte         `xml:",innerxml"`

@@ -119,8 +119,8 @@ func TestMarshalMarshalIndentUnmarshalBasic(t *testing.T) {
 
 func TestUnmarshalTagSemanticsMatchStdlib(t *testing.T) {
 	type anyNode struct {
-		XMLName stdxml.Name
-		Text    string `xml:",chardata"`
+		XMLName stdxml.Name `xml:""`
+		Text    string      `xml:",chardata"`
 	}
 	type payload struct {
 		XMLName stdxml.Name `xml:"root"`
@@ -726,8 +726,8 @@ func TestUnmarshalAnySingleAttrStringMatchStdlib(t *testing.T) {
 
 func TestUnmarshalAnySliceElementsMatchStdlib(t *testing.T) {
 	type anyNode struct {
-		XMLName stdxml.Name
-		Text    string `xml:",chardata"`
+		XMLName stdxml.Name `xml:""`
+		Text    string      `xml:",chardata"`
 	}
 	type payload struct {
 		Keep string    `xml:"keep"`
@@ -745,8 +745,8 @@ func TestUnmarshalAnySliceElementsMatchStdlib(t *testing.T) {
 
 func TestUnmarshalAnySingleWithMultipleMatchesMatchStdlib(t *testing.T) {
 	type anyNode struct {
-		XMLName stdxml.Name
-		Text    string `xml:",chardata"`
+		XMLName stdxml.Name `xml:""`
+		Text    string      `xml:",chardata"`
 	}
 	type payload struct {
 		Any anyNode `xml:",any"`

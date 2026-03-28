@@ -59,8 +59,8 @@ type xslDependencies struct {
 }
 
 type xslDependency struct {
-	XMLName   xml.Name
-	Value     string `xml:"value,attr"`
+	XMLName   xml.Name `xml:""`
+	Value     string   `xml:"value,attr"`
 	Satisfied string `xml:"satisfied,attr"`
 }
 
@@ -154,8 +154,8 @@ type xslParam struct {
 }
 
 type xslResult struct {
-	XMLName xml.Name
-	Inner   []byte `xml:",innerxml"`
+	XMLName xml.Name `xml:""`
+	Inner   []byte   `xml:",innerxml"`
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ type xmlResultWrapper struct {
 }
 
 type xmlAssertion struct {
-	XMLName  xml.Name
+	XMLName  xml.Name       `xml:""`
 	Code     string         `xml:"code,attr"`
 	File     string         `xml:"file,attr"`
 	URI      string         `xml:"uri,attr"`
