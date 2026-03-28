@@ -399,7 +399,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*sortKey, error) {
 			return nil, err
 		}
 		if !include {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 	}
 
@@ -494,7 +494,7 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*withParam, error) {
 			return nil, err
 		}
 		if !include {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 	}
 

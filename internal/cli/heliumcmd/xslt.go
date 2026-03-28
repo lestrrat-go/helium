@@ -140,7 +140,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 
 func (c *xsltCommand) buildParams(ctx context.Context, cfg *xsltConfig) (*xslt3.Parameters, error) {
 	if len(cfg.params) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	params := xslt3.NewParameters()

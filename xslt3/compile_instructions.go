@@ -181,7 +181,7 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 				return nil, err
 			}
 			if !include {
-				return nil, nil
+				return nil, nil //nolint:nilnil
 			}
 		}
 	} else {
@@ -191,7 +191,7 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 				return nil, err
 			}
 			if !include {
-				return nil, nil
+				return nil, nil //nolint:nilnil
 			}
 		}
 	}
@@ -915,11 +915,11 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 		if err := c.validateDescendantUseWhen(elem); err != nil {
 			return nil, err
 		}
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	case lexicon.XSLTElementContextItem:
 		// xsl:context-item declares the expected context item type.
 		// Currently a no-op — validation happens at the mode level.
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	case lexicon.XSLTElementAssert:
 		return c.compileAssert(elem)
 	case lexicon.XSLTElementAnalyzeString:

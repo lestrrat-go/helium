@@ -344,7 +344,7 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 
 func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, externalID string) (Node, error) {
 	if pctx.options.IsSet(parseNoXXE) {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	if pdebug.Enabled {

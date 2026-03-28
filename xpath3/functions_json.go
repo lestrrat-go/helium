@@ -29,7 +29,7 @@ type jsonOptions struct {
 
 func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {
@@ -64,7 +64,7 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid trailing content: %v", err)}
 	}
 	if item == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	return ItemSlice{item}, nil
@@ -483,7 +483,7 @@ func canonicalInvalidJSONEscape(raw string) string {
 
 func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	uri, err := coerceArgToString(args[0])
 	if err != nil {

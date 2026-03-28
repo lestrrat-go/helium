@@ -42,7 +42,7 @@ func wrapUnparsedTextError(err error) error {
 
 func fnUnparsedText(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	href, err := coerceArgToString(args[0])
 	if err != nil {
@@ -85,7 +85,7 @@ func fnUnparsedTextAvailable(ctx context.Context, args []Sequence) (Sequence, er
 
 func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	href, err := coerceArgToString(args[0])
 	if err != nil {

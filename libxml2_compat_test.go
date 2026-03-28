@@ -203,7 +203,7 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.getEntity(%s)\n", name)
 		ent, ok := entities[name]
 		if !ok {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		return ent, nil
 	}))
@@ -211,7 +211,7 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.getParameterEntity(%s)\n", name)
 		ent, ok := peEntities[name]
 		if !ok {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		return ent, nil
 	}))

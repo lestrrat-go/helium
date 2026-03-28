@@ -84,7 +84,7 @@ func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	relative, err := coerceArgToString(args[0])
 	if err != nil {

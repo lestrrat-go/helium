@@ -720,7 +720,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		return nil, fmtErr
 	}
 	if !hasAny && effectiveFormat == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	// Start with parameter-document defaults (lowest priority).

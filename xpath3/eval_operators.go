@@ -148,7 +148,7 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 		return nil, err
 	}
 	if seqLen(startSeq) == 0 || seqLen(endSeq) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	sa, err := AtomizeItem(startSeq.Get(0))
 	if err != nil {
@@ -173,7 +173,7 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 	ev, eok := eaInt.Int64Val()
 	if sok && eok {
 		if sv > ev {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		count := ev - sv + 1
 		if count > int64(ec.maxNodes) {
@@ -184,7 +184,7 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 	start := saInt.BigInt()
 	end := eaInt.BigInt()
 	if start.Cmp(end) > 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	count := new(big.Int).Sub(end, start)
 	count.Add(count, big.NewInt(1))

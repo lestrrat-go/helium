@@ -203,7 +203,7 @@ func evalValueComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (S
 	}
 	// Empty sequence yields empty sequence
 	if len(leftAtoms) == 0 || len(rightAtoms) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	if len(leftAtoms) > 1 || len(rightAtoms) > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "value comparison requires singletons"}
@@ -230,7 +230,7 @@ func evalNodeComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Se
 	}
 	// Empty sequence yields empty sequence
 	if seqLen(left) == 0 || seqLen(right) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	if left.Len() > 1 || right.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires singletons"}

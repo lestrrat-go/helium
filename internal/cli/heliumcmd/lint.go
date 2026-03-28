@@ -343,7 +343,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) { //nolint:unparam // error always nil but may fail in future
 	envFiles := os.Getenv("XML_CATALOG_FILES")
 	if envFiles == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	for _, f := range strings.Split(envFiles, " ") {
 		f = strings.TrimSpace(f)
@@ -357,7 +357,7 @@ func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, err
 		}
 		return cat, nil
 	}
-	return nil, nil
+	return nil, nil //nolint:nilnil
 }
 
 func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {

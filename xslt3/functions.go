@@ -114,16 +114,16 @@ func (ec *execContext) fnNilled(_ context.Context, args []xpath3.Sequence) (xpat
 		node = ec.contextNode
 	} else if args[0] == nil || sequence.Len(args[0]) == 0 {
 		// nilled(()) or empty sequence argument: return empty sequence.
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	} else {
 		ni, ok := args[0].Get(0).(xpath3.NodeItem)
 		if !ok {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		node = ni.Node
 	}
 	if node == nil || node.Type() != helium.ElementNode {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	elem, ok := node.(*helium.Element)
 	if !ok {

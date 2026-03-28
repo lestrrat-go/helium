@@ -171,7 +171,7 @@ func compileLet(elem *helium.Element) (*letBinding, error) {
 	name := getAttr(elem, "name")
 	value := getAttr(elem, "value")
 	if name == "" || value == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	compiled, err := xpath1.Compile(value)

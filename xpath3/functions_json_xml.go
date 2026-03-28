@@ -19,7 +19,7 @@ func init() {
 
 func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	opts, err := parseJSONToXMLOptions(args)
@@ -291,7 +291,7 @@ type xmlJSONMeta struct {
 
 func fnXMLToJSON(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	if seqLen(args[0]) != 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json expects zero or one node"}

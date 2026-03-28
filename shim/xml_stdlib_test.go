@@ -94,7 +94,7 @@ func (t *toksNilStdlib) Token() (Token, error) {
 			// Return nil, nil before returning an EOF. It's legal, but
 			// discouraged.
 			t.returnEOF = true
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		return nil, io.EOF
 	}

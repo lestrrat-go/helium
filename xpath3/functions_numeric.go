@@ -41,7 +41,7 @@ func promoteToNumeric(item Item) (AtomicValue, error) {
 
 func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {
@@ -66,7 +66,7 @@ func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {
@@ -90,7 +90,7 @@ func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {
@@ -114,7 +114,7 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {
@@ -164,7 +164,7 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {

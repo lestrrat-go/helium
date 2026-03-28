@@ -195,7 +195,7 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 			// Simplified stylesheet — no XSLT root, cache as nil to signal
 			// that compileIncludeTemplates should fall back to compileInclude.
 			c.includeRoots[importKey] = nil
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		return nil, staticError(errCodeXTSE0010, "included document %q is not a stylesheet", uri)
 	}
@@ -213,7 +213,7 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 				c.useWhenExcluded = make(map[string]struct{})
 			}
 			c.useWhenExcluded[importKey] = struct{}{}
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 	}
 

@@ -695,7 +695,7 @@ found:
 		}
 	}
 
-	return nil, nil
+	return nil, nil //nolint:nilnil
 }
 
 // collectInScopeNamespaces walks up from elem collecting all namespace

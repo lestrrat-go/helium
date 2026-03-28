@@ -184,16 +184,16 @@ func fnFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	arityVal, ok := arityArg.Int64Val()
 	if !ok {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	arity := int(arityVal)
 	if arity < 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	fi, ok := lookupFunctionItem(ctx, nameArg.QNameVal(), arity)
 	if !ok {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	return ItemSlice{fi}, nil
 }
@@ -278,7 +278,7 @@ func fnFunctionName(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if fi.Name == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	ns := fi.Namespace
 	if ns == "" {
@@ -312,7 +312,7 @@ func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 				}
 				val, ok := v.Get(key)
 				if !ok {
-					return nil, nil
+					return nil, nil //nolint:nilnil
 				}
 				return val, nil
 			},

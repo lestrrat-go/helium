@@ -133,7 +133,7 @@ func (ec *execContext) findBestTemplate(node helium.Node, mode string) (*templat
 	}
 
 	if best == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	// Check on-multiple-match="fail": look for a second matching template
@@ -237,7 +237,7 @@ func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) (*templ
 		}
 	}
 	if best == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	// Check on-multiple-match="fail": look for conflicting atomic template match.
 	if ec.onMultipleMatchFail(mode) {

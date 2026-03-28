@@ -882,7 +882,7 @@ func (r strippingCollectionResolver) ResolveURICollection(uri string) ([]string,
 
 func (ec *execContext) copyCollectionNode(node helium.Node) (helium.Node, error) {
 	if node == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	if doc, ok := node.(*helium.Document); ok {

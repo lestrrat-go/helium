@@ -137,12 +137,12 @@ func newCountingSAXHandler() sax.SAX2Handler {
 	s.SetOnComment(sax.CommentFunc(func(context.Context, []byte) error { return nil }))
 	s.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(context.Context, string, string) error { return nil }))
 	s.SetOnReference(sax.ReferenceFunc(func(context.Context, string) error { return nil }))
-	s.SetOnGetEntity(sax.GetEntityFunc(func(context.Context, string) (sax.Entity, error) { return nil, nil }))
-	s.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(context.Context, string) (sax.Entity, error) { return nil, nil }))
+	s.SetOnGetEntity(sax.GetEntityFunc(func(context.Context, string) (sax.Entity, error) { return nil, nil })) //nolint:nilnil
+	s.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(context.Context, string) (sax.Entity, error) { return nil, nil })) //nolint:nilnil
 	s.SetOnHasExternalSubset(sax.HasExternalSubsetFunc(func(context.Context) (bool, error) { return false, nil }))
 	s.SetOnHasInternalSubset(sax.HasInternalSubsetFunc(func(context.Context) (bool, error) { return false, nil }))
 	s.SetOnIsStandalone(sax.IsStandaloneFunc(func(context.Context) (bool, error) { return false, nil }))
-	s.SetOnResolveEntity(sax.ResolveEntityFunc(func(context.Context, string, string) (sax.ParseInput, error) { return nil, nil }))
+	s.SetOnResolveEntity(sax.ResolveEntityFunc(func(context.Context, string, string) (sax.ParseInput, error) { return nil, nil })) //nolint:nilnil
 	s.SetOnAttributeDecl(sax.AttributeDeclFunc(func(context.Context, string, string, enum.AttributeType, enum.AttributeDefault, string, sax.Enumeration) error {
 		return nil
 	}))

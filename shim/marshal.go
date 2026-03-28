@@ -397,12 +397,12 @@ func (enc *Encoder) marshalSimpleValue(val reflect.Value, start *StartElement) e
 // marshalAttr encodes a field binding as an XML attribute.
 func (enc *Encoder) marshalAttr(b fieldBinding, field reflect.Value) (*Attr, error) {
 	if b.omitEmpty && isEmptyValue(field) {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	for field.Kind() == reflect.Pointer {
 		if field.IsNil() {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		field = field.Elem()
 	}
@@ -420,7 +420,7 @@ func (enc *Encoder) marshalAttr(b fieldBinding, field reflect.Value) (*Attr, err
 				return nil, err
 			}
 			if attr.Name.Local == "" {
-				return nil, nil
+				return nil, nil //nolint:nilnil
 			}
 			return &attr, nil
 		}
@@ -432,7 +432,7 @@ func (enc *Encoder) marshalAttr(b fieldBinding, field reflect.Value) (*Attr, err
 				return nil, err
 			}
 			if attr.Name.Local == "" {
-				return nil, nil
+				return nil, nil //nolint:nilnil
 			}
 			return &attr, nil
 		}

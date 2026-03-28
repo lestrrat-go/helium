@@ -213,7 +213,7 @@ func (ec *execContext) fnFunctionLookupPackage(ctx context.Context, args []xpath
 	origDef := pkgFn.OriginalFunc
 	if origDef.Visibility == visAbstract {
 		// Original is abstract — no implementation to look up
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	origUF := &xslUserFunc{def: origDef, ec: ec}
 	origFI := xpath3.FunctionItem{

@@ -68,7 +68,7 @@ func lookupItem(evalFn exprEvaluator, ec *evalContext, item Item, keyExpr Expr, 
 			return nil, err
 		}
 		if seqLen(keySeq) == 0 {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		var result ItemSlice
 		for keyItem := range seqItems(keySeq) {
@@ -95,7 +95,7 @@ func lookupItem(evalFn exprEvaluator, ec *evalContext, item Item, keyExpr Expr, 
 			return nil, err
 		}
 		if seqLen(keySeq) == 0 {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		var result ItemSlice
 		for keyItem := range seqItems(keySeq) {

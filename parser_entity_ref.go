@@ -638,7 +638,7 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 			return nil, pctx.error(ctx, err)
 		}
 		pctx.valid = false
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	} else if ent.entityType == enum.ExternalGeneralUnparsedEntity {
 		return nil, pctx.error(ctx, errors.New("entity reference to unparsed entity"))
 	} else if pctx.instate == psAttributeValue && ent.entityType == enum.ExternalGeneralParsedEntity {
