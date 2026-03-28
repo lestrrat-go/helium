@@ -37,7 +37,12 @@ func Example_relaxng_validate() {
 		return
 	}
 
-	if err := relaxng.NewValidator(grammar).Filename("doc.xml").Validate(context.Background(), doc); err != nil {
+	// Create a validator from the compiled grammar. Filename sets the
+	// document name used in error messages (it does not read from disk).
+	v := relaxng.NewValidator(grammar).
+		Filename("doc.xml")
+
+	if err := v.Validate(context.Background(), doc); err != nil {
 		fmt.Println(err)
 	}
 	// Output:

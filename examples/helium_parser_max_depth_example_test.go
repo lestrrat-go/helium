@@ -12,7 +12,8 @@ func Example_helium_parser_max_depth() {
 	// MaxDepth is a defensive limit against excessively deep input. This is
 	// useful when parsing untrusted XML or when you want to fail fast on inputs
 	// that are unexpectedly nested.
-	p := helium.NewParser().MaxDepth(2)
+	p := helium.NewParser().
+		MaxDepth(2) // reject documents nested deeper than 2 levels
 
 	_, err := p.Parse(context.Background(), []byte(`<root><level1><level2/></level1></root>`))
 	fmt.Println(err != nil)

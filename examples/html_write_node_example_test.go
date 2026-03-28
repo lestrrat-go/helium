@@ -25,8 +25,10 @@ func Example_html_write_node() {
 		return
 	}
 
+	// WriteTo serializes the selected node (and its subtree) as an HTML fragment.
 	var buf bytes.Buffer
-	if err := html.NewWriter().WriteTo(&buf, nodes[0]); err != nil {
+	w := html.NewWriter()
+	if err := w.WriteTo(&buf, nodes[0]); err != nil {
 		fmt.Printf("write failed: %s\n", err)
 		return
 	}

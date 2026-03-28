@@ -38,7 +38,12 @@ func Example_schematron_compile_file() {
 		return
 	}
 
-	if err := schematron.NewValidator(schema).Filename("doc.xml").Validate(context.Background(), doc); err != nil {
+	// Create a validator from the compiled schema. Filename sets the
+	// document name used in error messages (it does not read from disk).
+	v := schematron.NewValidator(schema).
+		Filename("doc.xml")
+
+	if err := v.Validate(context.Background(), doc); err != nil {
 		fmt.Println(err)
 	}
 	// Output:

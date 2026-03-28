@@ -18,7 +18,10 @@ func Example_html_new_sax_push_parser() {
 		return nil
 	}))
 
-	pp := html.NewParser().NewSAXPushParser(context.Background(), handler)
+	// NewSAXPushParser combines push parsing with SAX-style event delivery.
+	// Each Push call fires SAX callbacks as elements are encountered.
+	p := html.NewParser()
+	pp := p.NewSAXPushParser(context.Background(), handler)
 	if err := pp.Push([]byte(`<h1>Title</h1>`)); err != nil {
 		fmt.Printf("push failed: %s\n", err)
 		return

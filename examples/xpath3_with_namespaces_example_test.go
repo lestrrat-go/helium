@@ -26,15 +26,21 @@ func Example_xpath3_with_namespaces() {
 		return
 	}
 
-	r, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+	// Create an evaluator and bind the prefix "x" to the namespace URI used
+	// in the document. The prefix in the XPath expression ("x:item") does not
+	// have to match the prefix in the source XML ("ns:item") — only the URI
+	// must match.
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Namespaces(map[string]string{
 			"x": "http://example.com/ns",
-		}).
-		Evaluate(context.Background(), compiled, doc)
+		})
+
+	r, err := eval.Evaluate(context.Background(), compiled, doc)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return
 	}
+
 	nodes, err := r.Nodes()
 	if err != nil {
 		fmt.Printf("unexpected non-node result: %s\n", err)

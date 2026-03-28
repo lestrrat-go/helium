@@ -15,18 +15,24 @@ func Example_xpath_context_options() {
 		return
 	}
 
-	// Evaluator options are how you inject external values into XPath evaluation.
-	// Here we bind a variable and a custom function before running the queries.
-	ev := xpath1.NewEvaluator().
-		Variables(map[string]any{
-			"minPrice": float64(40),
-		}).
-		Function("discount", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
-			return &xpath1.Result{
-				Type:   xpath1.NumberResult,
-				Number: args[0].Number * 0.9,
-			}, nil
-		}))
+	// Evaluator options let you inject external values into XPath evaluation.
+	// Each builder method returns a new evaluator, so you can chain or
+	// assign intermediate steps.
+	ev := xpath1.NewEvaluator()
+
+	// Bind a variable that XPath expressions can reference as $minPrice.
+	ev = ev.Variables(map[string]any{
+		"minPrice": float64(40),
+	})
+
+	// Register a custom XPath function named "discount" that multiplies
+	// its numeric argument by 0.9.
+	ev = ev.Function("discount", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
+		return &xpath1.Result{
+			Type:   xpath1.NumberResult,
+			Number: args[0].Number * 0.9,
+		}, nil
+	}))
 
 	// The first expression reads the caller-supplied variable.
 	expr1, err := xpath1.Compile(`count(/catalog/book[number(@price) >= $minPrice])`)

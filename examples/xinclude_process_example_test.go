@@ -76,10 +76,12 @@ func Example_xinclude_process() {
 		return
 	}
 
-	n, err := xinclude.NewProcessor().
-		BaseURI(mainPath).
-		NoBaseFixup().
-		Process(context.Background(), doc)
+	// Configure an XInclude processor.
+	proc := xinclude.NewProcessor().
+		BaseURI(mainPath). // resolve relative hrefs against this path
+		NoBaseFixup()      // skip xml:base fixup on included nodes
+
+	n, err := proc.Process(context.Background(), doc)
 	if err != nil {
 		fmt.Printf("xinclude error: %s\n", err)
 		return
@@ -104,11 +106,14 @@ func Example_xinclude_process() {
 		return
 	}
 
-	n, err = xinclude.NewProcessor().
+	// Same processor settings, plus NoXIncludeMarkers to suppress the
+	// bracketing xi:include nodes.
+	proc = xinclude.NewProcessor().
 		BaseURI(mainPath).
 		NoBaseFixup().
-		NoXIncludeMarkers().
-		Process(context.Background(), doc)
+		NoXIncludeMarkers() // strip marker nodes from the result tree
+
+	n, err = proc.Process(context.Background(), doc)
 	if err != nil {
 		fmt.Printf("xinclude error: %s\n", err)
 		return
