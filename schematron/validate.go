@@ -12,6 +12,12 @@ import (
 
 func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig, handler helium.ErrorHandler) bool {
 	filename := cfg.label
+	if filename == "" {
+		filename = doc.URL()
+	}
+	if filename == "" {
+		filename = "(string)"
+	}
 	valid := true
 
 	ev := xpath1.NewEvaluator().Namespaces(schema.namespaces)

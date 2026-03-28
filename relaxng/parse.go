@@ -51,13 +51,21 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		eh = cfg.errorHandler
 	}
 
+	label := cfg.label
+	if label == "" {
+		label = doc.URL()
+	}
+	if label == "" {
+		label = "(string)"
+	}
+
 	c := &compiler{
 		ctx: ctx,
 		grammar: &Grammar{
 			defines: make(map[string]*pattern),
 		},
 		baseDir:      baseDir,
-		filename:     cfg.label,
+		filename:     label,
 		errorHandler: eh,
 		includeLimit: 1000,
 	}

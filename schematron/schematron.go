@@ -48,6 +48,8 @@ func (c Compiler) clone() Compiler {
 }
 
 // Label sets the label (typically a filename) used in compilation error messages.
+// If not set, the label is inferred from the document's URL ([helium.Document.URL]).
+// If neither is available, "(string)" is used.
 func (c Compiler) Label(name string) Compiler {
 	c = c.clone()
 	c.cfg.label = name
@@ -137,6 +139,8 @@ func (v Validator) clone() Validator {
 }
 
 // Label sets the label (typically a filename) used in validation error messages.
+// If not set, the label is inferred from the document's URL ([helium.Document.URL]).
+// If neither is available, "(string)" is used.
 func (v Validator) Label(name string) Validator {
 	v = v.clone()
 	v.cfg.label = name
