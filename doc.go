@@ -1,6 +1,8 @@
-// Package helium is a Go implementation of the libxml2 XML toolkit. It provides
-// tree-based XML parsing, a DOM interface, SAX2 callbacks, namespace handling,
-// DTD validation, and serialization.
+// Package helium is a fast, pure-Go XML toolkit covering XML parsing,
+// SAX2-style streaming, XPath 3.1, XSLT 3.0, XInclude, XSD, Relax NG, and
+// Schematron. This root package provides tree-based XML parsing, a DOM
+// interface, SAX2 callbacks, namespace handling, DTD validation, and
+// serialization. See the sub-packages listed below for additional features.
 //
 // # Parsing
 //
