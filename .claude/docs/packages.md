@@ -127,10 +127,10 @@ XSLT element registry: metadata for all ~80 recognized XSLT 3.0 elements.
 XML Schema (XSD) 1.0 compilation and validation.
 
 - **NewCompiler() → Compiler** — create fluent builder for schema compilation
-  - `SchemaLabel(name)`, `BaseDir(dir)`, `ErrorHandler(h)` — builder methods (clone-on-write)
+  - `Label(name)`, `BaseDir(dir)`, `ErrorHandler(h)` — builder methods (clone-on-write)
   - `Compile(ctx, *Document) → (*Schema, error)` / `CompileFile(ctx, path) → (*Schema, error)` — terminal methods
 - **NewValidator(schema) → Validator** — create fluent builder for validation
-  - `Filename(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)` — builder methods
+  - `Label(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)` — builder methods
   - `Validate(ctx, *Document) → error` — terminal method
 - **(*TypeDef).Validate(value, nsMap) → error** — validate a lexical value against a simple type; nsMap (prefix→URI) may be nil
 - **(*TypeDef).ValidateElement(elem, schema) → error** — validate an element's content against a type
@@ -146,7 +146,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 RELAX NG schema compilation and validation.
 
 - **NewCompiler() → Compiler** — create fluent builder for grammar compilation
-  - `SchemaLabel(name)`, `ErrorHandler(h)` — builder methods (clone-on-write)
+  - `Label(name)`, `ErrorHandler(h)` — builder methods (clone-on-write)
   - `Compile(ctx, *Document) → (*Grammar, error)` / `CompileFile(ctx, path) → (*Grammar, error)` — terminal methods
 - **NewValidator(grammar) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)` — builder methods
@@ -204,7 +204,7 @@ XPointer expression evaluation with scheme cascading.
 
 Schematron schema compilation and validation.
 
-- **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.SchemaLabel(s)` / `.ErrorHandler(h)` → `.Compile(ctx, doc)` or `.CompileFile(ctx, path)`
+- **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.Label(s)` / `.ErrorHandler(h)` → `.Compile(ctx, doc)` or `.CompileFile(ctx, path)`
 - **Validator** (fluent, clone-on-write): `NewValidator(schema)` → `.Label(s)` / `.Quiet()` / `.ErrorHandler(h)` → `.Validate(ctx, doc)`
 - `ErrValidationFailed` — sentinel error returned on validation failure; individual `*ValidationError` delivered to ErrorHandler
 - Supports: schema, pattern, rule, assert, report, let, name, value-of

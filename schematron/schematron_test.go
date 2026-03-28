@@ -785,7 +785,7 @@ func TestZeroCompilerFluent(t *testing.T) {
 	t.Parallel()
 	var c schematron.Compiler
 	require.NotPanics(t, func() {
-		c2 := c.SchemaLabel("test.sch")
+		c2 := c.Label("test.sch")
 		_ = c2
 	})
 }

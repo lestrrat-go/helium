@@ -210,7 +210,7 @@ func TestGoldenFiles(t *testing.T) {
 			// Compile schema.
 			xsdFilename := "./test/schemas/" + tc.xsdBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-			schema, err := xsd.NewCompiler().SchemaLabel(xsdFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.xsdPath)
+			schema, err := xsd.NewCompiler().Label(xsdFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.xsdPath)
 			require.NoError(t, err, "schema compilation failed for %s", tc.xsdPath)
 			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
@@ -810,7 +810,7 @@ func TestFacetConsistency(t *testing.T) {
 		xsdDoc, err := helium.NewParser().Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = xsd.NewCompiler().SchemaLabel("test.xsd").ErrorHandler(collector).Compile(t.Context(), xsdDoc)
+		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), xsdDoc)
 		require.NoError(t, err, "schema compilation failed")
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -1004,7 +1004,7 @@ func TestZeroCompilerFluent(t *testing.T) {
 	t.Parallel()
 	var c xsd.Compiler
 	require.NotPanics(t, func() {
-		c2 := c.SchemaLabel("test.xsd").BaseDir("/tmp")
+		c2 := c.Label("test.xsd").BaseDir("/tmp")
 		_ = c2
 	})
 }

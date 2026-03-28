@@ -149,7 +149,7 @@ func TestGoldenFiles(t *testing.T) {
 			// Compile schema.
 			rngFilename := "./test/relaxng/" + tc.rngBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-			grammar, err := relaxng.NewCompiler().SchemaLabel(rngFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.rngPath)
+			grammar, err := relaxng.NewCompiler().Label(rngFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.rngPath)
 			require.NoError(t, err, "schema compilation returned error for %s", tc.rngPath)
 			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
@@ -375,7 +375,7 @@ func TestCheckRules(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = relaxng.NewCompiler().SchemaLabel("test.rng").ErrorHandler(collector).Compile(t.Context(), doc)
+		_, err = relaxng.NewCompiler().Label("test.rng").ErrorHandler(collector).Compile(t.Context(), doc)
 		require.NoError(t, err)
 		_ = collector.Close()
 		compileWarnings, compileErrors = partitionCompileErrors(collector.Errors())
@@ -549,7 +549,7 @@ func TestZeroCompilerFluent(t *testing.T) {
 	t.Parallel()
 	var c relaxng.Compiler
 	require.NotPanics(t, func() {
-		c2 := c.SchemaLabel("test.rng")
+		c2 := c.Label("test.rng")
 		_ = c2
 	})
 }

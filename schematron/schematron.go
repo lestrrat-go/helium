@@ -47,8 +47,8 @@ func (c Compiler) clone() Compiler {
 	return Compiler{cfg: &cp}
 }
 
-// SchemaLabel sets the label (typically a filename) used in compilation error messages.
-func (c Compiler) SchemaLabel(name string) Compiler {
+// Label sets the label (typically a filename) used in compilation error messages.
+func (c Compiler) Label(name string) Compiler {
 	c = c.clone()
 	c.cfg.label = name
 	return c
