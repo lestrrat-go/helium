@@ -28,7 +28,7 @@ func TestFuzzRepros(t *testing.T) {
 
 		var buf bytes.Buffer
 		w := helium.NewWriter()
-		err = w.WriteDoc(&buf, doc)
+		err = w.WriteTo(&buf, doc)
 		require.NoError(t, err)
 
 		_, err = p.Parse(t.Context(), buf.Bytes())
@@ -48,7 +48,7 @@ func TestFuzzRepros(t *testing.T) {
 
 		var buf bytes.Buffer
 		w := helium.NewWriter()
-		err = w.WriteDoc(&buf, doc)
+		err = w.WriteTo(&buf, doc)
 		require.NoError(t, err)
 
 		_, err = p.Parse(t.Context(), buf.Bytes())
@@ -152,7 +152,7 @@ func FuzzParseRoundtrip(f *testing.F) {
 
 		var buf bytes.Buffer
 		w := helium.NewWriter()
-		err = w.WriteDoc(&buf, doc)
+		err = w.WriteTo(&buf, doc)
 		require.NoError(t, err)
 
 		_, err = p.Parse(t.Context(), buf.Bytes())

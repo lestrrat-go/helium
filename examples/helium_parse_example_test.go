@@ -16,9 +16,9 @@ func Example_helium_parse() {
 		return
 	}
 
-	// XMLString serializes the entire document back to an XML string,
+	// WriteString serializes the entire document back to an XML string,
 	// including the XML declaration (<?xml version="1.0"?>).
-	s, err := doc.XMLString()
+	s, err := helium.WriteString(doc)
 	if err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
 		return

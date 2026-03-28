@@ -115,16 +115,16 @@ func serializeItemAdaptive(item xpath3.Item, charMap map[rune]string) string {
 		return serializeArrayAdaptive(v, charMap)
 	case xpath3.NodeItem:
 		var buf bytes.Buffer
-		if elem, ok := v.Node.(*helium.Element); ok {
-			_ = elem.XML(&buf, helium.NewWriter().XMLDeclaration(false))
-		} else if doc, ok := v.Node.(*helium.Document); ok {
-			_ = doc.XML(&buf, helium.NewWriter().XMLDeclaration(false))
-		} else if attr, ok := v.Node.(*helium.Attribute); ok {
+		switch v.Node.(type) {
+		case *helium.Element, *helium.Document:
+			_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, v.Node)
+		case *helium.Attribute:
+			attr := v.Node.(*helium.Attribute)
 			buf.WriteString(attr.Name())
 			buf.WriteString("=\"")
 			buf.WriteString(string(attr.Content()))
 			buf.WriteString("\"")
-		} else {
+		default:
 			buf.WriteString(string(v.Node.Content()))
 		}
 		return maybeApply(buf.String())

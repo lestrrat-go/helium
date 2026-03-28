@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -136,21 +135,6 @@ func (d *Document) Free() {
 	d.textContentSlab = nil
 }
 
-func (d Document) XMLString(writers ...Writer) (string, error) {
-	out := bytes.Buffer{}
-	if err := d.XML(&out, writers...); err != nil {
-		return "", err
-	}
-	return out.String(), nil
-}
-
-func (d *Document) XML(out io.Writer, writers ...Writer) error {
-	writer := NewWriter()
-	if len(writers) > 0 {
-		writer = writers[0]
-	}
-	return writer.WriteDoc(out, d)
-}
 
 func (d *Document) AddChild(cur Node) error {
 	return addChild(d, cur)

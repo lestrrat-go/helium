@@ -510,7 +510,7 @@ func w3cAssertResultDocument(uri string, checks ...w3cCheck) w3cAssertion {
 					return false
 				}
 			} else {
-				if err := doc.XML(&buf, helium.NewWriter().XMLDeclaration(false)); err != nil {
+				if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, doc); err != nil {
 					t.Errorf("assert-result-document: cannot serialize result document %q: %v", uri, err)
 					return false
 				}
@@ -742,7 +742,7 @@ func w3cCheckAllOf(checks ...w3cCheck) w3cCheck {
 				} else {
 					// Fall back to fn with serialized form.
 					var buf bytes.Buffer
-					if err := doc.XML(&buf, helium.NewWriter().XMLDeclaration(false)); err != nil {
+					if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, doc); err != nil {
 						return false
 					}
 					if !chk.fn(strings.TrimSpace(buf.String()), nil, nil) {
@@ -1290,7 +1290,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		if outDef != nil && outDef.UndeclarePrefixes {
 			writer = writer.AllowPrefixUndeclarations(true)
 		}
-		err = resultDoc.XML(&buf, writer)
+		err = writer.WriteTo(&buf, resultDoc)
 	}
 	if expectSerializationError {
 		if err != nil {
@@ -2159,7 +2159,7 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 	}
 	if !ebv {
 		var buf bytes.Buffer
-		_ = doc.XML(&buf, helium.NewWriter().XMLDeclaration(false))
+		_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, doc)
 		t.Errorf("assert failed: %s evaluated to false (result: %s)", expr, buf.String())
 		return false
 	}

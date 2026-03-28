@@ -1,7 +1,6 @@
 package xpath3
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -616,13 +615,13 @@ func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 		if opts.indent {
 			writer = writer.Format(true)
 		}
-		s, err := n.XMLString(writer)
-		if err != nil {
+		var buf strings.Builder
+		if err := writer.WriteTo(&buf, n); err != nil {
 			return "", err
 		}
-		return strings.TrimSuffix(s, "\n"), nil
+		return strings.TrimSuffix(buf.String(), "\n"), nil
 	default:
-		var buf bytes.Buffer
+		var buf strings.Builder
 		writer := helium.NewWriter()
 		if opts.omitXMLDeclaration {
 			writer = writer.XMLDeclaration(false)
@@ -630,7 +629,7 @@ func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 		if opts.indent {
 			writer = writer.Format(true)
 		}
-		if err := writer.WriteNode(&buf, item.Node); err != nil {
+		if err := writer.WriteTo(&buf, item.Node); err != nil {
 			return "", err
 		}
 		return strings.TrimSuffix(buf.String(), "\n"), nil

@@ -125,9 +125,9 @@ func serializeMessageSequence(seq xpath3.Sequence) string {
 		var buf bytes.Buffer
 		switch n := ni.Node.(type) {
 		case *helium.Document:
-			_ = n.XML(&buf, helium.NewWriter().XMLDeclaration(false))
+			_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, n)
 		case *helium.Element:
-			_ = n.XML(&buf)
+			_ = helium.Write(&buf, n)
 		case *helium.Comment:
 			// Serialize comments as XML so they roundtrip properly
 			buf.WriteString("<!--")

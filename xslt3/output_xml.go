@@ -54,7 +54,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
 	if needStandalone || needStripNewline {
 		var buf strings.Builder
-		if err := doc.XML(&buf, writer); err != nil {
+		if err := writer.WriteTo(&buf, doc); err != nil {
 			return err
 		}
 		out := buf.String()
@@ -69,7 +69,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 		_, err := io.WriteString(w, out)
 		return err
 	}
-	return doc.XML(w, writer)
+	return writer.WriteTo(w, doc)
 }
 
 // injectStandalone inserts standalone="yes" or standalone="no" into the

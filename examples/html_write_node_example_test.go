@@ -11,7 +11,7 @@ import (
 )
 
 func Example_html_write_node() {
-	// html.NewWriter().WriteNode is the fragment-oriented counterpart to WriteDoc.
+	// html.NewWriter().WriteTo serializes an HTML node and its subtree.
 	// Use it when you already selected a subtree and only want that node's HTML.
 	doc, err := html.NewParser().Parse(context.Background(), []byte(`<div><p>Hello</p></div>`))
 	if err != nil {
@@ -26,7 +26,7 @@ func Example_html_write_node() {
 	}
 
 	var buf bytes.Buffer
-	if err := html.NewWriter().WriteNode(&buf, nodes[0]); err != nil {
+	if err := html.NewWriter().WriteTo(&buf, nodes[0]); err != nil {
 		fmt.Printf("write failed: %s\n", err)
 		return
 	}

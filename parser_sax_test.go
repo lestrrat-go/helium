@@ -564,7 +564,7 @@ func TestStopParser(t *testing.T) {
 
 		var buf bytes.Buffer
 		d := helium.NewWriter()
-		require.NoError(t, d.WriteDoc(&buf, doc))
+		require.NoError(t, d.WriteTo(&buf, doc))
 		out := buf.String()
 		require.Contains(t, out, "<a>")
 		require.Contains(t, out, "hello")

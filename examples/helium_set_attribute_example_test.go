@@ -28,7 +28,7 @@ func Example_helium_set_attribute() {
 		return
 	}
 
-	s, err := doc.XMLString()
+	s, err := helium.WriteString(doc)
 	if err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
 		return

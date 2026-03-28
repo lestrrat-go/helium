@@ -1121,7 +1121,7 @@ func TestConditionalSection(t *testing.T) {
 
 		var buf bytes.Buffer
 		d := helium.NewWriter()
-		require.NoError(t, d.WriteDoc(&buf, doc))
+		require.NoError(t, d.WriteTo(&buf, doc))
 		require.Equal(t, string(expected), buf.String())
 	})
 }

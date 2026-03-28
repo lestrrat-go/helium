@@ -21,7 +21,7 @@ func dumpDoc(t *testing.T, doc *helium.Document) string {
 	t.Helper()
 	var buf bytes.Buffer
 	d := helium.NewWriter()
-	require.NoError(t, d.WriteDoc(&buf, doc))
+	require.NoError(t, d.WriteTo(&buf, doc))
 	return buf.String()
 }
 

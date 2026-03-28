@@ -496,7 +496,7 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 	if cfg.dropdtd {
 		writer = writer.IncludeDTD(false)
 	}
-	if dErr := writer.WriteDoc(out, doc); dErr != nil {
+	if dErr := writer.WriteTo(out, doc); dErr != nil {
 		if cfg.timing {
 			_, _ = fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
 		}
@@ -545,7 +545,7 @@ func (c *command) evalXPath(ctx context.Context, cfg *config, doc *helium.Docume
 				}
 			default:
 				writer := helium.NewWriter()
-				if err := writer.WriteNode(out, n); err != nil {
+				if err := writer.WriteTo(out, n); err != nil {
 					_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 					return ExitErr
 				}

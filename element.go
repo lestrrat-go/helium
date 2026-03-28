@@ -1,9 +1,7 @@
 package helium
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/lestrrat-go/pdebug"
@@ -19,24 +17,6 @@ func newElement(name string) *Element {
 	e.name = name
 	e.etype = ElementNode
 	return &e
-}
-
-// XMLString serializes the element to an XML string using the given writer.
-func (n Element) XMLString(writers ...Writer) (string, error) {
-	out := bytes.Buffer{}
-	if err := n.XML(&out, writers...); err != nil {
-		return "", err
-	}
-	return out.String(), nil
-}
-
-// XML serializes the element to w using the given writer.
-func (n *Element) XML(out io.Writer, writers ...Writer) error {
-	writer := NewWriter()
-	if len(writers) > 0 {
-		writer = writers[0]
-	}
-	return writer.WriteNode(out, n)
 }
 
 // AddChild adds a new child node to the end of the children nodes (libxml2: xmlAddChild).

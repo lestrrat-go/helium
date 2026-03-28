@@ -66,7 +66,7 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(in))
 		require.NoError(t, err, `Parse(...) succeeds`)
 
-		str, err := doc.XMLString()
+		str, err := helium.WriteString(doc)
 		require.NoError(t, err, "XMLString(doc) succeeds")
 
 		if string(golden) != str {
@@ -94,7 +94,7 @@ func TestDOMToXMLString(t *testing.T) {
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.AppendText([]byte(`Hello, World!`)))
 
-	str, err := doc.XMLString()
+	str, err := helium.WriteString(doc)
 	require.NoError(t, err, "XMLString(doc) succeeds")
 
 	t.Logf("%s", str)
@@ -118,7 +118,7 @@ func BenchmarkWriteNonASCII(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := w.WriteDoc(io.Discard, doc)
+		err := w.WriteTo(io.Discard, doc)
 		require.NoError(b, err)
 	}
 }
@@ -133,7 +133,7 @@ func TestDumpNsSkipsXmlPrefix(t *testing.T) {
 	// Add explicit xml: namespace declaration to the element
 	require.NoError(t, root.DeclareNamespace("xml", lexicon.NamespaceXML))
 
-	str, err := doc.XMLString()
+	str, err := helium.WriteString(doc)
 	require.NoError(t, err)
 
 	// The xml: namespace declaration must NOT appear in the output.
@@ -150,7 +150,7 @@ func TestDumpNsPropagatesWriteError(t *testing.T) {
 	require.NoError(t, root.DeclareNamespace("p", "urn:test"))
 
 	writer := helium.NewWriter().XMLDeclaration(false)
-	err := writer.WriteDoc(&namespaceFailWriter{failOn: "xmlns"}, doc)
+	err := writer.WriteTo(&namespaceFailWriter{failOn: "xmlns"}, doc)
 	require.ErrorIs(t, err, errNamespaceWrite)
 }
 
@@ -185,8 +185,9 @@ func TestFormatOutput(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().Format(true))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>\n"
 		require.Equal(t, expected, str)
@@ -198,8 +199,9 @@ func TestFormatOutput(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child>hello</child></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().Format(true))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>hello</child>\n</root>\n"
 		require.Equal(t, expected, str)
@@ -211,8 +213,9 @@ func TestFormatOutput(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().Format(true).IndentString("\t"))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("\t").WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<root>\n\t<child>\n\t\t<grandchild/>\n\t</child>\n</root>\n"
 		require.Equal(t, expected, str)
@@ -224,7 +227,7 @@ func TestFormatOutput(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString()
+		str, err := helium.WriteString(doc)
 		require.NoError(t, err)
 
 		expected := "<?xml version=\"1.0\"?>\n<root><child><grandchild/></child></root>\n"
@@ -237,8 +240,9 @@ func TestFormatOutput(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><a/><b/><c/></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().Format(true))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<root>\n  <a/>\n  <b/>\n  <c/>\n</root>\n"
 		require.Equal(t, expected, str)
@@ -253,8 +257,9 @@ func TestFormatOutput(t *testing.T) {
 		root := doc.DocumentElement()
 		require.NotNil(t, root)
 
-		str, err := root.XMLString(helium.NewWriter().Format(true))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, root))
+		str := buf.String()
 
 		expected := "<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>"
 		require.Equal(t, expected, str)
@@ -266,8 +271,9 @@ func TestFormatOutput(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><!--comment--><child/><?pi data?></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().Format(true))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<root>\n  <!--comment-->\n  <child/>\n  <?pi data?>\n</root>\n"
 		require.Equal(t, expected, str)
@@ -279,8 +285,9 @@ func TestFormatOutput(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><a><b><c><d>text</d></c></b></a>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().Format(true))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<a>\n  <b>\n    <c>\n      <d>text</d>\n    </c>\n  </b>\n</a>\n"
 		require.Equal(t, expected, str)
@@ -301,7 +308,7 @@ func TestXHTML(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString()
+		str, err := helium.WriteString(doc)
 		require.NoError(t, err)
 
 		// <br> must be serialized as "<br />" (self-closing), not "<br></br>"
@@ -317,8 +324,9 @@ func TestXHTML(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().Format(true))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+		str := buf.String()
 
 		// <body> has element children → they should be indented
 		require.Contains(t, str, "<body>\n    <p>")
@@ -333,8 +341,9 @@ func TestXHTML(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().Format(true))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+		str := buf.String()
 
 		// <p> has only text → no indentation inside
 		require.Contains(t, str, "<p>hello</p>")
@@ -350,8 +359,9 @@ func TestNoEmpty(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><br/></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().SelfCloseEmptyElements(false))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<root><br></br></root>\n"
 		require.Equal(t, expected, str)
@@ -363,8 +373,9 @@ func TestNoEmpty(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><p>text</p></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().SelfCloseEmptyElements(false))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<root><p>text</p></root>\n"
 		require.Equal(t, expected, str)
@@ -376,8 +387,9 @@ func TestNoEmpty(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><img src="a.png"/></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().SelfCloseEmptyElements(false))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<root><img src=\"a.png\"></img></root>\n"
 		require.Equal(t, expected, str)
@@ -389,8 +401,9 @@ func TestNoEmpty(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><a/><b/></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString(helium.NewWriter().SelfCloseEmptyElements(false).Format(true))
-		require.NoError(t, err)
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).Format(true).WriteTo(&buf, doc))
+		str := buf.String()
 
 		expected := "<?xml version=\"1.0\"?>\n<root>\n  <a></a>\n  <b></b>\n</root>\n"
 		require.Equal(t, expected, str)
@@ -402,7 +415,7 @@ func TestNoEmpty(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><br/></root>`))
 		require.NoError(t, err)
 
-		str, err := doc.XMLString()
+		str, err := helium.WriteString(doc)
 		require.NoError(t, err)
 
 		expected := "<?xml version=\"1.0\"?>\n<root><br/></root>\n"
@@ -450,7 +463,7 @@ func TestDumpQuotingViaPublicAPI(t *testing.T) {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.inputXML))
 			require.NoError(t, err)
 
-			got, err := doc.XMLString()
+			got, err := helium.WriteString(doc)
 			require.NoError(t, err)
 			require.Contains(t, got, tt.expected)
 		})
