@@ -271,7 +271,7 @@ func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (value string, err error)
 
 	cur := ctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", errNoCursor
 	}
 	q := cur.Peek()
 	switch q {
@@ -394,7 +394,8 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 
 	b0 := cur.Peek()
@@ -472,7 +473,8 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {
 		prefixBytes, localBytes, nBytes, ok := u8.ScanQNameBytes()
@@ -545,7 +547,7 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
 
 	cur := ctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", errNoCursor
 	}
 
 	off := 0
@@ -593,7 +595,8 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {

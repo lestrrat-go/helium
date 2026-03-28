@@ -23,7 +23,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '&' {
 		return pctx.error(ctx, ErrAmpersandRequired)
@@ -510,7 +510,8 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 	var val int32
 	cur := ctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = errNoCursor
+		return
 	}
 	if cur.ConsumeString("&#x") {
 		for c := cur.Peek(); !cur.Done() && c != ';'; c = cur.Peek() {
@@ -575,7 +576,8 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 	if cur.Peek() != '&' {
 		err = pctx.error(ctx, ErrAmpersandRequired)
@@ -653,7 +655,7 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 	}
 
 	if ent == nil {
-		panic("at the end of parseEntityRef, ent == nil")
+		return nil, pctx.error(ctx, errors.New("entity resolution produced nil entity"))
 	}
 	return ent, nil
 }
@@ -699,7 +701,7 @@ func (pctx *parserCtx) handlePEReference(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '%' {
 		return nil

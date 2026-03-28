@@ -132,7 +132,7 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	// Doctype declarations and more misc
 	if cur.HasPrefixString("<!DOCTYPE") {
@@ -229,7 +229,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 
 	recover := pctx.options.IsSet(parseRecover)

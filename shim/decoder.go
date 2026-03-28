@@ -429,7 +429,8 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 					return nil, fmt.Errorf("xml: opening charset %q: %w", d.detectedCharset, err)
 				}
 				if newr == nil {
-					panic("CharsetReader returned a nil Reader for charset " + d.detectedCharset)
+					d.combinedReader = nil
+					return nil, fmt.Errorf("xml: CharsetReader returned nil Reader for charset %q", d.detectedCharset)
 				}
 				reader = ensureReader(newr)
 			}

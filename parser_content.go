@@ -26,7 +26,7 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 
 	cur := ctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", errNoCursor
 	}
 
 	off := 0
@@ -107,7 +107,7 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<?") {
 		return pctx.error(ctx, ErrInvalidProcessingInstruction)
@@ -250,7 +250,7 @@ func (pctx *parserCtx) parseCDSect(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<![CDATA[") {
 		return pctx.error(ctx, ErrInvalidCDSect)
@@ -302,7 +302,7 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<!--") {
 		return pctx.error(ctx, ErrInvalidComment)

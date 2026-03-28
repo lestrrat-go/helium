@@ -291,7 +291,10 @@ func preprocessJSONStringLiterals(s string) (string, map[rune]string, error) {
 				b.WriteString(s[i : i+2])
 				i += 2
 			case 'b', 'f':
-				ph := nextJSONPlaceholderRune(s, invalidEsc)
+				ph, err := nextJSONPlaceholderRune(s, invalidEsc)
+				if err != nil {
+					return "", nil, err
+				}
 				invalidEsc[ph] = s[i : i+2]
 				b.WriteRune(ph)
 				i += 2
@@ -314,12 +317,18 @@ func preprocessJSONStringLiterals(s string) (string, map[rune]string, error) {
 							continue
 						}
 					}
-					ph := nextJSONPlaceholderRune(s, invalidEsc)
+					ph, err := nextJSONPlaceholderRune(s, invalidEsc)
+					if err != nil {
+						return "", nil, err
+					}
 					invalidEsc[ph] = escapeText
 					b.WriteRune(ph)
 					i += 6
 				case cp >= 0xDC00 && cp <= 0xDFFF, !isValidXMLCodepoint(int(cp)):
-					ph := nextJSONPlaceholderRune(s, invalidEsc)
+					ph, err := nextJSONPlaceholderRune(s, invalidEsc)
+					if err != nil {
+						return "", nil, err
+					}
 					invalidEsc[ph] = escapeText
 					b.WriteRune(ph)
 					i += 6
@@ -359,16 +368,16 @@ func parseJSONHexEscape(hex string) (uint32, error) {
 	return cp, nil
 }
 
-func nextJSONPlaceholderRune(source string, used map[rune]string) rune {
+func nextJSONPlaceholderRune(source string, used map[rune]string) (rune, error) {
 	for r := rune(0xF0000); r <= 0xFFFFD; r++ {
 		if _, exists := used[r]; exists {
 			continue
 		}
 		if !strings.ContainsRune(source, r) {
-			return r
+			return r, nil
 		}
 	}
-	panic("exhausted JSON placeholder runes")
+	return 0, &XPathError{Code: errCodeFOJS0001, Message: "exhausted JSON placeholder runes"}
 }
 
 func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (string, error) {

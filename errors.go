@@ -41,6 +41,7 @@ var (
 	ErrDuplicateAttribute = errors.New("duplicate attribute")
 	ErrEntityBoundary     = errors.New("entity boundary violation")
 	errParserStopped      = errors.New("parser stopped")
+	errNoCursor           = errors.New("parser has no input")
 )
 
 // ErrDTDDupToken is returned when a DTD attribute enumeration contains

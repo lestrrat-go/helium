@@ -19,7 +19,7 @@ func (pctx *parserCtx) parseDocTypeDecl(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<!DOCTYPE") {
 		return pctx.error(ctx, ErrInvalidDTD)
@@ -78,7 +78,7 @@ func (pctx *parserCtx) parseInternalSubset(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '[' {
 		goto FinishDTD
@@ -146,7 +146,7 @@ func (pctx *parserCtx) parseMarkupDecl(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() == '<' {
 		if cur.PeekAt(1) == '!' {
@@ -333,7 +333,7 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '%' {
 		if pdebug.Enabled {

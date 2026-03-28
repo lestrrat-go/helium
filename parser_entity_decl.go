@@ -18,7 +18,7 @@ import (
 func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (string, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", pctx.error(ctx, errNoCursor)
 	}
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
@@ -174,7 +174,7 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<!ENTITY") {
 		return pctx.error(ctx, errors.New("<!ENTITY not started"))
