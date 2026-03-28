@@ -32,7 +32,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 	v := &validator{
 		ctx:          ctx,
 		grammar:      grammar,
-		filename:     cfg.filename,
+		filename:     cfg.label,
 		errorHandler: handler,
 		valid:        true,
 	}

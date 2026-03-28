@@ -11,7 +11,7 @@ import (
 )
 
 func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig, handler helium.ErrorHandler) bool {
-	filename := cfg.filename
+	filename := cfg.label
 	valid := true
 
 	ev := xpath1.NewEvaluator().Namespaces(schema.namespaces)

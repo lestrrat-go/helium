@@ -57,7 +57,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 			defines: make(map[string]*pattern),
 		},
 		baseDir:      baseDir,
-		filename:     cfg.filename,
+		filename:     cfg.label,
 		errorHandler: eh,
 		includeLimit: 1000,
 	}

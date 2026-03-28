@@ -37,10 +37,10 @@ func Example_schematron_validate() {
 		return
 	}
 
-	// Create a validator from the compiled schema. Filename sets the
+	// Create a validator from the compiled schema. Label sets the
 	// document name used in error messages (it does not read from disk).
 	v := schematron.NewValidator(schema).
-		Filename("doc.xml")
+		Label("doc.xml")
 
 	if err := v.Validate(context.Background(), doc); err != nil {
 		fmt.Println(err)

@@ -149,7 +149,7 @@ func TestGoldenFiles(t *testing.T) {
 			// Compile schema.
 			rngFilename := "./test/relaxng/" + tc.rngBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-			grammar, err := relaxng.NewCompiler().SchemaFilename(rngFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.rngPath)
+			grammar, err := relaxng.NewCompiler().SchemaLabel(rngFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.rngPath)
 			require.NoError(t, err, "schema compilation returned error for %s", tc.rngPath)
 			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
@@ -168,7 +168,7 @@ func TestGoldenFiles(t *testing.T) {
 				// Validate.
 				filename := "./test/relaxng/" + tc.xmlBase
 				valCollector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-				err = relaxng.NewValidator(grammar).Filename(filename).ErrorHandler(valCollector).Validate(t.Context(), doc)
+				err = relaxng.NewValidator(grammar).Label(filename).ErrorHandler(valCollector).Validate(t.Context(), doc)
 				_ = valCollector.Close()
 				if errors.Is(err, relaxng.ErrValidationFailed) {
 					var valErrs strings.Builder
@@ -375,7 +375,7 @@ func TestCheckRules(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = relaxng.NewCompiler().SchemaFilename("test.rng").ErrorHandler(collector).Compile(t.Context(), doc)
+		_, err = relaxng.NewCompiler().SchemaLabel("test.rng").ErrorHandler(collector).Compile(t.Context(), doc)
 		require.NoError(t, err)
 		_ = collector.Close()
 		compileWarnings, compileErrors = partitionCompileErrors(collector.Errors())
@@ -549,7 +549,7 @@ func TestZeroCompilerFluent(t *testing.T) {
 	t.Parallel()
 	var c relaxng.Compiler
 	require.NotPanics(t, func() {
-		c2 := c.SchemaFilename("test.rng")
+		c2 := c.SchemaLabel("test.rng")
 		_ = c2
 	})
 }
@@ -558,7 +558,7 @@ func TestZeroValidatorFluent(t *testing.T) {
 	t.Parallel()
 	var v relaxng.Validator
 	require.NotPanics(t, func() {
-		v2 := v.Filename("test.xml")
+		v2 := v.Label("test.xml")
 		_ = v2
 	})
 }

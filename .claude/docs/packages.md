@@ -127,7 +127,7 @@ XSLT element registry: metadata for all ~80 recognized XSLT 3.0 elements.
 XML Schema (XSD) 1.0 compilation and validation.
 
 - **NewCompiler() → Compiler** — create fluent builder for schema compilation
-  - `SchemaFilename(name)`, `BaseDir(dir)`, `ErrorHandler(h)` — builder methods (clone-on-write)
+  - `SchemaLabel(name)`, `BaseDir(dir)`, `ErrorHandler(h)` — builder methods (clone-on-write)
   - `Compile(ctx, *Document) → (*Schema, error)` / `CompileFile(ctx, path) → (*Schema, error)` — terminal methods
 - **NewValidator(schema) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)` — builder methods
@@ -146,7 +146,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 RELAX NG schema compilation and validation.
 
 - **NewCompiler() → Compiler** — create fluent builder for grammar compilation
-  - `SchemaFilename(name)`, `ErrorHandler(h)` — builder methods (clone-on-write)
+  - `SchemaLabel(name)`, `ErrorHandler(h)` — builder methods (clone-on-write)
   - `Compile(ctx, *Document) → (*Grammar, error)` / `CompileFile(ctx, path) → (*Grammar, error)` — terminal methods
 - **NewValidator(grammar) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)` — builder methods
@@ -204,8 +204,8 @@ XPointer expression evaluation with scheme cascading.
 
 Schematron schema compilation and validation.
 
-- **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.SchemaFilename(s)` / `.ErrorHandler(h)` → `.Compile(ctx, doc)` or `.CompileFile(ctx, path)`
-- **Validator** (fluent, clone-on-write): `NewValidator(schema)` → `.Filename(s)` / `.Quiet()` / `.ErrorHandler(h)` → `.Validate(ctx, doc)`
+- **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.SchemaLabel(s)` / `.ErrorHandler(h)` → `.Compile(ctx, doc)` or `.CompileFile(ctx, path)`
+- **Validator** (fluent, clone-on-write): `NewValidator(schema)` → `.Label(s)` / `.Quiet()` / `.ErrorHandler(h)` → `.Validate(ctx, doc)`
 - `ErrValidationFailed` — sentinel error returned on validation failure; individual `*ValidationError` delivered to ErrorHandler
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
