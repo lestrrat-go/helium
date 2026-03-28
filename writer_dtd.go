@@ -19,7 +19,10 @@ func dtdQuoteChar(value string) byte {
 }
 
 func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
-	dtd := n.(*DTD) //nolint:forcetypeassert
+	dtd, ok := AsType[*DTD](n)
+	if !ok {
+		return nil
+	}
 	_, _ = io.WriteString(out, "<!DOCTYPE ")
 	_, _ = io.WriteString(out, dtd.Name())
 

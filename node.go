@@ -16,6 +16,10 @@ import (
 //	    // use elem
 //	}
 func AsType[T Node](n Node) (T, bool) {
+	if n == nil {
+		var zero T
+		return zero, false
+	}
 	if v, ok := n.(T); ok {
 		return v, true
 	}
@@ -188,8 +192,10 @@ func (n docnode) Content() []byte {
 func appendText(n MutableNode, b []byte) error {
 	// Fast path: if last child is already a text node, append directly
 	// without allocating a new Text node.
-	if last := n.LastChild(); last != nil && last.Type() == TextNode {
-		return last.(*Text).AppendText(b) //nolint:forcetypeassert
+	if last := n.LastChild(); last != nil {
+		if t, ok := AsType[*Text](last); ok {
+			return t.AppendText(b)
+		}
 	}
 	// Use slab allocator when the node belongs to a document.
 	if doc := n.OwnerDocument(); doc != nil {
@@ -547,8 +553,7 @@ func setTreeDoc(n MutableNode, doc *Document) {
 		return
 	}
 
-	if n.Type() == ElementNode {
-		e := n.(*Element) //nolint:forcetypeassert
+	if e, ok := AsType[*Element](n); ok {
 		for prop := e.properties; prop != nil; prop = prop.NextAttribute() {
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc

@@ -250,11 +250,9 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 
 	// Walk the document tree and validate each element
 	_ = Walk(doc, NodeWalkerFunc(func(n Node) error {
-		if n.Type() != ElementNode {
-			return nil
+		if elem, ok := AsType[*Element](n); ok {
+			validateOneElement(ctx, doc, elem, vctx)
 		}
-		elem := n.(*Element) //nolint:forcetypeassert
-		validateOneElement(ctx, doc, elem, vctx)
 		return nil
 	}))
 
@@ -463,9 +461,11 @@ func validateMixedContent(ctx context.Context, elem *Element, content *ElementCo
 		case TextNode, CDATASectionNode, EntityRefNode, CommentNode, ProcessingInstructionNode:
 			// Always allowed in mixed content
 		case ElementNode:
-			cname := child.(*Element).LocalName() //nolint:forcetypeassert
-			if _, ok := allowed[cname]; !ok {
-				vctx.addf(ctx, "element %s: child element %s not allowed in mixed content", elem.LocalName(), cname)
+			if ce, ok := AsType[*Element](child); ok {
+				cname := ce.LocalName()
+				if _, ok := allowed[cname]; !ok {
+					vctx.addf(ctx, "element %s: child element %s not allowed in mixed content", elem.LocalName(), cname)
+				}
 			}
 		}
 	}
@@ -498,7 +498,9 @@ func collectChildElements(elem *Element) []string {
 	for child := range Children(elem) {
 		switch child.Type() {
 		case ElementNode:
-			children = append(children, child.(*Element).LocalName()) //nolint:forcetypeassert
+			if ce, ok := AsType[*Element](child); ok {
+				children = append(children, ce.LocalName())
+			}
 		case TextNode:
 			// In element-only content, whitespace text is allowed (ignorable
 			// whitespace) but non-whitespace text is an error. We skip

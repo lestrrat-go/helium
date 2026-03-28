@@ -12,13 +12,15 @@ import (
 func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	switch src.Type() {
 	case DocumentNode:
-		doc, ok := src.(*Document)
-		if !ok {
-			return nil, fmt.Errorf("helium: unexpected DocumentNode type %T", src)
+		if doc, ok := AsType[*Document](src); ok {
+			return CopyDoc(doc)
 		}
-		return CopyDoc(doc)
+		return nil, fmt.Errorf("helium: unexpected DocumentNode type %T", src)
 	case ElementNode:
-		return copyElement(src.(*Element), targetDoc) //nolint:forcetypeassert
+		if elem, ok := AsType[*Element](src); ok {
+			return copyElement(elem, targetDoc)
+		}
+		return nil, fmt.Errorf("helium: unexpected ElementNode type %T", src)
 	case TextNode:
 		return targetDoc.CreateText(slices.Clone(src.Content())), nil
 	case CommentNode:
@@ -158,30 +160,34 @@ func copyDTD(src *DTD, dst *Document) error {
 	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
 		switch c.Type() {
 		case EntityNode:
-			ent := c.(*Entity) //nolint:forcetypeassert
-			cp := copyEntity(ent, dst)
-			switch ent.entityType {
-			case enum.InternalParameterEntity, enum.ExternalParameterEntity:
-				dstDTD.pentities[ent.name] = cp
-			default:
-				dstDTD.entities[ent.name] = cp
+			if ent, ok := AsType[*Entity](c); ok {
+				cp := copyEntity(ent, dst)
+				switch ent.entityType {
+				case enum.InternalParameterEntity, enum.ExternalParameterEntity:
+					dstDTD.pentities[ent.name] = cp
+				default:
+					dstDTD.entities[ent.name] = cp
+				}
+				_ = dstDTD.AddChild(cp)
 			}
-			_ = dstDTD.AddChild(cp)
 		case ElementDeclNode:
-			edecl := c.(*ElementDecl) //nolint:forcetypeassert
-			cp := copyElementDecl(edecl, dst)
-			dstDTD.elements[edecl.name+":"+edecl.prefix] = cp
-			_ = dstDTD.AddChild(cp)
+			if edecl, ok := AsType[*ElementDecl](c); ok {
+				cp := copyElementDecl(edecl, dst)
+				dstDTD.elements[edecl.name+":"+edecl.prefix] = cp
+				_ = dstDTD.AddChild(cp)
+			}
 		case AttributeDeclNode:
-			adecl := c.(*AttributeDecl) //nolint:forcetypeassert
-			cp := copyAttributeDecl(adecl, dst)
-			dstDTD.attributes[adecl.name+":"+adecl.prefix+":"+adecl.elem] = cp
-			_ = dstDTD.AddChild(cp)
+			if adecl, ok := AsType[*AttributeDecl](c); ok {
+				cp := copyAttributeDecl(adecl, dst)
+				dstDTD.attributes[adecl.name+":"+adecl.prefix+":"+adecl.elem] = cp
+				_ = dstDTD.AddChild(cp)
+			}
 		case NotationNode:
-			nota := c.(*Notation) //nolint:forcetypeassert
-			cp := copyNotation(nota, dst)
-			dstDTD.notations[nota.name] = cp
-			_ = dstDTD.AddChild(cp)
+			if nota, ok := AsType[*Notation](c); ok {
+				cp := copyNotation(nota, dst)
+				dstDTD.notations[nota.name] = cp
+				_ = dstDTD.AddChild(cp)
+			}
 		case CommentNode:
 			cm := dst.CreateComment(slices.Clone(c.Content()))
 			_ = dstDTD.AddChild(cm)

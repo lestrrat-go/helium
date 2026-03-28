@@ -214,8 +214,8 @@ func (d *Document) Replace(_ ...Node) error {
 // DocumentElement returns the root element of the document, or nil if none exists.
 func (d *Document) DocumentElement() *Element {
 	for n := d.firstChild; n != nil; n = n.NextSibling() {
-		if n.Type() == ElementNode {
-			return n.(*Element) //nolint:forcetypeassert
+		if elem, ok := AsType[*Element](n); ok {
+			return elem
 		}
 	}
 	return nil
@@ -893,10 +893,10 @@ func (d *Document) GetElementByID(id string) *Element {
 	// Fallback: O(n) tree walk for documents not built via parser.
 	var found *Element
 	_ = Walk(d, NodeWalkerFunc(func(n Node) error {
-		if n.Type() != ElementNode {
+		elem, ok := AsType[*Element](n)
+		if !ok {
 			return nil
 		}
-		elem := n.(*Element) //nolint:forcetypeassert
 		for _, a := range elem.Attributes() {
 			// Check xml:id (normalize value — xs:ID collapses whitespace)
 			if a.Name() == lexicon.QNameXMLID && strings.TrimSpace(a.Value()) == id {

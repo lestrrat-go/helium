@@ -207,7 +207,10 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 		defer g.IRelease("END Writer.dumpDocContent")
 	}
 
-	doc := n.(*Document) //nolint:forcetypeassert
+	doc, ok := AsType[*Document](n)
+	if !ok {
+		return nil
+	}
 	_, _ = io.WriteString(out, `<?xml version="`)
 	version := doc.Version()
 	if version == "" {
@@ -257,14 +260,15 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		return nil
 	case ProcessingInstructionNode:
 		// Mirrors xmlsave.c XML_PI_NODE handling.
-		pi := n.(*ProcessingInstruction) //nolint:forcetypeassert
-		_, _ = io.WriteString(out, "<?")
-		_, _ = io.WriteString(out, pi.target)
-		if pi.data != "" {
-			_, _ = io.WriteString(out, " ")
-			_, _ = io.WriteString(out, pi.data)
+		if pi, ok := AsType[*ProcessingInstruction](n); ok {
+			_, _ = io.WriteString(out, "<?")
+			_, _ = io.WriteString(out, pi.target)
+			if pi.data != "" {
+				_, _ = io.WriteString(out, " ")
+				_, _ = io.WriteString(out, pi.data)
+			}
+			_, _ = io.WriteString(out, "?>")
 		}
-		_, _ = io.WriteString(out, "?>")
 		return nil
 	case EntityRefNode:
 		_, _ = io.WriteString(out, "&")
@@ -312,23 +316,31 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		}
 		return nil
 	case ElementDeclNode:
-		if err = d.dumpElementDecl(out, n.(*ElementDecl)); err != nil { //nolint:forcetypeassert
-			return err
+		if edecl, ok := AsType[*ElementDecl](n); ok {
+			if err = d.dumpElementDecl(out, edecl); err != nil {
+				return err
+			}
 		}
 		return nil
 	case AttributeDeclNode:
-		if err = d.dumpAttributeDecl(out, n.(*AttributeDecl)); err != nil { //nolint:forcetypeassert
-			return err
+		if adecl, ok := AsType[*AttributeDecl](n); ok {
+			if err = d.dumpAttributeDecl(out, adecl); err != nil {
+				return err
+			}
 		}
 		return nil
 	case EntityNode:
-		if err = d.dumpEntityDecl(out, n.(*Entity)); err != nil { //nolint:forcetypeassert
-			return err
+		if ent, ok := AsType[*Entity](n); ok {
+			if err = d.dumpEntityDecl(out, ent); err != nil {
+				return err
+			}
 		}
 		return nil
 	case NotationNode:
-		if err = d.dumpNotationDecl(out, n.(*Notation)); err != nil { //nolint:forcetypeassert
-			return err
+		if nota, ok := AsType[*Notation](n); ok {
+			if err = d.dumpNotationDecl(out, nota); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -384,7 +396,9 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			if a == nil {
 				break
 			}
-			attr = a.(*Attribute) //nolint:forcetypeassert
+			if at, ok := AsType[*Attribute](a); ok {
+				attr = at
+			}
 		}
 
 		if child := e.FirstChild(); child == nil {
