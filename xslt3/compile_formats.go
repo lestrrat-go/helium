@@ -1100,7 +1100,7 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 
 // nameTestKey returns a canonical key for a nameTest by resolving the prefix
 // to a URI. EQName prefixes of the form "Q{uri}" are used as-is.
-func (c *compiler) nameTestKey(ctx context.Context, nt nameTest) string { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) nameTestKey(_ context.Context, nt nameTest) string {
 	uri := ""
 	if strings.HasPrefix(nt.Prefix, "Q{") {
 		uri = nt.Prefix[2 : len(nt.Prefix)-1]

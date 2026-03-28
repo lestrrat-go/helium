@@ -163,7 +163,7 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 
 // findImportSchema looks up a pre-compiled schema by target namespace from
 // the import schemas provided at compile time.
-func (c *compiler) findImportSchema(ctx context.Context, ns string) *xsd.Schema { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) findImportSchema(_ context.Context, ns string) *xsd.Schema {
 	for _, s := range c.importSchemas {
 		if s.TargetNamespace() == ns {
 			return s
@@ -357,7 +357,7 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 //
 // This covers the most common case where compile-time static errors arise:
 // using schema-element() or schema-attribute() with an undeclared name.
-func (c *compiler) validateAsSequenceType(ctx context.Context, as string, context string) error { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) validateAsSequenceType(_ context.Context, as string, context string) error {
 	if as == "" {
 		return nil
 	}

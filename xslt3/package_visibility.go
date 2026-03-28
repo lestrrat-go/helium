@@ -527,7 +527,7 @@ func (c *compiler) compileExpose(ctx context.Context, elem *helium.Element) erro
 }
 
 // collectElemNamespaces gathers namespace bindings from an element and its ancestors.
-func (c *compiler) collectElemNamespaces(ctx context.Context, elem *helium.Element) map[string]string { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) collectElemNamespaces(_ context.Context, elem *helium.Element) map[string]string {
 	bindings := make(map[string]string)
 	maps.Copy(bindings, c.nsBindings)
 	for n := helium.Node(elem); n != nil; n = n.Parent() {
@@ -542,7 +542,7 @@ func (c *compiler) collectElemNamespaces(ctx context.Context, elem *helium.Eleme
 	return bindings
 }
 
-func (c *compiler) applyExposeToTemplates(ctx context.Context, pattern, visibility string, isWildcardComponent bool) error { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) applyExposeToTemplates(_ context.Context, pattern, visibility string, isWildcardComponent bool) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.templateVisibility {
@@ -576,7 +576,7 @@ func (c *compiler) applyExposeToTemplates(ctx context.Context, pattern, visibili
 	return nil
 }
 
-func (c *compiler) applyExposeToFunctions(ctx context.Context, pattern, visibility string) error { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) applyExposeToFunctions(_ context.Context, pattern, visibility string) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for key := range c.stylesheet.functionVisibility {
@@ -607,7 +607,7 @@ func (c *compiler) applyExposeToFunctions(ctx context.Context, pattern, visibili
 // applyExposeToFunctionsStrict is like applyExposeToFunctions but reports
 // XTSE3010 when a non-wildcard pattern has no match. Used when the expose
 // element has component="function" (not component="*").
-func (c *compiler) applyExposeToFunctionsStrict(ctx context.Context, pattern, visibility string) error { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) applyExposeToFunctionsStrict(_ context.Context, pattern, visibility string) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for key := range c.stylesheet.functionVisibility {
@@ -637,7 +637,7 @@ func (c *compiler) applyExposeToFunctionsStrict(ctx context.Context, pattern, vi
 	return nil
 }
 
-func (c *compiler) applyExposeToVariables(ctx context.Context, pattern, visibility string) error { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) applyExposeToVariables(_ context.Context, pattern, visibility string) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.variableVisibility {
@@ -694,7 +694,7 @@ func (c *compiler) applyExposeToVariables(ctx context.Context, pattern, visibili
 
 // applyExposeToVariablesStrict is like applyExposeToVariables but reports
 // XTSE3010 when a non-wildcard pattern has no match.
-func (c *compiler) applyExposeToVariablesStrict(ctx context.Context, pattern, visibility string) error { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) applyExposeToVariablesStrict(_ context.Context, pattern, visibility string) error {
 	varMatched := false
 	paramMatched := false
 	isWild := isWildcard(pattern)
@@ -760,7 +760,7 @@ func (c *compiler) applyExposeToVariablesStrict(ctx context.Context, pattern, vi
 	return nil
 }
 
-func (c *compiler) applyExposeToAttrSets(ctx context.Context, pattern, visibility string, strict bool) error { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) applyExposeToAttrSets(_ context.Context, pattern, visibility string, strict bool) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.attrSetVisibility {
@@ -793,7 +793,7 @@ func (c *compiler) applyExposeToAttrSets(ctx context.Context, pattern, visibilit
 	return nil
 }
 
-func (c *compiler) applyExposeToModes(ctx context.Context, pattern, visibility string, strict bool) error { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) applyExposeToModes(_ context.Context, pattern, visibility string, strict bool) error {
 	if c.stylesheet.modeDefs == nil {
 		c.stylesheet.modeDefs = make(map[string]*modeDef)
 	}
@@ -870,7 +870,7 @@ func functionVisKey(qn xpath3.QualifiedName, arity int) string {
 
 // collectOverrideNames scans xsl:override children of xsl:use-package and returns
 // a set of "type:name" keys for components being overridden.
-func (c *compiler) collectOverrideNames(ctx context.Context, usePackageElem *helium.Element, nsBindings map[string]string) map[string]struct{} { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) collectOverrideNames(_ context.Context, usePackageElem *helium.Element, nsBindings map[string]string) map[string]struct{} {
 	names := make(map[string]struct{})
 	for child := range helium.Children(usePackageElem) {
 		elem, ok := child.(*helium.Element)

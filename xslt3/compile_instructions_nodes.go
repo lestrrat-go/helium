@@ -65,7 +65,7 @@ func (c *compiler) compileValueOf(ctx context.Context, elem *helium.Element) (*v
 	return inst, nil
 }
 
-func (c *compiler) compileText(ctx context.Context, elem *helium.Element) (*textInst, error) { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) compileText(_ context.Context, elem *helium.Element) (*textInst, error) {
 	// xsl:text must contain only text and CDATA sections — no child elements (XTSE0010)
 	var sb strings.Builder
 	for child := range helium.Children(elem) {
@@ -403,7 +403,7 @@ func (c *compiler) compileCopy(ctx context.Context, elem *helium.Element) (*copy
 	return inst, nil
 }
 
-func (c *compiler) compileCopyOf(ctx context.Context, elem *helium.Element) (*copyOfInst, error) { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) compileCopyOf(_ context.Context, elem *helium.Element) (*copyOfInst, error) {
 	// XTSE0260: xsl:copy-of must have no significant content
 	for child := range helium.Children(elem) {
 		switch child.Type() {
@@ -480,7 +480,7 @@ func (c *compiler) compileCopyOf(ctx context.Context, elem *helium.Element) (*co
 	return inst, nil
 }
 
-func (c *compiler) compileNumber(ctx context.Context, elem *helium.Element) (*numberInst, error) { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numberInst, error) {
 	inst := &numberInst{
 		Level: getAttr(elem, "level"),
 	}

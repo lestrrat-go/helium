@@ -420,7 +420,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 }
 
 // parseFacets extracts facet constraints from an xs:restriction element.
-func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element) *FacetSet { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) parseFacets(_ context.Context, restriction *helium.Element) *FacetSet {
 	var fs *FacetSet
 
 	for child := range helium.Children(restriction) {

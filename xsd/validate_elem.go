@@ -418,7 +418,7 @@ func (vc *validationContext) tryMatchParticle(ctx context.Context, p *Particle, 
 	return 0, nil
 }
 
-func (vc *validationContext) tryMatchElementParticle(ctx context.Context, p *Particle, edecl *ElementDecl, children []childElem, pos int) (int, error) { //nolint:unparam // ctx threaded through for API consistency
+func (vc *validationContext) tryMatchElementParticle(_ context.Context, p *Particle, edecl *ElementDecl, children []childElem, pos int) (int, error) {
 	count := 0
 	for pos+count < len(children) && elemMatchesDeclOrSubst(children[pos+count], edecl, vc.schema) {
 		count++
@@ -466,7 +466,7 @@ func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup,
 	return 0, fmt.Errorf("no choice matched")
 }
 
-func (vc *validationContext) tryMatchAll(ctx context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) { //nolint:unparam // ctx threaded through for API consistency
+func (vc *validationContext) tryMatchAll(_ context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) {
 	seen := make([]bool, len(mg.Particles))
 	nameToIdx := make(map[QName]int, len(mg.Particles))
 	for i, p := range mg.Particles {
@@ -572,7 +572,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 }
 
 // tryMatchWildcardParticle is the try version (no error reporting).
-func (vc *validationContext) tryMatchWildcardParticle(ctx context.Context, p *Particle, wc *Wildcard, children []childElem, pos int) (int, error) { //nolint:unparam // ctx threaded through for API consistency
+func (vc *validationContext) tryMatchWildcardParticle(_ context.Context, p *Particle, wc *Wildcard, children []childElem, pos int) (int, error) {
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]

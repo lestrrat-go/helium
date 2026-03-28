@@ -689,7 +689,7 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName
 // using the namespace declarations in scope on the given element.
-func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref string) QName { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) resolveQName(_ context.Context, elem *helium.Element, ref string) QName {
 	local := ref
 	ns := c.schema.targetNamespace
 

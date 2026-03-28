@@ -348,7 +348,7 @@ func isPatternFunctionArg(expr xpath3.Expr) bool {
 // validatePatternFunctions checks that all function calls in a pattern
 // reference known functions (built-in XPath or declared xsl:function).
 // Unknown functions like f:special() raise XPST0017 at compile time.
-func (c *compiler) validatePatternFunctions(ctx context.Context, p *pattern, source string) error { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) validatePatternFunctions(_ context.Context, p *pattern, source string) error {
 	for _, alt := range p.Alternatives {
 		var walkErr error
 		xpathstream.WalkExpr(alt.expr, func(e xpath3.Expr) bool {
@@ -1108,7 +1108,7 @@ func nodeMatchesTest(ctx context.Context, ec *execContext, test xpath3.NodeTest,
 }
 
 // matchSchemaElementTest checks if a node matches a schema-element(name) test.
-func matchSchemaElementTest(ctx context.Context, ec *execContext, t xpath3.SchemaElementTest, node helium.Node) bool { //nolint:unparam // ctx threaded through for API consistency
+func matchSchemaElementTest(_ context.Context, ec *execContext, t xpath3.SchemaElementTest, node helium.Node) bool {
 	if node.Type() != helium.ElementNode {
 		return false
 	}
@@ -1152,7 +1152,7 @@ func matchSchemaElementTest(ctx context.Context, ec *execContext, t xpath3.Schem
 }
 
 // matchSchemaAttributeTest checks if a node matches a schema-attribute(name) test.
-func matchSchemaAttributeTest(ctx context.Context, ec *execContext, t xpath3.SchemaAttributeTest, node helium.Node) bool { //nolint:unparam // ctx threaded through for API consistency
+func matchSchemaAttributeTest(_ context.Context, ec *execContext, t xpath3.SchemaAttributeTest, node helium.Node) bool {
 	if node.Type() != helium.AttributeNode {
 		return false
 	}
@@ -1194,7 +1194,7 @@ func matchTypeTest(tt xpath3.TypeTest, node helium.Node) bool {
 	return false
 }
 
-func matchNameTest(ctx context.Context, ec *execContext, nt xpath3.NameTest, node helium.Node) bool { //nolint:unparam // ctx threaded through for API consistency
+func matchNameTest(_ context.Context, ec *execContext, nt xpath3.NameTest, node helium.Node) bool {
 	var nodeLocal, nodeURI string
 	var isElem bool
 	switch v := node.(type) {
@@ -1407,7 +1407,7 @@ func matchAttributeTest(ctx context.Context, ec *execContext, at xpath3.Attribut
 }
 
 // matchTypeAnnotation checks if a node's type annotation matches the given type name.
-func matchTypeAnnotation(ctx context.Context, ec *execContext, node helium.Node, typeName string) bool { //nolint:unparam // ctx threaded through for API consistency
+func matchTypeAnnotation(_ context.Context, ec *execContext, node helium.Node, typeName string) bool {
 	// Normalize type name: strip "xs:" prefix if present
 	normalize := func(s string) string {
 		for _, prefix := range []string{"xs:", "xsd:", "http://www.w3.org/2001/XMLSchema:"} {

@@ -95,19 +95,19 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	return c.grammar, nil
 }
 
-func (c *compiler) pushGrammar(ctx context.Context) { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) pushGrammar(_ context.Context) {
 	c.grammarStack = append(c.grammarStack, &grammarScope{
 		defines: make(map[string]*defineEntry),
 	})
 }
 
-func (c *compiler) popGrammar(ctx context.Context) { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) popGrammar(_ context.Context) {
 	if len(c.grammarStack) > 0 {
 		c.grammarStack = c.grammarStack[:len(c.grammarStack)-1]
 	}
 }
 
-func (c *compiler) currentGrammar(ctx context.Context) *grammarScope { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) currentGrammar(_ context.Context) *grammarScope {
 	if len(c.grammarStack) == 0 {
 		return nil
 	}
@@ -157,7 +157,7 @@ func (c *compiler) checkRefCycles(ctx context.Context) {
 // findCycleInPattern walks a pattern tree looking for ref cycles.
 // Element patterns break the chain (refs inside elements don't create content cycles).
 // Returns the offending ref pattern if a cycle is found.
-func (c *compiler) findCycleInPattern(ctx context.Context, pat *pattern, visiting map[string]bool) *pattern { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) findCycleInPattern(ctx context.Context, pat *pattern, visiting map[string]bool) *pattern {
 	if pat == nil {
 		return nil
 	}
@@ -332,7 +332,7 @@ func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 // resolveHref resolves a relative href against xml:base ancestors and the
 // compiler's baseDir. This mirrors libxml2's xmlRelaxNGCleanupTree xml:base
 // fixup for <include> and <externalRef> hrefs.
-func (c *compiler) resolveHref(ctx context.Context, elem *helium.Element, href string) string { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href string) string {
 	if filepath.IsAbs(href) {
 		return href
 	}
@@ -732,7 +732,7 @@ func (c *compiler) parseData(ctx context.Context, node *helium.Element) *pattern
 }
 
 // parseValue parses a <value> pattern.
-func (c *compiler) parseValue(ctx context.Context, node *helium.Element) *pattern { //nolint:unparam // ctx threaded through for API consistency
+func (c *compiler) parseValue(_ context.Context, node *helium.Element) *pattern {
 	p := &pattern{kind: patternValue, line: node.Line()}
 
 	typeName := getAttr(node, "type")

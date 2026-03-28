@@ -67,7 +67,7 @@ func (l *parserLocator) GetPublicID() string { return "" }
 // GetSystemID returns the system identifier (URI/filename) of the document being parsed (libxml2: xmlSAXLocator.getSystemId).
 func (l *parserLocator) GetSystemID() string { return "" }
 
-func newParser(ctx context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser { //nolint:unparam // ctx threaded through for API consistency
+func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser {
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
 	normalized := normalizeNewlines(input)
 
