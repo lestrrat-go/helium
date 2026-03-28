@@ -4,21 +4,16 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/lestrrat-go/helium/catalog"
-
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/stretchr/testify/require"
 )
 
 func testdataDir() string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "..", "testdata", "libxml2-compat", "catalogs")
+	return filepath.Join(heliumtest.CallerDir(0), "..", "testdata", "libxml2-compat", "catalogs")
 }
 
 func loadTestCatalog(t *testing.T, name string) *catalog.Catalog {

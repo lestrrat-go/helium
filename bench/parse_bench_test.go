@@ -6,11 +6,11 @@ import (
 	"encoding/xml"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 )
 
 var (
@@ -22,11 +22,7 @@ var (
 )
 
 func findRepoRoot() string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("runtime.Caller failed")
-	}
-	dir := filepath.Dir(file)
+	dir := heliumtest.CallerDir(0)
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			return dir

@@ -4,28 +4,20 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/catalog"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/stretchr/testify/require"
 )
 
 func libxml2TestDir() string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "..", "testdata", "libxml2-compat", "catalogs")
+	return filepath.Join(heliumtest.CallerDir(0), "..", "testdata", "libxml2-compat", "catalogs")
 }
 
 func libxml2ResultDir() string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "..", "testdata", "libxml2-compat", "catalogs", "result")
+	return filepath.Join(heliumtest.CallerDir(0), "..", "testdata", "libxml2-compat", "catalogs", "result")
 }
 
 // TestLibxml2Compat runs the same catalog resolution tests as libxml2's

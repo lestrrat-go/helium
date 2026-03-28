@@ -3,22 +3,18 @@ package xslt3_test
 import (
 	"io"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
 
 func innerXSL(name string) string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "testdata", "fn-transform", name)
+	return filepath.Join(heliumtest.CallerDir(0), "testdata", "fn-transform", name)
 }
 
 func compileFnTransformOuter(t *testing.T, xsltSrc string) *xslt3.Stylesheet {

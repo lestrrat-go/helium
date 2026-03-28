@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -279,11 +279,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 // ──────────────────────────────────────────────────────────────────────
 
 func qt3TestDataDir() string {
-	_, f, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "testdata")
+	return filepath.Join(heliumtest.CallerDir(0), "..", "testdata", "qt3ts", "testdata")
 }
 
 func qt3DefaultBaseURI(tc qt3Test) string {
