@@ -90,7 +90,7 @@ const (
 	XIncludeStartNode
 	XIncludeEndNode
 
-	// This doesn't exist in libxml2. Do we need it?
+	// NamespaceNode represents a namespace declaration (does not exist in libxml2).
 	NamespaceNode
 )
 

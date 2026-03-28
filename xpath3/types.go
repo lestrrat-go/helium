@@ -88,7 +88,7 @@ const (
 	TypeUntypedAtomic     = "xs:untypedAtomic"
 	TypeAnyAtomicType     = "xs:anyAtomicType"
 
-	// Derived integer types
+	// TypeLong and the following are derived integer types.
 	TypeLong               = "xs:long"
 	TypeInt                = "xs:int"
 	TypeShort              = "xs:short"
@@ -102,7 +102,7 @@ const (
 	TypePositiveInteger    = "xs:positiveInteger"
 	TypeNegativeInteger    = "xs:negativeInteger"
 
-	// Derived string types
+	// TypeNormalizedString and the following are derived string types.
 	TypeNormalizedString = "xs:normalizedString"
 	TypeToken            = "xs:token"
 	TypeLanguage         = "xs:language"
@@ -116,19 +116,19 @@ const (
 	TypeIDREFS           = "xs:IDREFS"
 	TypeENTITIES         = "xs:ENTITIES"
 
-	// Gregorian date part types
+	// TypeGDay and the following are Gregorian date part types.
 	TypeGDay       = "xs:gDay"
 	TypeGMonth     = "xs:gMonth"
 	TypeGMonthDay  = "xs:gMonthDay"
 	TypeGYear      = "xs:gYear"
 	TypeGYearMonth = "xs:gYearMonth"
 
-	// Other derived types
+	// TypeDateTimeStamp and the following are other derived types.
 	TypeDateTimeStamp = "xs:dateTimeStamp"
 	TypeError         = "xs:error"
 	TypeNumeric       = "xs:numeric"
 
-	// Non-atomic / structural types
+	// TypeAnyType and the following are non-atomic / structural types.
 	TypeAnyType       = "xs:anyType"
 	TypeAnySimpleType = "xs:anySimpleType"
 	TypeUntyped       = "xs:untyped"

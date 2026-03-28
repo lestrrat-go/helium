@@ -356,8 +356,8 @@ func (LetClause) flworClause() {}
 
 // --- Control Flow ---
 
-// QuantifiedExpr represents "some/every $var in domain satisfies test".
 // QuantifiedBinding is a single "$var in expr" binding in a quantified expression.
+// It is used by QuantifiedExpr which represents "some/every $var in domain satisfies test".
 type QuantifiedBinding struct {
 	Var    string
 	Domain Expr
