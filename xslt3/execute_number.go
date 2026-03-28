@@ -457,7 +457,7 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int, l
 }
 
 // numericOrdinalSuffix returns the suffix for a numeric ordinal (e.g., "st", "nd", "rd", "th").
-func numericOrdinalSuffix(num int, lang string) string {
+func numericOrdinalSuffix(num int, _ string) string {
 	// Default to English ordinal suffixes
 	n := num % 100
 	if n >= 11 && n <= 13 {
@@ -844,7 +844,7 @@ func ordinalRangeLength(r rune) int {
 }
 
 // numberToWords converts a number to English words.
-func numberToWords(n int, upper bool) string {
+func numberToWords(n int, upper bool) string { //nolint:unparam // upper always false but kept for XSLT number-to-words spec
 	if n == 0 {
 		if upper {
 			return "ZERO"

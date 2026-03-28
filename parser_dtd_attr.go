@@ -316,7 +316,7 @@ func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (enum.At
 	return v, ok
 }
 
-func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefix string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, tree Enumeration) (attr *AttributeDecl, err error) {
+func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefix string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, tree Enumeration) (attr *AttributeDecl, err error) { //nolint:unparam // attr unused by callers but kept for API symmetry
 	if dtd == nil {
 		err = errors.New("dtd required")
 		return

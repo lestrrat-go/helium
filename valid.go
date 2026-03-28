@@ -132,7 +132,7 @@ func isValidNameChar(r rune) bool { return xmlchar.IsNCNameChar(r) }
 
 // validateAttributeValueInternal validates that defvalue is legal for the
 // declared attribute type. Mirrors xmlValidateAttributeDecl() in libxml2.
-func validateAttributeValueInternal(doc *Document, typ enum.AttributeType, defvalue string) error {
+func validateAttributeValueInternal(_ *Document, typ enum.AttributeType, defvalue string) error {
 	switch typ {
 	case enum.AttrCDATA:
 		// Any string is valid for CDATA
@@ -296,7 +296,7 @@ func validateOneElement(ctx context.Context, doc *Document, elem *Element, vctx 
 // - No undeclared attributes (if element is fully declared)
 // - ID values are unique across the document
 // - IDREF/IDREFS values are recorded for cross-reference checking
-func validateElementAttributes(ctx context.Context, doc *Document, elem *Element, edecl *ElementDecl, vctx *validCtx) {
+func validateElementAttributes(ctx context.Context, doc *Document, elem *Element, _ *ElementDecl, vctx *validCtx) {
 	ename := elem.LocalName()
 	attrs := elem.Attributes()
 
@@ -429,7 +429,7 @@ func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Elemen
 
 // validateElementContent validates that the element's children match the
 // declared content model.
-func validateElementContent(ctx context.Context, dtd *DTD, elem *Element, edecl *ElementDecl, vctx *validCtx) {
+func validateElementContent(ctx context.Context, _ *DTD, elem *Element, edecl *ElementDecl, vctx *validCtx) {
 	ename := elem.LocalName()
 
 	switch edecl.decltype {

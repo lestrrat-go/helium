@@ -67,7 +67,7 @@ type Decoder struct {
 	pendingEvent    *tokenEvent  // lookahead event saved during CharData merging
 }
 
-func newDecoderFromReader(r io.Reader) (*Decoder, error) {
+func newDecoderFromReader(r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
 	// Pre-scan the prolog to extract Directive, ProcInst, Comment, and
 	// CharData tokens. The SAX parser does not emit these for the prolog,
 	// so we handle them ourselves. The combined reader replays the full
@@ -592,7 +592,7 @@ func (d *Decoder) nextEvent() (tokenEvent, bool) {
 // CDATA sections are kept as separate tokens to match stdlib behavior.
 // It reads ahead from the event channel until a non-mergeable event is found
 // (which is saved as pendingEvent for the next call).
-func (d *Decoder) mergeCharData(first tokenEvent, raw bool) tokenEvent {
+func (d *Decoder) mergeCharData(first tokenEvent, _ bool) tokenEvent {
 	if first.cdata {
 		return first
 	}

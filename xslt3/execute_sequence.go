@@ -285,7 +285,7 @@ func (ec *execContext) execLiteralText(inst *literalTextInst) error {
 	return ec.addNode(text)
 }
 
-func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceInst) error {
+func (ec *execContext) execXSLSequence(_ context.Context, inst *xslSequenceInst) error {
 	result, err := ec.evalXPath(inst.Select, ec.contextNode)
 	if err != nil {
 		return err

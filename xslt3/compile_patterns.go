@@ -133,7 +133,7 @@ func validatePatternExpr(expr xpath3.Expr) error {
 	return validatePatternExprInner(expr, true)
 }
 
-func validatePatternExprInner(expr xpath3.Expr, topLevel bool) error {
+func validatePatternExprInner(expr xpath3.Expr, _ bool) error {
 	switch e := expr.(type) {
 	case xpath3.LocationPath, *xpath3.LocationPath:
 		// LocationPath patterns are valid (e.g., a/b/c, //x, /)

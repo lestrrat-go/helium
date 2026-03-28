@@ -651,7 +651,7 @@ func (p *processor) handleFallback(inc *helium.Element, origErr error) error {
 	return origErr
 }
 
-func (p *processor) processFallback(inc *helium.Element, fb *helium.Element) error {
+func (p *processor) processFallback(inc *helium.Element, fb *helium.Element) error { //nolint:unparam // always nil but callers check for future-proofing
 	var nodes []helium.Node
 	for c := range helium.Children(fb) {
 		nodes = append(nodes, c)

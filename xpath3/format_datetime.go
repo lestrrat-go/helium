@@ -632,7 +632,7 @@ func dayNamesForLang(lang string) []string {
 	}
 }
 
-func applyNameWidth(name string, comp byte, w dtWidth) string {
+func applyNameWidth(name string, _ byte, w dtWidth) string {
 	if w.maxWidth <= 0 && w.minWidth <= 0 {
 		return name
 	}

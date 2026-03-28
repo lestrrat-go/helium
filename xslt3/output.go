@@ -92,7 +92,7 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 
 // serializeItemsWithSeparator serializes a sequence of items using the specified
 // output method, joining them with the item-separator.
-func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
+func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.Document, outDef *OutputDef) error {
 	sep := "\n"
 	if outDef.ItemSeparator != nil {
 		sep = *outDef.ItemSeparator

@@ -13,7 +13,7 @@ import (
 
 // buildLargeDoc generates an XML document with n <item> children, each having
 // a @cat attribute alternating between "a" and "b", and a <val> child.
-func buildLargeDoc(b *testing.B, n int) *helium.Document {
+func buildLargeDoc(b *testing.B, n int) *helium.Document { //nolint:unparam // n always 1000 but kept for flexibility
 	b.Helper()
 	var buf strings.Builder
 	buf.WriteString("<root>")

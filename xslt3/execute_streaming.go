@@ -1306,7 +1306,7 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 
 // evaluateMergeSelect evaluates the select expression of a merge source
 // against a loaded document.
-func (ec *execContext) evaluateMergeSelect(ctx context.Context, src *mergeSource, doc *helium.Document) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateMergeSelect(_ context.Context, src *mergeSource, doc *helium.Document) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		return xpath3.ItemSlice{xpath3.NodeItem{Node: doc}}, nil
 	}
@@ -1332,7 +1332,7 @@ func (ec *execContext) evaluateMergeSelect(ctx context.Context, src *mergeSource
 
 // evaluateMergeSelectOnNode evaluates the select expression of a merge source
 // against a specific node (used with for-each-item).
-func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *mergeSource, node helium.Node) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateMergeSelectOnNode(_ context.Context, src *mergeSource, node helium.Node) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		if node != nil {
 			return xpath3.ItemSlice{xpath3.NodeItem{Node: node}}, nil

@@ -235,7 +235,7 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.pcdata(%s, %d)\n", output, len(data))
 		return nil
 	}))
-	charHandler := func(name string, _ context.Context, data []byte) error {
+	charHandler := func(name string, _ context.Context, data []byte) error { //nolint:unparam // always nil but matches SAX handler signature
 		output := string(data)
 		if len(output) > 30 {
 			output = output[:30]

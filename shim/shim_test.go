@@ -980,7 +980,7 @@ func TestDecoderDecodeElementMatchesStdlib(t *testing.T) {
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
 	shimDec := shim.NewDecoder(bytes.NewReader(input))
 
-	consumeRootStart := func(next func() (stdxml.Token, error)) stdxml.StartElement {
+	consumeRootStart := func(next func() (stdxml.Token, error)) stdxml.StartElement { //nolint:unparam // result unused but kept for clarity
 		for {
 			tok, err := next()
 			require.NoError(t, err)

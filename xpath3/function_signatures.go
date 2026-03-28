@@ -37,7 +37,7 @@ func stAtomic(typeName string, occ Occurrence) SequenceType {
 	return SequenceType{ItemTest: AtomicOrUnionType{Prefix: prefix, Name: name}, Occurrence: occ}
 }
 
-func stNode(occ Occurrence) SequenceType {
+func stNode(occ Occurrence) SequenceType { //nolint:unparam // always OccurrenceZeroOrOne but kept for signature symmetry with stAtomic/stItem
 	return SequenceType{ItemTest: TypeTest{Kind: NodeKindNode}, Occurrence: occ}
 }
 

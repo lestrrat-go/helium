@@ -547,7 +547,7 @@ func getSkipReason(deps []dependency) string {
 
 // getTestCaseSkipReason returns a skip reason for specific test cases that
 // need per-case handling (e.g., tests expecting static typing errors).
-func getTestCaseSkipReason(setName, caseName string) string {
+func getTestCaseSkipReason(_, caseName string) string {
 	switch caseName {
 	// These tests pass () or integer where xs:string? is expected and expect XPTY0004.
 	// Our dynamic evaluation handles these fine without static type checking.

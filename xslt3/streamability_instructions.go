@@ -864,7 +864,7 @@ func exprUsesCurrentGroup(expr *xpath3.Expression) bool {
 //     because node references become dangling after the fork branch completes.
 //   - Non-map-entry children (like xsl:if wrapping map-entry) break the implicit
 //     fork guarantee and are invalid when consuming entries are present.
-func checkMapStreamable(ss *Stylesheet, inst instruction) error {
+func checkMapStreamable(_ *Stylesheet, inst instruction) error {
 	mapInst, ok := inst.(*mapInst)
 	if !ok {
 		return nil

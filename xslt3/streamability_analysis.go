@@ -30,7 +30,7 @@ func lookupFuncStreamability(ss *Stylesheet, localName string, arity int) string
 // When an XTSE3430 violation is detected, the affected mode, source-document,
 // accumulator, or function is demoted to non-streamable and compilation
 // continues.
-func analyzeStreamability(ss *Stylesheet) error {
+func analyzeStreamability(ss *Stylesheet) error { //nolint:unparam // always nil but callers check for future-proofing
 	// Check all templates for source-document streamable="yes" in their body.
 	// On XTSE3430, demote the source-document to non-streamable.
 	for _, tmpl := range ss.templates {

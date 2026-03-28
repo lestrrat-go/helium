@@ -340,7 +340,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	return cfg, files
 }
 
-func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) {
+func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) { //nolint:unparam // error always nil but may fail in future
 	envFiles := os.Getenv("XML_CATALOG_FILES")
 	if envFiles == "" {
 		return nil, nil

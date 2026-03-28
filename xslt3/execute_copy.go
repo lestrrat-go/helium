@@ -647,7 +647,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 // output by a copy-of operation. It checks the DOM tree first, then pending
 // items in sequence mode. When the copied node is a document, the document
 // element is returned so that validation can be applied.
-func findCopiedElement(out *outputFrame, lastBefore helium.Node, pendingBefore int) *helium.Element {
+func findCopiedElement(out *outputFrame, _ helium.Node, pendingBefore int) *helium.Element {
 	if copied := out.current.LastChild(); copied != nil {
 		if elem, ok := copied.(*helium.Element); ok {
 			return elem

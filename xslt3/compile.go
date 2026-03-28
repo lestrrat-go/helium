@@ -560,7 +560,7 @@ func (c *compiler) setStaticVar(name string, value xpath3.Sequence) {
 // When called from an imported module, the kind is recorded in
 // importedStaticVarKinds. When called from the main module, it
 // checks against previously imported kinds for conflicts.
-func (c *compiler) setStaticVarWithKind(name, kind string, value xpath3.Sequence) error {
+func (c *compiler) setStaticVarWithKind(name, kind string, value xpath3.Sequence) error { //nolint:unparam // always nil but callers check for future-proofing
 	if c.insideImport {
 		if c.importedStaticVarKinds == nil {
 			c.importedStaticVarKinds = make(map[string]string)
@@ -1004,7 +1004,7 @@ func (c *compiler) useWhenEvaluator() xpath3.Evaluator {
 	return eval
 }
 
-func compileXPath(expr string, nsBindings map[string]string) (*xpath3.Expression, error) {
+func compileXPath(expr string, _ map[string]string) (*xpath3.Expression, error) {
 	compiled, err := xpath3.NewCompiler().Compile(expr)
 	if err != nil {
 		return nil, staticError(errCodeXTSE0165, "invalid XPath %q: %v", expr, err)

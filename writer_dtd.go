@@ -290,7 +290,7 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	return nil
 }
 
-func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
+func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error { //nolint:unparam // always nil but matches other dump methods
 	_, _ = io.WriteString(out, "<!NOTATION ")
 	_, _ = io.WriteString(out, n.name)
 	if n.publicID != "" {

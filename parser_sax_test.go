@@ -110,7 +110,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.Comment(%s)\n", data)
 		return nil
 	}))
-	charHandler := func(name string, _ context.Context, data []byte) error {
+	charHandler := func(name string, _ context.Context, data []byte) error { //nolint:unparam // always nil but matches SAX handler signature
 		var output string
 		if len(data) > 30 {
 			output = string(data[:30])

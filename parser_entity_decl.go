@@ -91,7 +91,7 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 				s = s[width:]
 				continue
 			}
-			if err := pctx.entityCheck(ent, 0, 0); err != nil {
+			if err := pctx.entityCheck(ent, 0); err != nil {
 				return "", err
 			}
 
@@ -105,7 +105,7 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 				if err != nil {
 					return "", err
 				}
-				if err := pctx.entityCheck(ent, len(rep), 0); err != nil {
+				if err := pctx.entityCheck(ent, len(rep)); err != nil {
 					return "", err
 				}
 
@@ -119,14 +119,14 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 			if err != nil {
 				return "", err
 			}
-			if err := pctx.entityCheck(ent, width, 0); err != nil {
+			if err := pctx.entityCheck(ent, width); err != nil {
 				return "", err
 			}
 			rep, err := pctx.decodeEntitiesInternal(ctx, ent.Content(), what, depth+1)
 			if err != nil {
 				return "", err
 			}
-			if err := pctx.entityCheck(ent, len(rep), 0); err != nil {
+			if err := pctx.entityCheck(ent, len(rep)); err != nil {
 				return "", err
 			}
 			_, _ = out.WriteString(rep)

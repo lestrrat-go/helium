@@ -374,7 +374,7 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 			return err
 		}
 		pctx.valid = false
-		if err := pctx.entityCheck(entity, 0, 0); err != nil {
+		if err := pctx.entityCheck(entity, 0); err != nil {
 			return pctx.error(ctx, err)
 		}
 	} else {

@@ -140,7 +140,7 @@ func (v *validator) validatePattern(pat *pattern, state *validState) int {
 	}
 }
 
-func (v *validator) validateText(state *validState) int {
+func (v *validator) validateText(state *validState) int { //nolint:unparam // always 0 but matches validatePattern return contract
 	// Text pattern matches any text content (including empty).
 	// Consume text nodes from the sequence.
 	for len(state.seq) > 0 {
@@ -1307,7 +1307,7 @@ func (v *validator) validateInterleave(pat *pattern, state *validState) int {
 	return 0
 }
 
-func (v *validator) validateOptional(pat *pattern, state *validState) int {
+func (v *validator) validateOptional(pat *pattern, state *validState) int { //nolint:unparam // always 0 but matches validatePattern return contract
 	if len(pat.children) == 0 {
 		return 0
 	}
@@ -1320,7 +1320,7 @@ func (v *validator) validateOptional(pat *pattern, state *validState) int {
 	return 0
 }
 
-func (v *validator) validateZeroOrMore(pat *pattern, state *validState) int {
+func (v *validator) validateZeroOrMore(pat *pattern, state *validState) int { //nolint:unparam // always 0 but matches validatePattern return contract
 	if len(pat.children) == 0 {
 		return 0
 	}

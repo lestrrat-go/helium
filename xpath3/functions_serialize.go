@@ -471,7 +471,7 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 	return "map{" + strings.Join(parts, ",") + "}", nil
 }
 
-func serializeAdaptiveArray(a ArrayItem, opts serializeOptions) (string, error) {
+func serializeAdaptiveArray(a ArrayItem, _ serializeOptions) (string, error) {
 	parts := make([]string, 0, a.Size())
 	for _, member := range a.members0() {
 		text, err := serializeAdaptiveSequence(member, serializeOptions{method: "adaptive", itemSeparator: ","})

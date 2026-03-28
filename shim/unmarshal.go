@@ -1283,7 +1283,7 @@ func findPathLeaf(children []*helium.Element, path []string, ns string, hasNS bo
 
 // findPathLeafInner is the recursive helper for findPathLeaf.
 // It doesn't need to track the wrapper index (only the top level does).
-func findPathLeafInner(children []*helium.Element, path []string, ns string, hasNS bool, consumedLeaves map[*helium.Element]bool) (int, *helium.Element) {
+func findPathLeafInner(children []*helium.Element, path []string, ns string, hasNS bool, consumedLeaves map[*helium.Element]bool) (int, *helium.Element) { //nolint:unparam // int unused but matches findPathLeaf signature
 	if len(path) == 0 {
 		return -1, nil
 	}

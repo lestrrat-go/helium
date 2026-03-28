@@ -769,7 +769,7 @@ func w3cCheckAllOf(checks ...w3cCheck) w3cCheck {
 	return c
 }
 
-func w3cCheckError(code string) w3cCheck {
+func w3cCheckError(_ string) w3cCheck { //nolint:unparam // code always "*" but kept for test pattern clarity
 	return w3cCheck{fn: func(_ string, _ []string, _ map[string]*helium.Document) bool {
 		// In the "not" context, this checks whether the transform errored.
 		// Since we only reach assertion checking on success, error checks

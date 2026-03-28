@@ -809,7 +809,7 @@ func (c *compiler) compileGlobalParam(elem *helium.Element) error {
 // VariableExpr references the given variable name. The name parameter
 // is the raw XSLT name attribute (may be prefixed like "ns:local");
 // nsBindings are used to resolve prefixes for matching.
-func xpathExprReferencesVar(expr xpath3.Expr, name string, nsBindings map[string]string) bool {
+func xpathExprReferencesVar(expr xpath3.Expr, name string, _ map[string]string) bool {
 	if expr == nil {
 		return false
 	}

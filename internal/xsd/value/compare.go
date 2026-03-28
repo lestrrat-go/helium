@@ -94,26 +94,26 @@ type xsdDateTime struct {
 	tzMin            int
 }
 
-func parseTZ(s string) (bool, int, string) {
+func parseTZ(s string) (bool, int) {
 	if s == "" {
-		return false, 0, ""
+		return false, 0
 	}
 	if s[0] == 'Z' || s[0] == 'z' {
-		return true, 0, s[1:]
+		return true, 0
 	}
 	if (s[0] == '+' || s[0] == '-') && len(s) >= 6 && s[3] == ':' {
 		hh, err1 := strconv.Atoi(s[1:3])
 		mm, err2 := strconv.Atoi(s[4:6])
 		if err1 != nil || err2 != nil {
-			return false, 0, s
+			return false, 0
 		}
 		offset := hh*60 + mm
 		if s[0] == '-' {
 			offset = -offset
 		}
-		return true, offset, s[6:]
+		return true, offset
 	}
-	return false, 0, s
+	return false, 0
 }
 
 func parseXSDDateTime(s string) (xsdDateTime, bool) {
@@ -197,7 +197,7 @@ func parseTimeInto(dt *xsdDateTime, s string) bool {
 	dt.hour = hh
 	dt.min = mm
 	dt.sec = sec
-	hasTZ, tzOff, _ := parseTZ(rest)
+	hasTZ, tzOff := parseTZ(rest)
 	dt.hasTZ = hasTZ
 	dt.tzMin = tzOff
 	return true
@@ -241,7 +241,7 @@ func parseXSDDate(s string) (xsdDateTime, bool) {
 	dt.year = year
 	dt.month = month
 	dt.day = day
-	hasTZ, tzOff, _ := parseTZ(rest[5:])
+	hasTZ, tzOff := parseTZ(rest[5:])
 	dt.hasTZ = hasTZ
 	dt.tzMin = tzOff
 	return dt, true
@@ -278,7 +278,7 @@ func parseXSDGYear(s string) (xsdDateTime, bool) {
 		year = -year
 	}
 	dt.year = year
-	hasTZ, tzOff, _ := parseTZ(s[i:])
+	hasTZ, tzOff := parseTZ(s[i:])
 	dt.hasTZ = hasTZ
 	dt.tzMin = tzOff
 	return dt, true
@@ -316,7 +316,7 @@ func parseXSDGYearMonth(s string) (xsdDateTime, bool) {
 	}
 	dt.year = year
 	dt.month = month
-	hasTZ, tzOff, _ := parseTZ(rest[2:])
+	hasTZ, tzOff := parseTZ(rest[2:])
 	dt.hasTZ = hasTZ
 	dt.tzMin = tzOff
 	return dt, true
@@ -332,7 +332,7 @@ func parseXSDGMonth(s string) (xsdDateTime, bool) {
 		return dt, false
 	}
 	dt.month = month
-	hasTZ, tzOff, _ := parseTZ(s[4:])
+	hasTZ, tzOff := parseTZ(s[4:])
 	dt.hasTZ = hasTZ
 	dt.tzMin = tzOff
 	return dt, true
@@ -348,7 +348,7 @@ func parseXSDGDay(s string) (xsdDateTime, bool) {
 		return dt, false
 	}
 	dt.day = day
-	hasTZ, tzOff, _ := parseTZ(s[5:])
+	hasTZ, tzOff := parseTZ(s[5:])
 	dt.hasTZ = hasTZ
 	dt.tzMin = tzOff
 	return dt, true
@@ -369,7 +369,7 @@ func parseXSDGMonthDay(s string) (xsdDateTime, bool) {
 	}
 	dt.month = month
 	dt.day = day
-	hasTZ, tzOff, _ := parseTZ(s[7:])
+	hasTZ, tzOff := parseTZ(s[7:])
 	dt.hasTZ = hasTZ
 	dt.tzMin = tzOff
 	return dt, true

@@ -67,7 +67,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		return nil
 	}
 
-	if err := pctx.entityCheck(ent, len(ent.content), 0); err != nil {
+	if err := pctx.entityCheck(ent, len(ent.content)); err != nil {
 		return pctx.error(ctx, err)
 	}
 
@@ -634,7 +634,7 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 				}
 			}
 		}
-		if err := pctx.entityCheck(ent, 0, 0); err != nil {
+		if err := pctx.entityCheck(ent, 0); err != nil {
 			return nil, pctx.error(ctx, err)
 		}
 		pctx.valid = false
@@ -667,7 +667,7 @@ func saturatedAdd(a, b int64) int64 {
 	return a + b
 }
 
-func (ctx *parserCtx) entityCheck(ent sax.Entity, size, replacement int) error {
+func (ctx *parserCtx) entityCheck(ent sax.Entity, size int) error {
 	if ctx.maxAmpl == 0 {
 		return nil
 	}
@@ -763,7 +763,7 @@ func (pctx *parserCtx) handlePEReference(ctx context.Context) error {
 			return err
 		}
 		pctx.valid = false
-		if err := pctx.entityCheck(nil, 0, 0); err != nil {
+		if err := pctx.entityCheck(nil, 0); err != nil {
 			return pctx.error(ctx, err)
 		}
 	} else {

@@ -260,7 +260,7 @@ func (ctx *parserCtx) lookupNamespace(prefix string) string {
 	return ctx.nsTab.Lookup(prefix)
 }
 
-func (ctx *parserCtx) release() error {
+func (ctx *parserCtx) release() error { //nolint:unparam // always nil but callers check for future-proofing
 	ctx.sax = nil
 	return nil
 }
@@ -363,7 +363,7 @@ func (ctx *parserCtx) getCursor() strcursor.Cursor {
 	return nil
 }
 
-func (ctx *parserCtx) popInput() any {
+func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for type generality
 	ctx.cachedCursor = nil // invalidate cache
 	return ctx.inputTab.Pop()
 }

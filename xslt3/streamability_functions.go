@@ -7,7 +7,7 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-func checkStreamableFunctionBody(ss *Stylesheet, fn *xslFunction) error {
+func checkStreamableFunctionBody(_ *Stylesheet, fn *xslFunction) error {
 	cat := fn.Streamability
 	switch cat {
 	case "absorbing":

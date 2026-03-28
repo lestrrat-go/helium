@@ -519,7 +519,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 // groupAdjacent implements group-adjacent: consecutive items with equal
 // grouping key values form a group. When composite is true, the key
 // expression returns a sequence treated as a single composite key.
-func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, adjExpr *xpath3.Expression, composite bool, collationKeyFn func(string) string) ([]fegGroup, error) {
+func (ec *execContext) groupAdjacent(_ context.Context, seq xpath3.Sequence, adjExpr *xpath3.Expression, composite bool, collationKeyFn func(string) string) ([]fegGroup, error) {
 	var groups []fegGroup
 	var currentKey string
 	var currentKeySeq xpath3.Sequence
