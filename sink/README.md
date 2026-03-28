@@ -25,12 +25,17 @@ func Example_sink_new() {
 
   ctx := context.Background()
 
-  // Create a sink that collects strings. HandlerFunc adapts a plain
-  // function into a Handler.
+  // Create a sink that collects strings.
   var collected []string
-  s := sink.New[string](ctx, sink.HandlerFunc[string](func(_ context.Context, v string) {
+
+  // HandlerFunc adapts a plain function into a sink.Handler.
+  handler := sink.HandlerFunc[string](func(_ context.Context, v string) {
     collected = append(collected, v)
-  }))
+  })
+
+  // sink.New starts a background goroutine that reads from an internal
+  // channel and calls the handler for each item.
+  s := sink.New[string](ctx, handler)
 
   for _, v := range []string{"alpha", "bravo", "charlie"} {
     s.Handle(ctx, v)
