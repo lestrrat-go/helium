@@ -64,7 +64,7 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	}
 
 	// Find best matching template
-	tmpl, err := ec.findBestTemplate(node, mode)
+	tmpl, err := ec.findBestTemplate(node, mode) //nolint:contextcheck
 	if err != nil {
 		return err
 	}
@@ -353,7 +353,7 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 		}
 
 		if p.Select != nil {
-			result, err := ec.xpathEvaluator().ContextItem(item).Evaluate(ec.xpathContext(), p.Select, nil)
+			result, err := ec.xpathEvaluator().ContextItem(item).Evaluate(ec.xpathContext(), p.Select, nil) //nolint:contextcheck
 			if err != nil {
 				return err
 			}
@@ -532,7 +532,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 			}
 			// Use default value
 			if p.Select != nil {
-				result, err := ec.evalXPath(p.Select, node)
+				result, err := ec.evalXPath(p.Select, node) //nolint:contextcheck
 				if err != nil {
 					return err
 				}

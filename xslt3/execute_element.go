@@ -165,7 +165,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 	// element's text content against the declared type, raising XTTE1510 on
 	// failure.
 	if inst.TypeName != "" {
-		if err := ec.validateAndNormalizeElementContent(elem, inst.TypeName); err != nil {
+		if err := ec.validateAndNormalizeElementContent(elem, inst.TypeName); err != nil { //nolint:contextcheck
 			// XTTE1540: content does not match the declared type.
 			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 				return dynamicError(errCodeXTTE1540,
@@ -627,7 +627,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 				return err
 			}
 		}
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 		if err != nil {
 			return err
 		}
@@ -1153,7 +1153,7 @@ func prefixBoundTo(elem *helium.Element, prefix string) string {
 func (ec *execContext) execComment(ctx context.Context, inst *commentInst) error {
 	var value string
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 		if err != nil {
 			return err
 		}
@@ -1217,7 +1217,7 @@ func (ec *execContext) execPI(ctx context.Context, inst *piInst) error {
 
 	var value string
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 		if err != nil {
 			return err
 		}
@@ -1265,7 +1265,7 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) e
 
 	var value string
 	if inst.Select != nil {
-		result, evalErr := ec.evalXPath(inst.Select, ec.contextNode)
+		result, evalErr := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 		if evalErr != nil {
 			return evalErr
 		}

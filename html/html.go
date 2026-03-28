@@ -120,7 +120,7 @@ func (p Parser) ParseWithSAX(ctx context.Context, data []byte, handler SAXHandle
 }
 
 // NewPushParser creates an HTML PushParser that builds a DOM tree.
-func (p Parser) NewPushParser(ctx context.Context) *PushParser {
+func (p Parser) NewPushParser(ctx context.Context) *PushParser { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -130,7 +130,7 @@ func (p Parser) NewPushParser(ctx context.Context) *PushParser {
 // NewSAXPushParser creates an HTML PushParser that fires SAX events
 // to the given handler instead of building a DOM tree.
 // (libxml2: htmlCreatePushParserCtxt with SAX handler)
-func (p Parser) NewSAXPushParser(ctx context.Context, h SAXHandler) *PushParser {
+func (p Parser) NewSAXPushParser(ctx context.Context, h SAXHandler) *PushParser { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}

@@ -470,7 +470,7 @@ func (p Parser) closeHandler() {
 // returned error is [ErrDTDValidationFailed] and the document is still
 // returned. Individual validation errors are delivered to the [ErrorHandler]
 // configured via [Parser.ErrorHandler].
-func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
+func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -524,7 +524,7 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 // This is identical to [Parse] but reads from a stream instead of a byte slice.
 // EBCDIC encoding detection is not supported when parsing from a reader.
 // See [Parse] for DTD validation error handling.
-func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
+func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -595,7 +595,7 @@ func (p Parser) ParseFile(ctx context.Context, path string) (*Document, error) {
 // DTD/entity context. Returns the first node of the parsed fragment list
 // (siblings linked via NextSibling). The returned nodes are not attached
 // to any parent.
-func (p Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, error) {
+func (p Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}

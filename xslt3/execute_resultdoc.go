@@ -70,7 +70,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 		if ec.schemaRegistry != nil {
 			root := findDocumentElement(tmpDoc)
 			if root != nil {
-				if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+				if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil { //nolint:contextcheck
 					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 						return dynamicError(errCodeXTTE1540,
 							"document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
@@ -410,7 +410,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 			root := findDocumentElement(tmpDoc)
 			if root != nil && ec.schemaRegistry != nil {
-				if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+				if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil { //nolint:contextcheck
 					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 						return dynamicError(errCodeXTTE1540,
 							"result document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
@@ -641,7 +641,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	if inst.TypeName != "" && inst.Validation == "" {
 		root := findDocumentElement(tmpDoc)
 		if root != nil && ec.schemaRegistry != nil {
-			if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+			if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil { //nolint:contextcheck
 				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 					return dynamicError(errCodeXTTE1540,
 						"result document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)

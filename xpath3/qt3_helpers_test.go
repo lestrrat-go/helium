@@ -434,7 +434,7 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 			seq := make(xpath3.ItemSlice, 0, len(col.SourceDocs))
 			uris := make([]string, 0, len(col.SourceDocs))
 			for _, src := range col.SourceDocs {
-				sourceDoc := qt3ParseDocSource(t, src)
+				sourceDoc := qt3ParseDocSource(t, src) //nolint:contextcheck
 				seq = append(seq, xpath3.NodeItem{Node: sourceDoc})
 				if src.URI != "" {
 					uris = append(uris, src.URI)

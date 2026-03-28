@@ -18,7 +18,7 @@ type validationContext struct {
 	suppressDepth int
 }
 
-func newValidationContext(ctx context.Context, schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext {
+func newValidationContext(ctx context.Context, schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}

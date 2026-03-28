@@ -231,7 +231,7 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 	capturedCtx := ctx
 	if ec := getFnContext(ctx); ec != nil {
 		capturedECValue := *ec
-		capturedCtx = withFnContext(ec.goCtx, &capturedECValue)
+		capturedCtx = withFnContext(ec.goCtx, &capturedECValue) //nolint:contextcheck
 	}
 
 	var paramTypes []SequenceType

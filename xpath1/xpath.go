@@ -254,7 +254,7 @@ func (e Evaluator) FunctionNS(uri, name string, fn Function) Evaluator {
 // Evaluate evaluates a compiled expression against the given context node.
 func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error) {
 	ectx := newEvalContextWithConfig(ctx, node, e.cfg)
-	return eval(ectx, expr.ast)
+	return eval(ectx, expr.ast) //nolint:contextcheck
 }
 
 // Find evaluates a compiled expression and returns the resulting node-set.
@@ -320,7 +320,7 @@ func MustCompile(expr string) *Expression {
 // (libxml2: xmlXPathCompiledEval)
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
 	ectx := newEvalContextWithConfig(ctx, node, nil)
-	return eval(ectx, e.ast)
+	return eval(ectx, e.ast) //nolint:contextcheck
 }
 
 // String returns the original XPath expression string.

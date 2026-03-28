@@ -72,7 +72,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	root := findDocumentElement(doc)
 	if root == nil {
 		msg := rngParserError("xmlRelaxNGParse: could not find root element")
-		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(msg, helium.ErrorLevelFatal))
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(msg, helium.ErrorLevelFatal)) //nolint:contextcheck
 		c.errorCount++
 		return c.grammar, nil
 	}
@@ -81,19 +81,19 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 	var startPat *pattern
 	if isRNG(root, "grammar") {
-		c.parseGrammarContent(root)
+		c.parseGrammarContent(root) //nolint:contextcheck
 		startPat = c.resolveStart()
 	} else {
 		// Bare pattern (e.g. <element> at root)
-		startPat = c.parsePattern(root)
+		startPat = c.parsePattern(root) //nolint:contextcheck
 	}
 
 	c.resolveRefs()
-	c.checkRefCycles()
+	c.checkRefCycles() //nolint:contextcheck
 	c.popGrammar()
 
 	c.grammar.start = startPat
-	c.checkRules()
+	c.checkRules() //nolint:contextcheck
 
 	return c.grammar, nil
 }

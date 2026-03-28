@@ -377,7 +377,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 			}
 			result, err = sk.Select.EvaluateReuse(evalState, node)
 		} else {
-			r, e := ec.evalXPath(sk.Select, node)
+			r, e := ec.evalXPath(sk.Select, node) //nolint:contextcheck
 			if e != nil {
 				return sortValue{}, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", e)
 			}
@@ -754,7 +754,7 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *s
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState()
+	evalState := ec.sortXPathEvalState() //nolint:contextcheck
 	evalState.SetSize(len(nodes))
 
 	// Save and restore currentNode so current() works correctly
@@ -803,7 +803,7 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState()
+	evalState := ec.sortXPathEvalState() //nolint:contextcheck
 	entries := make([]keyed1[xpath3.Item], sequence.Len(items))
 
 	savedItem := ec.contextItem
@@ -857,7 +857,7 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState()
+	evalState := ec.sortXPathEvalState() //nolint:contextcheck
 	evalState.SetSize(len(nodes))
 
 	savedCurrent := ec.currentNode
@@ -896,7 +896,7 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState()
+	evalState := ec.sortXPathEvalState() //nolint:contextcheck
 	entries := make(keyedSlice[xpath3.Item], sequence.Len(items))
 
 	savedItem := ec.contextItem
@@ -1022,7 +1022,7 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *performSortIns
 	var seq xpath3.Sequence
 
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 		if err != nil {
 			return err
 		}

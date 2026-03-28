@@ -20,7 +20,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 	// XSLT 3.0: select attribute specifies which node to number.
 	// Evaluate select before the nil-node check so it works inside xsl:function.
 	if inst.Select != nil && inst.Value == nil {
-		result, err := ec.evalXPath(inst.Select, node)
+		result, err := ec.evalXPath(inst.Select, node) //nolint:contextcheck
 		if err != nil {
 			return err
 		}
@@ -58,7 +58,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 
 	if inst.Value != nil {
 		// value attribute: evaluate expression and use result directly
-		result, err := ec.evalXPath(inst.Value, node)
+		result, err := ec.evalXPath(inst.Value, node) //nolint:contextcheck
 		if err != nil {
 			return err
 		}
@@ -80,13 +80,13 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 		var nums []int
 		switch inst.Level {
 		case "single":
-			nums = ec.numberSingle(inst, node)
+			nums = ec.numberSingle(inst, node) //nolint:contextcheck
 		case "multiple":
-			nums = ec.numberMultiple(inst, node)
+			nums = ec.numberMultiple(inst, node) //nolint:contextcheck
 		case "any":
-			nums = ec.numberAny(inst, node)
+			nums = ec.numberAny(inst, node) //nolint:contextcheck
 		default:
-			nums = ec.numberSingle(inst, node)
+			nums = ec.numberSingle(inst, node) //nolint:contextcheck
 		}
 		for _, n := range nums {
 			bigNums = append(bigNums, big.NewInt(int64(n)))

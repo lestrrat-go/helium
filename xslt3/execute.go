@@ -1273,7 +1273,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 		origName := ec.overridingVarDef.Name
 		wasEvaluating := ec.globalEvaluating[origName]
 		delete(ec.globalEvaluating, origName)
-		val, err := ec.evaluateGlobalVar(ec.overridingVarDef.OriginalVar)
+		val, err := ec.evaluateGlobalVar(ec.overridingVarDef.OriginalVar) //nolint:contextcheck
 		if wasEvaluating {
 			ec.globalEvaluating[origName] = true
 		}
@@ -1319,7 +1319,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 					// and should be evaluated in that sub-package's context.
 					// Use evaluatePackageVar to get the correct per-package value.
 					if pkgVar.OwnerPackage != nil && pkgVar.OwnerPackage != ec.stylesheet {
-						val, err := ec.evaluatePackageVar(pkgVar)
+						val, err := ec.evaluatePackageVar(pkgVar) //nolint:contextcheck
 						if err != nil {
 							return nil, false, err
 						}
@@ -1348,7 +1348,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	if ec.currentPackage != nil {
 		for _, v := range ec.currentPackage.globalVars {
 			if v.Name == name {
-				val, err := ec.evaluatePackageVar(v)
+				val, err := ec.evaluatePackageVar(v) //nolint:contextcheck
 				if err != nil {
 					return nil, false, err
 				}
@@ -1359,7 +1359,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	// Try to lazily evaluate a pending global variable
 	for _, n := range lookupNames {
 		if def, ok := ec.globalVarDefs[n]; ok {
-			val, err := ec.evaluateGlobalVar(def)
+			val, err := ec.evaluateGlobalVar(def) //nolint:contextcheck
 			if err != nil {
 				return nil, false, err
 			}
@@ -1371,7 +1371,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	if ec.currentPackage != nil {
 		for _, v := range ec.currentPackage.globalVars {
 			if v.Name == name {
-				val, err := ec.evaluateGlobalVar(v)
+				val, err := ec.evaluateGlobalVar(v) //nolint:contextcheck
 				if err != nil {
 					return nil, false, err
 				}
@@ -1382,7 +1382,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 		// that were not merged into the using stylesheet).
 		for _, p := range ec.currentPackage.globalParams {
 			if p.Name == name {
-				val, err := ec.evaluateGlobalParam(p)
+				val, err := ec.evaluateGlobalParam(p) //nolint:contextcheck
 				if err != nil {
 					return nil, false, err
 				}
@@ -1393,7 +1393,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	// Try to lazily evaluate a pending global parameter
 	for _, n := range lookupNames {
 		if def, ok := ec.globalParamDefs[n]; ok {
-			val, err := ec.evaluateGlobalParam(def)
+			val, err := ec.evaluateGlobalParam(def) //nolint:contextcheck
 			if err != nil {
 				return nil, false, err
 			}
@@ -1406,7 +1406,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	// globalVars but are accessible to package code.
 	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
 		if v := findPackageVar(ec.currentPackage, expandedName, nil); v != nil {
-			val, err := ec.evaluatePackageVar(v)
+			val, err := ec.evaluatePackageVar(v) //nolint:contextcheck
 			if err != nil {
 				return nil, false, err
 			}
@@ -1483,9 +1483,9 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst instruction)
 	case *valueOfInst:
 		return ec.execValueOf(ctx, v)
 	case *textInst:
-		return ec.execText(v)
+		return ec.execText(v) //nolint:contextcheck
 	case *literalTextInst:
-		return ec.execLiteralText(v)
+		return ec.execLiteralText(v) //nolint:contextcheck
 	case *elementInst:
 		return ec.execElement(ctx, v)
 	case *attributeInst:

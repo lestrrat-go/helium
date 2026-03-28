@@ -91,7 +91,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 			}
 			avs = append(avs, av)
 		}
-		nodes, err := ec.lookupCompositeKey(name, avs, root)
+		nodes, err := ec.lookupCompositeKey(name, avs, root) //nolint:contextcheck
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +106,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 	// (XSLT 2.0+ §16.3.2).
 	seen := make(map[helium.Node]struct{})
 	var seq xpath3.ItemSlice
-	for item := range sequence.Items(args[1]) {
+	for item := range sequence.Items(args[1]) { //nolint:contextcheck
 		valAV, err := xpath3.AtomizeItem(item)
 		if err != nil {
 			return nil, err

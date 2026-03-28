@@ -1240,7 +1240,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	}
 
 	// Process top-level elements
-	if err := c.compileTopLevel(root); err != nil {
+	if err := c.compileTopLevel(root); err != nil { //nolint:contextcheck
 		return nil, err
 	}
 

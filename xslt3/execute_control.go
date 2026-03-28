@@ -12,7 +12,7 @@ import (
 )
 
 func (ec *execContext) execIf(ctx context.Context, inst *ifInst) error {
-	result, err := ec.evalXPath(inst.Test, ec.contextNode)
+	result, err := ec.evalXPath(inst.Test, ec.contextNode) //nolint:contextcheck
 	if err != nil {
 		return err
 	}
@@ -53,10 +53,10 @@ func (ec *execContext) execChoose(ctx context.Context, inst *chooseInst) error {
 		var err error
 		// Override namespace bindings with per-clause bindings when present
 		if when.Namespaces != nil {
-			eval := ec.xpathEvaluator().Namespaces(when.Namespaces).StrictPrefixes()
-			result, err = eval.Evaluate(ec.xpathContext(), when.Test, ec.contextNode)
+			eval := ec.xpathEvaluator().Namespaces(when.Namespaces).StrictPrefixes() //nolint:contextcheck
+			result, err = eval.Evaluate(ec.xpathContext(), when.Test, ec.contextNode) //nolint:contextcheck
 		} else {
-			result, err = ec.evalXPath(when.Test, ec.contextNode)
+			result, err = ec.evalXPath(when.Test, ec.contextNode) //nolint:contextcheck
 		}
 		if err != nil {
 			ec.xpathDefaultNS = savedNS
@@ -105,7 +105,7 @@ func (ec *execContext) execChoose(ctx context.Context, inst *chooseInst) error {
 }
 
 func (ec *execContext) execForEach(ctx context.Context, inst *forEachInst) error {
-	result, err := ec.evalXPath(inst.Select, ec.contextNode)
+	result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 	if err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func (ec *execContext) execForEach(ctx context.Context, inst *forEachInst) error
 }
 
 func (ec *execContext) execForEachGroup(ctx context.Context, inst *forEachGroupInst) error {
-	result, err := ec.evalXPath(inst.Select, ec.contextNode)
+	result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 	if err != nil {
 		return err
 	}
@@ -228,9 +228,9 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *forEachGroupI
 	case inst.GroupAdjacent != nil:
 		groups, err = ec.groupAdjacent(ctx, seq, inst.GroupAdjacent, inst.Composite, collationKeyFn)
 	case inst.GroupStartingWith != nil:
-		groups = ec.groupStartingWith(seq, inst.GroupStartingWith)
+		groups = ec.groupStartingWith(seq, inst.GroupStartingWith) //nolint:contextcheck
 	case inst.GroupEndingWith != nil:
-		groups = ec.groupEndingWith(seq, inst.GroupEndingWith)
+		groups = ec.groupEndingWith(seq, inst.GroupEndingWith) //nolint:contextcheck
 	default:
 		// No grouping attribute — treat entire sequence as one group
 		groups = []fegGroup{{items: xpath3.ItemSlice(sequence.Materialize(seq))}}
@@ -427,7 +427,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 			ec.contextNode = nil
 			ec.currentNode = nil
 		}
-		result, err := ec.evalXPath(groupByExpr, node)
+		result, err := ec.evalXPath(groupByExpr, node) //nolint:contextcheck
 		if err != nil {
 			return nil, err
 		}
@@ -553,7 +553,7 @@ func (ec *execContext) groupAdjacent(_ context.Context, seq xpath3.Sequence, adj
 			ec.contextNode = nil
 			ec.currentNode = nil
 		}
-		result, err := ec.evalXPath(adjExpr, node)
+		result, err := ec.evalXPath(adjExpr, node) //nolint:contextcheck
 		if err != nil {
 			return nil, err
 		}
@@ -666,7 +666,7 @@ func (ec *execContext) execVariable(ctx context.Context, inst *variableInst) err
 	var evalErr error
 
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 		if err != nil {
 			// XSLT 3.0 §9.5: circular references are only errors when
 			// the variable is actually used. Defer the error so that

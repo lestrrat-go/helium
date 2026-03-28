@@ -121,7 +121,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {
 		if !isValidBlock(v) && c.filename != "" {
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(), //nolint:contextcheck
 				root.LocalName(), elemSchema, attrBlockDefault,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
 			c.errorCount++
@@ -133,7 +133,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Parse finalDefault attribute.
 	if v := getAttr(root, attrFinalDefault); v != "" {
 		if !isValidFinalDefault(v) && c.filename != "" {
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(), //nolint:contextcheck
 				root.LocalName(), elemSchema, attrFinalDefault,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'."), helium.ErrorLevelFatal))
 			c.errorCount++
@@ -146,22 +146,22 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	registerBuiltinTypes(c.schema)
 
 	// First pass: collect all named types and global elements.
-	if err := c.parseSchemaChildren(root); err != nil {
+	if err := c.parseSchemaChildren(root); err != nil { //nolint:contextcheck
 		return nil, err
 	}
 
 	// Process includes after parsing the main schema's declarations.
 	// This matches libxml2's processing order where includes are merged
 	// after the including schema's own declarations are registered.
-	if err := c.processIncludes(root); err != nil {
+	if err := c.processIncludes(root); err != nil { //nolint:contextcheck
 		return nil, err
 	}
 
 	// Second pass: resolve type references.
-	c.resolveRefs()
+	c.resolveRefs() //nolint:contextcheck
 
 	// Check facet consistency after refs are resolved (base types are available).
-	c.checkFacetConsistency()
+	c.checkFacetConsistency() //nolint:contextcheck
 
 	// Build substitution group membership map and detect circular references.
 	for _, edecl := range c.schema.elements {
@@ -173,7 +173,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 		// Check for circular substitution groups.
 		if c.filename != "" {
-			c.checkCircularSubstGroup(edecl)
+			c.checkCircularSubstGroup(edecl) //nolint:contextcheck
 		}
 	}
 
@@ -186,8 +186,8 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 	// Enforce final on type derivations.
 	if c.filename != "" && c.errorCount == 0 {
-		c.checkFinalOnTypes()
-		c.checkFinalOnSubstGroups()
+		c.checkFinalOnTypes() //nolint:contextcheck
+		c.checkFinalOnSubstGroups() //nolint:contextcheck
 	}
 
 	return c.schema, nil

@@ -39,7 +39,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 
 	if inst.Select != nil {
 		// XSLT 3.0: xsl:copy with select — iterate over selected items
-		result, err := ec.evalXPath(inst.Select, contextNode)
+		result, err := ec.evalXPath(inst.Select, contextNode) //nolint:contextcheck
 		if err != nil {
 			return err
 		}
@@ -194,7 +194,7 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *copyInst, 
 		}
 		copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 		if copiedElem != nil {
-			if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
+			if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil { //nolint:contextcheck
 				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 					return dynamicError(errCodeXTTE1540,
 						"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
@@ -450,7 +450,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 }
 
 func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
-	result, err := ec.evalXPath(inst.Select, ec.contextNode)
+	result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 	if err != nil {
 		return err
 	}
@@ -534,7 +534,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 				// Type validation: validate the copied element against the declared type.
 				copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 				if copiedElem != nil {
-					if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
+					if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil { //nolint:contextcheck
 						if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 							return dynamicError(errCodeXTTE1540,
 								"copy-of: element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)

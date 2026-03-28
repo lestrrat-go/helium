@@ -832,7 +832,7 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 				ec.contextItem = v
 				ec.position = i + 1
 				ec.size = selLen
-				tmpl, tErr := ec.findAtomicTemplate(v, "")
+				tmpl, tErr := ec.findAtomicTemplate(v, "") //nolint:contextcheck
 				if tErr != nil {
 					return nil, nil, tErr
 				}

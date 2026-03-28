@@ -29,7 +29,7 @@ func Load(ctx context.Context, filename string) (*Catalog, error) {
 }
 
 // Load parses an OASIS XML Catalog file and returns a Catalog.
-func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) {
+func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}

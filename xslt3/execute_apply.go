@@ -15,7 +15,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 
 	var atomicItems xpath3.ItemSlice // XSLT 3.0: atomic values from select
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 	ec.size = len(atomicItems)
 	for i, item := range atomicItems {
 		ec.position = i + 1
-		tmpl, err := ec.findAtomicTemplate(item, mode)
+		tmpl, err := ec.findAtomicTemplate(item, mode) //nolint:contextcheck
 		if err != nil {
 			return err
 		}
@@ -233,7 +233,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 			}
 			continue
 		}
-		tmpl, err := ec.findAtomicTemplate(item, mode)
+		tmpl, err := ec.findAtomicTemplate(item, mode) //nolint:contextcheck
 		if err != nil {
 			return err
 		}
@@ -282,7 +282,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 func (ec *execContext) evaluateWithParam(ctx context.Context, wp *withParam) (xpath3.Sequence, error) {
 	var val xpath3.Sequence
 	if wp.Select != nil {
-		result, err := ec.evalXPath(wp.Select, ec.contextNode)
+		result, err := ec.evalXPath(wp.Select, ec.contextNode) //nolint:contextcheck
 		if err != nil {
 			return nil, err
 		}
@@ -494,7 +494,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 		}
 
 		if !fromCaller && p.Select != nil {
-			result, err := ec.evalXPath(p.Select, ec.contextNode)
+			result, err := ec.evalXPath(p.Select, ec.contextNode) //nolint:contextcheck
 			if err != nil {
 				return err
 			}
@@ -594,7 +594,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 				foundCurrent = true
 				continue
 			}
-			if foundCurrent && tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, ec.contextItem) {
+			if foundCurrent && tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, ec.contextItem) { //nolint:contextcheck
 				return ec.executeAtomicTemplate(ctx, tmpl, ec.contextItem, mode)
 			}
 		}
@@ -622,7 +622,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 		if !foundCurrent {
 			continue
 		}
-		if tmpl.Match == nil || !tmpl.Match.matchPattern(ec, node) {
+		if tmpl.Match == nil || !tmpl.Match.matchPattern(ec, node) { //nolint:contextcheck
 			continue
 		}
 		// Check for conflict at the same priority/import-precedence
@@ -635,7 +635,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 				if len(other.Body) > 0 && len(tmpl.Body) > 0 && &other.Body[0] == &tmpl.Body[0] {
 					continue
 				}
-				if other.Match != nil && other.Match.matchPattern(ec, node) {
+				if other.Match != nil && other.Match.matchPattern(ec, node) { //nolint:contextcheck
 					return dynamicError(errCodeXTRE0540,
 						"ambiguous rule match for node %v in mode %q (on-multiple-match=fail)",
 						node, mode)
@@ -714,7 +714,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 			if tmpl.ImportPrec >= maxPrec || tmpl.ImportPrec < minPrec {
 				continue
 			}
-			if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, ec.contextItem) {
+			if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, ec.contextItem) { //nolint:contextcheck
 				return ec.executeAtomicTemplate(ctx, tmpl, ec.contextItem, mode)
 			}
 		}
@@ -736,7 +736,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 		if tmpl.ImportPrec >= maxPrec || tmpl.ImportPrec < minPrec {
 			continue
 		}
-		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
+		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) { //nolint:contextcheck
 			return ec.executeTemplate(ctx, tmpl, node, mode, pv)
 		}
 	}

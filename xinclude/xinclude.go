@@ -117,7 +117,7 @@ type processor struct {
 
 // Process performs XInclude processing on the document.
 // Returns the number of substitutions made, or an error.
-func (proc Processor) Process(ctx context.Context, doc *helium.Document) (int, error) {
+func (proc Processor) Process(ctx context.Context, doc *helium.Document) (int, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -131,7 +131,7 @@ func (proc Processor) Process(ctx context.Context, doc *helium.Document) (int, e
 // ProcessTree performs XInclude processing starting from any node in the tree.
 // When called with a *Document, it processes the entire document.
 // Returns the number of substitutions made, or an error.
-func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, error) {
+func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
