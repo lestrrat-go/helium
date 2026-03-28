@@ -27,22 +27,22 @@ func fnCount(_ context.Context, args []Sequence) (Sequence, error) {
 // aggregateTypeFamily classifies an atomic type for aggregate type checking.
 func aggregateTypeFamily(typeName string) string {
 	if isIntegerDerived(typeName) {
-		return "numeric" //nolint:goconst
+		return familyNumeric
 	}
 	if isStringDerived(typeName) {
 		return lexicon.TypeString
 	}
 	switch typeName {
 	case TypeDecimal, TypeDouble, TypeFloat:
-		return "numeric"
+		return familyNumeric
 	case TypeUntypedAtomic:
-		return "numeric" // untypedAtomic promotes to double
+		return familyNumeric // untypedAtomic promotes to double
 	case TypeString, TypeAnyURI:
 		return lexicon.TypeString
 	case TypeYearMonthDuration:
-		return "duration:YM" //nolint:goconst
+		return familyDurationYM
 	case TypeDayTimeDuration:
-		return "duration:DT" //nolint:goconst
+		return familyDurationDT
 	case TypeDuration:
 		return lexicon.TypeDuration
 	case TypeDate:
@@ -87,7 +87,7 @@ func validateCollationArg(args []Sequence, idx int) error {
 func checkSumAvgType(a AtomicValue) error {
 	family := aggregateTypeFamily(a.TypeName)
 	switch family {
-	case "numeric", "duration:YM", "duration:DT":
+	case familyNumeric, familyDurationYM, familyDurationDT:
 		return nil
 	}
 	return &XPathError{
@@ -103,8 +103,8 @@ func checkAggregateHomogeneity(family, newFamily string) (string, error) {
 	if family == newFamily {
 		return family, nil
 	}
-	if family == "numeric" && newFamily == "numeric" {
-		return "numeric", nil
+	if family == familyNumeric && newFamily == familyNumeric {
+		return familyNumeric, nil
 	}
 	return "", &XPathError{
 		Code:    errCodeFORG0006,
@@ -159,7 +159,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 			sumFloat += a.ToFloat64()
 		}
 	}
-	if family == "duration:YM" || family == "duration:DT" {
+	if family == familyDurationYM || family == familyDurationDT {
 		atomSeq := make(ItemSlice, len(atoms))
 		for i, a := range atoms {
 			atomSeq[i] = a
@@ -209,7 +209,7 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 		avgSeconds = -avgSeconds
 	}
 	typeName := TypeYearMonthDuration
-	if family == "duration:DT" {
+	if family == familyDurationDT {
 		typeName = TypeDayTimeDuration
 	}
 	return SingleAtomic(AtomicValue{
@@ -381,7 +381,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 				Message: fmt.Sprintf("incompatible types in %s: %s and %s", fnName, family, newFamily),
 			}
 		}
-		if family == "numeric" && numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
+		if family == familyNumeric && numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
 			widest = a.TypeName
 		}
 		if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && a.FloatVal().IsNaN() {
@@ -418,7 +418,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 		}
 		return SingleAtomic(AtomicValue{TypeName: nanType, Value: NewDouble(math.NaN())}), nil
 	}
-	if family == "numeric" {
+	if family == familyNumeric {
 		best = promoteResult(best, widest)
 	}
 	return SingleAtomic(best), nil
@@ -495,7 +495,7 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 			sumFloat += a.ToFloat64()
 		}
 	}
-	if family == "duration:YM" || family == "duration:DT" {
+	if family == familyDurationYM || family == familyDurationDT {
 		atomSeq := make(ItemSlice, len(atoms))
 		for i, a := range atoms {
 			atomSeq[i] = a
@@ -534,7 +534,7 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 		totalSeconds = -totalSeconds
 	}
 	typeName := TypeYearMonthDuration
-	if family == "duration:DT" {
+	if family == familyDurationDT {
 		typeName = TypeDayTimeDuration
 	}
 	return SingleAtomic(AtomicValue{

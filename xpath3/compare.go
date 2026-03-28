@@ -454,11 +454,11 @@ func valueCompareThreeWayWithImplicitTimezone(a, b AtomicValue, coll *collationI
 // comparisonFamily returns a type family string for comparison compatibility checking.
 func comparisonFamily(typeName string) string {
 	if isIntegerDerived(typeName) {
-		return "numeric"
+		return familyNumeric
 	}
 	switch typeName {
 	case TypeDecimal, TypeDouble, TypeFloat:
-		return "numeric"
+		return familyNumeric
 	case TypeString, TypeAnyURI:
 		return lexicon.TypeString
 	case TypeBoolean:
