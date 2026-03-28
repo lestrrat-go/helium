@@ -333,10 +333,6 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		return nil
 	}
 
-	if err != nil {
-		return err
-	}
-
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START WriteNode(fallthrough)")
 		defer g.IRelease("END DUmpNode(fallthrough)")

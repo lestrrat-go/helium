@@ -177,25 +177,23 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 	}
 
 	// Check visibility: cannot override final
-	if pkgFn != nil && pkgFn.Visibility == visFinal {
+	if pkgFn.Visibility == visFinal {
 		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3070,
 			"cannot override final function %q", name)
 	}
 
 	// XTSE3070: new-each-time on the override must match the base component.
 	// The base defaults to "maybe" (empty string) when not specified.
-	if pkgFn != nil {
-		overrideNET := getAttr(elem, "new-each-time")
-		if overrideNET != "" {
-			baseNET := pkgFn.NewEachTime
-			if baseNET == "" {
-				baseNET = "maybe" // default per spec
-			}
-			if overrideNET != baseNET {
-				return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3070,
-					"override function %q: new-each-time=%q does not match base component value %q",
-					name, overrideNET, baseNET)
-			}
+	overrideNET := getAttr(elem, "new-each-time")
+	if overrideNET != "" {
+		baseNET := pkgFn.NewEachTime
+		if baseNET == "" {
+			baseNET = "maybe" // default per spec
+		}
+		if overrideNET != baseNET {
+			return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3070,
+				"override function %q: new-each-time=%q does not match base component value %q",
+				name, overrideNET, baseNET)
 		}
 	}
 
@@ -225,7 +223,7 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 	// Inherit the base component's visibility so that processExpose
 	// in the using package does not default it to private. Abstract
 	// becomes public since the override provides an implementation.
-	if pkgFn != nil && pkgFn.Visibility != "" {
+	if pkgFn.Visibility != "" {
 		if pkgFn.Visibility == visAbstract {
 			fn.Visibility = visPublic
 		} else {
@@ -238,7 +236,7 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 	exactKey := funcKey{Name: qn, Arity: len(params)}
 	if orig, ok := pkg.functions[exactKey]; ok {
 		fn.OriginalFunc = orig
-	} else if pkgFn != nil {
+	} else {
 		fn.OriginalFunc = pkgFn
 	}
 

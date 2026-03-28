@@ -287,9 +287,6 @@ func coerceArgToString(seq Sequence) (string, error) {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
 	a := atoms[0]
-	if err != nil {
-		return "", err
-	}
 	switch a.TypeName {
 	case TypeString, TypeAnyURI, TypeUntypedAtomic,
 		TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,

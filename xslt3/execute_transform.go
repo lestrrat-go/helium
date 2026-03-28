@@ -488,9 +488,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			outDef.ResolvedCharMap = resolveCharacterMaps(ss, ec.primaryCharacterMaps)
 		}
 	} else if len(ec.primaryResolvedCharMap) > 0 {
-		if outDef == nil {
-			outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
-		}
+		outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
 		outDef.ResolvedCharMap = ec.primaryResolvedCharMap
 	}
 
