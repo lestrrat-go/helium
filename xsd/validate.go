@@ -99,7 +99,7 @@ func (td *TypeDef) ValidateElement(elem *helium.Element, schema *Schema) error {
 }
 
 func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig, handler helium.ErrorHandler) bool {
-	filename := cfg.filename
+	filename := cfg.label
 	valid := true
 	vc := newValidationContext(ctx, schema, cfg, filename, handler)
 

@@ -158,7 +158,7 @@ func TestGoldenFiles(t *testing.T) {
 
 				filename := "./test/schematron/" + tc.xmlBase
 				valCollector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-				err = schematron.NewValidator(schema).Filename(filename).ErrorHandler(valCollector).Validate(t.Context(), doc)
+				err = schematron.NewValidator(schema).Label(filename).ErrorHandler(valCollector).Validate(t.Context(), doc)
 				_ = valCollector.Close()
 				var valErrs strings.Builder
 				for _, e := range valCollector.Errors() {
@@ -219,14 +219,14 @@ func TestWithQuiet(t *testing.T) {
 		// Without quiet: sentinel error returned, handler receives errors
 		var collected []*schematron.ValidationError
 		handler := validationErrorCollector{errors: &collected}
-		err = schematron.NewValidator(schema).Filename("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
+		err = schematron.NewValidator(schema).Label("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
 		require.ErrorIs(t, err, schematron.ErrValidationFailed)
 		require.NotEmpty(t, collected)
 
 		// With quiet + handler: handler still receives errors
 		var quietCollected []*schematron.ValidationError
 		quietHandler := validationErrorCollector{errors: &quietCollected}
-		quietErr := schematron.NewValidator(schema).Filename("test.xml").Quiet().ErrorHandler(quietHandler).Validate(t.Context(), doc)
+		quietErr := schematron.NewValidator(schema).Label("test.xml").Quiet().ErrorHandler(quietHandler).Validate(t.Context(), doc)
 		require.ErrorIs(t, quietErr, schematron.ErrValidationFailed)
 		require.Empty(t, quietCollected)
 	})
@@ -252,7 +252,7 @@ func TestWithQuiet(t *testing.T) {
 		// Without quiet: report fires
 		var collected []*schematron.ValidationError
 		handler := validationErrorCollector{errors: &collected}
-		err = schematron.NewValidator(rSchema).Filename("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
+		err = schematron.NewValidator(rSchema).Label("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
 		require.ErrorIs(t, err, schematron.ErrValidationFailed)
 		require.NotEmpty(t, collected)
 		require.Contains(t, collected[0].Message, "CCC is present")
@@ -260,7 +260,7 @@ func TestWithQuiet(t *testing.T) {
 		// With quiet: report suppressed (no errors delivered to handler)
 		var quietCollected []*schematron.ValidationError
 		quietHandler := validationErrorCollector{errors: &quietCollected}
-		quietErr := schematron.NewValidator(rSchema).Filename("test.xml").Quiet().ErrorHandler(quietHandler).Validate(t.Context(), doc)
+		quietErr := schematron.NewValidator(rSchema).Label("test.xml").Quiet().ErrorHandler(quietHandler).Validate(t.Context(), doc)
 		require.ErrorIs(t, quietErr, schematron.ErrValidationFailed)
 		require.Empty(t, quietCollected)
 	})
@@ -292,7 +292,7 @@ func TestWithErrorHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		err = schematron.NewValidator(schema).
-			Filename("test.xml").
+			Label("test.xml").
 			ErrorHandler(handler).
 			Validate(t.Context(), doc)
 
@@ -316,7 +316,7 @@ func TestWithErrorHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		err = schematron.NewValidator(schema).
-			Filename("test.xml").
+			Label("test.xml").
 			ErrorHandler(handler).
 			Validate(t.Context(), doc)
 
@@ -333,7 +333,7 @@ func TestWithErrorHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		err = schematron.NewValidator(schema).
-			Filename("test.xml").
+			Label("test.xml").
 			Quiet().
 			ErrorHandler(handler).
 			Validate(t.Context(), doc)
@@ -785,7 +785,7 @@ func TestZeroCompilerFluent(t *testing.T) {
 	t.Parallel()
 	var c schematron.Compiler
 	require.NotPanics(t, func() {
-		c2 := c.SchemaFilename("test.sch")
+		c2 := c.Label("test.sch")
 		_ = c2
 	})
 }
@@ -794,7 +794,7 @@ func TestZeroValidatorFluent(t *testing.T) {
 	t.Parallel()
 	var v schematron.Validator
 	require.NotPanics(t, func() {
-		v2 := v.Filename("test.xml")
+		v2 := v.Label("test.xml")
 		_ = v2
 	})
 }

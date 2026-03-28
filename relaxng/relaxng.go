@@ -11,13 +11,13 @@ import (
 )
 
 type compileConfig struct {
-	filename     string // RNG filename for error messages
+	label        string // label for error messages (e.g. source filename)
 	baseDir      string
 	errorHandler helium.ErrorHandler
 }
 
 type validateConfig struct {
-	filename     string
+	label        string
 	errorHandler helium.ErrorHandler
 }
 
@@ -44,10 +44,10 @@ func (c Compiler) clone() Compiler {
 	return Compiler{cfg: &cp}
 }
 
-// SchemaFilename sets the RNG filename used in schema compilation error messages.
-func (c Compiler) SchemaFilename(name string) Compiler {
+// Label sets the label (typically a filename) used in schema compilation error messages.
+func (c Compiler) Label(name string) Compiler {
 	c = c.clone()
-	c.cfg.filename = name
+	c.cfg.label = name
 	return c
 }
 
@@ -107,7 +107,7 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error
 	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		if pe, ok := errors.AsType[helium.ErrParseError](err); ok {
-			filename := cfg.filename
+			filename := cfg.label
 			if filename == "" {
 				filename = path
 			}
@@ -148,10 +148,10 @@ func (v Validator) clone() Validator {
 	return Validator{cfg: &cp, grammar: v.grammar}
 }
 
-// Filename sets the filename used in validation error messages.
-func (v Validator) Filename(name string) Validator {
+// Label sets the label (typically a filename) used in validation error messages.
+func (v Validator) Label(name string) Validator {
 	v = v.clone()
-	v.cfg.filename = name
+	v.cfg.label = name
 	return v
 }
 

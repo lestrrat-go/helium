@@ -210,7 +210,7 @@ func TestGoldenFiles(t *testing.T) {
 			// Compile schema.
 			xsdFilename := "./test/schemas/" + tc.xsdBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-			schema, err := xsd.NewCompiler().SchemaFilename(xsdFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.xsdPath)
+			schema, err := xsd.NewCompiler().Label(xsdFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.xsdPath)
 			require.NoError(t, err, "schema compilation failed for %s", tc.xsdPath)
 			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
@@ -228,7 +228,7 @@ func TestGoldenFiles(t *testing.T) {
 				// Validate. Collect validation errors via ErrorHandler.
 				filename := "./test/schemas/" + tc.xmlBase
 				var valErrs string
-				err = validateWithOutput(t, xsd.NewValidator(schema).Filename(filename), doc, &valErrs)
+				err = validateWithOutput(t, xsd.NewValidator(schema).Label(filename), doc, &valErrs)
 				if err != nil {
 					got = compileWarnings + valErrs + filename + " fails to validate\n"
 				} else {
@@ -406,7 +406,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 
 		xmlDoc, err := helium.NewParser().Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
-		v := xsd.NewValidator(schema).Filename("test.xml")
+		v := xsd.NewValidator(schema).Label("test.xml")
 		if out != nil {
 			valCollector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 			v = v.ErrorHandler(valCollector)
@@ -509,7 +509,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 
 		xmlDoc, err := helium.NewParser().Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
-		v := xsd.NewValidator(schema).Filename("test.xml")
+		v := xsd.NewValidator(schema).Label("test.xml")
 		if out != nil {
 			valCollector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 			v = v.ErrorHandler(valCollector)
@@ -810,7 +810,7 @@ func TestFacetConsistency(t *testing.T) {
 		xsdDoc, err := helium.NewParser().Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = xsd.NewCompiler().SchemaFilename("test.xsd").ErrorHandler(collector).Compile(t.Context(), xsdDoc)
+		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), xsdDoc)
 		require.NoError(t, err, "schema compilation failed")
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -1004,7 +1004,7 @@ func TestZeroCompilerFluent(t *testing.T) {
 	t.Parallel()
 	var c xsd.Compiler
 	require.NotPanics(t, func() {
-		c2 := c.SchemaFilename("test.xsd").BaseDir("/tmp")
+		c2 := c.Label("test.xsd").BaseDir("/tmp")
 		_ = c2
 	})
 }
@@ -1013,7 +1013,7 @@ func TestZeroValidatorFluent(t *testing.T) {
 	t.Parallel()
 	var v xsd.Validator
 	require.NotPanics(t, func() {
-		v2 := v.Filename("test.xml")
+		v2 := v.Label("test.xml")
 		_ = v2
 	})
 }

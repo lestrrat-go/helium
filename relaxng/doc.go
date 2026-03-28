@@ -13,7 +13,7 @@
 // Use [NewValidator] to validate a document against a compiled grammar:
 //
 //	err := relaxng.NewValidator(grammar).
-//	    Filename("input.xml").
+//	    Label("input.xml").
 //	    Validate(ctx, doc)
 //
 // On failure, the returned error is [ErrValidationFailed]. Individual

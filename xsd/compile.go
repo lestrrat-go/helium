@@ -102,7 +102,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
-		c.filename = cfg.filename
+		c.filename = cfg.label
 		if cfg.errorHandler != nil {
 			c.errorHandler = cfg.errorHandler
 		}

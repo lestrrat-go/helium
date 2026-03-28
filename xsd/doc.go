@@ -5,7 +5,7 @@
 // Use [NewCompiler] to compile an XSD document or file into a [*Schema]:
 //
 //	schema, err := xsd.NewCompiler().
-//	    SchemaFilename("schema.xsd").
+//	    Label("schema.xsd").
 //	    CompileFile(ctx, "schema.xsd")
 //
 // # Validation
@@ -13,7 +13,7 @@
 // Use [NewValidator] to validate a document against a compiled schema:
 //
 //	err := xsd.NewValidator(schema).
-//	    Filename("input.xml").
+//	    Label("input.xml").
 //	    Validate(ctx, doc)
 //
 // On failure, the returned error is [ErrValidationFailed]. Individual

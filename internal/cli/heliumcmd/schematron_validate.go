@@ -67,7 +67,7 @@ func (c *schematronValidateCommand) runContext(ctx context.Context, args []strin
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	schema, err := schematron.NewCompiler().SchemaFilename(cfg.schemaFile).CompileFile(ctx, cfg.schemaFile)
+	schema, err := schematron.NewCompiler().Label(cfg.schemaFile).CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
@@ -164,7 +164,7 @@ func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schem
 		t0 = time.Now()
 	}
 	handler := &writerErrorHandler{w: c.stderr}
-	err = schematron.NewValidator(schema).Filename(input.name).ErrorHandler(handler).Validate(ctx, doc)
+	err = schematron.NewValidator(schema).Label(input.name).ErrorHandler(handler).Validate(ctx, doc)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}

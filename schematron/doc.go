@@ -15,7 +15,7 @@
 // Use [NewValidator] to validate a document against a compiled schema:
 //
 //	err := schematron.NewValidator(schema).
-//	    Filename("input.xml").
+//	    Label("input.xml").
 //	    Validate(ctx, doc)
 //
 // On failure, the returned error is [ErrValidationFailed]. Individual

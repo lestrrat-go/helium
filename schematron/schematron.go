@@ -11,13 +11,13 @@ import (
 )
 
 type compileConfig struct {
-	filename     string
+	label        string
 	baseDir      string
 	errorHandler helium.ErrorHandler
 }
 
 type validateConfig struct {
-	filename     string
+	label        string
 	quiet        bool
 	errorHandler helium.ErrorHandler
 }
@@ -47,10 +47,10 @@ func (c Compiler) clone() Compiler {
 	return Compiler{cfg: &cp}
 }
 
-// SchemaFilename sets the schema filename used in compilation error messages.
-func (c Compiler) SchemaFilename(name string) Compiler {
+// Label sets the label (typically a filename) used in compilation error messages.
+func (c Compiler) Label(name string) Compiler {
 	c = c.clone()
-	c.cfg.filename = name
+	c.cfg.label = name
 	return c
 }
 
@@ -136,10 +136,10 @@ func (v Validator) clone() Validator {
 	return Validator{cfg: &cp, schema: v.schema}
 }
 
-// Filename sets the filename used in validation error messages.
-func (v Validator) Filename(name string) Validator {
+// Label sets the label (typically a filename) used in validation error messages.
+func (v Validator) Label(name string) Validator {
 	v = v.clone()
-	v.cfg.filename = name
+	v.cfg.label = name
 	return v
 }
 

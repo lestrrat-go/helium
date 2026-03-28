@@ -14,7 +14,7 @@ func compileWithErrors(t *testing.T, schemaXML string) (*xsd.Schema, string) {
 	schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
 	require.NoError(t, err)
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-	schema, err := xsd.NewCompiler().SchemaFilename("test.xsd").ErrorHandler(collector).Compile(t.Context(), schemaDOC)
+	schema, err := xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), schemaDOC)
 	require.NoError(t, err)
 	_ = collector.Close()
 	_, errs := partitionCompileErrors(collector.Errors())
@@ -27,7 +27,7 @@ func compileAndValidate(t *testing.T, schemaXML, instanceXML string, out *string
 	require.Empty(t, errs, "unexpected compile errors")
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
 	require.NoError(t, err)
-	v := xsd.NewValidator(schema).Filename("test.xml")
+	v := xsd.NewValidator(schema).Label("test.xml")
 	if out != nil {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		v = v.ErrorHandler(collector)
