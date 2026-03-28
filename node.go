@@ -8,6 +8,21 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
+// AsType performs a safe type assertion on a [Node], returning the
+// concrete type T and true if the assertion succeeds, or the zero value
+// of T and false otherwise. It mirrors the signature of [errors.AsType].
+//
+//	if elem, ok := helium.AsType[*helium.Element](node); ok {
+//	    // use elem
+//	}
+func AsType[T Node](n Node) (T, bool) {
+	if v, ok := n.(T); ok {
+		return v, true
+	}
+	var zero T
+	return zero, false
+}
+
 // Node is a read-only view of an XML document tree node (libxml2: xmlNode).
 type Node interface {
 	baseDocNode() *docnode // prevents external implementation
