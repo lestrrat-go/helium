@@ -1038,7 +1038,9 @@ func (v *vm) evalInstruction(goCtx context.Context, ec *evalContext, ref compile
 	case vmOpUnion:
 		return vmEvalPayload(inst, func(e UnionExpr) (Sequence, error) { return evalUnionExpr(v.evalExpr, goCtx, ec, e) })
 	case vmOpIntersectExcept:
-		return vmEvalPayload(inst, func(e IntersectExceptExpr) (Sequence, error) { return evalIntersectExceptExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e IntersectExceptExpr) (Sequence, error) {
+			return evalIntersectExceptExpr(v.evalExpr, goCtx, ec, e)
+		})
 	case vmOpFilter:
 		return vmEvalPayload(inst, func(e FilterExpr) (Sequence, error) { return evalFilterExpr(v.evalExpr, goCtx, ec, e) })
 	case vmOpPath:
@@ -1068,7 +1070,9 @@ func (v *vm) evalInstruction(goCtx context.Context, ec *evalContext, ref compile
 	case vmOpFunctionCall:
 		return vmEvalPayload(inst, func(e FunctionCall) (Sequence, error) { return evalFunctionCall(v.evalExpr, goCtx, ec, e) })
 	case vmOpDynamicFunctionCall:
-		return vmEvalPayload(inst, func(e DynamicFunctionCall) (Sequence, error) { return evalDynamicFunctionCall(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e DynamicFunctionCall) (Sequence, error) {
+			return evalDynamicFunctionCall(v.evalExpr, goCtx, ec, e)
+		})
 	case vmOpNamedFunctionRef:
 		return vmEvalPayload(inst, func(e NamedFunctionRef) (Sequence, error) { return evalNamedFunctionRef(goCtx, ec, e) })
 	case vmOpInlineFunction:
@@ -1076,7 +1080,9 @@ func (v *vm) evalInstruction(goCtx context.Context, ec *evalContext, ref compile
 	case vmOpMapConstructor:
 		return vmEvalPayload(inst, func(e MapConstructorExpr) (Sequence, error) { return evalMapConstructorExpr(v.evalExpr, goCtx, ec, e) })
 	case vmOpArrayConstructor:
-		return vmEvalPayload(inst, func(e ArrayConstructorExpr) (Sequence, error) { return evalArrayConstructorExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e ArrayConstructorExpr) (Sequence, error) {
+			return evalArrayConstructorExpr(v.evalExpr, goCtx, ec, e)
+		})
 	case vmOpSequence:
 		return vmEvalPayload(inst, func(e SequenceExpr) (Sequence, error) { return evalSequenceExpr(v.evalExpr, goCtx, ec, e) })
 	case vmOpPlaceholder:

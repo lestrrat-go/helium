@@ -621,7 +621,7 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 	for child := range helium.Children(doc) {
 		if child.Type() == helium.ElementNode {
 			elem, _ := helium.AsNode[*helium.Element](child)
-		return elem
+			return elem
 		}
 	}
 	return nil
