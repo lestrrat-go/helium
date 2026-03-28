@@ -85,7 +85,7 @@ func (p *ietfDateParser) parse() (time.Time, error) {
 
 // parseRFC parses: day [-] month [-] year time [timezone]
 func (p *ietfDateParser) parseRFC() (time.Time, error) {
-	day, err := p.readIntN(1, 2)
+	day, err := p.readIntN(1)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("expected day (1-2 digits): %w", err)
 	}
@@ -165,7 +165,7 @@ func (p *ietfDateParser) parseAsctime() (time.Time, error) {
 	}
 	p.skipSep()
 
-	day, err := p.readIntN(1, 2)
+	day, err := p.readIntN(1)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("expected day (1-2 digits): %w", err)
 	}
@@ -227,7 +227,7 @@ func (p *ietfDateParser) parseAsctime() (time.Time, error) {
 }
 
 func (p *ietfDateParser) parseTime() (hour, minute, sec int, frac float64, err error) {
-	hour, err = p.readIntN(1, 2)
+	hour, err = p.readIntN(1)
 	if err != nil {
 		return 0, 0, 0, 0, fmt.Errorf("expected hour (1-2 digits): %w", err)
 	}
@@ -236,7 +236,7 @@ func (p *ietfDateParser) parseTime() (hour, minute, sec int, frac float64, err e
 	}
 	p.pos++ // skip ':'
 
-	minute, err = p.readIntN(2, 2)
+	minute, err = p.readIntN(2)
 	if err != nil {
 		return 0, 0, 0, 0, fmt.Errorf("expected minute (exactly 2 digits): %w", err)
 	}
@@ -244,7 +244,7 @@ func (p *ietfDateParser) parseTime() (hour, minute, sec int, frac float64, err e
 	// Seconds are optional
 	if p.pos < len(p.input) && p.input[p.pos] == ':' {
 		p.pos++ // skip ':'
-		sec, err = p.readIntN(2, 2)
+		sec, err = p.readIntN(2)
 		if err != nil {
 			return 0, 0, 0, 0, fmt.Errorf("expected second (exactly 2 digits): %w", err)
 		}
@@ -447,8 +447,9 @@ func (p *ietfDateParser) peekTZ() bool {
 	return false
 }
 
-// readIntN reads an integer with digit count in [minDigits, maxDigits].
-func (p *ietfDateParser) readIntN(minDigits, maxDigits int) (int, error) { //nolint:unparam // maxDigits always 2 but kept for API clarity
+// readIntN reads an integer of at least minDigits and at most 2 digits.
+func (p *ietfDateParser) readIntN(minDigits int) (int, error) {
+	const maxDigits = 2
 	start := p.pos
 	for p.pos < len(p.input) && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
 		p.pos++
