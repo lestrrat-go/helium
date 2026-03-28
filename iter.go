@@ -2,7 +2,13 @@ package helium
 
 import "iter"
 
-// Children returns an iterator over the direct children of n.
+// Children returns an iterator over all direct child nodes of n,
+// including elements, text, comments, processing instructions, and any
+// other node types. Use Children when you need to inspect or process
+// every node in the child list regardless of type.
+//
+// To iterate over child elements only, use [ChildElements] instead.
+//
 // If n is nil or has no children, the iterator yields nothing.
 //
 // The caller must not modify the tree structure (add, remove, or reorder
@@ -51,8 +57,13 @@ func Descendants(n Node) iter.Seq[Node] {
 
 // ChildElements returns an iterator over the direct child elements of n,
 // skipping non-element children such as text, comments, and processing
-// instructions. If n is nil or has no element children, the iterator
-// yields nothing.
+// instructions. Use ChildElements when you only care about element
+// children and want to avoid type-checking each node yourself.
+//
+// To iterate over all child nodes including non-elements, use [Children]
+// instead.
+//
+// If n is nil or has no element children, the iterator yields nothing.
 //
 // The caller must not modify the tree structure (add, remove, or reorder
 // nodes) during iteration. Doing so may cause nodes to be skipped or
