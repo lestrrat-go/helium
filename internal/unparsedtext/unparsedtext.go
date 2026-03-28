@@ -61,7 +61,7 @@ func LoadText(ctx context.Context, cfg *Config, href, encoding string) (string, 
 		return "", err
 	}
 
-	data, httpEncoding, err := readURIWithEncoding(cfg, resolvedURI)
+	data, httpEncoding, err := readURIWithEncoding(ctx, cfg, resolvedURI)
 	if err != nil {
 		return "", &Error{Code: ErrCodeRetrieval, Message: fmt.Sprintf("cannot retrieve resource: %v", err)}
 	}
@@ -140,7 +140,7 @@ func ResolveURI(_ context.Context, cfg *Config, href string) (string, error) {
 
 // readURIWithEncoding reads the content at the resolved URI and returns
 // an optional encoding hint from HTTP Content-Type headers.
-func readURIWithEncoding(cfg *Config, uri string) ([]byte, string, error) {
+func readURIWithEncoding(ctx context.Context, cfg *Config, uri string) ([]byte, string, error) {
 	if cfg != nil && cfg.URIResolver != nil {
 		rc, err := cfg.URIResolver.ResolveURI(uri)
 		if err != nil {
@@ -161,7 +161,11 @@ func readURIWithEncoding(cfg *Config, uri string) ([]byte, string, error) {
 		if cfg != nil && cfg.HTTPClient != nil {
 			client = cfg.HTTPClient
 		}
-		resp, err := client.Get(uri)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+		if err != nil {
+			return nil, "", err
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, "", err
 		}
@@ -207,7 +211,7 @@ func extractHTTPCharset(contentType string) string {
 }
 
 // ReadURI reads the content at the resolved URI.
-func ReadURI(_ context.Context, cfg *Config, uri string) ([]byte, error) {
+func ReadURI(ctx context.Context, cfg *Config, uri string) ([]byte, error) {
 	if cfg != nil && cfg.URIResolver != nil {
 		rc, err := cfg.URIResolver.ResolveURI(uri)
 		if err != nil {
@@ -227,7 +231,11 @@ func ReadURI(_ context.Context, cfg *Config, uri string) ([]byte, error) {
 		if cfg != nil && cfg.HTTPClient != nil {
 			client = cfg.HTTPClient
 		}
-		resp, err := client.Get(uri)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, err
 		}

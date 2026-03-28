@@ -899,8 +899,8 @@ func qt3InitSharedServer() {
 		}))
 		qt3SharedServer.client = &http.Client{
 			Transport: &http.Transport{
-				DialContext: func(_ context.Context, network, _ string) (net.Conn, error) {
-					return net.Dial(network, qt3SharedServer.srv.Listener.Addr().String())
+				DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+					return (&net.Dialer{}).DialContext(ctx, network, qt3SharedServer.srv.Listener.Addr().String())
 				},
 			},
 		}
