@@ -1227,8 +1227,8 @@ func childElements(elem *helium.Element) []*helium.Element {
 		return result
 	}
 	for child := range helium.Children(elem) {
-		if child.Type() == helium.ElementNode {
-			result = append(result, child.(*helium.Element)) //nolint:forcetypeassert
+		if ce, ok := helium.AsNode[*helium.Element](child); ok {
+			result = append(result, ce)
 		}
 	}
 	return result
@@ -1346,10 +1346,10 @@ func findPath(children []*helium.Element, consumed map[int]bool, path []string) 
 
 func firstChildByTag(elem *helium.Element, tag string) *helium.Element {
 	for child := range helium.Children(elem) {
-		if child.Type() != helium.ElementNode {
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
 		if matchElementByTag(ce, tag) {
 			return ce
 		}

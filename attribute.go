@@ -23,11 +23,8 @@ func newAttribute(name string, ns *Namespace) *Attribute {
 // NextAttribute is a thin wrapper around NextSibling() so that the
 // caller does not have to constantly type assert
 func (n *Attribute) NextAttribute() *Attribute {
-	next := n.NextSibling()
-	if next == nil {
-		return nil
-	}
-	return next.(*Attribute) //nolint:forcetypeassert
+	attr, _ := AsNode[*Attribute](n.NextSibling())
+	return attr
 }
 
 // AddChild adds cur as a child of this attribute node. For attributes
