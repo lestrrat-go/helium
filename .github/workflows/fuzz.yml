@@ -38,8 +38,35 @@ jobs:
       - name: Run fuzz tests
         run: |
           FUZZTIME="${{ github.event.inputs.fuzz-time || '5m' }}"
+          mkdir -p /tmp/fuzz-output
           for target in $(go test ./${{ matrix.package }}/ -list '^Fuzz' -run '^$' | grep '^Fuzz' || true); do
             echo "::group::${target}"
-            go test ./${{ matrix.package }}/ -run '^$' -fuzz "^${target}\$" -fuzztime "${FUZZTIME}"
+            go test ./${{ matrix.package }}/ -run '^$' -fuzz "^${target}\$" -fuzztime "${FUZZTIME}" 2>&1 \
+              | tee -a /tmp/fuzz-output/log.txt
             echo "::endgroup::"
           done
+
+      - name: Collect failing corpus
+        if: failure()
+        run: |
+          mkdir -p /tmp/fuzz-failures
+          grep -oP 'Failing input written to \K\S+' /tmp/fuzz-output/log.txt \
+            | while read -r f; do
+                pkg="${{ matrix.package }}"
+                path="${f}"
+                if [ "$pkg" != "." ]; then
+                  path="${pkg}/${f}"
+                fi
+                if [ -f "$path" ]; then
+                  cp --parents "$path" /tmp/fuzz-failures/
+                fi
+              done
+
+      - name: Upload failing corpus
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-corpus-${{ matrix.package }}
+          path: /tmp/fuzz-failures/
+          if-no-files-found: ignore
+          retention-days: 30
