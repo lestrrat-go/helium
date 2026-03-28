@@ -1,18 +1,114 @@
 version: "2"
-
-run:
-  timeout: 5m
-
 linters:
-  default: none
-  enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-
+  default: all
+  disable:
+    - copyloopvar
+    - cyclop
+    - depguard
+    - dupl
+    - embeddedstructfieldcheck
+    - err113
+    - errorlint
+    - exhaustive
+    - funcorder
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gosec
+    - gosmopolitan
+    - iface
+    - inamedparam
+    - interfacebloat
+    - ireturn
+    - lll
+    - maintidx
+    - makezero
+    - mnd
+    - nakedret
+    - nestif
+    - nlreturn
+    - noinlineerr
+    - nonamedreturns
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - recvcheck
+    - revive
+    - tagliatelle
+    - testifylint
+    - testpackage
+    - thelper
+    - tparallel
+    - varnamelen
+    - wastedassign
+    - wrapcheck
+    - wsl
+    - wsl_v5
+  settings:
+    govet:
+      disable:
+        - shadow
+        - fieldalignment
+      enable-all: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - staticcheck
+        text: 'ST1003: should not use underscores in package names'
+      - linters:
+          - staticcheck
+        text: SA1019
+      - linters:
+          - exhaustruct
+        path: /*.go
+      - linters:
+          - errcheck
+        path: /main.go
+      - linters:
+          - errcheck
+          - errchkjson
+          - forcetypeassert
+        path: /*_test.go
+      - linters:
+          - forbidigo
+        path: /*_example_test.go
+      - linters:
+          - forbidigo
+        path: (^|/)cmd/
+      - linters:
+          - forbidigo
+        path: (^|/)tools/
+      - linters:
+          - forbidigo
+        path: /*_test.go
+      - linters:
+          - godoclint
+        path: (^|/)internal/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-dirs:
-    - bench
-    - testdata
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
