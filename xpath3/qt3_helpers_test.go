@@ -279,7 +279,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 // ──────────────────────────────────────────────────────────────────────
 
 func qt3TestDataDir() string {
-	return filepath.Join(heliumtest.CallerDir(0), "..", "testdata", "qt3ts", "testdata")
+	return heliumtest.TestDir("testdata", "qt3ts", "testdata")
 }
 
 func qt3DefaultBaseURI(tc qt3Test) string {

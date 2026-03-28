@@ -13,11 +13,11 @@ import (
 )
 
 func libxml2TestDir() string {
-	return filepath.Join(heliumtest.CallerDir(0), "..", "testdata", "libxml2-compat", "catalogs")
+	return heliumtest.TestDir("testdata", "libxml2-compat", "catalogs")
 }
 
 func libxml2ResultDir() string {
-	return filepath.Join(heliumtest.CallerDir(0), "..", "testdata", "libxml2-compat", "catalogs", "result")
+	return heliumtest.TestDir("testdata", "libxml2-compat", "catalogs", "result")
 }
 
 // TestLibxml2Compat runs the same catalog resolution tests as libxml2's

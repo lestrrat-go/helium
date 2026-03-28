@@ -13,7 +13,7 @@ import (
 )
 
 func testdataDir() string {
-	return filepath.Join(heliumtest.CallerDir(0), "..", "testdata", "libxml2-compat", "catalogs")
+	return heliumtest.TestDir("testdata", "libxml2-compat", "catalogs")
 }
 
 func loadTestCatalog(t *testing.T, name string) *catalog.Catalog {
