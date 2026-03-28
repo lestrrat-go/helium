@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +10,7 @@ import (
 )
 
 // processIncludesAndImports handles xs:include and xs:import elements.
-func (c *compiler) processIncludes(root *helium.Element) error {
+func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) error {
 	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -21,7 +22,7 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 			if loc == "" {
 				continue
 			}
-			if err := c.loadInclude(loc, elem); err != nil {
+			if err := c.loadInclude(ctx, loc, elem); err != nil {
 				return err
 			}
 		case isXSDElement(elem, elemImport):
@@ -35,18 +36,18 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 			if prevLoc, ok := c.importedNS[ns]; ok && c.filename != "" {
 				displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
 				displayPrevLoc := filepath.Join(filepath.Dir(c.filename), prevLoc)
-				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
 					elem.LocalName(), elemImport,
 					"Skipping import of schema located at '"+displayLoc+"' for the namespace '"+ns+"', since this namespace was already imported with the schema located at '"+displayPrevLoc+"'."), helium.ErrorLevelWarning))
 				continue
 			}
 
-			if err := c.loadImport(loc, ns); err != nil {
+			if err := c.loadImport(ctx, loc, ns); err != nil {
 				// Import failure — report warning if we have a filename.
 				if c.filename != "" {
 					displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
-					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"), helium.ErrorLevelWarning))
-					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"), helium.ErrorLevelWarning))
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
 						elem.LocalName(), elemImport,
 						"Failed to locate a schema at location '"+displayLoc+"'. Skipping the import."), helium.ErrorLevelWarning))
 				}
@@ -60,7 +61,7 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 			if loc == "" {
 				continue
 			}
-			if err := c.loadRedefine(loc, elem); err != nil {
+			if err := c.loadRedefine(ctx, loc, elem); err != nil {
 				return err
 			}
 		}
@@ -69,7 +70,7 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 }
 
 // loadInclude loads and merges an included schema file.
-func (c *compiler) loadInclude(location string, includeElem *helium.Element) error {
+func (c *compiler) loadInclude(ctx context.Context, location string, includeElem *helium.Element) error {
 	path := location
 	if c.baseDir != "" {
 		path = filepath.Join(c.baseDir, location)
@@ -80,7 +81,7 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
 
-	doc, err := helium.NewParser().Parse(c.compileContext(), data)
+	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to parse include %q: %w", location, err)
 	}
@@ -97,7 +98,7 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 		if c.filename != "" {
 			displayLoc = filepath.Join(filepath.Dir(c.filename), location)
 		}
-		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, includeElem.Line(),
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, includeElem.Line(),
 			includeElem.LocalName(), elemInclude,
 			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."), helium.ErrorLevelFatal))
 		c.errorCount++
@@ -134,7 +135,7 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 	}
 
 	// Parse the included schema's declarations into the current compiler.
-	err = c.parseSchemaChildren(incRoot)
+	err = c.parseSchemaChildren(ctx, incRoot)
 
 	// Restore form-qualified settings, defaults, and include file.
 	c.schema.elemFormQualified = savedElemForm
@@ -149,7 +150,7 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 // loadRedefine loads a schema via xs:redefine and processes override children.
 // It works like xs:include (merging original declarations) but then applies
 // redefinitions for complexType, simpleType, group, and attributeGroup children.
-func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) error {
+func (c *compiler) loadRedefine(ctx context.Context, location string, redefineElem *helium.Element) error {
 	// Phase A: Load the redefined schema (same as include).
 	path := location
 	if c.baseDir != "" {
@@ -161,7 +162,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
 
-	doc, err := helium.NewParser().Parse(c.compileContext(), data)
+	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to parse redefine %q: %w", location, err)
 	}
@@ -178,7 +179,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 		if c.filename != "" {
 			displayLoc = filepath.Join(filepath.Dir(c.filename), location)
 		}
-		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, redefineElem.Line(),
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, redefineElem.Line(),
 			redefineElem.LocalName(), elemRedefine,
 			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."), helium.ErrorLevelFatal))
 		c.errorCount++
@@ -208,7 +209,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 	}
 
 	// Parse the included schema's declarations into the current compiler.
-	if err := c.parseSchemaChildren(incRoot); err != nil {
+	if err := c.parseSchemaChildren(ctx, incRoot); err != nil {
 		c.schema.elemFormQualified = savedElemForm
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
@@ -233,7 +234,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
 			origType := c.schema.types[qn]
-			if err := c.parseNamedComplexType(elem); err != nil {
+			if err := c.parseNamedComplexType(ctx, elem); err != nil {
 				c.schema.elemFormQualified = savedElemForm
 				c.schema.attrFormQualified = savedAttrForm
 				c.schema.blockDefault = savedBlockDefault
@@ -259,7 +260,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
 			origType := c.schema.types[qn]
-			if err := c.parseNamedSimpleType(elem); err != nil {
+			if err := c.parseNamedSimpleType(ctx, elem); err != nil {
 				c.schema.elemFormQualified = savedElemForm
 				c.schema.attrFormQualified = savedAttrForm
 				c.schema.blockDefault = savedBlockDefault
@@ -287,7 +288,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 			for mg := range c.groupRefs {
 				existingRefs[mg] = true
 			}
-			if err := c.parseNamedGroup(elem); err != nil {
+			if err := c.parseNamedGroup(ctx, elem); err != nil {
 				c.schema.elemFormQualified = savedElemForm
 				c.schema.attrFormQualified = savedAttrForm
 				c.schema.blockDefault = savedBlockDefault
@@ -326,11 +327,11 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 				gce := gc.(*helium.Element) //nolint:forcetypeassert
 				switch {
 				case isXSDElement(gce, elemAttribute):
-					au := c.parseAttributeUse(gce)
+					au := c.parseAttributeUse(ctx, gce)
 					attrs = append(attrs, au)
 				case isXSDElement(gce, elemAttributeGroup):
 					if ref := getAttr(gce, attrRef); ref != "" {
-						refQN := c.resolveQName(gce, ref)
+						refQN := c.resolveQName(ctx, gce, ref)
 						if refQN == qn && origAttrs != nil {
 							attrs = append(attrs, origAttrs...)
 						}
@@ -352,7 +353,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 }
 
 // loadImport loads an imported schema and merges its declarations.
-func (c *compiler) loadImport(location, _ string) error {
+func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
 	path := location
 	if c.baseDir != "" {
 		path = filepath.Join(c.baseDir, location)
@@ -363,7 +364,7 @@ func (c *compiler) loadImport(location, _ string) error {
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}
 
-	doc, err := helium.NewParser().Parse(c.compileContext(), data)
+	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to parse import %q: %w", location, err)
 	}
@@ -406,7 +407,7 @@ func (c *compiler) loadImport(location, _ string) error {
 	// Sub-compiler collects errors into its own collector so we can
 	// conditionally forward them. This matches libxml2's behavior of
 	// stopping error reporting after the first import failure.
-	subCollector := helium.NewErrorCollector(c.compileContext(), helium.ErrorLevelNone)
+	subCollector := helium.NewErrorCollector(ctx, helium.ErrorLevelNone)
 	impC.errorHandler = subCollector
 
 	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
@@ -421,12 +422,12 @@ func (c *compiler) loadImport(location, _ string) error {
 
 	registerBuiltinTypes(impC.schema)
 
-	if err := impC.parseSchemaChildren(impRoot); err != nil {
+	if err := impC.parseSchemaChildren(ctx, impRoot); err != nil {
 		return err
 	}
 
 	// Process includes/imports in the imported schema (but skip back-references).
-	if err := impC.processIncludes(impRoot); err != nil {
+	if err := impC.processIncludes(ctx, impRoot); err != nil {
 		// Non-fatal for imported schemas.
 		_ = err
 	}
@@ -439,7 +440,7 @@ func (c *compiler) loadImport(location, _ string) error {
 	if impC.errorCount > 0 {
 		if c.errorCount == 0 {
 			for _, e := range subCollector.Errors() {
-				c.errorHandler.Handle(c.compileContext(), e)
+				c.errorHandler.Handle(ctx, e)
 			}
 		}
 		c.errorCount += impC.errorCount

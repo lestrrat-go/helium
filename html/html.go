@@ -83,7 +83,7 @@ func (p Parser) parseConfig() parseConfig {
 func (p Parser) Parse(ctx context.Context, data []byte) (*helium.Document, error) {
 	tb := newTreeBuilder()
 	hp := newParser(ctx, data, tb, p.parseConfig())
-	if err := hp.parse(); err != nil {
+	if err := hp.parse(ctx); err != nil {
 		return nil, err
 	}
 	if enc := hp.detectedEncoding; enc != "" {
@@ -116,23 +116,18 @@ func (p Parser) ParseFile(ctx context.Context, filename string) (*helium.Documen
 // (libxml2: htmlSAXParseDoc)
 func (p Parser) ParseWithSAX(ctx context.Context, data []byte, handler SAXHandler) error {
 	hp := newParser(ctx, data, handler, p.parseConfig())
-	return hp.parse()
+	return hp.parse(ctx)
 }
 
 // NewPushParser creates an HTML PushParser that builds a DOM tree.
-func (p Parser) NewPushParser(ctx context.Context) *PushParser { //nolint:contextcheck
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return &PushParser{ctx: ctx, cfg: p.parseConfig()}
+// Pass ctx to [PushParser.Close] when parsing the accumulated data.
+func (p Parser) NewPushParser() *PushParser {
+	return &PushParser{cfg: p.parseConfig()}
 }
 
 // NewSAXPushParser creates an HTML PushParser that fires SAX events
 // to the given handler instead of building a DOM tree.
 // (libxml2: htmlCreatePushParserCtxt with SAX handler)
-func (p Parser) NewSAXPushParser(ctx context.Context, h SAXHandler) *PushParser { //nolint:contextcheck
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return &PushParser{ctx: ctx, sax: h, cfg: p.parseConfig()}
+func (p Parser) NewSAXPushParser(h SAXHandler) *PushParser {
+	return &PushParser{sax: h, cfg: p.parseConfig()}
 }

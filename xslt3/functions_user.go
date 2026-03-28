@@ -193,7 +193,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 			}
 			ec.setVar(param.Name, val)
 		} else if param.Select != nil {
-			result, err := ec.evalXPath(param.Select, ec.contextNode) //nolint:contextcheck
+			result, err := ec.evalXPath(ctx, param.Select, ec.contextNode)
 			if err != nil {
 				return nil, err
 			}

@@ -760,7 +760,6 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 		docCache:            make(map[string]*helium.Document),
 		functionResultCache: make(map[string]xpath3.Sequence),
 		accumulatorState:    make(map[string]xpath3.Sequence),
-		transformCtx:        ctx,
 		resultDocuments:     make(map[string]*helium.Document),
 		usedResultURIs:      make(map[string]struct{}),
 		defaultValidation:   ss.defaultValidation,
@@ -832,7 +831,7 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 				ec.contextItem = v
 				ec.position = i + 1
 				ec.size = selLen
-				tmpl, tErr := ec.findAtomicTemplate(v, "") //nolint:contextcheck
+				tmpl, tErr := ec.findAtomicTemplate(ctx, v, "")
 				if tErr != nil {
 					return nil, nil, tErr
 				}

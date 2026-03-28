@@ -14,12 +14,11 @@ import (
 
 // internalLoader implements icatalog.Loader using helium's parser.
 type internalLoader struct {
-	ctx          context.Context
 	errorHandler helium.ErrorHandler
 }
 
-func (l internalLoader) Load(filename string) (*icatalog.Catalog, error) {
-	return loadInternal(l.ctx, filename, l.errorHandler)
+func (l internalLoader) Load(ctx context.Context, filename string) (*icatalog.Catalog, error) {
+	return loadInternal(ctx, filename, l.errorHandler)
 }
 
 // Load parses an OASIS XML Catalog file and returns a Catalog.
@@ -90,7 +89,7 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 	cat := &icatalog.Catalog{
 		Prefer:  icatalog.PreferPublic, // default per OASIS spec
 		BaseURI: baseURI,
-		Loader:  internalLoader{ctx: ctx, errorHandler: eh},
+		Loader:  internalLoader{errorHandler: eh},
 	}
 
 	if v := getAttr(root, lexicon.AttrPrefer); v != "" {

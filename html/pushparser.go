@@ -18,7 +18,6 @@ import (
 //
 // (libxml2: htmlCreatePushParserCtxt)
 type PushParser struct {
-	ctx context.Context
 	buf bytes.Buffer
 	sax SAXHandler
 	cfg parseConfig
@@ -38,15 +37,15 @@ func (pp *PushParser) Write(p []byte) (int, error) {
 // Close parses the accumulated HTML data and returns the resulting Document.
 // When created with [Parser.NewSAXPushParser], it fires SAX events and always
 // returns a nil Document; the returned error is non-nil only on parse failure.
-func (pp *PushParser) Close() (*helium.Document, error) {
+func (pp *PushParser) Close(ctx context.Context) (*helium.Document, error) {
 	data := pp.buf.Bytes()
 	if pp.sax != nil {
-		hp := newParser(pp.ctx, data, pp.sax, pp.cfg)
-		return nil, hp.parse()
+		hp := newParser(ctx, data, pp.sax, pp.cfg)
+		return nil, hp.parse(ctx)
 	}
 	tb := newTreeBuilder()
-	hp := newParser(pp.ctx, data, tb, pp.cfg)
-	if err := hp.parse(); err != nil {
+	hp := newParser(ctx, data, tb, pp.cfg)
+	if err := hp.parse(ctx); err != nil {
 		return nil, err
 	}
 	if enc := hp.detectedEncoding; enc != "" {

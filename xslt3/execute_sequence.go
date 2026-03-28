@@ -36,7 +36,7 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *valueOfInst) error
 				return err
 			}
 		}
-		result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -181,13 +181,9 @@ func mergeAdjacentTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 	return result
 }
 
-func (ec *execContext) execText(inst *textInst) error {
+func (ec *execContext) execText(ctx context.Context, inst *textInst) error {
 	value := inst.Value
 	if inst.TVT != nil {
-		ctx := ec.transformCtx
-		if ctx == nil {
-			ctx = context.Background()
-		}
 		ctx = withExecContext(ctx, ec)
 		var err error
 		value, err = inst.TVT.evaluate(ctx, ec.contextNode)
@@ -249,14 +245,10 @@ func (ec *execContext) execText(inst *textInst) error {
 	return ec.addNode(text)
 }
 
-func (ec *execContext) execLiteralText(inst *literalTextInst) error {
+func (ec *execContext) execLiteralText(ctx context.Context, inst *literalTextInst) error {
 	value := inst.Value
 	if inst.TVT != nil {
 		// Text value template: evaluate like an avt
-		ctx := ec.transformCtx
-		if ctx == nil {
-			ctx = context.Background()
-		}
 		ctx = withExecContext(ctx, ec)
 		var err error
 		value, err = inst.TVT.evaluate(ctx, ec.contextNode)
@@ -285,8 +277,8 @@ func (ec *execContext) execLiteralText(inst *literalTextInst) error {
 	return ec.addNode(text)
 }
 
-func (ec *execContext) execXSLSequence(_ context.Context, inst *xslSequenceInst) error {
-	result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
+func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceInst) error {
+	result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 	if err != nil {
 		return err
 	}

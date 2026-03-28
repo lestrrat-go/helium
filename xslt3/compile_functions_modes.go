@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"context"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -9,14 +10,14 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"as": {}, "use": {}, "use-when": {},
 	}); err != nil {
 		return err
 	}
 	asAttr := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(asAttr, "xsl:global-context-item"); err != nil {
+	if err := c.validateAsSequenceType(ctx, asAttr, "xsl:global-context-item"); err != nil {
 		return err
 	}
 	def := &globalContextItemDef{
@@ -66,8 +67,8 @@ func isReservedFunctionNS(uri string) bool {
 	return false
 }
 
-func (c *compiler) compileFunction(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "as": {}, "visibility": {}, "streamable": {},
 		"streamability":               {},
 		"override-extension-function": {}, "override": {},
@@ -82,7 +83,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	}
 
 	// Collect namespace declarations from this element
-	c.collectNamespaces(elem)
+	c.collectNamespaces(ctx, elem)
 
 	// Resolve the prefixed name to a QualifiedName
 	var qn xpath3.QualifiedName
@@ -165,7 +166,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	}
 
 	// Compile function body (params + instructions)
-	_, body, params, err := c.compileTemplateBodyEx(elem, true)
+	_, body, params, err := c.compileTemplateBodyEx(ctx, elem, true)
 	c.expandText = savedExpandText
 	if err != nil {
 		return err
@@ -213,7 +214,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	}
 
 	fnAs := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(fnAs, "xsl:function "+name); err != nil {
+	if err := c.validateAsSequenceType(ctx, fnAs, "xsl:function "+name); err != nil {
 		return err
 	}
 
@@ -273,8 +274,8 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileMode(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "streamable": {}, "on-no-match": {}, "on-multiple-match": {},
 		"warning-on-no-match": {}, "warning-on-multiple-match": {},
 		"typed": {}, "visibility": {}, "use-when": {}, "use-accumulators": {},
@@ -295,7 +296,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 		// Resolve QName to Clark notation so mode declarations and mode
 		// references (on xsl:template/@mode, xsl:apply-templates/@mode)
 		// use the same key format.
-		name = c.resolveMode(name)
+		name = c.resolveMode(ctx, name)
 	}
 
 	// Parse streamable with proper xs:boolean validation

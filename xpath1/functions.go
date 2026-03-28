@@ -97,14 +97,14 @@ func init() {
 	}
 }
 
-func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
+func evalFunctionCall(goCtx context.Context, ctx *evalContext, fc FunctionCall) (*Result, error) {
 	if err := ctx.countOps(1); err != nil {
 		return nil, err
 	}
 
 	// Namespaced function call: resolve prefix to URI and look up in functionsNS.
 	if fc.Prefix != "" {
-		return evalNamespacedFunctionCall(ctx, fc)
+		return evalNamespacedFunctionCall(goCtx, ctx, fc)
 	}
 
 	// Unqualified: built-ins take priority, then user-registered functions.
@@ -121,7 +121,7 @@ func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
 	// Pre-evaluate all arguments.
 	args := make([]*Result, len(fc.Args))
 	for i, expr := range fc.Args {
-		r, err := eval(ctx, expr)
+		r, err := eval(goCtx, ctx, expr)
 		if err != nil {
 			return nil, err
 		}
@@ -130,11 +130,11 @@ func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
 
 	// Stash the evalContext as FunctionContext in the context.Context
 	// so functions can retrieve it via GetFunctionContext.
-	fctx := withFunctionContext(ctx.goCtx, ctx)
+	fctx := withFunctionContext(goCtx, ctx)
 	return fn.Eval(fctx, args) //nolint:wrapcheck
 }
 
-func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
+func evalNamespacedFunctionCall(goCtx context.Context, ctx *evalContext, fc FunctionCall) (*Result, error) {
 	if ctx.namespaces == nil {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, fc.Prefix)
 	}
@@ -153,7 +153,7 @@ func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, err
 	// Pre-evaluate all arguments.
 	args := make([]*Result, len(fc.Args))
 	for i, expr := range fc.Args {
-		r, err := eval(ctx, expr)
+		r, err := eval(goCtx, ctx, expr)
 		if err != nil {
 			return nil, err
 		}
@@ -162,7 +162,7 @@ func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, err
 
 	// Stash the evalContext as FunctionContext in the context.Context
 	// so functions can retrieve it via GetFunctionContext.
-	fctx := withFunctionContext(ctx.goCtx, ctx)
+	fctx := withFunctionContext(goCtx, ctx)
 	return fn.Eval(fctx, args) //nolint:wrapcheck
 }
 

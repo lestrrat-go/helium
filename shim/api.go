@@ -2,6 +2,7 @@ package shim
 
 import (
 	"bytes"
+	"context"
 	stdxml "encoding/xml"
 	"io"
 )
@@ -35,16 +36,16 @@ func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func NewDecoder(r io.Reader) *Decoder {
-	dec, _ := newDecoderFromReader(r)
+func NewDecoder(ctx context.Context, r io.Reader) *Decoder {
+	dec, _ := newDecoderFromReader(ctx, r)
 	return dec
 }
 
-func NewTokenDecoder(t TokenReader) *Decoder {
+func NewTokenDecoder(ctx context.Context, t TokenReader) *Decoder {
 	if d, ok := t.(*Decoder); ok {
 		return d
 	}
-	return newDecoderFromTokenReader(t)
+	return newDecoderFromTokenReader(ctx, t)
 }
 
 func EscapeText(w io.Writer, s []byte) error {

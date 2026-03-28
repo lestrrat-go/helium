@@ -1,6 +1,7 @@
 package relaxng
 
 import (
+	"context"
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
@@ -21,17 +22,17 @@ const (
 
 // checkRules walks the compiled pattern tree and reports forbidden nesting
 // errors (e.g. list//element, attribute//attribute) and warnings.
-func (c *compiler) checkRules() {
+func (c *compiler) checkRules(ctx context.Context) {
 	if c.grammar.start == nil {
 		return
 	}
 	visited := make(map[string]int8) // 0=unseen, 1=in-progress, 2=done
-	c.checkPattern(c.grammar.start, inStart, visited)
+	c.checkPattern(ctx, c.grammar.start, inStart, visited)
 }
 
 // checkPattern recursively checks a pattern node for forbidden nestings,
 // then recurses into children with updated flags.
-func (c *compiler) checkPattern(pat *pattern, flags ruleFlags, visited map[string]int8) {
+func (c *compiler) checkPattern(ctx context.Context, pat *pattern, flags ruleFlags, visited map[string]int8) {
 	if pat == nil {
 		return
 	}
@@ -39,100 +40,100 @@ func (c *compiler) checkPattern(pat *pattern, flags ruleFlags, visited map[strin
 	switch pat.kind {
 	case patternElement:
 		if flags&inList != 0 {
-			c.addPatternError(pat, "Found forbidden pattern list//element")
+			c.addPatternError(ctx, pat, "Found forbidden pattern list//element")
 		}
 		if flags&inAttribute != 0 {
-			c.addPatternError(pat, "Found forbidden pattern attribute//element")
+			c.addPatternError(ctx, pat, "Found forbidden pattern attribute//element")
 		}
 		if flags&inDataExcept != 0 {
-			c.addPatternError(pat, "Found forbidden pattern data/except//element")
+			c.addPatternError(ctx, pat, "Found forbidden pattern data/except//element")
 		}
 		// Element resets context: recurse attrs and children with 0.
 		// (Attribute patterns in pat.attrs set inAttribute on their own children.)
 		for _, attr := range pat.attrs {
-			c.checkPattern(attr, 0, visited)
+			c.checkPattern(ctx, attr, 0, visited)
 		}
 		for _, child := range pat.children {
-			c.checkPattern(child, 0, visited)
+			c.checkPattern(ctx, child, 0, visited)
 		}
 		return
 
 	case patternAttribute:
 		if flags&inAttribute != 0 {
-			c.addPatternError(pat, "Found forbidden pattern attribute//attribute")
+			c.addPatternError(ctx, pat, "Found forbidden pattern attribute//attribute")
 		}
 		if flags&inList != 0 {
-			c.addPatternError(pat, "Found forbidden pattern list//attribute")
+			c.addPatternError(ctx, pat, "Found forbidden pattern list//attribute")
 		}
 		if flags&inStart != 0 {
-			c.addPatternError(pat, "Found forbidden pattern start//attribute")
+			c.addPatternError(ctx, pat, "Found forbidden pattern start//attribute")
 		}
 		if flags&inDataExcept != 0 {
-			c.addPatternError(pat, "Found forbidden pattern data/except//attribute")
+			c.addPatternError(ctx, pat, "Found forbidden pattern data/except//attribute")
 		}
 		if flags&inOOMGroup != 0 {
-			c.addPatternError(pat, "Found forbidden pattern oneOrMore//group//attribute")
+			c.addPatternError(ctx, pat, "Found forbidden pattern oneOrMore//group//attribute")
 		}
 		if flags&inOOMInterleave != 0 {
-			c.addPatternError(pat, "Found forbidden pattern oneOrMore//interleave//attribute")
+			c.addPatternError(ctx, pat, "Found forbidden pattern oneOrMore//interleave//attribute")
 		}
 		// Warnings for anyName/nsName without oneOrMore ancestor.
 		if pat.nameClass != nil && flags&inOneOrMore == 0 {
 			if pat.nameClass.kind == ncAnyName {
-				c.addPatternWarning(pat, "Found anyName attribute without oneOrMore ancestor")
+				c.addPatternWarning(ctx, pat, "Found anyName attribute without oneOrMore ancestor")
 			}
 			if pat.nameClass.kind == ncNsName {
-				c.addPatternWarning(pat, "Found nsName attribute without oneOrMore ancestor")
+				c.addPatternWarning(ctx, pat, "Found nsName attribute without oneOrMore ancestor")
 			}
 		}
 		childFlags := flags | inAttribute
 		for _, child := range pat.children {
-			c.checkPattern(child, childFlags, visited)
+			c.checkPattern(ctx, child, childFlags, visited)
 		}
 		return
 
 	case patternList:
 		if flags&inList != 0 {
-			c.addPatternError(pat, "Found forbidden pattern list//list")
+			c.addPatternError(ctx, pat, "Found forbidden pattern list//list")
 		}
 		if flags&inDataExcept != 0 {
-			c.addPatternError(pat, "Found forbidden pattern data/except//list")
+			c.addPatternError(ctx, pat, "Found forbidden pattern data/except//list")
 		}
 		childFlags := flags | inList
 		for _, child := range pat.children {
-			c.checkPattern(child, childFlags, visited)
+			c.checkPattern(ctx, child, childFlags, visited)
 		}
 		return
 
 	case patternText:
 		if flags&inList != 0 {
-			c.addPatternError(pat, "Found forbidden pattern list//text")
+			c.addPatternError(ctx, pat, "Found forbidden pattern list//text")
 		}
 		if flags&inDataExcept != 0 {
-			c.addPatternError(pat, "Found forbidden pattern data/except//text")
+			c.addPatternError(ctx, pat, "Found forbidden pattern data/except//text")
 		}
 		return
 
 	case patternInterleave:
 		if flags&inList != 0 {
-			c.addPatternError(pat, "Found forbidden pattern list//interleave")
+			c.addPatternError(ctx, pat, "Found forbidden pattern list//interleave")
 		}
 		if flags&inDataExcept != 0 {
-			c.addPatternError(pat, "Found forbidden pattern data/except//interleave")
+			c.addPatternError(ctx, pat, "Found forbidden pattern data/except//interleave")
 		}
 		childFlags := flags
 		if flags&inOneOrMore != 0 {
 			childFlags |= inOOMInterleave
 		}
 		for _, child := range pat.children {
-			c.checkPattern(child, childFlags, visited)
+			c.checkPattern(ctx, child, childFlags, visited)
 		}
 		return
 
 	case patternOneOrMore, patternZeroOrMore:
 		childFlags := flags | inOneOrMore
 		for _, child := range pat.children {
-			c.checkPattern(child, childFlags, visited)
+			c.checkPattern(ctx, child, childFlags, visited)
 		}
 		return
 
@@ -142,7 +143,7 @@ func (c *compiler) checkPattern(pat *pattern, flags ruleFlags, visited map[strin
 			childFlags |= inOOMGroup
 		}
 		for _, child := range pat.children {
-			c.checkPattern(child, childFlags, visited)
+			c.checkPattern(ctx, child, childFlags, visited)
 		}
 		return
 
@@ -150,13 +151,13 @@ func (c *compiler) checkPattern(pat *pattern, flags ruleFlags, visited map[strin
 		// Children of data are except patterns.
 		childFlags := flags | inDataExcept
 		for _, child := range pat.children {
-			c.checkPattern(child, childFlags, visited)
+			c.checkPattern(ctx, child, childFlags, visited)
 		}
 		return
 
 	case patternRef, patternParentRef:
 		if flags&inDataExcept != 0 {
-			c.addPatternError(pat, "Found forbidden pattern data/except//ref")
+			c.addPatternError(ctx, pat, "Found forbidden pattern data/except//ref")
 		}
 		def, ok := c.grammar.defines[pat.name]
 		if !ok {
@@ -167,19 +168,19 @@ func (c *compiler) checkPattern(pat *pattern, flags ruleFlags, visited map[strin
 			return // in-progress or done
 		}
 		visited[pat.name] = 1 // in-progress
-		c.checkPattern(def, flags, visited)
+		c.checkPattern(ctx, def, flags, visited)
 		visited[pat.name] = 2 // done
 		return
 	}
 
 	// Default: choice, optional, mixed — pass flags through.
 	for _, child := range pat.children {
-		c.checkPattern(child, flags, visited)
+		c.checkPattern(ctx, child, flags, visited)
 	}
 }
 
 // addPatternError records a forbidden-nesting error.
-func (c *compiler) addPatternError(p *pattern, msg string) {
+func (c *compiler) addPatternError(ctx context.Context, p *pattern, msg string) {
 	elemName := patternElemName(p.kind)
 	var formatted string
 	if c.filename != "" {
@@ -187,12 +188,12 @@ func (c *compiler) addPatternError(p *pattern, msg string) {
 	} else {
 		formatted = rngParserError(msg)
 	}
-	c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(formatted, helium.ErrorLevelFatal))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(formatted, helium.ErrorLevelFatal))
 	c.errorCount++
 }
 
 // addPatternWarning records a forbidden-nesting warning.
-func (c *compiler) addPatternWarning(p *pattern, msg string) {
+func (c *compiler) addPatternWarning(ctx context.Context, p *pattern, msg string) {
 	elemName := patternElemName(p.kind)
 	var formatted string
 	if c.filename != "" {
@@ -201,7 +202,7 @@ func (c *compiler) addPatternWarning(p *pattern, msg string) {
 	} else {
 		formatted = fmt.Sprintf("Relax-NG parser warning : %s\n", msg)
 	}
-	c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(formatted, helium.ErrorLevelWarning))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(formatted, helium.ErrorLevelWarning))
 }
 
 // patternElemName returns the XML element name for a pattern kind.

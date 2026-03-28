@@ -152,7 +152,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 // sequence with mutable iteration parameters.
 func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error {
 	// Evaluate the select expression.
-	result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
+	result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 		}
 		var val xpath3.Sequence
 		if p.Select != nil {
-			pResult, err := ec.evalXPath(p.Select, ec.contextNode) //nolint:contextcheck
+			pResult, err := ec.evalXPath(ctx, p.Select, ec.contextNode)
 			if err != nil {
 				return err
 			}
@@ -333,7 +333,7 @@ func (ec *execContext) execFork(ctx context.Context, inst *forkInst) error {
 // execBreak executes xsl:break, which terminates the enclosing xsl:iterate.
 func (ec *execContext) execBreak(ctx context.Context, inst *breakInst) error {
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -884,7 +884,7 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 
 	if src.ForEachSource != nil {
 		// Evaluate for-each-source to get URI(s).
-		uriResult, err := ec.evalXPath(src.ForEachSource, ec.contextNode) //nolint:contextcheck
+		uriResult, err := ec.evalXPath(ctx, src.ForEachSource, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
@@ -923,7 +923,7 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 		}
 	} else if src.ForEachItem != nil {
 		// Evaluate for-each-item to get item(s).
-		itemResult, err := ec.evalXPath(src.ForEachItem, ec.contextNode) //nolint:contextcheck
+		itemResult, err := ec.evalXPath(ctx, src.ForEachItem, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
@@ -957,7 +957,7 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 		}
 	} else if src.Select != nil {
 		// No for-each-source or for-each-item — just evaluate select against current context.
-		selResult, err := ec.evalXPath(src.Select, ec.contextNode) //nolint:contextcheck
+		selResult, err := ec.evalXPath(ctx, src.Select, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
@@ -1087,7 +1087,7 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 
 		switch {
 		case def.Initial != nil:
-			result, err := ec.evalXPath(def.Initial, doc) //nolint:contextcheck
+			result, err := ec.evalXPath(ctx, def.Initial, doc)
 			if err != nil {
 				stateErr[name] = err
 				state[name] = xpath3.EmptySequence()
@@ -1195,7 +1195,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 		}
 
 		for _, rule := range def.Rules {
-			if rule.Phase != phase || !rule.Match.matchPattern(ec, node) { //nolint:contextcheck
+			if rule.Phase != phase || !rule.Match.matchPattern(ctx, ec, node) {
 				continue
 			}
 
@@ -1222,7 +1222,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 			)
 			switch {
 			case rule.Select != nil:
-				result, evalErr := ec.evalXPath(rule.Select, node) //nolint:contextcheck
+				result, evalErr := ec.evalXPath(ctx, rule.Select, node)
 				if evalErr != nil {
 					err = evalErr
 				} else {
@@ -1307,7 +1307,7 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 
 // evaluateMergeSelect evaluates the select expression of a merge source
 // against a loaded document.
-func (ec *execContext) evaluateMergeSelect(_ context.Context, src *mergeSource, doc *helium.Document) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateMergeSelect(ctx context.Context, src *mergeSource, doc *helium.Document) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		return xpath3.ItemSlice{xpath3.NodeItem{Node: doc}}, nil
 	}
@@ -1324,7 +1324,7 @@ func (ec *execContext) evaluateMergeSelect(_ context.Context, src *mergeSource, 
 		ec.currentNode = savedCurrent
 	}()
 
-	result, err := ec.evalXPath(src.Select, doc) //nolint:contextcheck
+	result, err := ec.evalXPath(ctx, src.Select, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -1333,7 +1333,7 @@ func (ec *execContext) evaluateMergeSelect(_ context.Context, src *mergeSource, 
 
 // evaluateMergeSelectOnNode evaluates the select expression of a merge source
 // against a specific node (used with for-each-item).
-func (ec *execContext) evaluateMergeSelectOnNode(_ context.Context, src *mergeSource, node helium.Node) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *mergeSource, node helium.Node) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		if node != nil {
 			return xpath3.ItemSlice{xpath3.NodeItem{Node: node}}, nil
@@ -1355,7 +1355,7 @@ func (ec *execContext) evaluateMergeSelectOnNode(_ context.Context, src *mergeSo
 		ec.currentNode = savedCurrent
 	}()
 
-	result, err := ec.evalXPath(src.Select, node) //nolint:contextcheck
+	result, err := ec.evalXPath(ctx, src.Select, node)
 	if err != nil {
 		return nil, err
 	}
@@ -1365,7 +1365,7 @@ func (ec *execContext) evaluateMergeSelectOnNode(_ context.Context, src *mergeSo
 // evaluateMergeSelectOnItem evaluates the select expression for a merge source
 // with an atomic item as the context item (used with for-each-item when the
 // items are not nodes).
-func (ec *execContext) evaluateMergeSelectOnItem(_ context.Context, src *mergeSource, item xpath3.Item) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateMergeSelectOnItem(ctx context.Context, src *mergeSource, item xpath3.Item) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		return xpath3.ItemSlice{item}, nil
 	}
@@ -1376,7 +1376,7 @@ func (ec *execContext) evaluateMergeSelectOnItem(_ context.Context, src *mergeSo
 		ec.contextItem = savedItem
 	}()
 
-	result, err := ec.evalXPath(src.Select, nil) //nolint:contextcheck
+	result, err := ec.evalXPath(ctx, src.Select, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1421,7 +1421,7 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 			var seq xpath3.Sequence
 			if mk.Select != nil {
 				ec.evaluatingMergeKey = true
-				result, err := ec.evalXPath(mk.Select, node) //nolint:contextcheck
+				result, err := ec.evalXPath(ctx, mk.Select, node)
 				ec.evaluatingMergeKey = false
 				if err != nil {
 					return nil, err

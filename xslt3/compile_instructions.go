@@ -69,7 +69,7 @@ var xsltStandardAttrs = map[string]struct{}{
 // Standard attributes (use-when, expand-text, etc.) are always allowed per XSLT 3.0 §3.5.
 // In forwards-compatible mode (version > 3.0), unknown attributes are silently ignored
 // per XSLT 3.0 §3.8.
-func (c *compiler) validateXSLTAttrs(elem *helium.Element, allowed map[string]struct{}) error {
+func (c *compiler) validateXSLTAttrs(_ context.Context, elem *helium.Element, allowed map[string]struct{}) error {
 	fc := isForwardsCompatible(c.effectiveVersion)
 	if !fc {
 		// Also check the element's own version attribute
@@ -124,7 +124,7 @@ func validateValidationAttr(elemName, validation string) error {
 // checkTypeAttrSchemaAware verifies that the type attribute is only used when
 // the stylesheet has imported at least one schema, unless typeName resolves to
 // a built-in XSD type (xs: / xsd: namespace). Returns XTSE0215 otherwise.
-func (c *compiler) checkTypeAttrSchemaAware(elemName, typeName string) error {
+func (c *compiler) checkTypeAttrSchemaAware(_ context.Context, elemName, typeName string) error {
 	if isBuiltinXSDTypeName(typeName, c.nsBindings) {
 		// Built-in XSD types are always valid; mark schema-aware so
 		// type annotations are tracked at runtime.
@@ -163,20 +163,20 @@ func checkValidationTypeExclusive(elemName, validation, typeName string) error {
 }
 
 // compileInstruction compiles a single element into an instruction.
-func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error) {
-	if err := c.ctx.Err(); err != nil {
+func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element) (instruction, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
 	// Push element-local namespace declarations into scope
-	saved := c.pushElementNamespaces(elem)
+	saved := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = saved }()
 
 	// Evaluate use-when: on XSLT elements check "use-when" attribute,
 	// on LREs check "xsl:use-when" (in XSLT namespace).
 	if elem.URI() == lexicon.NamespaceXSLT {
 		if uw := getAttr(elem, "use-when"); uw != "" {
-			include, err := c.evaluateUseWhen(uw)
+			include, err := c.evaluateUseWhen(ctx, uw)
 			if err != nil {
 				return nil, err
 			}
@@ -186,7 +186,7 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 		}
 	} else {
 		if uw, ok := elem.GetAttributeNS("use-when", lexicon.NamespaceXSLT); ok {
-			include, err := c.evaluateUseWhen(uw)
+			include, err := c.evaluateUseWhen(ctx, uw)
 			if err != nil {
 				return nil, err
 			}
@@ -209,7 +209,7 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 	// Resolve shadow attributes: _foo="avt" → foo="evaluated value"
 	// Shadow attributes are evaluated at compile time using static params.
 	if elem.URI() == lexicon.NamespaceXSLT {
-		if err := c.resolveShadowAttributes(elem); err != nil {
+		if err := c.resolveShadowAttributes(ctx, elem); err != nil {
 			return nil, err
 		}
 	}
@@ -325,27 +325,27 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 	var inst instruction
 	var err error
 	if elem.URI() == lexicon.NamespaceXSLT {
-		inst, err = c.compileXSLTInstruction(elem)
+		inst, err = c.compileXSLTInstruction(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
 	} else if uri := elem.URI(); uri != "" && c.extensionURIs != nil {
 		if _, isExt := c.extensionURIs[uri]; isExt {
 			// Extension element: compile xsl:fallback children.
-			return c.compileForwardsCompat(elem)
+			return c.compileForwardsCompat(ctx, elem)
 		}
-		inst, err = c.compileLiteralResultElement(elem)
+		inst, err = c.compileLiteralResultElement(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		inst, err = c.compileLiteralResultElement(elem)
+		inst, err = c.compileLiteralResultElement(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
 	}
 	// Store effective xpath-default-namespace on instructions that support it
-	c.setInstructionXPathNS(inst, hasLocalXPNS)
+	c.setInstructionXPathNS(ctx, inst, hasLocalXPNS)
 	// Record source location for $err:line-number / $err:module in xsl:catch
 	if si, ok := inst.(interface{ setSourceInfo(int, string) }); ok {
 		module := ""
@@ -381,7 +381,7 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 
 // setInstructionXPathNS stores the current xpath-default-namespace on
 // instructions that embed xpathNS.
-func (c *compiler) setInstructionXPathNS(inst instruction, hasLocal bool) {
+func (c *compiler) setInstructionXPathNS(_ context.Context, inst instruction, hasLocal bool) {
 	set := func(ns *xpathNS) {
 		ns.XPathDefaultNS = c.xpathDefaultNS
 		// Mark as set when either explicitly declared locally or inherited non-empty
@@ -410,7 +410,7 @@ func (c *compiler) setInstructionXPathNS(inst instruction, hasLocal bool) {
 // on all descendant elements. This is used for elements like xsl:fallback whose
 // children are not compiled but whose use-when expressions must still be
 // syntactically valid per XSLT 3.0.
-func (c *compiler) validateDescendantUseWhen(parent *helium.Element) error {
+func (c *compiler) validateDescendantUseWhen(ctx context.Context, parent *helium.Element) error {
 	for child := range helium.Children(parent) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -424,11 +424,11 @@ func (c *compiler) validateDescendantUseWhen(parent *helium.Element) error {
 			uw, _ = childElem.GetAttributeNS("use-when", lexicon.NamespaceXSLT)
 		}
 		if uw != "" {
-			if _, err := c.evaluateUseWhen(uw); err != nil {
+			if _, err := c.evaluateUseWhen(ctx, uw); err != nil {
 				return err
 			}
 		}
-		if err := c.validateDescendantUseWhen(childElem); err != nil {
+		if err := c.validateDescendantUseWhen(ctx,childElem); err != nil {
 			return err
 		}
 	}
@@ -440,7 +440,7 @@ func (c *compiler) validateDescendantUseWhen(parent *helium.Element) error {
 // or (false, error) to propagate a compile-time error.
 // Provides XSLT static context functions: function-available, system-property,
 // type-available, element-available per XSLT 3.0 §3.14.
-func (c *compiler) evaluateUseWhen(expr string) (bool, error) {
+func (c *compiler) evaluateUseWhen(ctx context.Context, expr string) (bool, error) {
 	compiled, err := xpath3.NewCompiler().Compile(expr)
 	if err != nil {
 		// XPST0003: invalid XPath in use-when is a static error
@@ -448,9 +448,9 @@ func (c *compiler) evaluateUseWhen(expr string) (bool, error) {
 			"invalid XPath expression in use-when: %s: %v", expr, err)
 	}
 
-	eval := c.useWhenEvaluator()
+	eval := c.useWhenEvaluator(ctx)
 
-	result, err := eval.Evaluate(c.ctx, compiled, nil)
+	result, err := eval.Evaluate(ctx, compiled, nil)
 	if err != nil {
 		// Propagate all errors from use-when evaluation.
 		// XSLT 3.0 spec requires static errors (XPST0003, XPST0008,
@@ -616,7 +616,7 @@ func (c *compiler) useWhenElementAvailable(_ context.Context, args []xpath3.Sequ
 // pushElementNamespaces adds namespace declarations from elem to nsBindings
 // and to the stylesheet's runtime namespace map. Returns previous nsBindings
 // for restoring.
-func (c *compiler) pushElementNamespaces(elem *helium.Element) map[string]string {
+func (c *compiler) pushElementNamespaces(_ context.Context, elem *helium.Element) map[string]string {
 	nsList := elem.Namespaces()
 	if len(nsList) == 0 {
 		return c.nsBindings
@@ -644,32 +644,32 @@ func (c *compiler) pushElementNamespaces(elem *helium.Element) map[string]string
 }
 
 // compileXSLTInstruction compiles an XSLT-namespaced instruction element.
-func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, error) {
+func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Element) (instruction, error) {
 	switch elem.LocalName() {
 	case lexicon.XSLTElementApplyTemplates:
-		return c.compileApplyTemplates(elem)
+		return c.compileApplyTemplates(ctx, elem)
 	case lexicon.XSLTElementCallTemplate:
-		return c.compileCallTemplate(elem)
+		return c.compileCallTemplate(ctx, elem)
 	case lexicon.XSLTElementValueOf:
-		return c.compileValueOf(elem)
+		return c.compileValueOf(ctx, elem)
 	case lexicon.XSLTElementText:
-		return c.compileText(elem)
+		return c.compileText(ctx, elem)
 	case lexicon.XSLTElementElement:
-		return c.compileElement(elem)
+		return c.compileElement(ctx, elem)
 	case lexicon.XSLTElementAttribute:
-		return c.compileAttribute(elem)
+		return c.compileAttribute(ctx, elem)
 	case lexicon.XSLTElementComment:
-		return c.compileComment(elem)
+		return c.compileComment(ctx, elem)
 	case lexicon.XSLTElementProcessingInstruction:
-		return c.compilePI(elem)
+		return c.compilePI(ctx, elem)
 	case lexicon.XSLTElementIf:
-		return c.compileIf(elem)
+		return c.compileIf(ctx, elem)
 	case lexicon.XSLTElementChoose:
-		return c.compileChoose(elem)
+		return c.compileChoose(ctx, elem)
 	case lexicon.XSLTElementForEach:
-		return c.compileForEach(elem)
+		return c.compileForEach(ctx, elem)
 	case lexicon.XSLTElementVariable:
-		return c.compileLocalVariable(elem)
+		return c.compileLocalVariable(ctx, elem)
 	case lexicon.XSLTElementParam:
 		// XTSE0010: xsl:param is only allowed at the top of xsl:template,
 		// xsl:function, or xsl:iterate. If we reach here, it means
@@ -677,25 +677,25 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 		return nil, staticError(errCodeXTSE0010,
 			"xsl:param is not allowed in this position; it must appear at the start of xsl:template, xsl:function, or xsl:iterate")
 	case lexicon.XSLTElementCopy:
-		return c.compileCopy(elem)
+		return c.compileCopy(ctx, elem)
 	case lexicon.XSLTElementCopyOf:
-		return c.compileCopyOf(elem)
+		return c.compileCopyOf(ctx, elem)
 	case lexicon.XSLTElementNumber:
-		return c.compileNumber(elem)
+		return c.compileNumber(ctx, elem)
 	case lexicon.XSLTElementMessage:
-		return c.compileMessage(elem)
+		return c.compileMessage(ctx, elem)
 	case lexicon.XSLTElementNamespace:
-		return c.compileNamespace(elem)
+		return c.compileNamespace(ctx, elem)
 	case lexicon.XSLTElementSequence:
-		return c.compileSequence(elem)
+		return c.compileSequence(ctx, elem)
 	case lexicon.XSLTElementPerformSort:
-		return c.compilePerformSort(elem)
+		return c.compilePerformSort(ctx, elem)
 	case lexicon.XSLTElementNextMatch:
-		return c.compileNextMatch(elem)
+		return c.compileNextMatch(ctx, elem)
 	case lexicon.XSLTElementApplyImports:
-		return c.compileApplyImports(elem)
+		return c.compileApplyImports(ctx, elem)
 	case lexicon.XSLTElementDocument:
-		return c.compileDocument(elem)
+		return c.compileDocument(ctx, elem)
 	case lexicon.XSLTElementResultDocument:
 		inst := &resultDocumentInst{}
 		if href := getAttr(elem, "href"); href != "" {
@@ -822,7 +822,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 				// Static parameter-document: load at compile time
 				outDef := &OutputDef{}
 				baseURI := stylesheetBaseURI(elem, c.baseURI)
-				if err := c.loadParameterDocument(outDef, baseURI, pd); err != nil {
+				if err := c.loadParameterDocument(ctx, outDef, baseURI, pd); err != nil {
 					return nil, err
 				}
 				inst.ParameterDocOutputDef = outDef
@@ -846,7 +846,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 				inst.BuildTree = &b
 			}
 		}
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -855,7 +855,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 		return inst, nil
 	case lexicon.XSLTElementWherePopulated:
 		// xsl:where-populated: execute body and only include if non-empty
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -869,7 +869,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 			}
 			inst.Select = expr
 		} else {
-			body, err := c.compileChildren(elem)
+			body, err := c.compileChildren(ctx, elem)
 			if err != nil {
 				return nil, err
 			}
@@ -885,7 +885,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 			}
 			inst.Select = expr
 		} else {
-			body, err := c.compileChildren(elem)
+			body, err := c.compileChildren(ctx, elem)
 			if err != nil {
 				return nil, err
 			}
@@ -893,13 +893,13 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 		}
 		return inst, nil
 	case lexicon.XSLTElementTry:
-		return c.compileTry(elem)
+		return c.compileTry(ctx, elem)
 	case lexicon.XSLTElementForEachGroup:
-		return c.compileForEachGroup(elem)
+		return c.compileForEachGroup(ctx, elem)
 	case lexicon.XSLTElementMap:
-		return c.compileMap(elem)
+		return c.compileMap(ctx, elem)
 	case lexicon.XSLTElementMapEntry:
-		return c.compileMapEntry(elem)
+		return c.compileMapEntry(ctx, elem)
 	case lexicon.XSLTElementSort:
 		// XTSE0010: xsl:sort is only allowed as a child of xsl:apply-templates,
 		// xsl:for-each, xsl:for-each-group, or xsl:perform-sort.
@@ -912,7 +912,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 		// when we reach here the parent was recognized, so skip.
 		// But we still need to validate use-when XPath on descendant elements
 		// since use-when is evaluated during static analysis (XPST0003).
-		if err := c.validateDescendantUseWhen(elem); err != nil {
+		if err := c.validateDescendantUseWhen(ctx,elem); err != nil {
 			return nil, err
 		}
 		return nil, nil //nolint:nilnil
@@ -921,23 +921,23 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 		// Currently a no-op — validation happens at the mode level.
 		return nil, nil //nolint:nilnil
 	case lexicon.XSLTElementAssert:
-		return c.compileAssert(elem)
+		return c.compileAssert(ctx, elem)
 	case lexicon.XSLTElementAnalyzeString:
-		return c.compileAnalyzeString(elem)
+		return c.compileAnalyzeString(ctx, elem)
 	case lexicon.XSLTElementEvaluate:
-		return c.compileEvaluate(elem)
+		return c.compileEvaluate(ctx, elem)
 	case lexicon.XSLTElementSourceDocument:
-		return c.compileSourceDocument(elem)
+		return c.compileSourceDocument(ctx, elem)
 	case lexicon.XSLTElementIterate:
-		return c.compileIterate(elem)
+		return c.compileIterate(ctx, elem)
 	case lexicon.XSLTElementFork:
-		return c.compileFork(elem)
+		return c.compileFork(ctx, elem)
 	case lexicon.XSLTElementBreak:
-		return c.compileBreak(elem)
+		return c.compileBreak(ctx, elem)
 	case lexicon.XSLTElementNextIteration:
-		return c.compileNextIteration(elem)
+		return c.compileNextIteration(ctx, elem)
 	case lexicon.XSLTElementMerge:
-		return c.compileMerge(elem)
+		return c.compileMerge(ctx, elem)
 	case lexicon.XSLTElementMergeSource:
 		// xsl:merge-source must be a direct child of xsl:merge
 		return nil, staticError(errCodeXTSE0010, "xsl:merge-source must be a direct child of xsl:merge")
@@ -956,7 +956,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 		// version > 3.0, unknown instructions are allowed and
 		// xsl:fallback children are used at runtime.
 		if c.effectiveVersion > "3.0" {
-			return c.compileForwardsCompat(elem)
+			return c.compileForwardsCompat(ctx, elem)
 		}
 		return nil, staticError(errCodeXTSE0090, "unknown XSLT instruction xsl:%s", elem.LocalName())
 	}
@@ -966,7 +966,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 // forwards-compatible processing rules (XSLT 3.0 §3.8).
 // It collects xsl:fallback children as the body. At runtime, if the body
 // is empty, XTDE1450 is raised.
-func (c *compiler) compileForwardsCompat(elem *helium.Element) (*fallbackInst, error) {
+func (c *compiler) compileForwardsCompat(ctx context.Context, elem *helium.Element) (*fallbackInst, error) {
 	inst := &fallbackInst{
 		Name: "xsl:" + elem.LocalName(),
 	}
@@ -977,7 +977,7 @@ func (c *compiler) compileForwardsCompat(elem *helium.Element) (*fallbackInst, e
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementFallback {
 			inst.HasFallback = true
-			body, err := c.compileChildren(childElem)
+			body, err := c.compileChildren(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -988,8 +988,8 @@ func (c *compiler) compileForwardsCompat(elem *helium.Element) (*fallbackInst, e
 }
 
 // compileChildren compiles all children of an element into instructions.
-func (c *compiler) compileChildren(parent *helium.Element) ([]instruction, error) {
-	if err := c.ctx.Err(); err != nil {
+func (c *compiler) compileChildren(ctx context.Context, parent *helium.Element) ([]instruction, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
@@ -999,7 +999,7 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]instruction, error
 	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
 		switch v := child.(type) {
 		case *helium.Element:
-			inst, err := c.compileInstruction(v)
+			inst, err := c.compileInstruction(ctx, v)
 			if err != nil {
 				return nil, err
 			}
@@ -1042,7 +1042,7 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]instruction, error
 				}
 				break
 			}
-			if !c.shouldStripText(text) {
+			if !c.shouldStripText(ctx, text) {
 				if sawTerminator {
 					return nil, staticError(errCodeXTSE3120, "no instruction may follow xsl:break or xsl:next-iteration")
 				}
@@ -1064,14 +1064,14 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]instruction, error
 	return body, nil
 }
 
-func (c *compiler) compileLocalVariable(elem *helium.Element) (*variableInst, error) {
+func (c *compiler) compileLocalVariable(ctx context.Context, elem *helium.Element) (*variableInst, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
 	}
 
-	asAttr := c.resolveAsType(getAttr(elem, "as"))
-	if err := c.validateAsSequenceType(asAttr, "xsl:variable "+name); err != nil {
+	asAttr := c.resolveAsType(ctx, getAttr(elem, "as"))
+	if err := c.validateAsSequenceType(ctx, asAttr, "xsl:variable "+name); err != nil {
 		return nil, err
 	}
 
@@ -1089,7 +1089,7 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*variableInst, er
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		// XTSE0620: select and non-empty content are mutually exclusive.
-		if err := c.validateEmptyElement(elem, "xsl:variable"); err != nil {
+		if err := c.validateEmptyElement(ctx, elem, "xsl:variable"); err != nil {
 			return nil, staticError(errCodeXTSE0620, "xsl:variable %q has both @select and content", name)
 		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -1098,7 +1098,7 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*variableInst, er
 		}
 		inst.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -1108,7 +1108,7 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*variableInst, er
 	return inst, nil
 }
 
-func (c *compiler) compileMessage(elem *helium.Element) (*messageInst, error) {
+func (c *compiler) compileMessage(ctx context.Context, elem *helium.Element) (*messageInst, error) {
 	inst := &messageInst{}
 
 	selectAttr := getAttr(elem, "select")
@@ -1120,7 +1120,7 @@ func (c *compiler) compileMessage(elem *helium.Element) (*messageInst, error) {
 		inst.Select = expr
 	}
 	// XSLT 3.0: both select and body content are allowed
-	body, err := c.compileChildren(elem)
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
@@ -1153,15 +1153,15 @@ func (c *compiler) compileMessage(elem *helium.Element) (*messageInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileMap(elem *helium.Element) (*mapInst, error) {
-	body, err := c.compileChildren(elem)
+func (c *compiler) compileMap(ctx context.Context, elem *helium.Element) (*mapInst, error) {
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
 	return &mapInst{Body: body}, nil
 }
 
-func (c *compiler) compileMapEntry(elem *helium.Element) (*mapEntryInst, error) {
+func (c *compiler) compileMapEntry(ctx context.Context, elem *helium.Element) (*mapEntryInst, error) {
 	inst := &mapEntryInst{}
 
 	keyAttr := getAttr(elem, "key")
@@ -1187,7 +1187,7 @@ func (c *compiler) compileMapEntry(elem *helium.Element) (*mapEntryInst, error) 
 		}
 		inst.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -1201,7 +1201,7 @@ func (c *compiler) compileMapEntry(elem *helium.Element) (*mapEntryInst, error) 
 // Required attribute: test.
 // Optional attributes: select, error-code.
 // The body provides the error message if no select attribute is present.
-func (c *compiler) compileAssert(elem *helium.Element) (instruction, error) {
+func (c *compiler) compileAssert(ctx context.Context, elem *helium.Element) (instruction, error) {
 	testAttr := getAttr(elem, "test")
 	if testAttr == "" {
 		return nil, staticError(errCodeXTSE0010, "xsl:assert requires a test attribute")
@@ -1238,7 +1238,7 @@ func (c *compiler) compileAssert(elem *helium.Element) (instruction, error) {
 	}
 
 	// Compile body (error message content)
-	body, err := c.compileChildren(elem)
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}

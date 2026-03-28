@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"strings"
 )
 
@@ -11,7 +12,7 @@ const CatalogBreak = "\x00CATAL_BREAK"
 
 // Resolve resolves an external identifier (pubID and/or sysID) to a URI.
 // Returns the resolved URI or "" if not found.
-func (c *Catalog) Resolve(pubID, sysID string) string {
+func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 	if c == nil {
 		return ""
 	}
@@ -35,22 +36,22 @@ func (c *Catalog) Resolve(pubID, sysID string) string {
 	// Unwrap URNs.
 	if pubID != "" {
 		if urnPub := UnwrapURN(pubID); urnPub != "" {
-			return c.Resolve(urnPub, sysID)
+			return c.Resolve(ctx, urnPub, sysID)
 		}
 	}
 	if sysID != "" {
 		if urnSys := UnwrapURN(sysID); urnSys != "" {
 			if pubID == "" {
-				return c.Resolve(urnSys, "")
+				return c.Resolve(ctx, urnSys, "")
 			}
 			if pubID == urnSys {
-				return c.Resolve(pubID, "")
+				return c.Resolve(ctx, pubID, "")
 			}
-			return c.Resolve(pubID, urnSys)
+			return c.Resolve(ctx, pubID, urnSys)
 		}
 	}
 
-	ret := c.resolve(pubID, sysID)
+	ret := c.resolve(ctx, pubID, sysID)
 	if ret == CatalogBreak {
 		return ""
 	}
@@ -59,7 +60,7 @@ func (c *Catalog) Resolve(pubID, sysID string) string {
 
 // ResolveURI resolves a URI reference.
 // Returns the resolved URI or "" if not found.
-func (c *Catalog) ResolveURI(uri string) string {
+func (c *Catalog) ResolveURI(ctx context.Context, uri string) string {
 	if c == nil || uri == "" {
 		return ""
 	}
@@ -74,10 +75,10 @@ func (c *Catalog) ResolveURI(uri string) string {
 	// Unwrap urn:publicid: URNs and delegate to Resolve as a public ID,
 	// matching libxml2's xmlCatalogListXMLResolveURI behavior.
 	if pubID := UnwrapURN(uri); pubID != "" {
-		return c.Resolve(pubID, "")
+		return c.Resolve(ctx, pubID, "")
 	}
 
-	ret := c.resolveURI(uri)
+	ret := c.resolveURI(ctx, uri)
 	if ret == CatalogBreak {
 		return ""
 	}
@@ -87,7 +88,7 @@ func (c *Catalog) ResolveURI(uri string) string {
 // resolve implements the core resolution algorithm from libxml2's
 // xmlCatalogXMLResolve. Returns "" if not found or CatalogBreak to
 // signal cut.
-func (c *Catalog) resolve(pubID, sysID string) string {
+func (c *Catalog) resolve(ctx context.Context, pubID, sysID string) string {
 	if c.Depth > MaxDepth {
 		return ""
 	}
@@ -128,7 +129,7 @@ func (c *Catalog) resolve(pubID, sysID string) string {
 		}
 
 		if haveDelegate > 0 {
-			ret := c.resolveDelegateSystem(sysID)
+			ret := c.resolveDelegateSystem(ctx, sysID)
 			if ret != "" {
 				return ret
 			}
@@ -159,7 +160,7 @@ func (c *Catalog) resolve(pubID, sysID string) string {
 		}
 
 		if haveDelegate > 0 {
-			ret := c.resolveDelegatePublic(pubID)
+			ret := c.resolveDelegatePublic(ctx, pubID)
 			if ret != "" {
 				return ret
 			}
@@ -169,14 +170,14 @@ func (c *Catalog) resolve(pubID, sysID string) string {
 
 	// nextCatalog fallback.
 	if haveNext > 0 {
-		return c.resolveNextCatalogs(pubID, sysID)
+		return c.resolveNextCatalogs(ctx, pubID, sysID)
 	}
 
 	return ""
 }
 
 // resolveURI implements URI resolution from libxml2's xmlCatalogXMLResolveURI.
-func (c *Catalog) resolveURI(uri string) string {
+func (c *Catalog) resolveURI(ctx context.Context, uri string) string {
 	if c.Depth > MaxDepth {
 		return ""
 	}
@@ -215,7 +216,7 @@ func (c *Catalog) resolveURI(uri string) string {
 	}
 
 	if haveDelegate > 0 {
-		ret := c.resolveDelegateURI(uri)
+		ret := c.resolveDelegateURI(ctx, uri)
 		if ret != "" {
 			return ret
 		}
@@ -223,14 +224,14 @@ func (c *Catalog) resolveURI(uri string) string {
 	}
 
 	if haveNext > 0 {
-		return c.resolveNextCatalogsURI(uri)
+		return c.resolveNextCatalogsURI(ctx, uri)
 	}
 
 	return ""
 }
 
 // resolveDelegateSystem tries all matching delegateSystem entries.
-func (c *Catalog) resolveDelegateSystem(sysID string) string {
+func (c *Catalog) resolveDelegateSystem(ctx context.Context, sysID string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
 	for i := range c.Entries {
@@ -248,14 +249,14 @@ func (c *Catalog) resolveDelegateSystem(sysID string) string {
 			seen[e.URL] = struct{}{}
 		}
 
-		if err := c.lazyLoad(e); err != nil {
+		if err := c.lazyLoad(ctx, e); err != nil {
 			continue
 		}
 		if c.checkVisited(e.URL, "", sysID) {
 			continue
 		}
 		// Delegate with sysID only (pubID=nil per libxml2).
-		ret := e.Catalog.resolve("", sysID)
+		ret := e.Catalog.resolve(ctx, "", sysID)
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
@@ -264,7 +265,7 @@ func (c *Catalog) resolveDelegateSystem(sysID string) string {
 }
 
 // resolveDelegatePublic tries all matching delegatePublic entries.
-func (c *Catalog) resolveDelegatePublic(pubID string) string {
+func (c *Catalog) resolveDelegatePublic(ctx context.Context, pubID string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
 	for i := range c.Entries {
@@ -285,14 +286,14 @@ func (c *Catalog) resolveDelegatePublic(pubID string) string {
 			seen[e.URL] = struct{}{}
 		}
 
-		if err := c.lazyLoad(e); err != nil {
+		if err := c.lazyLoad(ctx, e); err != nil {
 			continue
 		}
 		if c.checkVisited(e.URL, pubID, "") {
 			continue
 		}
 		// Delegate with pubID only (sysID=nil per libxml2).
-		ret := e.Catalog.resolve(pubID, "")
+		ret := e.Catalog.resolve(ctx, pubID, "")
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
@@ -301,7 +302,7 @@ func (c *Catalog) resolveDelegatePublic(pubID string) string {
 }
 
 // resolveDelegateURI tries all matching delegateURI and delegateSystem entries.
-func (c *Catalog) resolveDelegateURI(uri string) string {
+func (c *Catalog) resolveDelegateURI(ctx context.Context, uri string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
 	for i := range c.Entries {
@@ -319,13 +320,13 @@ func (c *Catalog) resolveDelegateURI(uri string) string {
 			seen[e.URL] = struct{}{}
 		}
 
-		if err := c.lazyLoad(e); err != nil {
+		if err := c.lazyLoad(ctx, e); err != nil {
 			continue
 		}
 		if c.checkVisited(e.URL, uri, "") {
 			continue
 		}
-		ret := e.Catalog.resolveURI(uri)
+		ret := e.Catalog.resolveURI(ctx, uri)
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
@@ -334,19 +335,19 @@ func (c *Catalog) resolveDelegateURI(uri string) string {
 }
 
 // resolveNextCatalogs tries all nextCatalog entries for Resolve.
-func (c *Catalog) resolveNextCatalogs(pubID, sysID string) string {
+func (c *Catalog) resolveNextCatalogs(ctx context.Context, pubID, sysID string) string {
 	for i := range c.Entries {
 		e := &c.Entries[i]
 		if e.Type != EntryNextCatalog {
 			continue
 		}
-		if err := c.lazyLoad(e); err != nil {
+		if err := c.lazyLoad(ctx, e); err != nil {
 			continue
 		}
 		if c.checkVisited(e.URL, pubID, sysID) {
 			continue
 		}
-		ret := e.Catalog.resolve(pubID, sysID)
+		ret := e.Catalog.resolve(ctx, pubID, sysID)
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
@@ -358,19 +359,19 @@ func (c *Catalog) resolveNextCatalogs(pubID, sysID string) string {
 }
 
 // resolveNextCatalogsURI tries all nextCatalog entries for ResolveURI.
-func (c *Catalog) resolveNextCatalogsURI(uri string) string {
+func (c *Catalog) resolveNextCatalogsURI(ctx context.Context, uri string) string {
 	for i := range c.Entries {
 		e := &c.Entries[i]
 		if e.Type != EntryNextCatalog {
 			continue
 		}
-		if err := c.lazyLoad(e); err != nil {
+		if err := c.lazyLoad(ctx, e); err != nil {
 			continue
 		}
 		if c.checkVisited(e.URL, uri, "") {
 			continue
 		}
-		ret := e.Catalog.resolveURI(uri)
+		ret := e.Catalog.resolveURI(ctx, uri)
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
@@ -399,7 +400,7 @@ func (c *Catalog) checkVisited(url, id1, id2 string) bool {
 // lazyLoad loads the catalog file for a delegate or nextCatalog entry
 // on first access via the Loader. The loaded catalog shares the parent's
 // depth counter and visited cache for recursion detection.
-func (c *Catalog) lazyLoad(e *Entry) error {
+func (c *Catalog) lazyLoad(ctx context.Context, e *Entry) error {
 	if e.Catalog != nil {
 		// Already loaded — share depth and visited cache.
 		e.Catalog.Depth = c.Depth
@@ -409,7 +410,7 @@ func (c *Catalog) lazyLoad(e *Entry) error {
 	if c.Loader == nil {
 		return nil
 	}
-	cat, err := c.Loader.Load(e.URL)
+	cat, err := c.Loader.Load(ctx, e.URL)
 	if err != nil {
 		return err
 	}

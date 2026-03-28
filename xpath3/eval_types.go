@@ -11,15 +11,15 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
-func evalInstanceOfExpr(evalFn exprEvaluator, ec *evalContext, e InstanceOfExpr) (Sequence, error) {
-	seq, err := evalFn(ec, e.Expr)
+func evalInstanceOfExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e InstanceOfExpr) (Sequence, error) {
+	seq, err := evalFn(goCtx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
 	return SingleBoolean(matchesSequenceType(seq, e.Type, ec)), nil
 }
 
-func evalCastExpr(evalFn exprEvaluator, ec *evalContext, e CastExpr) (Sequence, error) {
+func evalCastExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e CastExpr) (Sequence, error) {
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	if isAbstractCastTarget(targetType) {
 		return nil, &XPathError{
@@ -27,7 +27,7 @@ func evalCastExpr(evalFn exprEvaluator, ec *evalContext, e CastExpr) (Sequence, 
 			Message: fmt.Sprintf("cannot use abstract type %s as cast target", targetType),
 		}
 	}
-	seq, err := evalFn(ec, e.Expr)
+	seq, err := evalFn(goCtx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func evalCastExpr(evalFn exprEvaluator, ec *evalContext, e CastExpr) (Sequence, 
 	return SingleAtomic(result), nil
 }
 
-func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Sequence, error) {
+func evalCastableExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e CastableExpr) (Sequence, error) {
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	// Abstract types raise a static error even for castable (XPST0080)
 	if isAbstractCastTarget(targetType) {
@@ -109,7 +109,7 @@ func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Se
 			Message: fmt.Sprintf("cannot use abstract type %s as castable target", targetType),
 		}
 	}
-	seq, err := evalFn(ec, e.Expr)
+	seq, err := evalFn(goCtx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -208,8 +208,8 @@ func isValidListCastable(s string, listType string) bool {
 	return true
 }
 
-func evalTreatAsExpr(evalFn exprEvaluator, ec *evalContext, e TreatAsExpr) (Sequence, error) {
-	seq, err := evalFn(ec, e.Expr)
+func evalTreatAsExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e TreatAsExpr) (Sequence, error) {
+	seq, err := evalFn(goCtx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}

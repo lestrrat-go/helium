@@ -306,13 +306,13 @@ func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.N
 		return nil, err
 	}
 
-	ec := e.newEvalCtx(ctx, node)
+	ec := e.newEvalCtx(node)
 
 	if err := expr.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
 		return nil, err
 	}
 
-	seq, err := expr.evaluate(ec)
+	seq, err := expr.evaluate(ctx, ec)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +320,7 @@ func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.N
 }
 
 // newEvalCtx creates the internal evaluation context from the Evaluator config.
-func (e Evaluator) newEvalCtx(ctx context.Context, node helium.Node) *evalContext {
+func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	opCount := 0
 	now := time.Now()
 
@@ -330,7 +330,6 @@ func (e Evaluator) newEvalCtx(ctx context.Context, node helium.Node) *evalContex
 	}
 
 	ec := &evalContext{
-		goCtx:    ctx,
 		node:     node,
 		position: 1,
 		size:     1,

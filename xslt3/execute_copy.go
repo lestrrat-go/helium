@@ -39,7 +39,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 
 	if inst.Select != nil {
 		// XSLT 3.0: xsl:copy with select — iterate over selected items
-		result, err := ec.evalXPath(inst.Select, contextNode) //nolint:contextcheck
+		result, err := ec.evalXPath(ctx, inst.Select, contextNode)
 		if err != nil {
 			return err
 		}
@@ -450,7 +450,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 }
 
 func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
-	result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
+	result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -12,7 +13,7 @@ func Example_shim_decoder_token() {
 	// Decoder.Token() reads individual XML tokens with namespace
 	// resolution, similar to encoding/xml.Decoder.Token().
 	input := `<root><child>text</child></root>`
-	dec := shim.NewDecoder(strings.NewReader(input))
+	dec := shim.NewDecoder(context.Background(), strings.NewReader(input))
 
 	for {
 		tok, err := dec.Token()

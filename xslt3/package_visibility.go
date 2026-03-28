@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -301,7 +302,7 @@ func applyAcceptRules(compType, compName string, rules []acceptRule, defaultVis 
 
 // processExpose processes xsl:expose children of xsl:package to set component
 // visibility. This is called during package compilation.
-func (c *compiler) processExpose(root *helium.Element) error {
+func (c *compiler) processExpose(ctx context.Context, root *helium.Element) error {
 	if !c.stylesheet.isPackage {
 		return nil
 	}
@@ -407,7 +408,7 @@ func (c *compiler) processExpose(root *helium.Element) error {
 		if !ok || elem.URI() != lexicon.NamespaceXSLT || elem.LocalName() != xslElemExpose {
 			continue
 		}
-		if err := c.compileExpose(elem); err != nil {
+		if err := c.compileExpose(ctx, elem); err != nil {
 			return err
 		}
 	}
@@ -441,7 +442,7 @@ func (c *compiler) processExpose(root *helium.Element) error {
 }
 
 // compileExpose processes a single xsl:expose element.
-func (c *compiler) compileExpose(elem *helium.Element) error {
+func (c *compiler) compileExpose(ctx context.Context, elem *helium.Element) error {
 	component := getAttr(elem, xslAttrComponent)
 	names := getAttr(elem, xslAttrNames)
 	visibility := getAttr(elem, xslAttrVisibility)
@@ -468,14 +469,14 @@ func (c *compiler) compileExpose(elem *helium.Element) error {
 	}
 
 	// Collect namespace bindings from the element's context
-	nsBindings := c.collectElemNamespaces(elem)
+	nsBindings := c.collectElemNamespaces(ctx, elem)
 
 	for _, name := range strings.Fields(names) {
 		resolvedName := resolveComponentName(name, nsBindings, elem)
 
 		switch component {
 		case xslElemTemplate:
-			if err := c.applyExposeToTemplates(resolvedName, visibility, false); err != nil {
+			if err := c.applyExposeToTemplates(ctx, resolvedName, visibility, false); err != nil {
 				return err
 			}
 		case xslElemFunction:
@@ -485,19 +486,19 @@ func (c *compiler) compileExpose(elem *helium.Element) error {
 				return staticError(errCodeXTSE3020,
 					"xsl:expose: function name %q must include arity (e.g. %s#0)", name, name)
 			}
-			if err := c.applyExposeToFunctionsStrict(resolvedName, visibility); err != nil {
+			if err := c.applyExposeToFunctionsStrict(ctx, resolvedName, visibility); err != nil {
 				return err
 			}
 		case xslElemVariable:
-			if err := c.applyExposeToVariablesStrict(resolvedName, visibility); err != nil {
+			if err := c.applyExposeToVariablesStrict(ctx, resolvedName, visibility); err != nil {
 				return err
 			}
 		case xslElemAttributeSet:
-			if err := c.applyExposeToAttrSets(resolvedName, visibility, true); err != nil {
+			if err := c.applyExposeToAttrSets(ctx, resolvedName, visibility, true); err != nil {
 				return err
 			}
 		case xslElemMode:
-			if err := c.applyExposeToModes(resolvedName, visibility, true); err != nil {
+			if err := c.applyExposeToModes(ctx, resolvedName, visibility, true); err != nil {
 				return err
 			}
 		case xslWildcard:
@@ -506,11 +507,11 @@ func (c *compiler) compileExpose(elem *helium.Element) error {
 			// in one component type but not others. But propagate XTSE3025
 			// (abstract on non-abstract) which applies regardless.
 			for _, fn := range []func() error{
-				func() error { return c.applyExposeToTemplates(resolvedName, visibility, true) },
-				func() error { return c.applyExposeToFunctions(resolvedName, visibility) },
-				func() error { return c.applyExposeToVariables(resolvedName, visibility) },
-				func() error { return c.applyExposeToAttrSets(resolvedName, visibility, false) },
-				func() error { return c.applyExposeToModes(resolvedName, visibility, false) },
+				func() error { return c.applyExposeToTemplates(ctx, resolvedName, visibility, true) },
+				func() error { return c.applyExposeToFunctions(ctx, resolvedName, visibility) },
+				func() error { return c.applyExposeToVariables(ctx, resolvedName, visibility) },
+				func() error { return c.applyExposeToAttrSets(ctx, resolvedName, visibility, false) },
+				func() error { return c.applyExposeToModes(ctx, resolvedName, visibility, false) },
 			} {
 				if err := fn(); err != nil {
 					if xErr, ok := err.(*XSLTError); ok && xErr.Code == errCodeXTSE3025 {
@@ -525,7 +526,7 @@ func (c *compiler) compileExpose(elem *helium.Element) error {
 }
 
 // collectElemNamespaces gathers namespace bindings from an element and its ancestors.
-func (c *compiler) collectElemNamespaces(elem *helium.Element) map[string]string {
+func (c *compiler) collectElemNamespaces(ctx context.Context, elem *helium.Element) map[string]string {
 	bindings := make(map[string]string)
 	for k, v := range c.nsBindings {
 		bindings[k] = v
@@ -542,7 +543,7 @@ func (c *compiler) collectElemNamespaces(elem *helium.Element) map[string]string
 	return bindings
 }
 
-func (c *compiler) applyExposeToTemplates(pattern, visibility string, isWildcardComponent bool) error {
+func (c *compiler) applyExposeToTemplates(ctx context.Context, pattern, visibility string, isWildcardComponent bool) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.templateVisibility {
@@ -577,7 +578,7 @@ func (c *compiler) applyExposeToTemplates(pattern, visibility string, isWildcard
 	return nil
 }
 
-func (c *compiler) applyExposeToFunctions(pattern, visibility string) error {
+func (c *compiler) applyExposeToFunctions(ctx context.Context, pattern, visibility string) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for key := range c.stylesheet.functionVisibility {
@@ -609,7 +610,7 @@ func (c *compiler) applyExposeToFunctions(pattern, visibility string) error {
 // applyExposeToFunctionsStrict is like applyExposeToFunctions but reports
 // XTSE3010 when a non-wildcard pattern has no match. Used when the expose
 // element has component="function" (not component="*").
-func (c *compiler) applyExposeToFunctionsStrict(pattern, visibility string) error {
+func (c *compiler) applyExposeToFunctionsStrict(ctx context.Context, pattern, visibility string) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for key := range c.stylesheet.functionVisibility {
@@ -640,7 +641,7 @@ func (c *compiler) applyExposeToFunctionsStrict(pattern, visibility string) erro
 	return nil
 }
 
-func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
+func (c *compiler) applyExposeToVariables(ctx context.Context, pattern, visibility string) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.variableVisibility {
@@ -699,7 +700,7 @@ func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
 
 // applyExposeToVariablesStrict is like applyExposeToVariables but reports
 // XTSE3010 when a non-wildcard pattern has no match.
-func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) error {
+func (c *compiler) applyExposeToVariablesStrict(ctx context.Context, pattern, visibility string) error {
 	varMatched := false
 	paramMatched := false
 	isWild := isWildcard(pattern)
@@ -767,7 +768,7 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 	return nil
 }
 
-func (c *compiler) applyExposeToAttrSets(pattern, visibility string, strict bool) error {
+func (c *compiler) applyExposeToAttrSets(ctx context.Context, pattern, visibility string, strict bool) error {
 	matched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.attrSetVisibility {
@@ -801,7 +802,7 @@ func (c *compiler) applyExposeToAttrSets(pattern, visibility string, strict bool
 	return nil
 }
 
-func (c *compiler) applyExposeToModes(pattern, visibility string, strict bool) error {
+func (c *compiler) applyExposeToModes(ctx context.Context, pattern, visibility string, strict bool) error {
 	if c.stylesheet.modeDefs == nil {
 		c.stylesheet.modeDefs = make(map[string]*modeDef)
 	}
@@ -878,7 +879,7 @@ func functionVisKey(qn xpath3.QualifiedName, arity int) string {
 
 // collectOverrideNames scans xsl:override children of xsl:use-package and returns
 // a set of "type:name" keys for components being overridden.
-func (c *compiler) collectOverrideNames(usePackageElem *helium.Element, nsBindings map[string]string) map[string]struct{} {
+func (c *compiler) collectOverrideNames(ctx context.Context, usePackageElem *helium.Element, nsBindings map[string]string) map[string]struct{} {
 	names := make(map[string]struct{})
 	for child := range helium.Children(usePackageElem) {
 		elem, ok := child.(*helium.Element)

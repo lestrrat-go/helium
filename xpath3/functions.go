@@ -93,13 +93,13 @@ var builtinFunctions3 = map[QualifiedName]Function{}
 //  2. User-registered functions by QualifiedName (ec.fnsNS)
 //  3. Built-in functions by QualifiedName (builtinFunctions3)
 //  4. Default fn: namespace (no prefix = fn:)
-func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function, error) {
+func resolveFunction(goCtx context.Context, ec *evalContext, prefix, name string, arity int) (Function, error) {
 	// Handle Q{uri}local URIQualifiedName syntax from the lexer
 	if prefix == "" && strings.HasPrefix(name, "Q{") {
 		if idx := strings.Index(name, "}"); idx >= 0 {
 			uri := name[2:idx]
 			local := name[idx+1:]
-			return resolveFunctionByURI(ec, uri, local, arity)
+			return resolveFunctionByURI(goCtx, ec, uri, local, arity)
 		}
 	}
 
@@ -119,10 +119,10 @@ func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function,
 		return nil, err
 	}
 
-	return resolveFunctionByURI(ec, uri, name, arity)
+	return resolveFunctionByURI(goCtx, ec, uri, name, arity)
 }
 
-func resolveFunctionByURI(ec *evalContext, uri, name string, arity int) (Function, error) {
+func resolveFunctionByURI(goCtx context.Context, ec *evalContext, uri, name string, arity int) (Function, error) {
 	// User functions by qualified name
 	if ec.fnsNS != nil {
 		qn := QualifiedName{URI: uri, Name: name}
@@ -145,7 +145,7 @@ func resolveFunctionByURI(ec *evalContext, uri, name string, arity int) (Functio
 
 	// Check function resolver (not visible to function-lookup)
 	if ec.functionResolver != nil {
-		if fn, ok, err := ec.functionResolver.ResolveFunction(ec.goCtx, uri, name, arity); err != nil {
+		if fn, ok, err := ec.functionResolver.ResolveFunction(goCtx, uri, name, arity); err != nil {
 			return nil, err
 		} else if ok {
 			return fn, nil

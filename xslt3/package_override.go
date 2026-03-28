@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -22,7 +23,7 @@ type overrideSet struct {
 // processOverrides handles xsl:override children of xsl:use-package.
 // It compiles the override children in the context of the package components,
 // validates they match existing package components, and returns the override set.
-func (c *compiler) processOverrides(usePackageElem *helium.Element, pkg *Stylesheet) (*overrideSet, error) {
+func (c *compiler) processOverrides(ctx context.Context, usePackageElem *helium.Element, pkg *Stylesheet) (*overrideSet, error) {
 	oset := &overrideSet{
 		functions:      make(map[funcKey]*xslFunction),
 		namedTemplates: make(map[string]*template),
@@ -37,7 +38,7 @@ func (c *compiler) processOverrides(usePackageElem *helium.Element, pkg *Stylesh
 			continue
 		}
 
-		if err := c.compileOverrideChildren(elem, pkg, oset); err != nil {
+		if err := c.compileOverrideChildren(ctx, elem, pkg, oset); err != nil {
 			return nil, err
 		}
 	}
@@ -46,14 +47,14 @@ func (c *compiler) processOverrides(usePackageElem *helium.Element, pkg *Stylesh
 }
 
 // compileOverrideChildren compiles children of an xsl:override element.
-func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *Stylesheet, oset *overrideSet) error {
+func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *helium.Element, pkg *Stylesheet, oset *overrideSet) error {
 	// Push namespace bindings from override element
-	c.collectNamespaces(overrideElem)
+	c.collectNamespaces(ctx, overrideElem)
 
 	// Handle default-mode on xsl:override
 	savedDefaultMode := c.defaultMode
 	if dm := getAttr(overrideElem, "default-mode"); dm != "" {
-		c.defaultMode = c.resolveMode(dm)
+		c.defaultMode = c.resolveMode(ctx, dm)
 	}
 	defer func() { c.defaultMode = savedDefaultMode }()
 
@@ -75,7 +76,7 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 
 		switch elem.LocalName() {
 		case xslElemFunction:
-			fn, qn, err := c.compileOverrideFunction(elem, pkg)
+			fn, qn, err := c.compileOverrideFunction(ctx, elem, pkg)
 			if err != nil {
 				return err
 			}
@@ -88,7 +89,7 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 			oset.functions[fk] = fn
 
 		case xslElemTemplate:
-			tmpl, err := c.compileOverrideTemplate(elem, pkg)
+			tmpl, err := c.compileOverrideTemplate(ctx, elem, pkg)
 			if err != nil {
 				return err
 			}
@@ -100,21 +101,21 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 			}
 
 		case xslElemVariable:
-			v, err := c.compileOverrideVariable(elem, pkg)
+			v, err := c.compileOverrideVariable(ctx, elem, pkg)
 			if err != nil {
 				return err
 			}
 			oset.variables[v.Name] = v
 
 		case xslElemParam:
-			p, err := c.compileOverrideParam(elem, pkg)
+			p, err := c.compileOverrideParam(ctx, elem, pkg)
 			if err != nil {
 				return err
 			}
 			oset.params[p.Name] = p
 
 		case xslElemAttributeSet:
-			as, err := c.compileOverrideAttributeSet(elem, pkg)
+			as, err := c.compileOverrideAttributeSet(ctx, elem, pkg)
 			if err != nil {
 				return err
 			}
@@ -131,13 +132,13 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 }
 
 // compileOverrideFunction compiles a function inside xsl:override.
-func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet) (*xslFunction, xpath3.QualifiedName, error) {
+func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*xslFunction, xpath3.QualifiedName, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE0110, "xsl:function in xsl:override requires name attribute")
 	}
 
-	c.collectNamespaces(elem)
+	c.collectNamespaces(ctx, elem)
 
 	var qn xpath3.QualifiedName
 	if strings.HasPrefix(name, "Q{") {
@@ -205,7 +206,7 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 		}
 	}
 
-	body, params, err := c.compileTemplateBody(elem)
+	body, params, err := c.compileTemplateBody(ctx, elem)
 	c.expandText = savedExpandText
 	if err != nil {
 		return nil, xpath3.QualifiedName{}, err
@@ -244,14 +245,14 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 }
 
 // compileOverrideTemplate compiles a template inside xsl:override.
-func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet) (*template, error) {
+func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*template, error) {
 	tmpl := &template{
 		ImportPrec:    c.importPrec,
 		MinImportPrec: c.minImportPrec,
 		BaseURI:       c.baseURI,
 	}
 
-	c.collectNamespaces(elem)
+	c.collectNamespaces(ctx, elem)
 
 	savedXPathDefaultNS := c.xpathDefaultNS
 	if xdn := getAttr(elem, "xpath-default-namespace"); xdn != "" {
@@ -272,7 +273,7 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
 	modeAttr := getAttr(elem, "mode")
 	if modeAttr != "" {
-		tmpl.Mode = c.resolveMode(modeAttr)
+		tmpl.Mode = c.resolveMode(ctx, modeAttr)
 	} else if tmpl.Match != nil && c.defaultMode != "" {
 		// When no explicit mode is specified and a default-mode is active,
 		// match templates use the default mode.
@@ -336,7 +337,7 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 		}
 	}
 
-	ctxDecl, body, params, err := c.compileTemplateBodyEx(elem, false)
+	ctxDecl, body, params, err := c.compileTemplateBodyEx(ctx, elem, false)
 	c.expandText = savedExpandText
 	if err != nil {
 		return nil, err
@@ -377,7 +378,7 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 }
 
 // compileOverrideVariable compiles a variable inside xsl:override.
-func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet) (*variable, error) {
+func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*variable, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:variable in xsl:override requires name attribute")
@@ -477,7 +478,7 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 		}
 		v.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -488,8 +489,8 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 }
 
 // compileOverrideParam compiles a param inside xsl:override.
-func (c *compiler) compileOverrideParam(elem *helium.Element, pkg *Stylesheet) (*param, error) {
-	p, err := c.compileParamDef(elem)
+func (c *compiler) compileOverrideParam(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*param, error) {
+	p, err := c.compileParamDef(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +522,7 @@ func (c *compiler) compileOverrideParam(elem *helium.Element, pkg *Stylesheet) (
 }
 
 // compileOverrideAttributeSet compiles an attribute-set inside xsl:override.
-func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Stylesheet) (*attributeSetDef, error) {
+func (c *compiler) compileOverrideAttributeSet(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*attributeSetDef, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:attribute-set in xsl:override requires name attribute")
@@ -576,7 +577,7 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 			continue
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementAttribute {
-			inst, err := c.compileAttribute(childElem)
+			inst, err := c.compileAttribute(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}

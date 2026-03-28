@@ -13,8 +13,8 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-func (c *compiler) compileImport(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileImport(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"href": {}, "use-when": {},
 	}); err != nil {
 		return err
@@ -23,11 +23,11 @@ func (c *compiler) compileImport(elem *helium.Element) error {
 	if href == "" {
 		return staticError(errCodeXTSE0110, "xsl:import requires href attribute")
 	}
-	return c.loadExternalStylesheet(stylesheetBaseURI(elem, c.baseURI), href, true)
+	return c.loadExternalStylesheet(ctx, stylesheetBaseURI(elem, c.baseURI), href, true)
 }
 
 // resolveIncludeURI resolves an xsl:include's href to an absolute URI.
-func (c *compiler) resolveIncludeURI(elem *helium.Element) (string, string, error) {
+func (c *compiler) resolveIncludeURI(_ context.Context, elem *helium.Element) (string, string, error) {
 	href := getAttr(elem, "href")
 	if href == "" {
 		return "", "", staticError(errCodeXTSE0110, "xsl:include requires href attribute")
@@ -57,11 +57,11 @@ func (c *compiler) resolveIncludeURI(elem *helium.Element) (string, string, erro
 // It loads the included document, caches the parsed root, and recursively
 // processes only xsl:import elements (and imports within nested includes).
 // This ensures importPrec is finalized before any templates are compiled.
-func (c *compiler) collectIncludeImports(elem *helium.Element) error {
+func (c *compiler) collectIncludeImports(ctx context.Context, elem *helium.Element) error {
 	// Check use-when before loading the included file (avoids loading
 	// non-existent files when use-when="false()").
 	if uw := getAttr(elem, "use-when"); uw != "" {
-		include, err := c.evaluateUseWhen(uw)
+		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return err
 		}
@@ -70,7 +70,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 		}
 	}
 
-	uri, importKey, err := c.resolveIncludeURI(elem)
+	uri, importKey, err := c.resolveIncludeURI(ctx, elem)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 	c.importStack[importKey] = struct{}{}
 	defer delete(c.importStack, importKey)
 
-	root, err := c.loadAndCacheInclude(uri, importKey)
+	root, err := c.loadAndCacheInclude(ctx, uri, importKey)
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 	c.moduleKey = importKey
 	defer func() { c.moduleKey = savedModuleKey }()
 
-	c.collectNamespaces(root)
+	c.collectNamespaces(ctx, root)
 
 	// Process namespace-alias declarations from the included module.
 	for child := range helium.Children(root) {
@@ -106,7 +106,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 			continue
 		}
 		if ce.LocalName() == lexicon.XSLTElementNamespaceAlias {
-			if err := c.compileNamespaceAlias(ce); err != nil {
+			if err := c.compileNamespaceAlias(ctx, ce); err != nil {
 				return err
 			}
 		}
@@ -120,11 +120,11 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 		}
 		switch ce.LocalName() {
 		case lexicon.XSLTElementImport:
-			if err := c.compileImport(ce); err != nil {
+			if err := c.compileImport(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementInclude:
-			if err := c.collectIncludeImports(ce); err != nil {
+			if err := c.collectIncludeImports(ctx, ce); err != nil {
 				return err
 			}
 		}
@@ -133,12 +133,12 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 }
 
 // loadAndCacheInclude loads a stylesheet document and caches its root element.
-func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, error) {
+func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey string) (*helium.Element, error) {
 	if root, ok := c.includeRoots[importKey]; ok {
 		return root, nil
 	}
 
-	if err := c.ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
@@ -162,7 +162,7 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 		}
 	}
 
-	doc, err := parseStylesheetDocument(c.ctx, data, uri)
+	doc, err := parseStylesheetDocument(ctx, data, uri)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
@@ -203,7 +203,7 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 	// Check use-when on the included/imported stylesheet's root element.
 	// If use-when evaluates to false, skip the entire module.
 	if uw := getAttr(root, "use-when"); uw != "" {
-		include, err := c.evaluateUseWhen(uw)
+		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return nil, err
 		}
@@ -224,11 +224,11 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 // compileIncludeTemplates is the second phase of two-phase include processing.
 // It compiles all non-import declarations from the cached included document
 // in document order, interleaving with nested includes' templates.
-func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
-	if err := c.ctx.Err(); err != nil {
+func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Element) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	uri, importKey, err := c.resolveIncludeURI(elem)
+	uri, importKey, err := c.resolveIncludeURI(ctx, elem)
 	if err != nil {
 		return err
 	}
@@ -241,7 +241,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 		}
 		// Simplified stylesheet — fall back to the original full include path.
 		// Simplified stylesheets have no imports, so document order is trivially correct.
-		return c.loadExternalStylesheet(stylesheetBaseURI(elem, c.baseURI), getAttr(elem, "href"), false)
+		return c.loadExternalStylesheet(ctx, stylesheetBaseURI(elem, c.baseURI), getAttr(elem, "href"), false)
 	}
 
 	savedBase := c.baseURI
@@ -293,13 +293,13 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 			if name != "" && sel != "" {
 				compiled, err := xpath3.NewCompiler().Compile(sel)
 				if err == nil {
-					eval := c.staticEvaluator()
+					eval := c.staticEvaluator(ctx)
 					if len(c.staticVars) > 0 {
 						eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
 					}
-					result, err := eval.Evaluate(c.ctx, compiled, nil)
+					result, err := eval.Evaluate(ctx, compiled, nil)
 					if err == nil {
-						if setErr := c.setStaticVarWithKind(name, ln, result.Sequence()); setErr != nil {
+						if setErr := c.setStaticVarWithKind(ctx, name, ln, result.Sequence()); setErr != nil {
 							return setErr
 						}
 					}
@@ -317,7 +317,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 		}
 
 		// Resolve shadow attributes before processing.
-		if err := c.resolveShadowAttributes(ce); err != nil {
+		if err := c.resolveShadowAttributes(ctx, ce); err != nil {
 			return err
 		}
 
@@ -325,71 +325,71 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 		case lexicon.XSLTElementImport, lexicon.XSLTElementNamespaceAlias:
 			// Already processed in collectIncludeImports
 		case lexicon.XSLTElementInclude:
-			if err := c.compileIncludeTemplates(ce); err != nil {
+			if err := c.compileIncludeTemplates(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementUsePackage:
-			if err := c.compileUsePackage(ce); err != nil {
+			if err := c.compileUsePackage(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementTemplate:
-			if err := c.compileTemplate(ce); err != nil {
+			if err := c.compileTemplate(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementVariable:
-			if err := c.compileGlobalVariable(ce); err != nil {
+			if err := c.compileGlobalVariable(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementParam:
-			if err := c.compileGlobalParam(ce); err != nil {
+			if err := c.compileGlobalParam(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementKey:
-			if err := c.compileKey(ce); err != nil {
+			if err := c.compileKey(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementOutput:
-			if err := c.compileOutput(ce); err != nil {
+			if err := c.compileOutput(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementStripSpace:
-			if err := c.compileSpaceHandling(ce, true); err != nil {
+			if err := c.compileSpaceHandling(ctx, ce, true); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementPreserveSpace:
-			if err := c.compileSpaceHandling(ce, false); err != nil {
+			if err := c.compileSpaceHandling(ctx, ce, false); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementFunction:
-			if err := c.compileFunction(ce); err != nil {
+			if err := c.compileFunction(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementDecimalFormat:
-			if err := c.compileDecimalFormat(ce); err != nil {
+			if err := c.compileDecimalFormat(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementMode:
-			if err := c.compileMode(ce); err != nil {
+			if err := c.compileMode(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementImportSchema:
-			if err := c.compileImportSchema(ce); err != nil {
+			if err := c.compileImportSchema(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementAccumulator:
-			if err := c.compileAccumulator(ce); err != nil {
+			if err := c.compileAccumulator(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementAttributeSet:
-			if err := c.compileAttributeSet(ce); err != nil {
+			if err := c.compileAttributeSet(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementGlobalContextItem:
-			if err := c.compileGlobalContextItem(ce); err != nil {
+			if err := c.compileGlobalContextItem(ctx, ce); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementCharacterMap:
-			if err := c.compileCharacterMap(ce); err != nil {
+			if err := c.compileCharacterMap(ctx, ce); err != nil {
 				return err
 			}
 		}
@@ -427,8 +427,8 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 	return base
 }
 
-func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) error {
-	if err := c.ctx.Err(); err != nil {
+func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href string, isImport bool) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 
@@ -480,7 +480,7 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 		}
 	}
 
-	doc, err := parseStylesheetDocument(c.ctx, data, uri)
+	doc, err := parseStylesheetDocument(ctx, data, uri)
 	if err != nil {
 		return fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
@@ -521,7 +521,7 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 	if importedRoot.URI() != lexicon.NamespaceXSLT {
 		if _, ok := importedRoot.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
 			// Simplified stylesheet — compile as a single template matching "/"
-			simplified, err := compileSimplified(c.ctx, doc, importedRoot, &compileConfig{baseURI: uri})
+			simplified, err := compileSimplified(ctx, doc, importedRoot, &compileConfig{baseURI: uri})
 			if err != nil {
 				return err
 			}
@@ -546,7 +546,7 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 	// Check use-when on the imported/included stylesheet's root element.
 	// If use-when evaluates to false, skip the entire module.
 	if uw := getAttr(importedRoot, "use-when"); uw != "" {
-		include, err := c.evaluateUseWhen(uw)
+		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return err
 		}
@@ -608,8 +608,8 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 		c.minImportPrec = c.importPrec
 		savedInsideImport := c.insideImport
 		c.insideImport = true
-		c.collectNamespaces(importedRoot)
-		if err := c.compileTopLevel(importedRoot); err != nil {
+		c.collectNamespaces(ctx, importedRoot)
+		if err := c.compileTopLevel(ctx, importedRoot); err != nil {
 			c.minImportPrec = savedMinImportPrec
 			c.insideImport = savedInsideImport
 			return err
@@ -622,8 +622,8 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 		// Inherit minImportPrec from the including module so that
 		// xsl:apply-imports in included templates searches the
 		// including module's full import tree.
-		c.collectNamespaces(importedRoot)
-		if err := c.compileTopLevel(importedRoot); err != nil {
+		c.collectNamespaces(ctx, importedRoot)
+		if err := c.compileTopLevel(ctx, importedRoot); err != nil {
 			return err
 		}
 	}
@@ -643,7 +643,6 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 			"simplified stylesheet (literal result element) must have an xsl:version attribute")
 	}
 	c := &compiler{
-		ctx: ctx,
 		stylesheet: &Stylesheet{
 			version:          "3.0",
 			namedTemplates:   make(map[string]*template),
@@ -666,9 +665,9 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 		c.packageResolver = cfg.packageResolver
 	}
 
-	c.collectNamespaces(root)
+	c.collectNamespaces(ctx, root)
 
-	inst, err := c.compileLiteralResultElement(root)
+	inst, err := c.compileLiteralResultElement(ctx, root)
 	if err != nil {
 		return nil, err
 	}

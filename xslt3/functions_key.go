@@ -91,7 +91,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 			}
 			avs = append(avs, av)
 		}
-		nodes, err := ec.lookupCompositeKey(name, avs, root) //nolint:contextcheck
+		nodes, err := ec.lookupCompositeKey(ctx, name, avs, root)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +111,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 		if err != nil {
 			return nil, err
 		}
-		nodes, err := ec.lookupKey(name, valAV, root)
+		nodes, err := ec.lookupKey(ctx, name, valAV, root)
 		if err != nil {
 			return nil, err
 		}

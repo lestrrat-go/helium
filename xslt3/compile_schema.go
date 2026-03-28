@@ -25,7 +25,7 @@ func (f *fatalErrorCounter) Handle(_ context.Context, err error) {
 	}
 }
 
-func (c *compiler) compileImportSchema(elem *helium.Element) error {
+func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element) error {
 	// Mark stylesheet as schema-aware whenever any xsl:import-schema is seen,
 	// even if it is a namespace-only declaration with no schema to compile.
 	c.stylesheet.schemaAware = true
@@ -33,7 +33,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 	// Collect namespace declarations from the xsl:import-schema element itself
 	// (e.g., xmlns:o="http://example.com/schema") so that XPath expressions in
 	// the stylesheet can use prefix:local references to schema-namespace types.
-	c.collectNamespaces(elem)
+	c.collectNamespaces(ctx, elem)
 
 	declaredNS := getAttr(elem, "namespace")
 
@@ -66,11 +66,11 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 			uri = filepath.Join(baseDir, schemaLoc)
 		}
 
-		schema, err := xsd.NewCompiler().CompileFile(c.ctx, uri)
+		schema, err := xsd.NewCompiler().CompileFile(ctx, uri)
 		if err != nil {
 			// File not found — try pre-compiled import schemas by namespace.
 			if declaredNS != "" {
-				if resolved := c.findImportSchema(declaredNS); resolved != nil {
+				if resolved := c.findImportSchema(ctx, declaredNS); resolved != nil {
 					c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
 					return nil
 				}
@@ -80,7 +80,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 		// XTSE0220: namespace attribute must match the schema's targetNamespace.
 		if declaredNS != "" && schema.TargetNamespace() != declaredNS {
 			// Try pre-compiled import schemas by namespace before erroring.
-			if resolved := c.findImportSchema(declaredNS); resolved != nil {
+			if resolved := c.findImportSchema(ctx, declaredNS); resolved != nil {
 				c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
 				return nil
 			}
@@ -130,7 +130,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 			if c.baseURI != "" {
 				compiler = compiler.BaseDir(filepath.Dir(c.baseURI))
 			}
-			schema, err := compiler.Compile(c.ctx, inlineDoc)
+			schema, err := compiler.Compile(ctx, inlineDoc)
 			if err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot compile inline schema: %w", err)
 			}
@@ -154,7 +154,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 
 	// Namespace-only declaration — try pre-compiled import schemas by namespace.
 	if declaredNS != "" {
-		if resolved := c.findImportSchema(declaredNS); resolved != nil {
+		if resolved := c.findImportSchema(ctx, declaredNS); resolved != nil {
 			c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
 		}
 	}
@@ -163,7 +163,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 
 // findImportSchema looks up a pre-compiled schema by target namespace from
 // the import schemas provided at compile time.
-func (c *compiler) findImportSchema(ns string) *xsd.Schema {
+func (c *compiler) findImportSchema(ctx context.Context, ns string) *xsd.Schema {
 	for _, s := range c.importSchemas {
 		if s.TargetNamespace() == ns {
 			return s
@@ -359,7 +359,7 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 //
 // This covers the most common case where compile-time static errors arise:
 // using schema-element() or schema-attribute() with an undeclared name.
-func (c *compiler) validateAsSequenceType(as string, context string) error {
+func (c *compiler) validateAsSequenceType(ctx context.Context, as string, context string) error {
 	if as == "" {
 		return nil
 	}

@@ -1,6 +1,9 @@
 package xpath3
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 type vmOpcode uint8
 
@@ -975,23 +978,23 @@ type vm struct {
 	program *vmProgram
 }
 
-func (p *vmProgram) execute(ec *evalContext) (Sequence, error) {
+func (p *vmProgram) execute(goCtx context.Context, ec *evalContext) (Sequence, error) {
 	machine := vm{program: p}
-	return machine.evalExpr(ec, compiledExprRef{index: p.root})
+	return machine.evalExpr(goCtx, ec, compiledExprRef{index: p.root})
 }
 
-func (v *vm) evalExpr(ec *evalContext, expr Expr) (Sequence, error) {
-	return evalWith(v.evalExprBody, ec, expr)
+func (v *vm) evalExpr(goCtx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
+	return evalWith(v.evalExprBody, goCtx, ec, expr)
 }
 
-func (v *vm) evalExprBody(ec *evalContext, expr Expr) (Sequence, error) {
+func (v *vm) evalExprBody(goCtx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
 	if ref, ok := expr.(compiledExprRef); ok {
-		return v.evalInstruction(ec, ref)
+		return v.evalInstruction(goCtx, ec, ref)
 	}
-	return dispatchExpr(v.evalExpr, ec, expr)
+	return dispatchExpr(v.evalExpr, goCtx, ec, expr)
 }
 
-func (v *vm) evalInstruction(ec *evalContext, ref compiledExprRef) (Sequence, error) {
+func (v *vm) evalInstruction(goCtx context.Context, ec *evalContext, ref compiledExprRef) (Sequence, error) {
 	if ref.index < 0 || ref.index >= len(v.program.instructions) {
 		return nil, fmt.Errorf("%w: invalid VM instruction %d", ErrUnsupportedExpr, ref.index)
 	}
@@ -1000,67 +1003,67 @@ func (v *vm) evalInstruction(ec *evalContext, ref compiledExprRef) (Sequence, er
 	case vmOpLiteral:
 		return evalLiteral(inst.payload.(LiteralExpr)) //nolint:forcetypeassert
 	case vmOpVariable:
-		return evalVariable(ec, inst.payload.(VariableExpr)) //nolint:forcetypeassert
+		return evalVariable(goCtx, ec, inst.payload.(VariableExpr)) //nolint:forcetypeassert
 	case vmOpRoot:
 		return evalRootExpr(ec)
 	case vmOpContextItem:
 		return evalContextItemExpr(ec)
 	case vmOpLocationPath:
-		return evalVMLocationPath(v.evalExpr, ec, inst.payload.(vmLocationPathExpr)) //nolint:forcetypeassert
+		return evalVMLocationPath(v.evalExpr, goCtx, ec, inst.payload.(vmLocationPathExpr)) //nolint:forcetypeassert
 	case vmOpBinary:
-		return evalBinaryExpr(v.evalExpr, ec, inst.payload.(BinaryExpr)) //nolint:forcetypeassert
+		return evalBinaryExpr(v.evalExpr, goCtx, ec, inst.payload.(BinaryExpr)) //nolint:forcetypeassert
 	case vmOpUnary:
-		return evalUnaryExpr(v.evalExpr, ec, inst.payload.(UnaryExpr)) //nolint:forcetypeassert
+		return evalUnaryExpr(v.evalExpr, goCtx, ec, inst.payload.(UnaryExpr)) //nolint:forcetypeassert
 	case vmOpConcat:
-		return evalConcatExpr(v.evalExpr, ec, inst.payload.(ConcatExpr)) //nolint:forcetypeassert
+		return evalConcatExpr(v.evalExpr, goCtx, ec, inst.payload.(ConcatExpr)) //nolint:forcetypeassert
 	case vmOpSimpleMap:
-		return evalSimpleMapExpr(v.evalExpr, ec, inst.payload.(SimpleMapExpr)) //nolint:forcetypeassert
+		return evalSimpleMapExpr(v.evalExpr, goCtx, ec, inst.payload.(SimpleMapExpr)) //nolint:forcetypeassert
 	case vmOpRange:
-		return evalRangeExpr(v.evalExpr, ec, inst.payload.(RangeExpr)) //nolint:forcetypeassert
+		return evalRangeExpr(v.evalExpr, goCtx, ec, inst.payload.(RangeExpr)) //nolint:forcetypeassert
 	case vmOpUnion:
-		return evalUnionExpr(v.evalExpr, ec, inst.payload.(UnionExpr)) //nolint:forcetypeassert
+		return evalUnionExpr(v.evalExpr, goCtx, ec, inst.payload.(UnionExpr)) //nolint:forcetypeassert
 	case vmOpIntersectExcept:
-		return evalIntersectExceptExpr(v.evalExpr, ec, inst.payload.(IntersectExceptExpr)) //nolint:forcetypeassert
+		return evalIntersectExceptExpr(v.evalExpr, goCtx, ec, inst.payload.(IntersectExceptExpr)) //nolint:forcetypeassert
 	case vmOpFilter:
-		return evalFilterExpr(v.evalExpr, ec, inst.payload.(FilterExpr)) //nolint:forcetypeassert
+		return evalFilterExpr(v.evalExpr, goCtx, ec, inst.payload.(FilterExpr)) //nolint:forcetypeassert
 	case vmOpPath:
-		return evalVMPathExpr(v.evalExpr, ec, inst.payload.(vmPathExpr)) //nolint:forcetypeassert
+		return evalVMPathExpr(v.evalExpr, goCtx, ec, inst.payload.(vmPathExpr)) //nolint:forcetypeassert
 	case vmOpPathStep:
-		return evalPathStepExpr(v.evalExpr, ec, inst.payload.(PathStepExpr)) //nolint:forcetypeassert
+		return evalPathStepExpr(v.evalExpr, goCtx, ec, inst.payload.(PathStepExpr)) //nolint:forcetypeassert
 	case vmOpLookup:
-		return evalLookupExpr(v.evalExpr, ec, inst.payload.(LookupExpr)) //nolint:forcetypeassert
+		return evalLookupExpr(v.evalExpr, goCtx, ec, inst.payload.(LookupExpr)) //nolint:forcetypeassert
 	case vmOpUnaryLookup:
-		return evalUnaryLookupExpr(v.evalExpr, ec, inst.payload.(UnaryLookupExpr)) //nolint:forcetypeassert
+		return evalUnaryLookupExpr(v.evalExpr, goCtx, ec, inst.payload.(UnaryLookupExpr)) //nolint:forcetypeassert
 	case vmOpFLWOR:
-		return evalFLWOR(v.evalExpr, ec, inst.payload.(FLWORExpr)) //nolint:forcetypeassert
+		return evalFLWOR(v.evalExpr, goCtx, ec, inst.payload.(FLWORExpr)) //nolint:forcetypeassert
 	case vmOpQuantified:
-		return evalQuantifiedExpr(v.evalExpr, ec, inst.payload.(QuantifiedExpr)) //nolint:forcetypeassert
+		return evalQuantifiedExpr(v.evalExpr, goCtx, ec, inst.payload.(QuantifiedExpr)) //nolint:forcetypeassert
 	case vmOpIf:
-		return evalIfExpr(v.evalExpr, ec, inst.payload.(IfExpr)) //nolint:forcetypeassert
+		return evalIfExpr(v.evalExpr, goCtx, ec, inst.payload.(IfExpr)) //nolint:forcetypeassert
 	case vmOpTryCatch:
-		return evalTryCatchExpr(v.evalExpr, ec, inst.payload.(TryCatchExpr)) //nolint:forcetypeassert
+		return evalTryCatchExpr(v.evalExpr, goCtx, ec, inst.payload.(TryCatchExpr)) //nolint:forcetypeassert
 	case vmOpInstanceOf:
-		return evalInstanceOfExpr(v.evalExpr, ec, inst.payload.(InstanceOfExpr)) //nolint:forcetypeassert
+		return evalInstanceOfExpr(v.evalExpr, goCtx, ec, inst.payload.(InstanceOfExpr)) //nolint:forcetypeassert
 	case vmOpCast:
-		return evalCastExpr(v.evalExpr, ec, inst.payload.(CastExpr)) //nolint:forcetypeassert
+		return evalCastExpr(v.evalExpr, goCtx, ec, inst.payload.(CastExpr)) //nolint:forcetypeassert
 	case vmOpCastable:
-		return evalCastableExpr(v.evalExpr, ec, inst.payload.(CastableExpr)) //nolint:forcetypeassert
+		return evalCastableExpr(v.evalExpr, goCtx, ec, inst.payload.(CastableExpr)) //nolint:forcetypeassert
 	case vmOpTreatAs:
-		return evalTreatAsExpr(v.evalExpr, ec, inst.payload.(TreatAsExpr)) //nolint:forcetypeassert
+		return evalTreatAsExpr(v.evalExpr, goCtx, ec, inst.payload.(TreatAsExpr)) //nolint:forcetypeassert
 	case vmOpFunctionCall:
-		return evalFunctionCall(v.evalExpr, ec, inst.payload.(FunctionCall)) //nolint:forcetypeassert
+		return evalFunctionCall(v.evalExpr, goCtx, ec, inst.payload.(FunctionCall)) //nolint:forcetypeassert
 	case vmOpDynamicFunctionCall:
-		return evalDynamicFunctionCall(v.evalExpr, ec, inst.payload.(DynamicFunctionCall)) //nolint:forcetypeassert
+		return evalDynamicFunctionCall(v.evalExpr, goCtx, ec, inst.payload.(DynamicFunctionCall)) //nolint:forcetypeassert
 	case vmOpNamedFunctionRef:
-		return evalNamedFunctionRef(ec, inst.payload.(NamedFunctionRef)) //nolint:forcetypeassert
+		return evalNamedFunctionRef(goCtx, ec, inst.payload.(NamedFunctionRef)) //nolint:forcetypeassert
 	case vmOpInlineFunction:
-		return evalInlineFunctionExpr(v.evalExpr, ec, inst.payload.(InlineFunctionExpr)) //nolint:forcetypeassert
+		return evalInlineFunctionExpr(v.evalExpr, goCtx, ec, inst.payload.(InlineFunctionExpr)) //nolint:forcetypeassert
 	case vmOpMapConstructor:
-		return evalMapConstructorExpr(v.evalExpr, ec, inst.payload.(MapConstructorExpr)) //nolint:forcetypeassert
+		return evalMapConstructorExpr(v.evalExpr, goCtx, ec, inst.payload.(MapConstructorExpr)) //nolint:forcetypeassert
 	case vmOpArrayConstructor:
-		return evalArrayConstructorExpr(v.evalExpr, ec, inst.payload.(ArrayConstructorExpr)) //nolint:forcetypeassert
+		return evalArrayConstructorExpr(v.evalExpr, goCtx, ec, inst.payload.(ArrayConstructorExpr)) //nolint:forcetypeassert
 	case vmOpSequence:
-		return evalSequenceExpr(v.evalExpr, ec, inst.payload.(SequenceExpr)) //nolint:forcetypeassert
+		return evalSequenceExpr(v.evalExpr, goCtx, ec, inst.payload.(SequenceExpr)) //nolint:forcetypeassert
 	case vmOpPlaceholder:
 		return nil, fmt.Errorf("%w: placeholder outside partial application", ErrUnsupportedExpr)
 	default:

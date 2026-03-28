@@ -12,7 +12,6 @@ import (
 
 // validator holds state during document validation.
 type validator struct {
-	ctx           context.Context
 	grammar       *Grammar
 	filename      string
 	errorHandler  helium.ErrorHandler
@@ -38,7 +37,6 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 	}
 
 	v := &validator{
-		ctx:          ctx,
 		grammar:      grammar,
 		filename:     label,
 		errorHandler: handler,

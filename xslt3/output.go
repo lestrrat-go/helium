@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"strconv"
@@ -45,7 +44,6 @@ const (
 )
 
 type conditionalAction struct {
-	ctx           context.Context
 	kind          conditionalKind
 	content       xpath3.Sequence
 	placeholder   helium.MutableNode

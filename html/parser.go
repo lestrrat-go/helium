@@ -21,7 +21,6 @@ const (
 
 // parser is the HTML parser. It drives the tokenizer and fires SAX events.
 type parser struct {
-	ctx   context.Context
 	input []byte
 	pos   int
 	line  int
@@ -99,7 +98,6 @@ func newParser(ctx context.Context, input []byte, sax SAXHandler, cfg parseConfi
 	}
 
 	p := &parser{
-		ctx:               ctx,
 		input:             normalized,
 		pos:               0,
 		line:              1,
@@ -443,12 +441,12 @@ func (p *parser) htmlCheckImplied(newTag string) {
 }
 
 // parse runs the main parsing loop.
-func (p *parser) parse() error {
+func (p *parser) parse(ctx context.Context) error {
 	_ = p.sax.SetDocumentLocator(p.locator)
 	_ = p.sax.StartDocument()
 
 	for !p.atEnd() {
-		if err := p.ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if p.peek() == '<' {

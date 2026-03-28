@@ -26,19 +26,10 @@ func (f *fileParseInput) URI() string { return f.uri }
 
 // TreeBuilder is a SAX2 handler that builds a DOM tree from SAX events,
 // analogous to libxml2's default SAX handler (xmlSAX2InitDefaultSAXHandler).
-type TreeBuilder struct {
-	cachedCtx  context.Context // last context seen
-	cachedPCtx *parserCtx      // cached parserCtx for that context
-}
+type TreeBuilder struct{}
 
 func (t *TreeBuilder) pctx(ctxif context.Context) *parserCtx {
-	if ctxif == t.cachedCtx {
-		return t.cachedPCtx
-	}
-	p := getParserCtx(ctxif)
-	t.cachedCtx = ctxif
-	t.cachedPCtx = p
-	return p
+	return getParserCtx(ctxif)
 }
 
 // NewTreeBuilder creates a new TreeBuilder that builds a DOM tree from SAX events.
@@ -394,7 +385,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 
 	// Try catalog resolution first.
 	if ctx.catalog != nil {
-		if catalogURI := ctx.catalog.Resolve(eid, uri); catalogURI != "" {
+		if catalogURI := ctx.catalog.Resolve(ctxif, eid, uri); catalogURI != "" {
 			uri = catalogURI
 		}
 	}
@@ -712,7 +703,7 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 
 	ctx := t.pctx(ctxif)
 	if ctx.catalog != nil {
-		if resolved := ctx.catalog.Resolve(publicID, systemID); resolved != "" {
+		if resolved := ctx.catalog.Resolve(ctxif, publicID, systemID); resolved != "" {
 			f, err := os.Open(resolved)
 			if err == nil {
 				return &fileParseInput{ReadCloser: f, uri: resolved}, nil

@@ -30,7 +30,7 @@ func FuzzLoad(f *testing.F) {
 			return
 		}
 
-		_ = cat.Resolve(pubID, sysID)
-		_ = cat.ResolveURI(uri)
+		_ = cat.Resolve(t.Context(), pubID, sysID)
+		_ = cat.ResolveURI(t.Context(), uri)
 	})
 }

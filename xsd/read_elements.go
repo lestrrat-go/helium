@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
@@ -61,7 +62,7 @@ func readProcessContents(elem *helium.Element) ProcessContentsKind {
 	}
 }
 
-func (c *compiler) readWildcard(elem *helium.Element) *Wildcard {
+func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wildcard {
 	namespace := getAttr(elem, attrNamespace)
 	if namespace == "" {
 		namespace = WildcardNSAny
@@ -74,7 +75,7 @@ func (c *compiler) readWildcard(elem *helium.Element) *Wildcard {
 	}
 }
 
-func (c *compiler) readElementDecl(elem *helium.Element, opts elementDeclReadOptions) (*ElementDecl, error) {
+func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, opts elementDeclReadOptions) (*ElementDecl, error) {
 	decl := &ElementDecl{
 		Name:      QName{Local: opts.name, NS: opts.namespace},
 		MinOccurs: opts.minOccurs,
@@ -88,7 +89,7 @@ func (c *compiler) readElementDecl(elem *helium.Element, opts elementDeclReadOpt
 
 	if opts.allowSubstitutionGroup {
 		if sg := getAttr(elem, attrSubstitutionGroup); sg != "" {
-			decl.SubstitutionGroup = c.resolveQName(elem, sg)
+			decl.SubstitutionGroup = c.resolveQName(ctx, elem, sg)
 		}
 	}
 
@@ -110,17 +111,17 @@ func (c *compiler) readElementDecl(elem *helium.Element, opts elementDeclReadOpt
 		}
 	}
 
-	if err := c.readElementType(elem, decl, opts.name); err != nil {
+	if err := c.readElementType(ctx, elem, decl, opts.name); err != nil {
 		return nil, err
 	}
-	decl.IDCs = c.parseIDConstraints(elem)
+	decl.IDCs = c.parseIDConstraints(ctx, elem)
 	return decl, nil
 }
 
-func (c *compiler) readElementType(elem *helium.Element, decl *ElementDecl, sourceName string) error {
+func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, decl *ElementDecl, sourceName string) error {
 	typeRef := getAttr(elem, attrType)
 	if typeRef != "" {
-		qn := c.resolveQName(elem, typeRef)
+		qn := c.resolveQName(ctx, elem, typeRef)
 		c.elemRefs[decl] = qn
 		c.elemRefSources[decl] = elemRefSource{elemName: sourceName, line: elem.Line()}
 		return nil
@@ -133,15 +134,15 @@ func (c *compiler) readElementType(elem *helium.Element, decl *ElementDecl, sour
 		ce := child.(*helium.Element) //nolint:forcetypeassert
 		switch {
 		case isXSDElement(ce, elemAnnotation):
-			c.checkAnnotation(ce)
+			c.checkAnnotation(ctx, ce)
 		case isXSDElement(ce, elemComplexType):
-			td, err := c.parseComplexType(ce)
+			td, err := c.parseComplexType(ctx, ce)
 			if err != nil {
 				return err
 			}
 			decl.Type = td
 		case isXSDElement(ce, elemSimpleType):
-			td, err := c.parseSimpleType(ce)
+			td, err := c.parseSimpleType(ctx, ce)
 			if err != nil {
 				return err
 			}
@@ -152,10 +153,10 @@ func (c *compiler) readElementType(elem *helium.Element, decl *ElementDecl, sour
 	return nil
 }
 
-func (c *compiler) readAttributeUseDecl(elem *helium.Element, opts attrUseReadOptions) *AttrUse {
+func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Element, opts attrUseReadOptions) *AttrUse {
 	au := &AttrUse{Name: opts.name}
 	if typeRef := getAttr(elem, attrType); typeRef != "" {
-		au.TypeName = c.resolveQName(elem, typeRef)
+		au.TypeName = c.resolveQName(ctx, elem, typeRef)
 	}
 	if opts.includeUse {
 		switch getAttr(elem, attrUse) {
@@ -169,15 +170,15 @@ func (c *compiler) readAttributeUseDecl(elem *helium.Element, opts attrUseReadOp
 	return au
 }
 
-func (c *compiler) parseGlobalElement(elem *helium.Element) error {
-	c.checkGlobalElement(elem)
+func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element) error {
+	c.checkGlobalElement(ctx, elem)
 	name := getAttr(elem, attrName)
 	if name == "" {
 		// Still register with a placeholder name to continue parsing.
 		return nil
 	}
 
-	decl, err := c.readElementDecl(elem, elementDeclReadOptions{
+	decl, err := c.readElementDecl(ctx, elem, elementDeclReadOptions{
 		name:                   name,
 		namespace:              c.schema.targetNamespace,
 		minOccurs:              1,
@@ -199,7 +200,7 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 			qnDisplay = "'{" + decl.Name.NS + "}" + decl.Name.Local + "'"
 		}
 		source := c.includeFile
-		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(source, elem.Line(),
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(source, elem.Line(),
 			elem.LocalName(), "element",
 			"A global element declaration "+qnDisplay+" does already exist."), helium.ErrorLevelFatal))
 		c.errorCount++
@@ -211,13 +212,13 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
-	c.checkLocalElement(elem)
+func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) (*Particle, error) {
+	c.checkLocalElement(ctx, elem)
 	minOcc, maxOcc := parseParticleOccurs(elem)
 
 	// Handle element references (ref="...").
 	if ref := getAttr(elem, attrRef); ref != "" {
-		qn := c.resolveQName(elem, ref)
+		qn := c.resolveQName(ctx, elem, ref)
 		edecl := &ElementDecl{
 			Name:      qn,
 			MinOccurs: minOcc,
@@ -245,7 +246,7 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 		elemNS = c.schema.targetNamespace
 	}
 
-	edecl, err := c.readElementDecl(elem, elementDeclReadOptions{
+	edecl, err := c.readElementDecl(ctx, elem, elementDeclReadOptions{
 		name:         name,
 		namespace:    elemNS,
 		minOccurs:    minOcc,
@@ -263,9 +264,9 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 	}, nil
 }
 
-func (c *compiler) parseWildcard(elem *helium.Element) *Particle {
+func (c *compiler) parseWildcard(ctx context.Context, elem *helium.Element) *Particle {
 	minOcc, maxOcc := parseParticleOccurs(elem)
-	wc := c.readWildcard(elem)
+	wc := c.readWildcard(ctx, elem)
 	return &Particle{
 		MinOccurs: minOcc,
 		MaxOccurs: maxOcc,
@@ -273,28 +274,28 @@ func (c *compiler) parseWildcard(elem *helium.Element) *Particle {
 	}
 }
 
-func (c *compiler) parseAnyAttribute(elem *helium.Element) *Wildcard {
-	return c.readWildcard(elem)
+func (c *compiler) parseAnyAttribute(ctx context.Context, elem *helium.Element) *Wildcard {
+	return c.readWildcard(ctx, elem)
 }
 
-func (c *compiler) parseGlobalAttribute(elem *helium.Element) {
-	c.checkAttributeUse(elem)
+func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Element) {
+	c.checkAttributeUse(ctx, elem)
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return
 	}
 	// Global attributes are always in the target namespace (per spec).
-	au := c.readAttributeUseDecl(elem, attrUseReadOptions{
+	au := c.readAttributeUseDecl(ctx, elem, attrUseReadOptions{
 		name: QName{Local: name, NS: c.schema.targetNamespace},
 	})
 	c.schema.globalAttrs[au.Name] = au
 }
 
-func (c *compiler) parseAttributeUse(elem *helium.Element) *AttrUse {
-	c.checkAttributeUse(elem)
+func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) *AttrUse {
+	c.checkAttributeUse(ctx, elem)
 	// Handle attribute references (ref="...").
 	if ref := getAttr(elem, attrRef); ref != "" {
-		qn := c.resolveQName(elem, ref)
+		qn := c.resolveQName(ctx, elem, ref)
 		au := &AttrUse{Name: qn}
 		if getAttr(elem, attrUse) == attrValRequired {
 			au.Required = true
@@ -316,14 +317,14 @@ func (c *compiler) parseAttributeUse(elem *helium.Element) *AttrUse {
 	if form == attrValQualified || (form == "" && c.schema.attrFormQualified) {
 		attrNS = c.schema.targetNamespace
 	}
-	return c.readAttributeUseDecl(elem, attrUseReadOptions{
+	return c.readAttributeUseDecl(ctx, elem, attrUseReadOptions{
 		name:       QName{Local: name, NS: attrNS},
 		includeUse: true,
 	})
 }
 
 // parseIDConstraints scans element children for xs:key, xs:keyref, xs:unique declarations.
-func (c *compiler) parseIDConstraints(elem *helium.Element) []*IDConstraint {
+func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element) []*IDConstraint {
 	var idcs []*IDConstraint
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -341,7 +342,7 @@ func (c *compiler) parseIDConstraints(elem *helium.Element) []*IDConstraint {
 		default:
 			continue
 		}
-		idc := c.parseIDConstraint(ce, kind)
+		idc := c.parseIDConstraint(ctx, ce, kind)
 		if idc != nil {
 			idcs = append(idcs, idc)
 		}
@@ -350,7 +351,7 @@ func (c *compiler) parseIDConstraints(elem *helium.Element) []*IDConstraint {
 }
 
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
-func (c *compiler) parseIDConstraint(elem *helium.Element, kind IDCKind) *IDConstraint {
+func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return nil

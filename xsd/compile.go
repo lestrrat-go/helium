@@ -12,7 +12,6 @@ import (
 
 // compiler holds state during schema compilation.
 type compiler struct {
-	ctx     context.Context
 	schema  *Schema
 	baseDir string // directory of the schema file, for resolving relative paths
 	// unresolved type references: maps from element/type QName to the type ref string
@@ -61,13 +60,6 @@ type typeDefSource struct {
 	isLocal bool // true for anonymous (local) complex types
 }
 
-func (c *compiler) compileContext() context.Context {
-	if c == nil || c.ctx == nil {
-		return context.Background()
-	}
-	return c.ctx
-}
-
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {
 	root := findDocumentElement(doc)
 	if root == nil {
@@ -79,7 +71,6 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 
 	c := &compiler{
-		ctx: ctx,
 		schema: &Schema{
 			elements:    make(map[QName]*ElementDecl),
 			types:       make(map[QName]*TypeDef),
@@ -121,8 +112,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {
 		if !isValidBlock(v) && c.filename != "" {
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(), //nolint:contextcheck
-				root.LocalName(), elemSchema, attrBlockDefault,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),				root.LocalName(), elemSchema, attrBlockDefault,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
@@ -133,8 +123,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Parse finalDefault attribute.
 	if v := getAttr(root, attrFinalDefault); v != "" {
 		if !isValidFinalDefault(v) && c.filename != "" {
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(), //nolint:contextcheck
-				root.LocalName(), elemSchema, attrFinalDefault,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),				root.LocalName(), elemSchema, attrFinalDefault,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
@@ -146,22 +135,22 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	registerBuiltinTypes(c.schema)
 
 	// First pass: collect all named types and global elements.
-	if err := c.parseSchemaChildren(root); err != nil { //nolint:contextcheck
+	if err := c.parseSchemaChildren(ctx, root); err != nil {
 		return nil, err
 	}
 
 	// Process includes after parsing the main schema's declarations.
 	// This matches libxml2's processing order where includes are merged
 	// after the including schema's own declarations are registered.
-	if err := c.processIncludes(root); err != nil { //nolint:contextcheck
+	if err := c.processIncludes(ctx, root); err != nil {
 		return nil, err
 	}
 
 	// Second pass: resolve type references.
-	c.resolveRefs() //nolint:contextcheck
+	c.resolveRefs(ctx)
 
 	// Check facet consistency after refs are resolved (base types are available).
-	c.checkFacetConsistency() //nolint:contextcheck
+	c.checkFacetConsistency(ctx)
 
 	// Build substitution group membership map and detect circular references.
 	for _, edecl := range c.schema.elements {
@@ -173,7 +162,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 		// Check for circular substitution groups.
 		if c.filename != "" {
-			c.checkCircularSubstGroup(edecl) //nolint:contextcheck
+			c.checkCircularSubstGroup(ctx, edecl)
 		}
 	}
 
@@ -186,15 +175,15 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 	// Enforce final on type derivations.
 	if c.filename != "" && c.errorCount == 0 {
-		c.checkFinalOnTypes() //nolint:contextcheck
-		c.checkFinalOnSubstGroups() //nolint:contextcheck
+		c.checkFinalOnTypes(ctx)
+		c.checkFinalOnSubstGroups(ctx)
 	}
 
 	return c.schema, nil
 }
 
 // parseSchemaChildren parses the children of an xs:schema element.
-func (c *compiler) parseSchemaChildren(root *helium.Element) error {
+func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element) error {
 	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -202,27 +191,27 @@ func (c *compiler) parseSchemaChildren(root *helium.Element) error {
 		elem := child.(*helium.Element) //nolint:forcetypeassert
 		switch {
 		case isXSDElement(elem, elemElement):
-			if err := c.parseGlobalElement(elem); err != nil {
+			if err := c.parseGlobalElement(ctx, elem); err != nil {
 				return err
 			}
 		case isXSDElement(elem, elemComplexType):
-			if err := c.parseNamedComplexType(elem); err != nil {
+			if err := c.parseNamedComplexType(ctx, elem); err != nil {
 				return err
 			}
 		case isXSDElement(elem, elemSimpleType):
-			if err := c.parseNamedSimpleType(elem); err != nil {
+			if err := c.parseNamedSimpleType(ctx, elem); err != nil {
 				return err
 			}
 		case isXSDElement(elem, elemGroup):
-			if err := c.parseNamedGroup(elem); err != nil {
+			if err := c.parseNamedGroup(ctx, elem); err != nil {
 				return err
 			}
 		case isXSDElement(elem, elemAttributeGroup):
-			if err := c.parseNamedAttributeGroup(elem); err != nil {
+			if err := c.parseNamedAttributeGroup(ctx, elem); err != nil {
 				return err
 			}
 		case isXSDElement(elem, elemAttribute):
-			c.parseGlobalAttribute(elem)
+			c.parseGlobalAttribute(ctx, elem)
 		}
 	}
 	return nil

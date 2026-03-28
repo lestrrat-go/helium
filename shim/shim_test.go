@@ -2,6 +2,7 @@ package shim_test
 
 import (
 	"bytes"
+	"context"
 	stdxml "encoding/xml"
 	"fmt"
 	"io"
@@ -36,7 +37,7 @@ func TestEscapeTextMatchesStdlib(t *testing.T) {
 }
 
 func TestNewDecoderToken(t *testing.T) {
-	dec := shim.NewDecoder(bytes.NewReader([]byte(`<root/>`)))
+	dec := shim.NewDecoder(context.Background(), bytes.NewReader([]byte(`<root/>`)))
 	require.NotNil(t, dec, "NewDecoder returned nil")
 
 	tok, err := dec.Token()
@@ -48,7 +49,7 @@ func TestNewDecoderToken(t *testing.T) {
 
 func TestNewTokenDecoder(t *testing.T) {
 	src := stdxml.NewDecoder(bytes.NewReader([]byte(`<root/>`)))
-	dec := shim.NewTokenDecoder(src)
+	dec := shim.NewTokenDecoder(context.Background(), src)
 	require.NotNil(t, dec, "NewTokenDecoder returned nil")
 
 	tok, err := dec.Token()
@@ -963,7 +964,7 @@ func TestDecoderDecodeMatchesStdlib(t *testing.T) {
 	require.NoError(t, stdDec.Decode(&stdItem))
 
 	var shimItem item
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 	require.NoError(t, shimDec.Decode(&shimItem))
 
 	require.Equal(t, stdItem, shimItem, "Decode result mismatch")
@@ -978,7 +979,7 @@ func TestDecoderDecodeElementMatchesStdlib(t *testing.T) {
 	input := []byte(`<root><child>one</child><child>two</child></root>`)
 
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 
 	consumeRootStart := func(next func() (stdxml.Token, error)) stdxml.StartElement { //nolint:unparam // result unused but kept for clarity
 		for {
@@ -1018,7 +1019,7 @@ func TestDecoderDecodeInvalidTargetMatchStdlib(t *testing.T) {
 	// non-pointer
 	nonPtr := any("hello")
 	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr)  //nolint:staticcheck // intentional non-pointer to test error behavior
-	shimErr := shim.NewDecoder(bytes.NewReader(input)).Decode(nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
+	shimErr := shim.NewDecoder(context.Background(), bytes.NewReader(input)).Decode(nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
 	require.Error(t, stdErr)
 	require.Error(t, shimErr)
 	require.Equal(t, stdErr.Error(), shimErr.Error())
@@ -1026,7 +1027,7 @@ func TestDecoderDecodeInvalidTargetMatchStdlib(t *testing.T) {
 	// nil pointer
 	var nilPtr *string
 	stdErr = stdxml.NewDecoder(bytes.NewReader(input)).Decode(nilPtr)
-	shimErr = shim.NewDecoder(bytes.NewReader(input)).Decode(nilPtr)
+	shimErr = shim.NewDecoder(context.Background(), bytes.NewReader(input)).Decode(nilPtr)
 	require.Error(t, stdErr)
 	require.Error(t, shimErr)
 	require.Equal(t, stdErr.Error(), shimErr.Error())
@@ -1042,7 +1043,7 @@ func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
 	stdStart := stdTok.(stdxml.StartElement)
 	stdErr := stdDec.DecodeElement(nonPtr, &stdStart) //nolint:staticcheck // intentional non-pointer to test error behavior
 
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 	shimTok, _ := shimDec.Token()
 	shimStart := shimTok.(stdxml.StartElement)
 	shimErr := shimDec.DecodeElement(nonPtr, &shimStart) //nolint:staticcheck // intentional non-pointer to test error behavior
@@ -1058,7 +1059,7 @@ func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
 	stdStart2 := stdTok2.(stdxml.StartElement)
 	stdErr = stdDec2.DecodeElement(nilPtr, &stdStart2)
 
-	shimDec2 := shim.NewDecoder(bytes.NewReader(input))
+	shimDec2 := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 	shimTok2, _ := shimDec2.Token()
 	shimStart2 := shimTok2.(stdxml.StartElement)
 	shimErr = shimDec2.DecodeElement(nilPtr, &shimStart2)
@@ -1070,7 +1071,7 @@ func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
 
 func TestAPICompilesWithInterfaces(t *testing.T) {
 	var _ io.Reader = bytes.NewReader(nil)
-	_ = shim.NewDecoder(bytes.NewReader(nil))
+	_ = shim.NewDecoder(context.Background(), bytes.NewReader(nil))
 	_ = shim.NewEncoder(io.Discard)
 }
 
@@ -1078,7 +1079,7 @@ func TestRawTokenSequenceMatchesStdlib(t *testing.T) {
 	input := []byte(`<root><a x="1">t</a><!--c--><?pi d?></root>`)
 
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 
 	var stdSeq []string
 	for {
@@ -1107,7 +1108,7 @@ func TestSkipBehaviorMatchesStdlib(t *testing.T) {
 	input := []byte(`<root><skip><a/><b>txt</b></skip><keep/></root>`)
 
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 
 	consumeUntilStart := func(next func() (stdxml.Token, error), name string) {
 		for {
@@ -1151,7 +1152,7 @@ func TestSkipBehaviorMatchesStdlib(t *testing.T) {
 func TestInputOffsetAndPosMatchStdlib(t *testing.T) {
 	input := []byte("<root>abc</root>")
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 
 	for i := 0; i < 2; i++ {
 		_, err := stdDec.Token()

@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"context"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -10,7 +11,7 @@ import (
 )
 
 // compileSourceDocument compiles an xsl:source-document element.
-func (c *compiler) compileSourceDocument(elem *helium.Element) (instruction, error) {
+func (c *compiler) compileSourceDocument(ctx context.Context, elem *helium.Element) (instruction, error) {
 	hrefAttr := getAttr(elem, "href")
 	if hrefAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:source-document requires href attribute")
@@ -36,7 +37,7 @@ func (c *compiler) compileSourceDocument(elem *helium.Element) (instruction, err
 		}
 	}
 
-	body, err := c.compileChildren(elem)
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +47,7 @@ func (c *compiler) compileSourceDocument(elem *helium.Element) (instruction, err
 }
 
 // compileIterate compiles an xsl:iterate element.
-func (c *compiler) compileIterate(elem *helium.Element) (instruction, error) {
+func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (instruction, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:iterate requires select attribute")
@@ -91,7 +92,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (instruction, error) {
 			// Text nodes in the body (after params)
 			if text, ok := child.(*helium.Text); ok {
 				t := string(text.Content())
-				if !c.shouldStripText(t) {
+				if !c.shouldStripText(ctx, t) {
 					inParams = false
 					bodyChildren = append(bodyChildren, bodyChild{text: t})
 				}
@@ -106,7 +107,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (instruction, error) {
 					// XTSE0010: xsl:param must come before other content
 					return nil, staticError(errCodeXTSE0010, "xsl:param in xsl:iterate must precede all other children")
 				}
-				p, err := c.compileIterateParam(childElem)
+				p, err := c.compileIterateParam(ctx, childElem)
 				if err != nil {
 					return nil, err
 				}
@@ -136,7 +137,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (instruction, error) {
 					}
 					if txt, ok := ch.(*helium.Text); ok {
 						t := string(txt.Content())
-						if !c.shouldStripText(t) {
+						if !c.shouldStripText(ctx, t) {
 							hasBody = true
 							break
 						}
@@ -152,7 +153,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (instruction, error) {
 					}
 					inst.OnCompletion = []instruction{&xslSequenceInst{Select: selExpr}}
 				} else {
-					body, err := c.compileChildren(childElem)
+					body, err := c.compileChildren(ctx, childElem)
 					if err != nil {
 						return nil, err
 					}
@@ -193,7 +194,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (instruction, error) {
 			continue
 		}
 		c.breakAllowed = (i == lastSignificant)
-		childInst, err := c.compileInstruction(bc.elem)
+		childInst, err := c.compileInstruction(ctx, bc.elem)
 		if err != nil {
 			return nil, err
 		}
@@ -291,7 +292,7 @@ func instructionChildren(inst instruction) [][]instruction {
 }
 
 // compileIterateParam compiles an xsl:param inside xsl:iterate.
-func (c *compiler) compileIterateParam(elem *helium.Element) (*iterateParam, error) {
+func (c *compiler) compileIterateParam(ctx context.Context, elem *helium.Element) (*iterateParam, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
@@ -310,7 +311,7 @@ func (c *compiler) compileIterateParam(elem *helium.Element) (*iterateParam, err
 		}
 		p.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -321,7 +322,7 @@ func (c *compiler) compileIterateParam(elem *helium.Element) (*iterateParam, err
 }
 
 // compileFork compiles an xsl:fork element.
-func (c *compiler) compileFork(elem *helium.Element) (instruction, error) {
+func (c *compiler) compileFork(ctx context.Context, elem *helium.Element) (instruction, error) {
 	inst := &forkInst{}
 
 	for child := range helium.Children(elem) {
@@ -332,7 +333,7 @@ func (c *compiler) compileFork(elem *helium.Element) (instruction, error) {
 
 		// Each child of xsl:fork is a branch (typically xsl:sequence or
 		// xsl:for-each-group, but any instruction is valid per spec).
-		branch, err := c.compileForkBranch(childElem)
+		branch, err := c.compileForkBranch(ctx, childElem)
 		if err != nil {
 			return nil, err
 		}
@@ -345,7 +346,7 @@ func (c *compiler) compileFork(elem *helium.Element) (instruction, error) {
 }
 
 // compileForkBranch compiles one child of xsl:fork into a branch (slice of instructions).
-func (c *compiler) compileForkBranch(elem *helium.Element) ([]instruction, error) {
+func (c *compiler) compileForkBranch(ctx context.Context, elem *helium.Element) ([]instruction, error) {
 	// If the child is xsl:sequence, compile its children as the branch body.
 	if elem.URI() == lexicon.NamespaceXSLT && elem.LocalName() == lexicon.XSLTElementSequence {
 		selectAttr := getAttr(elem, "select")
@@ -356,11 +357,11 @@ func (c *compiler) compileForkBranch(elem *helium.Element) ([]instruction, error
 			}
 			return []instruction{&xslSequenceInst{Select: expr}}, nil
 		}
-		return c.compileChildren(elem)
+		return c.compileChildren(ctx, elem)
 	}
 
 	// Otherwise, compile the element as a single-instruction branch.
-	inst, err := c.compileInstruction(elem)
+	inst, err := c.compileInstruction(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +372,7 @@ func (c *compiler) compileForkBranch(elem *helium.Element) ([]instruction, error
 }
 
 // compileBreak compiles an xsl:break element.
-func (c *compiler) compileBreak(elem *helium.Element) (instruction, error) {
+func (c *compiler) compileBreak(ctx context.Context, elem *helium.Element) (instruction, error) {
 	// XTSE0010: xsl:break must be lexically within xsl:iterate.
 	if c.iterateDepth == 0 {
 		return nil, staticError(errCodeXTSE0010, "xsl:break must be within xsl:iterate")
@@ -395,7 +396,7 @@ func (c *compiler) compileBreak(elem *helium.Element) (instruction, error) {
 		}
 		if txt, ok := ch.(*helium.Text); ok {
 			t := string(txt.Content())
-			if !c.shouldStripText(t) {
+			if !c.shouldStripText(ctx, t) {
 				hasBody = true
 				break
 			}
@@ -414,7 +415,7 @@ func (c *compiler) compileBreak(elem *helium.Element) (instruction, error) {
 		}
 		inst.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -425,7 +426,7 @@ func (c *compiler) compileBreak(elem *helium.Element) (instruction, error) {
 }
 
 // compileNextIteration compiles an xsl:next-iteration element.
-func (c *compiler) compileNextIteration(elem *helium.Element) (instruction, error) {
+func (c *compiler) compileNextIteration(ctx context.Context, elem *helium.Element) (instruction, error) {
 	// XTSE0010: xsl:next-iteration must be lexically within xsl:iterate.
 	if c.iterateDepth == 0 {
 		return nil, staticError(errCodeXTSE0010, "xsl:next-iteration must be within xsl:iterate")
@@ -446,7 +447,7 @@ func (c *compiler) compileNextIteration(elem *helium.Element) (instruction, erro
 			continue
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementWithParam {
-			wp, err := c.compileWithParam(childElem)
+			wp, err := c.compileWithParam(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -465,7 +466,7 @@ func (c *compiler) compileNextIteration(elem *helium.Element) (instruction, erro
 }
 
 // compileAccumulator compiles an xsl:accumulator top-level element.
-func (c *compiler) compileAccumulator(elem *helium.Element) error {
+func (c *compiler) compileAccumulator(ctx context.Context, elem *helium.Element) error {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:accumulator requires name attribute")
@@ -501,7 +502,7 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 			continue
 		}
 		if childElem.LocalName() == lexicon.XSLTElementAccumulatorRule {
-			if err := c.compileAccumulatorRule(acc, childElem); err != nil {
+			if err := c.compileAccumulatorRule(ctx, acc, childElem); err != nil {
 				return err
 			}
 		}
@@ -541,7 +542,7 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 }
 
 // compileAccumulatorRule compiles an xsl:accumulator-rule element.
-func (c *compiler) compileAccumulatorRule(parent *accumulatorDef, elem *helium.Element) error {
+func (c *compiler) compileAccumulatorRule(ctx context.Context, parent *accumulatorDef, elem *helium.Element) error {
 	matchAttr := getAttr(elem, "match")
 	if matchAttr == "" {
 		return staticError(errCodeXTSE0110, "xsl:accumulator-rule requires match attribute")
@@ -577,7 +578,7 @@ func (c *compiler) compileAccumulatorRule(parent *accumulatorDef, elem *helium.E
 		}
 		rule.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return err
 		}
@@ -733,7 +734,7 @@ func extractAccumulatorRefs(src string) []string {
 }
 
 // compileMerge compiles an xsl:merge element.
-func (c *compiler) compileMerge(elem *helium.Element) (instruction, error) {
+func (c *compiler) compileMerge(ctx context.Context, elem *helium.Element) (instruction, error) {
 	inst := &mergeInst{}
 
 	actionCount := 0
@@ -748,14 +749,14 @@ func (c *compiler) compileMerge(elem *helium.Element) (instruction, error) {
 		// Resolve shadow attributes on child XSLT elements (e.g.
 		// _select="..." on xsl:merge-source) before compilation.
 		if childElem.URI() == lexicon.NamespaceXSLT {
-			if err := c.resolveShadowAttributes(childElem); err != nil {
+			if err := c.resolveShadowAttributes(ctx, childElem); err != nil {
 				return nil, err
 			}
 		}
 
 		switch childElem.LocalName() {
 		case lexicon.XSLTElementMergeSource:
-			src, err := c.compileMergeSource(childElem)
+			src, err := c.compileMergeSource(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -765,7 +766,7 @@ func (c *compiler) compileMerge(elem *helium.Element) (instruction, error) {
 			if actionCount > 1 {
 				return nil, staticError(errCodeXTSE0010, "xsl:merge must have at most one xsl:merge-action child")
 			}
-			body, err := c.compileChildren(childElem)
+			body, err := c.compileChildren(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -835,8 +836,8 @@ var mergeSourceAllowedAttrs = map[string]struct{}{
 }
 
 // compileMergeSource compiles an xsl:merge-source element.
-func (c *compiler) compileMergeSource(elem *helium.Element) (*mergeSource, error) {
-	if err := c.validateXSLTAttrs(elem, mergeSourceAllowedAttrs); err != nil {
+func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element) (*mergeSource, error) {
+	if err := c.validateXSLTAttrs(ctx, elem, mergeSourceAllowedAttrs); err != nil {
 		return nil, err
 	}
 	// XTSE0020: the type attribute requires schema-aware type validation
@@ -908,7 +909,7 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*mergeSource, error
 			continue
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementMergeKey {
-			mk, err := c.compileMergeKey(childElem)
+			mk, err := c.compileMergeKey(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -939,7 +940,7 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*mergeSource, error
 }
 
 // compileMergeKey compiles an xsl:merge-key element.
-func (c *compiler) compileMergeKey(elem *helium.Element) (*mergeKey, error) {
+func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*mergeKey, error) {
 	// XTSE0090: validate permitted attributes on xsl:merge-key.
 	for _, attr := range elem.Attributes() {
 		if attr.URI() != "" {
@@ -989,7 +990,7 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*mergeKey, error) {
 			}
 			if txt, ok := ch.(*helium.Text); ok {
 				t := string(txt.Content())
-				if !c.shouldStripText(t) {
+				if !c.shouldStripText(ctx, t) {
 					return nil, staticError(errCodeXTSE3200, "xsl:merge-key must not have both select attribute and sequence constructor")
 				}
 			}
@@ -1003,7 +1004,7 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*mergeKey, error) {
 		}
 		mk.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}

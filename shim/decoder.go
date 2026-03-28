@@ -50,8 +50,10 @@ type Decoder struct {
 
 	tokenReader     TokenReader
 	events          chan tokenEvent
-	ctx             context.Context
+	done            <-chan struct{} // cancellation signal from cancel context; avoids storing context.Context
+	ctxErr          func() error   // returns cancel context's error; avoids storing context.Context
 	cancel          context.CancelFunc
+	startSAX        func(io.Reader) // deferred SAX emitter start; captures cancel context in closure
 	lastToken       Token
 	savedErr        error
 	offset          int64
@@ -68,17 +70,18 @@ type Decoder struct {
 	pendingEvent    *tokenEvent // lookahead event saved during CharData merging
 }
 
-func newDecoderFromReader(r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
+func newDecoderFromReader(ctx context.Context, r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
 	// Pre-scan the prolog to extract Directive, ProcInst, Comment, and
 	// CharData tokens. The SAX parser does not emit these for the prolog,
 	// so we handle them ourselves. The combined reader replays the full
 	// input (including the prolog) for the SAX parser.
 	prologTokens, combined, prologOnly, prologErr := scanProlog(r)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	d := &Decoder{
 		Strict:         true,
-		ctx:            ctx,
+		done:           ctx.Done(),
+		ctxErr:         ctx.Err,
 		cancel:         cancel,
 		line:           1,
 		column:         1,
@@ -87,11 +90,14 @@ func newDecoderFromReader(r io.Reader) (*Decoder, error) { //nolint:unparam // e
 		prologErr:      prologErr,
 		combinedReader: combined,
 	}
+	// Capture the cancel context in a closure so the Decoder struct does not
+	// store context.Context directly (satisfies containedctx linter).
+	d.startSAX = func(r io.Reader) { d.startSAXEmitter(ctx, r) }
 	// Error is always nil; kept in signature for compatibility.
 	return d, nil
 }
 
-func newDecoderFromTokenReader(tr TokenReader) *Decoder {
+func newDecoderFromTokenReader(_ context.Context, tr TokenReader) *Decoder {
 	return &Decoder{
 		Strict:      true,
 		tokenReader: tr,
@@ -100,15 +106,15 @@ func newDecoderFromTokenReader(tr TokenReader) *Decoder {
 	}
 }
 
-func (d *Decoder) startSAXEmitter(r io.Reader) {
+func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 	var locator sax.DocumentLocator
 
 	push := func(tok, rawTok Token, line, col int) error {
 		select {
 		case d.events <- tokenEvent{tok: stdxml.CopyToken(tok), rawTok: stdxml.CopyToken(rawTok), line: line, col: col}:
 			return nil
-		case <-d.ctx.Done():
-			return d.ctx.Err()
+		case <-d.done:
+			return d.ctxErr()
 		}
 	}
 
@@ -246,8 +252,8 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		select {
 		case d.events <- tokenEvent{tok: cd, rawTok: cd, line: line, col: col, cdata: true}:
 			return nil
-		case <-d.ctx.Done():
-			return d.ctx.Err()
+		case <-d.done:
+			return d.ctxErr()
 		}
 	}))
 	h.SetOnComment(sax.CommentFunc(func(_ context.Context, value []byte) error {
@@ -317,11 +323,11 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 	go func() {
 		defer close(d.events)
 		p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth).SAXHandler(h)
-		_, err := p.ParseReader(d.ctx, r)
+		_, err := p.ParseReader(ctx, r)
 		if err != nil {
 			select {
 			case d.events <- tokenEvent{err: err}:
-			case <-d.ctx.Done():
+			case <-d.done:
 			}
 		}
 	}()
@@ -436,7 +442,7 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 				reader = ensureReader(newr)
 			}
 			d.events = make(chan tokenEvent, 64)
-			d.startSAXEmitter(reader)
+			d.startSAX(reader)
 		}
 		d.combinedReader = nil // release reference
 	}

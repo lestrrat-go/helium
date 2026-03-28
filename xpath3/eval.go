@@ -19,7 +19,6 @@ const (
 
 // evalContext holds the evaluation state for an XPath 3.1 expression.
 type evalContext struct {
-	goCtx                context.Context
 	node                 helium.Node
 	contextItem          Item // non-nil when context item is not a node (simple map over atomics)
 	position             int
@@ -57,10 +56,6 @@ type evalContext struct {
 	schemaDeclarations     SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
 	allowXML11Chars        bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
 	traceWriter            io.Writer              // destination for fn:trace output (nil = os.Stderr)
-
-	// Cached function-call context to avoid context.WithValue per call.
-	cachedFnCtx    context.Context
-	cachedFnCtxFor context.Context // the goCtx it was built from
 }
 
 type variableScope struct {
@@ -220,15 +215,9 @@ func (ec *evalContext) withVar(name string, val Sequence) *evalContext {
 }
 
 // fnContext returns a context.Context carrying this evalContext for built-in
-// function calls. The result is cached and reused as long as ec.goCtx has not
-// changed, avoiding a context.WithValue allocation per function call.
-func (ec *evalContext) fnContext() context.Context {
-	if ec.cachedFnCtx != nil && ec.cachedFnCtxFor == ec.goCtx {
-		return ec.cachedFnCtx
-	}
-	ec.cachedFnCtx = context.WithValue(ec.goCtx, fnContextKey{}, ec)
-	ec.cachedFnCtxFor = ec.goCtx
-	return ec.cachedFnCtx
+// function calls.
+func (ec *evalContext) fnContext(goCtx context.Context) context.Context {
+	return context.WithValue(goCtx, fnContextKey{}, ec)
 }
 
 // pushScope sets ec.vars to scope in place and returns the previous scope.
@@ -244,9 +233,9 @@ func (ec *evalContext) restoreScope(old *variableScope) {
 	ec.vars = old
 }
 
-func (ec *evalContext) countOps(n int) error {
+func (ec *evalContext) countOps(goCtx context.Context, n int) error {
 	// Check context cancellation on every op count call
-	if err := ec.goCtx.Err(); err != nil {
+	if err := goCtx.Err(); err != nil {
 		return err
 	}
 	if ec.opLimit <= 0 {
@@ -259,16 +248,16 @@ func (ec *evalContext) countOps(n int) error {
 	return nil
 }
 
-type exprEvaluator func(*evalContext, Expr) (Sequence, error)
+type exprEvaluator func(context.Context, *evalContext, Expr) (Sequence, error)
 
-func evalWith(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, error) {
+func evalWith(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
 	ec.depth++
 	if ec.depth > maxRecursionDepth {
 		return nil, ErrRecursionLimit
 	}
 	defer func() { ec.depth-- }()
 
-	return evalFn(ec, expr)
+	return evalFn(goCtx, ec, expr)
 }
 
 func evalContextItemExpr(ec *evalContext) (Sequence, error) {
@@ -293,74 +282,74 @@ func evalRootExpr(ec *evalContext) (Sequence, error) {
 	return ItemSlice{nodeItemFor(ec, root)}, nil
 }
 
-func dispatchExpr(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, error) {
+func dispatchExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
 	switch e := expr.(type) {
 	case compiledExprRef:
 		return nil, fmt.Errorf("%w: compiled expression reference outside VM", ErrUnsupportedExpr)
 	case LiteralExpr:
 		return evalLiteral(e)
 	case VariableExpr:
-		return evalVariable(ec, e)
+		return evalVariable(goCtx, ec, e)
 	case ContextItemExpr:
 		return evalContextItemExpr(ec)
 	case RootExpr:
 		return evalRootExpr(ec)
 	case SequenceExpr:
-		return evalSequenceExpr(evalFn, ec, e)
+		return evalSequenceExpr(evalFn, goCtx, ec, e)
 	case *LocationPath:
-		return evalLocationPath(evalFn, ec, e)
+		return evalLocationPath(evalFn, goCtx, ec, e)
 	case BinaryExpr:
-		return evalBinaryExpr(evalFn, ec, e)
+		return evalBinaryExpr(evalFn, goCtx, ec, e)
 	case UnaryExpr:
-		return evalUnaryExpr(evalFn, ec, e)
+		return evalUnaryExpr(evalFn, goCtx, ec, e)
 	case ConcatExpr:
-		return evalConcatExpr(evalFn, ec, e)
+		return evalConcatExpr(evalFn, goCtx, ec, e)
 	case SimpleMapExpr:
-		return evalSimpleMapExpr(evalFn, ec, e)
+		return evalSimpleMapExpr(evalFn, goCtx, ec, e)
 	case RangeExpr:
-		return evalRangeExpr(evalFn, ec, e)
+		return evalRangeExpr(evalFn, goCtx, ec, e)
 	case UnionExpr:
-		return evalUnionExpr(evalFn, ec, e)
+		return evalUnionExpr(evalFn, goCtx, ec, e)
 	case IntersectExceptExpr:
-		return evalIntersectExceptExpr(evalFn, ec, e)
+		return evalIntersectExceptExpr(evalFn, goCtx, ec, e)
 	case FilterExpr:
-		return evalFilterExpr(evalFn, ec, e)
+		return evalFilterExpr(evalFn, goCtx, ec, e)
 	case PathExpr:
-		return evalPathExpr(evalFn, ec, e)
+		return evalPathExpr(evalFn, goCtx, ec, e)
 	case PathStepExpr:
-		return evalPathStepExpr(evalFn, ec, e)
+		return evalPathStepExpr(evalFn, goCtx, ec, e)
 	case LookupExpr:
-		return evalLookupExpr(evalFn, ec, e)
+		return evalLookupExpr(evalFn, goCtx, ec, e)
 	case UnaryLookupExpr:
-		return evalUnaryLookupExpr(evalFn, ec, e)
+		return evalUnaryLookupExpr(evalFn, goCtx, ec, e)
 	case FLWORExpr:
-		return evalFLWOR(evalFn, ec, e)
+		return evalFLWOR(evalFn, goCtx, ec, e)
 	case QuantifiedExpr:
-		return evalQuantifiedExpr(evalFn, ec, e)
+		return evalQuantifiedExpr(evalFn, goCtx, ec, e)
 	case IfExpr:
-		return evalIfExpr(evalFn, ec, e)
+		return evalIfExpr(evalFn, goCtx, ec, e)
 	case TryCatchExpr:
-		return evalTryCatchExpr(evalFn, ec, e)
+		return evalTryCatchExpr(evalFn, goCtx, ec, e)
 	case InstanceOfExpr:
-		return evalInstanceOfExpr(evalFn, ec, e)
+		return evalInstanceOfExpr(evalFn, goCtx, ec, e)
 	case CastExpr:
-		return evalCastExpr(evalFn, ec, e)
+		return evalCastExpr(evalFn, goCtx, ec, e)
 	case CastableExpr:
-		return evalCastableExpr(evalFn, ec, e)
+		return evalCastableExpr(evalFn, goCtx, ec, e)
 	case TreatAsExpr:
-		return evalTreatAsExpr(evalFn, ec, e)
+		return evalTreatAsExpr(evalFn, goCtx, ec, e)
 	case FunctionCall:
-		return evalFunctionCall(evalFn, ec, e)
+		return evalFunctionCall(evalFn, goCtx, ec, e)
 	case DynamicFunctionCall:
-		return evalDynamicFunctionCall(evalFn, ec, e)
+		return evalDynamicFunctionCall(evalFn, goCtx, ec, e)
 	case NamedFunctionRef:
-		return evalNamedFunctionRef(ec, e)
+		return evalNamedFunctionRef(goCtx, ec, e)
 	case InlineFunctionExpr:
-		return evalInlineFunctionExpr(evalFn, ec, e)
+		return evalInlineFunctionExpr(evalFn, goCtx, ec, e)
 	case MapConstructorExpr:
-		return evalMapConstructorExpr(evalFn, ec, e)
+		return evalMapConstructorExpr(evalFn, goCtx, ec, e)
 	case ArrayConstructorExpr:
-		return evalArrayConstructorExpr(evalFn, ec, e)
+		return evalArrayConstructorExpr(evalFn, goCtx, ec, e)
 	default:
 		return nil, fmt.Errorf("%w: %T", ErrUnsupportedExpr, expr)
 	}

@@ -13,7 +13,7 @@ func Example_html_new_push_parser() {
 	// parser. The HTML parser is more lenient — unclosed tags, missing
 	// end tags, etc. are recovered automatically.
 	p := html.NewParser()
-	pp := p.NewPushParser(context.Background())
+	pp := p.NewPushParser()
 	if err := pp.Push([]byte(`<h1>Title`)); err != nil {
 		fmt.Printf("push failed: %s\n", err)
 		return
@@ -23,7 +23,7 @@ func Example_html_new_push_parser() {
 		return
 	}
 
-	doc, err := pp.Close()
+	doc, err := pp.Close(context.Background())
 	if err != nil {
 		fmt.Printf("close failed: %s\n", err)
 		return

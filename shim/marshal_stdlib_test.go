@@ -6,6 +6,7 @@ package shim_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -2403,7 +2404,7 @@ func TestDecodeEncodeStdlib(t *testing.T) {
 <root>
 </root>
 `)
-	dec := NewDecoder(&in)
+	dec := NewDecoder(context.Background(), &in)
 	enc := NewEncoder(&out)
 	for tok, err := dec.Token(); err == nil; tok, err = dec.Token() {
 		err = enc.EncodeToken(tok)

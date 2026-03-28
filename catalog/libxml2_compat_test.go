@@ -76,11 +76,11 @@ func TestLibxml2Compat(t *testing.T) {
 				var got string
 				switch cmd.typ {
 				case "resolve":
-					got = cat.Resolve(cmd.arg1, cmd.arg2)
+					got = cat.Resolve(t.Context(), cmd.arg1, cmd.arg2)
 				case "public":
-					got = cat.Resolve(cmd.arg1, "")
+					got = cat.Resolve(t.Context(), cmd.arg1, "")
 				case "system":
-					got = cat.Resolve("", cmd.arg1)
+					got = cat.Resolve(t.Context(), "", cmd.arg1)
 				default:
 					t.Fatalf("unknown command %q at line %d", cmd.typ, i+1)
 				}

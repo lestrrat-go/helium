@@ -144,7 +144,7 @@ func validateUsedPackageGlobalContextItem(ss *Stylesheet, seen map[*Stylesheet]s
 // parameter.  Errors raised here (e.g. FOAR0001 from division by zero in a
 // global variable initializer) are returned to the caller so they become
 // non-recoverable — they cannot be caught by xsl:try/xsl:catch.
-func (ec *execContext) evaluateAllGlobals() error {
+func (ec *execContext) evaluateAllGlobals(ctx context.Context) error {
 	for len(ec.globalParamDefs) > 0 || len(ec.globalVarDefs) > 0 {
 		progress := false
 		// Evaluate in sorted key order for deterministic temporary tree
@@ -159,7 +159,7 @@ func (ec *execContext) evaluateAllGlobals() error {
 			if !ok {
 				continue
 			}
-			if _, err := ec.evaluateGlobalParam(p); err != nil {
+			if _, err := ec.evaluateGlobalParam(ctx, p); err != nil {
 				return err
 			}
 			progress = true
@@ -182,7 +182,7 @@ func (ec *execContext) evaluateAllGlobals() error {
 			if v.Visibility == visAbstract || v.OwnerPackage != nil {
 				continue
 			}
-			if _, err := ec.evaluateGlobalVar(v); err != nil {
+			if _, err := ec.evaluateGlobalVar(ctx, v); err != nil {
 				return err
 			}
 			progress = true
@@ -238,7 +238,7 @@ func (ec *execContext) invokeInitialFunction(ctx context.Context, cfg *transform
 }
 
 // evaluateGlobalVar evaluates a global variable on first access.
-func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpath3.Sequence, error) {
 	if ec.globalEvaluating[v.Name] {
 		return nil, fmt.Errorf("%w: global variable %q", ErrCircularRef, v.Name)
 	}
@@ -246,10 +246,6 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 	defer delete(ec.globalEvaluating, v.Name)
 
 	var val xpath3.Sequence
-	ctx := ec.transformCtx
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	ctx = withExecContext(ctx, ec)
 
 	// XSLT 2.0 erratum XT.E19: mode="#current" in a global variable
@@ -349,7 +345,7 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 		if !ec.globalContextAbsent {
 			sourceNode = normalizeNode(ec.sourceDoc)
 		}
-		result, err := ec.evalXPath(v.Select, sourceNode)
+		result, err := ec.evalXPath(ctx, v.Select, sourceNode)
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global variable %q: %w", v.Name, err)
 		}
@@ -411,7 +407,7 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 }
 
 // evaluateGlobalParam evaluates a global param on first access.
-func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateGlobalParam(ctx context.Context, p *param) (xpath3.Sequence, error) {
 	if ec.globalEvaluating[p.Name] {
 		return nil, fmt.Errorf("%w: global param %q", ErrCircularRef, p.Name)
 	}
@@ -419,10 +415,6 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 	defer delete(ec.globalEvaluating, p.Name)
 
 	var val xpath3.Sequence
-	ctx := ec.transformCtx
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	ctx = withExecContext(ctx, ec)
 
 	// XSLT 2.0 erratum XT.E19: mode="#current" in a global param
@@ -453,7 +445,7 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 		if !ec.globalContextAbsent {
 			sourceNode = normalizeNode(ec.sourceDoc)
 		}
-		result, err := ec.evalXPath(p.Select, sourceNode)
+		result, err := ec.evalXPath(ctx, p.Select, sourceNode)
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global param %q: %w", p.Name, err)
 		}

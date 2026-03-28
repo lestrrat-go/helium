@@ -76,7 +76,7 @@ func TestDocbook(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := cat.Resolve(tt.pubID, tt.sysID)
+			got := cat.Resolve(t.Context(), tt.pubID, tt.sysID)
 			require.Equal(t, tt.expect, got)
 		})
 	}
@@ -122,7 +122,7 @@ func TestRegistry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := cat.Resolve(tt.pubID, tt.sysID)
+			got := cat.Resolve(t.Context(), tt.pubID, tt.sysID)
 			require.Equal(t, tt.expect, got)
 		})
 	}
@@ -178,7 +178,7 @@ func TestWhitex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := cat.Resolve(tt.pubID, tt.sysID)
+			got := cat.Resolve(t.Context(), tt.pubID, tt.sysID)
 			require.Equal(t, tt.expect, got)
 		})
 	}
@@ -189,7 +189,7 @@ func TestRecursive(t *testing.T) {
 
 	// Resolving a URI that triggers the recursive catalog should return ""
 	// (recursion limit prevents infinite loop).
-	got := cat.ResolveURI("/foo/bar")
+	got := cat.ResolveURI(t.Context(), "/foo/bar")
 	require.Equal(t, "", got)
 }
 
@@ -200,7 +200,7 @@ func TestRepeatedNextCatalog(t *testing.T) {
 	cat := loadTestCatalog(t, "repeated-next-catalog.xml")
 
 	// Should still resolve correctly through the deduplicated nextCatalogs.
-	got := cat.Resolve("-//OASIS//ENTITIES DocBook XML Character Entities V4.1.2//EN", "")
+	got := cat.Resolve(t.Context(), "-//OASIS//ENTITIES DocBook XML Character Entities V4.1.2//EN", "")
 	require.Equal(t, "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod", got)
 }
 
@@ -257,11 +257,11 @@ func TestUnwrapURN(t *testing.T) {
 func TestResolveURI(t *testing.T) {
 	cat := loadTestCatalog(t, "stylesheet.xml")
 
-	got := cat.ResolveURI("http://www.oasis-open.org/committes/tr.xsl")
+	got := cat.ResolveURI(t.Context(), "http://www.oasis-open.org/committes/tr.xsl")
 	require.Equal(t, "http://www.oasis-open.org/committes/entity/stylesheets/base/tr.xsl", got)
 
 	// Non-matching URI should return "".
-	got = cat.ResolveURI("http://example.com/nonexistent")
+	got = cat.ResolveURI(t.Context(), "http://example.com/nonexistent")
 	require.Equal(t, "", got)
 }
 
@@ -272,6 +272,6 @@ func TestLoadError(t *testing.T) {
 
 func TestNilCatalog(t *testing.T) {
 	var c *catalog.Catalog
-	require.Equal(t, "", c.Resolve("foo", "bar"))
-	require.Equal(t, "", c.ResolveURI("foo"))
+	require.Equal(t, "", c.Resolve(t.Context(), "foo", "bar"))
+	require.Equal(t, "", c.ResolveURI(t.Context(), "foo"))
 }

@@ -63,7 +63,6 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		docCache:            make(map[string]*helium.Document),
 		functionResultCache: make(map[string]xpath3.Sequence),
 		accumulatorState:    make(map[string]xpath3.Sequence),
-		transformCtx:        ctx,
 		currentTime:         time.Now().UTC(),
 		resultDocuments:     make(map[string]*helium.Document),
 		resultDocItems:      make(map[string]xpath3.Sequence),
@@ -199,7 +198,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// (e.g. FOAR0001 from division by zero) are raised before any template
 	// execution begins.  This ensures that global-variable evaluation errors
 	// are non-recoverable and cannot be caught by xsl:try/xsl:catch.
-	if err := ec.evaluateAllGlobals(); err != nil { //nolint:contextcheck
+	if err := ec.evaluateAllGlobals(ctx); err != nil {
 		return nil, err
 	}
 
@@ -356,7 +355,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 					ec.contextItem = v
 					ec.position = i + 1
 					ec.size = selLen
-					tmpl, tErr := ec.findAtomicTemplate(v, resolvedMode) //nolint:contextcheck
+					tmpl, tErr := ec.findAtomicTemplate(ctx, v, resolvedMode)
 					if tErr != nil {
 						ec.tunnelParams = savedTunnel
 						return nil, tErr

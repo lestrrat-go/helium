@@ -44,7 +44,7 @@ func (s *EvalState) SetSize(size int) { s.ec.size = size }
 // The returned Result is only valid until the next EvaluateReuse call
 // on the same EvalState. Callers must extract all needed values from
 // the Result before calling EvaluateReuse again.
-func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, error) {
+func (e *Expression) EvaluateReuse(ctx context.Context, state *EvalState, node helium.Node) (Result, error) {
 	if err := e.requireCompiledProgram(); err != nil {
 		return Result{}, err
 	}
@@ -73,7 +73,7 @@ func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, 
 	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
 		return Result{}, err
 	}
-	seq, err := e.evaluate(ec)
+	seq, err := e.evaluate(ctx, ec)
 	if err != nil {
 		return Result{}, err
 	}
@@ -119,19 +119,17 @@ func (r Result) StringValue() string {
 }
 
 // NewEvalState creates a reusable EvalState from this Evaluator's config.
-// ctx carries cancellation/deadlines and optional xslt3 exec context.
 // node sets the initial context node (may be nil).
 //
 // The returned EvalState is not safe for concurrent use. The Result from
 // EvaluateReuse is only valid until the next EvaluateReuse call.
-func (e Evaluator) NewEvalState(ctx context.Context, node helium.Node) *EvalState {
+func (e Evaluator) NewEvalState(node helium.Node) *EvalState {
 	opCount := 0
 	now := time.Now()
 	s := &EvalState{}
 	ec := &s.ec
 	cfg := e.cfg
 
-	ec.goCtx = ctx
 	ec.node = node
 	ec.position = 1
 	ec.size = 1

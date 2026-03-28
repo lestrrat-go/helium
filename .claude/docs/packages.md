@@ -247,7 +247,7 @@ SAX2 event-driven parsing interface definitions.
 
 Drop-in replacement for encoding/xml backed by helium parser.
 
-- **NewDecoder(io.Reader) → *Decoder** / **NewEncoder(io.Writer) → *Encoder**
+- **NewDecoder(ctx, io.Reader) → *Decoder** / **NewTokenDecoder(ctx, TokenReader) → *Decoder** / **NewEncoder(io.Writer) → *Encoder**
 - **Marshal(v) → ([]byte, error)** / **Unmarshal([]byte, v) → error**
 - API mirrors encoding/xml; strict mode only; undeclared namespace prefixes rejected
 - Known differences: empty elements self-closed, xmlns before regular attrs, InputOffset approximate

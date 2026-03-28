@@ -1,6 +1,8 @@
 package catalog
 
 import (
+	"context"
+
 	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 )
@@ -15,21 +17,21 @@ type Catalog struct {
 // Resolve resolves an external identifier (pubID and/or sysID) to a URI.
 // Returns the resolved URI or "" if not found.
 // A nil receiver is safe and always returns "".
-func (c *Catalog) Resolve(pubID, sysID string) string {
+func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 	if c == nil {
 		return ""
 	}
-	return c.cat.Resolve(pubID, sysID)
+	return c.cat.Resolve(ctx, pubID, sysID)
 }
 
 // ResolveURI resolves a URI reference.
 // Returns the resolved URI or "" if not found.
 // A nil receiver is safe and always returns "".
-func (c *Catalog) ResolveURI(uri string) string {
+func (c *Catalog) ResolveURI(ctx context.Context, uri string) string {
 	if c == nil {
 		return ""
 	}
-	return c.cat.ResolveURI(uri)
+	return c.cat.ResolveURI(ctx, uri)
 }
 
 // loaderConfig holds configuration for a Loader.

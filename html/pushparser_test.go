@@ -34,9 +34,9 @@ func TestHTMLPushParserSingleChunk(t *testing.T) {
 	want, err := html.NewParser().Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	pp := html.NewParser().NewPushParser(t.Context())
+	pp := html.NewParser().NewPushParser()
 	require.NoError(t, pp.Push(input))
-	got, err := pp.Close()
+	got, err := pp.Close(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, dumpHTMLDoc(t, want), dumpHTMLDoc(t, got))
 }
@@ -47,7 +47,7 @@ func TestHTMLPushParserMultiChunk(t *testing.T) {
 	want, err := html.NewParser().Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	pp := html.NewParser().NewPushParser(t.Context())
+	pp := html.NewParser().NewPushParser()
 	// Push in 20-byte chunks
 	for i := 0; i < len(input); i += 20 {
 		end := i + 20
@@ -57,7 +57,7 @@ func TestHTMLPushParserMultiChunk(t *testing.T) {
 		require.NoError(t, pp.Push(input[i:end]))
 	}
 
-	got, err := pp.Close()
+	got, err := pp.Close(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, dumpHTMLDoc(t, want), dumpHTMLDoc(t, got))
 }
@@ -84,9 +84,9 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 	handler.SetOnWarning(html.WarningFunc(func(err error) error { return nil }))
 	handler.SetOnSetDocumentLocator(html.SetDocumentLocatorFunc(func(loc html.DocumentLocator) error { return nil }))
 
-	pp := html.NewParser().NewSAXPushParser(t.Context(), handler)
+	pp := html.NewParser().NewSAXPushParser(handler)
 	require.NoError(t, pp.Push(input))
-	doc, err := pp.Close()
+	doc, err := pp.Close(t.Context())
 	require.NoError(t, err)
 	require.Nil(t, doc, "SAX mode should not return a document")
 	require.Contains(t, elements, "html")
@@ -115,12 +115,12 @@ func TestHTMLParseWithSAXRespectsContextCancellation(t *testing.T) {
 func TestHTMLPushParserCloseRespectsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 
-	pp := html.NewParser().NewPushParser(ctx)
+	pp := html.NewParser().NewPushParser()
 	require.NoError(t, pp.Push([]byte(testHTML)))
 
 	cancel()
 
-	_, err := pp.Close()
+	_, err := pp.Close(ctx)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -130,12 +130,12 @@ func TestHTMLPushParserIOCopy(t *testing.T) {
 	want, err := html.NewParser().Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	pp := html.NewParser().NewPushParser(t.Context())
+	pp := html.NewParser().NewPushParser()
 	n, err := io.Copy(pp, bytes.NewReader(input))
 	require.NoError(t, err)
 	require.Equal(t, int64(len(input)), n)
 
-	got, err := pp.Close()
+	got, err := pp.Close(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, dumpHTMLDoc(t, want), dumpHTMLDoc(t, got))
 }

@@ -19,7 +19,6 @@ const (
 
 // evalContext holds the evaluation state for an XPath expression.
 type evalContext struct {
-	goCtx       context.Context
 	node        helium.Node
 	position    int
 	size        int
@@ -33,10 +32,9 @@ type evalContext struct {
 	docOrder    *ixpath.DocOrderCache
 }
 
-func newEvalContextWithConfig(ctx context.Context, node helium.Node, cfg *evalConfig) *evalContext {
+func newEvalContextWithConfig(node helium.Node, cfg *evalConfig) *evalContext {
 	opCount := 0
 	ectx := &evalContext{
-		goCtx:    ctx,
 		node:     node,
 		position: 1,
 		size:     1,
@@ -55,7 +53,6 @@ func newEvalContextWithConfig(ctx context.Context, node helium.Node, cfg *evalCo
 
 func (ctx *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 	return &evalContext{
-		goCtx:       ctx.goCtx,
 		node:        n,
 		position:    pos,
 		size:        size,
@@ -119,24 +116,24 @@ func (ctx *evalContext) Variable(name string) (any, bool) {
 }
 
 // eval dispatches to the appropriate evaluator for each AST node type.
-func eval(ctx *evalContext, expr Expr) (*Result, error) {
+func eval(goCtx context.Context, ctx *evalContext, expr Expr) (*Result, error) {
 	ctx.depth++
 	if ctx.depth > maxRecursionDepth {
 		return nil, ErrRecursionLimit
 	}
 	defer func() { ctx.depth-- }()
-	return dispatchExpr(ctx, expr)
+	return dispatchExpr(goCtx, ctx, expr)
 }
 
 // dispatchExpr routes an expression to its evaluator without the depth check.
-func dispatchExpr(ctx *evalContext, expr Expr) (*Result, error) {
+func dispatchExpr(goCtx context.Context, ctx *evalContext, expr Expr) (*Result, error) {
 	switch e := expr.(type) {
 	case *LocationPath:
-		return evalLocationPath(ctx, e)
+		return evalLocationPath(goCtx, ctx, e)
 	case BinaryExpr:
-		return evalBinaryExpr(ctx, e)
+		return evalBinaryExpr(goCtx, ctx, e)
 	case UnaryExpr:
-		return evalUnaryExpr(ctx, e)
+		return evalUnaryExpr(goCtx, ctx, e)
 	case LiteralExpr:
 		return &Result{Type: StringResult, String: e.Value}, nil
 	case NumberExpr:
@@ -144,27 +141,27 @@ func dispatchExpr(ctx *evalContext, expr Expr) (*Result, error) {
 	case VariableExpr:
 		return evalVariableExpr(ctx, e)
 	case FunctionCall:
-		return evalFunctionCall(ctx, e)
+		return evalFunctionCall(goCtx, ctx, e)
 	default:
-		return dispatchCompoundExpr(ctx, expr)
+		return dispatchCompoundExpr(goCtx, ctx, expr)
 	}
 }
 
 // dispatchCompoundExpr handles compound expression types that combine sub-expressions.
-func dispatchCompoundExpr(ctx *evalContext, expr Expr) (*Result, error) {
+func dispatchCompoundExpr(goCtx context.Context, ctx *evalContext, expr Expr) (*Result, error) {
 	switch e := expr.(type) {
 	case FilterExpr:
-		return evalFilterExpr(ctx, e)
+		return evalFilterExpr(goCtx, ctx, e)
 	case UnionExpr:
-		return evalUnionExpr(ctx, e)
+		return evalUnionExpr(goCtx, ctx, e)
 	case PathExpr:
-		return evalPathExpr(ctx, e)
+		return evalPathExpr(goCtx, ctx, e)
 	default:
 		return nil, fmt.Errorf("%w: %T", ErrUnsupportedExpr, expr)
 	}
 }
 
-func evalLocationPath(ctx *evalContext, lp *LocationPath) (*Result, error) {
+func evalLocationPath(goCtx context.Context, ctx *evalContext, lp *LocationPath) (*Result, error) {
 	var nodes []helium.Node
 
 	if lp.Absolute {
@@ -177,7 +174,7 @@ func evalLocationPath(ctx *evalContext, lp *LocationPath) (*Result, error) {
 	var err error
 	for _, step := range lp.Steps {
 		if len(step.Predicates) > 0 {
-			nodes, err = evalStepWithPredicates(ctx, nodes, step)
+			nodes, err = evalStepWithPredicates(goCtx, ctx, nodes, step)
 		} else {
 			nodes, err = evalStepNoPredicates(ctx, nodes, step)
 		}
@@ -191,7 +188,7 @@ func evalLocationPath(ctx *evalContext, lp *LocationPath) (*Result, error) {
 
 // evalStepWithPredicates evaluates one location step that has predicates.
 // Position() is relative to each parent's candidate set, not the global set.
-func evalStepWithPredicates(ctx *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
+func evalStepWithPredicates(goCtx context.Context, ctx *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	var allFiltered []helium.Node
 	for _, n := range nodes {
 		candidates, err := traverseAxis(step.Axis, n)
@@ -203,7 +200,7 @@ func evalStepWithPredicates(ctx *evalContext, nodes []helium.Node, step Step) ([
 		}
 		matched := filterByNodeTest(candidates, step.NodeTest, step.Axis, ctx)
 		for _, pred := range step.Predicates {
-			matched, err = applyPredicate(ctx, matched, pred)
+			matched, err = applyPredicate(goCtx, ctx, matched, pred)
 			if err != nil {
 				return nil, err
 			}
@@ -334,7 +331,7 @@ func matchTypeTest(test TypeTest, n helium.Node) bool {
 	return false
 }
 
-func applyPredicate(ctx *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
+func applyPredicate(goCtx context.Context, ctx *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
 	if err := ctx.countOps(len(nodes)); err != nil {
 		return nil, err
 	}
@@ -342,7 +339,7 @@ func applyPredicate(ctx *evalContext, nodes []helium.Node, pred Expr) ([]helium.
 	var result []helium.Node
 	for i, n := range nodes {
 		pctx := ctx.withNode(n, i+1, size)
-		r, err := eval(pctx, pred)
+		r, err := eval(goCtx, pctx, pred)
 		if err != nil {
 			return nil, err
 		}
@@ -363,56 +360,56 @@ func predicateTrue(r *Result, position int) bool {
 	return resultToBoolean(r)
 }
 
-func evalBinaryExpr(ctx *evalContext, e BinaryExpr) (*Result, error) {
+func evalBinaryExpr(goCtx context.Context, ctx *evalContext, e BinaryExpr) (*Result, error) {
 	switch e.Op {
 	case TokenOr:
-		return evalOr(ctx, e)
+		return evalOr(goCtx, ctx, e)
 	case TokenAnd:
-		return evalAnd(ctx, e)
+		return evalAnd(goCtx, ctx, e)
 	case TokenEquals, TokenNotEquals, TokenLess, TokenLessEq, TokenGreater, TokenGreaterEq:
-		return evalComparison(ctx, e)
+		return evalComparison(goCtx, ctx, e)
 	case TokenPlus, TokenMinus, TokenStar, TokenDiv, TokenMod:
-		return evalArithmetic(ctx, e)
+		return evalArithmetic(goCtx, ctx, e)
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnsupportedBinaryOp, e.Op)
 }
 
-func evalOr(ctx *evalContext, e BinaryExpr) (*Result, error) {
-	left, err := eval(ctx, e.Left)
+func evalOr(goCtx context.Context, ctx *evalContext, e BinaryExpr) (*Result, error) {
+	left, err := eval(goCtx, ctx, e.Left)
 	if err != nil {
 		return nil, err
 	}
 	if resultToBoolean(left) {
 		return &Result{Type: BooleanResult, Bool: true}, nil
 	}
-	right, err := eval(ctx, e.Right)
+	right, err := eval(goCtx, ctx, e.Right)
 	if err != nil {
 		return nil, err
 	}
 	return &Result{Type: BooleanResult, Bool: resultToBoolean(right)}, nil
 }
 
-func evalAnd(ctx *evalContext, e BinaryExpr) (*Result, error) {
-	left, err := eval(ctx, e.Left)
+func evalAnd(goCtx context.Context, ctx *evalContext, e BinaryExpr) (*Result, error) {
+	left, err := eval(goCtx, ctx, e.Left)
 	if err != nil {
 		return nil, err
 	}
 	if !resultToBoolean(left) {
 		return &Result{Type: BooleanResult, Bool: false}, nil
 	}
-	right, err := eval(ctx, e.Right)
+	right, err := eval(goCtx, ctx, e.Right)
 	if err != nil {
 		return nil, err
 	}
 	return &Result{Type: BooleanResult, Bool: resultToBoolean(right)}, nil
 }
 
-func evalComparison(ctx *evalContext, e BinaryExpr) (*Result, error) {
-	left, err := eval(ctx, e.Left)
+func evalComparison(goCtx context.Context, ctx *evalContext, e BinaryExpr) (*Result, error) {
+	left, err := eval(goCtx, ctx, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ctx, e.Right)
+	right, err := eval(goCtx, ctx, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -578,12 +575,12 @@ func reverseOp(op TokenType) TokenType {
 	return op
 }
 
-func evalArithmetic(ctx *evalContext, e BinaryExpr) (*Result, error) {
-	left, err := eval(ctx, e.Left)
+func evalArithmetic(goCtx context.Context, ctx *evalContext, e BinaryExpr) (*Result, error) {
+	left, err := eval(goCtx, ctx, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ctx, e.Right)
+	right, err := eval(goCtx, ctx, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -606,8 +603,8 @@ func evalArithmetic(ctx *evalContext, e BinaryExpr) (*Result, error) {
 	return &Result{Type: NumberResult, Number: result}, nil
 }
 
-func evalUnaryExpr(ctx *evalContext, e UnaryExpr) (*Result, error) {
-	r, err := eval(ctx, e.Operand)
+func evalUnaryExpr(goCtx context.Context, ctx *evalContext, e UnaryExpr) (*Result, error) {
+	r, err := eval(goCtx, ctx, e.Operand)
 	if err != nil {
 		return nil, err
 	}
@@ -637,8 +634,8 @@ func evalVariableExpr(ctx *evalContext, e VariableExpr) (*Result, error) {
 	}
 }
 
-func evalFilterExpr(ctx *evalContext, e FilterExpr) (*Result, error) {
-	r, err := eval(ctx, e.Expr)
+func evalFilterExpr(goCtx context.Context, ctx *evalContext, e FilterExpr) (*Result, error) {
+	r, err := eval(goCtx, ctx, e.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -647,7 +644,7 @@ func evalFilterExpr(ctx *evalContext, e FilterExpr) (*Result, error) {
 	}
 	nodes := r.NodeSet
 	for _, pred := range e.Predicates {
-		nodes, err = applyPredicate(ctx, nodes, pred)
+		nodes, err = applyPredicate(goCtx, ctx, nodes, pred)
 		if err != nil {
 			return nil, err
 		}
@@ -655,12 +652,12 @@ func evalFilterExpr(ctx *evalContext, e FilterExpr) (*Result, error) {
 	return &Result{Type: NodeSetResult, NodeSet: nodes}, nil
 }
 
-func evalUnionExpr(ctx *evalContext, e UnionExpr) (*Result, error) {
-	left, err := eval(ctx, e.Left)
+func evalUnionExpr(goCtx context.Context, ctx *evalContext, e UnionExpr) (*Result, error) {
+	left, err := eval(goCtx, ctx, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ctx, e.Right)
+	right, err := eval(goCtx, ctx, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -674,8 +671,8 @@ func evalUnionExpr(ctx *evalContext, e UnionExpr) (*Result, error) {
 	return &Result{Type: NodeSetResult, NodeSet: merged}, nil
 }
 
-func evalPathExpr(ctx *evalContext, e PathExpr) (*Result, error) {
-	r, err := eval(ctx, e.Filter)
+func evalPathExpr(goCtx context.Context, ctx *evalContext, e PathExpr) (*Result, error) {
+	r, err := eval(goCtx, ctx, e.Filter)
 	if err != nil {
 		return nil, err
 	}
@@ -689,7 +686,7 @@ func evalPathExpr(ctx *evalContext, e PathExpr) (*Result, error) {
 	var result []helium.Node
 	for _, n := range r.NodeSet {
 		subCtx := ctx.withNode(n, 1, 1)
-		subResult, err := evalLocationPath(subCtx, e.Path)
+		subResult, err := evalLocationPath(goCtx, subCtx, e.Path)
 		if err != nil {
 			return nil, err
 		}

@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 
@@ -30,7 +31,7 @@ func TestResolveURIUnwrapsURN(t *testing.T) {
 	urn := "urn:publicid:-:OASIS:DTD+DocBook+XML+V4.1.2:EN"
 
 	// ResolveURI should unwrap the URN and resolve via the public entry.
-	got := cat.ResolveURI(urn)
+	got := cat.ResolveURI(t.Context(), urn)
 	require.Equal(t, "file:///usr/share/xml/docbook.dtd", got)
 }
 
@@ -48,7 +49,7 @@ func TestResolveURINonURNUnchanged(t *testing.T) {
 	}
 
 	// Normal URI (not a URN) should resolve via URI entry as before.
-	got := cat.ResolveURI("http://example.com/schema.xsd")
+	got := cat.ResolveURI(t.Context(), "http://example.com/schema.xsd")
 	require.Equal(t, "file:///local/schema.xsd", got)
 }
 
@@ -68,17 +69,17 @@ func TestResolveURIURNNotFound(t *testing.T) {
 
 	// URN that unwraps to a public ID not in the catalog.
 	urn := "urn:publicid:-:OASIS:DTD+DocBook+XML+V4.1.2:EN"
-	got := cat.ResolveURI(urn)
+	got := cat.ResolveURI(t.Context(), urn)
 	require.Equal(t, "", got)
 }
 
 // countingLoader is a Loader that counts how many times each URL is loaded.
 type countingLoader struct {
-	counts  map[string]*atomic.Int32
-	cat     *catalog.Catalog
+	counts map[string]*atomic.Int32
+	cat    *catalog.Catalog
 }
 
-func (l *countingLoader) Load(filename string) (*catalog.Catalog, error) {
+func (l *countingLoader) Load(_ context.Context, filename string) (*catalog.Catalog, error) {
 	if l.counts[filename] == nil {
 		l.counts[filename] = &atomic.Int32{}
 	}
@@ -91,9 +92,6 @@ func (l *countingLoader) Load(filename string) (*catalog.Catalog, error) {
 func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 	t.Parallel()
 
-	// Build a catalog graph where the same target catalog ("shared.xml")
-	// is reachable from two nextCatalog entries. Without the visited
-	// cache, the target would be entered twice for the same query.
 	target := &catalog.Catalog{
 		Entries: []catalog.Entry{
 			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
@@ -113,24 +111,16 @@ func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 		Loader: loader,
 	}
 
-	// Query that misses in root but falls through to nextCatalog entries.
-	// Both point to shared.xml, but visited cache should skip the second.
-	got := root.Resolve("", "http://example.com/notfound.dtd")
+	got := root.Resolve(t.Context(), "", "http://example.com/notfound.dtd")
 	require.Equal(t, "", got)
 
-	// shared.xml was loaded (lazyLoad), but its resolve should only be
-	// called once due to the visited cache.
 	cnt := loader.counts["shared.xml"]
 	require.NotNil(t, cnt)
-	// The second nextCatalog entry should be skipped by visited cache.
-	// lazyLoad may be called twice (it caches on the Entry), but resolve
-	// is guarded by checkVisited.
 }
 
 func TestVisitedCacheStillResolves(t *testing.T) {
 	t.Parallel()
 
-	// Ensure the visited cache doesn't prevent valid resolution.
 	target := &catalog.Catalog{
 		Entries: []catalog.Entry{
 			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
@@ -150,15 +140,13 @@ func TestVisitedCacheStillResolves(t *testing.T) {
 		Loader: loader,
 	}
 
-	got := root.Resolve("", "http://example.com/foo.dtd")
+	got := root.Resolve(t.Context(), "", "http://example.com/foo.dtd")
 	require.Equal(t, "file:///local/foo.dtd", got)
 }
 
 func TestVisitedCachePerQuery(t *testing.T) {
 	t.Parallel()
 
-	// The visited cache is per top-level Resolve call. Two different
-	// queries should each be able to visit the same catalog.
 	target := &catalog.Catalog{
 		Entries: []catalog.Entry{
 			{Type: catalog.EntrySystem, Name: "http://example.com/a.dtd", URL: "file:///a.dtd"},
@@ -178,9 +166,9 @@ func TestVisitedCachePerQuery(t *testing.T) {
 		Loader: loader,
 	}
 
-	got := root.Resolve("", "http://example.com/a.dtd")
+	got := root.Resolve(t.Context(), "", "http://example.com/a.dtd")
 	require.Equal(t, "file:///a.dtd", got)
 
-	got = root.Resolve("", "http://example.com/b.dtd")
+	got = root.Resolve(t.Context(), "", "http://example.com/b.dtd")
 	require.Equal(t, "file:///b.dtd", got)
 }

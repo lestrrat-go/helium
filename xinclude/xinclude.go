@@ -110,7 +110,6 @@ type processor struct {
 	docCache     map[string]docCacheEntry // cached raw bytes for XML documents
 	txtCache     map[string]txtCacheEntry // cached text inclusions
 	errorHandler helium.ErrorHandler
-	ctx          context.Context
 	depth        int
 	count        int
 }
@@ -145,7 +144,6 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		resolver:     cfg.resolver,
 		baseURI:      cfg.baseURI,
 		errorHandler: cfg.errorHandler,
-		ctx:          ctx,
 		expanding:    make(map[string]bool),
 		docCache:     make(map[string]docCacheEntry),
 		txtCache:     make(map[string]txtCacheEntry),
@@ -299,7 +297,7 @@ func (p *processor) includeXML(ctx context.Context, inc *helium.Element, uri str
 		return err
 	}
 
-	p.mergeEntities(doc, inc.OwnerDocument())
+	p.mergeEntities(ctx, doc, inc.OwnerDocument())
 
 	// Collect top-level children from included document, skipping DTD nodes
 	var nodes []helium.Node
@@ -380,7 +378,7 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 		}
 	}
 
-	p.mergeEntities(doc, inc.OwnerDocument())
+	p.mergeEntities(ctx, doc, inc.OwnerDocument())
 
 	// Evaluate XPointer expression against the document
 	nodes, err := xpointer.Evaluate(ctx, doc, xptrExpr)
@@ -467,7 +465,7 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 // subsets into the target document's internal subset, matching libxml2's
 // xmlXIncludeMergeEntities behavior. Creates a minimal internal subset on
 // the target if it doesn't have one and the source does.
-func (p *processor) mergeEntities(src, dst *helium.Document) {
+func (p *processor) mergeEntities(ctx context.Context, src, dst *helium.Document) {
 	srcInt := src.IntSubset()
 	srcExt := src.ExtSubset()
 	if srcInt == nil && srcExt == nil {
@@ -516,7 +514,7 @@ func (p *processor) mergeEntities(src, dst *helium.Document) {
 				mismatch = true
 			}
 			if mismatch {
-				p.errorHandler.Handle(p.ctx, helium.NewLeveledError(
+				p.errorHandler.Handle(ctx, helium.NewLeveledError(
 					fmt.Sprintf("xi:include: entity '%s' definition mismatch", name),
 					helium.ErrorLevelWarning,
 				))

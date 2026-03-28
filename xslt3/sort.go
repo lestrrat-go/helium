@@ -375,9 +375,9 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 			if ec.contextItem != nil {
 				evalState.SetContextItem(ec.contextItem)
 			}
-			result, err = sk.Select.EvaluateReuse(evalState, node)
+			result, err = sk.Select.EvaluateReuse(ctx, evalState, node)
 		} else {
-			r, e := ec.evalXPath(sk.Select, node) //nolint:contextcheck
+			r, e := ec.evalXPath(ctx, sk.Select, node)
 			if e != nil {
 				return sortValue{}, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", e)
 			}
@@ -754,7 +754,7 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *s
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState() //nolint:contextcheck
+	evalState := ec.sortXPathEvalState(ctx)
 	evalState.SetSize(len(nodes))
 
 	// Save and restore currentNode so current() works correctly
@@ -803,7 +803,7 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState() //nolint:contextcheck
+	evalState := ec.sortXPathEvalState(ctx)
 	entries := make([]keyed1[xpath3.Item], sequence.Len(items))
 
 	savedItem := ec.contextItem
@@ -857,7 +857,7 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState() //nolint:contextcheck
+	evalState := ec.sortXPathEvalState(ctx)
 	evalState.SetSize(len(nodes))
 
 	savedCurrent := ec.currentNode
@@ -896,7 +896,7 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState() //nolint:contextcheck
+	evalState := ec.sortXPathEvalState(ctx)
 	entries := make(keyedSlice[xpath3.Item], sequence.Len(items))
 
 	savedItem := ec.contextItem
@@ -1022,7 +1022,7 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *performSortIns
 	var seq xpath3.Sequence
 
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode) //nolint:contextcheck
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}

@@ -64,7 +64,7 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	}
 
 	// Find best matching template
-	tmpl, err := ec.findBestTemplate(node, mode) //nolint:contextcheck
+	tmpl, err := ec.findBestTemplate(ctx, node, mode)
 	if err != nil {
 		return err
 	}
@@ -119,17 +119,17 @@ func (ec *execContext) nodeIsTyped(node helium.Node) bool {
 // findBestTemplate finds the highest-priority matching template for a node.
 // Returns XTRE0540 when on-multiple-match="fail" and two templates match
 // with equal priority and import precedence.
-func (ec *execContext) findBestTemplate(node helium.Node, mode string) (*template, error) {
+func (ec *execContext) findBestTemplate(ctx context.Context, node helium.Node, mode string) (*template, error) {
 	// Set currentNode to the candidate so current() works in pattern predicates
 	savedCurrent := ec.currentNode
 	ec.currentNode = node
 	defer func() { ec.currentNode = savedCurrent }()
 
-	best := ec.findFirstMatch(ec.stylesheet.modeTemplates[mode], node)
+	best := ec.findFirstMatch(ctx, ec.stylesheet.modeTemplates[mode], node)
 
 	// Also check #all mode templates that might not be registered in this mode
 	if best == nil && mode != modeAll {
-		best = ec.findFirstMatch(ec.stylesheet.modeTemplates[modeAll], node)
+		best = ec.findFirstMatch(ctx, ec.stylesheet.modeTemplates[modeAll], node)
 	}
 
 	if best == nil {
@@ -139,7 +139,7 @@ func (ec *execContext) findBestTemplate(node helium.Node, mode string) (*templat
 	// Check on-multiple-match="fail": look for a second matching template
 	// with the same priority and import precedence.
 	if ec.onMultipleMatchFail(mode) {
-		if ec.hasConflictingMatch(node, mode, best) {
+		if ec.hasConflictingMatch(ctx, node, mode, best) {
 			return nil, dynamicError(errCodeXTDE0540,
 				"ambiguous rule match for node %v in mode %q (on-multiple-match=fail)",
 				node, mode)
@@ -150,9 +150,9 @@ func (ec *execContext) findBestTemplate(node helium.Node, mode string) (*templat
 }
 
 // findFirstMatch returns the first template in the list that matches the node.
-func (ec *execContext) findFirstMatch(templates []*template, node helium.Node) *template {
+func (ec *execContext) findFirstMatch(ctx context.Context, templates []*template, node helium.Node) *template {
 	for _, tmpl := range templates {
-		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
+		if tmpl.Match != nil && tmpl.Match.matchPattern(ctx, ec, node) {
 			return tmpl
 		}
 	}
@@ -182,7 +182,7 @@ func (ec *execContext) onMultipleMatchFail(mode string) bool {
 
 // hasConflictingMatch checks whether there is another template (besides best)
 // that matches the same node with equal import precedence and priority.
-func (ec *execContext) hasConflictingMatch(node helium.Node, mode string, best *template) bool {
+func (ec *execContext) hasConflictingMatch(ctx context.Context, node helium.Node, mode string, best *template) bool {
 	check := func(templates []*template) bool {
 		for _, tmpl := range templates {
 			if tmpl == best {
@@ -201,7 +201,7 @@ func (ec *execContext) hasConflictingMatch(node helium.Node, mode string, best *
 			if len(tmpl.Body) > 0 && len(best.Body) > 0 && &tmpl.Body[0] == &best.Body[0] {
 				continue
 			}
-			if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
+			if tmpl.Match != nil && tmpl.Match.matchPattern(ctx, ec, node) {
 				return true
 			}
 		}
@@ -219,18 +219,18 @@ func (ec *execContext) hasConflictingMatch(node helium.Node, mode string, best *
 
 // findAtomicTemplate finds a template matching an atomic value.
 // XSLT 3.0 patterns like ".[. instance of xs:integer]" can match atomic items.
-func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) (*template, error) {
+func (ec *execContext) findAtomicTemplate(ctx context.Context, item xpath3.Item, mode string) (*template, error) {
 	var best *template
 	templates := ec.stylesheet.modeTemplates[mode]
 	for _, tmpl := range templates {
-		if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
+		if tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, item) {
 			best = tmpl
 			break
 		}
 	}
 	if best == nil && mode != modeAll {
 		for _, tmpl := range ec.stylesheet.modeTemplates[modeAll] {
-			if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
+			if tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, item) {
 				best = tmpl
 				break
 			}
@@ -241,7 +241,7 @@ func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) (*templ
 	}
 	// Check on-multiple-match="fail": look for conflicting atomic template match.
 	if ec.onMultipleMatchFail(mode) {
-		if ec.hasConflictingAtomicMatch(item, mode, best) {
+		if ec.hasConflictingAtomicMatch(ctx, item, mode, best) {
 			return nil, dynamicError(errCodeXTDE0540,
 				"ambiguous rule match for atomic item in mode %q (on-multiple-match=fail)", mode)
 		}
@@ -251,7 +251,7 @@ func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) (*templ
 
 // hasConflictingAtomicMatch checks whether there is another template (besides best)
 // that matches the same atomic item with equal import precedence and priority.
-func (ec *execContext) hasConflictingAtomicMatch(item xpath3.Item, mode string, best *template) bool {
+func (ec *execContext) hasConflictingAtomicMatch(ctx context.Context, item xpath3.Item, mode string, best *template) bool {
 	check := func(templates []*template) bool {
 		for _, tmpl := range templates {
 			if tmpl == best {
@@ -266,7 +266,7 @@ func (ec *execContext) hasConflictingAtomicMatch(item xpath3.Item, mode string, 
 			if len(tmpl.Body) > 0 && len(best.Body) > 0 && &tmpl.Body[0] == &best.Body[0] {
 				continue
 			}
-			if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
+			if tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, item) {
 				return true
 			}
 		}
@@ -282,7 +282,7 @@ func (ec *execContext) hasConflictingAtomicMatch(item xpath3.Item, mode string, 
 }
 
 // matchAtomicPattern checks if an atomic item matches a pattern.
-func (ec *execContext) matchAtomicPattern(p *pattern, item xpath3.Item) bool {
+func (ec *execContext) matchAtomicPattern(ctx context.Context, p *pattern, item xpath3.Item) bool {
 	for _, alt := range p.Alternatives {
 		// variable reference patterns (e.g., match="$var") only match nodes,
 		// never atomic items per XSLT 3.0 §5.5.3.
@@ -298,7 +298,7 @@ func (ec *execContext) matchAtomicPattern(p *pattern, item xpath3.Item) bool {
 			}
 		}
 		// Evaluate the pattern as a boolean predicate with the item as context
-		result, err := ec.xpathEvaluator().ContextItem(item).Evaluate(ec.xpathContext(), compiled, nil)
+		result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), compiled, nil)
 		if err != nil {
 			continue
 		}
@@ -353,7 +353,7 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 		}
 
 		if p.Select != nil {
-			result, err := ec.xpathEvaluator().ContextItem(item).Evaluate(ec.xpathContext(), p.Select, nil) //nolint:contextcheck
+			result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), p.Select, nil)
 			if err != nil {
 				return err
 			}
@@ -532,7 +532,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 			}
 			// Use default value
 			if p.Select != nil {
-				result, err := ec.evalXPath(p.Select, node) //nolint:contextcheck
+				result, err := ec.evalXPath(ctx, p.Select, node)
 				if err != nil {
 					return err
 				}

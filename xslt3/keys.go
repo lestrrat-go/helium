@@ -183,7 +183,7 @@ func compositeAtomicEquals(a, b []xpath3.AtomicValue, cmpFn func(string, string)
 
 // buildKeyTable builds or retrieves a key table for the given key name
 // scoped to the given document root.
-func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, error) {
+func (ec *execContext) buildKeyTable(ctx context.Context, name string, root helium.Node) (*keyTable, error) {
 	if ec.keyTables == nil {
 		ec.keyTables = make(map[string]*keyTable)
 	}
@@ -281,7 +281,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 	// indexNode tries to match a single node against all key defs and index it.
 	indexNode := func(node helium.Node) error {
 		for _, kd := range defs {
-			if !kd.Match.matchPattern(ec, node) {
+			if !kd.Match.matchPattern(ctx, ec, node) {
 				// Check if a fatal error occurred during pattern matching
 				if ec.patternMatchErr != nil {
 					err := ec.patternMatchErr
@@ -298,7 +298,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 			ec.keyUseExprDepth++
 			if kd.Use != nil {
 				// use="expr" form
-				result, err := ec.evalXPath(kd.Use, node)
+				result, err := ec.evalXPath(ctx, kd.Use, node)
 				if err != nil {
 					ec.keyUseExprDepth--
 					return err
@@ -306,10 +306,6 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 				items = sequence.Materialize(result.Sequence())
 			} else if len(kd.Body) > 0 {
 				// Content constructor form: evaluate body as sequence
-				ctx := ec.transformCtx
-				if ctx == nil {
-					ctx = context.Background()
-				}
 				ec.temporaryOutputDepth++
 				seq, err := ec.evaluateBodyAsSequence(ctx, kd.Body)
 				ec.temporaryOutputDepth--
@@ -406,8 +402,8 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 }
 
 // lookupKey looks up nodes by key name and typed value in the given document root.
-func (ec *execContext) lookupKey(name string, value xpath3.AtomicValue, root helium.Node) ([]helium.Node, error) {
-	kt, err := ec.buildKeyTable(name, root)
+func (ec *execContext) lookupKey(ctx context.Context, name string, value xpath3.AtomicValue, root helium.Node) ([]helium.Node, error) {
+	kt, err := ec.buildKeyTable(ctx, name, root)
 	if err != nil {
 		return nil, err
 	}
@@ -434,8 +430,8 @@ func (ec *execContext) lookupKey(name string, value xpath3.AtomicValue, root hel
 }
 
 // lookupCompositeKey looks up nodes by composite key (sequence of values).
-func (ec *execContext) lookupCompositeKey(name string, values []xpath3.AtomicValue, root helium.Node) ([]helium.Node, error) {
-	kt, err := ec.buildKeyTable(name, root)
+func (ec *execContext) lookupCompositeKey(ctx context.Context, name string, values []xpath3.AtomicValue, root helium.Node) ([]helium.Node, error) {
+	kt, err := ec.buildKeyTable(ctx, name, root)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"context"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -9,7 +10,7 @@ import (
 // checkUPA checks that a content model is deterministic (Unique Particle Attribution).
 // A non-deterministic model means that when an element arrives, there's ambiguity
 // about which particle it belongs to.
-func (c *compiler) checkUPA(td *TypeDef, src typeDefSource) {
+func (c *compiler) checkUPA(ctx context.Context, td *TypeDef, src typeDefSource) {
 	if td.ContentModel == nil {
 		return
 	}
@@ -18,7 +19,7 @@ func (c *compiler) checkUPA(td *TypeDef, src typeDefSource) {
 		if !src.isLocal {
 			component = td.Name.Local
 		}
-		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
 			"The content model is not determinist."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}

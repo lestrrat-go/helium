@@ -2,6 +2,7 @@ package shim_test
 
 import (
 	"bytes"
+	"context"
 	stdxml "encoding/xml"
 	"io"
 	"reflect"
@@ -468,7 +469,7 @@ func TestUnmarshalNSStdlib(t *testing.T) {
 		var dst Tables
 		var err error
 		if tt.ns != "" {
-			d := NewDecoder(strings.NewReader(tt.xml))
+			d := NewDecoder(context.Background(), strings.NewReader(tt.xml))
 			d.DefaultSpace = tt.ns
 			err = d.Decode(&dst)
 		} else {
@@ -585,7 +586,7 @@ func TestUnmarshalNSAttrStdlib(t *testing.T) {
 		var dst TableAttrs
 		var err error
 		if tt.ns != "" {
-			d := NewDecoder(strings.NewReader(tt.xml))
+			d := NewDecoder(context.Background(), strings.NewReader(tt.xml))
 			d.DefaultSpace = tt.ns
 			err = d.Decode(&dst)
 		} else {

@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-func (c *compiler) compileValueOf(elem *helium.Element) (*valueOfInst, error) {
+func (c *compiler) compileValueOf(ctx context.Context, elem *helium.Element) (*valueOfInst, error) {
 	inst := &valueOfInst{}
 
 	selectAttr := getAttr(elem, "select")
@@ -42,7 +43,7 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*valueOfInst, error) {
 		}
 	} else {
 		// Sequence constructor body (XSLT 2.0+)
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +64,7 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*valueOfInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileText(elem *helium.Element) (*textInst, error) {
+func (c *compiler) compileText(ctx context.Context, elem *helium.Element) (*textInst, error) {
 	// xsl:text must contain only text and CDATA sections — no child elements (XTSE0010)
 	var sb strings.Builder
 	for child := range helium.Children(elem) {
@@ -100,14 +101,14 @@ func (c *compiler) compileText(elem *helium.Element) (*textInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileElement(elem *helium.Element) (*elementInst, error) {
+func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*elementInst, error) {
 	// xsl:break / xsl:next-iteration not allowed inside element constructors.
 	savedBreak := c.breakAllowed
 	c.breakAllowed = false
 	defer func() { c.breakAllowed = savedBreak }()
 
 	// Validate attributes
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "namespace": {}, "inherit-namespaces": {},
 		"use-attribute-sets": {}, "type": {}, "validation": {},
 	}); err != nil {
@@ -152,7 +153,7 @@ func (c *compiler) compileElement(elem *helium.Element) (*elementInst, error) {
 		return nil, err
 	}
 	if typeAttr != "" {
-		if err := c.checkTypeAttrSchemaAware("xsl:element", typeAttr); err != nil {
+		if err := c.checkTypeAttrSchemaAware(ctx, "xsl:element", typeAttr); err != nil {
 			return nil, err
 		}
 		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
@@ -186,7 +187,7 @@ func (c *compiler) compileElement(elem *helium.Element) (*elementInst, error) {
 		inst.StaticBaseURI = effectiveBase
 	}
 
-	body, err := c.compileChildren(elem)
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +196,7 @@ func (c *compiler) compileElement(elem *helium.Element) (*elementInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileAttribute(elem *helium.Element) (*attributeInst, error) {
+func (c *compiler) compileAttribute(ctx context.Context, elem *helium.Element) (*attributeInst, error) {
 	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:attribute requires name attribute")
@@ -209,7 +210,7 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*attributeInst, error
 	inst := &attributeInst{Name: nameAVT}
 
 	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
-		if err := c.checkTypeAttrSchemaAware("xsl:attribute", typeAttr); err != nil {
+		if err := c.checkTypeAttrSchemaAware(ctx, "xsl:attribute", typeAttr); err != nil {
 			return nil, err
 		}
 		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
@@ -253,7 +254,7 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*attributeInst, error
 		}
 		inst.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -263,13 +264,13 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*attributeInst, error
 	return inst, nil
 }
 
-func (c *compiler) compileComment(elem *helium.Element) (*commentInst, error) {
+func (c *compiler) compileComment(ctx context.Context, elem *helium.Element) (*commentInst, error) {
 	inst := &commentInst{}
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		// XTSE0940: select and non-empty content are mutually exclusive.
-		if err := c.validateEmptyElement(elem, "xsl:comment"); err != nil {
+		if err := c.validateEmptyElement(ctx, elem, "xsl:comment"); err != nil {
 			return nil, staticError(errCodeXTSE0940, "xsl:comment has both @select and content")
 		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -278,7 +279,7 @@ func (c *compiler) compileComment(elem *helium.Element) (*commentInst, error) {
 		}
 		inst.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -288,7 +289,7 @@ func (c *compiler) compileComment(elem *helium.Element) (*commentInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compilePI(elem *helium.Element) (*piInst, error) {
+func (c *compiler) compilePI(ctx context.Context, elem *helium.Element) (*piInst, error) {
 	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:processing-instruction requires name attribute")
@@ -304,7 +305,7 @@ func (c *compiler) compilePI(elem *helium.Element) (*piInst, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		// XTSE0940: select and non-empty content are mutually exclusive.
-		if err := c.validateEmptyElement(elem, "xsl:processing-instruction"); err != nil {
+		if err := c.validateEmptyElement(ctx, elem, "xsl:processing-instruction"); err != nil {
 			return nil, staticError(errCodeXTSE0940, "xsl:processing-instruction has both @select and content")
 		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -313,7 +314,7 @@ func (c *compiler) compilePI(elem *helium.Element) (*piInst, error) {
 		}
 		inst.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -323,7 +324,7 @@ func (c *compiler) compilePI(elem *helium.Element) (*piInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileCopy(elem *helium.Element) (*copyInst, error) {
+func (c *compiler) compileCopy(ctx context.Context, elem *helium.Element) (*copyInst, error) {
 	// Validate boolean attributes (including empty string)
 	if inAttr, hasIn := elem.GetAttribute("inherit-namespaces"); hasIn {
 		if err := validateBooleanAttr("xsl:copy", "inherit-namespaces", inAttr); err != nil {
@@ -394,7 +395,7 @@ func (c *compiler) compileCopy(elem *helium.Element) (*copyInst, error) {
 		}
 	}
 
-	body, err := c.compileChildren(elem)
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +404,7 @@ func (c *compiler) compileCopy(elem *helium.Element) (*copyInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileCopyOf(elem *helium.Element) (*copyOfInst, error) {
+func (c *compiler) compileCopyOf(ctx context.Context, elem *helium.Element) (*copyOfInst, error) {
 	// XTSE0260: xsl:copy-of must have no significant content
 	for child := range helium.Children(elem) {
 		switch child.Type() {
@@ -480,7 +481,7 @@ func (c *compiler) compileCopyOf(elem *helium.Element) (*copyOfInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileNumber(elem *helium.Element) (*numberInst, error) {
+func (c *compiler) compileNumber(ctx context.Context, elem *helium.Element) (*numberInst, error) {
 	inst := &numberInst{
 		Level: getAttr(elem, "level"),
 	}
@@ -593,7 +594,7 @@ func (c *compiler) compileNumber(elem *helium.Element) (*numberInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileNamespace(elem *helium.Element) (*namespaceInst, error) {
+func (c *compiler) compileNamespace(ctx context.Context, elem *helium.Element) (*namespaceInst, error) {
 	nameAttr, hasName := elem.GetAttribute("name")
 	if !hasName {
 		return nil, staticError(errCodeXTSE0110, "xsl:namespace requires name attribute")
@@ -608,7 +609,7 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*namespaceInst, error
 	inst := &namespaceInst{Name: nameAVT}
 
 	selectAttr := getAttr(elem, "select")
-	hasContent := c.hasEffectiveContent(elem)
+	hasContent := c.hasEffectiveContent(ctx, elem)
 	// XTSE0910: select and content are mutually exclusive on xsl:namespace
 	if selectAttr != "" && hasContent {
 		return nil, staticError(errCodeXTSE0910, "xsl:namespace must not have both a select attribute and content")
@@ -623,7 +624,7 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*namespaceInst, error
 		}
 		inst.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -633,7 +634,7 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*namespaceInst, error
 	return inst, nil
 }
 
-func (c *compiler) compileDocument(elem *helium.Element) (*documentInst, error) {
+func (c *compiler) compileDocument(ctx context.Context, elem *helium.Element) (*documentInst, error) {
 	inst := &documentInst{}
 	if v := getAttr(elem, "validation"); v != "" {
 		if err := validateValidationAttr("xsl:document", v); err != nil {
@@ -644,7 +645,7 @@ func (c *compiler) compileDocument(elem *helium.Element) (*documentInst, error) 
 	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
 		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
 	}
-	body, err := c.compileChildren(elem)
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
@@ -652,8 +653,8 @@ func (c *compiler) compileDocument(elem *helium.Element) (*documentInst, error) 
 	return inst, nil
 }
 
-func (c *compiler) compileSequence(elem *helium.Element) (instruction, error) {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileSequence(ctx context.Context, elem *helium.Element) (instruction, error) {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"select": {},
 	}); err != nil {
 		return nil, err
@@ -670,7 +671,7 @@ func (c *compiler) compileSequence(elem *helium.Element) (instruction, error) {
 		}
 		return &xslSequenceInst{Select: expr}, nil
 	}
-	body, err := c.compileChildren(elem)
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
@@ -681,7 +682,7 @@ func (c *compiler) compileSequence(elem *helium.Element) (instruction, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*literalResultElement, error) {
+func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium.Element) (*literalResultElement, error) {
 	// xsl:break / xsl:next-iteration not allowed inside element constructors.
 	savedBreak := c.breakAllowed
 	c.breakAllowed = false
@@ -883,7 +884,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*literalRe
 	// but before children are compiled.
 	if len(c.stylesheet.namespaceAliases) > 0 {
 		// Alias the element itself
-		if resultURI, resultPfx, ok := c.resolveNamespaceAlias(lre.Namespace); ok {
+		if resultURI, resultPfx, ok := c.resolveNamespaceAlias(ctx, lre.Namespace); ok {
 			lre.Namespace = resultURI
 			if resultPfx != "" {
 				lre.Prefix = resultPfx
@@ -899,7 +900,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*literalRe
 			if attr.Namespace == "" {
 				continue
 			}
-			if resultURI, resultPfx, ok := c.resolveNamespaceAlias(attr.Namespace); ok {
+			if resultURI, resultPfx, ok := c.resolveNamespaceAlias(ctx, attr.Namespace); ok {
 				attr.Namespace = resultURI
 				if resultPfx != "" {
 					attr.Prefix = resultPfx
@@ -914,7 +915,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*literalRe
 		// Alias namespace declarations
 		aliasedNS := make(map[string]string)
 		for prefix, uri := range lre.Namespaces {
-			if resultURI, resultPfx, ok := c.resolveNamespaceAlias(uri); ok {
+			if resultURI, resultPfx, ok := c.resolveNamespaceAlias(ctx, uri); ok {
 				if resultPfx != "" {
 					aliasedNS[resultPfx] = resultURI
 				} else if resultURI != "" {
@@ -956,7 +957,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*literalRe
 
 	// Handle xsl:type
 	if typeAttr, ok := elem.GetAttributeNS("type", lexicon.NamespaceXSLT); ok {
-		if err := c.checkTypeAttrSchemaAware("LRE (xsl:type)", typeAttr); err != nil {
+		if err := c.checkTypeAttrSchemaAware(ctx, "LRE (xsl:type)", typeAttr); err != nil {
 			return nil, err
 		}
 		lre.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
@@ -976,7 +977,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*literalRe
 	}
 
 	// Compile children
-	body, err := c.compileChildren(elem)
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
