@@ -109,11 +109,7 @@ func (c *command) runContext(ctx context.Context, args []string) int {
 
 	var cat *catalog.Catalog
 	if cfg.catalogs && !cfg.noCatalogs {
-		var err error
-		cat, err = c.loadCatalogFromEnv(ctx)
-		if err != nil {
-			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
-		}
+		cat = c.loadCatalogFromEnv(ctx)
 	}
 
 	var schema *xsd.Schema
@@ -340,10 +336,10 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	return cfg, files
 }
 
-func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) {
+func (c *command) loadCatalogFromEnv(ctx context.Context) *catalog.Catalog {
 	envFiles := os.Getenv("XML_CATALOG_FILES")
 	if envFiles == "" {
-		return nil, nil //nolint:nilnil
+		return nil
 	}
 	for f := range strings.SplitSeq(envFiles, " ") {
 		f = strings.TrimSpace(f)
@@ -355,9 +351,9 @@ func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, err
 			_, _ = fmt.Fprintf(c.stderr, "%s: failed to load catalog %s: %s\n", c.prog, f, err)
 			continue
 		}
-		return cat, nil
+		return cat
 	}
-	return nil, nil //nolint:nilnil
+	return nil
 }
 
 func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
