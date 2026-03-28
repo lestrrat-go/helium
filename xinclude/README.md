@@ -94,7 +94,7 @@ func Example_xinclude_process() {
   }
   fmt.Printf("substitutions: %d\n", n)
 
-  s, err := doc.XMLString()
+  s, err := helium.WriteString(doc)
   if err != nil {
     fmt.Printf("failed to serialize: %s\n", err)
     return
@@ -123,7 +123,7 @@ func Example_xinclude_process() {
   }
   fmt.Printf("substitutions: %d\n", n)
 
-  s, err = doc.XMLString()
+  s, err = helium.WriteString(doc)
   if err != nil {
     fmt.Printf("failed to serialize: %s\n", err)
     return
