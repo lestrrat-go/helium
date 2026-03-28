@@ -130,7 +130,7 @@ func (ec *execContext) fnSnapshot(ctx context.Context, args []xpath3.Sequence) (
 	}
 	snapped, err := ec.snapshotNode(ctx, node)
 	if err != nil {
-		return xpath3.ItemSlice{xpath3.NodeItem{Node: node}}, nil
+		return xpath3.ItemSlice{xpath3.NodeItem{Node: node}}, nil //nolint:nilerr // snapshot falls back to original node on failure
 	}
 	ec.transferNilledStatus(node, snapped)
 	return xpath3.ItemSlice{xpath3.NodeItem{Node: snapped}}, nil
@@ -517,15 +517,15 @@ func (ec *execContext) fnRegexGroup(_ context.Context, args []xpath3.Sequence) (
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // regex-group returns "" on atomization failure
 	}
 	s, err := xpath3.AtomicToString(av)
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // regex-group returns "" on string conversion failure
 	}
 	idx, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // regex-group returns "" for non-integer group number
 	}
 	if idx < 0 || idx >= len(ec.regexGroups) {
 		return xpath3.SingleString(""), nil

@@ -18,7 +18,7 @@ func (ec *execContext) fnElementAvailable(_ context.Context, args []xpath3.Seque
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr // element-available returns false on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 
@@ -71,7 +71,7 @@ func (ec *execContext) fnFunctionAvailable(_ context.Context, args []xpath3.Sequ
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr // function-available returns false on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 
@@ -172,7 +172,7 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr // type-available returns false on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 
@@ -314,11 +314,11 @@ func (ec *execContext) accumulatorLookup(
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.EmptySequence(), nil
+		return xpath3.EmptySequence(), nil //nolint:nilerr // accumulator lookup returns empty on atomization failure
 	}
 	name, err := xpath3.AtomicToString(av)
 	if err != nil {
-		return xpath3.EmptySequence(), nil
+		return xpath3.EmptySequence(), nil //nolint:nilerr // accumulator lookup returns empty on string conversion failure
 	}
 	// XTDE3340: validate the name is a valid EQName
 	if !isValidQName(name) && !isValidEQName(name) {

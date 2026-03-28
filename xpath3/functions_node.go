@@ -463,7 +463,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		a, err := CastFromString(s, TypeDouble)
 		if err != nil {
-			return SingleDouble(math.NaN()), nil
+			return SingleDouble(math.NaN()), nil //nolint:nilerr // fn:number returns NaN on cast failure per spec
 		}
 		return SingleDouble(a.DoubleVal()), nil
 	}
@@ -477,11 +477,11 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		if errors.As(err, &xpErr) && xpErr.Code == "FOTY0013" {
 			return nil, err
 		}
-		return SingleDouble(math.NaN()), nil
+		return SingleDouble(math.NaN()), nil //nolint:nilerr // fn:number returns NaN on atomization failure per spec
 	}
 	dbl, err := CastAtomic(a, TypeDouble)
 	if err != nil {
-		return SingleDouble(math.NaN()), nil
+		return SingleDouble(math.NaN()), nil //nolint:nilerr // fn:number returns NaN on cast failure per spec
 	}
 	return SingleDouble(dbl.DoubleVal()), nil
 }

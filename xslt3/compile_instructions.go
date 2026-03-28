@@ -459,7 +459,7 @@ func (c *compiler) evaluateUseWhen(expr string) (bool, error) {
 	}
 	b, err := xpath3.EBV(result.Sequence())
 	if err != nil {
-		return true, nil
+		return true, nil //nolint:nilerr // use-when defaults to true on EBV failure
 	}
 	return b, nil
 }
@@ -470,7 +470,7 @@ func (c *compiler) useWhenFunctionAvailable(_ context.Context, args []xpath3.Seq
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr // function-available returns false on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 
@@ -532,7 +532,7 @@ func (c *compiler) useWhenSystemProperty(_ context.Context, args []xpath3.Sequen
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // system-property returns "" on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 
@@ -576,7 +576,7 @@ func (c *compiler) useWhenTypeAvailable(_ context.Context, args []xpath3.Sequenc
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr // type-available returns false on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 	resolved := resolveQName(name, c.nsBindings)
@@ -589,7 +589,7 @@ func (c *compiler) useWhenElementAvailable(_ context.Context, args []xpath3.Sequ
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr // element-available returns false on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 	resolved := resolveQName(name, c.nsBindings)

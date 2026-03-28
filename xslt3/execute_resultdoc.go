@@ -240,7 +240,7 @@ func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *resultD
 	if inst.FormatAVT != nil {
 		v, err := inst.FormatAVT.evaluate(ctx, ec.contextNode)
 		if err != nil {
-			return inst.Format, nil
+			return inst.Format, nil //nolint:nilerr // AVT eval failure falls back to static format
 		}
 		v = strings.TrimSpace(v)
 		if v != "" && !strings.HasPrefix(v, "Q{") {

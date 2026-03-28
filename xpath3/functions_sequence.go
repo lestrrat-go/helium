@@ -307,7 +307,7 @@ func deepEqualAtomic(a, b AtomicValue, opts deepEqualOptions) (bool, error) {
 	eq, err := ValueCompareWithImplicitTimezone(TokenEq, a, b, opts.implicitTZ)
 	if err != nil {
 		// Incomparable types are not deep-equal
-		return false, nil
+		return false, nil //nolint:nilerr // incomparable types yield false per fn:deep-equal spec
 	}
 	return eq, nil
 }

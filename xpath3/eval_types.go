@@ -121,7 +121,7 @@ func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Se
 	}
 	av, err := AtomizeItem(seq.Get(0))
 	if err != nil {
-		return SingleBoolean(false), nil
+		return SingleBoolean(false), nil //nolint:nilerr // castable returns false on atomization failure
 	}
 	// xs:QName cast from string requires namespace context
 	if targetType == TypeQName {
@@ -134,7 +134,7 @@ func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Se
 	if targetType == TypeENTITIES || targetType == TypeIDREFS || targetType == TypeNMTOKENS {
 		s, err := AtomicToString(av)
 		if err != nil {
-			return SingleBoolean(false), nil
+			return SingleBoolean(false), nil //nolint:nilerr // castable returns false on conversion failure
 		}
 		return SingleBoolean(isValidListCastable(s, targetType)), nil
 	}

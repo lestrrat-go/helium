@@ -64,7 +64,7 @@ func compareSingletonAgainstRange(evalFn exprEvaluator, ec *evalContext, op Toke
 	}
 	singletonInt, err := coerceToInteger(singletonAtoms[0])
 	if err != nil {
-		return false, false, nil
+		return false, false, nil //nolint:nilerr // non-integer subscript means no match
 	}
 	start, end, empty, err := evalRangeBounds(evalFn, ec, rangeExpr)
 	if err != nil {

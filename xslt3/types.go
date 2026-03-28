@@ -282,7 +282,7 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 		// Parse the function type
 		st, err := xpath3.ParseSequenceType(itemType)
 		if err != nil {
-			return item, nil // unparseable → pass through
+			return item, nil //nolint:nilerr // unparseable type → pass through
 		}
 		seq := xpath3.ItemSlice{item}
 		// First try strict sequenceType matching (contravariant params, covariant return).

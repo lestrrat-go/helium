@@ -421,7 +421,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 			_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
 				name, sErr := paramKeyToClark(key)
 				if sErr != nil {
-					return nil
+					return nil //nolint:nilerr // skip unparseable static param keys
 				}
 				nestedCompiler = nestedCompiler.SetStaticParameter(name, value)
 				staticParamValues[name] = value
@@ -578,7 +578,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
 			name, sErr := paramKeyToClark(key)
 			if sErr != nil {
-				return nil
+				return nil //nolint:nilerr // skip unparseable param keys
 			}
 			params[name] = value
 			return nil

@@ -698,10 +698,10 @@ func (ec *execContext) checkIDConstraintsForCopiedDoc(out *outputFrame, pendingB
 	tmpDoc := helium.NewDefaultDocument()
 	copied, err := helium.CopyNode(copiedElem, tmpDoc)
 	if err != nil {
-		return nil // best effort
+		return nil //nolint:nilerr // best-effort ID validation; copy failure is non-fatal
 	}
 	if err := tmpDoc.AddChild(copied); err != nil {
-		return nil
+		return nil //nolint:nilerr // best-effort ID validation; AddChild failure is non-fatal
 	}
 	// Transfer annotations from the live tree to the copy.
 	ann := make(xsd.TypeAnnotations)

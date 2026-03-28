@@ -379,11 +379,11 @@ func (ec *execContext) fnUnparsedEntityURI(ctx context.Context, args []xpath3.Se
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // unparsed-entity-uri returns "" on atomization failure
 	}
 	name, err := xpath3.AtomicToString(av)
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // unparsed-entity-uri returns "" on string conversion failure
 	}
 	ent := lookupUnparsedEntityInDoc(name, doc)
 	if ent == nil {
@@ -437,11 +437,11 @@ func (ec *execContext) fnUnparsedEntityPublicID(ctx context.Context, args []xpat
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // unparsed-entity-public-id returns "" on atomization failure
 	}
 	name, err := xpath3.AtomicToString(av)
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // unparsed-entity-public-id returns "" on string conversion failure
 	}
 	ent := lookupUnparsedEntityInDoc(name, doc)
 	if ent == nil {
