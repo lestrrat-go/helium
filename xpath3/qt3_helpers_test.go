@@ -279,7 +279,8 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 // ──────────────────────────────────────────────────────────────────────
 
 func qt3TestDataDir() string {
-	_, f, _, _ := runtime.Caller(0)
+	_, f, _, ok := runtime.Caller(0)
+	_ = ok
 	return filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "testdata")
 }
 

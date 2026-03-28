@@ -38,7 +38,7 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 			return nil, pctx.error(ctx, ErrNotationNameRequired)
 		}
 		if _, ok := names[name]; ok {
-			return nil, pctx.error(ctx, ErrDTDDupToken{Name: name})
+			return nil, pctx.error(ctx, DTDDupTokenError{Name: name})
 		}
 
 		enumv = append(enumv, name)
@@ -89,7 +89,7 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 			return nil, pctx.error(ctx, ErrNmtokenRequired)
 		}
 		if _, ok := names[name]; ok {
-			return nil, pctx.error(ctx, ErrDTDDupToken{Name: name})
+			return nil, pctx.error(ctx, DTDDupTokenError{Name: name})
 		}
 
 		enumv = append(enumv, name)

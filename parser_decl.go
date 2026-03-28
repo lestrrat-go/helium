@@ -16,7 +16,7 @@ func (pctx *parserCtx) parseVersionInfoFromCursor(ctx context.Context) (string, 
 	cur := pctx.getCursor()
 	pctx.skipBlanks(ctx)
 	if !cur.ConsumeString("version") {
-		return "", pctx.error(ctx, ErrAttrNotFound{Token: "version"})
+		return "", pctx.error(ctx, AttrNotFoundError{Token: "version"})
 	}
 	pctx.skipBlanks(ctx)
 	if cur.Peek() != '=' {
@@ -59,7 +59,7 @@ func (pctx *parserCtx) parseEncodingDeclFromCursor(ctx context.Context) (string,
 	cur := pctx.getCursor()
 	pctx.skipBlanks(ctx)
 	if !cur.ConsumeString("encoding") {
-		return "", ErrAttrNotFound{Token: "encoding"}
+		return "", AttrNotFoundError{Token: "encoding"}
 	}
 	pctx.skipBlanks(ctx)
 	if cur.Peek() != '=' {
@@ -102,7 +102,7 @@ func (pctx *parserCtx) parseStandaloneDeclFromCursor(ctx context.Context) (Docum
 	cur := pctx.getCursor()
 	pctx.skipBlanks(ctx)
 	if !cur.ConsumeString("standalone") {
-		return StandaloneImplicitNo, ErrAttrNotFound{Token: "standalone"}
+		return StandaloneImplicitNo, AttrNotFoundError{Token: "standalone"}
 	}
 	pctx.skipBlanks(ctx)
 	if cur.Peek() != '=' {
@@ -149,7 +149,7 @@ func (pctx *parserCtx) parseStandaloneDeclFromCursor(ctx context.Context) (Docum
 	}
 }
 
-func (e ErrAttrNotFound) Error() string {
+func (e AttrNotFoundError) Error() string {
 	return "attribute token '" + e.Token + "' not found"
 }
 
@@ -174,7 +174,7 @@ func (pctx *parserCtx) parseNamedAttributeBytes(ctx context.Context, name []byte
 
 	pctx.skipBlankBytes(ctx, cur)
 	if !cur.Consume(name) {
-		return "", pctx.error(ctx, ErrAttrNotFound{Token: string(name)})
+		return "", pctx.error(ctx, AttrNotFoundError{Token: string(name)})
 	}
 
 	pctx.skipBlankBytes(ctx, cur)

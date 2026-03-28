@@ -14,7 +14,8 @@ import (
 )
 
 func testdataDir() string {
-	_, file, _, _ := runtime.Caller(0)
+	_, file, _, ok := runtime.Caller(0)
+	_ = ok
 	return filepath.Join(filepath.Dir(file), "..", "testdata", "libxml2-compat", "catalogs")
 }
 

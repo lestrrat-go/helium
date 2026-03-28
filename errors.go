@@ -44,15 +44,15 @@ var (
 	errNoCursor           = errors.New("parser has no input")
 )
 
-// ErrDTDDupToken is returned when a DTD attribute enumeration contains
+// DTDDupTokenError is returned when a DTD attribute enumeration contains
 // a duplicate token value.
-type ErrDTDDupToken struct {
+type DTDDupTokenError struct {
 	Name string
 }
 
-// ErrAttrNotFound is returned when a referenced attribute token cannot
+// AttrNotFoundError is returned when a referenced attribute token cannot
 // be found in the DTD attribute declarations.
-type ErrAttrNotFound struct {
+type AttrNotFoundError struct {
 	Token string
 }
 
@@ -202,6 +202,6 @@ func (e ErrParseError) FormatError() string {
 }
 
 // Error returns the diagnostic message for this duplicate token error.
-func (e ErrDTDDupToken) Error() string {
+func (e DTDDupTokenError) Error() string {
 	return "standalone: attribute enumeration value token " + e.Name + " duplicated"
 }
