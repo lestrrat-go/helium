@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -929,7 +930,7 @@ func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) e
 			}
 			return dynamicError(errCodeXPTY0004, "xsl:evaluate: result does not match as=%q", asType)
 		}
-	case "xs:integer":
+	case lexicon.XSInteger:
 		for item := range sequence.Items(seq) {
 			if av, ok := item.(xpath3.AtomicValue); ok {
 				switch av.TypeName {
@@ -939,7 +940,7 @@ func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) e
 			}
 			return dynamicError(errCodeXPTY0004, "xsl:evaluate: result does not match as=%q", asType)
 		}
-	case "xs:boolean":
+	case lexicon.XSBoolean:
 		for item := range sequence.Items(seq) {
 			if av, ok := item.(xpath3.AtomicValue); ok {
 				switch av.TypeName {
@@ -949,7 +950,7 @@ func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) e
 			}
 			return dynamicError(errCodeXPTY0004, "xsl:evaluate: result does not match as=%q", asType)
 		}
-	case "item()", "item()*":
+	case lexicon.NodeTestItem, "item()*":
 		// Any item matches
 	}
 	return nil

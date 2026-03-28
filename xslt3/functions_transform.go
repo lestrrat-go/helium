@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -551,8 +552,8 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	secondaryResults := make(map[string]*helium.Document)
 	secondaryOutputDefs := make(map[string]*OutputDef)
 	fnTransformCfg := &transformConfig{
-		initialTemplate:   initialTemplate,
-		initialMode:       initialMode,
+		initialTemplate:  initialTemplate,
+		initialMode:      initialMode,
 		initialFunction:  initialFunction,
 		baseOutputURI:    baseOutputURI,
 		resultDocHandler: resultDocCollector{results: secondaryResults, outputDefs: secondaryOutputDefs},
@@ -634,7 +635,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		// Set up the initial match selection on the exec context.
 		// Enable raw capture when delivery-format is "raw" so function
 		// items and other non-node XDM values are preserved.
-		rawCapture := deliveryFormat == "raw"
+		rawCapture := deliveryFormat == lexicon.OutputRaw
 		var execErr error
 		resultDoc, capturedItems, execErr = executeTransformWithSelection(ctx, sourceDoc, ss, fnTransformCfg, initialMatchSel, rawCapture)
 		if execErr != nil {

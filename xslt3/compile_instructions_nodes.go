@@ -423,7 +423,7 @@ func (c *compiler) compileCopyOf(elem *helium.Element) (*copyOfInst, error) {
 		if attr.URI() != "" {
 			continue
 		}
-		if attr.LocalName() == "match" || attr.LocalName() == "count" || attr.LocalName() == "from" {
+		if attr.LocalName() == "match" || attr.LocalName() == lexicon.AttrCount || attr.LocalName() == "from" {
 			return nil, staticError(errCodeXTSE0090,
 				"attribute %q is not allowed on xsl:copy-of", attr.LocalName())
 		}
@@ -738,7 +738,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*literalRe
 		// When a child element rebinds a prefix to a different URI,
 		// the original URI (not the new one) remains excluded.
 		if erp, ok := elem.GetAttributeNS("exclude-result-prefixes", lexicon.NamespaceXSLT); ok {
-			if erp == "#all" {
+			if erp == lexicon.ModeAll {
 				for prefix := range c.stylesheet.namespaces {
 					if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 						newExcludes[uri] = struct{}{}
@@ -746,7 +746,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*literalRe
 				}
 			} else {
 				for _, prefix := range strings.Fields(erp) {
-					if prefix == "#default" {
+					if prefix == lexicon.ModeDefault {
 						if uri, ok := c.nsBindings[""]; ok && uri != "" {
 							newExcludes[uri] = struct{}{}
 						} else {

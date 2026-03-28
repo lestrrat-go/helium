@@ -26,7 +26,7 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 		}
 	}
 
-	dir := "test"
+	dir := "test" //nolint:goconst
 	files, err := os.ReadDir(dir)
 	require.NoError(t, err, "os.ReadDir should succeed")
 

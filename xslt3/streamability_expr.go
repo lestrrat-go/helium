@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -129,7 +130,7 @@ func exprHasShallowDescentCallWithClimbingArg(ss *Stylesheet, expr *xpath3.Expre
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok && fc.Prefix != "" && len(fc.Args) > 0 {
 			cat := lookupFuncStreamability(ss, fc.Name, len(fc.Args))
-			if cat == "shallow-descent" {
+			if cat == lexicon.StreamShallowDescent {
 				if exprHasUpwardAxis(fc.Args[0]) {
 					found = true
 					return false
@@ -322,7 +323,7 @@ func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
 			return false
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if fc.Prefix == "" && (fc.Name == "reverse" || fc.Name == "innermost") {
+			if fc.Prefix == "" && (fc.Name == "reverse" || fc.Name == "innermost") { //nolint:goconst
 				for _, arg := range fc.Args {
 					if argHasStreamingCrawl(arg) {
 						found = true
@@ -356,7 +357,7 @@ func exprHasHigherOrderWithConsumingArg(expr *xpath3.Expression) bool {
 			return true
 		}
 		switch fc.Name {
-		case "filter", "fold-right":
+		case lexicon.StreamFilter, "fold-right":
 			if argHasStreamingDownwardUngrounded(fc.Args[0]) {
 				found = true
 				return false
@@ -668,7 +669,7 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 // function (produces grounded, non-streaming output).
 func isGroundingFuncName(name string) bool {
 	switch name {
-	case "snapshot", "copy-of", "copy", "current-group",
+	case "snapshot", "copy-of", "copy", "current-group", //nolint:goconst
 		"outermost", "innermost", "parse-xml", "parse-xml-fragment",
 		"doc", "document", "sort", "reverse", "head":
 		return true
@@ -741,14 +742,14 @@ func isAtomicResultExpr(expr xpath3.Expr) bool {
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
 		if fc.Prefix == "" {
 			switch fc.Name {
-			case "tokenize", "string", "data", "number", "boolean",
+			case "tokenize", "string", "data", "number", "boolean", //nolint:goconst
 				"name", "local-name", "namespace-uri", "string-length",
 				"normalize-space", "count", "sum", "avg", "min", "max",
 				"string-join", "concat", "contains", "starts-with",
 				"ends-with", "matches", "replace", "translate",
 				"substring", "substring-before", "substring-after",
 				"upper-case", "lower-case", "round", "floor", "ceiling",
-				"abs", "not", "true", "false", "position", "last",
+				"abs", "not", "true", "false", "position", lexicon.FnLast,
 				"empty", "exists", "head", "tail":
 				return true
 			}

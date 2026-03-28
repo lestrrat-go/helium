@@ -27,10 +27,10 @@ func fnCount(_ context.Context, args []Sequence) (Sequence, error) {
 // aggregateTypeFamily classifies an atomic type for aggregate type checking.
 func aggregateTypeFamily(typeName string) string {
 	if isIntegerDerived(typeName) {
-		return "numeric"
+		return "numeric" //nolint:goconst
 	}
 	if isStringDerived(typeName) {
-		return "string"
+		return lexicon.TypeString
 	}
 	switch typeName {
 	case TypeDecimal, TypeDouble, TypeFloat:
@@ -38,13 +38,13 @@ func aggregateTypeFamily(typeName string) string {
 	case TypeUntypedAtomic:
 		return "numeric" // untypedAtomic promotes to double
 	case TypeString, TypeAnyURI:
-		return "string"
+		return lexicon.TypeString
 	case TypeYearMonthDuration:
-		return "duration:YM"
+		return "duration:YM" //nolint:goconst
 	case TypeDayTimeDuration:
-		return "duration:DT"
+		return "duration:DT" //nolint:goconst
 	case TypeDuration:
-		return "duration"
+		return lexicon.TypeDuration
 	case TypeDate:
 		return "date"
 	case TypeDateTime:
@@ -52,7 +52,7 @@ func aggregateTypeFamily(typeName string) string {
 	case TypeTime:
 		return "time"
 	case TypeBoolean:
-		return "boolean"
+		return lexicon.TypeBoolean
 	case TypeBase64Binary:
 		return "base64Binary"
 	case TypeHexBinary:
@@ -347,7 +347,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 			}
 		}
 		family := aggregateTypeFamily(a.TypeName)
-		if family == "" || family == "duration" {
+		if family == "" || family == lexicon.TypeDuration {
 			return nil, &XPathError{
 				Code:    errCodeFORG0006,
 				Message: fmt.Sprintf("invalid type %s for %s", a.TypeName, fnName),
@@ -394,7 +394,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 			continue
 		}
 		var cmp bool
-		if coll != nil && family == "string" {
+		if coll != nil && family == lexicon.TypeString {
 			r := coll.compare(a.StringVal(), best.StringVal())
 			cmp = (isMax && r > 0) || (!isMax && r < 0)
 		} else {

@@ -186,7 +186,7 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 	if !strings.HasPrefix(name, "Q{") {
 		if idx := strings.IndexByte(name, ':'); idx >= 0 {
 			prefix := name[:idx]
-			if prefix != "xs" && prefix != "xsd" {
+			if prefix != "xs" && prefix != lexicon.PrefixXSD {
 				if _, ok := ec.stylesheet.namespaces[prefix]; !ok {
 					return nil, dynamicError(errCodeXTDE1428,
 						"type-available: prefix %q has no namespace declaration", prefix)
@@ -456,7 +456,7 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 	// those accumulators are accessible from templates in that mode.
 	if md := ec.effectiveModeDefs()[ec.currentMode]; md != nil && md.UseAccumulators != nil {
 		switch *md.UseAccumulators {
-		case "#all":
+		case lexicon.ModeAll:
 			// all accumulators allowed
 		case "":
 			// use-accumulators="" means NO accumulators allowed

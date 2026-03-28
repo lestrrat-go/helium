@@ -4,6 +4,8 @@ import (
 	"bytes"
 	stdxml "encoding/xml"
 	"io"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // scanProlog reads from r until the first element start tag, tokenizing
@@ -135,7 +137,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 				return tokens, &stdxml.SyntaxError{Msg: "expected target name after <?"}
 			}
 
-			if pi.Target == "xml" {
+			if pi.Target == lexicon.PrefixXML {
 				s.xmlDeclStart = piStart
 				s.xmlDeclEnd = s.buf.Len()
 			}

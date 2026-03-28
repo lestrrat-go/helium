@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -458,9 +459,9 @@ func comparisonFamily(typeName string) string {
 	case TypeDecimal, TypeDouble, TypeFloat:
 		return "numeric"
 	case TypeString, TypeAnyURI:
-		return "string"
+		return lexicon.TypeString
 	case TypeBoolean:
-		return "boolean"
+		return lexicon.TypeBoolean
 	case TypeDate:
 		return "date"
 	case TypeDateTime:

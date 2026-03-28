@@ -429,7 +429,7 @@ func parseTestSet(path string) *testSetFile {
 func mergeDeps(setDeps, caseDeps []dependency) []dependency {
 	caseHasSpec := false
 	for _, d := range caseDeps {
-		if d.Type == "spec" {
+		if d.Type == "spec" { //nolint:goconst
 			caseHasSpec = true
 			break
 		}
@@ -452,7 +452,7 @@ func isXPathApplicable(deps []dependency) bool {
 		// Exclude tests that require the absence of a feature we support.
 		// E.g. unicode-normalization-form value="FULLY-NORMALIZED" satisfied="false"
 		// means the test is for processors that do NOT support that form.
-		if d.Satisfied == "false" && isSupportedFeature(d) {
+		if d.Satisfied == "false" && isSupportedFeature(d) { //nolint:goconst
 			return false
 		}
 		if d.Type != "spec" {
@@ -825,7 +825,7 @@ func convertAssertion(xa xmlAssertion) assertion {
 	// Decode the raw inner XML to preserve character references like &#xD;
 	// that Go's xml:",chardata" would normalize away.
 	value := decodeXMLText(string(xa.Inner))
-	if xa.XMLName.Local != "assert-string-value" {
+	if xa.XMLName.Local != "assert-string-value" { //nolint:goconst
 		value = strings.TrimSpace(value)
 	}
 	a := assertion{
@@ -1035,10 +1035,10 @@ func generateTestFile(tests []generatedTest) string {
 
 func assertionsExpectError(assertions []assertion) bool {
 	for _, a := range assertions {
-		if a.Type == "error" {
+		if a.Type == "error" { //nolint:goconst
 			return true
 		}
-		if a.Type == "any-of" {
+		if a.Type == "any-of" { //nolint:goconst
 			// Only treat as error-only if ALL children are errors.
 			// If any-of has both error and non-error children,
 			// the non-error result is also acceptable (XP31 behavior).

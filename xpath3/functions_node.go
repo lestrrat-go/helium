@@ -578,11 +578,11 @@ func stripXMLTextDeclaration(s string) (string, error) {
 
 	switch len(names) {
 	case 1:
-		if names[0] != "encoding" {
+		if names[0] != lexicon.DeclEncoding {
 			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
 		}
 	case 2:
-		if names[0] != "version" || names[1] != "encoding" {
+		if names[0] != lexicon.DeclVersion || names[1] != lexicon.DeclEncoding {
 			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
 		}
 	default:
@@ -612,7 +612,7 @@ func parseXMLPseudoAttributes(s string) ([]string, error) {
 		}
 		name := s[start:i]
 		switch name {
-		case "version", "encoding":
+		case lexicon.DeclVersion, "encoding":
 		case "standalone":
 			return nil, fmt.Errorf("standalone not allowed")
 		default:

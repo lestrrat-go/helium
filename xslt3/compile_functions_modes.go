@@ -180,7 +180,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementParam {
 			if reqVal, hasReq := childElem.GetAttribute("required"); hasReq {
-				if reqVal != lexicon.ValueYes && reqVal != "1" && reqVal != "true" {
+				if reqVal != lexicon.ValueYes && reqVal != "1" && reqVal != lexicon.ValueTrue {
 					pname := getAttr(childElem, "name")
 					return staticError(errCodeXTSE0020,
 						"xsl:param %q in xsl:function must not have required=%q", pname, reqVal)
@@ -223,12 +223,12 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		streamability = getAttr(elem, "streamable")
 		switch streamability {
 		case lexicon.ValueYes:
-			streamability = "absorbing"
+			streamability = lexicon.StreamAbsorbing
 		case lexicon.ValueNo, "":
 			streamability = ""
 		}
 	}
-	if len(params) == 0 && streamability != "" && streamability != "unclassified" {
+	if len(params) == 0 && streamability != "" && streamability != lexicon.StreamUnclassified {
 		return staticError(errCodeXTSE3155,
 			"xsl:function %q with no parameters must not have streamability=%q (only unclassified allowed)", name, streamability)
 	}

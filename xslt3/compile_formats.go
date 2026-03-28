@@ -245,7 +245,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.Method = methodXML
 	}
 	if outDef.Encoding == "" {
-		outDef.Encoding = "UTF-8"
+		outDef.Encoding = lexicon.EncodingUTF8U
 	}
 
 	// Validate and parse boolean output attributes.
@@ -299,11 +299,11 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	if v := getAttr(elem, paramStandalone); v != "" {
 		v = strings.TrimSpace(v)
 		switch v {
-		case lexicon.ValueYes, lexicon.ValueNo, "omit":
+		case lexicon.ValueYes, lexicon.ValueNo, "omit": //nolint:goconst
 			// valid as-is
-		case "true", "1":
+		case lexicon.ValueTrue, "1":
 			v = lexicon.ValueYes
-		case "false", "0":
+		case lexicon.ValueFalse, "0":
 			v = lexicon.ValueNo
 		default:
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
@@ -543,7 +543,7 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 			if outDef.StandaloneRaw == "" && val != "" {
 				v := strings.TrimSpace(val)
 				switch v {
-				case lexicon.ValueYes, lexicon.ValueNo, "omit":
+				case lexicon.ValueYes, lexicon.ValueNo, "omit": //nolint:goconst
 					outDef.Standalone = v
 				}
 			}

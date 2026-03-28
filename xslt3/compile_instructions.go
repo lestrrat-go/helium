@@ -224,7 +224,7 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 	// Handle xml:space inheritance
 	savedPreserve := c.preserveSpace
 	if xs := getAttr(elem, lexicon.QNameXMLSpace); xs != "" {
-		c.preserveSpace = (xs == "preserve")
+		c.preserveSpace = (xs == lexicon.SpacePreserve)
 	}
 	defer func() { c.preserveSpace = savedPreserve }()
 
@@ -729,7 +729,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 			if !strings.ContainsAny(v, "{}") {
 				sv := strings.TrimSpace(v)
 				switch sv {
-				case lexicon.ValueYes, lexicon.ValueNo, "omit", "true", "false", "1", "0":
+				case lexicon.ValueYes, lexicon.ValueNo, lexicon.ValueOmit, "true", lexicon.ValueFalse, "1", "0":
 					// valid
 				default:
 					return nil, staticError(errCodeSEPM0016, "%q is not a valid value for xsl:result-document/@standalone", v)

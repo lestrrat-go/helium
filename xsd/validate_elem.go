@@ -239,7 +239,7 @@ func (vc *validationContext) matchAll(parent *helium.Element, mg *ModelGroup, ch
 			continue
 		}
 		if td != nil && td.Abstract {
-			msg := "The type definition is abstract."
+			msg := "The type definition is abstract." //nolint:goconst
 			vc.reportValidityError(vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("abstract type")
 			continue

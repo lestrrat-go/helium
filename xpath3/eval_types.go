@@ -721,7 +721,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 					// Contravariant: the function's declared param type must be a supertype
 					// of (or same as) the test's param type. In practice, this means the
 					// test's param type must be a subtype of the function's param type.
-						if !isSequenceSubtype(testParam, v.ParamTypes[i], ec) {
+					if !isSequenceSubtype(testParam, v.ParamTypes[i], ec) {
 						return false
 					}
 				}

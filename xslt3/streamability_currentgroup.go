@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -119,7 +120,7 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 	case xpath3.FunctionCall:
 		if e.Prefix == "" {
 			switch e.Name {
-			case "current-group":
+			case lexicon.FnCurrentGroup:
 				// Any reference to current-group() is consuming in streaming
 				return 1
 			case "current-grouping-key":
@@ -184,7 +185,7 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 // isCurrentGroupCall returns true if expr is a call to current-group().
 func isCurrentGroupCall(expr xpath3.Expr) bool {
 	fc, ok := expr.(xpath3.FunctionCall)
-	return ok && fc.Prefix == "" && fc.Name == "current-group"
+	return ok && fc.Prefix == "" && fc.Name == lexicon.FnCurrentGroup
 }
 
 // pathHasDownwardStep returns true if a LocationPath has any child or

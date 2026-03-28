@@ -1488,7 +1488,7 @@ func (v *validator) matchValue(pat *pattern, text string) int {
 	if pat.dataType != nil {
 		switch pat.dataType.library {
 		case "":
-			if pat.dataType.name == "token" {
+			if pat.dataType.name == lexicon.TypeToken {
 				text = normalizeToken(text)
 				expected = normalizeToken(expected)
 			}
@@ -1519,7 +1519,7 @@ func (v *validator) matchData(pat *pattern, text string) int {
 		return validateXSDType(dt.name, text, pat.params)
 	case "":
 		switch dt.name {
-		case "token":
+		case lexicon.TypeToken:
 			return 0
 		case "string":
 			return 0
@@ -1537,7 +1537,7 @@ func validateXSDType(typeName, value string, params []*param) int {
 	case "normalizedString", "token":
 		return 0
 	case "integer", "int", "long", "short", "byte",
-		"nonNegativeInteger", "positiveInteger",
+		"nonNegativeInteger", lexicon.TypePositiveInteger,
 		"nonPositiveInteger", "negativeInteger",
 		"unsignedInt", "unsignedLong", "unsignedShort", "unsignedByte":
 		return validateXSDInteger(typeName, value)

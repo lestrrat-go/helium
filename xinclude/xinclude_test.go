@@ -77,7 +77,7 @@ func TestXIncludeBasicXML(t *testing.T) {
 	var found bool
 	for c := root.FirstChild(); c != nil; c = c.NextSibling() {
 		if c.Type() == helium.ElementNode {
-			if c.(*helium.Element).LocalName() == "chapter" {
+			if c.(*helium.Element).LocalName() == "chapter" { //nolint:goconst
 				found = true
 				require.Equal(t, "Hello", string(c.Content()))
 			}

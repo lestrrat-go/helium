@@ -11,6 +11,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 )
 
@@ -47,24 +48,24 @@ type Decoder struct {
 	// DefaultSpace sets the default namespace for elements without an explicit namespace.
 	DefaultSpace string
 
-	tokenReader    TokenReader
-	events         chan tokenEvent
-	ctx            context.Context
-	cancel         context.CancelFunc
-	lastToken      Token
-	savedErr       error
-	offset         int64
-	line           int
-	column         int
-	nestDepth      int      // tracks populateElement recursion depth
-	prologTokens   []Token  // pre-scanned prolog tokens (Directive, ProcInst, Comment, CharData)
-	prologIdx      int      // next prolog token to emit
-	prologOnly     bool     // true if entire input is prolog (no root element)
-	prologErr      error    // syntax error detected during prolog scanning
-	combinedReader  io.Reader // buffered reader for lazy SAX startup
-	saxStarted      bool      // true once SAX goroutine has been started
-	detectedCharset string       // non-UTF-8 encoding from XML declaration
-	pendingEvent    *tokenEvent  // lookahead event saved during CharData merging
+	tokenReader     TokenReader
+	events          chan tokenEvent
+	ctx             context.Context
+	cancel          context.CancelFunc
+	lastToken       Token
+	savedErr        error
+	offset          int64
+	line            int
+	column          int
+	nestDepth       int         // tracks populateElement recursion depth
+	prologTokens    []Token     // pre-scanned prolog tokens (Directive, ProcInst, Comment, CharData)
+	prologIdx       int         // next prolog token to emit
+	prologOnly      bool        // true if entire input is prolog (no root element)
+	prologErr       error       // syntax error detected during prolog scanning
+	combinedReader  io.Reader   // buffered reader for lazy SAX startup
+	saxStarted      bool        // true once SAX goroutine has been started
+	detectedCharset string      // non-UTF-8 encoding from XML declaration
+	pendingEvent    *tokenEvent // lookahead event saved during CharData merging
 }
 
 func newDecoderFromReader(r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
@@ -259,7 +260,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		return push(c, c, line, col)
 	}))
 	h.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(_ context.Context, target, data string) error {
-		if target == "xml" {
+		if target == lexicon.PrefixXML {
 			return nil // skip XML declaration
 		}
 		line, col := 0, 0
@@ -305,7 +306,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		}
 		return nil, nil //nolint:nilnil
 	}))
-	h.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(_ context.Context, _ string) (sax.Entity, error) { return nil, nil })) //nolint:nilnil
+	h.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(_ context.Context, _ string) (sax.Entity, error) { return nil, nil }))     //nolint:nilnil
 	h.SetOnResolveEntity(sax.ResolveEntityFunc(func(_ context.Context, _ string, _ string) (sax.ParseInput, error) { return nil, nil })) //nolint:nilnil
 	h.SetOnHasExternalSubset(sax.HasExternalSubsetFunc(func(_ context.Context) (bool, error) { return false, nil }))
 	h.SetOnHasInternalSubset(sax.HasInternalSubsetFunc(func(_ context.Context) (bool, error) { return false, nil }))
@@ -393,7 +394,7 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 		d.advancePosition(tok)
 
 		// Check encoding attribute in XML declaration
-		if pi, ok := tok.(ProcInst); ok && pi.Target == "xml" {
+		if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
 			if err := d.checkProcInstVersion(string(pi.Inst)); err != nil {
 				return nil, err
 			}
@@ -494,7 +495,7 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	tok = stdxml.CopyToken(tok)
 
 	// Check encoding attribute in XML declaration
-	if pi, ok := tok.(ProcInst); ok && pi.Target == "xml" {
+	if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
 		if err := d.checkProcInstEncoding(string(pi.Inst)); err != nil {
 			return nil, err
 		}
@@ -829,4 +830,3 @@ func setElementAttrs(doc *helium.Document, elem *helium.Element, attrs []stdxml.
 	}
 	return nil
 }
-

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -19,7 +20,7 @@ type sortKey struct {
 	Select    *xpath3.Expression
 	Body      []instruction // sequence constructor (when select is absent)
 	Order     *avt          // "ascending" or "descending"
-	DataType  *avt          // "text" or "number"
+	DataType  *avt          // "text" or lexicon.TypeNumber
 	CaseOrder *avt          // "upper-first" or "lower-first"
 	Lang      *avt
 	Collation *avt // collation URI
@@ -39,7 +40,7 @@ type dataTypeMode uint8
 const (
 	dataTypeAuto       dataTypeMode = iota // no explicit data-type attr; detect from first numeric result
 	dataTypeText                           // explicit data-type="text"
-	dataTypeNumber                         // explicit data-type="number"
+	dataTypeNumber                         // explicit data-type=lexicon.TypeNumber
 	dataTypeNumberAuto                     // auto-detected from first numeric/date value
 )
 
@@ -401,7 +402,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 
 		implicitTZ := ec.currentTime.Location()
 		if *dtMode == dataTypeNumber {
-			// Explicit data-type="number": use number() semantics.
+			// Explicit data-type=lexicon.TypeNumber: use number() semantics.
 			// Dates/times are not numeric → convert via string → NaN.
 			return extractNumericValueExplicit(seq, result, implicitTZ), nil
 		}
@@ -539,7 +540,7 @@ func extractSortValues(ctx context.Context, ec *execContext, sortKeys []*sortKey
 
 // --- Numeric extraction helpers ---
 
-// extractNumericValueExplicit handles explicit data-type="number".
+// extractNumericValueExplicit handles explicit data-type=lexicon.TypeNumber.
 // Per XSLT spec, sort key values are converted using number() semantics.
 // Only actual numeric types use direct conversion; others (date, duration)
 // fall through to string → double (producing NaN for dates).
@@ -650,7 +651,7 @@ func initDataTypeModes(ctx context.Context, ec *execContext, sortKeys []*sortKey
 		if err != nil {
 			return nil, err
 		}
-		if dt == "number" {
+		if dt == lexicon.TypeNumber {
 			modes[i] = dataTypeNumber
 		} else {
 			modes[i] = dataTypeText
@@ -667,7 +668,7 @@ func initDataTypeMode1(ctx context.Context, ec *execContext, sk *sortKey) (dataT
 	if err != nil {
 		return dataTypeAuto, err
 	}
-	if dt == "number" {
+	if dt == lexicon.TypeNumber {
 		return dataTypeNumber, nil
 	}
 	return dataTypeText, nil

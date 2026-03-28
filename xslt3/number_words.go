@@ -183,8 +183,8 @@ func germanCardinal(n int) string {
 			return tens[n/10]
 		}
 		o := ones[n%10]
-		if o == "eins" {
-			o = "ein"
+		if o == "eins" { //nolint:goconst
+			o = "ein" //nolint:goconst
 		}
 		return o + "und" + tens[n/10]
 	}

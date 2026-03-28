@@ -113,7 +113,7 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 		}
 		s, _ := atomicToString(av)
 		switch s {
-		case "reject", "use-first", "use-last":
+		case "reject", "use-first", "use-last": //nolint:goconst
 			opts.duplicates = s
 		default:
 			return opts, &XPathError{Code: errCodeFOJS0005,
@@ -203,7 +203,7 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 					switch opts.duplicates {
 					case "reject":
 						return nil, &XPathError{Code: errCodeFOJS0003, Message: fmt.Sprintf("duplicate key in JSON object: %q", key)}
-					case "use-first":
+					case "use-first": //nolint:goconst
 						continue
 					case "use-last":
 						entries[prev].Value = value

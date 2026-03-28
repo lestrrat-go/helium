@@ -22,7 +22,7 @@ type pattern struct {
 
 // patternAlt is one alternative in a union pattern (separated by |).
 type patternAlt struct {
-	expr         xpath3.Expr       // the parsed XPath AST
+	expr         xpath3.Expr        // the parsed XPath AST
 	compiled     *xpath3.Expression // cached compiled expression for runtime matching
 	priority     float64
 	neverMatches bool // true for syntactically valid but semantically empty patterns (e.g., child::document-node())
@@ -423,10 +423,10 @@ func checkPatternForbiddenFunctions(ast xpath3.Expr) error {
 		case "current-merge-group":
 			walkErr = staticError(errCodeXTSE3470, "current-merge-group() must not be used within a pattern")
 			return false
-		case "current-group":
+		case lexicon.FnCurrentGroup:
 			walkErr = staticError(errCodeXTSE1060, "current-group() must not be used within a pattern")
 			return false
-		case "current-grouping-key":
+		case lexicon.FnCurrentGroupingKey:
 			walkErr = staticError(errCodeXTSE1070, "current-grouping-key() must not be used within a pattern")
 			return false
 		}
@@ -1141,7 +1141,7 @@ func matchSchemaElementTest(ctx *execContext, t xpath3.SchemaElementTest, node h
 	if ctx.typeAnnotations != nil {
 		ann = ctx.typeAnnotations[node]
 	}
-	if ann == "" || ann == "xs:untyped" {
+	if ann == "" || ann == lexicon.XSUntyped {
 		return false // untyped elements have not been validated — no match
 	}
 	if ann == declType || ctx.schemaRegistry.IsSubtypeOf(ann, declType) {
@@ -1259,7 +1259,7 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 		if ctx.typeAnnotations != nil {
 			ann = ctx.typeAnnotations[node]
 		}
-		if ann == "" || ann == "xs:untyped" {
+		if ann == "" || ann == lexicon.XSUntyped {
 			return false
 		}
 		if ann != declType && !ctx.schemaRegistry.IsSubtypeOf(ann, declType) {
@@ -1273,11 +1273,11 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 func isTypedStrictMode(ctx *execContext) bool {
 	mode := ctx.currentMode
 	if md := ctx.stylesheet.modeDefs[mode]; md != nil {
-		return md.Typed == validationStrict || md.Typed == lexicon.ValueYes || md.Typed == "true" || md.Typed == "1"
+		return md.Typed == validationStrict || md.Typed == lexicon.ValueYes || md.Typed == lexicon.ValueTrue || md.Typed == "1"
 	}
 	if mode == "" {
 		if md := ctx.stylesheet.modeDefs[modeDefault]; md != nil {
-			return md.Typed == validationStrict || md.Typed == lexicon.ValueYes || md.Typed == "true" || md.Typed == "1"
+			return md.Typed == validationStrict || md.Typed == lexicon.ValueYes || md.Typed == lexicon.ValueTrue || md.Typed == "1"
 		}
 	}
 	return false
@@ -1285,20 +1285,20 @@ func isTypedStrictMode(ctx *execContext) bool {
 
 // matchElementTest checks if a node matches an element() test.
 // isBuiltinXSDType returns true for type names that are built-in XSD types
-// (e.g., "string", "integer", "decimal", "untyped", "untypedAtomic").
+// (e.g., lexicon.TypeString, "integer", "decimal", "untyped", "untypedAtomic").
 func isBuiltinXSDType(name string) bool {
 	switch name {
-	case "string", "boolean", "decimal", "float", "double",
-		"duration", "dateTime", "time", "date",
+	case lexicon.TypeString, lexicon.TypeBoolean, lexicon.TypeDecimal, "float", "double",
+		"duration", lexicon.TypeDateTime, "time", lexicon.TypeDate,
 		"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",
-		"hexBinary", "base64Binary", "anyURI", "QName", "NOTATION",
+		"hexBinary", "base64Binary", lexicon.TypeAnyURI, "QName", "NOTATION",
 		"normalizedString", "token", "language", "NMTOKEN", "NMTOKENS",
 		"Name", "NCName", "ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES",
 		"integer", "nonPositiveInteger", "negativeInteger", "long", "int",
 		"short", "byte", "nonNegativeInteger", "unsignedLong", "unsignedInt",
 		"unsignedShort", "unsignedByte", "positiveInteger",
 		"yearMonthDuration", "dayTimeDuration", "dateTimeStamp",
-		"untyped", "untypedAtomic", "anyType", "anySimpleType", "anyAtomicType":
+		"untyped", lexicon.TypeUntypedAtomic, "anyType", "anySimpleType", "anyAtomicType":
 		return true
 	}
 	return false

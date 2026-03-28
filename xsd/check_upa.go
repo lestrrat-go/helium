@@ -14,7 +14,7 @@ func (c *compiler) checkUPA(td *TypeDef, src typeDefSource) {
 		return
 	}
 	if !modelGroupIsDeterministic(td.ContentModel, c.schema) {
-		component := "local complex type"
+		component := "local complex type" //nolint:goconst
 		if !src.isLocal {
 			component = td.Name.Local
 		}

@@ -572,7 +572,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*performSortInst, e
 			}
 			if childElem.URI() == lexicon.NamespaceXSLT {
 				ln := childElem.LocalName()
-				if ln != "sort" && ln != "fallback" {
+				if ln != lexicon.XSLTElementSort && ln != "fallback" {
 					return nil, staticError(errCodeXTSE1040,
 						"xsl:perform-sort with select attribute must not contain xsl:%s", ln)
 				}
@@ -827,7 +827,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*forEachGroupInst,
 		if err := validateBooleanAttr("xsl:for-each-group", "composite", comp); err != nil {
 			return nil, err
 		}
-		if comp == lexicon.ValueYes || comp == "true" || comp == "1" {
+		if comp == lexicon.ValueYes || comp == lexicon.ValueTrue || comp == "1" {
 			inst.Composite = true
 		}
 	}

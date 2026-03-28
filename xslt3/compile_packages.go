@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // compileUsePackage handles xsl:use-package by resolving and compiling the
@@ -534,14 +535,14 @@ func resolveTemplateModes(mode string) []string {
 	}
 	if len(fields) == 1 {
 		m := fields[0]
-		if m == "#default" || m == "#unnamed" {
+		if m == lexicon.ModeDefault || m == lexicon.ModeUnnamed {
 			return []string{""}
 		}
 		return []string{m}
 	}
 	var modes []string
 	for _, m := range fields {
-		if m == "#default" || m == "#unnamed" {
+		if m == lexicon.ModeDefault || m == lexicon.ModeUnnamed {
 			m = ""
 		}
 		modes = append(modes, m)

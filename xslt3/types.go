@@ -6,15 +6,15 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
-	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // sequenceType represents a parsed XSLT/XPath sequence type declaration
 // from the "as" attribute (e.g., "xs:string*", "element()+", "item()?").
 type sequenceType struct {
-	ItemType   string // "xs:string", "element()", "node()", "item()", etc.
+	ItemType   string // "xs:string", "element()", lexicon.NodeTestNode, lexicon.NodeTestItem, etc.
 	Occurrence rune   // 0 = exactly one, '?' = zero or one, '*' = zero or more, '+' = one or more
 }
 
@@ -23,7 +23,7 @@ type sequenceType struct {
 func parseSequenceType(as string) sequenceType {
 	s := stripXPathComments(strings.TrimSpace(as))
 	if s == "" {
-		return sequenceType{ItemType: "item()", Occurrence: '*'}
+		return sequenceType{ItemType: lexicon.NodeTestItem, Occurrence: '*'}
 	}
 
 	// empty-sequence() is a special type that matches only the empty sequence
@@ -122,7 +122,7 @@ func checkSequenceType(seq xpath3.Sequence, st sequenceType, errCode string, con
 // isAtomicTargetType returns true when the item type string names an atomic
 // type (e.g. "xs:decimal", "xs:string") rather than a node/function/map test.
 func isAtomicTargetType(itemType string) bool {
-	if itemType == "" || itemType == "item()" {
+	if itemType == "" || itemType == lexicon.NodeTestItem {
 		return false
 	}
 	// Node tests, function tests, map/array tests are not atomic.
@@ -144,7 +144,6 @@ func isAtomicTargetType(itemType string) bool {
 	return true
 }
 
-
 // coerceItem checks that a single item matches the expected type, applying
 // atomization and casting as needed per the XSLT function conversion rules.
 func coerceItem(item xpath3.Item, itemType string, ec ...*execContext) (xpath3.Item, error) {
@@ -162,10 +161,10 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 		itemType = itemType[1 : len(itemType)-1]
 	}
 	switch itemType {
-	case "item()":
+	case lexicon.NodeTestItem:
 		// Anything matches item()
 		return item, nil
-	case "node()":
+	case lexicon.NodeTestNode:
 		if _, ok := item.(xpath3.NodeItem); ok {
 			return item, nil
 		}
@@ -198,7 +197,7 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 			}
 		}
 		return nil, fmt.Errorf("expected comment(), got %s", describeItem(item))
-	case "processing-instruction()":
+	case lexicon.NodeTestPI:
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			if ni.Node.Type() == helium.ProcessingInstructionNode {
 				return item, nil
@@ -661,7 +660,7 @@ func normalizeTypeName(name string, ec ...*execContext) string {
 	}
 	// Map unprefixed names to xs: prefixed
 	switch name {
-	case "string":
+	case lexicon.TypeString:
 		return xpath3.TypeString
 	case "integer":
 		return xpath3.TypeInteger
@@ -671,7 +670,7 @@ func normalizeTypeName(name string, ec ...*execContext) string {
 		return xpath3.TypeDouble
 	case "float":
 		return xpath3.TypeFloat
-	case "boolean":
+	case lexicon.TypeBoolean:
 		return xpath3.TypeBoolean
 	case "date":
 		return xpath3.TypeDate
@@ -902,9 +901,9 @@ func sequenceMatchesTypeStrict(seq xpath3.Sequence, st sequenceType) bool {
 
 func itemMatchesTypeStrict(item xpath3.Item, itemType string) bool {
 	switch itemType {
-	case "item()":
+	case lexicon.NodeTestItem:
 		return true
-	case "node()":
+	case lexicon.NodeTestNode:
 		_, ok := item.(xpath3.NodeItem)
 		return ok
 	case "element()":
@@ -927,7 +926,7 @@ func itemMatchesTypeStrict(item xpath3.Item, itemType string) bool {
 			return ni.Node.Type() == helium.CommentNode
 		}
 		return false
-	case "processing-instruction()":
+	case lexicon.NodeTestPI:
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			return ni.Node.Type() == helium.ProcessingInstructionNode
 		}

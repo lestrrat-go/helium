@@ -103,7 +103,7 @@ func (c *relaxNGValidateCommand) parseArgs(args []string) (*relaxNGValidateConfi
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "--version":
+		case "--version": //nolint:goconst
 			cfg.version = true
 		case "--timing":
 			cfg.timing = true

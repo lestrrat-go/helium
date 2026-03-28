@@ -3,6 +3,7 @@ package xslt3
 import (
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -246,14 +247,14 @@ func bodyUsesCurrentGroupOutsideFEG(body []instruction) bool {
 			if expr == nil {
 				continue
 			}
-			if xpathstream.ExprUsesFunction(expr, "current-group") {
+			if xpathstream.ExprUsesFunction(expr, lexicon.FnCurrentGroup) {
 				return true
 			}
 		}
 		// Check LRE attribute AVTs (not covered by getInstructionExprs).
 		if lre, ok := bi.(*literalResultElement); ok {
 			for _, attr := range lre.Attrs {
-				if attr.Value.hasFunction("current-group") {
+				if attr.Value.hasFunction(lexicon.FnCurrentGroup) {
 					return true
 				}
 			}
@@ -753,7 +754,7 @@ func bodyUsesCurrentGroup(body []instruction) bool {
 			if expr == nil {
 				continue
 			}
-			if xpathstream.ExprUsesFunction(expr, "current-group") {
+			if xpathstream.ExprUsesFunction(expr, lexicon.FnCurrentGroup) {
 				return true
 			}
 		}
@@ -781,14 +782,14 @@ func exprUsesCurrentGroupConsumingly(expr *xpath3.Expression) bool {
 		e = derefXPathExpr(e)
 		switch v := e.(type) {
 		case xpath3.FunctionCall:
-			if v.Prefix == "" && v.Name == "current-group" {
+			if v.Prefix == "" && v.Name == lexicon.FnCurrentGroup {
 				if !insideSnapshot {
 					found = true
 				}
 				return
 			}
 			// snapshot() grounds its arguments — current-group() inside is not consuming.
-			if v.Prefix == "" && v.Name == "snapshot" {
+			if v.Prefix == "" && v.Name == "snapshot" { //nolint:goconst
 				for _, arg := range v.Args {
 					walk(arg, true)
 				}
@@ -850,7 +851,7 @@ func exprUsesCurrentGroupConsumingly(expr *xpath3.Expression) bool {
 
 // exprUsesCurrentGroup returns true if the expression calls current-group() anywhere.
 func exprUsesCurrentGroup(expr *xpath3.Expression) bool {
-	return xpathstream.ExprUsesFunction(expr, "current-group")
+	return xpathstream.ExprUsesFunction(expr, lexicon.FnCurrentGroup)
 }
 
 // checkMapStreamable checks xsl:map instructions for streamability violations.

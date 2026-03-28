@@ -1,6 +1,10 @@
 package xpath3
 
-import "math/big"
+import (
+	"math/big"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
+)
 
 // AST returns the root AST node of the compiled expression.
 // This is used by streamability analysis in xslt3 via internal/xpathstream.
@@ -312,7 +316,7 @@ func predicateIsNonMotionlessWithStep(pred Expr, step *Step) bool {
 				return false
 			}
 		case FunctionCall:
-			if v.Prefix == "" && (v.Name == "last" || v.Name == "position") {
+			if v.Prefix == "" && (v.Name == "last" || v.Name == lexicon.FnPosition) {
 				nonMotionless = true
 				return false
 			}

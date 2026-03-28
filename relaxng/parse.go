@@ -11,7 +11,6 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-
 // compiler holds state during schema compilation.
 type compiler struct {
 	ctx          context.Context
@@ -209,13 +208,13 @@ func (c *compiler) parseGrammarContent(grammarElem *helium.Element) {
 		}
 
 		switch elem.LocalName() {
-		case "start":
+		case "start": //nolint:goconst
 			c.parseStart(elem)
-		case "define":
+		case "define": //nolint:goconst
 			c.parseDefine(elem)
 		case "include":
 			c.parseInclude(elem)
-		case "div":
+		case "div": //nolint:goconst
 			// <div> is transparent — recurse into its children
 			c.parseGrammarContent(elem)
 		}
@@ -315,12 +314,12 @@ func (c *compiler) parseDefine(elem *helium.Element) {
 // combinePatterns combines two patterns with the given combine mode.
 func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 	switch mode {
-	case "interleave":
+	case "interleave": //nolint:goconst
 		return &pattern{
 			kind:     patternInterleave,
 			children: []*pattern{existing, incoming},
 		}
-	case "choice":
+	case "choice": //nolint:goconst
 		return &pattern{
 			kind:     patternChoice,
 			children: []*pattern{existing, incoming},

@@ -513,7 +513,7 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 	// XTSE0165: a package must not import another package via xsl:import.
-	if isImport && importedRoot.URI() == lexicon.NamespaceXSLT && importedRoot.LocalName() == "package" {
+	if isImport && importedRoot.URI() == lexicon.NamespaceXSLT && importedRoot.LocalName() == lexicon.XSLTElementPackage {
 		return staticError(errCodeXTSE0165,
 			"cannot import xsl:package %q (use xsl:use-package instead)", uri)
 	}

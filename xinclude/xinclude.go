@@ -11,14 +11,14 @@ import (
 	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpointer"
 )
 
 const (
-	maxDepth          = 40
-	maxURILength      = 2000
+	maxDepth     = 40
+	maxURILength = 2000
 )
 
 // Resolver loads content from a URI.
@@ -28,9 +28,9 @@ type Resolver interface {
 
 // processorCfg holds the configuration for a Processor.
 type processorCfg struct {
-	noMarkers   bool
-	noBaseFixup bool
-	resolver    Resolver
+	noMarkers    bool
+	noBaseFixup  bool
+	resolver     Resolver
 	baseURI      string
 	errorHandler helium.ErrorHandler
 }
@@ -102,17 +102,17 @@ type txtCacheEntry struct {
 }
 
 type processor struct {
-	noMarkers   bool
-	noBaseFixup bool
-	resolver    Resolver
-	baseURI     string
-	expanding   map[string]bool          // circular inclusion detection (set during recursive expansion)
-	docCache    map[string]docCacheEntry // cached raw bytes for XML documents
+	noMarkers    bool
+	noBaseFixup  bool
+	resolver     Resolver
+	baseURI      string
+	expanding    map[string]bool          // circular inclusion detection (set during recursive expansion)
+	docCache     map[string]docCacheEntry // cached raw bytes for XML documents
 	txtCache     map[string]txtCacheEntry // cached text inclusions
 	errorHandler helium.ErrorHandler
 	ctx          context.Context
 	depth        int
-	count       int
+	count        int
 }
 
 // Process performs XInclude processing on the document.
@@ -140,15 +140,15 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		cfg = &processorCfg{}
 	}
 	p := &processor{
-		noMarkers:   cfg.noMarkers,
-		noBaseFixup: cfg.noBaseFixup,
-		resolver:    cfg.resolver,
+		noMarkers:    cfg.noMarkers,
+		noBaseFixup:  cfg.noBaseFixup,
+		resolver:     cfg.resolver,
 		baseURI:      cfg.baseURI,
 		errorHandler: cfg.errorHandler,
 		ctx:          ctx,
 		expanding:    make(map[string]bool),
-		docCache:    make(map[string]docCacheEntry),
-		txtCache:    make(map[string]txtCacheEntry),
+		docCache:     make(map[string]docCacheEntry),
+		txtCache:     make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
 		p.resolver = &fileResolver{}
@@ -642,7 +642,7 @@ func (p *processor) handleFallback(inc *helium.Element, origErr error) error {
 	for c := range helium.Children(inc) {
 		if c.Type() == helium.ElementNode {
 			if elem, ok := c.(*helium.Element); ok {
-				if elem.LocalName() == "fallback" && getNamespaceURI(elem) == nsURI {
+				if elem.LocalName() == lexicon.XSLTElementFallback && getNamespaceURI(elem) == nsURI {
 					return p.processFallback(inc, elem)
 				}
 			}
@@ -851,7 +851,7 @@ func resolveURI(href, base string) (string, error) {
 	if parseErr != nil {
 		return href, nil //nolint:nilerr // intentional fallback: unparseable base is treated as absent
 	}
-	if baseURL.Scheme == "" || baseURL.Scheme == "file" {
+	if baseURL.Scheme == "" || baseURL.Scheme == lexicon.SchemeFile {
 		basePath := baseURL.Path
 		if basePath == "" {
 			basePath = base

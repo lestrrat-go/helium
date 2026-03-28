@@ -35,7 +35,7 @@ func (r *schemaRegistry) LookupElement(local, ns string) (typeName string, ok bo
 			}
 			// Per XSD spec, elements without an explicit type default to
 			// xs:anyType (the universal base type), not xs:untyped.
-			return "xs:anyType", true
+			return lexicon.XSAnyType, true
 		}
 	}
 	return "", false
@@ -431,13 +431,13 @@ func (r *schemaRegistry) LookupAttribute(local, ns string) (typeName string, ok 
 			continue
 		}
 		if au.TypeName.Local == "" {
-			return "xs:untypedAtomic", true
+			return lexicon.XSUntypedAtomic, true
 		}
 		td, tdOk := s.LookupType(au.TypeName.Local, au.TypeName.NS)
 		if tdOk {
 			return xsdTypeNameFromDef(td), true
 		}
-		return "xs:untypedAtomic", true
+		return lexicon.XSUntypedAtomic, true
 	}
 	return "", false
 }
@@ -524,7 +524,7 @@ func (r *schemaRegistry) ValidateAttribute(localName, nsURI, value string) (stri
 		}
 		if au.TypeName.Local == "" {
 			// No type constraint — any value is valid.
-			return "xs:untypedAtomic", true, nil
+			return lexicon.XSUntypedAtomic, true, nil
 		}
 		// Resolve the type definition and validate the value string.
 		td, tdOk := s.LookupType(au.TypeName.Local, au.TypeName.NS)
@@ -634,7 +634,7 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 // compare against the declared type hierarchy.
 func xsdTypeNameFromDef(td *xsd.TypeDef) string {
 	if td == nil {
-		return "xs:untyped"
+		return lexicon.XSUntyped
 	}
 	for cur := td; cur != nil; cur = cur.BaseType {
 		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local != "" {
@@ -709,7 +709,6 @@ func collectXMLIDsFromDoc(doc *helium.Document, ids map[string]struct{}) error {
 	return walkElementsForID(doc.FirstChild(), ids)
 }
 
-
 // walkElementsForID recursively walks sibling node chains collecting xml:id values.
 func walkElementsForID(node helium.Node, ids map[string]struct{}) error {
 	for ; node != nil; node = node.NextSibling() {
@@ -772,7 +771,7 @@ func collectXSITypeIDREFsFromNode(node helium.Node, idrefs *[]string) {
 				switch localName {
 				case "IDREFS":
 					*idrefs = append(*idrefs, splitSpaceSeparated(string(elem.Content()))...)
-				case "IDREF":
+				case lexicon.TypeIDREF:
 					val := string(elem.Content())
 					if val != "" {
 						*idrefs = append(*idrefs, val)

@@ -21,6 +21,7 @@ import (
 	"golang.org/x/text/transform"
 
 	iencoding "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // URIResolver resolves a URI to a readable stream.
@@ -156,7 +157,7 @@ func readURIWithEncoding(ctx context.Context, cfg *Config, uri string) ([]byte, 
 		return nil, "", err
 	}
 
-	if parsed.Scheme == "http" || parsed.Scheme == "https" {
+	if parsed.Scheme == lexicon.SchemeHTTP || parsed.Scheme == lexicon.SchemeHTTPS {
 		client := http.DefaultClient
 		if cfg != nil && cfg.HTTPClient != nil {
 			client = cfg.HTTPClient
@@ -183,7 +184,7 @@ func readURIWithEncoding(ctx context.Context, cfg *Config, uri string) ([]byte, 
 	}
 
 	switch parsed.Scheme {
-	case "file":
+	case lexicon.SchemeFile:
 		data, err := os.ReadFile(parsed.Path)
 		return data, "", err
 	case "":
@@ -247,7 +248,7 @@ func ReadURI(ctx context.Context, cfg *Config, uri string) ([]byte, error) {
 	}
 
 	switch parsed.Scheme {
-	case "file":
+	case lexicon.SchemeFile:
 		return os.ReadFile(parsed.Path)
 	case "":
 		return os.ReadFile(uri)

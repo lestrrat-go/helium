@@ -190,8 +190,8 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 
 	// Check if we need encoding conversion (non-UTF-8)
 	enc := strings.ToLower(outDef.Encoding)
-	isUTF16 := enc == "utf-16" || enc == "utf16"
-	needsEncodingConversion := enc != "" && enc != "utf-8" && enc != "utf8" && !isUTF16
+	isUTF16 := enc == lexicon.EncodingUTF16 || enc == "utf16"                                        //nolint:goconst
+	needsEncodingConversion := enc != "" && enc != lexicon.EncodingUTF8 && enc != "utf8" && !isUTF16 //nolint:goconst
 
 	// Check if we need Unicode normalization
 	needsNormalization := outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE"
@@ -499,7 +499,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	// SESU0007: unsupported encoding for any output method
 	{
 		enc := strings.ToLower(outDef.Encoding)
-		if enc != "" && enc != "utf-8" && enc != "utf8" && enc != "utf-16" && enc != "utf16" {
+		if enc != "" && enc != lexicon.EncodingUTF8 && enc != "utf8" && enc != lexicon.EncodingUTF16 && enc != "utf16" {
 			_, encErr := htmlindex.Get(enc)
 			if encErr != nil {
 				return dynamicError(errCodeSESU0007,

@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func castToDouble(v AtomicValue) (AtomicValue, error) {
@@ -42,7 +44,7 @@ func castToDouble(v AtomicValue) (AtomicValue, error) {
 
 func castToFloat(v AtomicValue) (AtomicValue, error) {
 	// When casting from string, use the xs:float lexical rules directly
-	// (XSD 1.1 accepts "INF", "-INF", "+INF", "NaN")
+	// (XSD 1.1 accepts "INF", lexicon.FloatNegINF, "+INF", "NaN")
 	if v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic || isStringDerived(v.TypeName) {
 		return castStringToFloat(strings.TrimSpace(v.StringVal()))
 	}
@@ -56,19 +58,19 @@ func castToFloat(v AtomicValue) (AtomicValue, error) {
 }
 
 // castStringToFloat parses s as an xs:float using XSD 1.1 lexical rules.
-// Valid special values: "INF", "+INF", "-INF", "NaN". All other values must be
+// Valid special values: "INF", "+INF", lexicon.FloatNegINF, "NaN". All other values must be
 // numeric literals that fit in float32 range.
 func castStringToFloat(s string) (AtomicValue, error) {
 	switch s {
-	case "INF", "+INF":
+	case lexicon.FloatINF, "+INF":
 		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(math.Inf(1))}, nil
-	case "-INF":
+	case lexicon.FloatNegINF:
 		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(math.Inf(-1))}, nil
-	case "NaN":
+	case lexicon.FloatNaN:
 		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(math.NaN())}, nil
 	}
 	// Reject case-insensitive nan/inf variants that strconv.ParseFloat accepts
-	// but XSD 1.1 does not (only exact "NaN", "INF", "+INF", "-INF" are valid,
+	// but XSD 1.1 does not (only exact "NaN", "INF", "+INF", lexicon.FloatNegINF are valid,
 	// already handled above).
 	lower := strings.ToLower(s)
 	if lower == "nan" || lower == "inf" || lower == "+inf" || lower == "-inf" {
@@ -78,7 +80,7 @@ func castStringToFloat(s string) (AtomicValue, error) {
 	if err != nil {
 		return AtomicValue{}, castError(s, TypeFloat)
 	}
-	// Reject infinity from ParseFloat — only whitelisted "INF"/"-INF" above are valid
+	// Reject infinity from ParseFloat — only whitelisted "INF"/lexicon.FloatNegINF above are valid
 	if math.IsInf(f, 0) {
 		return AtomicValue{}, castError(s, TypeFloat)
 	}

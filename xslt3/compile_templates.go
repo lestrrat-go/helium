@@ -198,7 +198,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		for k, v := range c.localExcludes {
 			newExcludes[k] = v
 		}
-		if erp == "#all" {
+		if erp == lexicon.ModeAll {
 			for prefix := range c.stylesheet.namespaces {
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExcludes[uri] = struct{}{}
@@ -227,7 +227,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	// Handle xml:space on xsl:template
 	savedPreserveSpace := c.preserveSpace
 	if xs := getAttr(elem, lexicon.QNameXMLSpace); xs != "" {
-		c.preserveSpace = (xs == "preserve")
+		c.preserveSpace = (xs == lexicon.SpacePreserve)
 	}
 
 	// Handle version on xsl:template for forwards-compatible processing
@@ -330,7 +330,7 @@ func (c *compiler) registerTemplateInModes(tmpl *template, mode string) {
 		return
 	}
 	// XSLT 2.0+: mode can be a whitespace-separated list of mode names.
-	// Each mode name can be a QName, "#default", "#unnamed", or "#all".
+	// Each mode name can be a QName, "#default", "#unnamed", or lexicon.ModeAll.
 	modes := strings.Fields(mode)
 	if len(modes) <= 1 {
 		// Single mode (or empty = default mode)
@@ -374,7 +374,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	for ch := range helium.Children(elem) {
 		if e, ok := ch.(*helium.Element); ok && e.URI() == lexicon.NamespaceXSLT {
 			ln := e.LocalName()
-			if ln == "context-item" || ln == "param" {
+			if ln == "context-item" || ln == lexicon.XSLTElementParam {
 				lastDeclNode = ch
 			}
 		}

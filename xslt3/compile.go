@@ -308,14 +308,14 @@ func getAttr(elem *helium.Element, name string) string {
 }
 
 // parseDOEAttr validates and parses a disable-output-escaping attribute value.
-// Valid values are "yes"/"no"/"true"/"false"/"1"/"0" (with whitespace trimming).
+// Valid values are "yes"/"no"/lexicon.ValueTrue/lexicon.ValueFalse/"1"/"0" (with whitespace trimming).
 // Returns SEPM0016 for invalid values.
 func parseDOEAttr(v string) (bool, error) {
 	v = strings.TrimSpace(v)
 	switch v {
-	case lexicon.ValueYes, "true", "1":
+	case lexicon.ValueYes, lexicon.ValueTrue, "1":
 		return true, nil
-	case lexicon.ValueNo, "false", "0":
+	case lexicon.ValueNo, lexicon.ValueFalse, "0":
 		return false, nil
 	default:
 		return false, staticError(errCodeSEPM0016,
@@ -384,13 +384,13 @@ func hasSignificantChildren(elem *helium.Element) bool {
 	return false
 }
 
-// parseXSDBool parses an xs:boolean value ("yes"/"no", "true"/"false", "1"/"0")
+// parseXSDBool parses an xs:boolean value ("yes"/"no", lexicon.ValueTrue/lexicon.ValueFalse, "1"/"0")
 // with whitespace trimming per the XSD specification.
 func parseXSDBool(s string) (bool, bool) {
 	switch strings.TrimSpace(s) {
-	case lexicon.ValueYes, "true", "1":
+	case lexicon.ValueYes, lexicon.ValueTrue, "1":
 		return true, true
-	case lexicon.ValueNo, "false", "0":
+	case lexicon.ValueNo, lexicon.ValueFalse, "0":
 		return false, true
 	default:
 		return false, false
@@ -1197,7 +1197,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 			}
 		} else {
 			for _, prefix := range strings.Fields(erp) {
-				if prefix == "#default" {
+				if prefix == lexicon.ModeDefault {
 					c.stylesheet.excludePrefixes[""] = struct{}{}
 					continue
 				}
@@ -1443,11 +1443,11 @@ func checkDeclaredModes(ss *Stylesheet, usedModes map[string]struct{}) error {
 		if mode == modeCurrent || mode == modeAll {
 			continue
 		}
-		// The unnamed mode ("", "#default", "#unnamed") must also be declared
+		// The unnamed mode ("", lexicon.ModeDefault, "#unnamed") must also be declared
 		// when declared-modes is in effect.
 		if mode == "" || mode == modeDefault || mode == modeUnnamed {
 			// Check if unnamed mode is declared. It can be declared as "",
-			// "#default", or "#unnamed" in modeDefs.
+			// lexicon.ModeDefault, or "#unnamed" in modeDefs.
 			if ss.modeDefs != nil {
 				if _, ok := ss.modeDefs[""]; ok {
 					continue

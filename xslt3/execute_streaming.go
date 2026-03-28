@@ -9,9 +9,10 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
-	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // Sentinel errors for xsl:break and xsl:next-iteration control flow.
@@ -365,11 +366,11 @@ func (ec *execContext) execNextIteration(ctx context.Context, inst *nextIteratio
 // mergeKeyValue holds a single merge key as an XPath atomic value for
 // type-aware comparison (dates, numbers, strings, etc.).
 type mergeKeyValue struct {
-	atom       xpath3.AtomicValue   // the actual typed atomic value
-	str        string               // string fallback (used when atom is zero)
-	num        float64              // numeric value (used when numeric is true)
-	numeric    bool                 // true when data-type="number" was applied
-	isNaN      bool                 // true when numeric conversion produced NaN
+	atom        xpath3.AtomicValue    // the actual typed atomic value
+	str         string                // string fallback (used when atom is zero)
+	num         float64               // numeric value (used when numeric is true)
+	numeric     bool                  // true when data-type="number" was applied
+	isNaN       bool                  // true when numeric conversion produced NaN
 	collCompare func(a, b string) int // collation compare function (nil = codepoint)
 }
 
@@ -385,7 +386,7 @@ type mergeSourceItems struct {
 
 // mergeGroup represents one group of items that share the same merge key tuple.
 type mergeGroup struct {
-	key      xpath3.Sequence            // the merge key tuple for current-merge-key()
+	key      xpath3.Sequence             // the merge key tuple for current-merge-key()
 	allItems xpath3.ItemSlice            // all items across all sources
 	byName   map[string]xpath3.ItemSlice // items per named source
 }
@@ -576,7 +577,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 			}
 			orderStr = evaluated
 		}
-		orders[i] = mergeKeyOrder{desc: orderStr == "descending"}
+		orders[i] = mergeKeyOrder{desc: orderStr == lexicon.OutputDescending}
 	}
 
 	// Resolve per-source data-types for each key level.
@@ -652,7 +653,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 			vk := make([]mergeKeyValue, len(src.keys[i]))
 			copy(vk, src.keys[i])
 			for k := range vk {
-				if k < len(srcDTs) && srcDTs[k] == "number" {
+				if k < len(srcDTs) && srcDTs[k] == lexicon.TypeNumber {
 					applyNumericMergeKey(&vk[k])
 				}
 			}
@@ -742,7 +743,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 		src := &allSources[si]
 		for i := range src.keys {
 			for k := range src.keys[i] {
-				if k < len(firstDTs) && firstDTs[k] == "number" {
+				if k < len(firstDTs) && firstDTs[k] == lexicon.TypeNumber {
 					applyNumericMergeKey(&src.keys[i][k])
 				}
 				if k < len(nwayCollations) && nwayCollations[k] != nil {

@@ -479,7 +479,7 @@ func (enc *Encoder) buildStructStart(val reflect.Value, bindings []fieldBinding,
 		}
 		// If the tag provides a non-empty name, use it.
 		// rawName != "XMLName" distinguishes "name from tag" vs "name from field".
-		if b.rawName != "" && b.rawName != "XMLName" && b.name != "" {
+		if b.rawName != "" && b.rawName != "XMLName" && b.name != "" { //nolint:goconst
 			name := Name{Local: b.name}
 			if b.hasNameSpace {
 				name.Space = b.nameSpace

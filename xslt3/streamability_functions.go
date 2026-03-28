@@ -3,6 +3,7 @@ package xslt3
 import (
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -10,15 +11,15 @@ import (
 func checkStreamableFunctionBody(_ *Stylesheet, fn *xslFunction) error {
 	cat := fn.Streamability
 	switch cat {
-	case "absorbing":
+	case lexicon.StreamAbsorbing:
 		return checkAbsorbingFunction(fn)
-	case "inspection":
+	case lexicon.StreamInspection:
 		return checkInspectionFunction(fn)
-	case "filter":
+	case lexicon.StreamFilter:
 		return checkFilterFunction(fn)
 	case "shallow-descent":
 		return checkShallowDescentFunction(fn)
-	case "ascent":
+	case lexicon.StreamAscent:
 		return checkAscentFunction(fn)
 	}
 	return nil
@@ -147,7 +148,7 @@ func checkShallowDescentFunction(fn *xslFunction) error {
 	firstParam := fn.Params[0]
 	if firstParam.As != "" {
 		as := strings.TrimSpace(firstParam.As)
-		if as != "node()" && as != "element()" {
+		if as != "node()" && as != lexicon.NodeTestElement {
 			return staticError(errCodeXTSE3430,
 				"shallow-descent function %q first parameter type %q is not a single node, violating its declared streamability",
 				fn.Name.Name, firstParam.As)
@@ -267,7 +268,7 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 					count += countStreamingDownwardSelectionsInner(ss, arg, false)
 				}
 				return count
-			case "inspection", "ascent":
+			case lexicon.StreamInspection, lexicon.StreamAscent:
 				// Inspection/ascent: motionless, no downward selection.
 				return 0
 			case "absorbing":
@@ -418,7 +419,7 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 // streaming analysis.
 func isConsumingBuiltinFunc(name string) bool {
 	switch name {
-	case "string", "data", "number", "boolean", "normalize-space":
+	case "string", "data", "number", "boolean", "normalize-space": //nolint:goconst
 		return true
 	}
 	return false

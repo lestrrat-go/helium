@@ -484,7 +484,7 @@ func formatWords(n *big.Int, lang, caseStyle string) string {
 
 func applyCase(s, caseStyle string) string {
 	switch caseStyle {
-	case "upper":
+	case "upper": //nolint:goconst
 		return strings.ToUpper(s)
 	case "title":
 		return toTitleCase(s)
@@ -518,7 +518,7 @@ var tensWords = []string{
 
 func intToEnglishWords(n *big.Int) string {
 	if n.Sign() == 0 {
-		return "zero"
+		return "zero" //nolint:goconst
 	}
 	if n.Sign() < 0 {
 		return "minus " + intToEnglishWords(new(big.Int).Neg(n))
@@ -879,7 +879,7 @@ func formatWordsLang(n *big.Int, lang, caseStyle string) string {
 
 func intToGermanWords(n *big.Int) string {
 	if n.Sign() == 0 {
-		return "null"
+		return "null" //nolint:goconst
 	}
 	if !n.IsInt64() {
 		return n.String()

@@ -41,7 +41,7 @@ func mapErrorMessage(pe helium.ErrParseError) string {
 		if tag := extractEndElement(pe.Line); tag != "" {
 			return fmt.Sprintf("unexpected end element </%s>", tag)
 		}
-		return "expected element name after <"
+		return "expected element name after <" //nolint:goconst
 	}
 
 	switch {

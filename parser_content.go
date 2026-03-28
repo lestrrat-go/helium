@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
@@ -204,7 +205,7 @@ func (pctx *parserCtx) parsePITarget(ctx context.Context) (string, error) {
 		return "", pctx.error(ctx, err)
 	}
 
-	if name == "xml" {
+	if name == lexicon.PrefixXML {
 		return "", errors.New("XML declaration allowed only at the start of the document")
 	}
 

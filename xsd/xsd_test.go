@@ -421,35 +421,30 @@ func TestDefaultFixedValidation(t *testing.T) {
 		return v.Validate(t.Context(), xmlDoc)
 	}
 
-	t.Run("element_fixed_correct_value", func(t *testing.T) {
-		t.Parallel()
-		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	fixedHelloSchema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
+
+	t.Run("element_fixed_correct_value", func(t *testing.T) {
+		t.Parallel()
 		xmlStr := `<root>hello</root>`
-		err := compileAndValidate(t, xsdStr, xmlStr, nil)
+		err := compileAndValidate(t, fixedHelloSchema, xmlStr, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("element_fixed_wrong_value", func(t *testing.T) {
 		t.Parallel()
-		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:element name="root" type="xs:string" fixed="hello"/>
-</xs:schema>`
 		xmlStr := `<root>wrong</root>`
 		var errs string
-		err := compileAndValidate(t, xsdStr, xmlStr, &errs)
+		err := compileAndValidate(t, fixedHelloSchema, xmlStr, &errs)
 		require.Error(t, err)
 		require.Contains(t, errs, "fixed value constraint")
 	})
 
 	t.Run("element_fixed_empty", func(t *testing.T) {
 		t.Parallel()
-		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:element name="root" type="xs:string" fixed="hello"/>
-</xs:schema>`
-		xmlStr := `<root/>`
-		err := compileAndValidate(t, xsdStr, xmlStr, nil)
+		xmlStr := `<root/>` //nolint:goconst
+		err := compileAndValidate(t, fixedHelloSchema, xmlStr, nil)
 		require.NoError(t, err)
 	})
 

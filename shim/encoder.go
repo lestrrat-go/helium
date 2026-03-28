@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 var (
@@ -244,7 +246,7 @@ func (enc *Encoder) writeComment(c Comment) error {
 }
 
 func (enc *Encoder) writeProcInst(pi ProcInst) error {
-	if pi.Target == "xml" && enc.hasTokens {
+	if pi.Target == lexicon.PrefixXML && enc.hasTokens {
 		return fmt.Errorf("xml: EncodeToken of ProcInst xml target only valid for xml declaration, first token encoded")
 	}
 	if !isXMLName(pi.Target) {

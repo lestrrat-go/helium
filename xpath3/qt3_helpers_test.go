@@ -286,7 +286,7 @@ func qt3TestDataDir() string {
 
 func qt3DefaultBaseURI(tc qt3Test) string {
 	if qt3NeedsParseXMLBaseURI(tc.XPath) {
-		return "http://www.w3.org/fots/fn/"
+		return "http://www.w3.org/fots/fn/" //nolint:goconst
 	}
 	if qt3NeedsRelativeUnparsedTextBaseURI(tc.XPath) && (tc.NeedsHTTP || len(tc.ResourceMap) > 0) {
 		// Relative QT3 unparsed-text fixtures live under testdata/qt3ts/testdata/fn/.
@@ -874,11 +874,11 @@ func qt3FormatSeq(seq xpath3.Sequence) string {
 // qt3SharedServer is a package-level shared HTTP test server.
 // All qt3RunTests calls share this single server instead of creating 356 separate ones.
 var qt3SharedServer struct {
-	once     sync.Once
-	srv      *httptest.Server
-	client   *http.Client
-	pathMap  sync.Map // map[string]string: URL path → local file path
-	fotsDir  string
+	once    sync.Once
+	srv     *httptest.Server
+	client  *http.Client
+	pathMap sync.Map // map[string]string: URL path → local file path
+	fotsDir string
 }
 
 func qt3InitSharedServer() {

@@ -433,8 +433,8 @@ func isAtomicTypeName(as string) bool {
 	}
 	// unprefixed atomic types (rare but possible)
 	switch name {
-	case "string", "integer", "boolean", "double", "float", "decimal",
-		"date", "dateTime", "time", "duration", "anyURI":
+	case lexicon.TypeString, lexicon.TypeInteger, lexicon.TypeBoolean, lexicon.TypeDouble, lexicon.TypeFloat, "decimal",
+		lexicon.TypeDate, "dateTime", lexicon.TypeTime, lexicon.TypeDuration, lexicon.TypeAnyURI:
 		return true
 	}
 	return false

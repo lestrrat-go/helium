@@ -202,7 +202,7 @@ func (vc *validationContext) validateRootElement(elem *helium.Element) error {
 		td = edecl.Type // fall back to declared type
 	}
 	if td != nil && td.Abstract {
-		msg := "The type definition is abstract."
+		msg := "The type definition is abstract." //nolint:goconst
 		vc.reportValidityError(vc.filename, elem.Line(), elemDisplayName(elem), msg)
 		return fmt.Errorf("abstract type")
 	}

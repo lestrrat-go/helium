@@ -1229,7 +1229,7 @@ func parseWithDTDAttributeType(t *testing.T, typ enum.AttributeType, value strin
 
 	switch typ {
 	case enum.AttrID:
-		docDecl = "<!ELEMENT doc EMPTY>"
+		docDecl = "<!ELEMENT doc EMPTY>" //nolint:goconst
 		body = fmt.Sprintf(`<doc attr=%q/>`, value)
 		typeName = "ID"
 	case enum.AttrNmtoken:

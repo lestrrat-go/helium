@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -72,18 +73,18 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 	name := "null"
 	switch v := item.(type) {
 	case MapItem:
-		name = "map"
+		name = "map" //nolint:goconst
 		_ = v
 	case ArrayItem:
-		name = "array"
+		name = "array" //nolint:goconst
 	case AtomicValue:
 		switch v.TypeName {
 		case TypeString:
-			name = "string"
+			name = lexicon.TypeString
 		case TypeBoolean:
-			name = "boolean"
+			name = lexicon.TypeBoolean
 		default:
-			name = "number"
+			name = lexicon.TypeNumber
 		}
 	}
 
@@ -109,7 +110,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 			keyText := key.StringVal()
 			_ = child.SetLiteralAttribute("key", keyText)
 			if opts.escape {
-				_ = child.SetLiteralAttribute("escaped-key", "true")
+				_ = child.SetLiteralAttribute("escaped-key", lexicon.ValueTrue)
 			}
 			if err := elem.AddChild(child); err != nil {
 				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
@@ -132,15 +133,15 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		switch v.TypeName {
 		case TypeString:
 			if opts.escape {
-				_ = elem.SetLiteralAttribute("escaped", "true")
+				_ = elem.SetLiteralAttribute("escaped", lexicon.ValueTrue)
 			}
 			if err := elem.AppendText([]byte(v.StringVal())); err != nil {
 				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append string value: %v", err)}
 			}
 		case TypeBoolean:
-			text := "false"
+			text := lexicon.ValueFalse
 			if v.BooleanVal() {
-				text = "true"
+				text = lexicon.ValueTrue
 			}
 			if err := elem.AppendText([]byte(text)); err != nil {
 				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append boolean value: %v", err)}
@@ -414,7 +415,7 @@ func serializeJSONXMLElement(elem *helium.Element, inherited xmlJSONInherited, o
 			parts = append(parts, value)
 		}
 		return formatJSONComposite("[", "]", parts, depth, opts.indent), meta, nil
-	case "string":
+	case lexicon.TypeString:
 		content, err := scalarElementText(elem, true)
 		if err != nil {
 			return "", xmlJSONMeta{}, err
@@ -468,7 +469,7 @@ func parseXMLJSONMeta(elem *helium.Element, inherited xmlJSONInherited) (xmlJSON
 	}
 
 	switch meta.kind {
-	case "map", "array", "string", "number", "boolean", "null":
+	case "map", "array", lexicon.TypeString, "number", "boolean", "null":
 	default:
 		return xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid element %q", meta.kind)}
 	}
@@ -579,9 +580,9 @@ func validateNullElement(elem *helium.Element) error {
 
 func parseXMLJSONBooleanAttr(s string) (bool, error) {
 	switch strings.TrimSpace(s) {
-	case "true", "1":
+	case lexicon.ValueTrue, "1":
 		return true, nil
-	case "false", "0":
+	case lexicon.ValueFalse, "0":
 		return false, nil
 	default:
 		return false, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid boolean attribute value %q", s)}
@@ -590,10 +591,10 @@ func parseXMLJSONBooleanAttr(s string) (bool, error) {
 
 func canonicalizeXMLJSONBoolean(s string) (string, error) {
 	switch strings.TrimSpace(s) {
-	case "true", "1":
-		return "true", nil
-	case "false", "0":
-		return "false", nil
+	case lexicon.ValueTrue, "1":
+		return lexicon.ValueTrue, nil
+	case lexicon.ValueFalse, "0":
+		return lexicon.ValueFalse, nil
 	default:
 		return "", &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid boolean value %q", s)}
 	}

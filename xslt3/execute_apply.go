@@ -6,8 +6,8 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTemplatesInst) error {
@@ -796,27 +796,27 @@ func (ec *execContext) checkContextItemType(tmpl *template) error {
 // requires "instance of" semantics per XSLT 3.0 §9.8.
 func instanceOfItemType(item xpath3.Item, itemType string, ec *execContext) bool {
 	switch itemType {
-	case "item()":
+	case lexicon.NodeTestItem:
 		return true
-	case "node()":
+	case lexicon.NodeTestNode:
 		_, ok := item.(xpath3.NodeItem)
 		return ok
-	case "element()":
+	case lexicon.NodeTestElement:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.ElementNode
-	case "attribute()":
+	case lexicon.NodeTestAttribute:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.AttributeNode
-	case "text()":
+	case lexicon.NodeTestText:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && (ni.Node.Type() == helium.TextNode || ni.Node.Type() == helium.CDATASectionNode)
-	case "comment()":
+	case lexicon.NodeTestComment:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.CommentNode
-	case "processing-instruction()":
+	case lexicon.NodeTestPI:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.ProcessingInstructionNode
-	case "document-node()":
+	case lexicon.NodeTestDocumentNode:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.DocumentNode
 	}
@@ -871,7 +871,7 @@ func instanceOfItemType(item xpath3.Item, itemType string, ec *execContext) bool
 		return false
 	}
 	target := normalizeTypeName(itemType, ec)
-	if target == "xs:anyAtomicType" {
+	if target == lexicon.XSAnyAtomicType {
 		return true
 	}
 	if av.TypeName == target {

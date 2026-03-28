@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
-	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) registerSchemaConstructors(dst map[xpath3.QualifiedName]xpath3.Function) {
@@ -185,31 +185,31 @@ func schemaTypeVariety(td *xsd.TypeDef) xsd.TypeVariety {
 
 func schemaBuiltinXPathType(td *xsd.TypeDef) string {
 	switch schemaBuiltinBaseLocal(td) {
-	case "string":
+	case lexicon.TypeString:
 		return xpath3.TypeString
-	case "boolean":
+	case lexicon.TypeBoolean:
 		return xpath3.TypeBoolean
-	case "decimal":
+	case lexicon.TypeDecimal:
 		return xpath3.TypeDecimal
-	case "double":
+	case lexicon.TypeDouble:
 		return xpath3.TypeDouble
-	case "float":
+	case lexicon.TypeFloat:
 		return xpath3.TypeFloat
-	case "integer":
+	case lexicon.TypeInteger:
 		return xpath3.TypeInteger
 	case "date":
 		return xpath3.TypeDate
-	case "dateTime":
+	case lexicon.TypeDateTime:
 		return xpath3.TypeDateTime
 	case "dateTimeStamp":
 		return xpath3.TypeDateTimeStamp
-	case "time":
+	case lexicon.TypeTime:
 		return xpath3.TypeTime
-	case "duration":
+	case lexicon.TypeDuration:
 		return xpath3.TypeDuration
-	case "dayTimeDuration":
+	case lexicon.TypeDayTimeDuration:
 		return xpath3.TypeDayTimeDuration
-	case "yearMonthDuration":
+	case lexicon.TypeYearMonthDuration:
 		return xpath3.TypeYearMonthDuration
 	case "anyURI":
 		return xpath3.TypeAnyURI
@@ -217,7 +217,7 @@ func schemaBuiltinXPathType(td *xsd.TypeDef) string {
 		return xpath3.TypeBase64Binary
 	case "hexBinary":
 		return xpath3.TypeHexBinary
-	case "untypedAtomic":
+	case lexicon.TypeUntypedAtomic:
 		return xpath3.TypeUntypedAtomic
 	case "normalizedString":
 		return xpath3.TypeNormalizedString

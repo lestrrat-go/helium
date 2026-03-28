@@ -183,7 +183,7 @@ func latin1ToUTF8(data []byte) []byte {
 // invalidByteInfo records the position and raw bytes of the first invalid
 // byte sequence found during UTF-8 validation.
 type invalidByteInfo struct {
-	offset   int    // byte offset of first invalid byte in newline-normalized input
+	offset   int // byte offset of first invalid byte in newline-normalized input
 	rawBytes [4]byte
 	nBytes   int // number of valid bytes in rawBytes (0..4)
 }
@@ -298,13 +298,13 @@ func (p *parser) currentName() string {
 
 // pushName pushes an element name onto the stack and tracks insert mode.
 func (p *parser) pushName(name string) {
-	if name == "html" {
+	if name == "html" { //nolint:goconst
 		p.sawRoot = true
 	}
-	if p.mode < insertInHead && name == "head" {
+	if p.mode < insertInHead && name == "head" { //nolint:goconst
 		p.mode = insertInHead
 	}
-	if p.mode < insertInBody && name == "body" {
+	if p.mode < insertInBody && name == "body" { //nolint:goconst
 		p.mode = insertInBody
 	}
 	p.nameStack = append(p.nameStack, name)
@@ -672,7 +672,7 @@ func (p *parser) parsePI() {
 	for !p.atEnd() {
 		if p.peek() == '>' {
 			data := p.input[start+1 : p.pos] // skip the '<', include '?'
-			p.advance(1)                      // skip '>'
+			p.advance(1)                     // skip '>'
 			_ = p.sax.Comment(data)
 			return
 		}
@@ -914,8 +914,8 @@ func (p *parser) inRawTextElement() bool {
 type scriptState int
 
 const (
-	scriptNormal       scriptState = 0 // normal script data
-	scriptEscaped      scriptState = 1 // after <!--
+	scriptNormal        scriptState = 0 // normal script data
+	scriptEscaped       scriptState = 1 // after <!--
 	scriptDoubleEscaped scriptState = 2 // after <script inside <!--
 )
 
@@ -1334,4 +1334,3 @@ func matchCaseInsensitive(data []byte, prefix string) bool {
 	}
 	return strings.EqualFold(string(data[:len(prefix)]), prefix)
 }
-

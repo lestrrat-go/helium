@@ -96,7 +96,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			// Track modes used by local templates (for XTSE3050).
 			// When declared-modes="no", using a mode implicitly declares it.
 			if !c.stylesheet.declaredModes {
-				if m := getAttr(elem, "mode"); m != "" && m != "#default" && m != "#all" && m != "#unnamed" {
+				if m := getAttr(elem, "mode"); m != "" && m != lexicon.ModeDefault && m != lexicon.ModeAll && m != "#unnamed" {
 					resolved := resolveQName(m, c.nsBindings)
 					c.localModeNames[resolved] = struct{}{}
 				}
@@ -189,7 +189,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			continue
 		}
 		ln := elem.LocalName()
-		if ln == "include" || ln == "import" {
+		if ln == "include" || ln == lexicon.XSLTElementImport {
 			if err := c.resolveShadowAttributes(elem); err != nil {
 				return err
 			}
@@ -306,7 +306,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			continue
 		}
 		ln := elem.LocalName()
-		if ln == "param" || ln == "variable" {
+		if ln == lexicon.XSLTElementParam || ln == "variable" {
 			if err := c.resolveSingleShadowAttribute(elem, "static"); err != nil {
 				return err
 			}
@@ -644,7 +644,7 @@ func (c *compiler) compileNamespaceAlias(elem *helium.Element) error {
 
 	// Resolve stylesheet-prefix to a URI
 	var stylesheetURI string
-	if stylesheetPrefix == "#default" {
+	if stylesheetPrefix == lexicon.ModeDefault {
 		stylesheetURI = localNS[""]
 	} else {
 		uri, ok := localNS[stylesheetPrefix]
@@ -658,7 +658,7 @@ func (c *compiler) compileNamespaceAlias(elem *helium.Element) error {
 	var resultURI string
 	var resultPfx string
 	switch resultPrefix {
-	case "#default":
+	case lexicon.ModeDefault:
 		resultURI = localNS[""]
 		resultPfx = ""
 	case lexicon.PrefixXML:

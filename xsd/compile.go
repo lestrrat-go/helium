@@ -264,7 +264,7 @@ func getAttr(elem *helium.Element, name string) string {
 
 // parseBlockFlags parses a block attribute value into BlockFlags.
 func parseBlockFlags(v string) BlockFlags {
-	if v == "#all" {
+	if v == lexicon.ModeAll {
 		return BlockExtension | BlockRestriction | BlockSubstitution
 	}
 	var f BlockFlags
@@ -283,7 +283,7 @@ func parseBlockFlags(v string) BlockFlags {
 
 // parseFinalFlags parses a finalDefault or simpleType final attribute value into FinalFlags.
 func parseFinalFlags(v string) FinalFlags {
-	if v == "#all" {
+	if v == lexicon.ModeAll {
 		return FinalExtension | FinalRestriction | FinalList | FinalUnion
 	}
 	var f FinalFlags
@@ -305,7 +305,7 @@ func parseFinalFlags(v string) FinalFlags {
 // parseElemFinalFlags parses a final attribute value for elements/complexTypes
 // (only extension/restriction are valid).
 func parseElemFinalFlags(v string) FinalFlags {
-	if v == "#all" {
+	if v == lexicon.ModeAll {
 		return FinalExtension | FinalRestriction
 	}
 	var f FinalFlags

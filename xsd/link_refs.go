@@ -186,7 +186,7 @@ func (c *compiler) resolveRefs() {
 		// Only check when the derived type has element content (not empty/attribute-only).
 		if td.BaseType.ContentType == ContentTypeSimple && (td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed) {
 			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
-				component := "local complex type"
+				component := "local complex type" //nolint:goconst
 				if !src.isLocal {
 					component = "complex type '" + td.Name.Local + "'"
 				}

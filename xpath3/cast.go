@@ -8,6 +8,8 @@ import (
 	"math/big"
 	"strings"
 	"time"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // isIntegerDerived returns true if the type is xs:integer or one of its derived types.
@@ -281,9 +283,9 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		return castStringToFloat(s)
 	case TypeBoolean:
 		switch s {
-		case "true", "1":
+		case lexicon.ValueTrue, "1":
 			return AtomicValue{TypeName: TypeBoolean, Value: true}, nil
-		case "false", "0":
+		case lexicon.ValueFalse, "0":
 			return AtomicValue{TypeName: TypeBoolean, Value: false}, nil
 		default:
 			return AtomicValue{}, castError(s, targetType)

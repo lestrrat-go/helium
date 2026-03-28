@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func castToString(v AtomicValue) (AtomicValue, error) {
@@ -65,9 +67,9 @@ func atomicToString(v AtomicValue) (string, error) {
 			return "", fmt.Errorf("xpath3: internal error: expected bool value for %s", v.TypeName)
 		}
 		if b {
-			return "true", nil
+			return lexicon.ValueTrue, nil
 		}
-		return "false", nil
+		return lexicon.ValueFalse, nil
 	case TypeDate:
 		t, ok := v.Value.(time.Time)
 		if !ok {
@@ -140,9 +142,9 @@ func atomicToString(v AtomicValue) (string, error) {
 		return formatXPathDouble(val), nil
 	case bool:
 		if val {
-			return "true", nil
+			return lexicon.ValueTrue, nil
 		}
-		return "false", nil
+		return lexicon.ValueFalse, nil
 	case time.Time:
 		return fmt.Sprintf("%v", val), nil
 	case Duration:
@@ -159,13 +161,13 @@ func atomicToString(v AtomicValue) (string, error) {
 // formatXPathDouble formats a float64 using XPath canonical representation.
 func formatXPathDouble(f float64) string {
 	if math.IsNaN(f) {
-		return "NaN"
+		return lexicon.FloatNaN
 	}
 	if math.IsInf(f, 1) {
-		return "INF"
+		return lexicon.FloatINF
 	}
 	if math.IsInf(f, -1) {
-		return "-INF"
+		return lexicon.FloatNegINF
 	}
 	if f == 0 {
 		if math.Signbit(f) {
@@ -210,13 +212,13 @@ func formatXPathDouble(f float64) string {
 func formatXPathFloat(f float64) string {
 	f32 := float32(f)
 	if math.IsNaN(float64(f32)) {
-		return "NaN"
+		return lexicon.FloatNaN
 	}
 	if math.IsInf(float64(f32), 1) {
-		return "INF"
+		return lexicon.FloatINF
 	}
 	if math.IsInf(float64(f32), -1) {
-		return "-INF"
+		return lexicon.FloatNegINF
 	}
 	if f32 == 0 {
 		if math.Signbit(float64(f32)) {
@@ -332,18 +334,18 @@ func formatXSDYear(year int) string {
 }
 
 // parseXPathDouble parses s as an xs:double using XSD 1.1 lexical rules.
-// Valid special values: "INF", "+INF", "-INF", "NaN".
+// Valid special values: "INF", "+INF", lexicon.FloatNegINF, "NaN".
 func parseXPathDouble(s string) (float64, error) {
 	switch s {
 	case "INF", "+INF":
 		return math.Inf(1), nil
-	case "-INF":
+	case lexicon.FloatNegINF:
 		return math.Inf(-1), nil
 	case "NaN":
 		return math.NaN(), nil
 	}
 	// Reject case-insensitive nan/inf variants that strconv.ParseFloat accepts
-	// but XSD 1.1 does not (only exact "NaN", "INF", "+INF", "-INF" are valid).
+	// but XSD 1.1 does not (only exact "NaN", "INF", "+INF", lexicon.FloatNegINF are valid).
 	lower := strings.ToLower(s)
 	if lower == "nan" || lower == "inf" || lower == "+inf" || lower == "-inf" {
 		return 0, fmt.Errorf("invalid xs:double value: %s", s)

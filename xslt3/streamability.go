@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -294,10 +295,10 @@ func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 		if fc, ok := e.(xpath3.FunctionCall); ok {
 			if fc.Prefix == "" {
 				switch fc.Name {
-				case "head", "tail", "copy-of", "snapshot", "string-join",
-					"serialize", "deep-equal", "sort", "reverse",
+				case "head", "tail", "copy-of", "snapshot", "string-join", //nolint:goconst
+					"serialize", "deep-equal", "sort", "reverse", //nolint:goconst
 					"empty", "exists", "count", "sum", "avg", "min", "max",
-					"string", "data", "boolean":
+					"string", "data", lexicon.TypeBoolean: //nolint:goconst
 					for _, arg := range fc.Args {
 						if ve, ok := arg.(xpath3.VariableExpr); ok {
 							if ve.Name == paramName {

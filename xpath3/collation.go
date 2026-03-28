@@ -266,14 +266,14 @@ func parseUCAParams(query string) (ucaParams, error) {
 			switch val {
 			case "non-ignorable":
 				p.alternate = ""
-			case "blanked", "shifted":
+			case "blanked", "shifted": //nolint:goconst
 				p.alternate = val
 				unsupported = true
 			default:
 				invalid = true
 			}
 		case "caseFirst":
-			if val == "upper" || val == "lower" {
+			if val == "upper" || val == "lower" { //nolint:goconst
 				p.caseFirst = val
 			} else {
 				invalid = true
@@ -297,7 +297,7 @@ func parseUCAParams(query string) (ucaParams, error) {
 			default:
 				invalid = true
 			}
-		case "numeric":
+		case "numeric": //nolint:goconst
 			switch val {
 			case lexicon.ValueYes:
 				p.collateOpts = append(p.collateOpts, collate.Numeric)
@@ -611,7 +611,6 @@ func IsCollationSupported(uri string) bool {
 	_, err := resolveCollation(uri, "")
 	return err == nil
 }
-
 
 // caseblindCollationURI is the QT3 test suite's case-blind collation URI.
 const caseblindCollationURI = "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind"

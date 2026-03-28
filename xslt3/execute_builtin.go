@@ -5,6 +5,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -305,7 +306,7 @@ func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
 	elem := parent.(*helium.Element) //nolint:forcetypeassert
 	// xml:space="preserve" on the element or an ancestor overrides strip-space.
 	// Walk up to find the nearest xml:space declaration.
-	if inheritedXMLSpace(elem) == "preserve" {
+	if inheritedXMLSpace(elem) == lexicon.SpacePreserve {
 		return false
 	}
 	if ec.isElementStripped(elem) {

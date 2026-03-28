@@ -213,7 +213,7 @@ func (ec *execContext) validateConstructedAttribute(localName, nsURI, value, val
 // data()/atomization at runtime.
 func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, typeName string) error {
 	// xs:anyType and xs:untyped accept any content — skip validation entirely.
-	if typeName == "xs:anyType" || typeName == "xs:untyped" {
+	if typeName == lexicon.XSAnyType || typeName == lexicon.XSUntyped {
 		return nil
 	}
 
@@ -761,14 +761,14 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			tmpElem := tmpDoc.CreateElement("_tmp")
 			{
 				if idx := strings.IndexByte(name, ':'); idx >= 0 {
-				prefix := name[:idx]
-				local := name[idx+1:]
-				uri := ec.resolvePrefix(prefix)
-				ns, _ := tmpDoc.CreateNamespace(prefix, uri)
-				_, _ = tmpElem.SetAttributeNS(local, value, ns)
-			} else {
-				_, _ = tmpElem.SetAttribute(name, value)
-			}
+					prefix := name[:idx]
+					local := name[idx+1:]
+					uri := ec.resolvePrefix(prefix)
+					ns, _ := tmpDoc.CreateNamespace(prefix, uri)
+					_, _ = tmpElem.SetAttributeNS(local, value, ns)
+				} else {
+					_, _ = tmpElem.SetAttribute(name, value)
+				}
 				for _, attr := range tmpElem.Attributes() {
 					out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
 					out.noteOutput()
@@ -1467,4 +1467,3 @@ func isQNameType(typeName string) bool {
 	}
 	return false
 }
-

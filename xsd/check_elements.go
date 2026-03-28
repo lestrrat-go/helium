@@ -20,7 +20,7 @@ func hasAttr(elem *helium.Element, name string) bool {
 
 // isValidFinal checks if a value is valid for the 'final' attribute on elements.
 func isValidFinal(v string) bool {
-	if v == "#all" {
+	if v == lexicon.ModeAll {
 		return true
 	}
 	for _, part := range splitSpace(v) {
@@ -33,7 +33,7 @@ func isValidFinal(v string) bool {
 
 // isValidBlock checks if a value is valid for the 'block' attribute.
 func isValidBlock(v string) bool {
-	if v == "#all" {
+	if v == lexicon.ModeAll {
 		return true
 	}
 	for _, part := range splitSpace(v) {
@@ -47,7 +47,7 @@ func isValidBlock(v string) bool {
 // isValidFinalDefault checks if a value is valid for the 'finalDefault' attribute on xs:schema.
 // Accepts #all or space-separated list of extension|restriction|list|union.
 func isValidFinalDefault(v string) bool {
-	if v == "#all" {
+	if v == lexicon.ModeAll {
 		return true
 	}
 	for _, part := range splitSpace(v) {
@@ -348,7 +348,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 		}
 	} else {
 		// Attribute name must not be "xmlns".
-		if getAttr(elem, attrName) == "xmlns" {
+		if getAttr(elem, attrName) == lexicon.PrefixXMLNS {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "attribute", "name",
 				"The value of the attribute must not match 'xmlns'."), helium.ErrorLevelFatal))
 			c.errorCount++

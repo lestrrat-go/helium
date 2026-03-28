@@ -20,7 +20,7 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	escapeCtrl := effectiveHTMLVersion5(outDef)
 
 	if hasDoctypeAttrs {
-		rootName := "html"
+		rootName := "html" //nolint:goconst
 		if root := doc.DocumentElement(); root != nil {
 			rootName = root.Name()
 		}

@@ -122,7 +122,7 @@ func runRelaxNG(ctx context.Context, stderr io.Writer, stdin io.Reader, stdinTTY
 	}
 
 	switch args[0] {
-	case "validate":
+	case "validate": //nolint:goconst
 		return newRelaxNGValidateCommandWithIO("helium relaxng validate", stdin, stderr, stdinTTY).runContext(ctx, args[1:])
 	default:
 		_, _ = fmt.Fprintf(stderr, "helium relaxng: unknown subcommand %q\n", args[0])

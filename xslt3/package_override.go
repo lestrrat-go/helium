@@ -678,8 +678,8 @@ func isStandardType(as string) bool {
 	}
 	// Standard keywords
 	switch name {
-	case "item()", "node()", "element()", "attribute()", "text()",
-		"comment()", "processing-instruction()", "document-node()",
+	case lexicon.NodeTestItem, lexicon.NodeTestNode, lexicon.NodeTestElement, lexicon.NodeTestAttribute, lexicon.NodeTestText,
+		lexicon.NodeTestComment, "processing-instruction()", lexicon.NodeTestDocumentNode,
 		"namespace-node()", "schema-element()", "schema-attribute()",
 		"function(*)", "map(*)", "array(*)":
 		return true

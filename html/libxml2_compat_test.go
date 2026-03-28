@@ -329,7 +329,7 @@ func normalizeCharDisplays(s string) string {
 func TestLibxml2CompatHTMLSAX(t *testing.T) {
 	t.Parallel()
 
-	dir := "../testdata/libxml2-compat/html"
+	dir := "../testdata/libxml2-compat/html" //nolint:goconst
 
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("testdata/libxml2-compat/html not found; run testdata/libxml2/generate.sh first")

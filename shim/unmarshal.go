@@ -922,7 +922,7 @@ func validateXMLNameExpectation(bindings []fieldBinding, elem *helium.Element) e
 		}
 
 		spec := strings.TrimSpace(binding.rawName)
-		if spec == "" || spec == "XMLName" {
+		if spec == "" || spec == "XMLName" { //nolint:goconst
 			return nil
 		}
 

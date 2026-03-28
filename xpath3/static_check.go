@@ -3,6 +3,8 @@ package xpath3
 import (
 	"fmt"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // knownXSTypeNames lists valid type local names in the xs: namespace
@@ -68,7 +70,7 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool
 			}
 			continue
 		}
-		if req.prefix == "xs" || req.prefix == "xsd" {
+		if req.prefix == "xs" || req.prefix == lexicon.PrefixXSD {
 			switch req.name {
 			case "NMTOKENS", "IDREFS", "ENTITIES":
 				return &XPathError{
@@ -89,7 +91,6 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool
 	}
 	return nil
 }
-
 
 func (b prefixPlanBuilder) plan() prefixValidationPlan {
 	return prefixValidationPlan{
@@ -274,7 +275,6 @@ func appendExprLocalPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 func appendStepLocalPrefixChecks(plan *prefixPlanBuilder, s *Step) {
 	appendNodeTestPrefixChecks(plan, s.NodeTest)
 }
-
 
 func appendVMPredicatePrefixChecks(plan *prefixPlanBuilder, pred Expr) {
 	switch p := pred.(type) {

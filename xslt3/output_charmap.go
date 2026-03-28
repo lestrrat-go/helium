@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/stream"
 	"golang.org/x/text/encoding/htmlindex"
 	xtunicode "golang.org/x/text/encoding/unicode"
@@ -18,7 +19,7 @@ import (
 // Returns (form, true) on success or (0, false) for unknown/NONE forms.
 func resolveNormForm(form string) (norm.Form, bool) {
 	switch form {
-	case "NFC", "FULLY-NORMALIZED":
+	case "NFC", lexicon.NormFullyNormalized:
 		return norm.NFC, true
 	case "NFD":
 		return norm.NFD, true
@@ -503,7 +504,7 @@ func writeCDATAWithEncoding(sw *stream.Writer, text, encoding, normForm string) 
 // for non-representable characters.
 func needsCDATASplit(encoding string) bool {
 	switch encoding {
-	case "", "utf-8", "utf8", "utf-16", "utf16":
+	case "", "utf-8", "utf8", "utf-16", "utf16": //nolint:goconst
 		return false
 	default:
 		return true

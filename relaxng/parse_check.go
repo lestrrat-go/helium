@@ -216,7 +216,7 @@ func patternElemName(k patternKind) string {
 	case patternText:
 		return "text"
 	case patternInterleave:
-		return "interleave"
+		return "interleave" //nolint:goconst
 	case patternRef:
 		return "ref"
 	case patternParentRef:
@@ -226,7 +226,7 @@ func patternElemName(k patternKind) string {
 	case patternGroup:
 		return "group"
 	case patternChoice:
-		return "choice"
+		return "choice" //nolint:goconst
 	case patternOneOrMore:
 		return "oneOrMore"
 	case patternZeroOrMore:

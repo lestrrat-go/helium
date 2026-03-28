@@ -7,8 +7,8 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // getParamDocOutputDef returns the effective parameter-document OutputDef for
@@ -538,7 +538,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 				adnVal, adnErr := inst.AllowDuplicateNames.evaluate(ctx, ec.contextNode)
 				if adnErr == nil {
 					adnVal = strings.TrimSpace(adnVal)
-					if adnVal == lexicon.ValueYes || adnVal == "true" || adnVal == "1" {
+					if adnVal == lexicon.ValueYes || adnVal == lexicon.ValueTrue || adnVal == "1" {
 						allowDupes = true
 					}
 				}
@@ -761,7 +761,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 			return nil, err
 		}
 		switch strings.TrimSpace(v) {
-		case "true", "1":
+		case lexicon.ValueTrue, "1":
 			v = lexicon.ValueYes
 		case "false", "0":
 			v = lexicon.ValueNo

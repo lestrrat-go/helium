@@ -245,9 +245,9 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "--version":
+		case "--version": //nolint:goconst
 			cfg.version = true
-		case "--timing":
+		case "--timing": //nolint:goconst
 			cfg.timing = true
 		case "--noout":
 			cfg.noout = true

@@ -593,7 +593,7 @@ func checkSerializationResult(method string, result string, expected string) boo
 		return normalizeSpace(actual) == normalizeSpace(expected)
 	case "xml", "xhtml", "html":
 		return xmlEqual(result, expected)
-	case "adaptive":
+	case "adaptive": //nolint:goconst
 		// Adaptive serialization: compare as string
 		return strings.TrimSpace(normLE(result)) == strings.TrimSpace(normLE(expected))
 	default:
@@ -1356,7 +1356,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	for _, a := range tc.Assertions {
 		if a.RawCheck != nil && rawResult != nil {
 			a.RawCheck(t, rawResult, result)
-		} else if a.Type == "assert" && rawResult != nil {
+		} else if a.Type == "assert" && rawResult != nil { //nolint:goconst
 			evalXPathAssertWithRawResult(t, a.Value, result, rawResult)
 		} else if a.Type == "assert" && resultAnnotations != nil {
 			evalXPathAssertWithAnnotations(t, a.Value, resultDoc, resultAnnotations, resultSchemaDecl)
@@ -1938,13 +1938,13 @@ func evalXPathAssertWithDoc(t *testing.T, expr string, doc *helium.Document) boo
 		ns = make(map[string]string)
 	}
 	if _, ok := ns["j"]; !ok {
-		ns["j"] = "http://www.w3.org/2005/xpath-functions"
+		ns["j"] = "http://www.w3.org/2005/xpath-functions" //nolint:goconst
 	}
 	if _, ok := ns["g"]; !ok {
-		ns["g"] = "http://www.w3.org/xsl-tests/grouped-transactions"
+		ns["g"] = "http://www.w3.org/xsl-tests/grouped-transactions" //nolint:goconst
 	}
 	if defNS, ok := ns[""]; ok {
-		if defNS == "http://www.w3.org/xsl-tests/grouped-transactions-e" {
+		if defNS == "http://www.w3.org/xsl-tests/grouped-transactions-e" { //nolint:goconst
 			if _, ok := ns["g"]; !ok || ns["g"] != defNS {
 				ns["g"] = defNS
 			}

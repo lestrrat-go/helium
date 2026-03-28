@@ -50,12 +50,12 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	// XTTE3110: typed="no" mode rejects typed nodes
 	if md := ec.lookupModeDef(mode); md != nil {
 		switch md.Typed {
-		case lexicon.ValueYes, "true", "1", validationStrict, validationLax:
+		case lexicon.ValueYes, lexicon.ValueTrue, "1", validationStrict, validationLax:
 			if !ec.nodeIsTyped(node) {
 				return dynamicError(errCodeXTTE3100,
 					"mode %q has typed=%q but node is untyped", mode, md.Typed)
 			}
-		case lexicon.ValueNo, "false", "0":
+		case lexicon.ValueNo, lexicon.ValueFalse, "0":
 			if ec.nodeIsTyped(node) {
 				return dynamicError(errCodeXTTE3110,
 					"mode %q has typed=%q but node is typed", mode, md.Typed)
@@ -399,7 +399,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 	// XTDE0160: backwards compatibility mode is not supported.
 	// Only XSLT 1.0 triggers backwards compatible behavior. Other versions
 	// (like 1.5) are forward-compatible and don't require BC support.
-	if strings.TrimSpace(tmpl.Version) == "1.0" {
+	if strings.TrimSpace(tmpl.Version) == lexicon.OutputVersion10 {
 		return dynamicError(errCodeXTDE0160,
 			"backwards compatibility mode (version 1.0) is not supported")
 	}
@@ -628,7 +628,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 			// (comments, attributes, PIs) per XSLT 3.0 §20.1.
 			emitDOE := isDOE && ec.temporaryOutputDepth == 0 && !out.captureItems && !out.sequenceMode
 			if emitDOE {
-				pi := ec.resultDoc.CreatePI("disable-output-escaping", "")
+				pi := ec.resultDoc.CreatePI(lexicon.OutputDisableEscaping, "")
 				if err := ec.addNode(pi); err != nil {
 					return err
 				}
@@ -729,7 +729,7 @@ func stripDOEMarkers(seq xpath3.Sequence) (xpath3.Sequence, map[int]bool) {
 	for item := range sequence.Items(seq) {
 		if ni, ok := item.(xpath3.NodeItem); ok && ni.Node.Type() == helium.ProcessingInstructionNode {
 			piName := ni.Node.Name()
-			if piName == "disable-output-escaping" {
+			if piName == lexicon.OutputDisableEscaping {
 				doeActive = true
 				continue
 			}

@@ -47,7 +47,7 @@ func (s *nsStack) createAttrPrefix(w *bufio.Writer, url string) string {
 	}
 
 	if url == lexicon.NamespaceXML {
-		return "xml"
+		return lexicon.PrefixXML
 	}
 
 	if s.attrPrefix == nil {

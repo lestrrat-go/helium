@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
@@ -225,7 +226,6 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *copyInst, 
 	}
 	return nil
 }
-
 
 // effectiveValidation returns the validation mode for a copy/copy-of instruction,
 // falling back to the stylesheet default when the instruction has none.
@@ -1162,12 +1162,12 @@ func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
 			"copy-accumulators requires use-accumulators on the processing mode")
 	}
 	// When use-accumulators attribute is absent (nil), the default is
-	// "#all" per XSLT 3.0 spec — all accumulators are applicable.
+	// lexicon.ModeAll per XSLT 3.0 spec — all accumulators are applicable.
 	if md.UseAccumulators == nil {
 		return nil
 	}
 	ua := *md.UseAccumulators
-	if ua == "#all" {
+	if ua == lexicon.ModeAll {
 		return nil
 	}
 	allowed := make(map[string]struct{})
@@ -1238,7 +1238,6 @@ func isNamespaceSensitiveType(typeName string) bool {
 	}
 	return false
 }
-
 
 // isComplexTypeName returns true if the given type name refers to a complex
 // type definition in the imported schemas.

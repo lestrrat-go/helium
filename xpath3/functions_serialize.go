@@ -108,9 +108,9 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 				return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
 			}
 			switch s {
-			case "true", "1":
+			case lexicon.ValueTrue, "1":
 				return true, true, nil
-			case "false", "0":
+			case lexicon.ValueFalse, "0":
 				return false, true, nil
 			default:
 				return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
