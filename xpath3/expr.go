@@ -9,6 +9,21 @@ type Expr interface {
 	exprNode()
 }
 
+// AsExpr performs a safe type assertion, returning the concrete Expr
+// type T and true if the assertion succeeds, or the zero value of T
+// and false otherwise.
+func AsExpr[T Expr](v any) (T, bool) {
+	if v == nil {
+		var zero T
+		return zero, false
+	}
+	if e, ok := v.(T); ok {
+		return e, true
+	}
+	var zero T
+	return zero, false
+}
+
 // AxisType identifies one of the 13 XPath axes, shared with xpath1.
 type AxisType = ixpath.AxisType
 
