@@ -313,7 +313,7 @@ func (n Element) Attributes() []*Attribute {
 	for attr := n.properties; attr != nil; {
 		attrs = append(attrs, attr)
 		if a := attr.NextSibling(); a != nil {
-			attr = a.(*Attribute)
+			attr = a.(*Attribute) //nolint:forcetypeassert
 		} else {
 			attr = nil
 		}
@@ -340,7 +340,7 @@ func (n Element) ForEachAttribute(fn func(*Attribute) bool) {
 			return
 		}
 		if a := attr.NextSibling(); a != nil {
-			attr = a.(*Attribute)
+			attr = a.(*Attribute) //nolint:forcetypeassert
 		} else {
 			attr = nil
 		}

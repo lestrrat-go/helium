@@ -640,7 +640,7 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 
 	// Boolean comparison
 	if a.TypeName == TypeBoolean && b.TypeName == TypeBoolean {
-		return compareBooleans(op, a.Value.(bool), b.Value.(bool)), nil
+		return compareBooleans(op, a.Value.(bool), b.Value.(bool)), nil //nolint:forcetypeassert
 	}
 
 	// Numeric comparison — type-preserving
@@ -678,11 +678,11 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 			}
 			return compareDuration(op, a.DurationVal(), b.DurationVal())
 		case TypeBase64Binary:
-			return compareBinary(op, a.Value.([]byte), b.Value.([]byte))
+			return compareBinary(op, a.Value.([]byte), b.Value.([]byte)) //nolint:forcetypeassert
 		case TypeHexBinary:
-			return compareBinary(op, a.Value.([]byte), b.Value.([]byte))
+			return compareBinary(op, a.Value.([]byte), b.Value.([]byte)) //nolint:forcetypeassert
 		case TypeQName:
-			return compareQName(op, a.Value.(QNameValue), b.Value.(QNameValue))
+			return compareQName(op, a.Value.(QNameValue), b.Value.(QNameValue)) //nolint:forcetypeassert
 		case TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
 			// Gregorian partial types only support eq/ne, not ordering
 			if op != TokenEq && op != TokenNe {

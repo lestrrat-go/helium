@@ -125,7 +125,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 			if err != nil {
 				return tokens, errUnexpectedEOF
 			}
-			pi := tok.(ProcInst)
+			pi := tok.(ProcInst) //nolint:forcetypeassert
 
 			// Validate PI target
 			if pi.Target == "" {

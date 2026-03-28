@@ -199,7 +199,7 @@ func (c *compiler) parseSchemaChildren(root *helium.Element) error {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		elem := child.(*helium.Element)
+		elem := child.(*helium.Element) //nolint:forcetypeassert
 		switch {
 		case isXSDElement(elem, elemElement):
 			if err := c.parseGlobalElement(elem); err != nil {

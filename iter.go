@@ -75,7 +75,7 @@ func ChildElements(n Node) iter.Seq[*Element] {
 		}
 		for child := n.FirstChild(); child != nil; child = child.NextSibling() {
 			if child.Type() == ElementNode {
-				if !yield(child.(*Element)) {
+				if !yield(child.(*Element)) { //nolint:forcetypeassert
 					return
 				}
 			}

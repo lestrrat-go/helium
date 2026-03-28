@@ -216,7 +216,7 @@ func (d *Document) Replace(_ ...Node) error {
 func (d *Document) DocumentElement() *Element {
 	for n := d.firstChild; n != nil; n = n.NextSibling() {
 		if n.Type() == ElementNode {
-			return n.(*Element)
+			return n.(*Element) //nolint:forcetypeassert
 		}
 	}
 	return nil
@@ -245,7 +245,7 @@ func (d *Document) SetDocumentElement(root MutableNode) error {
 			return err
 		}
 	} else {
-		if err := old.(MutableNode).Replace(root); err != nil {
+		if err := old.(MutableNode).Replace(root); err != nil { //nolint:forcetypeassert
 			return err
 		}
 	}
@@ -774,7 +774,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 						last = node
 						ret = node
 					} else {
-						if err2 := last.(MutableNode).AddSibling(node); err2 != nil {
+						if err2 := last.(MutableNode).AddSibling(node); err2 != nil { //nolint:forcetypeassert
 							err = err2
 							return
 						}
@@ -816,7 +816,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					last = node
 					ret = node
 				} else {
-					if err2 := last.(MutableNode).AddSibling(node); err2 != nil {
+					if err2 := last.(MutableNode).AddSibling(node); err2 != nil { //nolint:forcetypeassert
 						err = err2
 						return
 					}
@@ -837,7 +837,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 		if last == nil {
 			ret = n
 		} else {
-			if err := last.(MutableNode).AddSibling(n); err != nil {
+			if err := last.(MutableNode).AddSibling(n); err != nil { //nolint:forcetypeassert
 				return nil, err
 			}
 		}
@@ -903,7 +903,7 @@ func (d *Document) GetElementByID(id string) *Element {
 		if n.Type() != ElementNode {
 			return nil
 		}
-		elem := n.(*Element)
+		elem := n.(*Element) //nolint:forcetypeassert
 		for _, a := range elem.Attributes() {
 			// Check xml:id (normalize value — xs:ID collapses whitespace)
 			if a.Name() == lexicon.QNameXMLID && strings.TrimSpace(a.Value()) == id {

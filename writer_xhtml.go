@@ -50,7 +50,7 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		return d.writeNode(out, n)
 	}
 
-	e := n.(*Element)
+	e := n.(*Element) //nolint:forcetypeassert
 	localName := e.LocalName()
 
 	var name string
@@ -212,7 +212,7 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
 		if a == nil {
 			break
 		}
-		attr = a.(*Attribute)
+		attr = a.(*Attribute) //nolint:forcetypeassert
 	}
 
 	if nameAttr != nil && idAttr == nil && xhtmlNameIDElements[localName] {
@@ -251,7 +251,7 @@ func (d *writeSession) headHasContentTypeMeta(head *Element) bool {
 			if a == nil {
 				break
 			}
-			attr = a.(*Attribute)
+			attr = a.(*Attribute) //nolint:forcetypeassert
 		}
 	}
 	return false

@@ -752,7 +752,7 @@ func (r *elementTokenReader) emitElement(elem *helium.Element) {
 
 func buildFieldBindings(t reflect.Type) ([]fieldBinding, error) {
 	if cached, ok := fieldBindingCache.Load(t); ok {
-		return cached.([]fieldBinding), nil
+		return cached.([]fieldBinding), nil //nolint:forcetypeassert
 	}
 
 	bindings := make([]fieldBinding, 0, t.NumField())
@@ -1230,7 +1230,7 @@ func childElements(elem *helium.Element) []*helium.Element {
 	}
 	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
-			result = append(result, child.(*helium.Element))
+			result = append(result, child.(*helium.Element)) //nolint:forcetypeassert
 		}
 	}
 	return result
@@ -1351,7 +1351,7 @@ func firstChildByTag(elem *helium.Element, tag string) *helium.Element {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce := child.(*helium.Element) //nolint:forcetypeassert
 		if matchElementByTag(ce, tag) {
 			return ce
 		}

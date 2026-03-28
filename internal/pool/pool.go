@@ -24,7 +24,7 @@ func New[T any](allocator func() T, destructor func(T) T) *Pool[T] {
 
 // Get retrieves an item from the pool (or allocates a new one).
 func (p *Pool[T]) Get() T {
-	return p.pool.Get().(T)
+	return p.pool.Get().(T) //nolint:forcetypeassert
 }
 
 // Put returns an item to the pool. If a destructor was provided, the item

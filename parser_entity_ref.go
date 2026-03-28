@@ -106,7 +106,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 				ndn.next = nil
 				ndn.prev = nil
 				ndn.parent = nil
-				n.(MutableNode).SetTreeDoc(pctx.doc)
+				n.(MutableNode).SetTreeDoc(pctx.doc) //nolint:forcetypeassert
 				_ = ent.AddChild(n)
 				n = next
 			}
@@ -611,7 +611,7 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 		var loadedEnt sax.Entity
 		loadedEnt, _ = s.GetEntity(ctx, name)
 		if loadedEnt != nil {
-			ent = loadedEnt.(*Entity)
+			ent = loadedEnt.(*Entity) //nolint:forcetypeassert
 			return
 		}
 

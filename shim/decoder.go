@@ -597,8 +597,8 @@ func (d *Decoder) mergeCharData(first tokenEvent, _ bool) tokenEvent {
 		return first
 	}
 	merged := first
-	cookedBuf := []byte(merged.tok.(CharData))
-	rawBuf := []byte(merged.rawTok.(CharData))
+	cookedBuf := []byte(merged.tok.(CharData)) //nolint:forcetypeassert
+	rawBuf := []byte(merged.rawTok.(CharData)) //nolint:forcetypeassert
 	for {
 		next, ok := <-d.events
 		if !ok {
@@ -614,7 +614,7 @@ func (d *Decoder) mergeCharData(first tokenEvent, _ bool) tokenEvent {
 			break
 		}
 		cookedBuf = append(cookedBuf, nextCD...)
-		rawBuf = append(rawBuf, next.rawTok.(CharData)...)
+		rawBuf = append(rawBuf, next.rawTok.(CharData)...) //nolint:forcetypeassert
 	}
 	merged.tok = CharData(cookedBuf)
 	merged.rawTok = CharData(rawBuf)

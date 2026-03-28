@@ -207,7 +207,7 @@ func ebvAtomic(v AtomicValue) (bool, error) {
 	// untypedAtomic, string-derived types, and numeric types only.
 	switch v.TypeName {
 	case TypeBoolean:
-		return v.Value.(bool), nil
+		return v.Value.(bool), nil //nolint:forcetypeassert
 	case TypeString, TypeAnyURI, TypeUntypedAtomic:
 		s, _ := v.Value.(string)
 		return s != "", nil

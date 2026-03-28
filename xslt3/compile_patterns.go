@@ -164,7 +164,7 @@ func validatePatternExprInner(expr xpath3.Expr, _ bool) error {
 		case xpath3.LocationPath:
 			return nil // (path)[pred]
 		case *xpath3.LocationPath:
-			lp := e.Expr.(*xpath3.LocationPath)
+			lp := e.Expr.(*xpath3.LocationPath) //nolint:forcetypeassert
 			if lp.Absolute && len(lp.Steps) == 0 {
 				return nil // (/)[pred]
 			}
@@ -1111,7 +1111,7 @@ func matchSchemaElementTest(ctx *execContext, t xpath3.SchemaElementTest, node h
 	if node.Type() != helium.ElementNode {
 		return false
 	}
-	elem := node.(*helium.Element)
+	elem := node.(*helium.Element) //nolint:forcetypeassert
 	// Resolve the schema element name.
 	prefix, local := splitQNamePair(t.Name)
 	ns := ""
@@ -1155,7 +1155,7 @@ func matchSchemaAttributeTest(ctx *execContext, t xpath3.SchemaAttributeTest, no
 	if node.Type() != helium.AttributeNode {
 		return false
 	}
-	attr := node.(*helium.Attribute)
+	attr := node.(*helium.Attribute) //nolint:forcetypeassert
 	prefix, local := splitQNamePair(t.Name)
 	ns := ""
 	if prefix != "" {

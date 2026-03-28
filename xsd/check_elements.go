@@ -153,7 +153,7 @@ func (c *compiler) checkGlobalElement(elem *helium.Element) {
 			if child.Type() != helium.ElementNode {
 				continue
 			}
-			ce := child.(*helium.Element)
+			ce := child.(*helium.Element) //nolint:forcetypeassert
 			if isXSDElement(ce, "complexType") {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 					"The attribute 'type' and the <complexType> child are mutually exclusive."), helium.ErrorLevelFatal))
@@ -232,7 +232,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 			if child.Type() != helium.ElementNode {
 				continue
 			}
-			ce := child.(*helium.Element)
+			ce := child.(*helium.Element) //nolint:forcetypeassert
 			if isXSDElement(ce, elemComplexType) || isXSDElement(ce, elemSimpleType) {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 					"The content is not valid. Expected is (annotation?)."), helium.ErrorLevelFatal))
@@ -285,7 +285,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 			if child.Type() != helium.ElementNode {
 				continue
 			}
-			ce := child.(*helium.Element)
+			ce := child.(*helium.Element) //nolint:forcetypeassert
 			if isXSDElement(ce, elemComplexType) {
 				if hasType {
 					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
@@ -339,7 +339,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 			if child.Type() != helium.ElementNode {
 				continue
 			}
-			ce := child.(*helium.Element)
+			ce := child.(*helium.Element) //nolint:forcetypeassert
 			if isXSDElement(ce, elemSimpleType) {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "attribute",
 					"The content is not valid. Expected is (annotation?)."), helium.ErrorLevelFatal))
@@ -387,7 +387,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 				if child.Type() != helium.ElementNode {
 					continue
 				}
-				ce := child.(*helium.Element)
+				ce := child.(*helium.Element) //nolint:forcetypeassert
 				if isXSDElement(ce, elemSimpleType) {
 					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "attribute",
 						"The attribute 'type' and the <simpleType> child are mutually exclusive."), helium.ErrorLevelFatal))
@@ -442,7 +442,7 @@ func (c *compiler) checkAnnotation(elem *helium.Element) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce := child.(*helium.Element) //nolint:forcetypeassert
 		if isXSDElement(ce, elemAppinfo) {
 			c.checkAppinfo(ce)
 		} else if isXSDElement(ce, elemDocumentation) {

@@ -138,7 +138,7 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		// Handle []xml.Attr with any,attr tag
 		if b.isAny && field.Type() == attrSliceType {
 			for i := 0; i < field.Len(); i++ {
-				se.Attr = append(se.Attr, field.Index(i).Interface().(Attr))
+				se.Attr = append(se.Attr, field.Index(i).Interface().(Attr)) //nolint:forcetypeassert
 			}
 			continue
 		}

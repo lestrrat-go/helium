@@ -661,7 +661,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 				// DOM output: emit children since documents can't be
 				// children of elements. In capture/sequence mode, keep
 				// the document node intact (pattern matching may need it).
-				doc := v.Node.(*helium.Document)
+				doc := v.Node.(*helium.Document) //nolint:forcetypeassert
 				for dc := range helium.Children(doc) {
 					copied, copyErr := helium.CopyNode(dc, ec.resultDoc)
 					if copyErr != nil {

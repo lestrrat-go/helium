@@ -18,7 +18,7 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 		}
 		return CopyDoc(doc)
 	case ElementNode:
-		return copyElement(src.(*Element), targetDoc)
+		return copyElement(src.(*Element), targetDoc) //nolint:forcetypeassert
 	case TextNode:
 		return targetDoc.CreateText(slices.Clone(src.Content())), nil
 	case CommentNode:
@@ -158,7 +158,7 @@ func copyDTD(src *DTD, dst *Document) error {
 	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
 		switch c.Type() {
 		case EntityNode:
-			ent := c.(*Entity)
+			ent := c.(*Entity) //nolint:forcetypeassert
 			cp := copyEntity(ent, dst)
 			switch ent.entityType {
 			case enum.InternalParameterEntity, enum.ExternalParameterEntity:
@@ -168,17 +168,17 @@ func copyDTD(src *DTD, dst *Document) error {
 			}
 			_ = dstDTD.AddChild(cp)
 		case ElementDeclNode:
-			edecl := c.(*ElementDecl)
+			edecl := c.(*ElementDecl) //nolint:forcetypeassert
 			cp := copyElementDecl(edecl, dst)
 			dstDTD.elements[edecl.name+":"+edecl.prefix] = cp
 			_ = dstDTD.AddChild(cp)
 		case AttributeDeclNode:
-			adecl := c.(*AttributeDecl)
+			adecl := c.(*AttributeDecl) //nolint:forcetypeassert
 			cp := copyAttributeDecl(adecl, dst)
 			dstDTD.attributes[adecl.name+":"+adecl.prefix+":"+adecl.elem] = cp
 			_ = dstDTD.AddChild(cp)
 		case NotationNode:
-			nota := c.(*Notation)
+			nota := c.(*Notation) //nolint:forcetypeassert
 			cp := copyNotation(nota, dst)
 			dstDTD.notations[nota.name] = cp
 			_ = dstDTD.AddChild(cp)

@@ -551,7 +551,7 @@ func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName s
 		local = aName
 	}
 
-	enum := enumif.(Enumeration)
+	enum := enumif.(Enumeration) //nolint:forcetypeassert
 
 	doc := ctx.doc
 	switch ctx.inSubset {
@@ -599,7 +599,7 @@ func (t *TreeBuilder) ElementDecl(ctxif context.Context, name string, typ enum.E
 		return errors.New("sax.ElementDecl called while not in subset")
 	}
 
-	_, err := dtd.AddElementDecl(name, typ, content.(*ElementContent))
+	_, err := dtd.AddElementDecl(name, typ, content.(*ElementContent)) //nolint:forcetypeassert
 	if err != nil {
 		return err
 	}

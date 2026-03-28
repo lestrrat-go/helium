@@ -654,7 +654,7 @@ func stepMatchesElements(step xpath3.Step) bool {
 	case xpath3.NameTest:
 		return true // name tests match elements by default
 	case xpath3.TypeTest:
-		tt := step.NodeTest.(xpath3.TypeTest)
+		tt := step.NodeTest.(xpath3.TypeTest) //nolint:forcetypeassert
 		return tt.Kind == xpath3.NodeKindNode
 	}
 	return false

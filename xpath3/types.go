@@ -152,7 +152,7 @@ func isSubtypeOf(actualType, targetType string) bool {
 	}
 	key := [2]string{actualType, targetType}
 	if v, ok := subtypeCache.Load(key); ok {
-		return v.(bool)
+		return v.(bool) //nolint:forcetypeassert
 	}
 	result := computeIsSubtypeOf(actualType, targetType)
 	subtypeCache.Store(key, result)
@@ -256,7 +256,7 @@ func (AtomicValue) itemTag() {}
 
 // StringVal returns the backing string value. Panics if not a string-backed type.
 func (a AtomicValue) StringVal() string {
-	return a.Value.(string)
+	return a.Value.(string) //nolint:forcetypeassert
 }
 
 // IntegerVal returns the backing int64 value. Panics if the value exceeds int64 range.
@@ -264,7 +264,7 @@ func (a AtomicValue) IntegerVal() int64 {
 	if v, ok := a.Value.(int64); ok {
 		return v
 	}
-	return a.Value.(*big.Int).Int64()
+	return a.Value.(*big.Int).Int64() //nolint:forcetypeassert
 }
 
 // Int64Val returns the int64 value if it fits, or (0, false) otherwise.
@@ -318,37 +318,37 @@ func (a AtomicValue) BigRat() *big.Rat {
 
 // DoubleVal returns the backing float64 value (extracts from *FloatValue).
 func (a AtomicValue) DoubleVal() float64 {
-	return a.Value.(*FloatValue).Float64()
+	return a.Value.(*FloatValue).Float64() //nolint:forcetypeassert
 }
 
 // FloatVal returns the backing *FloatValue.
 func (a AtomicValue) FloatVal() *FloatValue {
-	return a.Value.(*FloatValue)
+	return a.Value.(*FloatValue) //nolint:forcetypeassert
 }
 
 // BooleanVal returns the backing bool value.
 func (a AtomicValue) BooleanVal() bool {
-	return a.Value.(bool)
+	return a.Value.(bool) //nolint:forcetypeassert
 }
 
 // TimeVal returns the backing time.Time value.
 func (a AtomicValue) TimeVal() time.Time {
-	return a.Value.(time.Time)
+	return a.Value.(time.Time) //nolint:forcetypeassert
 }
 
 // DurationVal returns the backing Duration value.
 func (a AtomicValue) DurationVal() Duration {
-	return a.Value.(Duration)
+	return a.Value.(Duration) //nolint:forcetypeassert
 }
 
 // BytesVal returns the backing []byte value.
 func (a AtomicValue) BytesVal() []byte {
-	return a.Value.([]byte)
+	return a.Value.([]byte) //nolint:forcetypeassert
 }
 
 // QNameVal returns the backing QNameValue.
 func (a AtomicValue) QNameVal() QNameValue {
-	return a.Value.(QNameValue)
+	return a.Value.(QNameValue) //nolint:forcetypeassert
 }
 
 // IsNaN returns true if the atomic value is NaN (xs:double or xs:float).
@@ -392,7 +392,7 @@ func (a AtomicValue) ToFloat64() float64 {
 	}
 	switch a.TypeName {
 	case TypeDouble, TypeFloat:
-		return a.Value.(*FloatValue).Float64()
+		return a.Value.(*FloatValue).Float64() //nolint:forcetypeassert
 	case TypeDecimal:
 		r, ok := a.Value.(*big.Rat)
 		if !ok {

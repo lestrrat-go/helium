@@ -372,7 +372,7 @@ func (p *parser) parseDirectPredicates() ([]Expr, error) {
 		}
 		if !ok || p.lexer.Peek().Type != TokenRBracket {
 			if predStart >= 0 {
-				p.lexer.(*lexer).idx = predStart
+				p.lexer.(*lexer).idx = predStart //nolint:forcetypeassert
 			}
 			pred, err = p.parseExpression()
 			if err != nil {

@@ -252,7 +252,7 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 		if n.Type() != ElementNode {
 			return nil
 		}
-		elem := n.(*Element)
+		elem := n.(*Element) //nolint:forcetypeassert
 		validateOneElement(ctx, doc, elem, vctx)
 		return nil
 	}))
@@ -469,7 +469,7 @@ func validateMixedContent(ctx context.Context, elem *Element, content *ElementCo
 		case TextNode, CDATASectionNode, EntityRefNode, CommentNode, ProcessingInstructionNode:
 			// Always allowed in mixed content
 		case ElementNode:
-			cname := child.(*Element).LocalName()
+			cname := child.(*Element).LocalName() //nolint:forcetypeassert
 			if _, ok := allowed[cname]; !ok {
 				vctx.addf(ctx, "element %s: child element %s not allowed in mixed content", elem.LocalName(), cname)
 			}
@@ -504,7 +504,7 @@ func collectChildElements(elem *Element) []string {
 	for child := range Children(elem) {
 		switch child.Type() {
 		case ElementNode:
-			children = append(children, child.(*Element).LocalName())
+			children = append(children, child.(*Element).LocalName()) //nolint:forcetypeassert
 		case TextNode:
 			// In element-only content, whitespace text is allowed (ignorable
 			// whitespace) but non-whitespace text is an error. We skip

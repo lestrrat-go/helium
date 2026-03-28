@@ -193,8 +193,8 @@ func (ec *execContext) numberNodeMatches(inst *numberInst, target helium.Node, c
 		return false
 	}
 	if target.Type() == helium.ElementNode {
-		te := target.(*helium.Element)
-		ce := contextNode.(*helium.Element)
+		te := target.(*helium.Element) //nolint:forcetypeassert
+		ce := contextNode.(*helium.Element) //nolint:forcetypeassert
 		return te.LocalName() == ce.LocalName() && te.URI() == ce.URI()
 	}
 	return target.Name() == contextNode.Name()
@@ -309,7 +309,7 @@ func (ec *execContext) prevInDocOrder(node helium.Node) helium.Node {
 // lastDescendant returns the deepest last descendant of node (or node itself if leaf).
 func (ec *execContext) lastDescendant(node helium.Node) helium.Node {
 	if node.Type() == helium.ElementNode {
-		elem := node.(*helium.Element)
+		elem := node.(*helium.Element) //nolint:forcetypeassert
 		if last := elem.LastChild(); last != nil {
 			return ec.lastDescendant(last)
 		}

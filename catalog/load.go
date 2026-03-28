@@ -112,7 +112,7 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		elem := child.(*helium.Element)
+		elem := child.(*helium.Element) //nolint:forcetypeassert
 
 		if elem.URI() != lexicon.NamespaceCatalog {
 			continue
@@ -251,7 +251,7 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 func documentElement(doc *helium.Document) *helium.Element {
 	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
 		if child.Type() == helium.ElementNode {
-			return child.(*helium.Element)
+			return child.(*helium.Element) //nolint:forcetypeassert
 		}
 	}
 	return nil

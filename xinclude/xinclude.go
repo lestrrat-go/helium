@@ -172,7 +172,7 @@ func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 		var includes []*helium.Element
 		for c := range helium.Children(n) {
 			if isXInclude(c) {
-				includes = append(includes, c.(*helium.Element))
+				includes = append(includes, c.(*helium.Element)) //nolint:forcetypeassert
 			}
 		}
 		if len(includes) == 0 {
@@ -480,7 +480,7 @@ func (p *processor) mergeEntities(src, dst *helium.Document) {
 		for c := range helium.Children(dst) {
 			if c.Type() == helium.ElementNode {
 				var err error
-				dstInt, err = dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", "")
+				dstInt, err = dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", "") //nolint:forcetypeassert
 				if err != nil {
 					return
 				}
@@ -684,7 +684,7 @@ func (p *processor) replaceWithNodes(target *helium.Element, nodes []helium.Node
 	// Detach nodes from their original parents
 	for _, n := range nodes {
 		if n.Parent() != nil {
-			helium.UnlinkNode(n.(helium.MutableNode))
+			helium.UnlinkNode(n.(helium.MutableNode)) //nolint:forcetypeassert
 		}
 	}
 
@@ -995,7 +995,7 @@ func fixupNamespaceDecls(n helium.Node) {
 	if n.Type() != helium.ElementNode {
 		return
 	}
-	elem := n.(*helium.Element)
+	elem := n.(*helium.Element) //nolint:forcetypeassert
 
 	// Build set of locally declared prefixes
 	declared := make(map[string]bool)

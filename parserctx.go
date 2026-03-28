@@ -187,16 +187,16 @@ func (pctx *parserCtx) fireSAXCallback(ctx context.Context, typ int, args ...any
 			g := pdebug.Marker("EntityDecl callback")
 			defer g.End()
 		}
-		return s.EntityDecl(ctx, args[0].(string), enum.InternalParameterEntity, "", "", args[1].(string))
+		return s.EntityDecl(ctx, args[0].(string), enum.InternalParameterEntity, "", "", args[1].(string)) //nolint:forcetypeassert
 	case cbGetParameterEntity:
 		if pdebug.Enabled {
 			g := pdebug.Marker("GetParameterEntity callback")
 			defer g.End()
 		}
 
-		entity, err := s.GetParameterEntity(ctx, args[1].(string))
+		entity, err := s.GetParameterEntity(ctx, args[1].(string)) //nolint:forcetypeassert
 		if err == nil {
-			ret := args[0].(*sax.Entity)
+			ret := args[0].(*sax.Entity) //nolint:forcetypeassert
 			*ret = entity
 			if pdebug.Enabled {
 				pdebug.Printf("got entity %s", entity)

@@ -174,7 +174,7 @@ func appendText(n MutableNode, b []byte) error {
 	// Fast path: if last child is already a text node, append directly
 	// without allocating a new Text node.
 	if last := n.LastChild(); last != nil && last.Type() == TextNode {
-		return last.(*Text).AppendText(b)
+		return last.(*Text).AppendText(b) //nolint:forcetypeassert
 	}
 	// Use slab allocator when the node belongs to a document.
 	if doc := n.OwnerDocument(); doc != nil {
@@ -295,7 +295,7 @@ func addChild(n MutableNode, cur Node) error {
 
 	// AddSibling handles setting the parent, and the
 	// lastChild pointer (also merges adjacent text nodes)
-	if err := l.(MutableNode).AddSibling(cur); err != nil {
+	if err := l.(MutableNode).AddSibling(cur); err != nil { //nolint:forcetypeassert
 		return err
 	}
 
@@ -407,9 +407,9 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	}
 
 	// Determine the true last replacement node
-	last := cur.(MutableNode)
+	last := cur.(MutableNode) //nolint:forcetypeassert
 	for i := 1; i < len(nodes); i++ {
-		c := nodes[i].(MutableNode)
+		c := nodes[i].(MutableNode) //nolint:forcetypeassert
 		c.SetParent(last.Parent())
 		c.SetPrevSibling(last)
 		last.SetNextSibling(c)
@@ -419,13 +419,13 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	// Link last replacement to whatever followed n
 	last.SetNextSibling(afterN)
 	if afterN != nil {
-		afterN.(MutableNode).SetPrevSibling(last)
+		afterN.(MutableNode).SetPrevSibling(last) //nolint:forcetypeassert
 	}
 
 	// Update parent's lastChild if n was the last child and we added more nodes
 	if afterN == nil && len(nodes) > 1 {
 		if parent := cdn.parent; parent != nil {
-			setLastChild(parent.(MutableNode), last)
+			setLastChild(parent.(MutableNode), last) //nolint:forcetypeassert
 		}
 	}
 
@@ -518,7 +518,7 @@ func setListDoc(n MutableNode, doc *Document) {
 
 	for cur := Node(n); cur != nil; cur = cur.NextSibling() {
 		if cur.OwnerDocument() != doc {
-			cur.(MutableNode).SetTreeDoc(doc)
+			cur.(MutableNode).SetTreeDoc(doc) //nolint:forcetypeassert
 		}
 	}
 }
@@ -533,17 +533,17 @@ func setTreeDoc(n MutableNode, doc *Document) {
 	}
 
 	if n.Type() == ElementNode {
-		e := n.(*Element)
+		e := n.(*Element) //nolint:forcetypeassert
 		for prop := e.properties; prop != nil; prop = prop.NextAttribute() {
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
-				setListDoc(child.(MutableNode), doc)
+				setListDoc(child.(MutableNode), doc) //nolint:forcetypeassert
 			}
 		}
 	}
 	if child := n.FirstChild(); child != nil {
-		setListDoc(child.(MutableNode), doc)
+		setListDoc(child.(MutableNode), doc) //nolint:forcetypeassert
 	}
 	n.SetOwnerDocument(doc)
 }

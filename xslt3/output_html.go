@@ -500,7 +500,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	var children []helium.Node
 	for child := head.FirstChild(); child != nil; {
 		next := child.NextSibling()
-		helium.UnlinkNode(child.(helium.MutableNode))
+		helium.UnlinkNode(child.(helium.MutableNode)) //nolint:forcetypeassert
 		children = append(children, child)
 		child = next
 	}

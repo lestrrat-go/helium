@@ -119,9 +119,9 @@ type htmlDumper struct {
 func (d *htmlDumper) dumpNode(out io.Writer, n helium.Node) error {
 	switch n.Type() {
 	case helium.DocumentNode, helium.HTMLDocumentNode:
-		return d.dumpDocument(out, n.(*helium.Document))
+		return d.dumpDocument(out, n.(*helium.Document)) //nolint:forcetypeassert
 	case helium.DTDNode:
-		return dumpDTD(out, n.(*helium.DTD))
+		return dumpDTD(out, n.(*helium.DTD)) //nolint:forcetypeassert
 	case helium.CommentNode:
 		_, _ = io.WriteString(out, "<!--")
 		_, _ = out.Write(n.Content())
@@ -144,7 +144,7 @@ func (d *htmlDumper) dumpNode(out io.Writer, n helium.Node) error {
 	case helium.TextNode:
 		return d.dumpText(out, n)
 	case helium.ElementNode:
-		return d.dumpElement(out, n.(*helium.Element))
+		return d.dumpElement(out, n.(*helium.Element)) //nolint:forcetypeassert
 	}
 	return nil
 }

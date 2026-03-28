@@ -19,7 +19,7 @@ func NodeGetBase(doc *Document, n Node) string {
 	var bases []string
 	for cur := n; cur != nil; cur = cur.Parent() {
 		if cur.Type() == ElementNode {
-			elem := cur.(*Element)
+			elem := cur.(*Element) //nolint:forcetypeassert
 			if val, ok := elem.GetAttributeNS("base", lexicon.NamespaceXML); ok && val != "" {
 				bases = append(bases, val)
 			}

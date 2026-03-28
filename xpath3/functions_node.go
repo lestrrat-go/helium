@@ -544,7 +544,7 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 
 	for cur := first; cur != nil; {
 		next := cur.NextSibling()
-		mn := cur.(helium.MutableNode)
+		mn := cur.(helium.MutableNode) //nolint:forcetypeassert
 		mn.SetPrevSibling(nil)
 		mn.SetNextSibling(nil)
 		if err := doc.AddChild(cur); err != nil {

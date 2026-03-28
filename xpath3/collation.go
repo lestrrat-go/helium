@@ -130,13 +130,13 @@ func makeUCACollation(params string) (*collationImpl, error) {
 		return projectVariableRunes(s).value
 	}
 	cmp := func(a, b string) int {
-		cl := mainPool.Get().(*collate.Collator)
+		cl := mainPool.Get().(*collate.Collator) //nolint:forcetypeassert
 		r := cl.CompareString(normalize(a), normalize(b))
 		mainPool.Put(cl)
 		return r
 	}
 	key := func(s string) []byte {
-		cl := mainPool.Get().(*collate.Collator)
+		cl := mainPool.Get().(*collate.Collator) //nolint:forcetypeassert
 		buf := &collate.Buffer{}
 		k := append([]byte(nil), cl.KeyFromString(buf, normalize(s))...)
 		mainPool.Put(cl)
@@ -153,7 +153,7 @@ func makeUCACollation(params string) (*collationImpl, error) {
 		caseFirst := opts.caseFirst
 		key = func(s string) []byte {
 			s = normalize(s)
-			cl := caseBlindPool.Get().(*collate.Collator)
+			cl := caseBlindPool.Get().(*collate.Collator) //nolint:forcetypeassert
 			buf := &collate.Buffer{}
 			base := append([]byte(nil), cl.KeyFromString(buf, s)...)
 			caseBlindPool.Put(cl)
@@ -639,7 +639,7 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 		return htmlASCIICaseInsensitiveCollation, nil
 	case strings.HasPrefix(uri, lexicon.CollationUCA):
 		if cached, ok := ucaCollationCache.Load(uri); ok {
-			return cached.(*collationImpl), nil
+			return cached.(*collationImpl), nil //nolint:forcetypeassert
 		}
 		params := ""
 		if idx := strings.Index(uri, "?"); idx >= 0 {

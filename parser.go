@@ -688,7 +688,7 @@ found:
 	if child := doc.FirstChild(); child != nil {
 		if grandchild := child.FirstChild(); grandchild != nil {
 			for e := grandchild; e != nil; e = e.NextSibling() {
-				e.(MutableNode).SetTreeDoc(doc)
+				e.(MutableNode).SetTreeDoc(doc) //nolint:forcetypeassert
 				e.baseDocNode().parent = nil
 			}
 			return grandchild, nil

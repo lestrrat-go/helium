@@ -27,7 +27,7 @@ func (n *Attribute) NextAttribute() *Attribute {
 	if next == nil {
 		return nil
 	}
-	return next.(*Attribute)
+	return next.(*Attribute) //nolint:forcetypeassert
 }
 
 // AddChild adds cur as a child of this attribute node. For attributes

@@ -323,7 +323,7 @@ func (ec *execContext) execXSLSequence(_ context.Context, inst *xslSequenceInst)
 			}
 			if v.Node.Type() == helium.AttributeNode {
 				// Attribute nodes: add as attribute to current element
-				attr := v.Node.(*helium.Attribute)
+				attr := v.Node.(*helium.Attribute) //nolint:forcetypeassert
 				elem, ok := out.current.(*helium.Element)
 				if ok {
 					copyAttributeToElement(elem, attr)

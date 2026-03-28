@@ -130,7 +130,7 @@ func (c *compiler) readElementType(elem *helium.Element, decl *ElementDecl, sour
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce := child.(*helium.Element) //nolint:forcetypeassert
 		switch {
 		case isXSDElement(ce, elemAnnotation):
 			c.checkAnnotation(ce)
@@ -329,7 +329,7 @@ func (c *compiler) parseIDConstraints(elem *helium.Element) []*IDConstraint {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce := child.(*helium.Element) //nolint:forcetypeassert
 		var kind IDCKind
 		switch {
 		case isXSDElement(ce, elemUnique):
@@ -367,7 +367,7 @@ func (c *compiler) parseIDConstraint(elem *helium.Element, kind IDCKind) *IDCons
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce := child.(*helium.Element) //nolint:forcetypeassert
 		switch {
 		case isXSDElement(ce, elemSelector):
 			idc.Selector = getAttr(ce, attrXPath)

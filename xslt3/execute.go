@@ -470,7 +470,7 @@ func (vs *varScope) lookupDeferred(name string) error {
 }
 
 func (ec *execContext) pushVarScope() {
-	vs := varScopePool.Get().(*varScope)
+	vs := varScopePool.Get().(*varScope) //nolint:forcetypeassert
 	vs.parent = ec.localVars
 	ec.localVars = vs
 }
@@ -489,7 +489,7 @@ func (ec *execContext) popVarScope() {
 
 func (ec *execContext) setVar(name string, value xpath3.Sequence) {
 	if ec.localVars == nil {
-		ec.localVars = varScopePool.Get().(*varScope)
+		ec.localVars = varScopePool.Get().(*varScope) //nolint:forcetypeassert
 	}
 	if ec.localVars.vars == nil {
 		ec.localVars.vars = make(map[string]xpath3.Sequence, 4)
@@ -502,7 +502,7 @@ func (ec *execContext) setVar(name string, value xpath3.Sequence) {
 // is actually referenced via ResolveVariable.
 func (ec *execContext) setVarDeferred(name string, err error) {
 	if ec.localVars == nil {
-		ec.localVars = varScopePool.Get().(*varScope)
+		ec.localVars = varScopePool.Get().(*varScope) //nolint:forcetypeassert
 	}
 	if ec.localVars.vars == nil {
 		ec.localVars.vars = make(map[string]xpath3.Sequence, 4)
@@ -550,7 +550,7 @@ func (ec *execContext) addNodeUntracked(node helium.Node) error {
 	// excluded — they are managed by resolveConditionalScope directly.
 	if node.Type() == helium.TextNode {
 		if n := len(out.conditionalScopes); n > 0 {
-			out.conditionalScopes[n-1].untrackedNodes = append(out.conditionalScopes[n-1].untrackedNodes, node.(helium.MutableNode))
+			out.conditionalScopes[n-1].untrackedNodes = append(out.conditionalScopes[n-1].untrackedNodes, node.(helium.MutableNode)) //nolint:forcetypeassert
 		}
 	}
 	return nil
@@ -711,7 +711,7 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.MutableNode,
 	out := ec.currentOutput()
 	savedCurrent := out.current
 	if parent != nil {
-		out.current = parent.(helium.MutableNode)
+		out.current = parent.(helium.MutableNode) //nolint:forcetypeassert
 		defer func() {
 			out.current = savedCurrent
 		}()
@@ -745,7 +745,7 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.MutableNode,
 				if !ok {
 					return dynamicError(errCodeXTDE0410, "cannot add attribute to a non-element node")
 				}
-				copyAttributeToElement(elem, v.Node.(*helium.Attribute))
+				copyAttributeToElement(elem, v.Node.(*helium.Attribute)) //nolint:forcetypeassert
 				out.noteOutput()
 			default:
 				copied, err := helium.CopyNode(v.Node, ec.resultDoc)

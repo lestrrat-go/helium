@@ -128,7 +128,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
-		elem := n.(*helium.Element)
+		elem := n.(*helium.Element) //nolint:forcetypeassert
 		if err := vc.validateElement(elem); err != nil {
 			valid = false
 		}
@@ -140,7 +140,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
-		elem := n.(*helium.Element)
+		elem := n.(*helium.Element) //nolint:forcetypeassert
 		edecl := lookupElemDecl(elem, vc.schema)
 		if edecl != nil && len(edecl.IDCs) > 0 {
 			if err := vc.validateIDConstraints(elem, edecl); err != nil {
@@ -297,7 +297,7 @@ func (vc *validationContext) validateEmptyContent(elem *helium.Element) error {
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
-			ce := child.(*helium.Element)
+			ce := child.(*helium.Element) //nolint:forcetypeassert
 			vc.reportValidityError(vc.filename, ce.Line(), ce.LocalName(), "This element is not expected.")
 			return fmt.Errorf("not expected")
 		case helium.TextNode:
@@ -326,7 +326,7 @@ func collectChildElements(elem *helium.Element) []childElem {
 	var children []childElem
 	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
-			ce := child.(*helium.Element)
+			ce := child.(*helium.Element) //nolint:forcetypeassert
 			children = append(children, childElem{elem: ce, name: ce.LocalName(), ns: ce.URI(), displayName: elemDisplayName(ce)})
 		}
 	}
@@ -603,7 +603,7 @@ func (vc *validationContext) validateNilledElement(elem *helium.Element, edecl *
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
-			ce := child.(*helium.Element)
+			ce := child.(*helium.Element) //nolint:forcetypeassert
 			vc.reportValidityError(vc.filename, ce.Line(), elemDisplayName(ce),
 				"This element is not expected, because the element '"+dn+"' is nilled.")
 			return fmt.Errorf("content in nilled element")
