@@ -283,10 +283,10 @@ func (ec *execContext) snapshotNode(ctx context.Context, node helium.Node) (heli
 
 // transferAccumulatorStates copies accumulator before/after state from
 // an original node subtree to a copied node subtree (parallel walk).
-func (ec *execContext) transferAccumulatorStates(orig, copy helium.Node) {
-	ec.transferAccumulatorNode(orig, copy)
+func (ec *execContext) transferAccumulatorStates(orig, dst helium.Node) {
+	ec.transferAccumulatorNode(orig, dst)
 	oc := orig.FirstChild()
-	cc := copy.FirstChild()
+	cc := dst.FirstChild()
 	for oc != nil && cc != nil {
 		ec.transferAccumulatorStates(oc, cc)
 		oc = oc.NextSibling()
@@ -295,16 +295,16 @@ func (ec *execContext) transferAccumulatorStates(orig, copy helium.Node) {
 }
 
 // transferAccumulatorNode copies the accumulator before/after maps for a
-// single node from orig to copy.
-func (ec *execContext) transferAccumulatorNode(orig, copy helium.Node) {
+// single node from orig to dst.
+func (ec *execContext) transferAccumulatorNode(orig, dst helium.Node) {
 	if ec.accumulatorBeforeByNode != nil {
 		if vals, ok := ec.accumulatorBeforeByNode[orig]; ok {
-			ec.accumulatorBeforeByNode[copy] = cloneAccumulatorSnapshot(vals)
+			ec.accumulatorBeforeByNode[dst] = cloneAccumulatorSnapshot(vals)
 		}
 	}
 	if ec.accumulatorAfterByNode != nil {
 		if vals, ok := ec.accumulatorAfterByNode[orig]; ok {
-			ec.accumulatorAfterByNode[copy] = cloneAccumulatorSnapshot(vals)
+			ec.accumulatorAfterByNode[dst] = cloneAccumulatorSnapshot(vals)
 		}
 	}
 	if ec.accumulatorBeforeErrorByNode != nil {
@@ -313,7 +313,7 @@ func (ec *execContext) transferAccumulatorNode(orig, copy helium.Node) {
 			for k, v := range errs {
 				cloned[k] = v
 			}
-			ec.accumulatorBeforeErrorByNode[copy] = cloned
+			ec.accumulatorBeforeErrorByNode[dst] = cloned
 		}
 	}
 	if ec.accumulatorAfterErrorByNode != nil {
@@ -322,7 +322,7 @@ func (ec *execContext) transferAccumulatorNode(orig, copy helium.Node) {
 			for k, v := range errs {
 				cloned[k] = v
 			}
-			ec.accumulatorAfterErrorByNode[copy] = cloned
+			ec.accumulatorAfterErrorByNode[dst] = cloned
 		}
 	}
 }

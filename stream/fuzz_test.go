@@ -79,12 +79,12 @@ func FuzzWriter(f *testing.F) {
 	})
 }
 
-func fuzzChunk(data []byte, index *int, max int) string {
+func fuzzChunk(data []byte, index *int, maxVal int) string {
 	if *index >= len(data) {
 		return ""
 	}
 
-	n := int(data[*index] % byte(max+1))
+	n := int(data[*index] % byte(maxVal+1))
 	*index++
 	if *index+n > len(data) {
 		n = len(data) - *index

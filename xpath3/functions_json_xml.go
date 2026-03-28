@@ -773,9 +773,9 @@ func encodeJSONStringContent(s string) string {
 	return b.String()
 }
 
-func formatJSONComposite(open, close string, parts []string, depth int, indent bool) string {
+func formatJSONComposite(open, closeBracket string, parts []string, depth int, indent bool) string {
 	if !indent || len(parts) == 0 {
-		return open + strings.Join(parts, ",") + close
+		return open + strings.Join(parts, ",") + closeBracket
 	}
 
 	var b strings.Builder
@@ -792,7 +792,7 @@ func formatJSONComposite(open, close string, parts []string, depth int, indent b
 	}
 	b.WriteByte('\n')
 	b.WriteString(parentIndent)
-	b.WriteString(close)
+	b.WriteString(closeBracket)
 	return b.String()
 }
 

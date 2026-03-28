@@ -144,8 +144,8 @@ func ParseVersionConstraint(s string) VersionConstraint {
 
 	// Check for minimum version: "X+"
 	if strings.HasSuffix(s, "+") {
-		min := ParsePackageVersion(s[:len(s)-1])
-		return VersionConstraint{IsMinVersion: true, MinVersion: min, Raw: s}
+		minVer := ParsePackageVersion(s[:len(s)-1])
+		return VersionConstraint{IsMinVersion: true, MinVersion: minVer, Raw: s}
 	}
 
 	// Check for prefix wildcard: "1.*"

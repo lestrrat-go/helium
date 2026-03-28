@@ -56,14 +56,14 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, err
 		}
 		n := iv.BigInt()
-		min, max := integerTypeRange(targetType)
-		if min != nil && n.Cmp(min) < 0 {
+		minVal, maxVal := integerTypeRange(targetType)
+		if minVal != nil && n.Cmp(minVal) < 0 {
 			return AtomicValue{}, &XPathError{
 				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("value %s out of range for %s", n.String(), targetType),
 			}
 		}
-		if max != nil && n.Cmp(max) > 0 {
+		if maxVal != nil && n.Cmp(maxVal) > 0 {
 			return AtomicValue{}, &XPathError{
 				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("value %s out of range for %s", n.String(), targetType),
@@ -435,40 +435,40 @@ func isIntegerSubtype(t string) bool {
 
 // validateIntegerRange checks that an integer value is within the range of the target type.
 func validateIntegerRange(n *big.Int, targetType string) error {
-	var min, max *big.Int
+	var minVal, maxVal *big.Int
 	switch targetType {
 	case "xs:long":
-		min, max = big.NewInt(math.MinInt64), big.NewInt(math.MaxInt64)
+		minVal, maxVal = big.NewInt(math.MinInt64), big.NewInt(math.MaxInt64)
 	case "xs:int":
-		min, max = big.NewInt(math.MinInt32), big.NewInt(math.MaxInt32)
+		minVal, maxVal = big.NewInt(math.MinInt32), big.NewInt(math.MaxInt32)
 	case "xs:short":
-		min, max = big.NewInt(math.MinInt16), big.NewInt(math.MaxInt16)
+		minVal, maxVal = big.NewInt(math.MinInt16), big.NewInt(math.MaxInt16)
 	case "xs:byte":
-		min, max = big.NewInt(math.MinInt8), big.NewInt(math.MaxInt8)
+		minVal, maxVal = big.NewInt(math.MinInt8), big.NewInt(math.MaxInt8)
 	case "xs:unsignedLong":
-		min = big.NewInt(0)
-		max = new(big.Int).SetUint64(math.MaxUint64)
+		minVal = big.NewInt(0)
+		maxVal = new(big.Int).SetUint64(math.MaxUint64)
 	case "xs:unsignedInt":
-		min, max = big.NewInt(0), big.NewInt(math.MaxUint32)
+		minVal, maxVal = big.NewInt(0), big.NewInt(math.MaxUint32)
 	case "xs:unsignedShort":
-		min, max = big.NewInt(0), big.NewInt(math.MaxUint16)
+		minVal, maxVal = big.NewInt(0), big.NewInt(math.MaxUint16)
 	case "xs:unsignedByte":
-		min, max = big.NewInt(0), big.NewInt(math.MaxUint8)
+		minVal, maxVal = big.NewInt(0), big.NewInt(math.MaxUint8)
 	case "xs:positiveInteger":
-		min = big.NewInt(1)
+		minVal = big.NewInt(1)
 	case "xs:nonPositiveInteger":
-		max = big.NewInt(0)
+		maxVal = big.NewInt(0)
 	case "xs:negativeInteger":
-		max = big.NewInt(-1)
+		maxVal = big.NewInt(-1)
 	case "xs:nonNegativeInteger":
-		min = big.NewInt(0)
+		minVal = big.NewInt(0)
 	default:
 		return nil
 	}
-	if min != nil && n.Cmp(min) < 0 {
+	if minVal != nil && n.Cmp(minVal) < 0 {
 		return castError(n.String(), targetType)
 	}
-	if max != nil && n.Cmp(max) > 0 {
+	if maxVal != nil && n.Cmp(maxVal) > 0 {
 		return castError(n.String(), targetType)
 	}
 	return nil
@@ -545,7 +545,7 @@ func validateStringDerivedType(s, targetType string) error {
 }
 
 // integerTypeRange returns the min/max bounds for a derived integer type.
-func integerTypeRange(typeName string) (min *big.Int, max *big.Int) {
+func integerTypeRange(typeName string) (minVal *big.Int, maxVal *big.Int) {
 	switch typeName {
 	case TypeLong:
 		return big.NewInt(math.MinInt64), big.NewInt(math.MaxInt64)

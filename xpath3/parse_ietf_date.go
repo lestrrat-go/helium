@@ -113,7 +113,7 @@ func (p *ietfDateParser) parseRFC() (time.Time, error) {
 	}
 	p.skipWS()
 
-	hour, min, sec, frac, err := p.parseTime()
+	hour, minute, sec, frac, err := p.parseTime()
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -133,7 +133,7 @@ func (p *ietfDateParser) parseRFC() (time.Time, error) {
 		return time.Time{}, fmt.Errorf("unexpected trailing content: %q", p.input[p.pos:])
 	}
 
-	if err := validateIETFDate(year, month, day, hour, min, sec); err != nil {
+	if err := validateIETFDate(year, month, day, hour, minute, sec); err != nil {
 		return time.Time{}, err
 	}
 
@@ -141,10 +141,10 @@ func (p *ietfDateParser) parseRFC() (time.Time, error) {
 	if hour == 24 {
 		hour = 0
 		// advance to next day
-		t := time.Date(year, time.Month(month), day+1, hour, min, sec, ns, loc)
+		t := time.Date(year, time.Month(month), day+1, hour, minute, sec, ns, loc)
 		return t, nil
 	}
-	t := time.Date(year, time.Month(month), day, hour, min, sec, ns, loc)
+	t := time.Date(year, time.Month(month), day, hour, minute, sec, ns, loc)
 	return t, nil
 }
 
@@ -171,7 +171,7 @@ func (p *ietfDateParser) parseAsctime() (time.Time, error) {
 	}
 	p.skipWS()
 
-	hour, min, sec, frac, err := p.parseTime()
+	hour, minute, sec, frac, err := p.parseTime()
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -212,21 +212,21 @@ func (p *ietfDateParser) parseAsctime() (time.Time, error) {
 		return time.Time{}, fmt.Errorf("unexpected trailing content: %q", p.input[p.pos:])
 	}
 
-	if err := validateIETFDate(year, month, day, hour, min, sec); err != nil {
+	if err := validateIETFDate(year, month, day, hour, minute, sec); err != nil {
 		return time.Time{}, err
 	}
 
 	ns := int(frac * 1e9)
 	if hour == 24 {
 		hour = 0
-		t := time.Date(year, time.Month(month), day+1, hour, min, sec, ns, loc)
+		t := time.Date(year, time.Month(month), day+1, hour, minute, sec, ns, loc)
 		return t, nil
 	}
-	t := time.Date(year, time.Month(month), day, hour, min, sec, ns, loc)
+	t := time.Date(year, time.Month(month), day, hour, minute, sec, ns, loc)
 	return t, nil
 }
 
-func (p *ietfDateParser) parseTime() (hour, min, sec int, frac float64, err error) {
+func (p *ietfDateParser) parseTime() (hour, minute, sec int, frac float64, err error) {
 	hour, err = p.readIntN(1, 2)
 	if err != nil {
 		return 0, 0, 0, 0, fmt.Errorf("expected hour (1-2 digits): %w", err)
@@ -236,7 +236,7 @@ func (p *ietfDateParser) parseTime() (hour, min, sec int, frac float64, err erro
 	}
 	p.pos++ // skip ':'
 
-	min, err = p.readIntN(2, 2)
+	minute, err = p.readIntN(2, 2)
 	if err != nil {
 		return 0, 0, 0, 0, fmt.Errorf("expected minute (exactly 2 digits): %w", err)
 	}
@@ -262,7 +262,7 @@ func (p *ietfDateParser) parseTime() (hour, min, sec int, frac float64, err erro
 		}
 	}
 
-	return hour, min, sec, frac, nil
+	return hour, minute, sec, frac, nil
 }
 
 func (p *ietfDateParser) parseTZ() (*time.Location, error) {
@@ -531,7 +531,7 @@ func normalizeYear(y int) int {
 	return y
 }
 
-func validateIETFDate(year, month, day, hour, min, sec int) error {
+func validateIETFDate(year, month, day, hour, minute, sec int) error {
 	if month < 1 || month > 12 {
 		return fmt.Errorf("month %d out of range", month)
 	}
@@ -542,11 +542,11 @@ func validateIETFDate(year, month, day, hour, min, sec int) error {
 	if day > maxDay {
 		return fmt.Errorf("day %d out of range for month %d", day, month)
 	}
-	if hour > 24 || (hour == 24 && (min != 0 || sec != 0)) {
+	if hour > 24 || (hour == 24 && (minute != 0 || sec != 0)) {
 		return fmt.Errorf("hour %d out of range", hour)
 	}
-	if min < 0 || min > 59 {
-		return fmt.Errorf("minute %d out of range", min)
+	if minute < 0 || minute > 59 {
+		return fmt.Errorf("minute %d out of range", minute)
 	}
 	if sec < 0 || sec > 60 { // 60 for leap seconds
 		return fmt.Errorf("second %d out of range", sec)
