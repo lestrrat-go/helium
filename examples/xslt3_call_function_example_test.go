@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -40,7 +41,7 @@ func Example_xslt3_call_function() {
 	})
 
 	resultDoc, err := stylesheet.
-		CallFunction("{http://example.com/fn}double", arg).
+		CallFunction(helium.ClarkName("http://example.com/fn", "double"), arg).
 		Do(ctx)
 	if err != nil {
 		fmt.Printf("call-function error: %s\n", err)

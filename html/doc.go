@@ -20,4 +20,10 @@
 // Use [NewWriter] to serialize HTML documents:
 //
 //	err := html.NewWriter().Format(true).WriteDoc(os.Stdout, doc)
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with html_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package html

@@ -22,4 +22,11 @@
 // errors are delivered as [*ValidationError] values to the configured
 // [helium.ErrorHandler] (structured fields: Filename, Line, Element,
 // Path, Message).
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with schematron_). Because examples are
+// in a separate test module they do not appear in the generated
+// documentation.
 package schematron

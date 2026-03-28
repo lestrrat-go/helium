@@ -19,22 +19,30 @@ func newAttributeDecl() *AttributeDecl {
 	return attr
 }
 
+// AddChild adds cur as a child of this attribute declaration node.
 func (n *AttributeDecl) AddChild(cur Node) error {
 	return addChild(n, cur)
 }
 
+// AppendText appends the given bytes to this attribute declaration's
+// text content.
 func (n *AttributeDecl) AppendText(b []byte) error {
 	return appendText(n, b)
 }
 
+// AddSibling inserts cur as the next sibling of this attribute
+// declaration in the DTD's declaration list.
 func (n *AttributeDecl) AddSibling(cur Node) error {
 	return addSibling(n, cur)
 }
 
+// Replace replaces this attribute declaration node with the given nodes.
 func (n *AttributeDecl) Replace(nodes ...Node) error {
 	return replaceNode(n, nodes...)
 }
 
+// SetTreeDoc recursively sets the owner document for this attribute
+// declaration and all of its children.
 func (n *AttributeDecl) SetTreeDoc(doc *Document) {
 	setTreeDoc(n, doc)
 }

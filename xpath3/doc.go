@@ -38,4 +38,10 @@
 // Over 100 built-in functions are provided across the fn:, math:, map:,
 // array: namespaces. Custom functions can be registered via
 // [Evaluator.Functions] or [Evaluator.FunctionResolver].
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with xpath3_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package xpath3

@@ -11,4 +11,10 @@
 //
 // Pass a SAX2Handler to [helium.Parser.SAXHandler] to receive events during
 // XML parsing without building a DOM tree.
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with sax_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package sax

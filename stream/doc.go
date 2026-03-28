@@ -15,4 +15,10 @@
 //
 // The writer tracks open elements and namespace scopes, and uses sticky
 // error handling — check [Writer.Error] after a sequence of calls.
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with stream_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package stream

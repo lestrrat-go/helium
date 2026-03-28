@@ -34,4 +34,10 @@
 //
 // For simple transforms, [Transform], [TransformString], and
 // [TransformToWriter] are convenience wrappers.
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with xslt3_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package xslt3

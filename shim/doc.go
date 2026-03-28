@@ -37,4 +37,10 @@
 //   - [Decoder.InputPos] is based on a SAX locator snapshot taken at event
 //     time. Column numbers may differ from [encoding/xml]. During prolog
 //     token emission the reported position is (1, 1).
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with shim_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package shim
