@@ -24,4 +24,10 @@
 // Both [Compiler] and [Validator] accept an [helium.ErrorHandler] via the
 // ErrorHandler builder method. Individual errors are delivered to the handler
 // as they occur.
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with relaxng_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package relaxng

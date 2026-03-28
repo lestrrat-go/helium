@@ -14,4 +14,10 @@
 //
 // The buffer size defaults to 256 and can be configured via [WithBufferSize].
 // Handle on a nil *Sink is a no-op.
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with sink_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package sink

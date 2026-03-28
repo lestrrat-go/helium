@@ -16,4 +16,11 @@
 // starts from defaults and callers only need to opt into non-default
 // behavior. The method name is self-documenting: calling NoBaseFixup means
 // "disable base URI fixup."
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with xinclude_). Because examples are
+// in a separate test module they do not appear in the generated
+// documentation.
 package xinclude

@@ -23,4 +23,10 @@
 //
 // [*Result] contains a type discriminant ([Result.Type]) and typed fields:
 // [Result.NodeSet], [Result.Bool], [Result.Number], [Result.String].
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with xpath_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package xpath1

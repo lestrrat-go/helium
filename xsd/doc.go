@@ -25,4 +25,10 @@
 // Both [Compiler] and [Validator] accept an [helium.ErrorHandler] via the
 // ErrorHandler builder method. When set, individual errors are delivered to
 // the handler as they occur during compilation or validation.
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with xsd_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package xsd

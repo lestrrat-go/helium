@@ -48,4 +48,10 @@
 //   - [github.com/lestrrat-go/helium/sax] — SAX2 handler interfaces
 //   - [github.com/lestrrat-go/helium/shim] — Drop-in encoding/xml replacement
 //   - [github.com/lestrrat-go/helium/html] — HTML parser
+//
+// # Examples
+//
+// Example code for this package lives in the examples/ directory at the
+// repository root (files prefixed with helium_). Because examples are in
+// a separate test module they do not appear in the generated documentation.
 package helium
