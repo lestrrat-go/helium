@@ -15,7 +15,9 @@ import (
 
 func testdataDir() string {
 	_, file, _, ok := runtime.Caller(0)
-	_ = ok
+	if !ok {
+		panic("runtime.Caller failed")
+	}
 	return filepath.Join(filepath.Dir(file), "..", "testdata", "libxml2-compat", "catalogs")
 }
 

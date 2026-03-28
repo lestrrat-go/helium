@@ -23,7 +23,9 @@ var (
 
 func findRepoRoot() string {
 	_, file, _, ok := runtime.Caller(0)
-	_ = ok
+	if !ok {
+		panic("runtime.Caller failed")
+	}
 	dir := filepath.Dir(file)
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {

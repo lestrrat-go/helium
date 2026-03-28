@@ -280,7 +280,9 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 
 func qt3TestDataDir() string {
 	_, f, _, ok := runtime.Caller(0)
-	_ = ok
+	if !ok {
+		panic("runtime.Caller failed")
+	}
 	return filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "testdata")
 }
 
