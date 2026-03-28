@@ -91,8 +91,17 @@ type pushResult struct {
 // PushParser provides an incremental XML parsing interface
 // (libxml2: xmlParserCtxt in push mode).
 // Data is pushed via Push or Write, and the parser processes tokens as
-// they become available in a background goroutine. Call Close to signal
-// end-of-input and retrieve the parsed Document.
+// they become available in a background goroutine. Call [PushParser.Flush]
+// to signal end-of-input and retrieve the parsed Document.
+//
+// # Differences from libxml2
+//
+// In libxml2, xmlParseChunk processes each chunk synchronously and
+// incrementally updates the DOM as data arrives. In helium, the parser
+// runs in a background goroutine reading from an internal pipe; Push
+// writes to the pipe and returns immediately without blocking on parse
+// progress. The DOM is only available after Flush is called and the
+// parser goroutine completes.
 type PushParser struct {
 	stream    *pushStream
 	done      chan pushResult
@@ -141,10 +150,10 @@ func (pp *PushParser) Write(p []byte) (int, error) {
 	return pp.stream.Write(p)
 }
 
-// Close signals end-of-input, waits for the parser goroutine to finish, and
+// Flush signals end-of-input, waits for the parser goroutine to finish, and
 // returns the parsed Document. It is idempotent: subsequent calls return the
 // same result.
-func (pp *PushParser) Close() (*Document, error) {
+func (pp *PushParser) Flush() (*Document, error) {
 	pp.closeOnce.Do(func() {
 		if err := pp.stream.Close(); err != nil {
 			pp.result = pushResult{err: err}

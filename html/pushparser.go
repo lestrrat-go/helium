@@ -8,13 +8,19 @@ import (
 )
 
 // PushParser provides an incremental HTML parsing interface. Data is
-// accumulated internally via Push or Write. When Close is called, the
-// accumulated data is parsed in one shot and the resulting Document is
-// returned.
+// accumulated internally via Push or Write. When [PushParser.Flush] is
+// called, the accumulated data is parsed in one shot and the resulting
+// Document is returned.
 //
 // Unlike the XML PushParser which parses concurrently, the HTML PushParser
 // buffers all data because the HTML parser operates on []byte directly
 // rather than an io.Reader.
+//
+// # Differences from libxml2
+//
+// In libxml2, htmlParseChunk processes each chunk incrementally,
+// updating the DOM as data arrives. In helium, all data is buffered
+// and parsed in a single pass when Flush is called.
 //
 // (libxml2: htmlCreatePushParserCtxt)
 type PushParser struct {
@@ -34,10 +40,10 @@ func (pp *PushParser) Write(p []byte) (int, error) {
 	return pp.buf.Write(p)
 }
 
-// Close parses the accumulated HTML data and returns the resulting Document.
+// Flush parses the accumulated HTML data and returns the resulting Document.
 // When created with [Parser.NewSAXPushParser], it fires SAX events and always
 // returns a nil Document; the returned error is non-nil only on parse failure.
-func (pp *PushParser) Close(ctx context.Context) (*helium.Document, error) {
+func (pp *PushParser) Flush(ctx context.Context) (*helium.Document, error) {
 	data := pp.buf.Bytes()
 	if pp.sax != nil {
 		hp := newParser(ctx, data, pp.sax, pp.cfg)

@@ -120,7 +120,7 @@ func (p Parser) ParseWithSAX(ctx context.Context, data []byte, handler SAXHandle
 }
 
 // NewPushParser creates an HTML PushParser that builds a DOM tree.
-// Pass ctx to [PushParser.Close] when parsing the accumulated data.
+// Pass ctx to [PushParser.Flush] when parsing the accumulated data.
 func (p Parser) NewPushParser() *PushParser {
 	return &PushParser{cfg: p.parseConfig()}
 }

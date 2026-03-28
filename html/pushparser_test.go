@@ -36,7 +36,7 @@ func TestHTMLPushParserSingleChunk(t *testing.T) {
 
 	pp := html.NewParser().NewPushParser()
 	require.NoError(t, pp.Push(input))
-	got, err := pp.Close(t.Context())
+	got, err := pp.Flush(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, dumpHTMLDoc(t, want), dumpHTMLDoc(t, got))
 }
@@ -54,7 +54,7 @@ func TestHTMLPushParserMultiChunk(t *testing.T) {
 		require.NoError(t, pp.Push(input[i:end]))
 	}
 
-	got, err := pp.Close(t.Context())
+	got, err := pp.Flush(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, dumpHTMLDoc(t, want), dumpHTMLDoc(t, got))
 }
@@ -83,7 +83,7 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 
 	pp := html.NewParser().NewSAXPushParser(handler)
 	require.NoError(t, pp.Push(input))
-	doc, err := pp.Close(t.Context())
+	doc, err := pp.Flush(t.Context())
 	require.NoError(t, err)
 	require.Nil(t, doc, "SAX mode should not return a document")
 	require.Contains(t, elements, "html")
@@ -109,7 +109,7 @@ func TestHTMLParseWithSAXRespectsContextCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-func TestHTMLPushParserCloseRespectsContextCancellation(t *testing.T) {
+func TestHTMLPushParserFlushRespectsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 
 	pp := html.NewParser().NewPushParser()
@@ -117,7 +117,7 @@ func TestHTMLPushParserCloseRespectsContextCancellation(t *testing.T) {
 
 	cancel()
 
-	_, err := pp.Close(ctx)
+	_, err := pp.Flush(ctx)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -132,7 +132,7 @@ func TestHTMLPushParserIOCopy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(len(input)), n)
 
-	got, err := pp.Close(t.Context())
+	got, err := pp.Flush(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, dumpHTMLDoc(t, want), dumpHTMLDoc(t, got))
 }

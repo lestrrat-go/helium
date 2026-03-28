@@ -26,8 +26,8 @@ func Example_html_new_sax_push_parser() {
 		fmt.Printf("push failed: %s\n", err)
 		return
 	}
-	if _, err := pp.Close(context.Background()); err != nil {
-		fmt.Printf("close failed: %s\n", err)
+	if _, err := pp.Flush(context.Background()); err != nil {
+		fmt.Printf("flush failed: %s\n", err)
 		return
 	}
 

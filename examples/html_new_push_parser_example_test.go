@@ -23,9 +23,9 @@ func Example_html_new_push_parser() {
 		return
 	}
 
-	doc, err := pp.Close(context.Background())
+	doc, err := pp.Flush(context.Background())
 	if err != nil {
-		fmt.Printf("close failed: %s\n", err)
+		fmt.Printf("flush failed: %s\n", err)
 		return
 	}
 
