@@ -171,7 +171,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 				// Root is "html" in no namespace → HTML output method.
 				outDef.Method = methodHTML
 				outDef.OmitDeclaration = true
-			} else if strings.EqualFold(string(root.LocalName()), "html") && string(root.URI()) == lexicon.NamespaceXHTML {
+			} else if strings.EqualFold(root.LocalName(), "html") && root.URI() == lexicon.NamespaceXHTML {
 				// Root is "html" in XHTML namespace → XHTML output method.
 				outDef.Method = methodXHTML
 			}
@@ -310,7 +310,7 @@ func serializeNodeWithMethod(node helium.Node, method string) string {
 		_ = serializeHTML(&buf, doc, outDef)
 		s := buf.String()
 		// If we wrapped the node in <html>, strip the wrapper tags
-		if elem, ok := node.(*helium.Element); ok && !strings.EqualFold(string(elem.LocalName()), "html") {
+		if elem, ok := node.(*helium.Element); ok && !strings.EqualFold(elem.LocalName(), "html") {
 			s = strings.TrimPrefix(s, "<html>")
 			s = strings.TrimSuffix(s, "</html>")
 		}
@@ -351,7 +351,7 @@ func wrapNodeInHTMLDoc(node helium.Node) *helium.Document {
 		copiedElem := copied.(*helium.Element)
 		// Remove redundant namespace declarations from descendants
 		removeRedundantNamespaces(copiedElem)
-		if strings.EqualFold(string(copiedElem.LocalName()), "html") {
+		if strings.EqualFold(copiedElem.LocalName(), "html") {
 			_ = doc.AddChild(copiedElem)
 		} else {
 			// Wrap in an <html> element

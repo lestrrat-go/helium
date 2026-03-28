@@ -145,7 +145,7 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if d, ok := n.(*helium.Document); ok {
 		doc = d
 	} else {
-		cur := helium.Node(n)
+		cur := n
 		for cur.Parent() != nil {
 			cur = cur.Parent()
 		}

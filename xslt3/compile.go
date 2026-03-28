@@ -854,7 +854,7 @@ func (c *compiler) resolveShadowAttributes(elem *helium.Element) error {
 			continue
 		}
 		realName := name[1:]
-		avtStr := string(attr.Value())
+		avtStr := attr.Value()
 		avt, err := compileAVT(avtStr, c.nsBindings)
 		if err != nil {
 			return staticError(errCodeXTSE0020,

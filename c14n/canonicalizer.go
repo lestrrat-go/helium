@@ -898,7 +898,7 @@ const xmlBaseLocalName = "base"
 func getXMLBaseAttr(e *helium.Element) string {
 	for _, attr := range e.Attributes() {
 		if attr.LocalName() == xmlBaseLocalName && attr.URI() == lexicon.NamespaceXML {
-			return string(attr.Value())
+			return attr.Value()
 		}
 	}
 	return ""

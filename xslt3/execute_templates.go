@@ -728,7 +728,7 @@ func stripDOEMarkers(seq xpath3.Sequence) (xpath3.Sequence, map[int]bool) {
 	doeActive := false
 	for item := range sequence.Items(seq) {
 		if ni, ok := item.(xpath3.NodeItem); ok && ni.Node.Type() == helium.ProcessingInstructionNode {
-			piName := string(ni.Node.Name())
+			piName := ni.Node.Name()
 			if piName == "disable-output-escaping" {
 				doeActive = true
 				continue

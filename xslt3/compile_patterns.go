@@ -1326,7 +1326,7 @@ func matchElementTest(ctx *execContext, et xpath3.ElementTest, node helium.Node)
 		if closeIdx > 0 {
 			uri := name[2:closeIdx]
 			local := name[closeIdx+1:]
-			nameMatch = elem.LocalName() == local && string(elem.URI()) == uri
+			nameMatch = elem.LocalName() == local && elem.URI() == uri
 		}
 	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
 		prefix := name[:idx]
@@ -1335,7 +1335,7 @@ func matchElementTest(ctx *execContext, et xpath3.ElementTest, node helium.Node)
 		if ctx != nil {
 			uri = ctx.resolvePrefix(prefix)
 		}
-		nameMatch = elem.LocalName() == local && string(elem.URI()) == uri
+		nameMatch = elem.LocalName() == local && elem.URI() == uri
 	} else {
 		nameMatch = elem.LocalName() == name
 	}

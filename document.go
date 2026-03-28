@@ -826,7 +826,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 		}
 
 		if charval != 0 {
-			_, _ = buf.WriteRune(rune(charval))
+			_, _ = buf.WriteRune(charval)
 			charval = 0
 		}
 	}

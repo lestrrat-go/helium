@@ -420,7 +420,7 @@ func applyCharMapToHTMLTag(tag string, charMap map[rune]string) string {
 func hasDOEMarkers(doc *helium.Document) bool {
 	found := false
 	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n.Type() == helium.ProcessingInstructionNode && string(n.Name()) == "disable-output-escaping" {
+		if n.Type() == helium.ProcessingInstructionNode && n.Name() == "disable-output-escaping" {
 			found = true
 		}
 		return nil
@@ -440,7 +440,7 @@ func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
 		return false
 	}
 	// Check Clark notation: {uri}local
-	clark := helium.ClarkName(string(elem.URI()), string(elem.LocalName()))
+	clark := helium.ClarkName(elem.URI(), elem.LocalName())
 	if _, ok := cdataElems[clark]; ok {
 		return true
 	}
@@ -450,7 +450,7 @@ func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
 		return true
 	}
 	// Check local name only (for unprefixed elements)
-	local := string(elem.LocalName())
+	local := elem.LocalName()
 	if _, ok := cdataElems[local]; ok {
 		return true
 	}

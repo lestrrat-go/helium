@@ -116,9 +116,9 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 	// Only emit the HTML5 DOCTYPE when the root element is "html" in the XHTML namespace.
 	if isHTML5 && outDef.DoctypeSystem == "" {
 		root := doc.DocumentElement()
-		if root != nil && strings.EqualFold(string(root.LocalName()), "html") &&
-			string(root.URI()) == lexicon.NamespaceXHTML {
-			dtdName := string(root.LocalName())
+		if root != nil && strings.EqualFold(root.LocalName(), "html") &&
+			root.URI() == lexicon.NamespaceXHTML {
+			dtdName := root.LocalName()
 			if dtd := doc.IntSubset(); dtd != nil {
 				helium.UnlinkNode(dtd)
 			}
@@ -131,7 +131,7 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 	// get an injected meta tag).
 	if outDef.IncludeContentType == nil || *outDef.IncludeContentType {
 		root := doc.DocumentElement()
-		if root != nil && string(root.URI()) == lexicon.NamespaceXHTML {
+		if root != nil && root.URI() == lexicon.NamespaceXHTML {
 			insertHTMLMeta(doc, outDef)
 		}
 	}
@@ -188,10 +188,10 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 		if !ok {
 			return nil
 		}
-		if string(elem.URI()) != lexicon.NamespaceXHTML {
+		if elem.URI() != lexicon.NamespaceXHTML {
 			return nil
 		}
-		if string(elem.Prefix()) == "" {
+		if elem.Prefix() == "" {
 			// Already using default namespace. Capture the NS node if we
 			// haven't seen one yet.
 			if sharedNS == nil {
@@ -205,7 +205,7 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 			return nil
 		}
 
-		oldPrefix := string(elem.Prefix())
+		oldPrefix := elem.Prefix()
 		// Remove the prefixed namespace declaration from this element
 		elem.RemoveNamespaceByPrefix(oldPrefix)
 
@@ -241,14 +241,14 @@ func normalizeForeignNamespaces(doc *helium.Document) {
 		if !ok {
 			return nil
 		}
-		uri := string(elem.URI())
+		uri := elem.URI()
 		if uri != lexicon.NamespaceSVG && uri != lexicon.NamespaceMathML {
 			return nil
 		}
-		if string(elem.Prefix()) == "" {
+		if elem.Prefix() == "" {
 			return nil // already unprefixed
 		}
-		oldPrefix := string(elem.Prefix())
+		oldPrefix := elem.Prefix()
 		// Remove the old prefixed namespace declaration
 		elem.RemoveNamespaceByPrefix(oldPrefix)
 		// Declare the element's namespace as the default on this element
@@ -456,7 +456,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	// Find the <head> element (case-insensitive, using local name for namespace support).
 	var head *helium.Element
 	for child := range helium.Children(root) {
-		if e, ok := child.(*helium.Element); ok && strings.EqualFold(string(e.LocalName()), "head") {
+		if e, ok := child.(*helium.Element); ok && strings.EqualFold(e.LocalName(), "head") {
 			head = e
 			break
 		}
@@ -477,7 +477,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	// Check if a <meta http-equiv="Content-Type"> already exists.
 	// If so, update its content attribute to match the output encoding.
 	for child := range helium.Children(head) {
-		if e, ok := child.(*helium.Element); ok && strings.EqualFold(string(e.LocalName()), "meta") {
+		if e, ok := child.(*helium.Element); ok && strings.EqualFold(e.LocalName(), "meta") {
 			for _, attr := range e.Attributes() {
 				if strings.EqualFold(attr.Name(), "http-equiv") && strings.EqualFold(attr.Value(), "Content-Type") {
 					// Update the existing content attribute
@@ -490,8 +490,8 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	// Create and insert the meta element.
 	meta := doc.CreateElement("meta")
 	// If the head element is in a namespace, put the meta element in the same namespace.
-	if headURI := string(head.URI()); headURI != "" {
-		_ = meta.SetActiveNamespace(string(head.Prefix()), headURI)
+	if headURI := head.URI(); headURI != "" {
+		_ = meta.SetActiveNamespace(head.Prefix(), headURI)
 	}
 	_ = meta.SetLiteralAttribute("http-equiv", "Content-Type")
 	_ = meta.SetLiteralAttribute("content", contentValue)

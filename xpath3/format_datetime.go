@@ -776,7 +776,7 @@ func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
 				b.WriteRune(groups[gi].sep)
 				gi++
 			}
-			b.WriteRune(rune(r))
+			b.WriteRune(r)
 		}
 		s = b.String()
 	}

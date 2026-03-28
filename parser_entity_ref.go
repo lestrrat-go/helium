@@ -76,7 +76,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		sizeBefore := pctx.sizeentcopy
 
 		if ent.EntityType() == enum.InternalGeneralEntity {
-			parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, []byte(ent.Content()))
+			parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, ent.Content())
 			switch err {
 			case nil, ErrParseSucceeded:
 			default:
@@ -116,7 +116,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 	if ent.firstChild == nil {
 		if wasChecked != 0 {
 			if ent.EntityType() == enum.InternalGeneralEntity {
-				parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, []byte(ent.Content()))
+				parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, ent.Content())
 				_ = parsedEnt
 				switch err {
 				case nil, ErrParseSucceeded:
@@ -238,7 +238,7 @@ func (pctx *parserCtx) replayEntityNode(ctx context.Context, n Node) error {
 
 func accumulateDecimalCharRef(val int32, c rune) (int32, error) {
 	if c >= '0' && c <= '9' {
-		val = val*10 + (rune(c) - '0')
+		val = val*10 + (c - '0')
 	} else {
 		return 0, errors.New("invalid decimal CharRef")
 	}
@@ -247,11 +247,11 @@ func accumulateDecimalCharRef(val int32, c rune) (int32, error) {
 
 func accumulateHexCharRef(val int32, c rune) (int32, error) {
 	if c >= '0' && c <= '9' {
-		val = val*16 + (rune(c) - '0')
+		val = val*16 + (c - '0')
 	} else if c >= 'a' && c <= 'f' {
-		val = val*16 + (rune(c) - 'a') + 10
+		val = val*16 + (c - 'a') + 10
 	} else if c >= 'A' && c <= 'F' {
-		val = val*16 + (rune(c) - 'A') + 10
+		val = val*16 + (c - 'A') + 10
 	} else {
 		return 0, errors.New("invalid hex CharRef")
 	}
@@ -292,7 +292,7 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 			width = 0
 			return
 		}
-		if rune(val) > unicode.MaxRune {
+		if val > unicode.MaxRune {
 			err = errors.New("hex CharRef out of range")
 			width = 0
 			return
@@ -308,7 +308,7 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 		width++
 	}
 
-	r = rune(val)
+	r = val
 	if !isXMLCharValue(uint32(val)) {
 		return utf8.RuneError, 0, fmt.Errorf("invalid XML char value %d", val)
 	}
@@ -558,7 +558,7 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 	}
 
 	if isXMLCharValue(uint32(val)) && val <= unicode.MaxRune {
-		r = rune(val)
+		r = val
 		return
 	}
 

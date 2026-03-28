@@ -63,7 +63,7 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 		in, err := os.ReadFile(fn)
 		require.NoError(t, err, "os.ReadFile should succeed")
 
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		doc, err := helium.NewParser().Parse(t.Context(), in)
 		require.NoError(t, err, `Parse(...) succeeds`)
 
 		str, err := helium.WriteString(doc)
