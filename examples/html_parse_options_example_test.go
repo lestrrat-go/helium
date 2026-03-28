@@ -9,9 +9,11 @@ import (
 
 func Example_html_parse_options() {
 	// Parser options let you tune how forgiving the HTML parser should be.
-	// SuppressImplied keeps the parser from synthesizing html/head/body elements,
-	// and StripBlanks drops whitespace-only text nodes from the DOM.
-	doc, err := html.NewParser().SuppressImplied(true).StripBlanks(true).Parse(context.Background(), []byte("<div>\n  <span>hi</span>\n</div>"))
+	p := html.NewParser().
+		SuppressImplied(true). // do not synthesize implicit html/head/body elements
+		StripBlanks(true)      // drop whitespace-only text nodes from the DOM
+
+	doc, err := p.Parse(context.Background(), []byte("<div>\n  <span>hi</span>\n</div>"))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

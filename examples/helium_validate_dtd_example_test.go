@@ -18,7 +18,12 @@ func Example_helium_validate_dtd() {
 
 	// Use an ErrorCollector to capture individual validation errors.
 	collector := helium.NewErrorCollector(ctx, helium.ErrorLevelNone)
-	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
+
+	// ValidateDTD enables DTD constraint checking during parsing.
+	// ErrorHandler routes each individual error to the collector.
+	p := helium.NewParser().
+		ValidateDTD(true).
+		ErrorHandler(collector)
 
 	// This document declares a #REQUIRED attribute "id" on <doc>,
 	// but the instance omits it.

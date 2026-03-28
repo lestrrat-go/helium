@@ -19,8 +19,11 @@ func Example_html_write_doc() {
 		return
 	}
 
+	// WriteTo on a full document produces a complete HTML document with a
+	// DOCTYPE preamble and HTML-specific serialization rules.
 	var buf bytes.Buffer
-	if err := html.NewWriter().WriteTo(&buf, doc); err != nil {
+	w := html.NewWriter()
+	if err := w.WriteTo(&buf, doc); err != nil {
 		fmt.Printf("failed to write: %s\n", err)
 		return
 	}

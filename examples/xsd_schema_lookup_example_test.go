@@ -40,6 +40,9 @@ func Example_xsd_schema_lookup() {
 
 	fmt.Println(schema.TargetNamespace())
 
+	// LookupElement finds a global element declaration by local name and
+	// namespace URI. The returned ElementDecl gives access to the element's
+	// type, constraints, and other schema metadata.
 	elem, ok := schema.LookupElement("book", "urn:books")
 	if !ok {
 		fmt.Println("element not found")
@@ -47,6 +50,7 @@ func Example_xsd_schema_lookup() {
 	}
 	fmt.Printf("%s -> %s\n", elem.Name.Local, elem.Type.Name.Local)
 
+	// LookupType finds a global type definition the same way.
 	typ, ok := schema.LookupType("BookType", "urn:books")
 	if !ok {
 		fmt.Println("type not found")

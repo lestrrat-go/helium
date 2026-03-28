@@ -56,12 +56,13 @@ func Example_xsd_validate_error_handler() {
 	// ErrorLevelNone collects all errors regardless of severity.
 	collector := helium.NewErrorCollector(ctx, helium.ErrorLevelNone)
 
-	// Pass the collector as the ErrorHandler for the validator.
+	// Create a validator and attach the collector as its ErrorHandler.
 	// The validator closes the collector automatically after Validate
 	// returns, so collected errors are ready to read immediately.
-	_ = xsd.NewValidator(schema).
-		ErrorHandler(collector).
-		Validate(ctx, doc)
+	v := xsd.NewValidator(schema).
+		ErrorHandler(collector)
+
+	_ = v.Validate(ctx, doc)
 
 	// Each validation error is available as a separate entry.
 	for i, e := range collector.Errors() {

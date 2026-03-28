@@ -18,6 +18,9 @@ func Example_shim_encoder() {
 
 	var buf bytes.Buffer
 	enc := shim.NewEncoder(&buf)
+
+	// Indent configures pretty-printing. The first argument is the prefix
+	// prepended to each line; the second is the per-level indent string.
 	enc.Indent("", "  ")
 
 	b := Book{Title: "The Go Programming Language", Author: "Donovan & Kernighan"}

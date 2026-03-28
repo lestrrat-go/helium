@@ -32,11 +32,15 @@ func Example_xslt3_call_function() {
 	// CallFunction invokes a named public function directly.
 	// The function name uses Clark notation: {namespace}local-name.
 	// Arguments are passed as positional xpath3.Sequence values.
+
+	// Build the argument: an xs:integer with value 21.
+	arg := xpath3.SingleAtomic(xpath3.AtomicValue{
+		TypeName: xpath3.TypeInteger,
+		Value:    big.NewInt(21),
+	})
+
 	resultDoc, err := stylesheet.
-		CallFunction("{http://example.com/fn}double", xpath3.SingleAtomic(xpath3.AtomicValue{
-			TypeName: xpath3.TypeInteger,
-			Value:    big.NewInt(21),
-		})).
+		CallFunction("{http://example.com/fn}double", arg).
 		Do(ctx)
 	if err != nil {
 		fmt.Printf("call-function error: %s\n", err)

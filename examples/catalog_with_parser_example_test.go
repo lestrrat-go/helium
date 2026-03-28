@@ -39,10 +39,11 @@ func Example_catalog_with_parser() {
 		return
 	}
 
-	// Catalog attaches a catalog to the parser for external entity
-	// resolution. When the parser needs to resolve a system ID or public ID
-	// (e.g., from a DOCTYPE declaration), it will consult this catalog first.
-	p := helium.NewParser().Catalog(cat)
+	// Catalog attaches a loaded catalog to the parser. When the parser needs
+	// to resolve a system ID or public ID (e.g., from a DOCTYPE declaration),
+	// it will consult this catalog first.
+	p := helium.NewParser().
+		Catalog(cat)
 
 	// Parse a simple document. The catalog is available for any external
 	// entity references the parser might encounter during parsing.

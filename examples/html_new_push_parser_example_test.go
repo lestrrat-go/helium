@@ -9,7 +9,11 @@ import (
 )
 
 func Example_html_new_push_parser() {
-	pp := html.NewParser().NewPushParser(context.Background())
+	// HTML push parser accepts input in chunks, just like the XML push
+	// parser. The HTML parser is more lenient — unclosed tags, missing
+	// end tags, etc. are recovered automatically.
+	p := html.NewParser()
+	pp := p.NewPushParser(context.Background())
 	if err := pp.Push([]byte(`<h1>Title`)); err != nil {
 		fmt.Printf("push failed: %s\n", err)
 		return
