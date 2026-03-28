@@ -143,9 +143,11 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 
 # Current status
 
-* Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RelaxNG, Schematron, XSD, and `encoding/xml` compatibility (`shim` package).
-* The codebase includes broad compatibility tests and examples, and active parity work against libxml2 behavior.
+* Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG, Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
+* W3C conformance suites: ~22,250 / 22,744 QT3 tests pass for XPath 3.1; ~11,780 / 13,129 W3C tests pass for XSLT 3.0 (skips are XSLT 1.0/2.0 backwards compatibility and other out-of-scope features).
+* libxml2-compat golden tests: core XML parsing 100%, XSD 99.6%, RELAX NG 100%, Schematron 100%, C14N 87%, HTML 100%.
 * XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards compatibility modes for XSLT 1.0/2.0 are not part of the target feature set.
+* A `helium` CLI provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron validate` subcommands.
 * Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
 
 # Contributing
