@@ -112,7 +112,7 @@ func TestFuzzRepros(t *testing.T) {
 	t.Run("whitespace-only attribute default", func(t *testing.T) {
 		t.Parallel()
 
-		const input = "<!DOCTYPEA[<!ATTLIST A (0) \""
+		const input = `<!DOCTYPEA[<!ATTLIST A A (0) " "` //nolint:dupword // repeated "A" is element name + attribute name
 
 		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.Error(t, err)
