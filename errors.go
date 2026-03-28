@@ -10,9 +10,16 @@ import (
 type ErrorLevel int
 
 const (
-	ErrorLevelNone    ErrorLevel = iota
+	// ErrorLevelNone indicates no specific severity. When used with
+	// [NewErrorCollector], it means all errors are collected regardless
+	// of level.
+	ErrorLevelNone ErrorLevel = iota
+	// ErrorLevelWarning indicates a non-fatal condition that may still
+	// produce correct output.
 	ErrorLevelWarning
+	// ErrorLevelError indicates a recoverable error in the input.
 	ErrorLevelError
+	// ErrorLevelFatal indicates an unrecoverable error that stops processing.
 	ErrorLevelFatal
 )
 
@@ -20,10 +27,14 @@ const (
 type ErrorDomain int
 
 const (
-	ErrorDomainParser    ErrorDomain = iota // default
+	// ErrorDomainParser indicates the error originated in the XML parser.
+	ErrorDomainParser ErrorDomain = iota
+	// ErrorDomainNamespace indicates the error originated in namespace
+	// processing.
 	ErrorDomainNamespace
 )
 
+// Sentinel errors for DOM operations.
 var (
 	ErrNilNode            = errors.New("nil node")
 	ErrInvalidOperation   = errors.New("operation cannot be performed")
@@ -32,14 +43,22 @@ var (
 	errParserStopped      = errors.New("parser stopped")
 )
 
+// ErrDTDDupToken is returned when a DTD attribute enumeration contains
+// a duplicate token value.
 type ErrDTDDupToken struct {
 	Name string
 }
 
+// ErrAttrNotFound is returned when a referenced attribute token cannot
+// be found in the DTD attribute declarations.
 type ErrAttrNotFound struct {
 	Token string
 }
 
+// ErrParseError is a structured parse error carrying the source location,
+// context line, severity, and the underlying error. Use [ErrParseError.FormatError]
+// to produce a libxml2-compatible multi-line diagnostic string. The error
+// can be unwrapped via [ErrParseError.Unwrap] to access the underlying cause.
 type ErrParseError struct {
 	Column     int
 	Domain     ErrorDomain
@@ -50,6 +69,9 @@ type ErrParseError struct {
 	LineNumber int
 }
 
+// Sentinel errors for XML parse failures. Each corresponds to a specific
+// syntactic violation detected by the parser. These errors typically appear
+// as the Err field of an [ErrParseError].
 var (
 	ErrAmpersandRequired            = errors.New("'&' was required here")
 	ErrAttrListNotFinished          = errors.New("attrlist must finish with a ')'")
@@ -99,10 +121,14 @@ var (
 	ErrValueRequired                = errors.New("value required")
 )
 
+// ErrorLevel returns the severity of this parse error, satisfying the
+// [ErrorLeveler] interface.
 func (e ErrParseError) ErrorLevel() ErrorLevel {
 	return e.Level
 }
 
+// Error returns a human-readable string including the file, line, column,
+// and a context snippet showing approximately where the error occurred.
 func (e ErrParseError) Error() string {
 	if e.File != "" {
 		return fmt.Sprintf(
@@ -123,6 +149,8 @@ func (e ErrParseError) Error() string {
 	)
 }
 
+// Unwrap returns the underlying error, enabling use with [errors.Is] and
+// [errors.As].
 func (e ErrParseError) Unwrap() error {
 	return e.Err
 }
@@ -172,6 +200,7 @@ func (e ErrParseError) FormatError() string {
 	return b.String()
 }
 
+// Error returns the diagnostic message for this duplicate token error.
 func (e ErrDTDDupToken) Error() string {
 	return "standalone: attribute enumeration value token " + e.Name + " duplicated"
 }
