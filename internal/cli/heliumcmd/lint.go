@@ -523,7 +523,11 @@ func (c *command) evalXPath(ctx context.Context, cfg *config, doc *helium.Docume
 		for _, n := range res.NodeSet {
 			switch n.Type() {
 			case helium.AttributeNode:
-				attr := n.(*helium.Attribute) //nolint:forcetypeassert // node type checked above
+				attr, ok := helium.AsType[*helium.Attribute](n)
+				if !ok {
+					_, _ = fmt.Fprintf(c.stderr, "%s: unexpected attribute node type %T\n", c.prog, n)
+					return ExitErr
+				}
 				_, _ = fmt.Fprintf(out, " %s=%q\n", attr.Name(), attr.Value())
 			case helium.NamespaceDeclNode, helium.NamespaceNode:
 				ns, ok := n.(interface {

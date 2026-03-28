@@ -170,7 +170,11 @@ func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 		var includes []*helium.Element
 		for c := range helium.Children(n) {
 			if isXInclude(c) {
-				includes = append(includes, c.(*helium.Element)) //nolint:forcetypeassert
+				elem, ok := helium.AsType[*helium.Element](c)
+				if !ok {
+					continue
+				}
+				includes = append(includes, elem)
 			}
 		}
 		if len(includes) == 0 {
@@ -476,9 +480,9 @@ func (p *processor) mergeEntities(ctx context.Context, src, dst *helium.Document
 	dstInt := dst.IntSubset()
 	if dstInt == nil {
 		for c := range helium.Children(dst) {
-			if c.Type() == helium.ElementNode {
+			if elem, ok := helium.AsType[*helium.Element](c); ok {
 				var err error
-				dstInt, err = dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", "") //nolint:forcetypeassert
+				dstInt, err = dst.CreateInternalSubset(elem.LocalName(), "", "")
 				if err != nil {
 					return
 				}
@@ -993,7 +997,10 @@ func fixupNamespaceDecls(n helium.Node) {
 	if n.Type() != helium.ElementNode {
 		return
 	}
-	elem := n.(*helium.Element) //nolint:forcetypeassert
+	elem, ok := helium.AsType[*helium.Element](n)
+	if !ok {
+		return
+	}
 
 	// Build set of locally declared prefixes
 	declared := make(map[string]bool)

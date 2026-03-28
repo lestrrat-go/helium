@@ -16,7 +16,10 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		elem := child.(*helium.Element) //nolint:forcetypeassert
+		elem, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(elem, elemInclude):
 			loc := getAttr(elem, attrSchemaLocation)
@@ -224,7 +227,10 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		elem := child.(*helium.Element) //nolint:forcetypeassert
+		elem, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(elem, elemAnnotation):
 			// skip
@@ -325,7 +331,10 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				if gc.Type() != helium.ElementNode {
 					continue
 				}
-				gce := gc.(*helium.Element) //nolint:forcetypeassert
+				gce, ok := helium.AsType[*helium.Element](gc)
+				if !ok {
+					continue
+				}
 				switch {
 				case isXSDElement(gce, elemAttribute):
 					au := c.parseAttributeUse(ctx, gce)

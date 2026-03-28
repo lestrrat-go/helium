@@ -18,7 +18,10 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		var compositor ModelGroupKind
 		switch {
 		case isXSDElement(ce, elemSequence):
@@ -53,7 +56,10 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		if isXSDElement(ce, elemAttribute) {
 			au := c.parseAttributeUse(ctx, ce)
 			attrs = append(attrs, au)
@@ -75,7 +81,10 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemElement):
 			p, err := c.parseLocalElement(ctx, ce)

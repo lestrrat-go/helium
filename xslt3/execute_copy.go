@@ -259,7 +259,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 
 	switch node.Type() {
 	case helium.ElementNode:
-		srcElem := node.(*helium.Element) //nolint:forcetypeassert
+		srcElem, _ := helium.AsType[*helium.Element](node)
 		// Use LocalName to avoid prefix doubling with SetActiveNamespace
 		elem := ec.resultDoc.CreateElement(srcElem.LocalName())
 
@@ -344,7 +344,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 		return ec.addNode(comment)
 
 	case helium.ProcessingInstructionNode:
-		pi := node.(*helium.ProcessingInstruction) //nolint:forcetypeassert
+		pi, _ := helium.AsType[*helium.ProcessingInstruction](node)
 		newPI := ec.resultDoc.CreatePI(pi.Name(), string(pi.Content()))
 		return ec.addNode(newPI)
 
@@ -410,7 +410,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 		return nil
 
 	case helium.AttributeNode:
-		attr := node.(*helium.Attribute) //nolint:forcetypeassert
+		attr, _ := helium.AsType[*helium.Attribute](node)
 		out := ec.currentOutput()
 		// In sequence mode (e.g. variable with as="attribute(*)*"),
 		// capture the attribute as a standalone item.
@@ -505,7 +505,8 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 			if copyNS && v.Node.Type() == helium.ElementNode {
 				copiedNSElem := findCopiedElement(out, lastBefore, pendingBefore)
 				if copiedNSElem != nil {
-					propagateAncestorNamespaces(v.Node.(*helium.Element), copiedNSElem) //nolint:forcetypeassert
+					srcElem, _ := helium.AsType[*helium.Element](v.Node)
+					propagateAncestorNamespaces(srcElem, copiedNSElem)
 				}
 			}
 			if inst.TypeName != "" {
@@ -943,7 +944,8 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 		return nil
 	default:
 		if !copyNS && node.Type() == helium.ElementNode {
-			return ec.copyElementNoNamespaces(node.(*helium.Element)) //nolint:forcetypeassert
+			elem, _ := helium.AsType[*helium.Element](node)
+			return ec.copyElementNoNamespaces(elem)
 		}
 		copied, err := helium.CopyNode(node, ec.resultDoc)
 		if err != nil {

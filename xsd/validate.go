@@ -122,7 +122,10 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
-		elem := n.(*helium.Element) //nolint:forcetypeassert
+		elem, ok := helium.AsType[*helium.Element](n)
+		if !ok {
+			return nil
+		}
 		if err := vc.validateElement(ctx, elem); err != nil {
 			valid = false
 		}
@@ -134,7 +137,10 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
-		elem := n.(*helium.Element) //nolint:forcetypeassert
+		elem, ok := helium.AsType[*helium.Element](n)
+		if !ok {
+			return nil
+		}
 		edecl := lookupElemDecl(elem, vc.schema)
 		if edecl != nil && len(edecl.IDCs) > 0 {
 			if err := vc.validateIDConstraints(ctx, elem, edecl); err != nil {
@@ -291,7 +297,10 @@ func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *hel
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
-			ce := child.(*helium.Element) //nolint:forcetypeassert
+			ce, ok := helium.AsType[*helium.Element](child)
+			if !ok {
+				continue
+			}
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), ce.LocalName(), "This element is not expected.")
 			return fmt.Errorf("not expected")
 		case helium.TextNode:
@@ -320,7 +329,10 @@ func collectChildElements(elem *helium.Element) []childElem {
 	var children []childElem
 	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
-			ce := child.(*helium.Element) //nolint:forcetypeassert
+			ce, ok := helium.AsType[*helium.Element](child)
+			if !ok {
+				continue
+			}
 			children = append(children, childElem{elem: ce, name: ce.LocalName(), ns: ce.URI(), displayName: elemDisplayName(ce)})
 		}
 	}
@@ -597,7 +609,10 @@ func (vc *validationContext) validateNilledElement(ctx context.Context, elem *he
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
-			ce := child.(*helium.Element) //nolint:forcetypeassert
+			ce, ok := helium.AsType[*helium.Element](child)
+			if !ok {
+				continue
+			}
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce),
 				"This element is not expected, because the element '"+dn+"' is nilled.")
 			return fmt.Errorf("content in nilled element")

@@ -188,7 +188,10 @@ func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		elem := child.(*helium.Element) //nolint:forcetypeassert
+		elem, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(elem, elemElement):
 			if err := c.parseGlobalElement(ctx, elem); err != nil {

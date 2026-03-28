@@ -74,7 +74,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemSequence):
 			mg, err := c.parseModelGroup(ctx, ce, CompositorSequence)
@@ -150,7 +153,10 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemRestriction):
 			return c.parseRestriction(ctx, ce, td)
@@ -174,7 +180,10 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemSequence):
 			mg, err := c.parseModelGroup(ctx, ce, CompositorSequence)
@@ -230,7 +239,10 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemSequence):
 			mg, err := c.parseModelGroup(ctx, ce, CompositorSequence)
@@ -287,7 +299,10 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemExtension):
 			baseRef := getAttr(ce, attrBase)
@@ -316,7 +331,10 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ae := child.(*helium.Element) //nolint:forcetypeassert
+		ae, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ae, elemAttribute):
 			au := c.parseAttributeUse(ctx, ae)
@@ -341,7 +359,10 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemRestriction):
 			baseRef := getAttr(ce, attrBase)
@@ -354,7 +375,10 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 					if gc.Type() != helium.ElementNode {
 						continue
 					}
-					gce := gc.(*helium.Element) //nolint:forcetypeassert
+					gce, ok := helium.AsType[*helium.Element](gc)
+					if !ok {
+						continue
+					}
 					if isXSDElement(gce, elemSimpleType) {
 						baseTD, err := c.parseSimpleType(ctx, gce)
 						if err != nil {
@@ -379,7 +403,10 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 					if gc.Type() != helium.ElementNode {
 						continue
 					}
-					gce := gc.(*helium.Element) //nolint:forcetypeassert
+					gce, ok := helium.AsType[*helium.Element](gc)
+					if !ok {
+						continue
+					}
 					if isXSDElement(gce, elemSimpleType) {
 						itemTD, err := c.parseSimpleType(ctx, gce)
 						if err != nil {
@@ -404,7 +431,10 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 				if gc.Type() != helium.ElementNode {
 					continue
 				}
-				gce := gc.(*helium.Element) //nolint:forcetypeassert
+				gce, ok := helium.AsType[*helium.Element](gc)
+				if !ok {
+					continue
+				}
 				if isXSDElement(gce, elemSimpleType) {
 					memberTD, err := c.parseSimpleType(ctx, gce)
 					if err != nil {
@@ -427,7 +457,10 @@ func (c *compiler) parseFacets(_ context.Context, restriction *helium.Element) *
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element) //nolint:forcetypeassert
+		ce, ok := helium.AsType[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		if ce.URI() != lexicon.NamespaceXSD {
 			continue
 		}

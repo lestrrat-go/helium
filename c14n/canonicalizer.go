@@ -65,7 +65,11 @@ func (c *canonicalizer) processDocument() error {
 		case helium.DocumentTypeNode, helium.DTDNode:
 			continue
 		case helium.ElementNode:
-			if err := c.processElement(child.(*helium.Element)); err != nil { //nolint:forcetypeassert
+			elem, ok := helium.AsType[*helium.Element](child)
+			if !ok {
+				continue
+			}
+			if err := c.processElement(elem); err != nil {
 				return err
 			}
 			beforeRoot = false
@@ -73,14 +77,22 @@ func (c *canonicalizer) processDocument() error {
 			if !c.isVisible(child) {
 				continue
 			}
-			if err := c.processPI(child.(*helium.ProcessingInstruction), beforeRoot); err != nil { //nolint:forcetypeassert
+			pi, ok := helium.AsType[*helium.ProcessingInstruction](child)
+			if !ok {
+				continue
+			}
+			if err := c.processPI(pi, beforeRoot); err != nil {
 				return err
 			}
 		case helium.CommentNode:
 			if !c.withComments || !c.isVisible(child) {
 				continue
 			}
-			if err := c.processComment(child.(*helium.Comment), beforeRoot); err != nil { //nolint:forcetypeassert
+			cm, ok := helium.AsType[*helium.Comment](child)
+			if !ok {
+				continue
+			}
+			if err := c.processComment(cm, beforeRoot); err != nil {
 				return err
 			}
 		case helium.TextNode:
@@ -175,7 +187,11 @@ func (c *canonicalizer) processElement(e *helium.Element) error {
 func (c *canonicalizer) processNode(n helium.Node) error {
 	switch n.Type() {
 	case helium.ElementNode:
-		return c.processElement(n.(*helium.Element)) //nolint:forcetypeassert
+		elem, ok := helium.AsType[*helium.Element](n)
+		if !ok {
+			return nil
+		}
+		return c.processElement(elem)
 	case helium.TextNode:
 		return c.processText(n)
 	case helium.CDATASectionNode:
@@ -185,13 +201,21 @@ func (c *canonicalizer) processNode(n helium.Node) error {
 			return nil
 		}
 		// Inside elements, PIs are inline (no position-dependent newlines)
-		return c.writePI(n.(*helium.ProcessingInstruction)) //nolint:forcetypeassert
+		pi, ok := helium.AsType[*helium.ProcessingInstruction](n)
+		if !ok {
+			return nil
+		}
+		return c.writePI(pi)
 	case helium.CommentNode:
 		if !c.withComments || !c.isVisible(n) {
 			return nil
 		}
 		// Inside elements, comments are inline (no position-dependent newlines)
-		return c.writeComment(n.(*helium.Comment)) //nolint:forcetypeassert
+		cm, ok := helium.AsType[*helium.Comment](n)
+		if !ok {
+			return nil
+		}
+		return c.writeComment(cm)
 	case helium.EntityRefNode:
 		// Expand entity ref children
 		for child := range helium.Children(n) {
@@ -432,7 +456,10 @@ func (c *canonicalizer) nsRenderedByAncestor(e *helium.Element, prefix, uri stri
 		if n.Type() != helium.ElementNode {
 			continue
 		}
-		anc := n.(*helium.Element) //nolint:forcetypeassert
+		anc, ok := helium.AsType[*helium.Element](n)
+		if !ok {
+			continue
+		}
 		if !c.isVisible(anc) {
 			continue
 		}
@@ -461,7 +488,10 @@ func (c *canonicalizer) findNearestRenderedDefaultNS(e *helium.Element) string {
 		if n.Type() != helium.ElementNode {
 			continue
 		}
-		anc := n.(*helium.Element) //nolint:forcetypeassert
+		anc, ok := helium.AsType[*helium.Element](n)
+		if !ok {
+			continue
+		}
 		if !c.isVisible(anc) {
 			continue
 		}
@@ -615,8 +645,8 @@ func (c *canonicalizer) collectInScopeNamespaces(e *helium.Element) map[string]s
 	// Later (closer) declarations override earlier ones.
 	var ancestors []*helium.Element
 	for n := helium.Node(e); n != nil; n = n.Parent() {
-		if n.Type() == helium.ElementNode {
-			ancestors = append(ancestors, n.(*helium.Element)) //nolint:forcetypeassert
+		if anc, ok := helium.AsType[*helium.Element](n); ok {
+			ancestors = append(ancestors, anc)
 		}
 	}
 
@@ -715,11 +745,12 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 // xml:* attribute and inherit from it.
 func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEntry) {
 	// Only inherit if there's a non-visible gap
-	parentNode := e.Parent()
-	if parentNode != nil && parentNode.Type() == helium.ElementNode {
-		if c.isVisible(parentNode.(*helium.Element)) { //nolint:forcetypeassert
-			// Parent is visible — no gap, xml:* attrs flow through normally
-			return
+	if parentNode := e.Parent(); parentNode != nil {
+		if parentElem, ok := helium.AsType[*helium.Element](parentNode); ok {
+			if c.isVisible(parentElem) {
+				// Parent is visible — no gap, xml:* attrs flow through normally
+				return
+			}
 		}
 	}
 
@@ -733,10 +764,10 @@ func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEn
 	}
 
 	for n := e.Parent(); n != nil; n = n.Parent() {
-		if n.Type() != helium.ElementNode {
+		anc, ok := helium.AsType[*helium.Element](n)
+		if !ok {
 			continue
 		}
-		anc := n.(*helium.Element) //nolint:forcetypeassert
 		for _, attr := range anc.Attributes() {
 			if attr.URI() != lexicon.NamespaceXML {
 				continue
@@ -758,10 +789,11 @@ func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEn
 // inheritXMLAttrsC14N11 inherits xml:lang and xml:space (but NOT xml:id or xml:base)
 // from non-visible ancestors in C14N 1.1 mode.
 func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attrSortEntry) {
-	parentNode := e.Parent()
-	if parentNode != nil && parentNode.Type() == helium.ElementNode {
-		if c.isVisible(parentNode.(*helium.Element)) { //nolint:forcetypeassert
-			return
+	if parentNode := e.Parent(); parentNode != nil {
+		if parentElem, ok := helium.AsType[*helium.Element](parentNode); ok {
+			if c.isVisible(parentElem) {
+				return
+			}
 		}
 	}
 
@@ -773,10 +805,10 @@ func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attr
 	}
 
 	for n := e.Parent(); n != nil; n = n.Parent() {
-		if n.Type() != helium.ElementNode {
+		anc, ok := helium.AsType[*helium.Element](n)
+		if !ok {
 			continue
 		}
-		anc := n.(*helium.Element) //nolint:forcetypeassert
 		for _, attr := range anc.Attributes() {
 			if attr.URI() != lexicon.NamespaceXML {
 				continue
@@ -803,10 +835,11 @@ func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attr
 // When there's a non-visible gap, the element's xml:base must be adjusted
 // to account for non-visible ancestors' xml:base contributions.
 func (c *canonicalizer) fixupXMLBase(e *helium.Element, entries *[]attrSortEntry) {
-	parentNode := e.Parent()
-	if parentNode != nil && parentNode.Type() == helium.ElementNode {
-		if c.isVisible(parentNode.(*helium.Element)) { //nolint:forcetypeassert
-			return // Parent visible, no fixup needed
+	if parentNode := e.Parent(); parentNode != nil {
+		if parentElem, ok := helium.AsType[*helium.Element](parentNode); ok {
+			if c.isVisible(parentElem) {
+				return // Parent visible, no fixup needed
+			}
 		}
 	}
 
@@ -816,8 +849,7 @@ func (c *canonicalizer) fixupXMLBase(e *helium.Element, entries *[]attrSortEntry
 	// Find nearest visible ancestor's effective base URI
 	vaBase := ""
 	for n := e.Parent(); n != nil; n = n.Parent() {
-		if n.Type() == helium.ElementNode {
-			anc := n.(*helium.Element) //nolint:forcetypeassert
+		if anc, ok := helium.AsType[*helium.Element](n); ok {
 			if c.isVisible(anc) {
 				vaBase = c.effectiveBaseURI(anc)
 				break
@@ -848,8 +880,8 @@ func (c *canonicalizer) effectiveBaseURI(e *helium.Element) string {
 	// Collect ancestor chain
 	var chain []*helium.Element
 	for n := helium.Node(e); n != nil; n = n.Parent() {
-		if n.Type() == helium.ElementNode {
-			chain = append(chain, n.(*helium.Element)) //nolint:forcetypeassert
+		if elem, ok := helium.AsType[*helium.Element](n); ok {
+			chain = append(chain, elem)
 		}
 	}
 

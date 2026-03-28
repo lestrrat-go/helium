@@ -346,7 +346,7 @@ func wrapNodeInHTMLDoc(node helium.Node) *helium.Document {
 		if err != nil {
 			return doc
 		}
-		copiedElem := copied.(*helium.Element) //nolint:forcetypeassert
+		copiedElem, _ := helium.AsType[*helium.Element](copied)
 		// Remove redundant namespace declarations from descendants
 		removeRedundantNamespaces(copiedElem)
 		if strings.EqualFold(copiedElem.LocalName(), "html") {

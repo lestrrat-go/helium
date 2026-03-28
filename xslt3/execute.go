@@ -745,7 +745,8 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.MutableNode,
 				if !ok {
 					return dynamicError(errCodeXTDE0410, "cannot add attribute to a non-element node")
 				}
-				copyAttributeToElement(elem, v.Node.(*helium.Attribute)) //nolint:forcetypeassert
+				attrNode, _ := helium.AsType[*helium.Attribute](v.Node)
+				copyAttributeToElement(elem, attrNode)
 				out.noteOutput()
 			default:
 				copied, err := helium.CopyNode(v.Node, ec.resultDoc)

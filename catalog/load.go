@@ -108,10 +108,10 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 	}
 
 	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() != helium.ElementNode {
+		elem, ok := helium.AsType[*helium.Element](child)
+		if !ok {
 			continue
 		}
-		elem := child.(*helium.Element) //nolint:forcetypeassert
 
 		if elem.URI() != lexicon.NamespaceCatalog {
 			continue
@@ -249,8 +249,8 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 // documentElement returns the first child element of a Document.
 func documentElement(doc *helium.Document) *helium.Element {
 	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() == helium.ElementNode {
-			return child.(*helium.Element) //nolint:forcetypeassert
+		if elem, ok := helium.AsType[*helium.Element](child); ok {
+			return elem
 		}
 	}
 	return nil

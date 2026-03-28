@@ -186,7 +186,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root has invalid child node"}
 		}
 
-		param := child.(*helium.Element) //nolint:forcetypeassert
+		param, _ := helium.AsType[*helium.Element](child)
 		if param.URI() == "" {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options parameters must be namespace-qualified"}
 		}
@@ -325,7 +325,7 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps has invalid child node"}
 		}
 
-		charMap := child.(*helium.Element) //nolint:forcetypeassert
+		charMap, _ := helium.AsType[*helium.Element](child)
 		if charMap.URI() != lexicon.NamespaceSerialization || charMap.LocalName() != "character-map" {
 			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps children must be output:character-map"}
 		}
