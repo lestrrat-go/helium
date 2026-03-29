@@ -177,13 +177,13 @@ These shortcuts preserve the public DOM shape; they only avoid generic API work 
 
 Both XML and HTML push parsers use the `push` package (`push.Parser[T]`), which manages a background goroutine fed by a thread-safe concurrent stream with blocking Read and non-blocking Write.
 
-**XML PushParser** (`parser_push.go`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
+**XML PushParser** (`parser.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
 Parser runs in a background goroutine reading from the stream via `ParseReader`. Tokens are processed incrementally as data is pushed — the stream's `Read` blocks until bytes are available, so the parser advances as each chunk arrives.
 
-**HTML PushParser** (`html/pushparser.go`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
+**HTML PushParser** (`html/html.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
-A background goroutine reads all pushed data via `io.ReadAll`, then parses in one shot. The HTML parser requires a complete `[]byte` buffer (it uses direct byte-slice indexing), so it cannot stream incrementally like the XML parser. The goroutine pattern keeps the API symmetric with the XML PushParser.
+A background goroutine reads all pushed data via `ParseReader` (which calls `io.ReadAll` internally), then parses in one shot. The HTML parser requires a complete `[]byte` buffer (it uses direct byte-slice indexing), so it cannot stream incrementally like the XML parser. The `push` package keeps both APIs symmetric.
 
 ## Character Buffering
 

@@ -4,11 +4,10 @@
 
 ```go
 type evalContext struct {
-    goCtx      context.Context
     node       helium.Node           // context item (nil if absent)
     position   int
     size       int
-    vars       map[string]Sequence   // scoped variable bindings
+    vars       *variableScope        // scoped variable bindings
     namespaces map[string]string
     functions  map[string]Function
     fnsNS      map[QualifiedName]Function
@@ -20,10 +19,12 @@ type evalContext struct {
     defaultLanguage string
 }
 
-func newEvalContext(ctx context.Context, node helium.Node) *evalContext
+func newEvalContext(node helium.Node) *evalContext
 func (ec *evalContext) withNode(n helium.Node, pos, size int) *evalContext
-func (ec *evalContext) withVar(name string, val Sequence) *evalContext  // new map per scope
+func (ec *evalContext) withVar(name string, val Sequence) *evalContext  // new scope
 ```
+
+`context.Context` is passed as a function parameter (`ctx`) through the eval chain, not stored in the struct.
 
 ## Dispatch
 
