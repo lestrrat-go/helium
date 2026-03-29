@@ -54,12 +54,12 @@ func signBytes(algURI string, key any, data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, algURI)
 	}
 
-	switch {
-	case algURI == AlgEd25519:
+	switch algURI {
+	case AlgEd25519:
 		return signEd25519(key, data)
-	case algURI == AlgHMACSHA1 || algURI == AlgHMACSHA256:
+	case AlgHMACSHA1, AlgHMACSHA256:
 		return signHMAC(sa.hash, key, data)
-	case algURI == AlgECDSASHA256 || algURI == AlgECDSASHA384:
+	case AlgECDSASHA256, AlgECDSASHA384:
 		return signECDSA(sa.hash, key, data)
 	default:
 		return signRSA(sa.hash, key, data)
@@ -72,12 +72,12 @@ func verifyBytes(algURI string, key any, data, sig []byte) error {
 		return fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, algURI)
 	}
 
-	switch {
-	case algURI == AlgEd25519:
+	switch algURI {
+	case AlgEd25519:
 		return verifyEd25519(key, data, sig)
-	case algURI == AlgHMACSHA1 || algURI == AlgHMACSHA256:
+	case AlgHMACSHA1, AlgHMACSHA256:
 		return verifyHMAC(sa.hash, key, data, sig)
-	case algURI == AlgECDSASHA256 || algURI == AlgECDSASHA384:
+	case AlgECDSASHA256, AlgECDSASHA384:
 		return verifyECDSA(sa.hash, key, data, sig)
 	default:
 		return verifyRSA(sa.hash, key, data, sig)
@@ -210,7 +210,11 @@ func verifyEd25519(key any, data, sig []byte) error {
 	pub, ok := key.(ed25519.PublicKey)
 	if !ok {
 		if priv, ok2 := key.(ed25519.PrivateKey); ok2 {
-			pub = priv.Public().(ed25519.PublicKey)
+			var ok3 bool
+			pub, ok3 = priv.Public().(ed25519.PublicKey)
+			if !ok3 {
+				return fmt.Errorf("%w: expected ed25519.PublicKey, got %T", ErrKeyMismatch, key)
+			}
 		} else {
 			return fmt.Errorf("%w: expected ed25519.PublicKey, got %T", ErrKeyMismatch, key)
 		}

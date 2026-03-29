@@ -127,14 +127,6 @@ func NewVerifier(ks KeySource) Verifier {
 	return Verifier{cfg: &verifierConfig{keySource: ks}}
 }
 
-func (v Verifier) clone() Verifier {
-	if v.cfg == nil {
-		return Verifier{cfg: &verifierConfig{}}
-	}
-	cp := *v.cfg
-	return Verifier{cfg: &cp}
-}
-
 // Verify verifies the first Signature element found in the document.
 func (v Verifier) Verify(ctx context.Context, doc *helium.Document) error {
 	sig := findSignatureElement(doc.DocumentElement())
@@ -173,7 +165,7 @@ func isDSigNS(e *helium.Element) bool {
 
 func elementNamespaceURI(e *helium.Element) string {
 	name := e.Name()
-	for i := 0; i < len(name); i++ {
+	for i := range len(name) {
 		if name[i] == ':' {
 			prefix := name[:i]
 			for _, ns := range e.Namespaces() {

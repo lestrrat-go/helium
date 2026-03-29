@@ -28,14 +28,14 @@ func aesKeyWrap(kek, plaintext []byte) ([]byte, error) {
 	copy(a[:], defaultIV[:])
 
 	r := make([][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		r[i] = make([]byte, 8)
 		copy(r[i], plaintext[i*8:(i+1)*8])
 	}
 
 	// Wrap
-	for j := 0; j < 6; j++ {
-		for i := 0; i < n; i++ {
+	for j := range 6 {
+		for i := range n {
 			// B = AES(K, A | R[i])
 			var input [16]byte
 			copy(input[:8], a[:])
@@ -59,7 +59,7 @@ func aesKeyWrap(kek, plaintext []byte) ([]byte, error) {
 	// Output: A || R[0] || R[1] || ... || R[n-1]
 	out := make([]byte, 8+n*8)
 	copy(out[:8], a[:])
-	for i := 0; i < n; i++ {
+	for i := range n {
 		copy(out[8+i*8:], r[i])
 	}
 	return out, nil
@@ -82,7 +82,7 @@ func aesKeyUnwrap(kek, ciphertext []byte) ([]byte, error) {
 	copy(a[:], ciphertext[:8])
 
 	r := make([][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		r[i] = make([]byte, 8)
 		copy(r[i], ciphertext[(i+1)*8:(i+2)*8])
 	}
@@ -115,7 +115,7 @@ func aesKeyUnwrap(kek, ciphertext []byte) ([]byte, error) {
 	}
 
 	out := make([]byte, n*8)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		copy(out[i*8:], r[i])
 	}
 	return out, nil

@@ -148,7 +148,7 @@ func parseCipherData(elem *helium.Element) ([]byte, error) {
 // localName returns the local name of an element, stripping any prefix.
 func localName(e *helium.Element) string {
 	name := e.Name()
-	for i := 0; i < len(name); i++ {
+	for i := range len(name) {
 		if name[i] == ':' {
 			return name[i+1:]
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -315,13 +316,7 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 				if err := incNS.SetActiveNamespace("ec", "http://www.w3.org/2001/10/xml-exc-c14n#"); err != nil {
 					return err
 				}
-				prefixList := ""
-				for i, p := range exc.prefixes {
-					if i > 0 {
-						prefixList += " "
-					}
-					prefixList += p
-				}
+				prefixList := strings.Join(exc.prefixes, " ")
 				if err := incNS.SetLiteralAttribute("PrefixList", prefixList); err != nil {
 					return err
 				}

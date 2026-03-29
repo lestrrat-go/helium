@@ -208,9 +208,13 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 	// Replace in tree.
 	if encType == TypeElement {
 		// Replace the element with EncryptedData.
-		parent := elem.Parent()
-		if parent != nil {
-			if err := insertBefore(parent, edElem, elem); err != nil {
+		if pe, ok := elem.Parent().(*helium.Element); ok {
+			if err := pe.AddChild(edElem); err != nil {
+				return nil, err
+			}
+			helium.UnlinkNode(elem)
+		} else if pd, ok := elem.Parent().(*helium.Document); ok {
+			if err := pd.AddChild(edElem); err != nil {
 				return nil, err
 			}
 			helium.UnlinkNode(elem)
@@ -246,33 +250,6 @@ func removeChildren(elem *helium.Element) {
 		}
 		child = next
 	}
-}
-
-func insertBefore(parent helium.Node, newChild, refChild helium.Node) error {
-	// Use AddChild to insert newChild, then move it before refChild.
-	// Since helium doesn't have InsertBefore, we add then reorder.
-	p, ok := parent.(helium.MutableNode)
-	if !ok {
-		return fmt.Errorf("parent is not mutable")
-	}
-	_ = p
-	// Simpler approach: add new child after ref, then swap positions.
-	// Actually, just add the new child to parent (appends to end), which
-	// is fine for our use case since we immediately remove refChild.
-	if pe, ok := parent.(*helium.Element); ok {
-		return pe.AddChild(edElemAsMutable(newChild))
-	}
-	if pd, ok := parent.(*helium.Document); ok {
-		return pd.AddChild(edElemAsMutable(newChild))
-	}
-	return fmt.Errorf("unsupported parent type")
-}
-
-func edElemAsMutable(n helium.Node) helium.MutableNode {
-	if mn, ok := n.(helium.MutableNode); ok {
-		return mn
-	}
-	return nil
 }
 
 // decryptConfig holds the configuration for a Decryptor.
@@ -360,7 +337,7 @@ func (d Decryptor) DecryptInPlace(ctx context.Context, doc *helium.Document) err
 	return nil
 }
 
-func decryptElement(_ context.Context, cfg *decryptConfig, elem *helium.Element) ([]helium.Node, error) {
+func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]helium.Node, error) {
 	ed, err := parseEncryptedData(elem)
 	if err != nil {
 		return nil, err
@@ -382,14 +359,13 @@ func decryptElement(_ context.Context, cfg *decryptConfig, elem *helium.Element)
 	}
 
 	// Parse decrypted XML.
-	doc := elem.OwnerDocument()
 	isContent := ed.Type == TypeContent
 
 	var nodes []helium.Node
 	if isContent {
 		// Content may be multiple children; wrap in a temporary root.
 		wrapped := "<_wrap>" + string(plaintext) + "</_wrap>"
-		tmpDoc, err := helium.NewParser().Parse(context.Background(), []byte(wrapped))
+		tmpDoc, err := helium.NewParser().Parse(ctx, []byte(wrapped))
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 		}
@@ -398,13 +374,12 @@ func decryptElement(_ context.Context, cfg *decryptConfig, elem *helium.Element)
 			nodes = append(nodes, child)
 		}
 	} else {
-		tmpDoc, err := helium.NewParser().Parse(context.Background(), []byte(plaintext))
+		tmpDoc, err := helium.NewParser().Parse(ctx, plaintext)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 		}
 		nodes = append(nodes, tmpDoc.DocumentElement())
 	}
-	_ = doc // may be used for node adoption in future
 
 	return nodes, nil
 }
