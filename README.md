@@ -4,8 +4,6 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/lestrrat-go/helium.svg)](https://pkg.go.dev/github.com/lestrrat-go/helium)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lestrrat-go/helium)
 
-** WARNING: THIS SOFTWARE SHOULD BE CONSIDERED ALPHA. ALL API STILL SUBJECT TO CHANGE **
-
 Helium is a fast XML toolkit for Go covering XML parsing, SAX2-style streaming,
 XPath 3.1, XSLT 3.0, XInclude, XSD, Relax NG, and Schematron.
 
