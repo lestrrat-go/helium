@@ -1,5 +1,7 @@
 # xmldsig1
 
+> **EXPERIMENTAL** — This package is under active development. Its API may change without notice, and it may be moved to a separate repository in the future.
+
 The `xmldsig1` package implements W3C XML Digital Signatures 1.1 for helium documents.
 
 Import path: `github.com/lestrrat-go/helium/xmldsig1`
