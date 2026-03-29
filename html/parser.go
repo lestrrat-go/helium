@@ -962,10 +962,8 @@ func (p *parser) parseRawContent(tagName string) {
 			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
 				validEnd := false
-				ch := p.cur.PeekAt(afterTag)
-				if ch == 0 {
-					validEnd = true
-				} else if ch == '>' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+				switch p.cur.PeekAt(afterTag) {
+				case 0, '>', ' ', '\t', '\n', '\r':
 					validEnd = true
 				}
 				if validEnd {
@@ -1048,10 +1046,7 @@ func (p *parser) parseRCDATAContent(tagName string) {
 // parsePlaintext parses plaintext content — everything until EOF.
 func (p *parser) parsePlaintext() {
 	n := 0
-	for {
-		if p.cur.PeekAt(n) == 0 {
-			break
-		}
+	for p.cur.PeekAt(n) != 0 {
 		n++
 	}
 	if n > 0 {
