@@ -254,6 +254,40 @@ Generic push parser infrastructure shared by both XML and HTML push parsers.
 - Both `helium.PushParser` and `html.PushParser` are type aliases for `push.Parser[*helium.Document]`
 - Files: `push.go`
 
+## xmldsig1/
+
+XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
+
+- **NewSigner() → Signer** — create fluent builder for signing (clone-on-write value type)
+  - `SignatureAlgorithm(uri)`, `CanonicalizationMethod(uri)`, `Reference(ReferenceConfig)`, `KeyInfo(KeyInfoBuilder)`, `SignatureID(id)` — builder methods
+  - `SignEnveloped(ctx, doc, parent, key)`, `SignEnveloping(ctx, doc, content, key)`, `SignDetached(ctx, doc, key)` — terminal methods
+- **NewVerifier(KeySource) → Verifier** — create fluent builder for verification
+  - `Verify(ctx, doc)`, `VerifyElement(ctx, doc, sigElem)` — terminal methods
+- **NewEnvelopedReference() → ReferenceConfig** — SAML-optimized defaults (enveloped + ExcC14N + SHA-256)
+- Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeySourceFunc`
+- Key info builders: `X509DataKeyInfo(certs...)`, `RSAKeyValueKeyInfo()`
+- Transforms: `Enveloped()`, `C14NTransform(uri)`, `ExcC14NTransform(prefixes...)`
+- Algorithms: RSA-SHA1/SHA256, ECDSA-SHA256/SHA384, HMAC-SHA1/SHA256, Ed25519
+- Digests: SHA-1, SHA-256, SHA-384, SHA-512
+- Files: `xmldsig1.go` (API), `constants.go`, `algorithms.go`, `sign.go`, `verify.go`, `transforms.go`, `keyinfo.go`, `errors.go`
+- Imports: helium, c14n/
+
+## xmlenc1/
+
+XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
+
+- **NewEncryptor() → Encryptor** — create fluent builder for encryption (clone-on-write value type)
+  - `BlockAlgorithm(uri)`, `KeyTransportAlgorithm(uri)`, `RecipientPublicKey(key)`, `SessionKey(key)`, `KeyWrapAlgorithm(uri)`, `KeyEncryptionKey(kek)`, `OAEPDigest(uri)`, `OAEPMGF(uri)`, `OAEPParams(params)` — builder methods
+  - `EncryptElement(ctx, elem)`, `EncryptContent(ctx, elem)` — terminal methods
+- **NewDecryptor() → Decryptor** — create fluent builder for decryption
+  - `PrivateKey(key)`, `KeyEncryptionKey(kek)`, `SessionKey(key)` — builder methods
+  - `Decrypt(ctx, elem)` — terminal method
+- Block encryption: AES-128/256-CBC, AES-128/256-GCM
+- Key transport: RSA-OAEP (1.0 + 1.1 with configurable digest/MGF)
+- Key wrapping: AES-128/256-KeyWrap (RFC 3394)
+- Files: `xmlenc1.go` (API), `constants.go`, `block.go`, `keytransport.go`, `keywrap.go`, `types.go`, `serialize.go`, `parse.go`, `errors.go`
+- Imports: helium
+
 ## shim/
 
 Drop-in replacement for encoding/xml backed by helium parser.
