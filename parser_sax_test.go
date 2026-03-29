@@ -481,8 +481,8 @@ func TestStopParser(t *testing.T) {
 		p := helium.NewParser().SAXHandler(s)
 		pp := p.NewPushParser(t.Context())
 		require.NoError(t, pp.Push([]byte(input)))
-		_, err := pp.Flush()
-		require.NoError(t, err, "PushParser Flush should not produce an error after StopParser")
+		_, err := pp.Close()
+		require.NoError(t, err, "PushParser Close should not produce an error after StopParser")
 	})
 
 	t.Run("in StartDocument", func(t *testing.T) {

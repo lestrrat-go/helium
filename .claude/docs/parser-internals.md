@@ -175,18 +175,15 @@ These shortcuts preserve the public DOM shape; they only avoid generic API work 
 
 ## Push Parser
 
-`PushParser` uses background goroutine + `pushStream` (thread-safe concurrent buffer):
+Both XML and HTML push parsers use the `push` package (`push.Parser[T]`), which manages a background goroutine fed by a thread-safe concurrent stream with blocking Read and non-blocking Write.
 
-```
-pushStream:
-  Read(p []byte)  — blocks until bytes available or closed
-  Write(p []byte) — non-blocking append + signal
-  Close()         — mark closed, signal waiters
-```
+**XML PushParser** (`parser_push.go`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
-Usage: `p := helium.NewParser(); pp := p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
+Parser runs in a background goroutine reading from the stream via `ParseReader`. Tokens are processed incrementally as data is pushed — the stream's `Read` blocks until bytes are available, so the parser advances as each chunk arrives.
 
-Parser runs in background goroutine, reading from pushStream via `ParseReader`. Processes tokens incrementally as data is pushed — the stream's `Read` blocks until bytes are available, so the parser advances as each chunk arrives.
+**HTML PushParser** (`html/pushparser.go`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
+
+A background goroutine reads all pushed data via `io.ReadAll`, then parses in one shot. The HTML parser requires a complete `[]byte` buffer (it uses direct byte-slice indexing), so it cannot stream incrementally like the XML parser. The goroutine pattern keeps the API symmetric with the XML PushParser.
 
 ## Character Buffering
 

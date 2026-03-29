@@ -38,7 +38,7 @@ func TestPushParser(t *testing.T) {
 
 		pp := p.NewPushParser(t.Context())
 		require.NoError(t, pp.Push(input))
-		got, err := pp.Flush()
+		got, err := pp.Close()
 		require.NoError(t, err)
 		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
 	})
@@ -67,7 +67,7 @@ func TestPushParser(t *testing.T) {
 			require.NoError(t, pp.Push(input[prev:]))
 		}
 
-		got, err := pp.Flush()
+		got, err := pp.Close()
 		require.NoError(t, err)
 		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
 	})
@@ -84,7 +84,7 @@ func TestPushParser(t *testing.T) {
 			require.NoError(t, pp.Push(input[i:i+1]))
 		}
 
-		got, err := pp.Flush()
+		got, err := pp.Close()
 		require.NoError(t, err)
 		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
 	})
@@ -106,7 +106,7 @@ func TestPushParser(t *testing.T) {
 		p2 := helium.NewParser().SAXHandler(gotHandler)
 		pp := p2.NewPushParser(t.Context())
 		require.NoError(t, pp.Push(input))
-		_, err = pp.Flush()
+		_, err = pp.Close()
 		require.NoError(t, err)
 
 		require.Equal(t, wantBuf.String(), gotBuf.String())
@@ -119,7 +119,7 @@ func TestPushParser(t *testing.T) {
 		p := helium.NewParser()
 		pp := p.NewPushParser(t.Context())
 		require.NoError(t, pp.Push(input))
-		_, err := pp.Flush()
+		_, err := pp.Close()
 		require.Error(t, err)
 	})
 
@@ -131,7 +131,7 @@ func TestPushParser(t *testing.T) {
 		pp := p.NewPushParser(t.Context())
 		require.NoError(t, pp.Push(malformed))
 
-		_, err := pp.Flush()
+		_, err := pp.Close()
 		require.Error(t, err)
 
 		// Now pushing should return an error
@@ -143,7 +143,7 @@ func TestPushParser(t *testing.T) {
 		t.Parallel()
 		p := helium.NewParser()
 		pp := p.NewPushParser(t.Context())
-		_, err := pp.Flush()
+		_, err := pp.Close()
 		require.Error(t, err, "empty input should produce an error")
 	})
 
@@ -159,7 +159,7 @@ func TestPushParser(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(len(input)), n)
 
-		got, err := pp.Flush()
+		got, err := pp.Close()
 		require.NoError(t, err)
 		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
 	})
@@ -172,8 +172,8 @@ func TestPushParser(t *testing.T) {
 		pp := p.NewPushParser(t.Context())
 		require.NoError(t, pp.Push(input))
 
-		doc1, err1 := pp.Flush()
-		doc2, err2 := pp.Flush()
+		doc1, err1 := pp.Close()
+		doc2, err2 := pp.Close()
 
 		require.Equal(t, err1, err2)
 		require.Equal(t, doc1, doc2)
@@ -194,7 +194,7 @@ func TestPushParser(t *testing.T) {
 		pp := p.NewPushParser(t.Context())
 		require.NoError(t, pp.Push(input))
 
-		got, err := pp.Flush()
+		got, err := pp.Close()
 		require.NoError(t, err)
 		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
 	})
@@ -212,7 +212,7 @@ func TestPushParser(t *testing.T) {
 		pp := p.NewPushParser(t.Context())
 		require.NoError(t, pp.Push(input))
 
-		got, err := pp.Flush()
+		got, err := pp.Close()
 		require.NoError(t, err)
 		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
 	})
@@ -236,7 +236,7 @@ func TestPushParser(t *testing.T) {
 			require.NoError(t, pp.Push(input[i:end]))
 		}
 
-		got, err := pp.Flush()
+		got, err := pp.Close()
 		require.NoError(t, err)
 		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
 	})

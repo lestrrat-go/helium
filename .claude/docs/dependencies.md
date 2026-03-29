@@ -16,15 +16,16 @@ relaxng        → helium
 schematron     → helium, xpath1
 xpointer       → helium, xpath1
 c14n           → helium
-html           → helium, sax
+html           → helium, sax, push
 catalog        → helium, internal/catalog, internal/lexicon
 stream         → internal/encoding
 sax            → helium, enum
-helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, internal/stack
+helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)
 internal/icu   → (none)
+push → (none)
 internal/sequence → (none)
 internal/strcursor → (none)
 internal/unparsedtext → (none)
@@ -33,7 +34,7 @@ test           → helium
 ```
 
 ## Leaf packages (no helium deps)
-sink, enum, internal/bitset, internal/parser, internal/stack, internal/cliutil, internal/catalog, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/unparsedtext, internal/xsd/value
+sink, enum, internal/bitset, internal/parser, push, internal/stack, internal/cliutil, internal/catalog, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/unparsedtext, internal/xsd/value
 
 ## Core layer
 helium (root) → sax, enum, internal/*

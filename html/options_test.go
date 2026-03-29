@@ -235,9 +235,9 @@ func TestParseFileSetsURL(t *testing.T) {
 }
 
 func TestOptionsPushParserCarriesOptions(t *testing.T) {
-	pp := html.NewParser().SuppressImplied(true).NewPushParser()
+	pp := html.NewParser().SuppressImplied(true).NewPushParser(t.Context())
 	require.NoError(t, pp.Push([]byte(`<p>hello</p>`)))
-	doc, err := pp.Flush(t.Context())
+	doc, err := pp.Close()
 	require.NoError(t, err)
 
 	first := doc.FirstChild()

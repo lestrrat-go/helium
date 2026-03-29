@@ -22,9 +22,9 @@ func Example_helium_push_parser() {
 		return
 	}
 
-	doc, err := pp.Flush()
+	doc, err := pp.Close()
 	if err != nil {
-		fmt.Printf("flush failed: %s\n", err)
+		fmt.Printf("close failed: %s\n", err)
 		return
 	}
 

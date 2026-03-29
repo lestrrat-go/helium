@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lestrrat-go/helium/push"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
@@ -716,4 +717,18 @@ func collectInScopeNamespaces(elem *Element) []*Namespace {
 		cur = cur.Parent()
 	}
 	return result
+}
+
+// PushParser provides an incremental XML parsing interface
+// (libxml2: xmlParserCtxt in push mode).
+// Data is pushed via Push or Write, and the parser processes tokens as
+// they become available in a background goroutine. Call [PushParser.Close]
+// to signal end-of-input and retrieve the parsed Document.
+type PushParser = push.Parser[*Document]
+
+// NewPushParser creates a PushParser using the given Parser's configuration.
+// The parser runs in a background goroutine, reading from the internal
+// stream as data is pushed.
+func (p Parser) NewPushParser(ctx context.Context) *PushParser {
+	return push.New[*Document](ctx, p)
 }
