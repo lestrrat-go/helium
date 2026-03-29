@@ -143,7 +143,7 @@ func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *
 
 // findSignatureElement searches for the first ds:Signature element in the tree.
 func findSignatureElement(n helium.Node) *helium.Element {
-	elem, ok := n.(*helium.Element)
+	elem, ok := helium.AsNode[*helium.Element](n)
 	if !ok {
 		return nil
 	}
@@ -175,7 +175,7 @@ func elementNamespaceURI(e *helium.Element) string {
 			}
 			// Walk ancestors for the namespace declaration.
 			for p := e.Parent(); p != nil; p = p.Parent() {
-				if pe, ok := p.(*helium.Element); ok {
+				if pe, ok := helium.AsNode[*helium.Element](p); ok {
 					for _, ns := range pe.Namespaces() {
 						if ns.Prefix() == prefix {
 							return ns.URI()
@@ -193,7 +193,7 @@ func elementNamespaceURI(e *helium.Element) string {
 		}
 	}
 	for p := e.Parent(); p != nil; p = p.Parent() {
-		if pe, ok := p.(*helium.Element); ok {
+		if pe, ok := helium.AsNode[*helium.Element](p); ok {
 			for _, ns := range pe.Namespaces() {
 				if ns.Prefix() == "" {
 					return ns.URI()

@@ -90,7 +90,7 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 	// Temporarily detach the Signature element for enveloped signatures.
 	var sigParent *helium.Element
 	if hasEnveloped {
-		if p, ok := sigElem.Parent().(*helium.Element); ok {
+		if p, ok := helium.AsNode[*helium.Element](sigElem.Parent()); ok {
 			sigParent = p
 		}
 		helium.UnlinkNode(sigElem)
@@ -152,7 +152,7 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 	parsed := &parsedSignature{}
 
 	for child := sigElem.FirstChild(); child != nil; child = child.NextSibling() {
-		elem, ok := child.(*helium.Element)
+		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -186,7 +186,7 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 
 func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := child.(*helium.Element)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -219,14 +219,14 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 	ref.uri, _ = elem.GetAttribute("URI")
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := child.(*helium.Element)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
 		switch localName(e) {
 		case "Transforms":
 			for tc := e.FirstChild(); tc != nil; tc = tc.NextSibling() {
-				te, ok := tc.(*helium.Element)
+				te, ok := helium.AsNode[*helium.Element](tc)
 				if !ok {
 					continue
 				}
@@ -237,7 +237,7 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 				t := parsedTransform{algorithm: alg}
 				// Parse InclusiveNamespaces for Exclusive C14N.
 				for inc := te.FirstChild(); inc != nil; inc = inc.NextSibling() {
-					incElem, ok := inc.(*helium.Element)
+					incElem, ok := helium.AsNode[*helium.Element](inc)
 					if !ok {
 						continue
 					}

@@ -165,7 +165,8 @@ func TestDecryptInPlace(t *testing.T) {
 	doc := mustParseXML(t, xml)
 
 	// Encrypt the Assertion element.
-	assertion := doc.DocumentElement().FirstChild().(*helium.Element)
+	assertion, ok := helium.AsNode[*helium.Element](doc.DocumentElement().FirstChild())
+	require.True(t, ok)
 	encryptor := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES128GCM).
 		KeyTransportAlgorithm(xmlenc1.RSAOAEP).

@@ -114,7 +114,7 @@ func collectSubtreeNodes(n helium.Node) []helium.Node {
 		nodes = append(nodes, cur)
 		// Include attribute nodes for elements.
 		// Namespace nodes are handled internally by the c14n package.
-		if elem, ok := cur.(*helium.Element); ok {
+		if elem, ok := helium.AsNode[*helium.Element](cur); ok {
 			for _, attr := range elem.Attributes() {
 				nodes = append(nodes, attr)
 			}
@@ -161,7 +161,7 @@ func findElementByIDAttr(doc *helium.Document, id string) *helium.Element {
 		if found != nil {
 			return
 		}
-		elem, ok := n.(*helium.Element)
+		elem, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
 			return
 		}

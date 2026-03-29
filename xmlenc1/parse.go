@@ -15,7 +15,7 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 	ed.Type, _ = elem.GetAttribute("Type")
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := child.(*helium.Element)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -48,7 +48,7 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 
 func parseKeyInfoForEncryption(elem *helium.Element, ed *EncryptedData) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := child.(*helium.Element)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -71,7 +71,7 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 	ek.Recipient, _ = elem.GetAttribute("Recipient")
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := child.(*helium.Element)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -105,7 +105,7 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	em.Algorithm = alg
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := child.(*helium.Element)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -129,7 +129,7 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 
 func parseCipherData(elem *helium.Element) ([]byte, error) {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := child.(*helium.Element)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}

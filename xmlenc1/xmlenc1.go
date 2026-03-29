@@ -208,12 +208,12 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 	// Replace in tree.
 	if encType == TypeElement {
 		// Replace the element with EncryptedData.
-		if pe, ok := elem.Parent().(*helium.Element); ok {
+		if pe, ok := helium.AsNode[*helium.Element](elem.Parent()); ok {
 			if err := pe.AddChild(edElem); err != nil {
 				return nil, err
 			}
 			helium.UnlinkNode(elem)
-		} else if pd, ok := elem.Parent().(*helium.Document); ok {
+		} else if pd, ok := helium.AsNode[*helium.Document](elem.Parent()); ok {
 			if err := pd.AddChild(edElem); err != nil {
 				return nil, err
 			}
@@ -319,7 +319,7 @@ func (d Decryptor) DecryptInPlace(ctx context.Context, doc *helium.Document) err
 		}
 
 		// Insert decrypted nodes before EncryptedData, then remove it.
-		pe, ok := parent.(*helium.Element)
+		pe, ok := helium.AsNode[*helium.Element](parent)
 		if !ok {
 			continue
 		}
@@ -420,7 +420,7 @@ func findEncryptedDataElements(n helium.Node) []*helium.Element {
 	var result []*helium.Element
 	var walk func(helium.Node)
 	walk = func(cur helium.Node) {
-		elem, ok := cur.(*helium.Element)
+		elem, ok := helium.AsNode[*helium.Element](cur)
 		if !ok {
 			return
 		}

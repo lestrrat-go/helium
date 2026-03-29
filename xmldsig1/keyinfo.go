@@ -183,7 +183,7 @@ func (b *rsaKeyValueKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Documen
 func parseKeyInfo(keyInfoElem *helium.Element) (*KeyInfoData, error) {
 	data := &KeyInfoData{}
 	for child := keyInfoElem.FirstChild(); child != nil; child = child.NextSibling() {
-		elem, ok := child.(*helium.Element)
+		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -203,7 +203,7 @@ func parseKeyInfo(keyInfoElem *helium.Element) (*KeyInfoData, error) {
 
 func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		certElem, ok := child.(*helium.Element)
+		certElem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -226,7 +226,7 @@ func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
 
 func parseKeyValue(elem *helium.Element, data *KeyInfoData) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		kvElem, ok := child.(*helium.Element)
+		kvElem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -243,7 +243,7 @@ func parseKeyValue(elem *helium.Element, data *KeyInfoData) error {
 func parseRSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 	kv := &RSAKeyValueData{}
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := child.(*helium.Element)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -266,7 +266,7 @@ func parseRSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 	kv := &ECKeyValueData{}
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := child.(*helium.Element)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
