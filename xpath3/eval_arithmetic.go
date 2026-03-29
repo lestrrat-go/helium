@@ -8,12 +8,12 @@ import (
 	"time"
 )
 
-func evalArithmetic(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := evalFn(goCtx, ec, e.Left)
+func evalArithmetic(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(goCtx, ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -328,8 +328,8 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 	return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(result)}), nil
 }
 
-func evalUnaryExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e UnaryExpr) (Sequence, error) {
-	r, err := evalFn(goCtx, ec, e.Operand)
+func evalUnaryExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e UnaryExpr) (Sequence, error) {
+	r, err := evalFn(ctx, ec, e.Operand)
 	if err != nil {
 		return nil, err
 	}

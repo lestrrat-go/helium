@@ -16,18 +16,18 @@ import (
 // evalGeneralComparison implements general comparison (= != < <= > >=).
 // Per XPath 3.1 Section 3.7.1: atomize both operands, then existentially
 // quantify — true if ANY pair satisfies the value comparison.
-func evalGeneralComparison(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	if result, ok, err := evalGeneralComparisonAgainstRange(evalFn, goCtx, ec, e); ok {
+func evalGeneralComparison(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	if result, ok, err := evalGeneralComparisonAgainstRange(evalFn, ctx, ec, e); ok {
 		if err != nil {
 			return nil, err
 		}
 		return SingleBoolean(result), nil
 	}
-	left, err := evalFn(goCtx, ec, e.Left)
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(goCtx, ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -39,18 +39,18 @@ func evalGeneralComparison(evalFn exprEvaluator, goCtx context.Context, ec *eval
 	return SingleBoolean(result), nil
 }
 
-func evalGeneralComparisonAgainstRange(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e BinaryExpr) (bool, bool, error) {
+func evalGeneralComparisonAgainstRange(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (bool, bool, error) {
 	if re, ok := e.Right.(RangeExpr); ok {
-		return compareSingletonAgainstRange(evalFn, goCtx, ec, e.Op, e.Left, re, false)
+		return compareSingletonAgainstRange(evalFn, ctx, ec, e.Op, e.Left, re, false)
 	}
 	if re, ok := e.Left.(RangeExpr); ok {
-		return compareSingletonAgainstRange(evalFn, goCtx, ec, e.Op, e.Right, re, true)
+		return compareSingletonAgainstRange(evalFn, ctx, ec, e.Op, e.Right, re, true)
 	}
 	return false, false, nil
 }
 
-func compareSingletonAgainstRange(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, op TokenType, singletonExpr Expr, rangeExpr RangeExpr, rangeOnLeft bool) (bool, bool, error) {
-	singletonSeq, err := evalFn(goCtx, ec, singletonExpr)
+func compareSingletonAgainstRange(evalFn exprEvaluator, ctx context.Context, ec *evalContext, op TokenType, singletonExpr Expr, rangeExpr RangeExpr, rangeOnLeft bool) (bool, bool, error) {
+	singletonSeq, err := evalFn(ctx, ec, singletonExpr)
 	if err != nil {
 		return false, true, err
 	}
@@ -68,7 +68,7 @@ func compareSingletonAgainstRange(evalFn exprEvaluator, goCtx context.Context, e
 	if err != nil {
 		return false, false, nil //nolint:nilerr // non-integer subscript means no match
 	}
-	start, end, empty, err := evalRangeBounds(evalFn, goCtx, ec, rangeExpr)
+	start, end, empty, err := evalRangeBounds(evalFn, ctx, ec, rangeExpr)
 	if err != nil {
 		return false, true, err
 	}
@@ -82,12 +82,12 @@ func compareSingletonAgainstRange(evalFn exprEvaluator, goCtx context.Context, e
 	return compareRangeBounds(op, singletonInt.BigInt(), start, end, rangeOnLeft), true, nil
 }
 
-func evalRangeBounds(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e RangeExpr) (*big.Int, *big.Int, bool, error) {
-	startSeq, err := evalFn(goCtx, ec, e.Start)
+func evalRangeBounds(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e RangeExpr) (*big.Int, *big.Int, bool, error) {
+	startSeq, err := evalFn(ctx, ec, e.Start)
 	if err != nil {
 		return nil, nil, false, err
 	}
-	endSeq, err := evalFn(goCtx, ec, e.End)
+	endSeq, err := evalFn(ctx, ec, e.End)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -185,12 +185,12 @@ func compareRangeBounds(op TokenType, singleton, start, end *big.Int, rangeOnLef
 
 // evalValueComparison implements value comparison (eq ne lt le gt ge).
 // Per XPath 3.1 Section 3.7.2: both operands must be single atomic values.
-func evalValueComparison(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := evalFn(goCtx, ec, e.Left)
+func evalValueComparison(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(goCtx, ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -221,12 +221,12 @@ func evalValueComparison(evalFn exprEvaluator, goCtx context.Context, ec *evalCo
 	return SingleBoolean(result), nil
 }
 
-func evalNodeComparison(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := evalFn(goCtx, ec, e.Left)
+func evalNodeComparison(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(goCtx, ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}

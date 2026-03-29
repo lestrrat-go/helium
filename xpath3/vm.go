@@ -983,20 +983,20 @@ type vm struct {
 	program *vmProgram
 }
 
-func (p *vmProgram) execute(goCtx context.Context, ec *evalContext) (Sequence, error) {
+func (p *vmProgram) execute(ctx context.Context, ec *evalContext) (Sequence, error) {
 	machine := vm{program: p}
-	return machine.evalExpr(goCtx, ec, compiledExprRef{index: p.root})
+	return machine.evalExpr(ctx, ec, compiledExprRef{index: p.root})
 }
 
-func (v *vm) evalExpr(goCtx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
-	return evalWith(v.evalExprBody, goCtx, ec, expr)
+func (v *vm) evalExpr(ctx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
+	return evalWith(v.evalExprBody, ctx, ec, expr)
 }
 
-func (v *vm) evalExprBody(goCtx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
+func (v *vm) evalExprBody(ctx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
 	if ref, ok := expr.(compiledExprRef); ok {
-		return v.evalInstruction(goCtx, ec, ref)
+		return v.evalInstruction(ctx, ec, ref)
 	}
-	return dispatchExpr(v.evalExpr, goCtx, ec, expr)
+	return dispatchExpr(v.evalExpr, ctx, ec, expr)
 }
 
 // vmEvalPayload extracts a typed Expr payload from a VM instruction and
@@ -1009,7 +1009,7 @@ func vmEvalPayload[T Expr](inst vmInstruction, fn func(T) (Sequence, error)) (Se
 	return fn(e)
 }
 
-func (v *vm) evalInstruction(goCtx context.Context, ec *evalContext, ref compiledExprRef) (Sequence, error) {
+func (v *vm) evalInstruction(ctx context.Context, ec *evalContext, ref compiledExprRef) (Sequence, error) {
 	if ref.index < 0 || ref.index >= len(v.program.instructions) {
 		return nil, fmt.Errorf("%w: invalid VM instruction %d", ErrUnsupportedExpr, ref.index)
 	}
@@ -1018,73 +1018,73 @@ func (v *vm) evalInstruction(goCtx context.Context, ec *evalContext, ref compile
 	case vmOpLiteral:
 		return vmEvalPayload(inst, func(e LiteralExpr) (Sequence, error) { return evalLiteral(e) })
 	case vmOpVariable:
-		return vmEvalPayload(inst, func(e VariableExpr) (Sequence, error) { return evalVariable(goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e VariableExpr) (Sequence, error) { return evalVariable(ctx, ec, e) })
 	case vmOpRoot:
 		return evalRootExpr(ec)
 	case vmOpContextItem:
 		return evalContextItemExpr(ec)
 	case vmOpLocationPath:
-		return vmEvalPayload(inst, func(e vmLocationPathExpr) (Sequence, error) { return evalVMLocationPath(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e vmLocationPathExpr) (Sequence, error) { return evalVMLocationPath(v.evalExpr, ctx, ec, e) })
 	case vmOpBinary:
-		return vmEvalPayload(inst, func(e BinaryExpr) (Sequence, error) { return evalBinaryExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e BinaryExpr) (Sequence, error) { return evalBinaryExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpUnary:
-		return vmEvalPayload(inst, func(e UnaryExpr) (Sequence, error) { return evalUnaryExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e UnaryExpr) (Sequence, error) { return evalUnaryExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpConcat:
-		return vmEvalPayload(inst, func(e ConcatExpr) (Sequence, error) { return evalConcatExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e ConcatExpr) (Sequence, error) { return evalConcatExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpSimpleMap:
-		return vmEvalPayload(inst, func(e SimpleMapExpr) (Sequence, error) { return evalSimpleMapExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e SimpleMapExpr) (Sequence, error) { return evalSimpleMapExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpRange:
-		return vmEvalPayload(inst, func(e RangeExpr) (Sequence, error) { return evalRangeExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e RangeExpr) (Sequence, error) { return evalRangeExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpUnion:
-		return vmEvalPayload(inst, func(e UnionExpr) (Sequence, error) { return evalUnionExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e UnionExpr) (Sequence, error) { return evalUnionExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpIntersectExcept:
 		return vmEvalPayload(inst, func(e IntersectExceptExpr) (Sequence, error) {
-			return evalIntersectExceptExpr(v.evalExpr, goCtx, ec, e)
+			return evalIntersectExceptExpr(v.evalExpr, ctx, ec, e)
 		})
 	case vmOpFilter:
-		return vmEvalPayload(inst, func(e FilterExpr) (Sequence, error) { return evalFilterExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e FilterExpr) (Sequence, error) { return evalFilterExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpPath:
-		return vmEvalPayload(inst, func(e vmPathExpr) (Sequence, error) { return evalVMPathExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e vmPathExpr) (Sequence, error) { return evalVMPathExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpPathStep:
-		return vmEvalPayload(inst, func(e PathStepExpr) (Sequence, error) { return evalPathStepExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e PathStepExpr) (Sequence, error) { return evalPathStepExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpLookup:
-		return vmEvalPayload(inst, func(e LookupExpr) (Sequence, error) { return evalLookupExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e LookupExpr) (Sequence, error) { return evalLookupExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpUnaryLookup:
-		return vmEvalPayload(inst, func(e UnaryLookupExpr) (Sequence, error) { return evalUnaryLookupExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e UnaryLookupExpr) (Sequence, error) { return evalUnaryLookupExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpFLWOR:
-		return vmEvalPayload(inst, func(e FLWORExpr) (Sequence, error) { return evalFLWOR(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e FLWORExpr) (Sequence, error) { return evalFLWOR(v.evalExpr, ctx, ec, e) })
 	case vmOpQuantified:
-		return vmEvalPayload(inst, func(e QuantifiedExpr) (Sequence, error) { return evalQuantifiedExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e QuantifiedExpr) (Sequence, error) { return evalQuantifiedExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpIf:
-		return vmEvalPayload(inst, func(e IfExpr) (Sequence, error) { return evalIfExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e IfExpr) (Sequence, error) { return evalIfExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpTryCatch:
-		return vmEvalPayload(inst, func(e TryCatchExpr) (Sequence, error) { return evalTryCatchExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e TryCatchExpr) (Sequence, error) { return evalTryCatchExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpInstanceOf:
-		return vmEvalPayload(inst, func(e InstanceOfExpr) (Sequence, error) { return evalInstanceOfExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e InstanceOfExpr) (Sequence, error) { return evalInstanceOfExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpCast:
-		return vmEvalPayload(inst, func(e CastExpr) (Sequence, error) { return evalCastExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e CastExpr) (Sequence, error) { return evalCastExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpCastable:
-		return vmEvalPayload(inst, func(e CastableExpr) (Sequence, error) { return evalCastableExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e CastableExpr) (Sequence, error) { return evalCastableExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpTreatAs:
-		return vmEvalPayload(inst, func(e TreatAsExpr) (Sequence, error) { return evalTreatAsExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e TreatAsExpr) (Sequence, error) { return evalTreatAsExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpFunctionCall:
-		return vmEvalPayload(inst, func(e FunctionCall) (Sequence, error) { return evalFunctionCall(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e FunctionCall) (Sequence, error) { return evalFunctionCall(v.evalExpr, ctx, ec, e) })
 	case vmOpDynamicFunctionCall:
 		return vmEvalPayload(inst, func(e DynamicFunctionCall) (Sequence, error) {
-			return evalDynamicFunctionCall(v.evalExpr, goCtx, ec, e)
+			return evalDynamicFunctionCall(v.evalExpr, ctx, ec, e)
 		})
 	case vmOpNamedFunctionRef:
-		return vmEvalPayload(inst, func(e NamedFunctionRef) (Sequence, error) { return evalNamedFunctionRef(goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e NamedFunctionRef) (Sequence, error) { return evalNamedFunctionRef(ctx, ec, e) })
 	case vmOpInlineFunction:
-		return vmEvalPayload(inst, func(e InlineFunctionExpr) (Sequence, error) { return evalInlineFunctionExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e InlineFunctionExpr) (Sequence, error) { return evalInlineFunctionExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpMapConstructor:
-		return vmEvalPayload(inst, func(e MapConstructorExpr) (Sequence, error) { return evalMapConstructorExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e MapConstructorExpr) (Sequence, error) { return evalMapConstructorExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpArrayConstructor:
 		return vmEvalPayload(inst, func(e ArrayConstructorExpr) (Sequence, error) {
-			return evalArrayConstructorExpr(v.evalExpr, goCtx, ec, e)
+			return evalArrayConstructorExpr(v.evalExpr, ctx, ec, e)
 		})
 	case vmOpSequence:
-		return vmEvalPayload(inst, func(e SequenceExpr) (Sequence, error) { return evalSequenceExpr(v.evalExpr, goCtx, ec, e) })
+		return vmEvalPayload(inst, func(e SequenceExpr) (Sequence, error) { return evalSequenceExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpPlaceholder:
 		return nil, fmt.Errorf("%w: placeholder outside partial application", ErrUnsupportedExpr)
 	default:

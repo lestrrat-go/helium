@@ -11,15 +11,15 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
-func evalInstanceOfExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e InstanceOfExpr) (Sequence, error) {
-	seq, err := evalFn(goCtx, ec, e.Expr)
+func evalInstanceOfExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e InstanceOfExpr) (Sequence, error) {
+	seq, err := evalFn(ctx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
 	return SingleBoolean(matchesSequenceType(seq, e.Type, ec)), nil
 }
 
-func evalCastExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e CastExpr) (Sequence, error) {
+func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e CastExpr) (Sequence, error) {
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	if isAbstractCastTarget(targetType) {
 		return nil, &XPathError{
@@ -27,7 +27,7 @@ func evalCastExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, 
 			Message: fmt.Sprintf("cannot use abstract type %s as cast target", targetType),
 		}
 	}
-	seq, err := evalFn(goCtx, ec, e.Expr)
+	seq, err := evalFn(ctx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func evalCastExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, 
 				// Validate facets for user-defined types using Q{ns}local format.
 				s, _ := AtomicToString(result)
 				annName := QAnnotation(ns, e.Type.Name)
-				if facetErr := ec.schemaDeclarations.ValidateCast(goCtx, s, annName); facetErr != nil {
+				if facetErr := ec.schemaDeclarations.ValidateCast(ctx, s, annName); facetErr != nil {
 					return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 				}
 				result.TypeName = targetType
@@ -100,7 +100,7 @@ func evalCastExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, 
 	return SingleAtomic(result), nil
 }
 
-func evalCastableExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e CastableExpr) (Sequence, error) {
+func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e CastableExpr) (Sequence, error) {
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	// Abstract types raise a static error even for castable (XPST0080)
 	if isAbstractCastTarget(targetType) {
@@ -109,7 +109,7 @@ func evalCastableExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalConte
 			Message: fmt.Sprintf("cannot use abstract type %s as castable target", targetType),
 		}
 	}
-	seq, err := evalFn(goCtx, ec, e.Expr)
+	seq, err := evalFn(ctx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -167,13 +167,13 @@ func evalCastableExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalConte
 					av.TypeName == TypeQName || av.TypeName == TypeNOTATION || isQV
 				if srcOK {
 					s, _ := AtomicToString(av)
-					castErr = ec.schemaDeclarations.ValidateCastWithNS(goCtx, s, annName, ec.namespaces)
+					castErr = ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, ec.namespaces)
 				}
 			} else {
 				result, baseErr := CastAtomic(av, builtinBase)
 				if baseErr == nil {
 					s, _ := AtomicToString(result)
-					castErr = ec.schemaDeclarations.ValidateCast(goCtx, s, annName)
+					castErr = ec.schemaDeclarations.ValidateCast(ctx, s, annName)
 				} else {
 					castErr = baseErr
 				}
@@ -208,8 +208,8 @@ func isValidListCastable(s string, listType string) bool {
 	return true
 }
 
-func evalTreatAsExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e TreatAsExpr) (Sequence, error) {
-	seq, err := evalFn(goCtx, ec, e.Expr)
+func evalTreatAsExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e TreatAsExpr) (Sequence, error) {
+	seq, err := evalFn(ctx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}

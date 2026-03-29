@@ -152,11 +152,11 @@ func (r *Result) IsString() (string, bool) {
 	return s, ok
 }
 
-func (e *Expression) evaluate(goCtx context.Context, ec *evalContext) (Sequence, error) {
+func (e *Expression) evaluate(ctx context.Context, ec *evalContext) (Sequence, error) {
 	if err := e.requireCompiledProgram(); err != nil {
 		return nil, err
 	}
-	return e.program.execute(goCtx, ec)
+	return e.program.execute(ctx, ec)
 }
 
 func (e *Expression) astExpr() Expr {
