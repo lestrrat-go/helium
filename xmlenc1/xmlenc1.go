@@ -382,4 +382,3 @@ func resolveSessionKey(cfg *decryptConfig, ed *EncryptedData) ([]byte, error) {
 		return nil, &UnsupportedAlgorithmError{Algorithm: alg}
 	}
 }
-
