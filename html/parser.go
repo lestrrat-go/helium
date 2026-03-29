@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strconv"
 	"strings"
@@ -48,6 +49,11 @@ type parser struct {
 	// Empty means UTF-8 (no conversion was needed). "ISO-8859-1" means the
 	// input was Latin-1/Windows-1252 and was converted to UTF-8 for parsing.
 	detectedEncoding string
+
+	// encodingSanitizer is non-nil when using the streaming reader path
+	// (newParserFromReader). It is queried for deferred encoding error
+	// position when the first U+FFFD is encountered in emitCharacters.
+	encodingSanitizer *utf8SanitizeReader
 
 	cfg parseConfig
 }
@@ -117,6 +123,25 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 		encodingErrorLine: encErrLine,
 		encodingErrorCol:  encErrCol,
 		detectedEncoding:  detectedEnc,
+		cfg:               cfg,
+	}
+	p.locator = &parserLocator{p: p}
+	return p
+}
+
+// newParserFromReader creates a parser that reads from an io.Reader using
+// streaming encoding wrappers. Unlike newParser (which pre-processes the
+// entire []byte), this chains io.Reader wrappers for newline normalization
+// and encoding conversion, feeding the result directly into the cursor.
+func newParserFromReader(_ context.Context, r io.Reader, sax SAXHandler, cfg parseConfig) *parser {
+	wrapped, detectedEnc, sanitizer := wrapReaderForHTML(r)
+
+	p := &parser{
+		cur:               strcursor.NewUTF8Cursor(wrapped),
+		sax:               sax,
+		mode:              insertInitial,
+		detectedEncoding:  detectedEnc,
+		encodingSanitizer: sanitizer,
 		cfg:               cfg,
 	}
 	p.locator = &parserLocator{p: p}
@@ -877,15 +902,26 @@ func (p *parser) emitCharacters(data []byte) error {
 			return nil
 		}
 	}
-	if p.encodingError && bytes.ContainsRune(data, '\uFFFD') {
-		// Temporarily override line/col so the DocumentLocator reports
-		// the position of the first invalid byte in the original input.
-		p.locator.overLine = p.encodingErrorLine
-		p.locator.overCol = p.encodingErrorCol
-		_ = p.emitError("Invalid bytes in character encoding")
-		p.locator.overLine = 0
-		p.locator.overCol = 0
-		p.encodingError = false
+	if bytes.ContainsRune(data, '\uFFFD') {
+		if p.encodingError {
+			// Batch path: error position was computed during pre-processing.
+			p.locator.overLine = p.encodingErrorLine
+			p.locator.overCol = p.encodingErrorCol
+			_ = p.emitError("Invalid bytes in character encoding")
+			p.locator.overLine = 0
+			p.locator.overCol = 0
+			p.encodingError = false
+		} else if p.encodingSanitizer != nil {
+			// Streaming path: query sanitizer for deferred error position.
+			if hasErr, line, col := p.encodingSanitizer.EncodingError(); hasErr {
+				p.locator.overLine = line
+				p.locator.overCol = col
+				_ = p.emitError("Invalid bytes in character encoding")
+				p.locator.overLine = 0
+				p.locator.overCol = 0
+				p.encodingSanitizer = nil
+			}
+		}
 	}
 	return p.sax.Characters(data)
 }

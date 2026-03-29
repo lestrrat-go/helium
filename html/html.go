@@ -80,15 +80,19 @@ func (p Parser) parseConfig() parseConfig {
 	return p.cfg.parseConfig
 }
 
-// ParseReader reads all data from r and parses it as HTML.
-// The HTML parser requires the complete input before parsing begins,
-// so all bytes are read into memory first.
+// ParseReader parses HTML from an io.Reader. The input is streamed through
+// encoding detection and normalization wrappers without reading it all into
+// memory first.
 func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*helium.Document, error) {
-	data, err := io.ReadAll(r)
-	if err != nil {
+	tb := newTreeBuilder()
+	hp := newParserFromReader(ctx, r, tb, p.parseConfig())
+	if err := hp.parse(ctx); err != nil {
 		return nil, err
 	}
-	return p.Parse(ctx, data)
+	if enc := hp.detectedEncoding; enc != "" {
+		tb.doc.SetEncoding(enc)
+	}
+	return tb.doc, nil
 }
 
 // Parse parses HTML data and returns a helium Document.
@@ -144,11 +148,7 @@ func (p Parser) withSAXHandler(h SAXHandler) saxParser {
 }
 
 func (sp saxParser) ParseReader(ctx context.Context, r io.Reader) (*helium.Document, error) {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-	hp := newParser(ctx, data, sp.handler, sp.parser.parseConfig())
+	hp := newParserFromReader(ctx, r, sp.handler, sp.parser.parseConfig())
 	return nil, hp.parse(ctx)
 }
 
