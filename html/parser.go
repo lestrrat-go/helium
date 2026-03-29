@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/lestrrat-go/helium/internal/strcursor"
 )
 
 // insertMode tracks the parser's insertion context.
@@ -21,10 +24,7 @@ const (
 
 // parser is the HTML parser. It drives the tokenizer and fires SAX events.
 type parser struct {
-	input []byte
-	pos   int
-	line  int
-	col   int
+	cur *strcursor.UTF8Cursor
 
 	sax       SAXHandler
 	nameStack []string // open element name stack
@@ -50,16 +50,34 @@ type parser struct {
 	// input was Latin-1/Windows-1252 and was converted to UTF-8 for parsing.
 	detectedEncoding string
 
+	// encodingSanitizer is non-nil when using the streaming reader path
+	// (newParserFromReader). It is queried for deferred encoding error
+	// position when the first U+FFFD is encountered in emitCharacters.
+	encodingSanitizer *utf8SanitizeReader
+
 	cfg parseConfig
 }
 
 // parserLocator implements DocumentLocator.
 type parserLocator struct {
-	p *parser
+	p        *parser
+	overLine int // 0 = use cursor
+	overCol  int
 }
 
-func (l *parserLocator) LineNumber() int   { return l.p.line }
-func (l *parserLocator) ColumnNumber() int { return l.p.col }
+func (l *parserLocator) LineNumber() int {
+	if l.overLine > 0 {
+		return l.overLine
+	}
+	return l.p.cur.LineNumber()
+}
+
+func (l *parserLocator) ColumnNumber() int {
+	if l.overCol > 0 {
+		return l.overCol
+	}
+	return l.p.cur.Column()
+}
 
 // GetPublicID returns the public identifier of the document being parsed (libxml2: xmlSAXLocator.getPublicId).
 func (l *parserLocator) GetPublicID() string { return "" }
@@ -98,16 +116,32 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 	}
 
 	p := &parser{
-		input:             normalized,
-		pos:               0,
-		line:              1,
-		col:               1,
+		cur:               strcursor.NewUTF8Cursor(bytes.NewReader(normalized)),
 		sax:               sax,
 		mode:              insertInitial,
 		encodingError:     encodingErr,
 		encodingErrorLine: encErrLine,
 		encodingErrorCol:  encErrCol,
 		detectedEncoding:  detectedEnc,
+		cfg:               cfg,
+	}
+	p.locator = &parserLocator{p: p}
+	return p
+}
+
+// newParserFromReader creates a parser that reads from an io.Reader using
+// streaming encoding wrappers. Unlike newParser (which pre-processes the
+// entire []byte), this chains io.Reader wrappers for newline normalization
+// and encoding conversion, feeding the result directly into the cursor.
+func newParserFromReader(_ context.Context, r io.Reader, sax SAXHandler, cfg parseConfig) *parser {
+	wrapped, detectedEnc, sanitizer := wrapReaderForHTML(r)
+
+	p := &parser{
+		cur:               strcursor.NewUTF8Cursor(wrapped),
+		sax:               sax,
+		mode:              insertInitial,
+		detectedEncoding:  detectedEnc,
+		encodingSanitizer: sanitizer,
 		cfg:               cfg,
 	}
 	p.locator = &parserLocator{p: p}
@@ -237,50 +271,11 @@ func declaredCharsetIsLatin1(data []byte) bool {
 		bytes.Contains(lower, []byte("charset=\"iso-8859-1\""))
 }
 
-// peek returns the byte at the current position, or 0 if at end.
-func (p *parser) peek() byte {
-	if p.pos >= len(p.input) {
-		return 0
-	}
-	return p.input[p.pos]
-}
-
-// peekAt returns the byte at pos+offset, or 0 if out of bounds.
-func (p *parser) peekAt(offset int) byte {
-	idx := p.pos + offset
-	if idx >= len(p.input) || idx < 0 {
-		return 0
-	}
-	return p.input[idx]
-}
-
-// advance moves forward by n bytes, updating line/col tracking.
-func (p *parser) advance(n int) {
-	for range n {
-		if p.pos >= len(p.input) {
-			break
-		}
-		if p.input[p.pos] == '\n' {
-			p.line++
-			p.col = 1
-		} else {
-			p.col++
-		}
-		p.pos++
-	}
-}
-
-// remaining returns the remaining input from current position.
-func (p *parser) remaining() []byte {
-	if p.pos >= len(p.input) {
-		return nil
-	}
-	return p.input[p.pos:]
-}
-
-// atEnd returns true if the parser has consumed all input.
-func (p *parser) atEnd() bool {
-	return p.pos >= len(p.input)
+// hasPrefixFold checks if the current input starts with the given prefix
+// (case-insensitive comparison).
+func (p *parser) hasPrefixFold(prefix string) bool {
+	got := p.cur.PeekString(len(prefix))
+	return len(got) == len(prefix) && strings.EqualFold(got, prefix)
 }
 
 // currentName returns the name on top of the element stack.
@@ -442,31 +437,31 @@ func (p *parser) parse(ctx context.Context) error {
 	_ = p.sax.SetDocumentLocator(p.locator)
 	_ = p.sax.StartDocument()
 
-	for !p.atEnd() {
+	for !p.cur.Done() {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if p.peek() == '<' {
-			if p.peekAt(1) == '/' {
+		if p.cur.Peek() == '<' {
+			if p.cur.PeekAt(1) == '/' {
 				p.parseEndTag()
-			} else if p.peekAt(1) == '!' {
-				if p.peekAt(2) == '-' && p.peekAt(3) == '-' {
+			} else if p.cur.PeekAt(1) == '!' {
+				if p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
 					p.parseComment()
-				} else if matchCaseInsensitive(p.remaining(), "<!DOCTYPE") {
+				} else if p.hasPrefixFold("<!DOCTYPE") {
 					p.parseDoctype()
 				} else {
 					// Bogus comment or similar — treat as comment
 					p.parseBogusComment()
 				}
-			} else if p.peekAt(1) == '?' {
+			} else if p.cur.PeekAt(1) == '?' {
 				// Processing instruction — in HTML mode, treated as comment
 				p.parsePI()
-			} else if isASCIIAlpha(p.peekAt(1)) {
+			} else if isASCIIAlpha(p.cur.PeekAt(1)) {
 				p.parseStartTag()
 			} else {
 				// Lone '<' — emit as character data
 				_ = p.emitCharacters([]byte("<"))
-				p.advance(1)
+				_ = p.cur.Advance(1)
 			}
 		} else {
 			p.parseCharacters()
@@ -480,7 +475,7 @@ func (p *parser) parse(ctx context.Context) error {
 
 // parseStartTag parses an HTML start tag: <tagname attrs...>
 func (p *parser) parseStartTag() {
-	p.advance(1) // skip '<'
+	_ = p.cur.Advance(1) // skip '<'
 
 	name := p.parseName()
 	if name == "" {
@@ -496,11 +491,11 @@ func (p *parser) parseStartTag() {
 
 	// Skip whitespace and close
 	p.skipWhitespace()
-	if p.peek() == '/' {
-		p.advance(1) // skip '/'
+	if p.cur.Peek() == '/' {
+		_ = p.cur.Advance(1) // skip '/'
 	}
-	if p.peek() == '>' {
-		p.advance(1) // skip '>'
+	if p.cur.Peek() == '>' {
+		_ = p.cur.Advance(1) // skip '>'
 	}
 
 	// Auto-close and implied element handling
@@ -540,7 +535,7 @@ func (p *parser) parseStartTag() {
 
 // parseEndTag parses an HTML end tag: </tagname>
 func (p *parser) parseEndTag() {
-	p.advance(2) // skip '</'
+	_ = p.cur.Advance(2) // skip '</'
 
 	name := p.parseName()
 	name = strings.ToLower(name)
@@ -549,8 +544,8 @@ func (p *parser) parseEndTag() {
 	// but before '>' indicate a malformed tag (e.g., </font<).
 	malformed := false
 	var junkChar byte
-	if !p.atEnd() && p.peek() != '>' {
-		ch := p.peek()
+	if !p.cur.Done() && p.cur.Peek() != '>' {
+		ch := p.cur.Peek()
 		if ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r' {
 			malformed = true
 			junkChar = ch
@@ -558,11 +553,11 @@ func (p *parser) parseEndTag() {
 	}
 
 	// Skip to closing '>'
-	for !p.atEnd() && p.peek() != '>' {
-		p.advance(1)
+	for !p.cur.Done() && p.cur.Peek() != '>' {
+		_ = p.cur.Advance(1)
 	}
-	if p.peek() == '>' {
-		p.advance(1)
+	if p.cur.Peek() == '>' {
+		_ = p.cur.Advance(1)
 	}
 
 	if name == "" {
@@ -603,84 +598,99 @@ func (p *parser) parseEndTag() {
 
 // parseComment parses an HTML comment: <!-- ... -->
 func (p *parser) parseComment() {
-	p.advance(4) // skip '<!--'
+	_ = p.cur.Advance(4) // skip '<!--'
 
 	// Handle short comments: <!-->  and <!--->
-	if p.peek() == '>' {
+	if p.cur.Peek() == '>' {
 		// <!-->  — empty comment
-		p.advance(1)
+		_ = p.cur.Advance(1)
 		_ = p.sax.Comment(nil)
 		return
 	}
-	if p.peek() == '-' && p.peekAt(1) == '>' {
+	if p.cur.Peek() == '-' && p.cur.PeekAt(1) == '>' {
 		// <!---> — empty comment
-		p.advance(2)
+		_ = p.cur.Advance(2)
 		_ = p.sax.Comment(nil)
 		return
 	}
 
-	start := p.pos
-	for !p.atEnd() {
+	n := 0
+	for {
+		b := p.cur.PeekAt(n)
+		if b == 0 {
+			break
+		}
 		// Check for end of comment: -->
-		if p.peek() == '-' && p.peekAt(1) == '-' && p.peekAt(2) == '>' {
-			data := p.input[start:p.pos]
-			p.advance(3) // skip '-->'
-			_ = p.sax.Comment(data)
+		if b == '-' && p.cur.PeekAt(n+1) == '-' && p.cur.PeekAt(n+2) == '>' {
+			data := p.cur.PeekString(n)
+			_ = p.cur.Advance(n + 3) // skip data + '-->'
+			_ = p.sax.Comment([]byte(data))
 			return
 		}
 		// Also handle incorrectly closed comment: --!>
-		if p.peek() == '-' && p.peekAt(1) == '-' && p.peekAt(2) == '!' && p.peekAt(3) == '>' {
-			data := p.input[start:p.pos]
-			p.advance(4) // skip '--!>'
-			_ = p.sax.Comment(data)
+		if b == '-' && p.cur.PeekAt(n+1) == '-' && p.cur.PeekAt(n+2) == '!' && p.cur.PeekAt(n+3) == '>' {
+			data := p.cur.PeekString(n)
+			_ = p.cur.Advance(n + 4) // skip data + '--!>'
+			_ = p.sax.Comment([]byte(data))
 			return
 		}
-		p.advance(1)
+		n++
 	}
 
 	// Unterminated comment — emit everything as comment
-	data := p.input[start:p.pos]
-	_ = p.sax.Comment(data)
+	data := p.cur.PeekString(n)
+	_ = p.cur.Advance(n)
+	_ = p.sax.Comment([]byte(data))
 }
 
 // parseBogusComment parses a bogus comment: <! ... >
 func (p *parser) parseBogusComment() {
-	p.advance(2) // skip '<!'
-	start := p.pos
-	for !p.atEnd() && p.peek() != '>' {
-		p.advance(1)
+	_ = p.cur.Advance(2) // skip '<!'
+	n := 0
+	for {
+		b := p.cur.PeekAt(n)
+		if b == 0 || b == '>' {
+			break
+		}
+		n++
 	}
-	data := p.input[start:p.pos]
-	if p.peek() == '>' {
-		p.advance(1)
+	data := p.cur.PeekString(n)
+	_ = p.cur.Advance(n)
+	if p.cur.Peek() == '>' {
+		_ = p.cur.Advance(1)
 	}
-	_ = p.sax.Comment(data)
+	_ = p.sax.Comment([]byte(data))
 }
 
 // parsePI parses a processing instruction in HTML mode.
 // In HTML, <?...> is treated as a comment by libxml2.
 func (p *parser) parsePI() {
 	// libxml2 emits the entire <?...> content as a comment (without the < and >).
-	start := p.pos
-	p.advance(1) // skip '<' — keep the '?' as part of comment content
+	_ = p.cur.Advance(1) // skip '<' — keep the '?' as part of comment content
 
-	for !p.atEnd() {
-		if p.peek() == '>' {
-			data := p.input[start+1 : p.pos] // skip the '<', include '?'
-			p.advance(1)                     // skip '>'
-			_ = p.sax.Comment(data)
+	n := 0
+	for {
+		b := p.cur.PeekAt(n)
+		if b == 0 {
+			break
+		}
+		if b == '>' {
+			data := p.cur.PeekString(n)
+			_ = p.cur.Advance(n + 1) // skip data + '>'
+			_ = p.sax.Comment([]byte(data))
 			return
 		}
-		p.advance(1)
+		n++
 	}
-	data := p.input[start+1 : p.pos]
-	_ = p.sax.Comment(data)
+	data := p.cur.PeekString(n)
+	_ = p.cur.Advance(n)
+	_ = p.sax.Comment([]byte(data))
 }
 
 // parseDoctype parses a DOCTYPE declaration.
 func (p *parser) parseDoctype() {
 	// Skip <!DOCTYPE
-	p.advance(9)
+	_ = p.cur.Advance(9)
 	p.skipWhitespace()
 
 	// Parse root element name
@@ -691,25 +701,24 @@ func (p *parser) parseDoctype() {
 	systemID := ""
 
 	// Check for PUBLIC or SYSTEM
-	rest := string(p.remaining())
-	if strings.HasPrefix(strings.ToUpper(rest), "PUBLIC") {
-		p.advance(6)
+	if p.hasPrefixFold("PUBLIC") {
+		_ = p.cur.Advance(6)
 		p.skipWhitespace()
 		externalID = p.parseQuotedString()
 		p.skipWhitespace()
 		systemID = p.parseQuotedString()
-	} else if strings.HasPrefix(strings.ToUpper(rest), "SYSTEM") {
-		p.advance(6)
+	} else if p.hasPrefixFold("SYSTEM") {
+		_ = p.cur.Advance(6)
 		p.skipWhitespace()
 		systemID = p.parseQuotedString()
 	}
 
 	// Skip to '>'
-	for !p.atEnd() && p.peek() != '>' {
-		p.advance(1)
+	for !p.cur.Done() && p.cur.Peek() != '>' {
+		_ = p.cur.Advance(1)
 	}
-	if p.peek() == '>' {
-		p.advance(1)
+	if p.cur.Peek() == '>' {
+		_ = p.cur.Advance(1)
 	}
 
 	_ = p.sax.InternalSubset(name, externalID, systemID)
@@ -721,29 +730,34 @@ func (p *parser) parseCharacters() {
 	// We need to split at whitespace→non-whitespace boundaries when inside
 	// <head> so that whitespace is emitted in <head> and non-whitespace
 	// triggers head-close + body-open.
-	start := p.pos
 	inHead := p.currentName() == "head"
 
-	for !p.atEnd() && p.peek() != '<' && p.peek() != '&' {
-		b := p.peek()
+	n := 0
+	for {
+		b := p.cur.PeekAt(n)
+		if b == 0 || b == '<' || b == '&' {
+			break
+		}
 		if inHead && !isWhitespaceByte(b) {
 			// Non-whitespace while inside head — break here to emit
 			// the preceding whitespace in head, then handle the rest
 			break
 		}
-		p.advance(1)
+		n++
 	}
 
-	if p.pos > start {
-		text := p.input[start:p.pos]
-		if !isAllWhitespace(text) {
+	if n > 0 {
+		text := p.cur.PeekString(n)
+		_ = p.cur.Advance(n)
+		textBytes := []byte(text)
+		if !isAllWhitespace(textBytes) {
 			p.htmlStartCharData()
 		}
 		// Suppress whitespace before the root element has been seen
-		if !p.sawRoot && isAllWhitespace(text) {
+		if !p.sawRoot && isAllWhitespace(textBytes) {
 			return
 		}
-		_ = p.emitCharacters(text)
+		_ = p.emitCharacters(textBytes)
 
 		// After emitting whitespace in head, continue to collect the
 		// non-whitespace part (which will trigger head close on next call)
@@ -751,23 +765,29 @@ func (p *parser) parseCharacters() {
 	}
 
 	// If we're at a non-whitespace char (after whitespace in head), collect it
-	if !p.atEnd() && p.peek() != '<' && p.peek() != '&' {
-		start = p.pos
-		for !p.atEnd() && p.peek() != '<' && p.peek() != '&' {
-			p.advance(1)
+	if !p.cur.Done() && p.cur.Peek() != '<' && p.cur.Peek() != '&' {
+		n = 0
+		for {
+			b := p.cur.PeekAt(n)
+			if b == 0 || b == '<' || b == '&' {
+				break
+			}
+			n++
 		}
-		if p.pos > start {
-			text := p.input[start:p.pos]
-			if !isAllWhitespace(text) {
+		if n > 0 {
+			text := p.cur.PeekString(n)
+			_ = p.cur.Advance(n)
+			textBytes := []byte(text)
+			if !isAllWhitespace(textBytes) {
 				p.htmlStartCharData()
 			}
-			_ = p.emitCharacters(text)
+			_ = p.emitCharacters(textBytes)
 		}
 		return
 	}
 
 	// Handle entity references in character data
-	if !p.atEnd() && p.peek() == '&' {
+	if !p.cur.Done() && p.cur.Peek() == '&' {
 		p.parseCharRef()
 	}
 }
@@ -789,13 +809,13 @@ func (p *parser) parseCharRef() {
 	// Entity content is non-whitespace — ensure implied elements
 	p.htmlStartCharData()
 
-	p.advance(1) // skip '&'
+	_ = p.cur.Advance(1) // skip '&'
 
-	if p.peek() == '#' {
-		p.advance(1) // skip '#'
+	if p.cur.Peek() == '#' {
+		_ = p.cur.Advance(1) // skip '#'
 		var codepoint int
-		if p.peek() == 'x' || p.peek() == 'X' {
-			p.advance(1) // skip 'x'
+		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
+			_ = p.cur.Advance(1) // skip 'x'
 			hexStr := p.parseWhile(isHexDigit)
 			codepoint64, err := strconv.ParseInt(hexStr, 16, 32)
 			if err == nil {
@@ -808,8 +828,8 @@ func (p *parser) parseCharRef() {
 				codepoint = int(codepoint64)
 			}
 		}
-		if p.peek() == ';' {
-			p.advance(1)
+		if p.cur.Peek() == ';' {
+			_ = p.cur.Advance(1)
 		}
 		if codepoint > 0 {
 			var buf [4]byte
@@ -820,12 +840,11 @@ func (p *parser) parseCharRef() {
 	}
 
 	// Named entity
-	nameStart := p.pos
 	name := p.parseWhile(isAlphanumeric)
 	hasSemicolon := false
-	if p.peek() == ';' {
+	if p.cur.Peek() == ';' {
 		hasSemicolon = true
-		p.advance(1)
+		_ = p.cur.Advance(1)
 	}
 
 	if name != "" {
@@ -859,7 +878,10 @@ func (p *parser) parseCharRef() {
 	}
 
 	// Unknown entity — emit as literal text
-	text := "&" + string(p.input[nameStart:p.pos])
+	text := "&" + name
+	if hasSemicolon {
+		text += ";"
+	}
 	_ = p.emitCharacters([]byte(text))
 }
 
@@ -880,14 +902,26 @@ func (p *parser) emitCharacters(data []byte) error {
 			return nil
 		}
 	}
-	if p.encodingError && bytes.ContainsRune(data, '\uFFFD') {
-		// Temporarily override line/col so the DocumentLocator reports
-		// the position of the first invalid byte in the original input.
-		savedLine, savedCol := p.line, p.col
-		p.line, p.col = p.encodingErrorLine, p.encodingErrorCol
-		_ = p.emitError("Invalid bytes in character encoding")
-		p.line, p.col = savedLine, savedCol
-		p.encodingError = false
+	if bytes.ContainsRune(data, '\uFFFD') {
+		if p.encodingError {
+			// Batch path: error position was computed during pre-processing.
+			p.locator.overLine = p.encodingErrorLine
+			p.locator.overCol = p.encodingErrorCol
+			_ = p.emitError("Invalid bytes in character encoding")
+			p.locator.overLine = 0
+			p.locator.overCol = 0
+			p.encodingError = false
+		} else if p.encodingSanitizer != nil {
+			// Streaming path: query sanitizer for deferred error position.
+			if hasErr, line, col := p.encodingSanitizer.EncodingError(); hasErr {
+				p.locator.overLine = line
+				p.locator.overCol = col
+				_ = p.emitError("Invalid bytes in character encoding")
+				p.locator.overLine = 0
+				p.locator.overCol = 0
+				p.encodingSanitizer = nil
+			}
+		}
 	}
 	return p.sax.Characters(data)
 }
@@ -923,82 +957,78 @@ const (
 func (p *parser) parseRawContent(tagName string) {
 	endTag := "</" + tagName
 	startTag := "<" + tagName
-	start := p.pos
 	isScript := tagName == "script"
 	state := scriptNormal
+	var content bytes.Buffer
 
-	for !p.atEnd() {
+	for !p.cur.Done() {
 		// Check for <!-- to enter escaped state
-		if isScript && state == scriptNormal && p.peek() == '<' && p.peekAt(1) == '!' &&
-			p.peekAt(2) == '-' && p.peekAt(3) == '-' {
+		if isScript && state == scriptNormal && p.cur.Peek() == '<' && p.cur.PeekAt(1) == '!' &&
+			p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
 			state = scriptEscaped
-			p.advance(4)
+			content.WriteString(p.cur.PeekString(4))
+			_ = p.cur.Advance(4)
 			continue
 		}
 
 		// Check for --> to exit escaped/double-escaped state
-		if isScript && state != scriptNormal && p.peek() == '-' && p.peekAt(1) == '-' && p.peekAt(2) == '>' {
+		if isScript && state != scriptNormal && p.cur.Peek() == '-' && p.cur.PeekAt(1) == '-' && p.cur.PeekAt(2) == '>' {
 			state = scriptNormal
-			p.advance(3)
+			content.WriteString(p.cur.PeekString(3))
+			_ = p.cur.Advance(3)
 			continue
 		}
 
 		// Check for <script to enter double-escaped state (only from escaped)
-		if isScript && state == scriptEscaped && p.peek() == '<' && p.peekAt(1) != '/' {
-			remaining := p.remaining()
-			if len(remaining) >= len(startTag) &&
-				strings.EqualFold(string(remaining[:len(startTag)]), startTag) {
+		if isScript && state == scriptEscaped && p.cur.Peek() == '<' && p.cur.PeekAt(1) != '/' {
+			if p.hasPrefixFold(startTag) {
 				// Check next char is >, whitespace, or end of tag
 				afterTag := len(startTag)
-				if p.pos+afterTag >= len(p.input) || !isNameChar(p.input[p.pos+afterTag]) {
+				if p.cur.PeekAt(afterTag) == 0 || !isNameChar(p.cur.PeekAt(afterTag)) {
 					state = scriptDoubleEscaped
-					p.advance(afterTag)
+					content.WriteString(p.cur.PeekString(afterTag))
+					_ = p.cur.Advance(afterTag)
 					continue
 				}
 			}
 		}
 
 		// Check for </script> end tag
-		if p.peek() == '<' && p.peekAt(1) == '/' {
-			remaining := p.remaining()
-			if len(remaining) >= len(endTag) &&
-				strings.EqualFold(string(remaining[:len(endTag)]), endTag) {
+		if p.cur.Peek() == '<' && p.cur.PeekAt(1) == '/' {
+			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
 				validEnd := false
-				if p.pos+afterTag >= len(p.input) {
+				switch p.cur.PeekAt(afterTag) {
+				case 0, '>', ' ', '\t', '\n', '\r':
 					validEnd = true
-				} else {
-					ch := p.input[p.pos+afterTag]
-					if ch == '>' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
-						validEnd = true
-					}
 				}
 				if validEnd {
 					if state == scriptDoubleEscaped {
 						// In double-escaped, </script> returns to escaped
 						state = scriptEscaped
-						p.advance(afterTag)
-						if p.peek() == '>' {
-							p.advance(1)
+						content.WriteString(p.cur.PeekString(afterTag))
+						_ = p.cur.Advance(afterTag)
+						if p.cur.Peek() == '>' {
+							content.WriteByte('>')
+							_ = p.cur.Advance(1)
 						}
 						continue
 					}
 					// In normal or escaped state, </script> closes the element
-					content := p.input[start:p.pos]
-					if len(content) > 0 {
-						_ = p.sax.CDataBlock(content)
+					if content.Len() > 0 {
+						_ = p.sax.CDataBlock(content.Bytes())
 					}
 					return // Let the main loop handle the end tag
 				}
 			}
 		}
-		p.advance(1)
+		content.WriteByte(p.cur.Peek())
+		_ = p.cur.Advance(1)
 	}
 
 	// Unterminated — emit everything as cdata
-	content := p.input[start:p.pos]
-	if len(content) > 0 {
-		_ = p.sax.CDataBlock(content)
+	if content.Len() > 0 {
+		_ = p.sax.CDataBlock(content.Bytes())
 	}
 }
 
@@ -1007,41 +1037,42 @@ func (p *parser) parseRawContent(tagName string) {
 func (p *parser) parseRCDATAContent(tagName string) {
 	endTag := "</" + tagName
 
-	for !p.atEnd() {
-		if p.peek() == '<' && p.peekAt(1) == '/' {
-			remaining := p.remaining()
-			if len(remaining) >= len(endTag) &&
-				strings.EqualFold(string(remaining[:len(endTag)]), endTag) {
+	for !p.cur.Done() {
+		if p.cur.Peek() == '<' && p.cur.PeekAt(1) == '/' {
+			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
-				if p.pos+afterTag < len(p.input) {
-					ch := p.input[p.pos+afterTag]
-					if ch == '>' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
-						return
-					}
-				} else {
+				ch := p.cur.PeekAt(afterTag)
+				if ch == 0 {
+					return
+				}
+				if ch == '>' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
 					return
 				}
 			}
 		}
 
-		if p.peek() == '&' {
+		if p.cur.Peek() == '&' {
 			p.parseCharRef()
 		} else {
 			// Collect text up to next & or potential end tag
-			start := p.pos
-			for !p.atEnd() && p.peek() != '&' && p.peek() != '<' {
-				p.advance(1)
+			n := 0
+			for {
+				b := p.cur.PeekAt(n)
+				if b == 0 || b == '&' || b == '<' {
+					break
+				}
+				n++
 			}
-			if p.pos > start {
-				_ = p.emitCharacters(p.input[start:p.pos])
+			if n > 0 {
+				text := p.cur.PeekString(n)
+				_ = p.cur.Advance(n)
+				_ = p.emitCharacters([]byte(text))
 			}
-			if !p.atEnd() && p.peek() == '<' {
+			if !p.cur.Done() && p.cur.Peek() == '<' {
 				// Check if this is the end tag — if not, emit '<' as text
-				remaining := p.remaining()
-				if p.peekAt(1) != '/' || len(remaining) < len(endTag) ||
-					!strings.EqualFold(string(remaining[:len(endTag)]), endTag) {
+				if p.cur.PeekAt(1) != '/' || !p.hasPrefixFold(endTag) {
 					_ = p.emitCharacters([]byte("<"))
-					p.advance(1)
+					_ = p.cur.Advance(1)
 				}
 			}
 		}
@@ -1050,27 +1081,33 @@ func (p *parser) parseRCDATAContent(tagName string) {
 
 // parsePlaintext parses plaintext content — everything until EOF.
 func (p *parser) parsePlaintext() {
-	start := p.pos
-	for !p.atEnd() {
-		p.advance(1)
+	n := 0
+	for p.cur.PeekAt(n) != 0 {
+		n++
 	}
-	if p.pos > start {
-		_ = p.sax.Characters(p.input[start:p.pos])
+	if n > 0 {
+		text := p.cur.PeekString(n)
+		_ = p.cur.Advance(n)
+		_ = p.sax.Characters([]byte(text))
 	}
 }
 
 // parseName parses an HTML tag name (letters, digits, colons, hyphens).
 func (p *parser) parseName() string {
-	start := p.pos
-	for !p.atEnd() {
-		b := p.peek()
-		if isNameChar(b) {
-			p.advance(1)
-		} else {
+	n := 0
+	for {
+		b := p.cur.PeekAt(n)
+		if b == 0 || !isNameChar(b) {
 			break
 		}
+		n++
 	}
-	return string(p.input[start:p.pos])
+	if n == 0 {
+		return ""
+	}
+	name := p.cur.PeekString(n)
+	_ = p.cur.Advance(n)
+	return name
 }
 
 // parseAttributes parses HTML tag attributes.
@@ -1082,14 +1119,14 @@ func (p *parser) parseAttributes() []Attribute {
 
 	for {
 		p.skipWhitespace()
-		if p.atEnd() || p.peek() == '>' || p.peek() == '/' {
+		if p.cur.Done() || p.cur.Peek() == '>' || p.cur.Peek() == '/' {
 			break
 		}
 
 		name := p.parseAttrName()
 		if name == "" {
 			// Skip unknown character
-			p.advance(1)
+			_ = p.cur.Advance(1)
 			continue
 		}
 
@@ -1098,8 +1135,8 @@ func (p *parser) parseAttributes() []Attribute {
 
 		value := ""
 		isBool := false
-		if p.peek() == '=' {
-			p.advance(1) // skip '='
+		if p.cur.Peek() == '=' {
+			_ = p.cur.Advance(1) // skip '='
 			p.skipWhitespace()
 			value = p.parseAttrValue()
 		} else {
@@ -1125,23 +1162,28 @@ func (p *parser) parseAttributes() []Attribute {
 // Uses negative-logic terminators: any character that is not a terminator
 // is accepted, matching HTML's liberal attribute name rules.
 func (p *parser) parseAttrName() string {
-	start := p.pos
-	for !p.atEnd() {
-		b := p.peek()
-		if isWhitespaceByte(b) || b == '>' || b == '/' || b == '=' || b == '"' || b == '\'' || b == '<' || b == 0 {
+	n := 0
+	for {
+		b := p.cur.PeekAt(n)
+		if b == 0 || isWhitespaceByte(b) || b == '>' || b == '/' || b == '=' || b == '"' || b == '\'' || b == '<' {
 			break
 		}
-		p.advance(1)
+		n++
 	}
-	return string(p.input[start:p.pos])
+	if n == 0 {
+		return ""
+	}
+	name := p.cur.PeekString(n)
+	_ = p.cur.Advance(n)
+	return name
 }
 
 // parseAttrValue parses an attribute value (quoted or unquoted).
 func (p *parser) parseAttrValue() string {
-	if p.peek() == '"' {
+	if p.cur.Peek() == '"' {
 		return p.parseQuotedAttrValue('"')
 	}
-	if p.peek() == '\'' {
+	if p.cur.Peek() == '\'' {
 		return p.parseQuotedAttrValue('\'')
 	}
 	// Unquoted attribute value
@@ -1150,19 +1192,19 @@ func (p *parser) parseAttrValue() string {
 
 // parseQuotedAttrValue parses a quoted attribute value with entity expansion.
 func (p *parser) parseQuotedAttrValue(quote byte) string {
-	p.advance(1) // skip opening quote
+	_ = p.cur.Advance(1) // skip opening quote
 	var buf bytes.Buffer
 
-	for !p.atEnd() && p.peek() != quote {
-		if p.peek() == '&' {
+	for !p.cur.Done() && p.cur.Peek() != quote {
+		if p.cur.Peek() == '&' {
 			buf.WriteString(p.resolveEntityInAttr())
 		} else {
-			buf.WriteByte(p.peek())
-			p.advance(1)
+			buf.WriteByte(p.cur.Peek())
+			_ = p.cur.Advance(1)
 		}
 	}
-	if p.peek() == quote {
-		p.advance(1) // skip closing quote
+	if p.cur.Peek() == quote {
+		_ = p.cur.Advance(1) // skip closing quote
 	}
 	return buf.String()
 }
@@ -1171,8 +1213,8 @@ func (p *parser) parseQuotedAttrValue(quote byte) string {
 func (p *parser) parseUnquotedAttrValue() string {
 	var buf bytes.Buffer
 
-	for !p.atEnd() {
-		b := p.peek()
+	for !p.cur.Done() {
+		b := p.cur.Peek()
 		if b == '>' || b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' {
 			break
 		}
@@ -1180,7 +1222,7 @@ func (p *parser) parseUnquotedAttrValue() string {
 			buf.WriteString(p.resolveEntityInAttr())
 		} else {
 			buf.WriteByte(b)
-			p.advance(1)
+			_ = p.cur.Advance(1)
 		}
 	}
 	return buf.String()
@@ -1190,13 +1232,13 @@ func (p *parser) parseUnquotedAttrValue() string {
 // In HTML, named entities without a trailing ';' are NOT resolved when followed
 // by '=' or an alphanumeric character (prevents mis-interpreting URL query strings).
 func (p *parser) resolveEntityInAttr() string {
-	p.advance(1) // skip '&'
+	_ = p.cur.Advance(1) // skip '&'
 
-	if p.peek() == '#' {
-		p.advance(1)
+	if p.cur.Peek() == '#' {
+		_ = p.cur.Advance(1)
 		var codepoint int
-		if p.peek() == 'x' || p.peek() == 'X' {
-			p.advance(1)
+		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
+			_ = p.cur.Advance(1)
 			hexStr := p.parseWhile(isHexDigit)
 			cp, err := strconv.ParseInt(hexStr, 16, 32)
 			if err == nil {
@@ -1209,8 +1251,8 @@ func (p *parser) resolveEntityInAttr() string {
 				codepoint = int(cp)
 			}
 		}
-		if p.peek() == ';' {
-			p.advance(1)
+		if p.cur.Peek() == ';' {
+			_ = p.cur.Advance(1)
 		}
 		if codepoint > 0 {
 			return string(rune(codepoint))
@@ -1220,9 +1262,9 @@ func (p *parser) resolveEntityInAttr() string {
 
 	name := p.parseWhile(isAlphanumeric)
 	hasSemicolon := false
-	if p.peek() == ';' {
+	if p.cur.Peek() == ';' {
 		hasSemicolon = true
-		p.advance(1)
+		_ = p.cur.Advance(1)
 	}
 
 	if name != "" {
@@ -1237,7 +1279,7 @@ func (p *parser) resolveEntityInAttr() string {
 				return "&" + name
 			}
 			// Without semicolon, check what follows
-			next := p.peek()
+			next := p.cur.Peek()
 			if next == '=' || isAlphanumeric(next) {
 				// Don't resolve — treat & as literal
 				return "&" + name
@@ -1250,40 +1292,57 @@ func (p *parser) resolveEntityInAttr() string {
 
 // parseQuotedString parses a quoted string (for DOCTYPE).
 func (p *parser) parseQuotedString() string {
-	if p.peek() != '"' && p.peek() != '\'' {
+	if p.cur.Peek() != '"' && p.cur.Peek() != '\'' {
 		return ""
 	}
-	quote := p.peek()
-	p.advance(1)
-	start := p.pos
-	for !p.atEnd() && p.peek() != quote {
-		p.advance(1)
+	quote := p.cur.Peek()
+	_ = p.cur.Advance(1)
+	n := 0
+	for {
+		b := p.cur.PeekAt(n)
+		if b == 0 || b == quote {
+			break
+		}
+		n++
 	}
-	s := string(p.input[start:p.pos])
-	if p.peek() == quote {
-		p.advance(1)
+	s := p.cur.PeekString(n)
+	_ = p.cur.Advance(n)
+	if p.cur.Peek() == quote {
+		_ = p.cur.Advance(1)
 	}
 	return s
 }
 
 // parseWhile collects characters while pred returns true.
 func (p *parser) parseWhile(pred func(byte) bool) string {
-	start := p.pos
-	for !p.atEnd() && pred(p.peek()) {
-		p.advance(1)
+	n := 0
+	for {
+		b := p.cur.PeekAt(n)
+		if b == 0 || !pred(b) {
+			break
+		}
+		n++
 	}
-	return string(p.input[start:p.pos])
+	if n == 0 {
+		return ""
+	}
+	s := p.cur.PeekString(n)
+	_ = p.cur.Advance(n)
+	return s
 }
 
 // skipWhitespace skips whitespace characters.
 func (p *parser) skipWhitespace() {
-	for !p.atEnd() {
-		b := p.peek()
-		if b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' {
-			p.advance(1)
-		} else {
+	n := 0
+	for {
+		b := p.cur.PeekAt(n)
+		if b != ' ' && b != '\t' && b != '\n' && b != '\r' && b != '\f' {
 			break
 		}
+		n++
+	}
+	if n > 0 {
+		_ = p.cur.Advance(n)
 	}
 }
 
@@ -1320,12 +1379,4 @@ func isAllWhitespace(data []byte) bool {
 		}
 	}
 	return true
-}
-
-// matchCaseInsensitive checks if data starts with the given prefix (case-insensitive).
-func matchCaseInsensitive(data []byte, prefix string) bool {
-	if len(data) < len(prefix) {
-		return false
-	}
-	return strings.EqualFold(string(data[:len(prefix)]), prefix)
 }
