@@ -281,7 +281,7 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
   - `EncryptElement(ctx, elem)`, `EncryptContent(ctx, elem)` — terminal methods
 - **NewDecryptor() → Decryptor** — create fluent builder for decryption
   - `PrivateKey(key)`, `KeyEncryptionKey(kek)`, `SessionKey(key)` — builder methods
-  - `Decrypt(ctx, elem)`, `DecryptInPlace(ctx, doc)` — terminal methods
+  - `Decrypt(ctx, elem)` — terminal method
 - Block encryption: AES-128/256-CBC, AES-128/256-GCM
 - Key transport: RSA-OAEP (1.0 + 1.1 with configurable digest/MGF)
 - Key wrapping: AES-128/256-KeyWrap (RFC 3394)

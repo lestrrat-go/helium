@@ -304,39 +304,6 @@ func (d Decryptor) Decrypt(ctx context.Context, elem *helium.Element) ([]helium.
 	return decryptElement(ctx, d.cfg, elem)
 }
 
-// DecryptInPlace finds all EncryptedData elements in the document and
-// decrypts them in place.
-func (d Decryptor) DecryptInPlace(ctx context.Context, doc *helium.Document) error {
-	elems := findEncryptedDataElements(doc.DocumentElement())
-	for _, elem := range elems {
-		nodes, err := decryptElement(ctx, d.cfg, elem)
-		if err != nil {
-			return err
-		}
-		parent := elem.Parent()
-		if parent == nil {
-			continue
-		}
-
-		// Insert decrypted nodes before EncryptedData, then remove it.
-		pe, ok := helium.AsNode[*helium.Element](parent)
-		if !ok {
-			continue
-		}
-		for _, n := range nodes {
-			mn, ok := n.(helium.MutableNode)
-			if !ok {
-				continue
-			}
-			if err := pe.AddChild(mn); err != nil {
-				return err
-			}
-		}
-		helium.UnlinkNode(elem)
-	}
-	return nil
-}
-
 func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]helium.Node, error) {
 	ed, err := parseEncryptedData(elem)
 	if err != nil {
@@ -416,22 +383,3 @@ func resolveSessionKey(cfg *decryptConfig, ed *EncryptedData) ([]byte, error) {
 	}
 }
 
-func findEncryptedDataElements(n helium.Node) []*helium.Element {
-	var result []*helium.Element
-	var walk func(helium.Node)
-	walk = func(cur helium.Node) {
-		elem, ok := helium.AsNode[*helium.Element](cur)
-		if !ok {
-			return
-		}
-		if localName(elem) == "EncryptedData" {
-			result = append(result, elem)
-			return
-		}
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-			walk(child)
-		}
-	}
-	walk(n)
-	return result
-}

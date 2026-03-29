@@ -159,36 +159,6 @@ func TestEncryptDecryptWithSessionKey(t *testing.T) {
 	require.Contains(t, s, "user@example.com")
 }
 
-func TestDecryptInPlace(t *testing.T) {
-	key := generateRSAKey(t)
-	xml := `<Response><Assertion>Secret</Assertion></Response>`
-	doc := mustParseXML(t, xml)
-
-	// Encrypt the Assertion element.
-	assertion, ok := helium.AsNode[*helium.Element](doc.DocumentElement().FirstChild())
-	require.True(t, ok)
-	encryptor := xmlenc1.NewEncryptor().
-		BlockAlgorithm(xmlenc1.AES128GCM).
-		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
-		RecipientPublicKey(&key.PublicKey)
-
-	_, err := encryptor.EncryptElement(t.Context(), assertion)
-	require.NoError(t, err)
-
-	out, err := helium.WriteString(doc)
-	require.NoError(t, err)
-	require.Contains(t, out, "EncryptedData")
-
-	// Decrypt in place.
-	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
-	err = decryptor.DecryptInPlace(t.Context(), doc)
-	require.NoError(t, err)
-
-	out, err = helium.WriteString(doc)
-	require.NoError(t, err)
-	require.Contains(t, out, "Secret")
-}
-
 func TestEncryptorImmutability(t *testing.T) {
 	e1 := xmlenc1.NewEncryptor().BlockAlgorithm(xmlenc1.AES128CBC)
 	e2 := e1.BlockAlgorithm(xmlenc1.AES256GCM)
