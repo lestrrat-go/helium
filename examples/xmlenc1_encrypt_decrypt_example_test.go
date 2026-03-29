@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/helium/xmlenc1"
 )
 
-func Example_xmlenc1_encrypt_element() {
+func Example_xmlenc1_encrypt_decrypt() {
 	// Parse a document containing sensitive data. In SAML, this would
 	// be an Assertion element inside a Response.
 	const src = `<Response><Assertion>sensitive user data</Assertion></Response>`
@@ -41,7 +41,7 @@ func Example_xmlenc1_encrypt_element() {
 		return
 	}
 
-	_, err = xmlenc1.NewEncryptor().
+	edElem, err := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES128GCM).
 		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
 		RecipientPublicKey(&key.PublicKey).
@@ -51,12 +51,23 @@ func Example_xmlenc1_encrypt_element() {
 		return
 	}
 
-	out, _ := helium.WriteString(doc)
+	encrypted, _ := helium.WriteString(doc)
+	fmt.Println(strings.Contains(encrypted, "sensitive user data"))
+	fmt.Println(strings.Contains(encrypted, "EncryptedData"))
 
-	// The plaintext is gone; only EncryptedData remains.
-	fmt.Println(strings.Contains(out, "sensitive user data"))
-	fmt.Println(strings.Contains(out, "EncryptedData"))
+	// Decrypt returns the original node(s). The caller decides whether
+	// to re-insert them into the tree or process them standalone.
+	nodes, err := xmlenc1.NewDecryptor().PrivateKey(key).
+		Decrypt(context.Background(), edElem)
+	if err != nil {
+		fmt.Printf("decrypt error: %s\n", err)
+		return
+	}
+
+	decrypted, _ := helium.WriteString(nodes[0])
+	fmt.Println(strings.Contains(decrypted, "sensitive user data"))
 	// Output:
 	// false
+	// true
 	// true
 }
