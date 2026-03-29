@@ -1,6 +1,9 @@
 package xslt3
 
 import (
+	"slices"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -129,7 +132,7 @@ func exprHasShallowDescentCallWithClimbingArg(ss *Stylesheet, expr *xpath3.Expre
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok && fc.Prefix != "" && len(fc.Args) > 0 {
 			cat := lookupFuncStreamability(ss, fc.Name, len(fc.Args))
-			if cat == "shallow-descent" {
+			if cat == lexicon.StreamShallowDescent {
 				if exprHasUpwardAxis(fc.Args[0]) {
 					found = true
 					return false
@@ -323,11 +326,9 @@ func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
 			if fc.Prefix == "" && (fc.Name == "reverse" || fc.Name == "innermost") {
-				for _, arg := range fc.Args {
-					if argHasStreamingCrawl(arg) {
-						found = true
-						return false
-					}
+				if slices.ContainsFunc(fc.Args, argHasStreamingCrawl) {
+					found = true
+					return false
 				}
 			}
 		}
@@ -356,7 +357,7 @@ func exprHasHigherOrderWithConsumingArg(expr *xpath3.Expression) bool {
 			return true
 		}
 		switch fc.Name {
-		case "filter", "fold-right":
+		case lexicon.StreamFilter, "fold-right":
 			if argHasStreamingDownwardUngrounded(fc.Args[0]) {
 				found = true
 				return false
@@ -748,7 +749,7 @@ func isAtomicResultExpr(expr xpath3.Expr) bool {
 				"ends-with", "matches", "replace", "translate",
 				"substring", "substring-before", "substring-after",
 				"upper-case", "lower-case", "round", "floor", "ceiling",
-				"abs", "not", "true", "false", "position", "last",
+				"abs", "not", "true", "false", "position", lexicon.FnLast,
 				"empty", "exists", "head", "tail":
 				return true
 			}

@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 
@@ -8,26 +9,26 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
-func evalBinaryExpr(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+func evalBinaryExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
 	switch e.Op {
 	case TokenOr:
-		return evalLogicOr(evalFn, ec, e)
+		return evalLogicOr(evalFn, ctx, ec, e)
 	case TokenAnd:
-		return evalLogicAnd(evalFn, ec, e)
+		return evalLogicAnd(evalFn, ctx, ec, e)
 	case TokenEquals, TokenNotEquals, TokenLess, TokenLessEq, TokenGreater, TokenGreaterEq:
-		return evalGeneralComparison(evalFn, ec, e)
+		return evalGeneralComparison(evalFn, ctx, ec, e)
 	case TokenEq, TokenNe, TokenLt, TokenLe, TokenGt, TokenGe:
-		return evalValueComparison(evalFn, ec, e)
+		return evalValueComparison(evalFn, ctx, ec, e)
 	case TokenIs, TokenNodePre, TokenNodeFol:
-		return evalNodeComparison(evalFn, ec, e)
+		return evalNodeComparison(evalFn, ctx, ec, e)
 	case TokenPlus, TokenMinus, TokenStar, TokenDiv, TokenIdiv, TokenMod:
-		return evalArithmetic(evalFn, ec, e)
+		return evalArithmetic(evalFn, ctx, ec, e)
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnsupportedBinaryOp, e.Op)
 }
 
-func evalLogicOr(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := evalFn(ec, e.Left)
+func evalLogicOr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +39,7 @@ func evalLogicOr(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence,
 	if lb {
 		return SingleBoolean(true), nil
 	}
-	right, err := evalFn(ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +50,8 @@ func evalLogicOr(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence,
 	return SingleBoolean(rb), nil
 }
 
-func evalLogicAnd(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := evalFn(ec, e.Left)
+func evalLogicAnd(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +62,7 @@ func evalLogicAnd(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence
 	if !lb {
 		return SingleBoolean(false), nil
 	}
-	right, err := evalFn(ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -72,12 +73,12 @@ func evalLogicAnd(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence
 	return SingleBoolean(rb), nil
 }
 
-func evalConcatExpr(evalFn exprEvaluator, ec *evalContext, e ConcatExpr) (Sequence, error) {
-	left, err := evalFn(ec, e.Left)
+func evalConcatExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e ConcatExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +113,8 @@ func concatToString(seq Sequence) (string, error) {
 	return seqToStringErr(seq)
 }
 
-func evalSimpleMapExpr(evalFn exprEvaluator, ec *evalContext, e SimpleMapExpr) (Sequence, error) {
-	left, err := evalFn(ec, e.Left)
+func evalSimpleMapExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e SimpleMapExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +128,7 @@ func evalSimpleMapExpr(evalFn exprEvaluator, ec *evalContext, e SimpleMapExpr) (
 		} else {
 			frame = ec.pushContextItem(item, i+1, size)
 		}
-		r, err := evalFn(ec, e.Right)
+		r, err := evalFn(ctx, ec, e.Right)
 		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
@@ -138,17 +139,17 @@ func evalSimpleMapExpr(evalFn exprEvaluator, ec *evalContext, e SimpleMapExpr) (
 	return result, nil
 }
 
-func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence, error) {
-	startSeq, err := evalFn(ec, e.Start)
+func evalRangeExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e RangeExpr) (Sequence, error) {
+	startSeq, err := evalFn(ctx, ec, e.Start)
 	if err != nil {
 		return nil, err
 	}
-	endSeq, err := evalFn(ec, e.End)
+	endSeq, err := evalFn(ctx, ec, e.End)
 	if err != nil {
 		return nil, err
 	}
 	if seqLen(startSeq) == 0 || seqLen(endSeq) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	sa, err := AtomizeItem(startSeq.Get(0))
 	if err != nil {
@@ -173,7 +174,7 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 	ev, eok := eaInt.Int64Val()
 	if sok && eok {
 		if sv > ev {
-			return nil, nil
+			return validNilSequence, nil
 		}
 		count := ev - sv + 1
 		if count > int64(ec.maxNodes) {
@@ -184,7 +185,7 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 	start := saInt.BigInt()
 	end := eaInt.BigInt()
 	if start.Cmp(end) > 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	count := new(big.Int).Sub(end, start)
 	count.Add(count, big.NewInt(1))
@@ -202,12 +203,12 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 	return result, nil
 }
 
-func evalUnionExpr(evalFn exprEvaluator, ec *evalContext, e UnionExpr) (Sequence, error) {
-	left, err := evalFn(ec, e.Left)
+func evalUnionExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e UnionExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -227,12 +228,12 @@ func evalUnionExpr(evalFn exprEvaluator, ec *evalContext, e UnionExpr) (Sequence
 	return result, nil
 }
 
-func evalIntersectExceptExpr(evalFn exprEvaluator, ec *evalContext, e IntersectExceptExpr) (Sequence, error) {
-	left, err := evalFn(ec, e.Left)
+func evalIntersectExceptExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e IntersectExceptExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -272,8 +273,8 @@ func evalIntersectExceptExpr(evalFn exprEvaluator, ec *evalContext, e IntersectE
 	return seq, nil
 }
 
-func evalFilterExpr(evalFn exprEvaluator, ec *evalContext, e FilterExpr) (Sequence, error) {
-	base, err := evalFn(ec, e.Expr)
+func evalFilterExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e FilterExpr) (Sequence, error) {
+	base, err := evalFn(ctx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +282,7 @@ func evalFilterExpr(evalFn exprEvaluator, ec *evalContext, e FilterExpr) (Sequen
 	// Try node-set path (optimized for node predicates)
 	if nodes, ok := NodesFrom(base); ok {
 		for _, pred := range e.Predicates {
-			nodes, err = applyPredicate(evalFn, ec, nodes, pred)
+			nodes, err = applyPredicate(evalFn, ctx, ec, nodes, pred)
 			if err != nil {
 				return nil, err
 			}
@@ -296,7 +297,7 @@ func evalFilterExpr(evalFn exprEvaluator, ec *evalContext, e FilterExpr) (Sequen
 	// General sequence filtering (XPath 3.1)
 	seq := base
 	for _, pred := range e.Predicates {
-		seq, err = applySequencePredicate(evalFn, ec, seq, pred)
+		seq, err = applySequencePredicate(evalFn, ctx, ec, seq, pred)
 		if err != nil {
 			return nil, err
 		}
@@ -306,7 +307,7 @@ func evalFilterExpr(evalFn exprEvaluator, ec *evalContext, e FilterExpr) (Sequen
 
 // applySequencePredicate filters a sequence by a predicate expression.
 // Each item becomes the context item; numeric predicates select by position.
-func applySequencePredicate(evalFn exprEvaluator, ec *evalContext, seq Sequence, pred Expr) (Sequence, error) {
+func applySequencePredicate(evalFn exprEvaluator, ctx context.Context, ec *evalContext, seq Sequence, pred Expr) (Sequence, error) {
 	size := seqLen(seq)
 	result := make(ItemSlice, 0, size)
 	i := 0
@@ -317,7 +318,7 @@ func applySequencePredicate(evalFn exprEvaluator, ec *evalContext, seq Sequence,
 		} else {
 			frame = ec.pushContextItem(item, i+1, size)
 		}
-		r, err := evalFn(ec, pred)
+		r, err := evalFn(ctx, ec, pred)
 		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
@@ -346,8 +347,8 @@ func applySequencePredicate(evalFn exprEvaluator, ec *evalContext, seq Sequence,
 	return result, nil
 }
 
-func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, error) {
-	base, err := evalFn(ec, e.Filter)
+func evalPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e PathExpr) (Sequence, error) {
+	base, err := evalFn(ctx, ec, e.Filter)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +362,7 @@ func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, 
 	result := make([]helium.Node, 0, len(baseNodes))
 	for _, n := range baseNodes {
 		frame := ec.pushNodeContext(n, 1, 1)
-		subResult, err := evalLocationPath(evalFn, ec, e.Path)
+		subResult, err := evalLocationPath(evalFn, ctx, ec, e.Path)
 		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
@@ -388,8 +389,8 @@ func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, 
 	return seq, nil
 }
 
-func evalVMPathExpr(evalFn exprEvaluator, ec *evalContext, e vmPathExpr) (Sequence, error) {
-	base, err := evalFn(ec, e.Filter)
+func evalVMPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e vmPathExpr) (Sequence, error) {
+	base, err := evalFn(ctx, ec, e.Filter)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +404,7 @@ func evalVMPathExpr(evalFn exprEvaluator, ec *evalContext, e vmPathExpr) (Sequen
 	result := make([]helium.Node, 0, len(baseNodes))
 	for _, n := range baseNodes {
 		frame := ec.pushNodeContext(n, 1, 1)
-		subResult, err := evalVMLocationPath(evalFn, ec, *e.Path)
+		subResult, err := evalVMLocationPath(evalFn, ctx, ec, *e.Path)
 		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
@@ -446,8 +447,8 @@ func filterPreservesOrder(e Expr) bool {
 // Per XPath 3.1: E1 must produce a node sequence; E2 is evaluated for each node
 // with that node as context. If all results are nodes, they are sorted in
 // document order and deduplicated.
-func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Sequence, error) {
-	base, err := evalFn(ec, e.Left)
+func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e PathStepExpr) (Sequence, error) {
+	base, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +463,7 @@ func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Se
 
 	for i, n := range baseNodes {
 		frame := ec.pushNodeContext(n, i+1, len(baseNodes))
-		r, err := evalFn(ec, e.Right)
+		r, err := evalFn(ctx, ec, e.Right)
 		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err

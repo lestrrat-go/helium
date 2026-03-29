@@ -141,9 +141,9 @@ func TestErrorDomain(t *testing.T) {
 	})
 }
 
-func TestErrDTDDupTokenFixed(t *testing.T) {
+func TestDTDDupTokenErrorFixed(t *testing.T) {
 	t.Parallel()
-	e := helium.ErrDTDDupToken{Name: "foo"}
+	e := helium.DTDDupTokenError{Name: "foo"}
 	require.Contains(t, e.Error(), "standalone")
 	require.NotContains(t, e.Error(), "standlone")
 }

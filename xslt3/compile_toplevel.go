@@ -1,7 +1,10 @@
 package xslt3
 
 import (
+	"context"
 	"errors"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -11,7 +14,7 @@ import (
 )
 
 // collectNamespaces gathers namespace declarations from an element.
-func (c *compiler) collectNamespaces(elem *helium.Element) {
+func (c *compiler) collectNamespaces(_ context.Context, elem *helium.Element) {
 	for _, ns := range elem.Namespaces() {
 		prefix := ns.Prefix()
 		uri := ns.URI()
@@ -23,8 +26,8 @@ func (c *compiler) collectNamespaces(elem *helium.Element) {
 }
 
 // compileTopLevel processes all top-level elements in the stylesheet.
-func (c *compiler) compileTopLevel(root *helium.Element) error {
-	if err := c.ctx.Err(); err != nil {
+func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 
@@ -48,7 +51,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			continue
 		}
 		if elem.LocalName() == lexicon.XSLTElementNamespaceAlias {
-			if err := c.compileNamespaceAlias(elem); err != nil {
+			if err := c.compileNamespaceAlias(ctx, elem); err != nil {
 				return err
 			}
 		}
@@ -96,7 +99,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			// Track modes used by local templates (for XTSE3050).
 			// When declared-modes="no", using a mode implicitly declares it.
 			if !c.stylesheet.declaredModes {
-				if m := getAttr(elem, "mode"); m != "" && m != "#default" && m != "#all" && m != "#unnamed" {
+				if m := getAttr(elem, "mode"); m != "" && m != lexicon.ModeDefault && m != lexicon.ModeAll && m != "#unnamed" {
 					resolved := resolveQName(m, c.nsBindings)
 					c.localModeNames[resolved] = struct{}{}
 				}
@@ -153,15 +156,15 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 				_, hasExternal := c.externalStaticParams[name]
 				compiled, err := xpath3.NewCompiler().Compile(sel)
 				if err == nil {
-					eval := c.staticEvaluator()
+					eval := c.staticEvaluator(ctx)
 					// Resolve xml:base on the element to adjust static-base-uri()
 					if elemBase := getAttr(elem, lexicon.QNameXMLBase); elemBase != "" {
-						eval = c.resolveXMLBaseEvaluator(eval, elemBase)
+						eval = c.resolveXMLBaseEvaluator(ctx, eval, elemBase)
 					}
 					if len(c.staticVars) > 0 {
 						eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
 					}
-					result, err := eval.Evaluate(c.ctx, compiled, nil)
+					result, err := eval.Evaluate(ctx, compiled, nil)
 					if err != nil {
 						if errors.Is(err, xpath3.ErrUndefinedVariable) {
 							// Forward references within the same module are
@@ -173,7 +176,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 							}
 						}
 					} else {
-						if setErr := c.setStaticVarWithKind(name, ln, result.Sequence()); setErr != nil {
+						if setErr := c.setStaticVarWithKind(ctx, name, ln, result.Sequence()); setErr != nil {
 							return setErr
 						}
 					}
@@ -189,8 +192,8 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			continue
 		}
 		ln := elem.LocalName()
-		if ln == "include" || ln == "import" {
-			if err := c.resolveShadowAttributes(elem); err != nil {
+		if ln == "include" || ln == lexicon.XSLTElementImport {
+			if err := c.resolveShadowAttributes(ctx, elem); err != nil {
 				return err
 			}
 		}
@@ -206,18 +209,18 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		}
 		switch elem.LocalName() {
 		case lexicon.XSLTElementImport:
-			if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+			if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 				"href": {}, "use-when": {},
 			}); err != nil {
 				return err
 			}
 			// XTSE0260: xsl:import must be empty.
-			if err := c.validateEmptyElement(elem, "xsl:import"); err != nil {
+			if err := c.validateEmptyElement(ctx, elem, "xsl:import"); err != nil {
 				return err
 			}
 			// Check use-when before loading imports (avoids loading non-existent files)
 			if uw := getAttr(elem, "use-when"); uw != "" {
-				include, err := c.evaluateUseWhen(uw)
+				include, err := c.evaluateUseWhen(ctx, uw)
 				if err != nil {
 					return err
 				}
@@ -225,22 +228,22 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 					continue
 				}
 			}
-			if err := c.compileImport(elem); err != nil {
+			if err := c.compileImport(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementInclude:
-			if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+			if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 				"href": {}, "use-when": {},
 			}); err != nil {
 				return err
 			}
 			// XTSE0260: xsl:include must be empty.
-			if err := c.validateEmptyElement(elem, "xsl:include"); err != nil {
+			if err := c.validateEmptyElement(ctx, elem, "xsl:include"); err != nil {
 				return err
 			}
 			// Check use-when before loading includes (avoids loading non-existent files)
 			if uw := getAttr(elem, "use-when"); uw != "" {
-				include, err := c.evaluateUseWhen(uw)
+				include, err := c.evaluateUseWhen(ctx, uw)
 				if err != nil {
 					return err
 				}
@@ -248,7 +251,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 					continue
 				}
 			}
-			if err := c.collectIncludeImports(elem); err != nil {
+			if err := c.collectIncludeImports(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementUsePackage:
@@ -260,7 +263,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 					"xsl:use-package is not allowed in an imported stylesheet module")
 			}
 			if uw := getAttr(elem, "use-when"); uw != "" {
-				include, err := c.evaluateUseWhen(uw)
+				include, err := c.evaluateUseWhen(ctx, uw)
 				if err != nil {
 					return err
 				}
@@ -268,7 +271,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 					continue
 				}
 			}
-			if err := c.compileUsePackage(elem); err != nil {
+			if err := c.compileUsePackage(ctx, elem); err != nil {
 				return err
 			}
 		}
@@ -278,7 +281,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 	// declarations and imported modules' declarations (param vs variable
 	// with same name, import earlier in tree order).
 	if !c.insideImport {
-		if err := c.checkStaticVarKindConflicts(root); err != nil {
+		if err := c.checkStaticVarKindConflicts(ctx, root); err != nil {
 			return err
 		}
 	}
@@ -291,9 +294,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		if c.staticVars == nil {
 			c.staticVars = make(map[string]xpath3.Sequence, len(c.externalStaticParams))
 		}
-		for name, seq := range c.externalStaticParams {
-			c.staticVars[name] = seq
-		}
+		maps.Copy(c.staticVars, c.externalStaticParams)
 	}
 
 	// Resolve only the _static shadow attribute on params/variables before
@@ -306,8 +307,8 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			continue
 		}
 		ln := elem.LocalName()
-		if ln == "param" || ln == "variable" {
-			if err := c.resolveSingleShadowAttribute(elem, "static"); err != nil {
+		if ln == lexicon.XSLTElementParam || ln == "variable" {
+			if err := c.resolveSingleShadowAttribute(ctx, elem, "static"); err != nil {
 				return err
 			}
 		}
@@ -316,7 +317,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 	// Detect circular references among static params/variables.
 	// Even if external values break the cycle at runtime, the
 	// circularity in the definitions is a static error (XPST0008).
-	if err := c.detectStaticParamCycles(root); err != nil {
+	if err := c.detectStaticParamCycles(ctx, root); err != nil {
 		return err
 	}
 
@@ -338,17 +339,17 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 				if sel != "" {
 					compiled, err := xpath3.NewCompiler().Compile(sel)
 					if err == nil {
-						eval := c.staticEvaluator()
+						eval := c.staticEvaluator(ctx)
 						// Resolve xml:base on the element to adjust static-base-uri()
 						if elemBase := getAttr(elem, lexicon.QNameXMLBase); elemBase != "" {
-							eval = c.resolveXMLBaseEvaluator(eval, elemBase)
+							eval = c.resolveXMLBaseEvaluator(ctx, eval, elemBase)
 						}
 						if len(c.staticVars) > 0 {
 							eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
 						}
-						result, err := eval.Evaluate(c.ctx, compiled, nil)
+						result, err := eval.Evaluate(ctx, compiled, nil)
 						if err == nil {
-							if setErr := c.setStaticVarWithKind(name, ln, result.Sequence()); setErr != nil {
+							if setErr := c.setStaticVarWithKind(ctx, name, ln, result.Sequence()); setErr != nil {
 								return setErr
 							}
 						}
@@ -361,7 +362,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 					if getAttr(elem, "as") == "" {
 						val = xpath3.SingleString("")
 					}
-					if setErr := c.setStaticVarWithKind(name, ln, val); setErr != nil {
+					if setErr := c.setStaticVarWithKind(ctx, name, ln, val); setErr != nil {
 						return setErr
 					}
 				}
@@ -372,9 +373,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 	// Merge externally supplied static params again so external values
 	// override any select="..." defaults evaluated above.
 	if len(c.externalStaticParams) > 0 {
-		for name, seq := range c.externalStaticParams {
-			c.staticVars[name] = seq
-		}
+		maps.Copy(c.staticVars, c.externalStaticParams)
 	}
 
 	// Fix up importPrec for namespace-alias declarations added in Pass 1.
@@ -392,7 +391,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 	// §3.10.2: an include acts as if textually inserted at the include point).
 	// All templates at this module level share the same importPrec which was
 	// finalized in pass 2.
-	if err := c.ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	for child := range helium.Children(root) {
@@ -410,7 +409,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		}
 
 		// Resolve shadow attributes on top-level XSLT elements.
-		if err := c.resolveShadowAttributes(elem); err != nil {
+		if err := c.resolveShadowAttributes(ctx, elem); err != nil {
 			return err
 		}
 
@@ -432,7 +431,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 						}
 					}
 				}
-				include, err := c.evaluateUseWhen(uw)
+				include, err := c.evaluateUseWhen(ctx, uw)
 				if restoreStaticVar != nil {
 					restoreStaticVar()
 				}
@@ -460,7 +459,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		case lexicon.XSLTElementInclude:
 			// Skip includes excluded by use-when in pass 2.
 			if uw := getAttr(elem, "use-when"); uw != "" {
-				include, err := c.evaluateUseWhen(uw)
+				include, err := c.evaluateUseWhen(ctx, uw)
 				if err != nil {
 					return err
 				}
@@ -468,63 +467,63 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 					continue
 				}
 			}
-			if err := c.compileIncludeTemplates(elem); err != nil {
+			if err := c.compileIncludeTemplates(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementTemplate:
-			if err := c.compileTemplate(elem); err != nil {
+			if err := c.compileTemplate(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementVariable:
-			if err := c.compileGlobalVariable(elem); err != nil {
+			if err := c.compileGlobalVariable(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementParam:
-			if err := c.compileGlobalParam(elem); err != nil {
+			if err := c.compileGlobalParam(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementKey:
-			if err := c.compileKey(elem); err != nil {
+			if err := c.compileKey(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementOutput:
-			if err := c.compileOutput(elem); err != nil {
+			if err := c.compileOutput(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementStripSpace:
-			if err := c.compileSpaceHandling(elem, true); err != nil {
+			if err := c.compileSpaceHandling(ctx, elem, true); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementPreserveSpace:
-			if err := c.compileSpaceHandling(elem, false); err != nil {
+			if err := c.compileSpaceHandling(ctx, elem, false); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementFunction:
-			if err := c.compileFunction(elem); err != nil {
+			if err := c.compileFunction(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementDecimalFormat:
-			if err := c.compileDecimalFormat(elem); err != nil {
+			if err := c.compileDecimalFormat(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementMode:
-			if err := c.compileMode(elem); err != nil {
+			if err := c.compileMode(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementImportSchema:
-			if err := c.compileImportSchema(elem); err != nil {
+			if err := c.compileImportSchema(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementAccumulator:
-			if err := c.compileAccumulator(elem); err != nil {
+			if err := c.compileAccumulator(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementAttributeSet:
-			if err := c.compileAttributeSet(elem); err != nil {
+			if err := c.compileAttributeSet(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementCharacterMap:
-			if err := c.compileCharacterMap(elem); err != nil {
+			if err := c.compileCharacterMap(ctx, elem); err != nil {
 				return err
 			}
 		case lexicon.XSLTElementNamespaceAlias:
@@ -532,7 +531,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		case lexicon.XSLTElementExpose:
 			// Processed after compilation via processExpose
 		case lexicon.XSLTElementGlobalContextItem:
-			if err := c.compileGlobalContextItem(elem); err != nil {
+			if err := c.compileGlobalContextItem(ctx, elem); err != nil {
 				return err
 			}
 		default:
@@ -556,7 +555,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 // Returns the result URI, result prefix, and true if an alias was found.
 // If multiple aliases target the same stylesheet URI, the one with the highest
 // import precedence wins.
-func (c *compiler) resolveNamespaceAlias(stylesheetURI string) (string, string, bool) {
+func (c *compiler) resolveNamespaceAlias(_ context.Context, stylesheetURI string) (string, string, bool) {
 	bestPrec := -1
 	var bestURI, bestPrefix string
 	found := false
@@ -576,7 +575,7 @@ func (c *compiler) resolveNamespaceAlias(stylesheetURI string) (string, string, 
 // checkConflictingNamespaceAliases checks for XTSE0810: multiple namespace-alias
 // declarations with the same stylesheet URI, same import precedence, but different
 // result URIs, unless overridden by a higher-precedence alias.
-func (c *compiler) checkConflictingNamespaceAliases() error {
+func (c *compiler) checkConflictingNamespaceAliases(_ context.Context) error {
 	aliases := c.stylesheet.namespaceAliases
 	// Group by stylesheet URI
 	type aliasInfo struct {
@@ -614,8 +613,8 @@ func (c *compiler) checkConflictingNamespaceAliases() error {
 }
 
 // compileNamespaceAlias compiles an xsl:namespace-alias declaration.
-func (c *compiler) compileNamespaceAlias(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileNamespaceAlias(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"stylesheet-prefix": {}, "result-prefix": {}, "use-when": {},
 	}); err != nil {
 		return err
@@ -635,16 +634,14 @@ func (c *compiler) compileNamespaceAlias(elem *helium.Element) error {
 	// namespace context of the xsl:namespace-alias element itself, not the
 	// stylesheet root (test namespace-alias-0903).
 	localNS := make(map[string]string)
-	for prefix, uri := range c.nsBindings {
-		localNS[prefix] = uri
-	}
+	maps.Copy(localNS, c.nsBindings)
 	for _, ns := range elem.Namespaces() {
 		localNS[ns.Prefix()] = ns.URI()
 	}
 
 	// Resolve stylesheet-prefix to a URI
 	var stylesheetURI string
-	if stylesheetPrefix == "#default" {
+	if stylesheetPrefix == lexicon.ModeDefault {
 		stylesheetURI = localNS[""]
 	} else {
 		uri, ok := localNS[stylesheetPrefix]
@@ -658,7 +655,7 @@ func (c *compiler) compileNamespaceAlias(elem *helium.Element) error {
 	var resultURI string
 	var resultPfx string
 	switch resultPrefix {
-	case "#default":
+	case lexicon.ModeDefault:
 		resultURI = localNS[""]
 		resultPfx = ""
 	case lexicon.PrefixXML:
@@ -683,7 +680,7 @@ func (c *compiler) compileNamespaceAlias(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) sortTemplates() {
+func (c *compiler) sortTemplates(_ context.Context) {
 	// Ensure #all templates are registered in every mode (including modes
 	// that were created after the #all template was compiled).
 	allTemplates := c.stylesheet.modeTemplates[modeAll]
@@ -694,14 +691,7 @@ func (c *compiler) sortTemplates() {
 			}
 			existing := c.stylesheet.modeTemplates[mode]
 			for _, at := range allTemplates {
-				found := false
-				for _, et := range existing {
-					if et == at {
-						found = true
-						break
-					}
-				}
-				if !found {
+				if !slices.Contains(existing, at) {
 					c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], at)
 				}
 			}

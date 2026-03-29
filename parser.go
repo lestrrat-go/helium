@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lestrrat-go/helium/push"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
@@ -470,7 +471,7 @@ func (p Parser) closeHandler() {
 // returned error is [ErrDTDValidationFailed] and the document is still
 // returned. Individual validation errors are delivered to the [ErrorHandler]
 // configured via [Parser.ErrorHandler].
-func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
+func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -524,7 +525,7 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 // This is identical to [Parse] but reads from a stream instead of a byte slice.
 // EBCDIC encoding detection is not supported when parsing from a reader.
 // See [Parse] for DTD validation error handling.
-func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
+func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -595,7 +596,7 @@ func (p Parser) ParseFile(ctx context.Context, path string) (*Document, error) {
 // DTD/entity context. Returns the first node of the parsed fragment list
 // (siblings linked via NextSibling). The returned nodes are not attached
 // to any parent.
-func (p Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, error) {
+func (p Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -688,14 +689,14 @@ found:
 	if child := doc.FirstChild(); child != nil {
 		if grandchild := child.FirstChild(); grandchild != nil {
 			for e := grandchild; e != nil; e = e.NextSibling() {
-				e.(MutableNode).SetTreeDoc(doc)
+				e.(MutableNode).SetTreeDoc(doc) //nolint:forcetypeassert
 				e.baseDocNode().parent = nil
 			}
 			return grandchild, nil
 		}
 	}
 
-	return nil, nil
+	return nil, nil //nolint:nilnil
 }
 
 // collectInScopeNamespaces walks up from elem collecting all namespace
@@ -716,4 +717,18 @@ func collectInScopeNamespaces(elem *Element) []*Namespace {
 		cur = cur.Parent()
 	}
 	return result
+}
+
+// PushParser provides an incremental XML parsing interface
+// (libxml2: xmlParserCtxt in push mode).
+// Data is pushed via Push or Write, and the parser processes tokens as
+// they become available in a background goroutine. Call [PushParser.Close]
+// to signal end-of-input and retrieve the parsed Document.
+type PushParser = push.Parser[*Document]
+
+// NewPushParser creates a PushParser using the given Parser's configuration.
+// The parser runs in a background goroutine, reading from the internal
+// stream as data is pushed.
+func (p Parser) NewPushParser(ctx context.Context) *PushParser {
+	return push.New[*Document](ctx, p)
 }

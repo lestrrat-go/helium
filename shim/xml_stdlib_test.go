@@ -8,6 +8,7 @@ package shim_test
 
 import (
 	"bytes"
+	"context"
 	stdxml "encoding/xml"
 	"fmt"
 	"io"
@@ -65,7 +66,7 @@ func TestDecodeEOFStdlib(t *testing.T) {
 		for _, eof := range []bool{true, false} {
 			name := fmt.Sprintf("%s/earlyEOF=%v", tc.name, eof)
 			t.Run(name, func(t *testing.T) {
-				d := NewTokenDecoder(&toksStdlib{
+				d := NewTokenDecoder(context.Background(), &toksStdlib{
 					earlyEOF: eof,
 					t:        tc.tokens,
 				})
@@ -94,7 +95,7 @@ func (t *toksNilStdlib) Token() (Token, error) {
 			// Return nil, nil before returning an EOF. It's legal, but
 			// discouraged.
 			t.returnEOF = true
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		return nil, io.EOF
 	}
@@ -109,7 +110,7 @@ func TestDecodeNilTokenStdlib(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			start := StartElement{Name: Name{Local: "test"}}
 			bad := StartElement{Name: Name{Local: "bad"}}
-			d := NewTokenDecoder(&toksNilStdlib{
+			d := NewTokenDecoder(context.Background(), &toksNilStdlib{
 				// Malformed
 				t: []Token{start, bad, start.End()},
 			})
@@ -277,7 +278,7 @@ var xmlInputStdlib = []string{
 
 func TestRawTokenStdlib(t *testing.T) {
 	t.Skip("shim: blocked on SAX attr vs xmlns ordering (source order not preserved) and InputOffset alignment")
-	d := NewDecoder(strings.NewReader(testInputStdlib))
+	d := NewDecoder(context.Background(), strings.NewReader(testInputStdlib))
 	d.Entity = testEntityStdlib
 	testRawTokenStdlib(t, d, testInputStdlib, rawTokensStdlib)
 }
@@ -331,7 +332,7 @@ var nonStrictTokensStdlib = []Token{
 
 func TestNonStrictRawTokenStdlib(t *testing.T) {
 	t.Skip("shim: non-strict mode not implemented")
-	d := NewDecoder(strings.NewReader(nonStrictInputStdlib))
+	d := NewDecoder(context.Background(), strings.NewReader(nonStrictInputStdlib))
 	d.Strict = false
 	testRawTokenStdlib(t, d, nonStrictInputStdlib, nonStrictTokensStdlib)
 }
@@ -356,7 +357,7 @@ func (d *downCaserStdlib) Read(p []byte) (int, error) {
 
 func TestRawTokenAltEncodingStdlib(t *testing.T) {
 	t.Skip("shim: CharsetReader works but test blocked on InputOffset alignment (item #11)")
-	d := NewDecoder(strings.NewReader(testInputAltEncodingStdlib))
+	d := NewDecoder(context.Background(), strings.NewReader(testInputAltEncodingStdlib))
 	d.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
 		if charset != "x-testing-uppercase" {
 			t.Fatalf("unexpected charset %q", charset)
@@ -367,7 +368,7 @@ func TestRawTokenAltEncodingStdlib(t *testing.T) {
 }
 
 func TestRawTokenAltEncodingNoConverterStdlib(t *testing.T) {
-	d := NewDecoder(strings.NewReader(testInputAltEncodingStdlib))
+	d := NewDecoder(context.Background(), strings.NewReader(testInputAltEncodingStdlib))
 	token, err := d.RawToken()
 	if token == nil {
 		t.Fatalf("expected a token on first RawToken call")
@@ -464,7 +465,7 @@ var nestedDirectivesTokensStdlib = []Token{
 }
 
 func TestNestedDirectivesStdlib(t *testing.T) {
-	d := NewDecoder(strings.NewReader(nestedDirectivesInputStdlib))
+	d := NewDecoder(context.Background(), strings.NewReader(nestedDirectivesInputStdlib))
 
 	for i, want := range nestedDirectivesTokensStdlib {
 		have, err := d.Token()
@@ -479,7 +480,7 @@ func TestNestedDirectivesStdlib(t *testing.T) {
 
 func TestTokenStdlib(t *testing.T) {
 	t.Skip("shim: blocked on SAX attr vs xmlns ordering (source order not preserved)")
-	d := NewDecoder(strings.NewReader(testInputStdlib))
+	d := NewDecoder(context.Background(), strings.NewReader(testInputStdlib))
 	d.Entity = testEntityStdlib
 
 	for i, want := range cookedTokensStdlib {
@@ -498,7 +499,7 @@ func TestSyntaxStdlib(t *testing.T) {
 		if xmlInputStdlib[i] == "<t>&nbspc;</t>" {
 			continue // helium silently drops undefined entity references
 		}
-		d := NewDecoder(strings.NewReader(xmlInputStdlib[i]))
+		d := NewDecoder(context.Background(), strings.NewReader(xmlInputStdlib[i]))
 		var err error
 		for _, err = d.Token(); err == nil; _, err = d.Token() {
 		}
@@ -533,7 +534,7 @@ att
 		{11, 1},
 		{11, 8},
 	}
-	dec := NewDecoder(strings.NewReader(testInput))
+	dec := NewDecoder(context.Background(), strings.NewReader(testInput))
 	for _, want := range linePos {
 		if _, err := dec.Token(); err != nil {
 			t.Errorf("Unexpected error: %v", err)
@@ -634,7 +635,7 @@ type itemStdlib struct {
 
 func TestIssue68387Stdlib(t *testing.T) {
 	data := `<item b=']]>'/>`
-	dec := NewDecoder(strings.NewReader(data))
+	dec := NewDecoder(context.Background(), strings.NewReader(data))
 	var tok1, tok2, tok3 Token
 	var err error
 	if tok1, err = dec.RawToken(); err != nil {
@@ -669,7 +670,7 @@ func TestIssue569Stdlib(t *testing.T) {
 func TestUnquotedAttrsStdlib(t *testing.T) {
 	t.Skip("shim: non-strict mode not implemented")
 	data := "<tag attr=azAZ09:-_\t>"
-	d := NewDecoder(strings.NewReader(data))
+	d := NewDecoder(context.Background(), strings.NewReader(data))
 	d.Strict = false
 	token, err := d.Token()
 	if _, ok := err.(*SyntaxError); ok {
@@ -696,7 +697,7 @@ func TestValuelessAttrsStdlib(t *testing.T) {
 		{"<input checked />", "input", "checked"},
 	}
 	for _, test := range tests {
-		d := NewDecoder(strings.NewReader(test[0]))
+		d := NewDecoder(context.Background(), strings.NewReader(test[0]))
 		d.Strict = false
 		token, err := d.Token()
 		if _, ok := err.(*SyntaxError); ok {
@@ -759,7 +760,7 @@ func TestCopyTokenCommentStdlib(t *testing.T) {
 
 func TestSyntaxErrorLineNumStdlib(t *testing.T) {
 	testInput := "<P>Foo<P>\n\n<P>Bar</>\n"
-	d := NewDecoder(strings.NewReader(testInput))
+	d := NewDecoder(context.Background(), strings.NewReader(testInput))
 	var err error
 	for _, err = d.Token(); err == nil; _, err = d.Token() {
 	}
@@ -774,7 +775,7 @@ func TestSyntaxErrorLineNumStdlib(t *testing.T) {
 
 func TestTrailingRawTokenStdlib(t *testing.T) {
 	input := `<FOO></FOO>  `
-	d := NewDecoder(strings.NewReader(input))
+	d := NewDecoder(context.Background(), strings.NewReader(input))
 	var err error
 	for _, err = d.RawToken(); err == nil; _, err = d.RawToken() {
 	}
@@ -785,7 +786,7 @@ func TestTrailingRawTokenStdlib(t *testing.T) {
 
 func TestTrailingTokenStdlib(t *testing.T) {
 	input := `<FOO></FOO>  `
-	d := NewDecoder(strings.NewReader(input))
+	d := NewDecoder(context.Background(), strings.NewReader(input))
 	var err error
 	for _, err = d.Token(); err == nil; _, err = d.Token() {
 	}
@@ -796,7 +797,7 @@ func TestTrailingTokenStdlib(t *testing.T) {
 
 func TestEntityInsideCDATA_Stdlib(t *testing.T) {
 	input := `<test><![CDATA[ &val=foo ]]></test>`
-	d := NewDecoder(strings.NewReader(input))
+	d := NewDecoder(context.Background(), strings.NewReader(input))
 	var err error
 	for _, err = d.Token(); err == nil; _, err = d.Token() {
 	}
@@ -830,7 +831,7 @@ func TestDisallowedCharactersStdlib(t *testing.T) {
 		if skip[i] {
 			continue
 		}
-		d := NewDecoder(strings.NewReader(tt.in))
+		d := NewDecoder(context.Background(), strings.NewReader(tt.in))
 		var err error
 
 		for err == nil {
@@ -866,7 +867,7 @@ var directivesWithCommentsTokensStdlib = []Token{
 }
 
 func TestDirectivesWithCommentsStdlib(t *testing.T) {
-	d := NewDecoder(strings.NewReader(directivesWithCommentsInputStdlib))
+	d := NewDecoder(context.Background(), strings.NewReader(directivesWithCommentsInputStdlib))
 
 	for i, want := range directivesWithCommentsTokensStdlib {
 		have, err := d.Token()
@@ -920,7 +921,6 @@ func TestIssue5880Stdlib(t *testing.T) {
 }
 
 func TestIssue8535Stdlib(t *testing.T) {
-
 	type ExampleConflict struct {
 		XMLName  Name   `xml:"example"`
 		Link     string `xml:"link"`
@@ -934,7 +934,7 @@ func TestIssue8535Stdlib(t *testing.T) {
 		</example>`
 
 	var dest ExampleConflict
-	d := NewDecoder(strings.NewReader(testCase))
+	d := NewDecoder(context.Background(), strings.NewReader(testCase))
 	if err := d.Decode(&dest); err != nil {
 		t.Fatal(err)
 	}
@@ -964,7 +964,6 @@ func TestEncodeXMLNSStdlib(t *testing.T) {
 }
 
 func encodeXMLNS1Stdlib() ([]byte, error) {
-
 	type T struct {
 		XMLName Name   `xml:"Test"`
 		Ns      string `xml:"xmlns,attr"`
@@ -976,7 +975,6 @@ func encodeXMLNS1Stdlib() ([]byte, error) {
 }
 
 func encodeXMLNS2Stdlib() ([]byte, error) {
-
 	type Test struct {
 		Body string `xml:"http://example.com/ns body"`
 	}
@@ -986,7 +984,6 @@ func encodeXMLNS2Stdlib() ([]byte, error) {
 }
 
 func encodeXMLNS3Stdlib() ([]byte, error) {
-
 	type Test struct {
 		XMLName Name `xml:"http://example.com/ns Test"`
 		Body    string
@@ -997,7 +994,6 @@ func encodeXMLNS3Stdlib() ([]byte, error) {
 }
 
 func encodeXMLNS4Stdlib() ([]byte, error) {
-
 	type Test struct {
 		Ns   string `xml:"xmlns,attr"`
 		Body string
@@ -1014,7 +1010,7 @@ func TestIssue11405Stdlib(t *testing.T) {
 		"<root><foo></foo>",
 	}
 	for _, tc := range testCases {
-		d := NewDecoder(strings.NewReader(tc))
+		d := NewDecoder(context.Background(), strings.NewReader(tc))
 		var err error
 		for {
 			_, err = d.Token()
@@ -1039,7 +1035,7 @@ func TestIssue12417Stdlib(t *testing.T) {
 		{`<?xml encoding="uuu-9" version="1.0"?><root/>`, false},
 	}
 	for _, tc := range testCases {
-		d := NewDecoder(strings.NewReader(tc.s))
+		d := NewDecoder(context.Background(), strings.NewReader(tc.s))
 		var err error
 		for {
 			_, err = d.Token()
@@ -1116,7 +1112,6 @@ func TestIssue7113Stdlib(t *testing.T) {
 }
 
 func TestIssue20396Stdlib(t *testing.T) {
-
 	var attrError = UnmarshalError("XML syntax error on line 1: expected attribute name in element")
 
 	testCases := []struct {
@@ -1163,7 +1158,7 @@ func TestIssue20685Stdlib(t *testing.T) {
 		{`<xbook>one</ybook>`, false},
 	}
 	for _, tc := range testCases {
-		d := NewDecoder(strings.NewReader(tc.s))
+		d := NewDecoder(context.Background(), strings.NewReader(tc.s))
 		var err error
 		for {
 			_, err = d.Token()
@@ -1207,15 +1202,15 @@ func (m mapperStdlib) Token() (Token, error) {
 }
 
 func TestNewTokenDecoderIdempotentStdlib(t *testing.T) {
-	d := NewDecoder(strings.NewReader(`<br>`))
-	d2 := NewTokenDecoder(d)
+	d := NewDecoder(context.Background(), strings.NewReader(`<br>`))
+	d2 := NewTokenDecoder(context.Background(), d)
 	if d != d2 {
 		t.Error("NewTokenDecoder did not detect underlying Decoder")
 	}
 }
 
 func TestWrapDecoderStdlib(t *testing.T) {
-	d := NewDecoder(strings.NewReader(`<quote>[Re-enter Clown with a letter, and FABIAN]</quote>`))
+	d := NewDecoder(context.Background(), strings.NewReader(`<quote>[Re-enter Clown with a letter, and FABIAN]</quote>`))
 	m := tokenMapStdlib(func(t Token) Token {
 		switch tok := t.(type) {
 		case StartElement:
@@ -1232,7 +1227,7 @@ func TestWrapDecoderStdlib(t *testing.T) {
 		return t
 	})
 
-	d = NewTokenDecoder(m(d))
+	d = NewTokenDecoder(context.Background(), m(d))
 
 	o := struct {
 		XMLName  Name   `xml:"blocking"`
@@ -1267,14 +1262,14 @@ func TestTokenUnmarshalerStdlib(t *testing.T) {
 		}
 	}()
 
-	d := NewTokenDecoder(tokReaderStdlib{})
+	d := NewTokenDecoder(context.Background(), tokReaderStdlib{})
 	if err := d.Decode(&FailureStdlib{}); err != nil {
 		t.Logf("Decode returned error (expected): %v", err)
 	}
 }
 
 func testRoundTripStdlib(t *testing.T, input string) {
-	d := NewDecoder(strings.NewReader(input))
+	d := NewDecoder(context.Background(), strings.NewReader(input))
 	var tokens []Token
 	var buf bytes.Buffer
 	e := NewEncoder(&buf)
@@ -1295,7 +1290,7 @@ func testRoundTripStdlib(t *testing.T, input string) {
 		t.Fatal(err)
 	}
 
-	d = NewDecoder(&buf)
+	d = NewDecoder(context.Background(), &buf)
 	for {
 		tok, err := d.Token()
 		if err == io.EOF {
@@ -1360,7 +1355,7 @@ func TestParseErrorsStdlib(t *testing.T) {
 		if test.skip != "" {
 			continue
 		}
-		d := NewDecoder(strings.NewReader(test.src))
+		d := NewDecoder(context.Background(), strings.NewReader(test.src))
 		var err error
 		for {
 			_, err = d.Token()
@@ -1442,7 +1437,7 @@ func TestHTMLAutoCloseStdlib(t *testing.T) {
 		EndElement{Name: Name{Space: "", Local: "br"}},
 	}
 
-	d := NewDecoder(strings.NewReader(testInputHTMLAutoCloseStdlib))
+	d := NewDecoder(context.Background(), strings.NewReader(testInputHTMLAutoCloseStdlib))
 	d.Strict = false
 	d.AutoClose = stdxml.HTMLAutoClose
 	d.Entity = HTMLEntity

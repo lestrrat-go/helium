@@ -21,7 +21,6 @@ const (
 
 // parser is the HTML parser. It drives the tokenizer and fires SAX events.
 type parser struct {
-	ctx   context.Context
 	input []byte
 	pos   int
 	line  int
@@ -68,7 +67,7 @@ func (l *parserLocator) GetPublicID() string { return "" }
 // GetSystemID returns the system identifier (URI/filename) of the document being parsed (libxml2: xmlSAXLocator.getSystemId).
 func (l *parserLocator) GetSystemID() string { return "" }
 
-func newParser(ctx context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser {
+func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser {
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
 	normalized := normalizeNewlines(input)
 
@@ -99,7 +98,6 @@ func newParser(ctx context.Context, input []byte, sax SAXHandler, cfg parseConfi
 	}
 
 	p := &parser{
-		ctx:               ctx,
 		input:             normalized,
 		pos:               0,
 		line:              1,
@@ -183,7 +181,7 @@ func latin1ToUTF8(data []byte) []byte {
 // invalidByteInfo records the position and raw bytes of the first invalid
 // byte sequence found during UTF-8 validation.
 type invalidByteInfo struct {
-	offset   int    // byte offset of first invalid byte in newline-normalized input
+	offset   int // byte offset of first invalid byte in newline-normalized input
 	rawBytes [4]byte
 	nBytes   int // number of valid bytes in rawBytes (0..4)
 }
@@ -201,10 +199,7 @@ func replaceInvalidUTF8(data []byte, info *invalidByteInfo) ([]byte, bool) {
 			buf.WriteRune('\uFFFD')
 			if !found && info != nil {
 				info.offset = i
-				end := i + 4
-				if end > len(data) {
-					end = len(data)
-				}
+				end := min(i+4, len(data))
 				info.nBytes = copy(info.rawBytes[:], data[i:end])
 			}
 			found = true
@@ -261,7 +256,7 @@ func (p *parser) peekAt(offset int) byte {
 
 // advance moves forward by n bytes, updating line/col tracking.
 func (p *parser) advance(n int) {
-	for i := 0; i < n; i++ {
+	for range n {
 		if p.pos >= len(p.input) {
 			break
 		}
@@ -301,10 +296,10 @@ func (p *parser) pushName(name string) {
 	if name == "html" {
 		p.sawRoot = true
 	}
-	if p.mode < insertInHead && name == "head" {
+	if p.mode < insertInHead && name == "head" { //nolint:goconst
 		p.mode = insertInHead
 	}
-	if p.mode < insertInBody && name == "body" {
+	if p.mode < insertInBody && name == "body" { //nolint:goconst
 		p.mode = insertInBody
 	}
 	p.nameStack = append(p.nameStack, name)
@@ -443,12 +438,12 @@ func (p *parser) htmlCheckImplied(newTag string) {
 }
 
 // parse runs the main parsing loop.
-func (p *parser) parse() error {
+func (p *parser) parse(ctx context.Context) error {
 	_ = p.sax.SetDocumentLocator(p.locator)
 	_ = p.sax.StartDocument()
 
 	for !p.atEnd() {
-		if err := p.ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if p.peek() == '<' {
@@ -672,7 +667,7 @@ func (p *parser) parsePI() {
 	for !p.atEnd() {
 		if p.peek() == '>' {
 			data := p.input[start+1 : p.pos] // skip the '<', include '?'
-			p.advance(1)                      // skip '>'
+			p.advance(1)                     // skip '>'
 			_ = p.sax.Comment(data)
 			return
 		}
@@ -914,8 +909,8 @@ func (p *parser) inRawTextElement() bool {
 type scriptState int
 
 const (
-	scriptNormal       scriptState = 0 // normal script data
-	scriptEscaped      scriptState = 1 // after <!--
+	scriptNormal        scriptState = 0 // normal script data
+	scriptEscaped       scriptState = 1 // after <!--
 	scriptDoubleEscaped scriptState = 2 // after <script inside <!--
 )
 
@@ -1334,4 +1329,3 @@ func matchCaseInsensitive(data []byte, prefix string) bool {
 	}
 	return strings.EqualFold(string(data[:len(prefix)]), prefix)
 }
-

@@ -42,14 +42,14 @@ func fnExists(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnHead(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return ItemSlice{args[0].Get(0)}, nil
 }
 
 func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) <= 1 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return ItemSlice(seqMaterialize(args[0])[1:]), nil
 }
@@ -156,10 +156,10 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 
 	// Handle NaN start or NaN length
 	if math.IsNaN(startF) {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	if hasLength && math.IsNaN(lengthF) {
-		return nil, nil
+		return validNilSequence, nil
 	}
 
 	// Compute end position: startF + lengthF (only when length is given)
@@ -168,7 +168,7 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 		endF = startF + lengthF
 		// -INF + INF = NaN → empty result
 		if math.IsNaN(endF) {
-			return nil, nil
+			return validNilSequence, nil
 		}
 	}
 
@@ -307,7 +307,7 @@ func deepEqualAtomic(a, b AtomicValue, opts deepEqualOptions) (bool, error) {
 	eq, err := ValueCompareWithImplicitTimezone(TokenEq, a, b, opts.implicitTZ)
 	if err != nil {
 		// Incomparable types are not deep-equal
-		return false, nil
+		return false, nil //nolint:nilerr // incomparable types yield false per fn:deep-equal spec
 	}
 	return eq, nil
 }
@@ -612,11 +612,8 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		ki := pairs[i].key
 		kj := pairs[j].key
-		minLen := seqLen(ki)
-		if seqLen(kj) < minLen {
-			minLen = seqLen(kj)
-		}
-		for idx := 0; idx < minLen; idx++ {
+		minLen := min(seqLen(ki), seqLen(kj))
+		for idx := range minLen {
 			ai, err1 := AtomizeItem(ki.Get(idx))
 			aj, err2 := AtomizeItem(kj.Get(idx))
 			if err1 != nil || err2 != nil {

@@ -82,6 +82,16 @@ testdata/libxml2-compat/
 
 ## Test Helpers
 
+### internal/heliumtest
+
+Shared test utilities in `internal/heliumtest/callerdir.go`:
+
+| Function | Purpose |
+|----------|---------|
+| `CallerDir(skip)` | Directory of caller's source file (skip=0 for direct caller) |
+| `RepoRoot()` | Absolute path to repo root (finds go.mod, cached) |
+| `TestDir(path...)` | Join path elements under repo root |
+
 ### SAX Event Normalization
 
 | Function | Package | Purpose |

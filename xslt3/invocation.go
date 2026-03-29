@@ -78,16 +78,16 @@ type invocationConfig struct {
 	initialTemplateParams *Parameters
 	initialModeParams     *Parameters
 
-	msgHandler              MessageHandler
-	resultDocHandler        ResultDocumentHandler
-	rawResultHandler        RawResultHandler
-	primaryItemsHandler     PrimaryItemsHandler
-	annotationHandler       AnnotationHandler
-	collectionResolver      xpath3.CollectionResolver
-	baseOutputURI      string
-	sourceSchemas      []*xsd.Schema
-	onMultipleMatch    OnMultipleMatchMode
-	traceWriter        io.Writer
+	msgHandler          MessageHandler
+	resultDocHandler    ResultDocumentHandler
+	rawResultHandler    RawResultHandler
+	primaryItemsHandler PrimaryItemsHandler
+	annotationHandler   AnnotationHandler
+	collectionResolver  xpath3.CollectionResolver
+	baseOutputURI       string
+	sourceSchemas       []*xsd.Schema
+	onMultipleMatch     OnMultipleMatchMode
+	traceWriter         io.Writer
 	globalContextSelect string // XPath for global context item (evaluated post-strip-space)
 
 	// resolvedOutputDef is set after executeTransform completes.

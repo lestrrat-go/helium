@@ -330,7 +330,6 @@ func TestLibxml2CompatHTMLSAX(t *testing.T) {
 	t.Parallel()
 
 	dir := "../testdata/libxml2-compat/html"
-
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("testdata/libxml2-compat/html not found; run testdata/libxml2/generate.sh first")
 	}
@@ -339,7 +338,7 @@ func TestLibxml2CompatHTMLSAX(t *testing.T) {
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_HTML_TEST_FILES"); v != "" {
-		for _, f := range strings.Split(v, ",") {
+		for f := range strings.SplitSeq(v, ",") {
 			only[strings.TrimSpace(f)] = struct{}{}
 		}
 	}
@@ -440,7 +439,7 @@ func TestHTMLSerialization(t *testing.T) {
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_HTML_TEST_FILES"); v != "" {
-		for _, f := range strings.Split(v, ",") {
+		for f := range strings.SplitSeq(v, ",") {
 			only[strings.TrimSpace(f)] = struct{}{}
 		}
 	}
@@ -604,15 +603,12 @@ func formatHTMLErrors(filename string, input []byte, errors []htmlError) string 
 		if e.msg == "Invalid bytes in character encoding" {
 			// Compute byte offset in normalized input
 			byteOffset := 0
-			for i := 0; i < lineIdx; i++ {
+			for i := range lineIdx {
 				byteOffset += len(lines[i]) + 1 // +1 for \n separator
 			}
 			byteOffset += errPos
 
-			endOfs := byteOffset + 4
-			if endOfs > len(normalized) {
-				endOfs = len(normalized)
-			}
+			endOfs := min(byteOffset+4, len(normalized))
 			rawBytes := normalized[byteOffset:endOfs]
 			var parts []string
 			for _, b := range rawBytes {
@@ -631,7 +627,7 @@ func formatHTMLErrors(filename string, input []byte, errors []htmlError) string 
 		buf.WriteByte('\n')
 
 		// Write caret line (preserving tabs from source)
-		for i := 0; i < col; i++ {
+		for i := range col {
 			if i < contentLen && content[i] == '\t' {
 				buf.WriteByte('\t')
 			} else {
@@ -663,7 +659,7 @@ func TestHTMLErrors(t *testing.T) {
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_HTML_TEST_FILES"); v != "" {
-		for _, f := range strings.Split(v, ",") {
+		for f := range strings.SplitSeq(v, ",") {
 			only[strings.TrimSpace(f)] = struct{}{}
 		}
 	}

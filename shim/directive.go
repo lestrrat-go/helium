@@ -4,6 +4,8 @@ import (
 	"bytes"
 	stdxml "encoding/xml"
 	"io"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // scanProlog reads from r until the first element start tag, tokenizing
@@ -125,7 +127,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 			if err != nil {
 				return tokens, errUnexpectedEOF
 			}
-			pi := tok.(ProcInst)
+			pi := tok.(ProcInst) //nolint:forcetypeassert
 
 			// Validate PI target
 			if pi.Target == "" {
@@ -135,7 +137,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 				return tokens, &stdxml.SyntaxError{Msg: "expected target name after <?"}
 			}
 
-			if pi.Target == "xml" {
+			if pi.Target == lexicon.PrefixXML {
 				s.xmlDeclStart = piStart
 				s.xmlDeclEnd = s.buf.Len()
 			}
@@ -306,17 +308,17 @@ func (s *prologScanner) scanDirective() (Token, error) {
 			match := "!--"
 			matched := true
 			var i int
-			for i = 0; i < len(match); i++ {
+			for i = range len(match) {
 				nb, err := s.readByte()
 				if err != nil {
-					for j := 0; j < i; j++ {
+					for j := range i {
 						content.WriteByte(match[j])
 					}
 					return Directive(content.Bytes()), err
 				}
 				if nb != match[i] {
 					// Not a comment. Write prefix, then process nb through handleB.
-					for j := 0; j < i; j++ {
+					for j := range i {
 						content.WriteByte(match[j])
 					}
 					depth++

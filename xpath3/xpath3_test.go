@@ -1166,7 +1166,7 @@ func BenchmarkMatchesLiteralRegex(b *testing.B) {
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := eval.Evaluate(b.Context(), expr, doc)
 		require.NoError(b, err)
 		value, ok := result.IsBoolean()

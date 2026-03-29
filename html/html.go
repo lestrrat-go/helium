@@ -2,10 +2,12 @@ package html
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/push"
 )
 
 // Parser configures HTML parsing. It is a value-style wrapper: fluent
@@ -78,12 +80,23 @@ func (p Parser) parseConfig() parseConfig {
 	return p.cfg.parseConfig
 }
 
+// ParseReader reads all data from r and parses it as HTML.
+// The HTML parser requires the complete input before parsing begins,
+// so all bytes are read into memory first.
+func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*helium.Document, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return p.Parse(ctx, data)
+}
+
 // Parse parses HTML data and returns a helium Document.
 // (libxml2: htmlParseDoc)
 func (p Parser) Parse(ctx context.Context, data []byte) (*helium.Document, error) {
 	tb := newTreeBuilder()
 	hp := newParser(ctx, data, tb, p.parseConfig())
-	if err := hp.parse(); err != nil {
+	if err := hp.parse(ctx); err != nil {
 		return nil, err
 	}
 	if enc := hp.detectedEncoding; enc != "" {
@@ -116,23 +129,47 @@ func (p Parser) ParseFile(ctx context.Context, filename string) (*helium.Documen
 // (libxml2: htmlSAXParseDoc)
 func (p Parser) ParseWithSAX(ctx context.Context, data []byte, handler SAXHandler) error {
 	hp := newParser(ctx, data, handler, p.parseConfig())
-	return hp.parse()
+	return hp.parse(ctx)
 }
 
-// NewPushParser creates an HTML PushParser that builds a DOM tree.
-func (p Parser) NewPushParser(ctx context.Context) *PushParser {
-	if ctx == nil {
-		ctx = context.Background()
+// saxParser wraps a Parser with a SAX handler so that ParseReader fires
+// SAX events instead of building a DOM tree.
+type saxParser struct {
+	parser  Parser
+	handler SAXHandler
+}
+
+func (p Parser) withSAXHandler(h SAXHandler) saxParser {
+	return saxParser{parser: p, handler: h}
+}
+
+func (sp saxParser) ParseReader(ctx context.Context, r io.Reader) (*helium.Document, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
 	}
-	return &PushParser{ctx: ctx, cfg: p.parseConfig()}
+	hp := newParser(ctx, data, sp.handler, sp.parser.parseConfig())
+	return nil, hp.parse(ctx)
+}
+
+// PushParser provides an incremental HTML parsing interface
+// (libxml2: htmlCreatePushParserCtxt).
+// Data is pushed via Push or Write. A background goroutine waits for all
+// data to arrive, then parses it in one shot. Call [PushParser.Close] to
+// signal end-of-input and retrieve the parsed Document.
+type PushParser = push.Parser[*helium.Document]
+
+// NewPushParser creates an HTML PushParser that builds a DOM tree.
+// A background goroutine is started immediately; it waits for data
+// pushed via [PushParser.Push] or [PushParser.Write], then parses
+// everything in one shot once [PushParser.Close] is called.
+func (p Parser) NewPushParser(ctx context.Context) *PushParser {
+	return push.New[*helium.Document](ctx, p)
 }
 
 // NewSAXPushParser creates an HTML PushParser that fires SAX events
 // to the given handler instead of building a DOM tree.
 // (libxml2: htmlCreatePushParserCtxt with SAX handler)
 func (p Parser) NewSAXPushParser(ctx context.Context, h SAXHandler) *PushParser {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return &PushParser{ctx: ctx, sax: h, cfg: p.parseConfig()}
+	return push.New[*helium.Document](ctx, p.withSAXHandler(h))
 }

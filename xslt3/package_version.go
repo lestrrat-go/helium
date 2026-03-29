@@ -26,13 +26,13 @@ func ParsePackageVersion(s string) PackageVersion {
 
 	// Split on first "-" for name suffix
 	numPart := s
-	if idx := strings.IndexByte(s, '-'); idx >= 0 {
-		numPart = s[:idx]
-		pv.Name = s[idx+1:]
+	if np, name, ok := strings.Cut(s, "-"); ok {
+		numPart = np
+		pv.Name = name
 	}
 
 	// Parse numeric parts
-	for _, part := range strings.Split(numPart, ".") {
+	for part := range strings.SplitSeq(numPart, ".") {
 		n, err := strconv.Atoi(part)
 		if err != nil {
 			// Non-numeric version component - treat as name
@@ -49,12 +49,9 @@ func ParsePackageVersion(s string) PackageVersion {
 // Compare compares two versions. Returns -1, 0, or 1.
 // Missing trailing components are treated as zero.
 func (v PackageVersion) Compare(other PackageVersion) int {
-	maxLen := len(v.Numbers)
-	if len(other.Numbers) > maxLen {
-		maxLen = len(other.Numbers)
-	}
+	maxLen := max(len(v.Numbers), len(other.Numbers))
 
-	for i := 0; i < maxLen; i++ {
+	for i := range maxLen {
 		a := 0
 		if i < len(v.Numbers) {
 			a = v.Numbers[i]
@@ -144,15 +141,15 @@ func ParseVersionConstraint(s string) VersionConstraint {
 
 	// Check for minimum version: "X+"
 	if strings.HasSuffix(s, "+") {
-		min := ParsePackageVersion(s[:len(s)-1])
-		return VersionConstraint{IsMinVersion: true, MinVersion: min, Raw: s}
+		minVer := ParsePackageVersion(s[:len(s)-1])
+		return VersionConstraint{IsMinVersion: true, MinVersion: minVer, Raw: s}
 	}
 
 	// Check for prefix wildcard: "1.*"
 	if strings.HasSuffix(s, ".*") {
 		prefix := s[:len(s)-2]
 		var nums []int
-		for _, p := range strings.Split(prefix, ".") {
+		for p := range strings.SplitSeq(prefix, ".") {
 			n, err := strconv.Atoi(p)
 			if err != nil {
 				break

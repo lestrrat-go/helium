@@ -33,7 +33,7 @@ func appendFastChild(parent MutableNode, child Node) error {
 		return nil
 	}
 
-	return last.(MutableNode).AddSibling(child)
+	return last.(MutableNode).AddSibling(child) //nolint:forcetypeassert
 }
 
 func (pctx *parserCtx) fastLookupAttributeNamespace(doc *Document, prefix string, cache []attrNamespaceCacheEntry) (*Namespace, []attrNamespaceCacheEntry, error) {
@@ -237,8 +237,10 @@ func (pctx *parserCtx) fastCharacters(data []byte) error {
 	}
 
 	pdn := parent.baseDocNode()
-	if last := pdn.lastChild; last != nil && last.Type() == TextNode {
-		return last.(*Text).AppendText(data)
+	if last := pdn.lastChild; last != nil {
+		if t, ok := AsNode[*Text](last); ok {
+			return t.AppendText(data)
+		}
 	}
 
 	text := pctx.doc.CreateText(data)

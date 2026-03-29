@@ -27,7 +27,7 @@ func Example_catalog_load() {
 		fmt.Printf("failed to create temp dir: %s\n", err)
 		return
 	}
-	defer os.RemoveAll(dir) //nolint:errcheck
+	defer os.RemoveAll(dir)
 
 	catalogPath := filepath.Join(dir, "catalog.xml")
 	if err := os.WriteFile(catalogPath, []byte(catalogSrc), 0644); err != nil {
@@ -48,16 +48,16 @@ func Example_catalog_load() {
 	// Here we check the suffix since the absolute path varies by environment.
 
 	// Resolve a system identifier (by systemId).
-	resolved := cat.Resolve("", "http://example.com/schema.dtd")
+	resolved := cat.Resolve(context.Background(), "", "http://example.com/schema.dtd")
 	fmt.Printf("system resolved: %t\n", strings.HasSuffix(resolved, "local-schema.dtd"))
 
 	// Resolve a public identifier (by publicId).
-	resolved = cat.Resolve("-//Example//DTD Test//EN", "")
+	resolved = cat.Resolve(context.Background(), "-//Example//DTD Test//EN", "")
 	fmt.Printf("public resolved: %t\n", strings.HasSuffix(resolved, "local-schema.dtd"))
 
 	// When neither publicId nor systemId matches any catalog entry,
 	// Resolve returns an empty string.
-	resolved = cat.Resolve("", "http://unknown.com/other.dtd")
+	resolved = cat.Resolve(context.Background(), "", "http://unknown.com/other.dtd")
 	fmt.Printf("unknown: %q\n", resolved)
 	// Output:
 	// system resolved: true

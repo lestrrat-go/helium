@@ -19,7 +19,10 @@ func dtdQuoteChar(value string) byte {
 }
 
 func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
-	dtd := n.(*DTD)
+	dtd, ok := AsNode[*DTD](n)
+	if !ok {
+		return nil
+	}
 	_, _ = io.WriteString(out, "<!DOCTYPE ")
 	_, _ = io.WriteString(out, dtd.Name())
 
@@ -290,7 +293,7 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	return nil
 }
 
-func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
+func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error { //nolint:unparam // always nil but matches other dump methods
 	_, _ = io.WriteString(out, "<!NOTATION ")
 	_, _ = io.WriteString(out, n.name)
 	if n.publicID != "" {

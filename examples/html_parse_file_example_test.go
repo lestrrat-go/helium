@@ -17,7 +17,7 @@ func Example_html_parse_file() {
 		fmt.Printf("create temp file failed: %s\n", err)
 		return
 	}
-	defer os.Remove(f.Name()) //nolint:errcheck
+	defer os.Remove(f.Name())
 
 	if _, err := f.WriteString(`<!doctype html><html><body><h1>FromFile</h1></body></html>`); err != nil {
 		fmt.Printf("write temp file failed: %s\n", err)

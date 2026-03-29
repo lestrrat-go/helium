@@ -21,6 +21,7 @@ import (
 	"go/format"
 	"io"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -150,8 +151,8 @@ type dependency struct {
 }
 
 type resultSpec struct {
-	XMLName xml.Name
-	Inner   []byte `xml:",innerxml"`
+	XMLName xml.Name `xml:""`
+	Inner   []byte   `xml:",innerxml"`
 }
 
 type assertion struct {
@@ -452,14 +453,14 @@ func isXPathApplicable(deps []dependency) bool {
 		// Exclude tests that require the absence of a feature we support.
 		// E.g. unicode-normalization-form value="FULLY-NORMALIZED" satisfied="false"
 		// means the test is for processors that do NOT support that form.
-		if d.Satisfied == "false" && isSupportedFeature(d) {
+		if d.Satisfied == "false" && isSupportedFeature(d) { //nolint:goconst
 			return false
 		}
 		if d.Type != "spec" {
 			continue
 		}
 		hasSpecDep = true
-		for _, v := range strings.Fields(d.Value) {
+		for v := range strings.FieldsSeq(d.Value) {
 			if !strings.HasPrefix(v, "XP") {
 				continue
 			}
@@ -526,7 +527,7 @@ func getSkipReason(deps []dependency) string {
 			}
 		}
 		if d.Type == "spec" {
-			for _, v := range strings.Fields(d.Value) {
+			for v := range strings.FieldsSeq(d.Value) {
 				if v == "XP20" && d.Satisfied != "false" {
 					return "requires XPath 2.0 only behavior"
 				}
@@ -547,7 +548,7 @@ func getSkipReason(deps []dependency) string {
 
 // getTestCaseSkipReason returns a skip reason for specific test cases that
 // need per-case handling (e.g., tests expecting static typing errors).
-func getTestCaseSkipReason(setName, caseName string) string {
+func getTestCaseSkipReason(_, caseName string) string {
 	switch caseName {
 	// These tests pass () or integer where xs:string? is expected and expect XPTY0004.
 	// Our dynamic evaluation handles these fine without static type checking.
@@ -713,12 +714,8 @@ func envNamedDecimalFormats(env *environment) []namedDecimalFormat {
 			continue
 		}
 		dfNS := make(map[string]string, len(ns))
-		for k, v := range ns {
-			dfNS[k] = v
-		}
-		for k, v := range decimalFormatNamespaces(df) {
-			dfNS[k] = v
-		}
+		maps.Copy(dfNS, ns)
+		maps.Copy(dfNS, decimalFormatNamespaces(df))
 		uri, local, ok := resolveEnvQName(name, dfNS)
 		if !ok {
 			continue
@@ -757,13 +754,12 @@ func resolveEnvQName(name string, ns map[string]string) (string, string, bool) {
 		return name[2:end], name[end+1:], true
 	}
 
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
+	if prefix, local, ok := strings.Cut(name, ":"); ok {
 		uri := ns[prefix]
 		if uri == "" {
 			return "", "", false
 		}
-		return uri, name[idx+1:], true
+		return uri, local, true
 	}
 
 	return "", name, true
@@ -802,7 +798,7 @@ type xmlResult struct {
 }
 
 type xmlAssertion struct {
-	XMLName        xml.Name
+	XMLName        xml.Name       `xml:""`
 	Code           string         `xml:"code,attr"`
 	NormalizeSpace string         `xml:"normalize-space,attr"`
 	Inner          []byte         `xml:",innerxml"`
@@ -1035,11 +1031,10 @@ func generateTestFile(tests []generatedTest) string {
 
 func assertionsExpectError(assertions []assertion) bool {
 	for _, a := range assertions {
-		if a.Type == "error" {
+		if a.Type == "error" { //nolint:goconst
 			return true
 		}
-		if a.Type == "any-of" {
-			// Only treat as error-only if ALL children are errors.
+		if a.Type == "any-of" { // Only treat as error-only if ALL children are errors.
 			// If any-of has both error and non-error children,
 			// the non-error result is also acceptable (XP31 behavior).
 			allError := true

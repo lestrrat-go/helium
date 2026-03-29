@@ -16,7 +16,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 	var value string
 	var bodySeq xpath3.ItemSlice
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			// Errors evaluating message content are recoverable
 			value = err.Error()
@@ -57,9 +57,9 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 		}
 		termStr = strings.TrimSpace(termStr)
 		switch termStr {
-		case lexicon.ValueYes, "true", "1":
+		case lexicon.ValueYes, lexicon.ValueTrue, "1":
 			terminate = true
-		case lexicon.ValueNo, "false", "0":
+		case lexicon.ValueNo, lexicon.ValueFalse, "0":
 			terminate = false
 		default:
 			// XTDE0030: avt value is not a valid xs:boolean
@@ -143,7 +143,7 @@ func serializeMessageSequence(seq xpath3.Sequence) string {
 			buf.WriteString("?>")
 		default:
 			// Text, CDATA, etc. — use string value
-			sb.WriteString(string(ni.Node.Content()))
+			sb.Write(ni.Node.Content())
 			continue
 		}
 		sb.WriteString(strings.TrimSpace(buf.String()))
@@ -179,7 +179,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 
 	tryErr := func() error {
 		if inst.Select != nil {
-			result, err := ec.evalXPath(inst.Select, ec.contextNode)
+			result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 			if err != nil {
 				return err
 			}
@@ -339,7 +339,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 
 	// Execute matched catch body
 	if matchedCatch.Select != nil {
-		result, err := ec.evalXPath(matchedCatch.Select, ec.contextNode)
+		result, err := ec.evalXPath(ctx, matchedCatch.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -360,7 +360,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 
 	tryErr := func() error {
 		if inst.Select != nil {
-			result, err := ec.evalXPath(inst.Select, ec.contextNode)
+			result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 			if err != nil {
 				return err
 			}
@@ -460,8 +460,8 @@ func catchMatches(clause *catchClause, errClark string) bool {
 	// Extract local name from Clark notation for wildcard matching.
 	errLocal := errClark
 	if strings.HasPrefix(errClark, "{") {
-		if idx := strings.IndexByte(errClark, '}'); idx >= 0 {
-			errLocal = errClark[idx+1:]
+		if _, after, ok := strings.Cut(errClark, "}"); ok {
+			errLocal = after
 		}
 	}
 

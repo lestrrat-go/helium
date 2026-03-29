@@ -41,7 +41,7 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 
 	// Fast path: UTF8Cursor can scan directly into a []byte slice,
@@ -155,7 +155,7 @@ func (pctx *parserCtx) parseElement(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '/' || cur.PeekAt(1) != '>' {
 		if err := pctx.parseContent(ctx); err != nil {
@@ -178,7 +178,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '<' {
 		return pctx.error(ctx, ErrStartTagRequired)
@@ -440,7 +440,7 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() == '/' && cur.PeekAt(1) == '>' {
 		if err := cur.Advance(2); err != nil {
@@ -504,7 +504,8 @@ func (pctx *parserCtx) parseAttributeValue(ctx context.Context, normalize bool) 
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 	qch := cur.Peek()
 	switch qch {
@@ -546,7 +547,8 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 
 	if !normalize {
@@ -612,7 +614,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 						err = pctx.error(ctx, err)
 						return
 					}
-					for i := 0; i < len(rep); i++ {
+					for i := range len(rep) {
 						switch rep[i] {
 						case 0xD, 0xA, 0x9:
 							_ = b.WriteByte(0x20)
@@ -643,10 +645,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 		default:
 			inSpace = false
 			b.WriteRune(c)
-			w := utf8.RuneLen(c)
-			if w < 1 {
-				w = 1
-			}
+			w := max(utf8.RuneLen(c), 1)
 			if err := cur.Advance(w); err != nil {
 				return "", 0, err
 			}
@@ -694,7 +693,8 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 	if cur.Peek() != '=' {
 		err = pctx.error(ctx, ErrEqualSignRequired)

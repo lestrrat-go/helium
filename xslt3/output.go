@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"strconv"
@@ -45,7 +44,6 @@ const (
 )
 
 type conditionalAction struct {
-	ctx           context.Context
 	kind          conditionalKind
 	content       xpath3.Sequence
 	placeholder   helium.MutableNode
@@ -92,7 +90,7 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 
 // serializeItemsWithSeparator serializes a sequence of items using the specified
 // output method, joining them with the item-separator.
-func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
+func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.Document, outDef *OutputDef) error {
 	sep := "\n"
 	if outDef.ItemSeparator != nil {
 		sep = *outDef.ItemSeparator
@@ -115,7 +113,7 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, doc *helium
 			default:
 				if v.Node.Type() == helium.CommentNode {
 					buf.WriteString("<!--")
-					buf.WriteString(string(v.Node.Content()))
+					buf.Write(v.Node.Content())
 					buf.WriteString("-->")
 				} else if v.Node.Type() == helium.ProcessingInstructionNode {
 					buf.WriteString("<?")
@@ -126,7 +124,7 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, doc *helium
 					}
 					buf.WriteString("?>")
 				} else {
-					buf.WriteString(string(v.Node.Content()))
+					buf.Write(v.Node.Content())
 				}
 			}
 			if _, err := w.Write(buf.Bytes()); err != nil {
@@ -171,7 +169,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 				// Root is "html" in no namespace → HTML output method.
 				outDef.Method = methodHTML
 				outDef.OmitDeclaration = true
-			} else if strings.EqualFold(string(root.LocalName()), "html") && string(root.URI()) == lexicon.NamespaceXHTML {
+			} else if strings.EqualFold(root.LocalName(), "html") && root.URI() == lexicon.NamespaceXHTML {
 				// Root is "html" in XHTML namespace → XHTML output method.
 				outDef.Method = methodXHTML
 			}
@@ -190,8 +188,8 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 
 	// Check if we need encoding conversion (non-UTF-8)
 	enc := strings.ToLower(outDef.Encoding)
-	isUTF16 := enc == "utf-16" || enc == "utf16"
-	needsEncodingConversion := enc != "" && enc != "utf-8" && enc != "utf8" && !isUTF16
+	isUTF16 := enc == lexicon.EncodingUTF16 || enc == "utf16"
+	needsEncodingConversion := enc != "" && enc != lexicon.EncodingUTF8 && enc != "utf8" && !isUTF16 //nolint:goconst
 
 	// Check if we need Unicode normalization
 	needsNormalization := outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE"
@@ -310,7 +308,7 @@ func serializeNodeWithMethod(node helium.Node, method string) string {
 		_ = serializeHTML(&buf, doc, outDef)
 		s := buf.String()
 		// If we wrapped the node in <html>, strip the wrapper tags
-		if elem, ok := node.(*helium.Element); ok && !strings.EqualFold(string(elem.LocalName()), "html") {
+		if elem, ok := node.(*helium.Element); ok && !strings.EqualFold(elem.LocalName(), "html") {
 			s = strings.TrimPrefix(s, "<html>")
 			s = strings.TrimSuffix(s, "</html>")
 		}
@@ -328,7 +326,7 @@ func serializeNodeWithMethod(node helium.Node, method string) string {
 		case *helium.Element, *helium.Document:
 			_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, node)
 		default:
-			buf.WriteString(string(node.Content()))
+			buf.Write(node.Content())
 		}
 		return buf.String()
 	}
@@ -348,10 +346,10 @@ func wrapNodeInHTMLDoc(node helium.Node) *helium.Document {
 		if err != nil {
 			return doc
 		}
-		copiedElem := copied.(*helium.Element)
+		copiedElem, _ := helium.AsNode[*helium.Element](copied)
 		// Remove redundant namespace declarations from descendants
 		removeRedundantNamespaces(copiedElem)
-		if strings.EqualFold(string(copiedElem.LocalName()), "html") {
+		if strings.EqualFold(copiedElem.LocalName(), "html") {
 			_ = doc.AddChild(copiedElem)
 		} else {
 			// Wrap in an <html> element
@@ -499,7 +497,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	// SESU0007: unsupported encoding for any output method
 	{
 		enc := strings.ToLower(outDef.Encoding)
-		if enc != "" && enc != "utf-8" && enc != "utf8" && enc != "utf-16" && enc != "utf16" {
+		if enc != "" && enc != lexicon.EncodingUTF8 && enc != "utf8" && enc != lexicon.EncodingUTF16 && enc != "utf16" {
 			_, encErr := htmlindex.Get(enc)
 			if encErr != nil {
 				return dynamicError(errCodeSESU0007,

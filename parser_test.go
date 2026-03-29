@@ -125,6 +125,7 @@ func TestParseCharRefReplacementCharacter(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
+	//nolint:dupword // "L\nL" is intentional XML content
 	const input = `<?xml version="1.0"?>
 <root foo="bar">
 	<!-- this is a sample comment -->

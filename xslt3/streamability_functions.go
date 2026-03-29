@@ -1,24 +1,26 @@
 package xslt3
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-func checkStreamableFunctionBody(ss *Stylesheet, fn *xslFunction) error {
+func checkStreamableFunctionBody(_ *Stylesheet, fn *xslFunction) error {
 	cat := fn.Streamability
 	switch cat {
-	case "absorbing":
+	case lexicon.StreamAbsorbing:
 		return checkAbsorbingFunction(fn)
-	case "inspection":
+	case lexicon.StreamInspection:
 		return checkInspectionFunction(fn)
-	case "filter":
+	case lexicon.StreamFilter:
 		return checkFilterFunction(fn)
 	case "shallow-descent":
 		return checkShallowDescentFunction(fn)
-	case "ascent":
+	case lexicon.StreamAscent:
 		return checkAscentFunction(fn)
 	}
 	return nil
@@ -135,11 +137,9 @@ func checkShallowDescentFunction(fn *xslFunction) error {
 
 	// Check if descendant/descendant-or-self axes are used.
 	for _, inst := range fn.Body {
-		for _, expr := range getInstructionExprs(inst) {
-			if xpathstream.ExprUsesDescendantOrSelf(expr) {
-				return staticError(errCodeXTSE3430,
-					"shallow-descent function %q uses descendant axis, violating its declared streamability", fn.Name.Name)
-			}
+		if slices.ContainsFunc(getInstructionExprs(inst), xpathstream.ExprUsesDescendantOrSelf) {
+			return staticError(errCodeXTSE3430,
+				"shallow-descent function %q uses descendant axis, violating its declared streamability", fn.Name.Name)
 		}
 	}
 
@@ -147,7 +147,7 @@ func checkShallowDescentFunction(fn *xslFunction) error {
 	firstParam := fn.Params[0]
 	if firstParam.As != "" {
 		as := strings.TrimSpace(firstParam.As)
-		if as != "node()" && as != "element()" {
+		if as != "node()" && as != lexicon.NodeTestElement {
 			return staticError(errCodeXTSE3430,
 				"shallow-descent function %q first parameter type %q is not a single node, violating its declared streamability",
 				fn.Name.Name, firstParam.As)
@@ -267,7 +267,7 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 					count += countStreamingDownwardSelectionsInner(ss, arg, false)
 				}
 				return count
-			case "inspection", "ascent":
+			case lexicon.StreamInspection, lexicon.StreamAscent:
 				// Inspection/ascent: motionless, no downward selection.
 				return 0
 			case "absorbing":

@@ -6,11 +6,11 @@ import (
 	"encoding/xml"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 )
 
 var (
@@ -21,25 +21,10 @@ var (
 	repoRoot  string
 )
 
-func findRepoRoot() string {
-	_, file, _, _ := runtime.Caller(0)
-	dir := filepath.Dir(file)
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			panic("cannot find repo root (go.mod)")
-		}
-		dir = parent
-	}
-}
-
 func loadCorpus(b *testing.B) {
 	b.Helper()
 	loadOnce.Do(func() {
-		repoRoot = findRepoRoot()
+		repoRoot = heliumtest.RepoRoot()
 		var err error
 		smallXML, err = os.ReadFile(filepath.Join(repoRoot, "testdata/qt3ts/testdata/fsx_NS.xml"))
 		if err != nil {

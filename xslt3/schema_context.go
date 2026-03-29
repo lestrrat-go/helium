@@ -35,7 +35,7 @@ func (r *schemaRegistry) LookupElement(local, ns string) (typeName string, ok bo
 			}
 			// Per XSD spec, elements without an explicit type default to
 			// xs:anyType (the universal base type), not xs:untyped.
-			return "xs:anyType", true
+			return lexicon.XSAnyType, true
 		}
 	}
 	return "", false
@@ -107,7 +107,7 @@ func (r *schemaRegistry) LookupAllTypeDefs(typeName string) []struct {
 // user-defined schema type. Returns the normalized value and nil on success,
 // or an error if the value is invalid. The typeName must be in annotation
 // format: "Q{ns}local" for user-defined types or "xs:local" for built-ins.
-func (r *schemaRegistry) CastToSchemaType(value, typeName string) (string, error) {
+func (r *schemaRegistry) CastToSchemaType(ctx context.Context, value, typeName string) (string, error) {
 	local, ns := splitAnnotationName(typeName)
 	for _, s := range r.schemas {
 		td, ok := s.LookupType(local, ns)
@@ -118,7 +118,7 @@ func (r *schemaRegistry) CastToSchemaType(value, typeName string) (string, error
 			// Complex types can't be cast from string.
 			return value, nil
 		}
-		if err := td.Validate(value, nil); err != nil {
+		if err := td.Validate(ctx, value, nil); err != nil {
 			return "", fmt.Errorf("value %q is not valid for type %s: %w", value, typeName, err)
 		}
 		return schemaNormalizeLexical(value, td), nil
@@ -126,9 +126,7 @@ func (r *schemaRegistry) CastToSchemaType(value, typeName string) (string, error
 	// If the type name is still a prefix:local form (no Q{} wrapping yet),
 	// try resolving by local name against all schemas' target namespaces.
 	if !strings.HasPrefix(typeName, "Q{") && !strings.HasPrefix(typeName, "xs:") {
-		idx := strings.IndexByte(typeName, ':')
-		if idx >= 0 {
-			localOnly := typeName[idx+1:]
+		if _, localOnly, ok := strings.Cut(typeName, ":"); ok {
 			for _, s := range r.schemas {
 				td, ok := s.LookupType(localOnly, s.TargetNamespace())
 				if !ok {
@@ -137,7 +135,7 @@ func (r *schemaRegistry) CastToSchemaType(value, typeName string) (string, error
 				if td.ContentType != xsd.ContentTypeSimple {
 					return value, nil
 				}
-				if err := td.Validate(value, nil); err != nil {
+				if err := td.Validate(ctx, value, nil); err != nil {
 					return "", fmt.Errorf("value %q is not valid for type %s: %w", value, typeName, err)
 				}
 				return schemaNormalizeLexical(value, td), nil
@@ -265,7 +263,7 @@ func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 
 // ValidateCast implements xpath3.SchemaDeclarations.
 // It validates a string value against a user-defined schema type's facets.
-func (r *schemaRegistry) ValidateCast(value, typeName string) error {
+func (r *schemaRegistry) ValidateCast(ctx context.Context, value, typeName string) error {
 	td, _, found := r.LookupTypeDef(typeName)
 	if !found {
 		return nil // type not found — no facet check possible
@@ -273,12 +271,12 @@ func (r *schemaRegistry) ValidateCast(value, typeName string) error {
 	if td.ContentType != xsd.ContentTypeSimple {
 		return nil // complex types don't constrain string values
 	}
-	return td.Validate(value, nil)
+	return td.Validate(ctx, value, nil)
 }
 
 // ValidateCastWithNS validates a value against a schema type using namespace
 // context for QName/NOTATION resolution. Implements xpath3.SchemaDeclarations.
-func (r *schemaRegistry) ValidateCastWithNS(value, typeName string, nsMap map[string]string) error {
+func (r *schemaRegistry) ValidateCastWithNS(ctx context.Context, value, typeName string, nsMap map[string]string) error {
 	td, _, found := r.LookupTypeDef(typeName)
 	if !found {
 		return nil
@@ -286,7 +284,7 @@ func (r *schemaRegistry) ValidateCastWithNS(value, typeName string, nsMap map[st
 	if td.ContentType != xsd.ContentTypeSimple {
 		return nil
 	}
-	return td.Validate(value, nsMap)
+	return td.Validate(ctx, value, nsMap)
 }
 
 // ListItemType implements xpath3.SchemaDeclarations.
@@ -431,13 +429,13 @@ func (r *schemaRegistry) LookupAttribute(local, ns string) (typeName string, ok 
 			continue
 		}
 		if au.TypeName.Local == "" {
-			return "xs:untypedAtomic", true
+			return lexicon.XSUntypedAtomic, true
 		}
 		td, tdOk := s.LookupType(au.TypeName.Local, au.TypeName.NS)
 		if tdOk {
 			return xsdTypeNameFromDef(td), true
 		}
-		return "xs:untypedAtomic", true
+		return lexicon.XSUntypedAtomic, true
 	}
 	return "", false
 }
@@ -509,7 +507,7 @@ func validateXMLNSAttr(localName, value string) (string, bool, error) {
 // declared attribute in the imported schemas. It returns (typeName, true, nil)
 // when the attribute value is valid, (typeName, false, err) when invalid, and
 // ("", false, nil) when no matching global attribute declaration is found.
-func (r *schemaRegistry) ValidateAttribute(localName, nsURI, value string) (string, bool, error) {
+func (r *schemaRegistry) ValidateAttribute(ctx context.Context, localName, nsURI, value string) (string, bool, error) {
 	// Check built-in XML namespace declarations.
 	if nsURI == lexicon.NamespaceXML {
 		if r.hasXMLNSImport() {
@@ -524,7 +522,7 @@ func (r *schemaRegistry) ValidateAttribute(localName, nsURI, value string) (stri
 		}
 		if au.TypeName.Local == "" {
 			// No type constraint — any value is valid.
-			return "xs:untypedAtomic", true, nil
+			return lexicon.XSUntypedAtomic, true, nil
 		}
 		// Resolve the type definition and validate the value string.
 		td, tdOk := s.LookupType(au.TypeName.Local, au.TypeName.NS)
@@ -534,7 +532,7 @@ func (r *schemaRegistry) ValidateAttribute(localName, nsURI, value string) (stri
 		typeName := xsdTypeNameFromDef(td)
 		// Validate using the XSD type definition (supports pattern facets,
 		// enumerations, and other constraints that CastFromString doesn't handle).
-		if valErr := td.Validate(value, nil); valErr != nil {
+		if valErr := td.Validate(ctx, value, nil); valErr != nil {
 			return typeName, false, valErr
 		}
 		return typeName, true, nil
@@ -622,7 +620,8 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 func findDocumentElement(doc *helium.Document) *helium.Element {
 	for child := range helium.Children(doc) {
 		if child.Type() == helium.ElementNode {
-			return child.(*helium.Element)
+			elem, _ := helium.AsNode[*helium.Element](child)
+			return elem
 		}
 	}
 	return nil
@@ -634,7 +633,7 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 // compare against the declared type hierarchy.
 func xsdTypeNameFromDef(td *xsd.TypeDef) string {
 	if td == nil {
-		return "xs:untyped"
+		return lexicon.XSUntyped
 	}
 	for cur := td; cur != nil; cur = cur.BaseType {
 		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local != "" {
@@ -709,7 +708,6 @@ func collectXMLIDsFromDoc(doc *helium.Document, ids map[string]struct{}) error {
 	return walkElementsForID(doc.FirstChild(), ids)
 }
 
-
 // walkElementsForID recursively walks sibling node chains collecting xml:id values.
 func walkElementsForID(node helium.Node, ids map[string]struct{}) error {
 	for ; node != nil; node = node.NextSibling() {
@@ -754,9 +752,8 @@ func collectXSITypeIDREFsFromNode(node helium.Node, idrefs *[]string) {
 			if attr.URI() == lexicon.NamespaceXSI && attr.LocalName() == "type" {
 				xsiType := attr.Value()
 				localName := xsiType
-				if colonIdx := strings.IndexByte(xsiType, ':'); colonIdx >= 0 {
-					prefix := xsiType[:colonIdx]
-					localName = xsiType[colonIdx+1:]
+				if prefix, ln, ok := strings.Cut(xsiType, ":"); ok {
+					localName = ln
 					// Verify the prefix resolves to the XSD namespace.
 					nsURI := ""
 					for _, ns := range elem.Namespaces() {
@@ -772,7 +769,7 @@ func collectXSITypeIDREFsFromNode(node helium.Node, idrefs *[]string) {
 				switch localName {
 				case "IDREFS":
 					*idrefs = append(*idrefs, splitSpaceSeparated(string(elem.Content()))...)
-				case "IDREF":
+				case lexicon.TypeIDREF:
 					val := string(elem.Content())
 					if val != "" {
 						*idrefs = append(*idrefs, val)
@@ -788,7 +785,7 @@ func collectXSITypeIDREFsFromNode(node helium.Node, idrefs *[]string) {
 func splitSpaceSeparated(s string) []string {
 	var parts []string
 	start := -1
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r' {
 			if start >= 0 {
 				parts = append(parts, s[start:i])

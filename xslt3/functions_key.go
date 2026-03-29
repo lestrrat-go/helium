@@ -91,7 +91,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 			}
 			avs = append(avs, av)
 		}
-		nodes, err := ec.lookupCompositeKey(name, avs, root)
+		nodes, err := ec.lookupCompositeKey(ctx, name, avs, root)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +111,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 		if err != nil {
 			return nil, err
 		}
-		nodes, err := ec.lookupKey(name, valAV, root)
+		nodes, err := ec.lookupKey(ctx, name, valAV, root)
 		if err != nil {
 			return nil, err
 		}
@@ -194,9 +194,8 @@ func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Seque
 			ns = name[2:end]
 			local = name[end+1:]
 		}
-	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local = name[idx+1:]
+	} else if prefix, l, ok := strings.Cut(name, ":"); ok {
+		local = l
 		// Resolve prefix via stylesheet-level namespaces.
 		resolved := false
 		if uri, ok := ec.stylesheet.namespaces[prefix]; ok {
@@ -379,11 +378,11 @@ func (ec *execContext) fnUnparsedEntityURI(ctx context.Context, args []xpath3.Se
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // unparsed-entity-uri returns "" on atomization failure
 	}
 	name, err := xpath3.AtomicToString(av)
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // unparsed-entity-uri returns "" on string conversion failure
 	}
 	ent := lookupUnparsedEntityInDoc(name, doc)
 	if ent == nil {
@@ -437,11 +436,11 @@ func (ec *execContext) fnUnparsedEntityPublicID(ctx context.Context, args []xpat
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // unparsed-entity-public-id returns "" on atomization failure
 	}
 	name, err := xpath3.AtomicToString(av)
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // unparsed-entity-public-id returns "" on string conversion failure
 	}
 	ent := lookupUnparsedEntityInDoc(name, doc)
 	if ent == nil {

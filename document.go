@@ -135,7 +135,6 @@ func (d *Document) Free() {
 	d.textContentSlab = nil
 }
 
-
 func (d *Document) AddChild(cur Node) error {
 	return addChild(d, cur)
 }
@@ -215,8 +214,8 @@ func (d *Document) Replace(_ ...Node) error {
 // DocumentElement returns the root element of the document, or nil if none exists.
 func (d *Document) DocumentElement() *Element {
 	for n := d.firstChild; n != nil; n = n.NextSibling() {
-		if n.Type() == ElementNode {
-			return n.(*Element)
+		if elem, ok := AsNode[*Element](n); ok {
+			return elem
 		}
 	}
 	return nil
@@ -245,7 +244,7 @@ func (d *Document) SetDocumentElement(root MutableNode) error {
 			return err
 		}
 	} else {
-		if err := old.(MutableNode).Replace(root); err != nil {
+		if err := old.(MutableNode).Replace(root); err != nil { //nolint:forcetypeassert
 			return err
 		}
 	}
@@ -526,13 +525,7 @@ func (d *Document) growOwnedTextContent(cur []byte, extra int) []byte {
 		return cur
 	}
 
-	newCap := cap(cur) * 2
-	if newCap < need {
-		newCap = need
-	}
-	if newCap < 64 {
-		newCap = 64
-	}
+	newCap := max(cap(cur)*2, need, 64)
 
 	next := d.allocTextContent(newCap)
 	next = next[:len(cur)]
@@ -689,7 +682,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			return
 		}
 
-		// if this is not any sort of an entity , just go go go
+		// if this is not any sort of an entity , just go
 		if r != '&' {
 			_, _ = buf.WriteRune(r)
 			continue
@@ -774,7 +767,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 						last = node
 						ret = node
 					} else {
-						if err2 := last.(MutableNode).AddSibling(node); err2 != nil {
+						if err2 := last.(MutableNode).AddSibling(node); err2 != nil { //nolint:forcetypeassert
 							err = err2
 							return
 						}
@@ -816,7 +809,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					last = node
 					ret = node
 				} else {
-					if err2 := last.(MutableNode).AddSibling(node); err2 != nil {
+					if err2 := last.(MutableNode).AddSibling(node); err2 != nil { //nolint:forcetypeassert
 						err = err2
 						return
 					}
@@ -826,7 +819,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 		}
 
 		if charval != 0 {
-			_, _ = buf.WriteRune(rune(charval))
+			_, _ = buf.WriteRune(charval)
 			charval = 0
 		}
 	}
@@ -837,7 +830,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 		if last == nil {
 			ret = n
 		} else {
-			if err := last.(MutableNode).AddSibling(n); err != nil {
+			if err := last.(MutableNode).AddSibling(n); err != nil { //nolint:forcetypeassert
 				return nil, err
 			}
 		}
@@ -900,10 +893,10 @@ func (d *Document) GetElementByID(id string) *Element {
 	// Fallback: O(n) tree walk for documents not built via parser.
 	var found *Element
 	_ = Walk(d, NodeWalkerFunc(func(n Node) error {
-		if n.Type() != ElementNode {
+		elem, ok := AsNode[*Element](n)
+		if !ok {
 			return nil
 		}
-		elem := n.(*Element)
 		for _, a := range elem.Attributes() {
 			// Check xml:id (normalize value — xs:ID collapses whitespace)
 			if a.Name() == lexicon.QNameXMLID && strings.TrimSpace(a.Value()) == id {

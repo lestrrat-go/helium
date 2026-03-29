@@ -78,7 +78,7 @@ func (c Compiler) closeHandler() {
 
 // Compile compiles a RELAX NG document into a Grammar.
 // (libxml2: xmlRelaxNGNewParserCtxt + xmlRelaxNGParse)
-func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Grammar, error) {
+func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Grammar, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -92,7 +92,7 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Grammar, 
 }
 
 // CompileFile reads and compiles a RELAX NG file into a Grammar.
-func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error) {
+func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -178,7 +178,7 @@ func (v Validator) closeHandler() {
 // It returns nil if the document is valid, or [ErrValidationFailed].
 // Individual validation errors are delivered to the configured [helium.ErrorHandler].
 // (libxml2: xmlRelaxNGValidateDoc)
-func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
+func (v Validator) Validate(ctx context.Context, doc *helium.Document) error { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}

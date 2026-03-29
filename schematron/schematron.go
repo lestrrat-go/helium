@@ -82,7 +82,7 @@ func (c Compiler) closeHandler() {
 
 // Compile compiles a Schematron document into a Schema.
 // (libxml2: xmlSchematronNewParserCtxt + xmlSchematronParse)
-func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, error) {
+func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -96,7 +96,7 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, e
 }
 
 // CompileFile reads and compiles a Schematron file into a Schema.
-func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error) {
+func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}

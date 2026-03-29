@@ -370,10 +370,7 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 	if fi.Arity >= 0 && fi.Arity != 2 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
-	size := a1.Size()
-	if a2.Size() < size {
-		size = a2.Size()
-	}
+	size := min(a1.Size(), a2.Size())
 	var results []Sequence
 	for i := 1; i <= size; i++ {
 		m1, _ := a1.get0(i)
@@ -456,11 +453,8 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 		ki := entries[i].key
 		kj := entries[j].key
 		// Compare element-by-element per XPath 3.1 sort key comparison
-		minLen := seqLen(ki)
-		if seqLen(kj) < minLen {
-			minLen = seqLen(kj)
-		}
-		for idx := 0; idx < minLen; idx++ {
+		minLen := min(seqLen(ki), seqLen(kj))
+		for idx := range minLen {
 			ai, errI := AtomizeItem(ki.Get(idx))
 			aj, errJ := AtomizeItem(kj.Get(idx))
 			if errI != nil {

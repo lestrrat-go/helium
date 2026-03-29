@@ -119,13 +119,10 @@ func fnForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
 	if fi.Arity >= 0 && fi.Arity != 2 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
-	size := seqLen(seq1)
-	if seqLen(seq2) < size {
-		size = seqLen(seq2)
-	}
+	size := min(seqLen(seq1), seqLen(seq2))
 	var result ItemSlice
 	callArgs := make([]Sequence, 2)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		callArgs[0] = ItemSlice{seq1.Get(i)}
 		callArgs[1] = ItemSlice{seq2.Get(i)}
 		r, err := fi.Invoke(ctx, callArgs)
@@ -184,16 +181,16 @@ func fnFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	arityVal, ok := arityArg.Int64Val()
 	if !ok {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	arity := int(arityVal)
 	if arity < 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 
 	fi, ok := lookupFunctionItem(ctx, nameArg.QNameVal(), arity)
 	if !ok {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return ItemSlice{fi}, nil
 }
@@ -231,7 +228,7 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 	capturedCtx := ctx
 	if ec := getFnContext(ctx); ec != nil {
 		capturedECValue := *ec
-		capturedCtx = withFnContext(ec.goCtx, &capturedECValue)
+		capturedCtx = withFnContext(ctx, &capturedECValue)
 	}
 
 	var paramTypes []SequenceType
@@ -278,7 +275,7 @@ func fnFunctionName(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if fi.Name == "" {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	ns := fi.Namespace
 	if ns == "" {
@@ -312,7 +309,7 @@ func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 				}
 				val, ok := v.Get(key)
 				if !ok {
-					return nil, nil
+					return validNilSequence, nil
 				}
 				return val, nil
 			},

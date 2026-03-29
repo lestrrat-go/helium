@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -11,7 +12,7 @@ func Example_shim_decoder() {
 	// shim.NewDecoder creates a streaming XML decoder backed by helium's
 	// SAX parser, compatible with encoding/xml.NewDecoder.
 	input := `<catalog><book>Go in Action</book><book>The Go Programming Language</book></catalog>`
-	dec := shim.NewDecoder(strings.NewReader(input))
+	dec := shim.NewDecoder(context.Background(), strings.NewReader(input))
 
 	var catalog struct {
 		XMLName shim.Name `xml:"catalog"`

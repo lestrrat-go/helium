@@ -110,7 +110,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.Comment(%s)\n", data)
 		return nil
 	}))
-	charHandler := func(name string, _ context.Context, data []byte) error {
+	charHandler := func(name string, _ context.Context, data []byte) error { //nolint:unparam // always nil but matches SAX handler signature
 		var output string
 		if len(data) > 30 {
 			output = string(data[:30])
@@ -292,13 +292,7 @@ func (r *parserChunkedReader) Read(p []byte) (int, error) {
 	if len(r.data) == 0 {
 		return 0, io.EOF
 	}
-	n := r.chunk
-	if n > len(r.data) {
-		n = len(r.data)
-	}
-	if n > len(p) {
-		n = len(p)
-	}
+	n := min(r.chunk, len(r.data), len(p))
 	copy(p, r.data[:n])
 	r.data = r.data[n:]
 	return n, nil

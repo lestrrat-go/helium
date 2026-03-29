@@ -9,9 +9,10 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
-	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // Sentinel errors for xsl:break and xsl:next-iteration control flow.
@@ -151,7 +152,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 // sequence with mutable iteration parameters.
 func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error {
 	// Evaluate the select expression.
-	result, err := ec.evalXPath(inst.Select, ec.contextNode)
+	result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -166,7 +167,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 		}
 		var val xpath3.Sequence
 		if p.Select != nil {
-			pResult, err := ec.evalXPath(p.Select, ec.contextNode)
+			pResult, err := ec.evalXPath(ctx, p.Select, ec.contextNode)
 			if err != nil {
 				return err
 			}
@@ -185,7 +186,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 		// Apply type coercion if as= is declared.
 		if p.As != "" && val != nil && sequence.Len(val) > 0 {
 			st := parseSequenceType(p.As)
-			coerced, err := checkSequenceType(val, st, errCodeXTTE0570, "xsl:iterate parameter $"+p.Name, ec)
+			coerced, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "xsl:iterate parameter $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -256,7 +257,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 						// Apply type coercion if as= is declared.
 						if asType, ok := paramTypes[name]; ok && asType != "" && val != nil && sequence.Len(val) > 0 {
 							st := parseSequenceType(asType)
-							coerced, coerceErr := checkSequenceType(val, st, errCodeXTTE0570, "xsl:next-iteration parameter $"+name, ec)
+							coerced, coerceErr := checkSequenceType(ctx, val, st, errCodeXTTE0570, "xsl:next-iteration parameter $"+name, ec)
 							if coerceErr != nil {
 								return coerceErr
 							}
@@ -332,7 +333,7 @@ func (ec *execContext) execFork(ctx context.Context, inst *forkInst) error {
 // execBreak executes xsl:break, which terminates the enclosing xsl:iterate.
 func (ec *execContext) execBreak(ctx context.Context, inst *breakInst) error {
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -365,11 +366,11 @@ func (ec *execContext) execNextIteration(ctx context.Context, inst *nextIteratio
 // mergeKeyValue holds a single merge key as an XPath atomic value for
 // type-aware comparison (dates, numbers, strings, etc.).
 type mergeKeyValue struct {
-	atom       xpath3.AtomicValue   // the actual typed atomic value
-	str        string               // string fallback (used when atom is zero)
-	num        float64              // numeric value (used when numeric is true)
-	numeric    bool                 // true when data-type="number" was applied
-	isNaN      bool                 // true when numeric conversion produced NaN
+	atom        xpath3.AtomicValue    // the actual typed atomic value
+	str         string                // string fallback (used when atom is zero)
+	num         float64               // numeric value (used when numeric is true)
+	numeric     bool                  // true when data-type="number" was applied
+	isNaN       bool                  // true when numeric conversion produced NaN
 	collCompare func(a, b string) int // collation compare function (nil = codepoint)
 }
 
@@ -385,7 +386,7 @@ type mergeSourceItems struct {
 
 // mergeGroup represents one group of items that share the same merge key tuple.
 type mergeGroup struct {
-	key      xpath3.Sequence            // the merge key tuple for current-merge-key()
+	key      xpath3.Sequence             // the merge key tuple for current-merge-key()
 	allItems xpath3.ItemSlice            // all items across all sources
 	byName   map[string]xpath3.ItemSlice // items per named source
 }
@@ -576,7 +577,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 			}
 			orderStr = evaluated
 		}
-		orders[i] = mergeKeyOrder{desc: orderStr == "descending"}
+		orders[i] = mergeKeyOrder{desc: orderStr == lexicon.OutputDescending}
 	}
 
 	// Resolve per-source data-types for each key level.
@@ -652,7 +653,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 			vk := make([]mergeKeyValue, len(src.keys[i]))
 			copy(vk, src.keys[i])
 			for k := range vk {
-				if k < len(srcDTs) && srcDTs[k] == "number" {
+				if k < len(srcDTs) && srcDTs[k] == lexicon.TypeNumber {
 					applyNumericMergeKey(&vk[k])
 				}
 			}
@@ -742,7 +743,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 		src := &allSources[si]
 		for i := range src.keys {
 			for k := range src.keys[i] {
-				if k < len(firstDTs) && firstDTs[k] == "number" {
+				if k < len(firstDTs) && firstDTs[k] == lexicon.TypeNumber {
 					applyNumericMergeKey(&src.keys[i][k])
 				}
 				if k < len(nwayCollations) && nwayCollations[k] != nil {
@@ -883,7 +884,7 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 
 	if src.ForEachSource != nil {
 		// Evaluate for-each-source to get URI(s).
-		uriResult, err := ec.evalXPath(src.ForEachSource, ec.contextNode)
+		uriResult, err := ec.evalXPath(ctx, src.ForEachSource, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
@@ -922,7 +923,7 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 		}
 	} else if src.ForEachItem != nil {
 		// Evaluate for-each-item to get item(s).
-		itemResult, err := ec.evalXPath(src.ForEachItem, ec.contextNode)
+		itemResult, err := ec.evalXPath(ctx, src.ForEachItem, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
@@ -956,7 +957,7 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSou
 		}
 	} else if src.Select != nil {
 		// No for-each-source or for-each-item — just evaluate select against current context.
-		selResult, err := ec.evalXPath(src.Select, ec.contextNode)
+		selResult, err := ec.evalXPath(ctx, src.Select, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
@@ -1086,13 +1087,13 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 
 		switch {
 		case def.Initial != nil:
-			result, err := ec.evalXPath(def.Initial, doc)
+			result, err := ec.evalXPath(ctx, def.Initial, doc)
 			if err != nil {
 				stateErr[name] = err
 				state[name] = xpath3.EmptySequence()
 				continue
 			}
-			checked, err := ec.checkAccumulatorType(def, result.Sequence())
+			checked, err := ec.checkAccumulatorType(ctx, def, result.Sequence())
 			if err != nil {
 				stateErr[name] = err
 				state[name] = xpath3.EmptySequence()
@@ -1106,7 +1107,7 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 				state[name] = xpath3.EmptySequence()
 				continue
 			}
-			checked, err := ec.checkAccumulatorType(def, seq)
+			checked, err := ec.checkAccumulatorType(ctx, def, seq)
 			if err != nil {
 				stateErr[name] = err
 				state[name] = xpath3.EmptySequence()
@@ -1194,7 +1195,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 		}
 
 		for _, rule := range def.Rules {
-			if rule.Phase != phase || !rule.Match.matchPattern(ec, node) {
+			if rule.Phase != phase || !rule.Match.matchPattern(ctx, ec, node) {
 				continue
 			}
 
@@ -1221,7 +1222,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 			)
 			switch {
 			case rule.Select != nil:
-				result, evalErr := ec.evalXPath(rule.Select, node)
+				result, evalErr := ec.evalXPath(ctx, rule.Select, node)
 				if evalErr != nil {
 					err = evalErr
 				} else {
@@ -1243,7 +1244,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 				ec.accumulatorStateError[name] = err
 				break
 			}
-			checked, err := ec.checkAccumulatorType(def, newValue)
+			checked, err := ec.checkAccumulatorType(ctx, def, newValue)
 			if err != nil {
 				if ec.accumulatorStateError == nil {
 					ec.accumulatorStateError = make(map[string]error)
@@ -1258,11 +1259,11 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 	return nil
 }
 
-func (ec *execContext) checkAccumulatorType(def *accumulatorDef, seq xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) checkAccumulatorType(ctx context.Context, def *accumulatorDef, seq xpath3.Sequence) (xpath3.Sequence, error) {
 	if def == nil || def.As == "" {
 		return seq, nil
 	}
-	return checkSequenceType(seq, parseSequenceType(def.As), "XPTY0004", "accumulator "+def.Name, ec)
+	return checkSequenceType(ctx, seq, parseSequenceType(def.As), "XPTY0004", "accumulator "+def.Name, ec)
 }
 
 // loadMergeDocument loads an XML document from a URI, resolving it relative
@@ -1323,7 +1324,7 @@ func (ec *execContext) evaluateMergeSelect(ctx context.Context, src *mergeSource
 		ec.currentNode = savedCurrent
 	}()
 
-	result, err := ec.evalXPath(src.Select, doc)
+	result, err := ec.evalXPath(ctx, src.Select, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -1354,7 +1355,7 @@ func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *merge
 		ec.currentNode = savedCurrent
 	}()
 
-	result, err := ec.evalXPath(src.Select, node)
+	result, err := ec.evalXPath(ctx, src.Select, node)
 	if err != nil {
 		return nil, err
 	}
@@ -1364,7 +1365,7 @@ func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *merge
 // evaluateMergeSelectOnItem evaluates the select expression for a merge source
 // with an atomic item as the context item (used with for-each-item when the
 // items are not nodes).
-func (ec *execContext) evaluateMergeSelectOnItem(_ context.Context, src *mergeSource, item xpath3.Item) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateMergeSelectOnItem(ctx context.Context, src *mergeSource, item xpath3.Item) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		return xpath3.ItemSlice{item}, nil
 	}
@@ -1375,7 +1376,7 @@ func (ec *execContext) evaluateMergeSelectOnItem(_ context.Context, src *mergeSo
 		ec.contextItem = savedItem
 	}()
 
-	result, err := ec.evalXPath(src.Select, nil)
+	result, err := ec.evalXPath(ctx, src.Select, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1420,7 +1421,7 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 			var seq xpath3.Sequence
 			if mk.Select != nil {
 				ec.evaluatingMergeKey = true
-				result, err := ec.evalXPath(mk.Select, node)
+				result, err := ec.evalXPath(ctx, mk.Select, node)
 				ec.evaluatingMergeKey = false
 				if err != nil {
 					return nil, err
@@ -1642,7 +1643,7 @@ func (ec *execContext) stripSchemaWhitespace(doc *helium.Document, annotations x
 			next := child.NextSibling()
 			if isElementOnly && (child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode) {
 				if strings.TrimSpace(string(child.Content())) == "" {
-					helium.UnlinkNode(child.(helium.MutableNode))
+					helium.UnlinkNode(child.(helium.MutableNode)) //nolint:forcetypeassert
 				}
 			} else if child.Type() == helium.ElementNode {
 				stack = append(stack, child)

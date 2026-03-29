@@ -50,10 +50,7 @@ func TestHTMLPushParserMultiChunk(t *testing.T) {
 	pp := html.NewParser().NewPushParser(t.Context())
 	// Push in 20-byte chunks
 	for i := 0; i < len(input); i += 20 {
-		end := i + 20
-		if end > len(input) {
-			end = len(input)
-		}
+		end := min(i+20, len(input))
 		require.NoError(t, pp.Push(input[i:end]))
 	}
 

@@ -29,7 +29,7 @@ type jsonOptions struct {
 
 func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {
@@ -64,7 +64,7 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid trailing content: %v", err)}
 	}
 	if item == nil {
-		return nil, nil
+		return validNilSequence, nil
 	}
 
 	return ItemSlice{item}, nil
@@ -113,7 +113,7 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 		}
 		s, _ := atomicToString(av)
 		switch s {
-		case "reject", "use-first", "use-last":
+		case "reject", "use-first", "use-last": //nolint:goconst
 			opts.duplicates = s
 		default:
 			return opts, &XPathError{Code: errCodeFOJS0005,
@@ -291,7 +291,10 @@ func preprocessJSONStringLiterals(s string) (string, map[rune]string, error) {
 				b.WriteString(s[i : i+2])
 				i += 2
 			case 'b', 'f':
-				ph := nextJSONPlaceholderRune(s, invalidEsc)
+				ph, err := nextJSONPlaceholderRune(s, invalidEsc)
+				if err != nil {
+					return "", nil, err
+				}
 				invalidEsc[ph] = s[i : i+2]
 				b.WriteRune(ph)
 				i += 2
@@ -314,12 +317,18 @@ func preprocessJSONStringLiterals(s string) (string, map[rune]string, error) {
 							continue
 						}
 					}
-					ph := nextJSONPlaceholderRune(s, invalidEsc)
+					ph, err := nextJSONPlaceholderRune(s, invalidEsc)
+					if err != nil {
+						return "", nil, err
+					}
 					invalidEsc[ph] = escapeText
 					b.WriteRune(ph)
 					i += 6
 				case cp >= 0xDC00 && cp <= 0xDFFF, !isValidXMLCodepoint(int(cp)):
-					ph := nextJSONPlaceholderRune(s, invalidEsc)
+					ph, err := nextJSONPlaceholderRune(s, invalidEsc)
+					if err != nil {
+						return "", nil, err
+					}
 					invalidEsc[ph] = escapeText
 					b.WriteRune(ph)
 					i += 6
@@ -359,16 +368,16 @@ func parseJSONHexEscape(hex string) (uint32, error) {
 	return cp, nil
 }
 
-func nextJSONPlaceholderRune(source string, used map[rune]string) rune {
+func nextJSONPlaceholderRune(source string, used map[rune]string) (rune, error) {
 	for r := rune(0xF0000); r <= 0xFFFFD; r++ {
 		if _, exists := used[r]; exists {
 			continue
 		}
 		if !strings.ContainsRune(source, r) {
-			return r
+			return r, nil
 		}
 	}
-	panic("exhausted JSON placeholder runes")
+	return 0, &XPathError{Code: errCodeFOJS0001, Message: "exhausted JSON placeholder runes"}
 }
 
 func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (string, error) {
@@ -474,7 +483,7 @@ func canonicalInvalidJSONEscape(raw string) string {
 
 func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	uri, err := coerceArgToString(args[0])
 	if err != nil {
@@ -502,7 +511,7 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 func jsonToXDM(v any) (Item, error) {
 	switch val := v.(type) {
 	case nil:
-		return nil, nil //nolint:nilnil // JSON null maps to empty sequence (nil Item, nil error) per XPath spec
+		return nil, nil //nolint:nilnil // JSON null maps to empty sequence per XPath spec
 	case bool:
 		return AtomicValue{TypeName: TypeBoolean, Value: val}, nil
 	case json.Number:

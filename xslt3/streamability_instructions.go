@@ -1,8 +1,10 @@
 package xslt3
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -246,22 +248,20 @@ func bodyUsesCurrentGroupOutsideFEG(body []instruction) bool {
 			if expr == nil {
 				continue
 			}
-			if xpathstream.ExprUsesFunction(expr, "current-group") {
+			if xpathstream.ExprUsesFunction(expr, lexicon.FnCurrentGroup) {
 				return true
 			}
 		}
 		// Check LRE attribute AVTs (not covered by getInstructionExprs).
 		if lre, ok := bi.(*literalResultElement); ok {
 			for _, attr := range lre.Attrs {
-				if attr.Value.hasFunction("current-group") {
+				if attr.Value.hasFunction(lexicon.FnCurrentGroup) {
 					return true
 				}
 			}
 		}
-		for _, children := range getChildInstructions(bi) {
-			if bodyUsesCurrentGroupOutsideFEG(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(bi), bodyUsesCurrentGroupOutsideFEG) {
+			return true
 		}
 	}
 	return false
@@ -438,10 +438,8 @@ func forEachBodyConsumesContext(body []instruction) bool {
 				return true
 			}
 		}
-		for _, children := range getChildInstructions(inst) {
-			if forEachBodyConsumesContext(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(inst), forEachBodyConsumesContext) {
+			return true
 		}
 	}
 	return false
@@ -641,15 +639,11 @@ func checkSourceDocCurrentGroup(body []instruction) error {
 // body uses current-group().
 func sourceDocBodyUsesCurrentGroup(body []instruction) bool {
 	for _, inst := range body {
-		for _, expr := range getInstructionExprs(inst) {
-			if exprUsesCurrentGroup(expr) {
-				return true
-			}
+		if slices.ContainsFunc(getInstructionExprs(inst), exprUsesCurrentGroup) {
+			return true
 		}
-		for _, children := range getChildInstructions(inst) {
-			if sourceDocBodyUsesCurrentGroup(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(inst), sourceDocBodyUsesCurrentGroup) {
+			return true
 		}
 	}
 	return false
@@ -678,11 +672,9 @@ func patternHasNonMotionlessPredicate(pat *pattern) bool {
 					}
 				}
 			case xpath3.FilterExpr:
-				for _, pred := range v.Predicates {
-					if xpathstream.PredicateIsNonMotionless(pred) {
-						nonMotionless = true
-						return false
-					}
+				if slices.ContainsFunc(v.Predicates, xpathstream.PredicateIsNonMotionless) {
+					nonMotionless = true
+					return false
 				}
 			}
 			return true
@@ -753,14 +745,12 @@ func bodyUsesCurrentGroup(body []instruction) bool {
 			if expr == nil {
 				continue
 			}
-			if xpathstream.ExprUsesFunction(expr, "current-group") {
+			if xpathstream.ExprUsesFunction(expr, lexicon.FnCurrentGroup) {
 				return true
 			}
 		}
-		for _, children := range getChildInstructions(bi) {
-			if bodyUsesCurrentGroup(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(bi), bodyUsesCurrentGroup) {
+			return true
 		}
 	}
 	return false
@@ -781,7 +771,7 @@ func exprUsesCurrentGroupConsumingly(expr *xpath3.Expression) bool {
 		e = derefXPathExpr(e)
 		switch v := e.(type) {
 		case xpath3.FunctionCall:
-			if v.Prefix == "" && v.Name == "current-group" {
+			if v.Prefix == "" && v.Name == lexicon.FnCurrentGroup {
 				if !insideSnapshot {
 					found = true
 				}
@@ -850,7 +840,7 @@ func exprUsesCurrentGroupConsumingly(expr *xpath3.Expression) bool {
 
 // exprUsesCurrentGroup returns true if the expression calls current-group() anywhere.
 func exprUsesCurrentGroup(expr *xpath3.Expression) bool {
-	return xpathstream.ExprUsesFunction(expr, "current-group")
+	return xpathstream.ExprUsesFunction(expr, lexicon.FnCurrentGroup)
 }
 
 // checkMapStreamable checks xsl:map instructions for streamability violations.
@@ -864,7 +854,7 @@ func exprUsesCurrentGroup(expr *xpath3.Expression) bool {
 //     because node references become dangling after the fork branch completes.
 //   - Non-map-entry children (like xsl:if wrapping map-entry) break the implicit
 //     fork guarantee and are invalid when consuming entries are present.
-func checkMapStreamable(ss *Stylesheet, inst instruction) error {
+func checkMapStreamable(_ *Stylesheet, inst instruction) error {
 	mapInst, ok := inst.(*mapInst)
 	if !ok {
 		return nil

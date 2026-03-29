@@ -3,6 +3,8 @@
 // github.com/lestrrat-go/helium/catalog package instead.
 package catalog
 
+import "context"
+
 const (
 	// MaxDepth is the maximum recursion depth for catalog resolution.
 	MaxDepth = 50
@@ -49,7 +51,7 @@ type Entry struct {
 // Loader loads a catalog from a file path. This interface decouples
 // the resolution logic from the XML parser used to read catalog files.
 type Loader interface {
-	Load(filename string) (*Catalog, error)
+	Load(ctx context.Context, filename string) (*Catalog, error)
 }
 
 // visitedKey identifies a (catalogURL, id1, id2) tuple for the resolve

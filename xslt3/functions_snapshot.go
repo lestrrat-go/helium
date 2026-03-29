@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -130,7 +131,7 @@ func (ec *execContext) fnSnapshot(ctx context.Context, args []xpath3.Sequence) (
 	}
 	snapped, err := ec.snapshotNode(ctx, node)
 	if err != nil {
-		return xpath3.ItemSlice{xpath3.NodeItem{Node: node}}, nil
+		return xpath3.ItemSlice{xpath3.NodeItem{Node: node}}, nil //nolint:nilerr // snapshot falls back to original node on failure
 	}
 	ec.transferNilledStatus(node, snapped)
 	return xpath3.ItemSlice{xpath3.NodeItem{Node: snapped}}, nil
@@ -260,7 +261,7 @@ func (ec *execContext) snapshotNode(ctx context.Context, node helium.Node) (heli
 		// The ancestor chain was built bottom-up, so the corresponding shell
 		// is: copied.Parent() for i=0, copied.Parent().Parent() for i=1, etc.
 		shell := copied.Parent()
-		for j := 0; j < i; j++ {
+		for range i {
 			if shell != nil {
 				shell = shell.Parent()
 			}
@@ -283,10 +284,10 @@ func (ec *execContext) snapshotNode(ctx context.Context, node helium.Node) (heli
 
 // transferAccumulatorStates copies accumulator before/after state from
 // an original node subtree to a copied node subtree (parallel walk).
-func (ec *execContext) transferAccumulatorStates(orig, copy helium.Node) {
-	ec.transferAccumulatorNode(orig, copy)
+func (ec *execContext) transferAccumulatorStates(orig, dst helium.Node) {
+	ec.transferAccumulatorNode(orig, dst)
 	oc := orig.FirstChild()
-	cc := copy.FirstChild()
+	cc := dst.FirstChild()
 	for oc != nil && cc != nil {
 		ec.transferAccumulatorStates(oc, cc)
 		oc = oc.NextSibling()
@@ -295,34 +296,30 @@ func (ec *execContext) transferAccumulatorStates(orig, copy helium.Node) {
 }
 
 // transferAccumulatorNode copies the accumulator before/after maps for a
-// single node from orig to copy.
-func (ec *execContext) transferAccumulatorNode(orig, copy helium.Node) {
+// single node from orig to dst.
+func (ec *execContext) transferAccumulatorNode(orig, dst helium.Node) {
 	if ec.accumulatorBeforeByNode != nil {
 		if vals, ok := ec.accumulatorBeforeByNode[orig]; ok {
-			ec.accumulatorBeforeByNode[copy] = cloneAccumulatorSnapshot(vals)
+			ec.accumulatorBeforeByNode[dst] = cloneAccumulatorSnapshot(vals)
 		}
 	}
 	if ec.accumulatorAfterByNode != nil {
 		if vals, ok := ec.accumulatorAfterByNode[orig]; ok {
-			ec.accumulatorAfterByNode[copy] = cloneAccumulatorSnapshot(vals)
+			ec.accumulatorAfterByNode[dst] = cloneAccumulatorSnapshot(vals)
 		}
 	}
 	if ec.accumulatorBeforeErrorByNode != nil {
 		if errs, ok := ec.accumulatorBeforeErrorByNode[orig]; ok {
 			cloned := make(map[string]error, len(errs))
-			for k, v := range errs {
-				cloned[k] = v
-			}
-			ec.accumulatorBeforeErrorByNode[copy] = cloned
+			maps.Copy(cloned, errs)
+			ec.accumulatorBeforeErrorByNode[dst] = cloned
 		}
 	}
 	if ec.accumulatorAfterErrorByNode != nil {
 		if errs, ok := ec.accumulatorAfterErrorByNode[orig]; ok {
 			cloned := make(map[string]error, len(errs))
-			for k, v := range errs {
-				cloned[k] = v
-			}
-			ec.accumulatorAfterErrorByNode[copy] = cloned
+			maps.Copy(cloned, errs)
+			ec.accumulatorAfterErrorByNode[dst] = cloned
 		}
 	}
 }
@@ -517,15 +514,15 @@ func (ec *execContext) fnRegexGroup(_ context.Context, args []xpath3.Sequence) (
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // regex-group returns "" on atomization failure
 	}
 	s, err := xpath3.AtomicToString(av)
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // regex-group returns "" on string conversion failure
 	}
 	idx, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil {
-		return xpath3.SingleString(""), nil
+		return xpath3.SingleString(""), nil //nolint:nilerr // regex-group returns "" for non-integer group number
 	}
 	if idx < 0 || idx >= len(ec.regexGroups) {
 		return xpath3.SingleString(""), nil

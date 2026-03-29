@@ -14,12 +14,11 @@ import (
 
 // internalLoader implements icatalog.Loader using helium's parser.
 type internalLoader struct {
-	ctx          context.Context
 	errorHandler helium.ErrorHandler
 }
 
-func (l internalLoader) Load(filename string) (*icatalog.Catalog, error) {
-	return loadInternal(l.ctx, filename, l.errorHandler)
+func (l internalLoader) Load(ctx context.Context, filename string) (*icatalog.Catalog, error) {
+	return loadInternal(ctx, filename, l.errorHandler)
 }
 
 // Load parses an OASIS XML Catalog file and returns a Catalog.
@@ -29,7 +28,7 @@ func Load(ctx context.Context, filename string) (*Catalog, error) {
 }
 
 // Load parses an OASIS XML Catalog file and returns a Catalog.
-func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) {
+func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -90,7 +89,7 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 	cat := &icatalog.Catalog{
 		Prefer:  icatalog.PreferPublic, // default per OASIS spec
 		BaseURI: baseURI,
-		Loader:  internalLoader{ctx: ctx, errorHandler: eh},
+		Loader:  internalLoader{errorHandler: eh},
 	}
 
 	if v := getAttr(root, lexicon.AttrPrefer); v != "" {
@@ -109,10 +108,10 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 	}
 
 	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() != helium.ElementNode {
+		elem, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
 			continue
 		}
-		elem := child.(*helium.Element)
 
 		if elem.URI() != lexicon.NamespaceCatalog {
 			continue
@@ -250,8 +249,8 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 // documentElement returns the first child element of a Document.
 func documentElement(doc *helium.Document) *helium.Element {
 	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() == helium.ElementNode {
-			return child.(*helium.Element)
+		if elem, ok := helium.AsNode[*helium.Element](child); ok {
+			return elem
 		}
 	}
 	return nil

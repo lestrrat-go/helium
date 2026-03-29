@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -19,7 +20,7 @@ func init() {
 
 func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 
 	opts, err := parseJSONToXMLOptions(args)
@@ -79,11 +80,11 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 	case AtomicValue:
 		switch v.TypeName {
 		case TypeString:
-			name = "string"
+			name = lexicon.TypeString
 		case TypeBoolean:
-			name = "boolean"
+			name = lexicon.TypeBoolean
 		default:
-			name = "number"
+			name = lexicon.TypeNumber
 		}
 	}
 
@@ -109,7 +110,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 			keyText := key.StringVal()
 			_ = child.SetLiteralAttribute("key", keyText)
 			if opts.escape {
-				_ = child.SetLiteralAttribute("escaped-key", "true")
+				_ = child.SetLiteralAttribute("escaped-key", lexicon.ValueTrue)
 			}
 			if err := elem.AddChild(child); err != nil {
 				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
@@ -132,15 +133,15 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		switch v.TypeName {
 		case TypeString:
 			if opts.escape {
-				_ = elem.SetLiteralAttribute("escaped", "true")
+				_ = elem.SetLiteralAttribute("escaped", lexicon.ValueTrue)
 			}
 			if err := elem.AppendText([]byte(v.StringVal())); err != nil {
 				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append string value: %v", err)}
 			}
 		case TypeBoolean:
-			text := "false"
+			text := lexicon.ValueFalse
 			if v.BooleanVal() {
-				text = "true"
+				text = lexicon.ValueTrue
 			}
 			if err := elem.AppendText([]byte(text)); err != nil {
 				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append boolean value: %v", err)}
@@ -291,7 +292,7 @@ type xmlJSONMeta struct {
 
 func fnXMLToJSON(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	if seqLen(args[0]) != 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json expects zero or one node"}
@@ -414,7 +415,7 @@ func serializeJSONXMLElement(elem *helium.Element, inherited xmlJSONInherited, o
 			parts = append(parts, value)
 		}
 		return formatJSONComposite("[", "]", parts, depth, opts.indent), meta, nil
-	case "string":
+	case lexicon.TypeString:
 		content, err := scalarElementText(elem, true)
 		if err != nil {
 			return "", xmlJSONMeta{}, err
@@ -468,7 +469,7 @@ func parseXMLJSONMeta(elem *helium.Element, inherited xmlJSONInherited) (xmlJSON
 	}
 
 	switch meta.kind {
-	case "map", "array", "string", "number", "boolean", "null":
+	case "map", "array", lexicon.TypeString, "number", "boolean", "null":
 	default:
 		return xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid element %q", meta.kind)}
 	}
@@ -579,9 +580,9 @@ func validateNullElement(elem *helium.Element) error {
 
 func parseXMLJSONBooleanAttr(s string) (bool, error) {
 	switch strings.TrimSpace(s) {
-	case "true", "1":
+	case lexicon.ValueTrue, "1":
 		return true, nil
-	case "false", "0":
+	case lexicon.ValueFalse, "0":
 		return false, nil
 	default:
 		return false, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid boolean attribute value %q", s)}
@@ -590,10 +591,10 @@ func parseXMLJSONBooleanAttr(s string) (bool, error) {
 
 func canonicalizeXMLJSONBoolean(s string) (string, error) {
 	switch strings.TrimSpace(s) {
-	case "true", "1":
-		return "true", nil
-	case "false", "0":
-		return "false", nil
+	case lexicon.ValueTrue, "1":
+		return lexicon.ValueTrue, nil
+	case lexicon.ValueFalse, "0":
+		return lexicon.ValueFalse, nil
 	default:
 		return "", &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid boolean value %q", s)}
 	}
@@ -638,9 +639,9 @@ func preprocessXMLJSONNumber(s string) string {
 
 	intPart := s
 	fracPart := ""
-	if idx := strings.IndexByte(s, '.'); idx >= 0 {
-		intPart = s[:idx]
-		fracPart = s[idx+1:]
+	if before, after, ok := strings.Cut(s, "."); ok {
+		intPart = before
+		fracPart = after
 	}
 	if intPart == "" {
 		intPart = "0"
@@ -773,9 +774,9 @@ func encodeJSONStringContent(s string) string {
 	return b.String()
 }
 
-func formatJSONComposite(open, close string, parts []string, depth int, indent bool) string {
+func formatJSONComposite(open, closeBracket string, parts []string, depth int, indent bool) string {
 	if !indent || len(parts) == 0 {
-		return open + strings.Join(parts, ",") + close
+		return open + strings.Join(parts, ",") + closeBracket
 	}
 
 	var b strings.Builder
@@ -792,7 +793,7 @@ func formatJSONComposite(open, close string, parts []string, depth int, indent b
 	}
 	b.WriteByte('\n')
 	b.WriteString(parentIndent)
-	b.WriteString(close)
+	b.WriteString(closeBracket)
 	return b.String()
 }
 

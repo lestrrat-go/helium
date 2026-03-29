@@ -24,7 +24,6 @@ var elems = elements.NewRegistry()
 
 // compiler holds state during stylesheet compilation.
 type compiler struct {
-	ctx                       context.Context
 	stylesheet                *Stylesheet
 	nsBindings                map[string]string
 	xpathDefaultNS            string // current xpath-default-namespace
@@ -204,11 +203,11 @@ func (c Compiler) toCompileConfig() *compileConfig {
 
 // recordModeUsage records a mode name (or space-separated list of mode names)
 // as being referenced, for later XTSE3085 validation.
-func (c *compiler) recordModeUsage(mode string) {
+func (c *compiler) recordModeUsage(_ context.Context, mode string) {
 	if c.usedModes == nil {
 		c.usedModes = make(map[string]struct{})
 	}
-	for _, m := range strings.Fields(mode) {
+	for m := range strings.FieldsSeq(mode) {
 		c.usedModes[m] = struct{}{}
 	}
 	if mode == "" {
@@ -220,7 +219,7 @@ func (c *compiler) recordModeUsage(mode string) {
 // resolveMode resolves mode name QNames to expanded Clark notation.
 // Special mode names (#all, #default, #unnamed, #current) are returned as-is.
 // Whitespace-separated lists are handled: each token is resolved independently.
-func (c *compiler) resolveMode(mode string) string {
+func (c *compiler) resolveMode(_ context.Context, mode string) string {
 	modes := strings.Fields(mode)
 	if len(modes) <= 1 {
 		mode = strings.TrimSpace(mode)
@@ -244,7 +243,7 @@ func (c *compiler) resolveMode(mode string) string {
 // (as specified by XSLT's default-collation attribute) and returns the first
 // URI that is supported by the XPath engine.  Returns "" if none is supported.
 func resolveDefaultCollation(list string) string {
-	for _, uri := range strings.Fields(list) {
+	for uri := range strings.FieldsSeq(list) {
 		if xpath3.IsCollationSupported(uri) {
 			return uri
 		}
@@ -256,7 +255,7 @@ func resolveDefaultCollation(list string) string {
 // during compilation (i.e., xml:space is not "preserve").
 // Uses the XML definition of whitespace (#x20, #x9, #xD, #xA) so that
 // characters like U+00A0 (non-breaking space) are NOT stripped.
-func (c *compiler) shouldStripText(text string) bool {
+func (c *compiler) shouldStripText(_ context.Context, text string) bool {
 	if c.preserveSpace {
 		return false
 	}
@@ -266,7 +265,7 @@ func (c *compiler) shouldStripText(text string) bool {
 // isXMLWhitespaceOnly returns true if s is empty or contains only XML
 // whitespace characters: space (#x20), tab (#x9), CR (#xD), LF (#xA).
 func isXMLWhitespaceOnly(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		switch s[i] {
 		case ' ', '\t', '\r', '\n':
 			continue
@@ -308,14 +307,14 @@ func getAttr(elem *helium.Element, name string) string {
 }
 
 // parseDOEAttr validates and parses a disable-output-escaping attribute value.
-// Valid values are "yes"/"no"/"true"/"false"/"1"/"0" (with whitespace trimming).
+// Valid values are "yes"/"no"/lexicon.ValueTrue/lexicon.ValueFalse/"1"/"0" (with whitespace trimming).
 // Returns SEPM0016 for invalid values.
 func parseDOEAttr(v string) (bool, error) {
 	v = strings.TrimSpace(v)
 	switch v {
-	case lexicon.ValueYes, "true", "1":
+	case lexicon.ValueYes, lexicon.ValueTrue, "1":
 		return true, nil
-	case lexicon.ValueNo, "false", "0":
+	case lexicon.ValueNo, lexicon.ValueFalse, "0":
 		return false, nil
 	default:
 		return false, staticError(errCodeSEPM0016,
@@ -343,7 +342,7 @@ func hasSignificantContent(elem *helium.Element) bool {
 // the current xpath-default-namespace. When the xpath-default-namespace
 // is the XSD namespace and the type name is unqualified, prefix it
 // with "xs:" so runtime type checks resolve correctly.
-func (c *compiler) resolveAsType(asAttr string) string {
+func (c *compiler) resolveAsType(_ context.Context, asAttr string) string {
 	if asAttr == "" || c.xpathDefaultNS == "" {
 		return asAttr
 	}
@@ -384,13 +383,13 @@ func hasSignificantChildren(elem *helium.Element) bool {
 	return false
 }
 
-// parseXSDBool parses an xs:boolean value ("yes"/"no", "true"/"false", "1"/"0")
+// parseXSDBool parses an xs:boolean value ("yes"/"no", lexicon.ValueTrue/lexicon.ValueFalse, "1"/"0")
 // with whitespace trimming per the XSD specification.
 func parseXSDBool(s string) (bool, bool) {
 	switch strings.TrimSpace(s) {
-	case lexicon.ValueYes, "true", "1":
+	case lexicon.ValueYes, lexicon.ValueTrue, "1":
 		return true, true
-	case lexicon.ValueNo, "false", "0":
+	case lexicon.ValueNo, lexicon.ValueFalse, "0":
 		return false, true
 	default:
 		return false, false
@@ -464,12 +463,10 @@ func resolveQName(qname string, nsBindings map[string]string) string {
 			return helium.ClarkName(uri, local)
 		}
 	}
-	idx := strings.IndexByte(qname, ':')
-	if idx < 0 {
+	prefix, local, ok := strings.Cut(qname, ":")
+	if !ok {
 		return qname
 	}
-	prefix := qname[:idx]
-	local := qname[idx+1:]
 	if uri, ok := nsBindings[prefix]; ok {
 		return helium.ClarkName(uri, local)
 	}
@@ -497,7 +494,7 @@ func isValidEQName(s string) bool {
 // validateEmptyElement checks that an XSLT element required to be empty has
 // no non-whitespace text content or element children. Returns XTSE0260 on violation.
 // When xml:space="preserve" is in effect, even whitespace-only text nodes are errors.
-func (c *compiler) validateEmptyElement(elem *helium.Element, name string) error {
+func (c *compiler) validateEmptyElement(_ context.Context, elem *helium.Element, name string) error {
 	xmlSpacePreserve := getAttr(elem, lexicon.QNameXMLSpace) == "preserve"
 	for child := range helium.Children(elem) {
 		switch child.Type() {
@@ -519,7 +516,7 @@ func (c *compiler) validateEmptyElement(elem *helium.Element, name string) error
 // hasEffectiveContent returns true if the element has non-whitespace content
 // after considering use-when exclusions. Child elements whose use-when evaluates
 // to false are not counted as content.
-func (c *compiler) hasEffectiveContent(elem *helium.Element) bool {
+func (c *compiler) hasEffectiveContent(ctx context.Context, elem *helium.Element) bool {
 	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Element:
@@ -531,7 +528,7 @@ func (c *compiler) hasEffectiveContent(elem *helium.Element) bool {
 				uw, _ = v.GetAttributeNS("use-when", lexicon.NamespaceXSLT)
 			}
 			if uw != "" {
-				include, err := c.evaluateUseWhen(uw)
+				include, err := c.evaluateUseWhen(ctx, uw)
 				if err == nil && !include {
 					continue // excluded by use-when
 				}
@@ -548,7 +545,7 @@ func (c *compiler) hasEffectiveContent(elem *helium.Element) bool {
 
 // setStaticVar sets a static variable value and records its kind
 // ("param" or "variable") for XTSE3450 conflict detection.
-func (c *compiler) setStaticVar(name string, value xpath3.Sequence) {
+func (c *compiler) setStaticVar(_ context.Context, name string, value xpath3.Sequence) {
 	if c.staticVars == nil {
 		c.staticVars = make(map[string]xpath3.Sequence)
 	}
@@ -560,7 +557,7 @@ func (c *compiler) setStaticVar(name string, value xpath3.Sequence) {
 // When called from an imported module, the kind is recorded in
 // importedStaticVarKinds. When called from the main module, it
 // checks against previously imported kinds for conflicts.
-func (c *compiler) setStaticVarWithKind(name, kind string, value xpath3.Sequence) error {
+func (c *compiler) setStaticVarWithKind(ctx context.Context, name, kind string, value xpath3.Sequence) error { //nolint:unparam // always nil but callers check for future-proofing
 	if c.insideImport {
 		if c.importedStaticVarKinds == nil {
 			c.importedStaticVarKinds = make(map[string]string)
@@ -574,7 +571,7 @@ func (c *compiler) setStaticVarWithKind(name, kind string, value xpath3.Sequence
 			c.importedStaticVarKinds[name] = kind
 			c.importedStaticVarValues[name] = value
 		}
-		c.setStaticVar(name, value)
+		c.setStaticVar(ctx, name, value)
 		return nil
 	}
 	// Main module: check against imported kinds for conflicts.
@@ -586,14 +583,14 @@ func (c *compiler) setStaticVarWithKind(name, kind string, value xpath3.Sequence
 	}
 	c.staticVarKinds[name] = kind
 	c.mainStaticVarValues[name] = value
-	c.setStaticVar(name, value)
+	c.setStaticVar(ctx, name, value)
 	return nil
 }
 
 // detectStaticParamCycles checks for circular references among
 // static params/variables. Even if external values break the cycle
 // at runtime, the circularity in definitions is XPST0008.
-func (c *compiler) detectStaticParamCycles(root *helium.Element) error {
+func (c *compiler) detectStaticParamCycles(_ context.Context, root *helium.Element) error {
 	// Collect static param/variable names and their select expressions.
 	type staticDef struct {
 		name string
@@ -700,7 +697,7 @@ func (c *compiler) detectStaticParamCycles(root *helium.Element) error {
 // checkStaticVarKindConflicts checks for XTSE3450 conflicts between
 // the main module's static declarations and imported modules' declarations.
 // Must be called after all imports have been processed.
-func (c *compiler) checkStaticVarKindConflicts(root *helium.Element) error {
+func (c *compiler) checkStaticVarKindConflicts(_ context.Context, root *helium.Element) error {
 	if len(c.importedStaticVarKinds) == 0 || len(c.staticVarKinds) == 0 {
 		return nil
 	}
@@ -814,7 +811,7 @@ func isReservedNamespace(uri string) bool {
 
 // checkQNamePrefix validates that if a QName has a prefix, that prefix is declared
 // in the current namespace bindings. Returns XTSE0280 for undeclared prefixes.
-func (c *compiler) checkQNamePrefix(name, context string) error {
+func (c *compiler) checkQNamePrefix(_ context.Context, name, context string) error {
 	if strings.HasPrefix(name, "Q{") {
 		return nil // EQName, no prefix to resolve
 	}
@@ -846,7 +843,7 @@ func isValidQName(s string) bool {
 // A shadow attribute _foo="avt" is evaluated at compile time and replaces
 // the regular foo attribute. Per XSLT 3.0 §3.5.2: "A shadow attribute
 // takes precedence over the corresponding regular attribute."
-func (c *compiler) resolveShadowAttributes(elem *helium.Element) error {
+func (c *compiler) resolveShadowAttributes(ctx context.Context, elem *helium.Element) error {
 	attrs := elem.Attributes()
 	for _, attr := range attrs {
 		name := attr.LocalName()
@@ -854,7 +851,7 @@ func (c *compiler) resolveShadowAttributes(elem *helium.Element) error {
 			continue
 		}
 		realName := name[1:]
-		avtStr := string(attr.Value())
+		avtStr := attr.Value()
 		avt, err := compileAVT(avtStr, c.nsBindings)
 		if err != nil {
 			return staticError(errCodeXTSE0020,
@@ -863,8 +860,8 @@ func (c *compiler) resolveShadowAttributes(elem *helium.Element) error {
 
 		// Evaluate using static variables and XSLT static functions
 		// (system-property, function-available, etc. per XSLT 3.0 §3.5.2)
-		eval := c.useWhenEvaluator()
-		val, err := avt.evaluateStatic(eval, nil)
+		eval := c.useWhenEvaluator(ctx)
+		val, err := avt.evaluateStatic(ctx, eval, nil)
 		if err != nil {
 			return staticError(errCodeXTSE0020,
 				"error evaluating shadow attribute _%s: %v", realName, err)
@@ -880,7 +877,7 @@ func (c *compiler) resolveShadowAttributes(elem *helium.Element) error {
 
 // resolveSingleShadowAttribute resolves just one shadow attribute (_name) on
 // an element, leaving all other shadow attributes intact.
-func (c *compiler) resolveSingleShadowAttribute(elem *helium.Element, name string) error {
+func (c *compiler) resolveSingleShadowAttribute(ctx context.Context, elem *helium.Element, name string) error {
 	shadowName := "_" + name
 	avtStr, hasShadow := elem.GetAttribute(shadowName)
 	if !hasShadow {
@@ -891,8 +888,8 @@ func (c *compiler) resolveSingleShadowAttribute(elem *helium.Element, name strin
 		return staticError(errCodeXTSE0020,
 			"invalid AVT in shadow attribute _%s: %v", name, err)
 	}
-	eval := c.useWhenEvaluator()
-	val, err := avt.evaluateStatic(eval, nil)
+	eval := c.useWhenEvaluator(ctx)
+	val, err := avt.evaluateStatic(ctx, eval, nil)
 	if err != nil {
 		return staticError(errCodeXTSE0020,
 			"error evaluating shadow attribute _%s: %v", name, err)
@@ -907,16 +904,14 @@ func (c *compiler) resolveSingleShadowAttribute(elem *helium.Element, name strin
 // XPath expressions at compile time (static="yes" params/variables). It
 // provides fn:transform and other XSLT static functions so that compile-time
 // evaluation can invoke dynamic transforms (used by use-when patterns).
-func (c *compiler) staticEvaluator() xpath3.Evaluator {
+func (c *compiler) staticEvaluator(_ context.Context) xpath3.Evaluator {
 	fns := map[string]xpath3.Function{
 		"transform": &xsltFunc{min: 1, max: 1, fn: c.staticFnTransform},
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
 	ns := make(map[string]string, len(c.nsBindings)+1)
-	for k, v := range c.nsBindings {
-		ns[k] = v
-	}
+	maps.Copy(ns, c.nsBindings)
 	if c.xpathDefaultNS != "" {
 		ns[""] = c.xpathDefaultNS
 	}
@@ -931,7 +926,7 @@ func (c *compiler) staticEvaluator() xpath3.Evaluator {
 
 // resolveXMLBaseEvaluator resolves an xml:base attribute value against the
 // compiler's base URI and returns an evaluator with the updated base URI.
-func (c *compiler) resolveXMLBaseEvaluator(eval xpath3.Evaluator, xmlBase string) xpath3.Evaluator {
+func (c *compiler) resolveXMLBaseEvaluator(_ context.Context, eval xpath3.Evaluator, xmlBase string) xpath3.Evaluator {
 	if strings.Contains(xmlBase, "://") {
 		return eval.BaseURI(xmlBase)
 	}
@@ -965,7 +960,6 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 		docCache:            make(map[string]*helium.Document),
 		functionResultCache: make(map[string]xpath3.Sequence),
 		accumulatorState:    make(map[string]xpath3.Sequence),
-		transformCtx:        ctx,
 		resultDocuments:     make(map[string]*helium.Document),
 		usedResultURIs:      make(map[string]struct{}),
 	}
@@ -976,7 +970,7 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 // useWhenEvaluator builds a compile-time evaluator for use-when evaluation
 // and shadow attribute resolution. It provides XSLT static functions
 // (system-property, function-available, type-available, element-available).
-func (c *compiler) useWhenEvaluator() xpath3.Evaluator {
+func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	fns := map[string]xpath3.Function{
 		"function-available": &xsltFunc{min: 1, max: 2, fn: c.useWhenFunctionAvailable},
 		"system-property":    &xsltFunc{min: 1, max: 1, fn: c.useWhenSystemProperty},
@@ -987,9 +981,7 @@ func (c *compiler) useWhenEvaluator() xpath3.Evaluator {
 		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
 	if len(c.nsBindings) > 0 || c.xpathDefaultNS != "" {
 		ns := make(map[string]string, len(c.nsBindings)+1)
-		for k, v := range c.nsBindings {
-			ns[k] = v
-		}
+		maps.Copy(ns, c.nsBindings)
 		if c.xpathDefaultNS != "" {
 			ns[""] = c.xpathDefaultNS
 		}
@@ -1004,7 +996,7 @@ func (c *compiler) useWhenEvaluator() xpath3.Evaluator {
 	return eval
 }
 
-func compileXPath(expr string, nsBindings map[string]string) (*xpath3.Expression, error) {
+func compileXPath(expr string, _ map[string]string) (*xpath3.Expression, error) {
 	compiled, err := xpath3.NewCompiler().Compile(expr)
 	if err != nil {
 		return nil, staticError(errCodeXTSE0165, "invalid XPath %q: %v", expr, err)
@@ -1035,7 +1027,6 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	}
 
 	c := &compiler{
-		ctx: ctx,
 		stylesheet: &Stylesheet{
 			namedTemplates:   make(map[string]*template),
 			modeTemplates:    make(map[string][]*template),
@@ -1102,7 +1093,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	}
 
 	// Collect namespace declarations from root
-	c.collectNamespaces(root)
+	c.collectNamespaces(ctx, root)
 
 	// Read default-validation from stylesheet root (XSLT 3.0).
 	// Per §3.6, the default value is "strip".
@@ -1178,7 +1169,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	c.effectiveVersion = c.stylesheet.version
 
 	// Validate attributes on root element now that effectiveVersion is known.
-	if err := c.validateXSLTAttrs(root, map[string]struct{}{
+	if err := c.validateXSLTAttrs(ctx, root, map[string]struct{}{
 		"version": {}, "id": {}, "default-mode": {},
 		"default-validation": {}, "input-type-annotations": {},
 		"default-collation": {}, "use-when": {},
@@ -1196,8 +1187,8 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 				c.stylesheet.excludePrefixes[prefix] = struct{}{}
 			}
 		} else {
-			for _, prefix := range strings.Fields(erp) {
-				if prefix == "#default" {
+			for prefix := range strings.FieldsSeq(erp) {
+				if prefix == lexicon.ModeDefault {
 					c.stylesheet.excludePrefixes[""] = struct{}{}
 					continue
 				}
@@ -1215,7 +1206,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// extension-element-prefixes are also excluded from output.
 	// XTSE0800: reserved namespaces must not be used as extension namespaces.
 	if eep := getAttr(root, "extension-element-prefixes"); eep != "" {
-		for _, prefix := range strings.Fields(eep) {
+		for prefix := range strings.FieldsSeq(eep) {
 			uri := c.nsBindings[prefix]
 			if isReservedNamespace(uri) {
 				return nil, staticError(errCodeXTSE0800,
@@ -1240,7 +1231,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	}
 
 	// Process top-level elements
-	if err := c.compileTopLevel(root); err != nil {
+	if err := c.compileTopLevel(ctx, root); err != nil {
 		return nil, err
 	}
 
@@ -1248,17 +1239,17 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// (same stylesheet URI, same import precedence, different result URIs)
 	// unless a higher-precedence alias overrides. This runs after all
 	// imports/includes are processed so import precedences are finalized.
-	if err := c.checkConflictingNamespaceAliases(); err != nil {
+	if err := c.checkConflictingNamespaceAliases(ctx); err != nil {
 		return nil, err
 	}
 
 	// XTSE0270: check for conflicting strip-space/preserve-space at same precedence
-	if err := c.checkSpaceConflicts(); err != nil {
+	if err := c.checkSpaceConflicts(ctx); err != nil {
 		return nil, err
 	}
 
 	// Process xsl:expose declarations for packages (after all components are compiled)
-	if err := c.processExpose(root); err != nil {
+	if err := c.processExpose(ctx, root); err != nil {
 		return nil, err
 	}
 
@@ -1309,13 +1300,13 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// Only check for the top-level stylesheet, not sub-packages (which
 	// may intentionally pass abstract components through).
 	if !cfg.isSubPackage {
-		if err := c.checkAbstractComponents(); err != nil {
+		if err := c.checkAbstractComponents(ctx); err != nil {
 			return nil, err
 		}
 	}
 
 	// Sort templates by import precedence (desc) then priority (desc)
-	c.sortTemplates()
+	c.sortTemplates(ctx)
 
 	// Store the stylesheet source document and base URI
 	c.stylesheet.sourceDoc = doc
@@ -1332,7 +1323,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// Validate deferred pattern function calls now that all xsl:function
 	// declarations have been processed.
 	for _, pv := range c.pendingPatternValidations {
-		if err := c.validatePatternFunctions(pv.pattern, pv.source); err != nil {
+		if err := c.validatePatternFunctions(ctx, pv.pattern, pv.source); err != nil {
 			return nil, err
 		}
 	}
@@ -1414,7 +1405,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 
 // checkAbstractComponents checks that no abstract components remain
 // unimplemented in the final compiled stylesheet. XTSE3080.
-func (c *compiler) checkAbstractComponents() error {
+func (c *compiler) checkAbstractComponents(_ context.Context) error {
 	// Check named templates
 	for name, tmpl := range c.stylesheet.namedTemplates {
 		if tmpl.Visibility == visAbstract {
@@ -1443,11 +1434,11 @@ func checkDeclaredModes(ss *Stylesheet, usedModes map[string]struct{}) error {
 		if mode == modeCurrent || mode == modeAll {
 			continue
 		}
-		// The unnamed mode ("", "#default", "#unnamed") must also be declared
+		// The unnamed mode ("", lexicon.ModeDefault, "#unnamed") must also be declared
 		// when declared-modes is in effect.
 		if mode == "" || mode == modeDefault || mode == modeUnnamed {
 			// Check if unnamed mode is declared. It can be declared as "",
-			// "#default", or "#unnamed" in modeDefs.
+			// lexicon.ModeDefault, or "#unnamed" in modeDefs.
 			if ss.modeDefs != nil {
 				if _, ok := ss.modeDefs[""]; ok {
 					continue

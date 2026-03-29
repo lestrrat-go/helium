@@ -470,7 +470,7 @@ loop:
 		// Pure unary plus: wrap to enforce numeric type check
 		expr = UnaryExpr{Operand: expr, Negate: false}
 	}
-	for i := 0; i < negate; i++ {
+	for range negate {
 		expr = UnaryExpr{Operand: expr, Negate: true}
 	}
 	return expr, nil
@@ -1243,13 +1243,13 @@ func (p *parser) parseKindTest(name string) (NodeTest, bool, error) {
 			return nil, true, fmt.Errorf("expected ')' after processing-instruction(")
 		}
 		return PITest{Target: target}, true, nil
-	case "element":
+	case lexicon.KindElement:
 		return p.parseElementOrAttributeTest(true)
-	case "attribute":
+	case lexicon.KindAttribute:
 		return p.parseElementOrAttributeTest(false)
 	case "document-node":
 		return p.parseDocumentNodeTest()
-	case "schema-element":
+	case lexicon.KindSchemaElement:
 		return p.parseSchemaTest(true)
 	case "schema-attribute":
 		return p.parseSchemaTest(false)
@@ -1315,14 +1315,14 @@ func (p *parser) parseDocumentNodeTest() (NodeTest, bool, error) {
 	tok := p.lexer.Peek()
 	if tok.Type == TokenName {
 		switch tok.Value {
-		case "element":
+		case lexicon.KindElement:
 			p.lexer.Next() // consume 'element'
 			nt, _, err := p.parseElementOrAttributeTest(true)
 			if err != nil {
 				return nil, true, err
 			}
 			inner = nt
-		case "schema-element":
+		case lexicon.KindSchemaElement:
 			p.lexer.Next() // consume 'schema-element'
 			nt, _, err := p.parseSchemaTest(true)
 			if err != nil {
@@ -1575,7 +1575,7 @@ func (p *parser) parseTryCatchExpr() (Expr, error) {
 		p.lexer.Next()
 		// Parse error codes (NameTest ("|" NameTest)*)
 		// NameTest ::= EQName | Wildcard
-		// Wildcard ::= "*" | NCName ":*" | "*:" NCName | "BracedURILiteral" "*"
+		// ::= "*" | NCName ":*" | "*:" NCName | "BracedURILiteral" "*"
 		var codes []string
 		for {
 			code, err := p.parseCatchCode()
@@ -2125,8 +2125,8 @@ func variableExprFromToken(name string) VariableExpr {
 		return VariableExpr{Name: name}
 	}
 	prefix := ""
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix = name[:idx]
+	if p2, _, ok := strings.Cut(name, ":"); ok {
+		prefix = p2
 	}
 	return VariableExpr{Prefix: prefix, Name: name}
 }
@@ -2162,7 +2162,7 @@ func (p *parser) looksLikeStepOffset(offset int) bool {
 			// schema-attribute(), namespace-node() are steps
 			switch tok.Value {
 			case "node", "text", "comment", "processing-instruction",
-				"element", "attribute", "document-node", "schema-element",
+				lexicon.KindElement, "attribute", "document-node", lexicon.KindSchemaElement,
 				"schema-attribute", "namespace-node":
 				return true
 			}

@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-func (c *compiler) resolveRefs() {
+func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve element type references.
 	// Two passes: the first pass resolves type-name refs and may leave
 	// element-to-element refs with nil Type (because the target global element
@@ -47,7 +48,7 @@ func (c *compiler) resolveRefs() {
 			if edecl.IsRef {
 				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
-					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, src.line, src.elemName, elemElement, attrRef, msg), helium.ErrorLevelFatal))
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, src.line, src.elemName, elemElement, attrRef, msg), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
 				edecl.Type = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
@@ -59,7 +60,7 @@ func (c *compiler) resolveRefs() {
 				if qn.NS == lexicon.NamespaceXSD {
 					if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 						msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-						c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
+						c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
 						c.errorCount++
 					}
 				}
@@ -186,11 +187,11 @@ func (c *compiler) resolveRefs() {
 		// Only check when the derived type has element content (not empty/attribute-only).
 		if td.BaseType.ContentType == ContentTypeSimple && (td.ContentType == ContentTypeElementOnly || td.ContentType == ContentTypeMixed) {
 			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
-				component := "local complex type"
+				component := componentLocalComplexType
 				if !src.isLocal {
 					component = "complex type '" + td.Name.Local + "'"
 				}
-				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
 					"The content type of both, the type and its base type, must either 'mixed' or 'element-only'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -226,12 +227,12 @@ func (c *compiler) resolveRefs() {
 			for _, au := range td.Attributes {
 				if baseAttrNames[au.Name.Local] {
 					if src, ok := c.typeDefSources[td]; ok {
-						component := "local complex type"
+						component := componentLocalComplexType
 						if !src.isLocal {
 							component = td.Name.Local
 						}
 						msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-						c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+						c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
 						c.errorCount++
 					}
 				}
@@ -264,7 +265,7 @@ func (c *compiler) resolveRefs() {
 		return si.line < sj.line
 	})
 	for _, td := range restrictionTypes {
-		c.checkRestrictionAttrs(td)
+		c.checkRestrictionAttrs(ctx, td)
 	}
 
 	// Check UPA (Unique Particle Attribution) for all complex types with content models.
@@ -273,7 +274,7 @@ func (c *compiler) resolveRefs() {
 	if c.filename != "" && c.errorCount == 0 {
 		for td, src := range c.typeDefSources {
 			if td.ContentModel != nil {
-				c.checkUPA(td, src)
+				c.checkUPA(ctx, td, src)
 			}
 		}
 	}
@@ -281,7 +282,7 @@ func (c *compiler) resolveRefs() {
 
 // checkRestrictionAttrs validates that a restriction-derived type's attributes
 // are compatible with the base type's attribute uses.
-func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
+func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 	if c.filename == "" {
 		return
 	}
@@ -290,7 +291,7 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 		return
 	}
 
-	component := "local complex type"
+	component := componentLocalComplexType
 	if !src.isLocal {
 		component = "complex type '" + td.Name.Local + "'"
 	}
@@ -317,14 +318,14 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 			// Check use consistency: optional cannot restrict required.
 			if baseAU.Required && !au.Required {
 				msg := fmt.Sprintf("The 'optional' attribute use is inconsistent with the corresponding 'required' attribute use of the base complex type definition %s.", baseQualified)
-				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType",
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 		} else if td.BaseType.AnyAttribute == nil {
 			// No matching attribute and no wildcard in base.
 			msg := fmt.Sprintf("Neither a matching attribute use, nor a matching wildcard exists in the base complex type definition %s.", baseQualified)
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType",
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType",
 				component+", attribute use '"+au.Name.Local+"'", msg), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -342,7 +343,7 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 		derived, found := derivedAttrs[baseAU.Name.Local]
 		if !found || derived.Prohibited {
 			msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
@@ -352,13 +353,13 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 		// 4.1: Base must also have a wildcard.
 		if td.BaseType.AnyAttribute == nil {
 			msg := fmt.Sprintf("The complex type definition has an attribute wildcard, but the base complex type definition %s does not have one.", baseQualified)
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
 			// 4.2: Derived namespace must be subset of base namespace.
 			if !wildcardNSSubset(td.AnyAttribute, td.BaseType.AnyAttribute) {
 				msg := fmt.Sprintf("The attribute wildcard is not a valid subset of the wildcard in the base complex type definition %s.", baseQualified)
-				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 			// 4.3: Derived processContents must be >= base strength (strict > lax > skip).
@@ -373,7 +374,7 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 					}
 				}
 				msg := fmt.Sprintf("The {process contents} of the attribute wildcard is weaker than the one in the base complex type definition %s.", baseQualified)
-				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, errLine, "complexType", errComponent, msg), helium.ErrorLevelFatal))
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, errLine, "complexType", errComponent, msg), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 		}
@@ -417,7 +418,7 @@ func wildcardNSSet(wc *Wildcard) map[string]bool {
 		s[wc.TargetNS] = true
 	default:
 		// Space-separated list of URIs, possibly including ##local and ##targetNamespace.
-		for _, token := range strings.Fields(wc.Namespace) {
+		for token := range strings.FieldsSeq(wc.Namespace) {
 			switch token {
 			case WildcardNSLocal:
 				s[""] = true
@@ -562,7 +563,7 @@ func processContentsStrength(pc ProcessContentsKind) int {
 // checkCircularSubstGroup detects if an element's substitution group chain
 // leads back to itself. Only reports an error if the element itself is part
 // of the cycle (not if it just points to a cyclic element).
-func (c *compiler) checkCircularSubstGroup(edecl *ElementDecl) {
+func (c *compiler) checkCircularSubstGroup(ctx context.Context, edecl *ElementDecl) {
 	visited := map[QName]bool{}
 	current := edecl.SubstitutionGroup
 	for current != (QName{}) {
@@ -573,9 +574,9 @@ func (c *compiler) checkCircularSubstGroup(edecl *ElementDecl) {
 				msg := fmt.Sprintf("The element declaration '%s' defines a circular substitution group to element declaration '%s'.",
 					edecl.Name.Local, current.Local)
 				errStr := schemaElemDeclError(c.filename, src.line, edecl.Name.Local, msg)
-				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(errStr, helium.ErrorLevelFatal))
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(errStr, helium.ErrorLevelFatal))
 				c.errorCount++
-				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(errStr, helium.ErrorLevelFatal))
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(errStr, helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 			return
@@ -594,7 +595,7 @@ func (c *compiler) checkCircularSubstGroup(edecl *ElementDecl) {
 }
 
 // checkFinalOnTypes checks that no type derivation violates the base type's final constraint.
-func (c *compiler) checkFinalOnTypes() {
+func (c *compiler) checkFinalOnTypes(ctx context.Context) {
 	for _, td := range c.schema.types {
 		src := c.typeDefSources[td]
 
@@ -604,18 +605,18 @@ func (c *compiler) checkFinalOnTypes() {
 			if td.Derivation == DerivationExtension && baseFinal&FinalExtension != 0 {
 				component := td.Name.Local
 				if src.isLocal {
-					component = "local complex type"
+					component = componentLocalComplexType
 				}
-				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
 					"Derivation by extension is forbidden by the base type '"+td.BaseType.Name.Local+"'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 			if td.Derivation == DerivationRestriction && baseFinal&FinalRestriction != 0 {
 				component := td.Name.Local
 				if src.isLocal {
-					component = "local complex type"
+					component = componentLocalComplexType
 				}
-				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
 					"Derivation by restriction is forbidden by the base type '"+td.BaseType.Name.Local+"'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -623,7 +624,7 @@ func (c *compiler) checkFinalOnTypes() {
 
 		// simpleType list: check if item type forbids list derivation.
 		if td.Variety == TypeVarietyList && td.ItemType != nil && td.ItemType.Final&FinalList != 0 {
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
 				"Derivation by list is forbidden by the item type '"+td.ItemType.Name.Local+"'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -631,7 +632,7 @@ func (c *compiler) checkFinalOnTypes() {
 		if td.Variety == TypeVarietyUnion {
 			for _, member := range td.MemberTypes {
 				if member.Final&FinalUnion != 0 {
-					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
 						"Derivation by union is forbidden by the member type '"+member.Name.Local+"'."), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
@@ -642,7 +643,7 @@ func (c *compiler) checkFinalOnTypes() {
 
 // checkFinalOnSubstGroups checks that substitution group members do not violate
 // the head element's final constraint.
-func (c *compiler) checkFinalOnSubstGroups() {
+func (c *compiler) checkFinalOnSubstGroups(ctx context.Context) {
 	for headQN, members := range c.schema.substGroups {
 		head, ok := c.schema.elements[headQN]
 		if !ok {
@@ -654,14 +655,14 @@ func (c *compiler) checkFinalOnSubstGroups() {
 		for _, member := range members {
 			if head.Final&FinalExtension != 0 && derivationUsesMethod(member.Type, head.Type, DerivationExtension) {
 				if src, ok := c.globalElemSources[member]; ok {
-					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaElemDeclError(c.filename, src.line, member.Name.Local,
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclError(c.filename, src.line, member.Name.Local,
 						"The substitution group affiliation is forbidden by the head element's final value."), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
 			}
 			if head.Final&FinalRestriction != 0 && derivationUsesMethod(member.Type, head.Type, DerivationRestriction) {
 				if src, ok := c.globalElemSources[member]; ok {
-					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaElemDeclError(c.filename, src.line, member.Name.Local,
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclError(c.filename, src.line, member.Name.Local,
 						"The substitution group affiliation is forbidden by the head element's final value."), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
@@ -688,11 +689,11 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName
 // using the namespace declarations in scope on the given element.
-func (c *compiler) resolveQName(elem *helium.Element, ref string) QName {
+func (c *compiler) resolveQName(_ context.Context, elem *helium.Element, ref string) QName {
 	local := ref
 	ns := c.schema.targetNamespace
 
-	for i := 0; i < len(ref); i++ {
+	for i := range len(ref) {
 		if ref[i] == ':' {
 			prefix := ref[:i]
 			local = ref[i+1:]

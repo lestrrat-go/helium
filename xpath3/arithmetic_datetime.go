@@ -34,8 +34,8 @@ func evalDateTimeArithmetic(ec *evalContext, op TokenType, la, ra AtomicValue) (
 	rDT := isDateTimeType(ra.TypeName)
 
 	// duration + duration → duration
-	// duration - duration → duration
-	// duration / duration → decimal
+	// - duration → duration
+	// / duration → decimal
 	if lDur && rDur {
 		if op == TokenDiv {
 			return arithmeticDurationDivDuration(la, ra)
@@ -56,7 +56,7 @@ func evalDateTimeArithmetic(ec *evalContext, op TokenType, la, ra AtomicValue) (
 	}
 
 	// date/dateTime/time + duration → date/dateTime/time
-	// date/dateTime/time - duration → date/dateTime/time
+	// - duration → date/dateTime/time
 	if lDT && rDur {
 		return arithmeticDateTimeDuration(op, la, ra)
 	}

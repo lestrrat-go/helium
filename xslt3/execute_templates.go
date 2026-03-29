@@ -50,12 +50,12 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	// XTTE3110: typed="no" mode rejects typed nodes
 	if md := ec.lookupModeDef(mode); md != nil {
 		switch md.Typed {
-		case lexicon.ValueYes, "true", "1", validationStrict, validationLax:
+		case lexicon.ValueYes, lexicon.ValueTrue, "1", validationStrict, validationLax:
 			if !ec.nodeIsTyped(node) {
 				return dynamicError(errCodeXTTE3100,
 					"mode %q has typed=%q but node is untyped", mode, md.Typed)
 			}
-		case lexicon.ValueNo, "false", "0":
+		case lexicon.ValueNo, lexicon.ValueFalse, "0":
 			if ec.nodeIsTyped(node) {
 				return dynamicError(errCodeXTTE3110,
 					"mode %q has typed=%q but node is typed", mode, md.Typed)
@@ -64,7 +64,7 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	}
 
 	// Find best matching template
-	tmpl, err := ec.findBestTemplate(node, mode)
+	tmpl, err := ec.findBestTemplate(ctx, node, mode)
 	if err != nil {
 		return err
 	}
@@ -119,27 +119,27 @@ func (ec *execContext) nodeIsTyped(node helium.Node) bool {
 // findBestTemplate finds the highest-priority matching template for a node.
 // Returns XTRE0540 when on-multiple-match="fail" and two templates match
 // with equal priority and import precedence.
-func (ec *execContext) findBestTemplate(node helium.Node, mode string) (*template, error) {
+func (ec *execContext) findBestTemplate(ctx context.Context, node helium.Node, mode string) (*template, error) {
 	// Set currentNode to the candidate so current() works in pattern predicates
 	savedCurrent := ec.currentNode
 	ec.currentNode = node
 	defer func() { ec.currentNode = savedCurrent }()
 
-	best := ec.findFirstMatch(ec.stylesheet.modeTemplates[mode], node)
+	best := ec.findFirstMatch(ctx, ec.stylesheet.modeTemplates[mode], node)
 
 	// Also check #all mode templates that might not be registered in this mode
 	if best == nil && mode != modeAll {
-		best = ec.findFirstMatch(ec.stylesheet.modeTemplates[modeAll], node)
+		best = ec.findFirstMatch(ctx, ec.stylesheet.modeTemplates[modeAll], node)
 	}
 
 	if best == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	// Check on-multiple-match="fail": look for a second matching template
 	// with the same priority and import precedence.
 	if ec.onMultipleMatchFail(mode) {
-		if ec.hasConflictingMatch(node, mode, best) {
+		if ec.hasConflictingMatch(ctx, node, mode, best) {
 			return nil, dynamicError(errCodeXTDE0540,
 				"ambiguous rule match for node %v in mode %q (on-multiple-match=fail)",
 				node, mode)
@@ -150,9 +150,9 @@ func (ec *execContext) findBestTemplate(node helium.Node, mode string) (*templat
 }
 
 // findFirstMatch returns the first template in the list that matches the node.
-func (ec *execContext) findFirstMatch(templates []*template, node helium.Node) *template {
+func (ec *execContext) findFirstMatch(ctx context.Context, templates []*template, node helium.Node) *template {
 	for _, tmpl := range templates {
-		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
+		if tmpl.Match != nil && tmpl.Match.matchPattern(ctx, ec, node) {
 			return tmpl
 		}
 	}
@@ -182,7 +182,7 @@ func (ec *execContext) onMultipleMatchFail(mode string) bool {
 
 // hasConflictingMatch checks whether there is another template (besides best)
 // that matches the same node with equal import precedence and priority.
-func (ec *execContext) hasConflictingMatch(node helium.Node, mode string, best *template) bool {
+func (ec *execContext) hasConflictingMatch(ctx context.Context, node helium.Node, mode string, best *template) bool {
 	check := func(templates []*template) bool {
 		for _, tmpl := range templates {
 			if tmpl == best {
@@ -201,7 +201,7 @@ func (ec *execContext) hasConflictingMatch(node helium.Node, mode string, best *
 			if len(tmpl.Body) > 0 && len(best.Body) > 0 && &tmpl.Body[0] == &best.Body[0] {
 				continue
 			}
-			if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
+			if tmpl.Match != nil && tmpl.Match.matchPattern(ctx, ec, node) {
 				return true
 			}
 		}
@@ -219,29 +219,29 @@ func (ec *execContext) hasConflictingMatch(node helium.Node, mode string, best *
 
 // findAtomicTemplate finds a template matching an atomic value.
 // XSLT 3.0 patterns like ".[. instance of xs:integer]" can match atomic items.
-func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) (*template, error) {
+func (ec *execContext) findAtomicTemplate(ctx context.Context, item xpath3.Item, mode string) (*template, error) {
 	var best *template
 	templates := ec.stylesheet.modeTemplates[mode]
 	for _, tmpl := range templates {
-		if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
+		if tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, item) {
 			best = tmpl
 			break
 		}
 	}
 	if best == nil && mode != modeAll {
 		for _, tmpl := range ec.stylesheet.modeTemplates[modeAll] {
-			if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
+			if tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, item) {
 				best = tmpl
 				break
 			}
 		}
 	}
 	if best == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	// Check on-multiple-match="fail": look for conflicting atomic template match.
 	if ec.onMultipleMatchFail(mode) {
-		if ec.hasConflictingAtomicMatch(item, mode, best) {
+		if ec.hasConflictingAtomicMatch(ctx, item, mode, best) {
 			return nil, dynamicError(errCodeXTDE0540,
 				"ambiguous rule match for atomic item in mode %q (on-multiple-match=fail)", mode)
 		}
@@ -251,7 +251,7 @@ func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) (*templ
 
 // hasConflictingAtomicMatch checks whether there is another template (besides best)
 // that matches the same atomic item with equal import precedence and priority.
-func (ec *execContext) hasConflictingAtomicMatch(item xpath3.Item, mode string, best *template) bool {
+func (ec *execContext) hasConflictingAtomicMatch(ctx context.Context, item xpath3.Item, mode string, best *template) bool {
 	check := func(templates []*template) bool {
 		for _, tmpl := range templates {
 			if tmpl == best {
@@ -266,7 +266,7 @@ func (ec *execContext) hasConflictingAtomicMatch(item xpath3.Item, mode string, 
 			if len(tmpl.Body) > 0 && len(best.Body) > 0 && &tmpl.Body[0] == &best.Body[0] {
 				continue
 			}
-			if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
+			if tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, item) {
 				return true
 			}
 		}
@@ -282,7 +282,7 @@ func (ec *execContext) hasConflictingAtomicMatch(item xpath3.Item, mode string, 
 }
 
 // matchAtomicPattern checks if an atomic item matches a pattern.
-func (ec *execContext) matchAtomicPattern(p *pattern, item xpath3.Item) bool {
+func (ec *execContext) matchAtomicPattern(ctx context.Context, p *pattern, item xpath3.Item) bool {
 	for _, alt := range p.Alternatives {
 		// variable reference patterns (e.g., match="$var") only match nodes,
 		// never atomic items per XSLT 3.0 §5.5.3.
@@ -298,7 +298,7 @@ func (ec *execContext) matchAtomicPattern(p *pattern, item xpath3.Item) bool {
 			}
 		}
 		// Evaluate the pattern as a boolean predicate with the item as context
-		result, err := ec.xpathEvaluator().ContextItem(item).Evaluate(ec.xpathContext(), compiled, nil)
+		result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), compiled, nil)
 		if err != nil {
 			continue
 		}
@@ -353,7 +353,7 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 		}
 
 		if p.Select != nil {
-			result, err := ec.xpathEvaluator().ContextItem(item).Evaluate(ec.xpathContext(), p.Select, nil)
+			result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), p.Select, nil)
 			if err != nil {
 				return err
 			}
@@ -376,7 +376,7 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 
 		if p.As != "" && val != nil && sequence.Len(val) > 0 {
 			st := parseSequenceType(p.As)
-			checked, err := checkSequenceType(val, st, errCodeXTTE0570, "param $"+p.Name, ec)
+			checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "param $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -399,7 +399,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 	// XTDE0160: backwards compatibility mode is not supported.
 	// Only XSLT 1.0 triggers backwards compatible behavior. Other versions
 	// (like 1.5) are forward-compatible and don't require BC support.
-	if strings.TrimSpace(tmpl.Version) == "1.0" {
+	if strings.TrimSpace(tmpl.Version) == lexicon.OutputVersion10 {
 		return dynamicError(errCodeXTDE0160,
 			"backwards compatibility mode (version 1.0) is not supported")
 	}
@@ -532,7 +532,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 			}
 			// Use default value
 			if p.Select != nil {
-				result, err := ec.evalXPath(p.Select, node)
+				result, err := ec.evalXPath(ctx, p.Select, node)
 				if err != nil {
 					return err
 				}
@@ -561,7 +561,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 			if fromCaller {
 				errCode = errCodeXTTE0590
 			}
-			checked, err := checkSequenceType(val, st, errCode, "param $"+p.Name, ec)
+			checked, err := checkSequenceType(ctx, val, st, errCode, "param $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -596,7 +596,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 	stripped, doeTextIndices := stripDOEMarkers(seq)
 
 	st := parseSequenceType(tmpl.As)
-	checked, err := checkSequenceType(stripped, st, errCodeXTTE0505, "template", ec)
+	checked, err := checkSequenceType(ctx, stripped, st, errCodeXTTE0505, "template", ec)
 	if err != nil {
 		return err
 	}
@@ -628,7 +628,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 			// (comments, attributes, PIs) per XSLT 3.0 §20.1.
 			emitDOE := isDOE && ec.temporaryOutputDepth == 0 && !out.captureItems && !out.sequenceMode
 			if emitDOE {
-				pi := ec.resultDoc.CreatePI("disable-output-escaping", "")
+				pi := ec.resultDoc.CreatePI(lexicon.OutputDisableEscaping, "")
 				if err := ec.addNode(pi); err != nil {
 					return err
 				}
@@ -661,7 +661,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 				// DOM output: emit children since documents can't be
 				// children of elements. In capture/sequence mode, keep
 				// the document node intact (pattern matching may need it).
-				doc := v.Node.(*helium.Document)
+				doc, _ := helium.AsNode[*helium.Document](v.Node)
 				for dc := range helium.Children(doc) {
 					copied, copyErr := helium.CopyNode(dc, ec.resultDoc)
 					if copyErr != nil {
@@ -728,8 +728,8 @@ func stripDOEMarkers(seq xpath3.Sequence) (xpath3.Sequence, map[int]bool) {
 	doeActive := false
 	for item := range sequence.Items(seq) {
 		if ni, ok := item.(xpath3.NodeItem); ok && ni.Node.Type() == helium.ProcessingInstructionNode {
-			piName := string(ni.Node.Name())
-			if piName == "disable-output-escaping" {
+			piName := ni.Node.Name()
+			if piName == lexicon.OutputDisableEscaping {
 				doeActive = true
 				continue
 			}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -81,7 +82,6 @@ type execContext struct {
 	errSourceModule              string                     // source module of last-executed instruction (for xsl:catch)
 	msgHandler                   MessageHandler
 	transformConfig              *transformConfig
-	transformCtx                 context.Context               // parent context from Transform caller (for cancellation/deadlines)
 	currentTime                  time.Time                     // stable fn:current-* value for whole transformation
 	schemaRegistry               *schemaRegistry               // merged schema registry for schema-aware processing
 	typeAnnotations              map[helium.Node]string        // node → xs:... type annotation (schema-aware)
@@ -470,7 +470,7 @@ func (vs *varScope) lookupDeferred(name string) error {
 }
 
 func (ec *execContext) pushVarScope() {
-	vs := varScopePool.Get().(*varScope)
+	vs := varScopePool.Get().(*varScope) //nolint:forcetypeassert
 	vs.parent = ec.localVars
 	ec.localVars = vs
 }
@@ -489,7 +489,7 @@ func (ec *execContext) popVarScope() {
 
 func (ec *execContext) setVar(name string, value xpath3.Sequence) {
 	if ec.localVars == nil {
-		ec.localVars = varScopePool.Get().(*varScope)
+		ec.localVars = varScopePool.Get().(*varScope) //nolint:forcetypeassert
 	}
 	if ec.localVars.vars == nil {
 		ec.localVars.vars = make(map[string]xpath3.Sequence, 4)
@@ -502,7 +502,7 @@ func (ec *execContext) setVar(name string, value xpath3.Sequence) {
 // is actually referenced via ResolveVariable.
 func (ec *execContext) setVarDeferred(name string, err error) {
 	if ec.localVars == nil {
-		ec.localVars = varScopePool.Get().(*varScope)
+		ec.localVars = varScopePool.Get().(*varScope) //nolint:forcetypeassert
 	}
 	if ec.localVars.vars == nil {
 		ec.localVars.vars = make(map[string]xpath3.Sequence, 4)
@@ -550,7 +550,7 @@ func (ec *execContext) addNodeUntracked(node helium.Node) error {
 	// excluded — they are managed by resolveConditionalScope directly.
 	if node.Type() == helium.TextNode {
 		if n := len(out.conditionalScopes); n > 0 {
-			out.conditionalScopes[n-1].untrackedNodes = append(out.conditionalScopes[n-1].untrackedNodes, node.(helium.MutableNode))
+			out.conditionalScopes[n-1].untrackedNodes = append(out.conditionalScopes[n-1].untrackedNodes, node.(helium.MutableNode)) //nolint:forcetypeassert
 		}
 	}
 	return nil
@@ -711,7 +711,7 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.MutableNode,
 	out := ec.currentOutput()
 	savedCurrent := out.current
 	if parent != nil {
-		out.current = parent.(helium.MutableNode)
+		out.current = parent.(helium.MutableNode) //nolint:forcetypeassert
 		defer func() {
 			out.current = savedCurrent
 		}()
@@ -745,7 +745,8 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.MutableNode,
 				if !ok {
 					return dynamicError(errCodeXTDE0410, "cannot add attribute to a non-element node")
 				}
-				copyAttributeToElement(elem, v.Node.(*helium.Attribute))
+				attrNode, _ := helium.AsNode[*helium.Attribute](v.Node)
+				copyAttributeToElement(elem, attrNode)
 				out.noteOutput()
 			default:
 				copied, err := helium.CopyNode(v.Node, ec.resultDoc)
@@ -882,7 +883,7 @@ func (r strippingCollectionResolver) ResolveURICollection(uri string) ([]string,
 
 func (ec *execContext) copyCollectionNode(node helium.Node) (helium.Node, error) {
 	if node == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	if doc, ok := node.(*helium.Document); ok {
@@ -912,18 +913,14 @@ func (ec *execContext) copyCollectionNode(node helium.Node) (helium.Node, error)
 
 // sortXPathEvalState creates a reusable xpath3.EvalState from the base context.
 // Used by sort to avoid per-item newEvalContext allocations.
-func (ec *execContext) sortXPathEvalState() *xpath3.EvalState {
-	return ec.xpathEvaluator().NewEvalState(ec.xpathContext(), nil)
+func (ec *execContext) sortXPathEvalState(ctx context.Context) *xpath3.EvalState {
+	return ec.xpathEvaluator(ctx).NewEvalState(nil)
 }
 
 // xpathContext returns a context.Context suitable for XPath evaluation.
 // It carries cancellation/deadlines and the xslt3 exec context, but
 // NOT XPath config (that comes from the Evaluator).
-func (ec *execContext) xpathContext() context.Context {
-	ctx := ec.transformCtx
-	if ctx == nil {
-		ctx = context.Background()
-	}
+func (ec *execContext) xpathContext(ctx context.Context) context.Context {
 	return withExecContext(ctx, ec)
 }
 
@@ -1076,8 +1073,8 @@ func (ec *execContext) accumulatorStateKey(name string) string {
 
 // xpathEvaluator returns the base evaluator with per-call overlays
 // (variables, position, size, context item, collation, doc-order cache).
-func (ec *execContext) xpathEvaluator() xpath3.Evaluator {
-	vars := ec.collectAllVars()
+func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
+	vars := ec.collectAllVars(ctx)
 	eval := ec.baseXPathEvaluator().
 		Variables(xpath3.VariablesFromMap(vars)).
 		Functions(xpath3.FunctionLibraryFromMaps(ec.xsltFunctions(), ec.xsltFunctionsNS()))
@@ -1109,11 +1106,11 @@ func (ec *execContext) xpathEvaluator() xpath3.Evaluator {
 }
 
 // evalXPath evaluates an XPath expression using the Evaluator-based path.
-func (ec *execContext) evalXPath(expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
-	return ec.xpathEvaluator().Evaluate(ec.xpathContext(), expr, node)
+func (ec *execContext) evalXPath(ctx context.Context, expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
+	return ec.xpathEvaluator(ctx).Evaluate(ec.xpathContext(ctx), expr, node)
 }
 
-func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
+func (ec *execContext) collectAllVars(ctx context.Context) map[string]xpath3.Sequence {
 	// Eagerly evaluate all pending global vars/params, but only at the
 	// top level. Nested calls (from within evaluateGlobalVar/param →
 	// newXPathContext → collectAllVars) just snapshot what's available;
@@ -1143,7 +1140,7 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 				if v.OwnerPackage != nil {
 					continue
 				}
-				if _, err := ec.evaluateGlobalVar(v); err == nil {
+				if _, err := ec.evaluateGlobalVar(ctx, v); err == nil {
 					progress = true
 				}
 			}
@@ -1157,7 +1154,7 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 				if !ok {
 					continue
 				}
-				if _, err := ec.evaluateGlobalParam(p); err == nil {
+				if _, err := ec.evaluateGlobalParam(ctx, p); err == nil {
 					progress = true
 				}
 			}
@@ -1176,18 +1173,14 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 
 	vars := make(map[string]xpath3.Sequence, len(ec.globalVars))
 	// Start with globals
-	for k, v := range ec.globalVars {
-		vars[k] = v
-	}
+	maps.Copy(vars, ec.globalVars)
 	// Walk from outermost to innermost scope so inner scopes override
 	var scopes []*varScope
 	for s := ec.localVars; s != nil; s = s.parent {
 		scopes = append(scopes, s)
 	}
 	for i := len(scopes) - 1; i >= 0; i-- {
-		for k, v := range scopes[i].vars {
-			vars[k] = v
-		}
+		maps.Copy(vars, scopes[i].vars)
 	}
 
 	// When executing in a used package, remove variables that the
@@ -1216,7 +1209,7 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 // cache), then evaluates it fresh if needed. The result is NOT stored in
 // ec.globalVars to avoid poisoning the global scope — each package may
 // define the same variable name with different values.
-func (ec *execContext) evaluatePackageVar(v *variable) (xpath3.Sequence, error) {
+func (ec *execContext) evaluatePackageVar(ctx context.Context, v *variable) (xpath3.Sequence, error) {
 	if ec.packageVarCache == nil {
 		ec.packageVarCache = make(map[*variable]xpath3.Sequence)
 	}
@@ -1227,7 +1220,7 @@ func (ec *execContext) evaluatePackageVar(v *variable) (xpath3.Sequence, error) 
 	// this package variable doesn't overwrite an override from the main
 	// stylesheet.
 	savedVal, hadSaved := ec.globalVars[v.Name]
-	val, err := ec.evaluateGlobalVar(v)
+	val, err := ec.evaluateGlobalVar(ctx, v)
 	if err != nil {
 		// Restore on error
 		if hadSaved {
@@ -1260,7 +1253,7 @@ func (ec *execContext) ResolveFunction(_ context.Context, uri, name string, arit
 // global variables and parameters that have not yet been evaluated, allowing
 // XPath expressions to reference globals that aren't in the snapshot built
 // by collectAllVars (e.g. during circular-but-unused variable scenarios).
-func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.Sequence, bool, error) {
+func (ec *execContext) ResolveVariable(ctx context.Context, name string) (xpath3.Sequence, bool, error) {
 	// Handle $xsl:original — resolve to the original overridden variable's value.
 	// The name may come as either the expanded form "{uri}original" or the
 	// prefixed form "xsl:original" depending on whether namespace resolution
@@ -1273,7 +1266,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 		origName := ec.overridingVarDef.Name
 		wasEvaluating := ec.globalEvaluating[origName]
 		delete(ec.globalEvaluating, origName)
-		val, err := ec.evaluateGlobalVar(ec.overridingVarDef.OriginalVar)
+		val, err := ec.evaluateGlobalVar(ctx, ec.overridingVarDef.OriginalVar)
 		if wasEvaluating {
 			ec.globalEvaluating[origName] = true
 		}
@@ -1319,7 +1312,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 					// and should be evaluated in that sub-package's context.
 					// Use evaluatePackageVar to get the correct per-package value.
 					if pkgVar.OwnerPackage != nil && pkgVar.OwnerPackage != ec.stylesheet {
-						val, err := ec.evaluatePackageVar(pkgVar)
+						val, err := ec.evaluatePackageVar(ctx, pkgVar)
 						if err != nil {
 							return nil, false, err
 						}
@@ -1348,7 +1341,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	if ec.currentPackage != nil {
 		for _, v := range ec.currentPackage.globalVars {
 			if v.Name == name {
-				val, err := ec.evaluatePackageVar(v)
+				val, err := ec.evaluatePackageVar(ctx, v)
 				if err != nil {
 					return nil, false, err
 				}
@@ -1359,7 +1352,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	// Try to lazily evaluate a pending global variable
 	for _, n := range lookupNames {
 		if def, ok := ec.globalVarDefs[n]; ok {
-			val, err := ec.evaluateGlobalVar(def)
+			val, err := ec.evaluateGlobalVar(ctx, def)
 			if err != nil {
 				return nil, false, err
 			}
@@ -1371,7 +1364,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	if ec.currentPackage != nil {
 		for _, v := range ec.currentPackage.globalVars {
 			if v.Name == name {
-				val, err := ec.evaluateGlobalVar(v)
+				val, err := ec.evaluateGlobalVar(ctx, v)
 				if err != nil {
 					return nil, false, err
 				}
@@ -1382,7 +1375,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 		// that were not merged into the using stylesheet).
 		for _, p := range ec.currentPackage.globalParams {
 			if p.Name == name {
-				val, err := ec.evaluateGlobalParam(p)
+				val, err := ec.evaluateGlobalParam(ctx, p)
 				if err != nil {
 					return nil, false, err
 				}
@@ -1393,7 +1386,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	// Try to lazily evaluate a pending global parameter
 	for _, n := range lookupNames {
 		if def, ok := ec.globalParamDefs[n]; ok {
-			val, err := ec.evaluateGlobalParam(def)
+			val, err := ec.evaluateGlobalParam(ctx, def)
 			if err != nil {
 				return nil, false, err
 			}
@@ -1406,7 +1399,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	// globalVars but are accessible to package code.
 	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
 		if v := findPackageVar(ec.currentPackage, expandedName, nil); v != nil {
-			val, err := ec.evaluatePackageVar(v)
+			val, err := ec.evaluatePackageVar(ctx, v)
 			if err != nil {
 				return nil, false, err
 			}
@@ -1483,9 +1476,9 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst instruction)
 	case *valueOfInst:
 		return ec.execValueOf(ctx, v)
 	case *textInst:
-		return ec.execText(v)
+		return ec.execText(ctx, v)
 	case *literalTextInst:
-		return ec.execLiteralText(v)
+		return ec.execLiteralText(ctx, v)
 	case *elementInst:
 		return ec.execElement(ctx, v)
 	case *attributeInst:

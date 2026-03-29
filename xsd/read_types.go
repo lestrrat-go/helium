@@ -1,20 +1,22 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-func (c *compiler) parseNamedComplexType(elem *helium.Element) error {
+func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Element) error {
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named complexType missing name")
 	}
 
-	td, err := c.parseComplexType(elem)
+	td, err := c.parseComplexType(ctx, elem)
 	if err != nil {
 		return err
 	}
@@ -34,13 +36,13 @@ func (c *compiler) parseNamedComplexType(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) parseNamedSimpleType(elem *helium.Element) error {
+func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Element) error {
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named simpleType missing name")
 	}
 
-	td, err := c.parseSimpleType(elem)
+	td, err := c.parseSimpleType(ctx, elem)
 	if err != nil {
 		return err
 	}
@@ -59,7 +61,7 @@ func (c *compiler) parseNamedSimpleType(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
+func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {
 	td := &TypeDef{}
 	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: true}
 
@@ -72,10 +74,13 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemSequence):
-			mg, err := c.parseModelGroup(ce, CompositorSequence)
+			mg, err := c.parseModelGroup(ctx, ce, CompositorSequence)
 			if err != nil {
 				return nil, err
 			}
@@ -84,7 +89,7 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 				td.ContentType = ContentTypeElementOnly
 			}
 		case isXSDElement(ce, elemChoice):
-			mg, err := c.parseModelGroup(ce, CompositorChoice)
+			mg, err := c.parseModelGroup(ctx, ce, CompositorChoice)
 			if err != nil {
 				return nil, err
 			}
@@ -93,7 +98,7 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 				td.ContentType = ContentTypeElementOnly
 			}
 		case isXSDElement(ce, elemAll):
-			mg, err := c.parseModelGroup(ce, CompositorAll)
+			mg, err := c.parseModelGroup(ctx, ce, CompositorAll)
 			if err != nil {
 				return nil, err
 			}
@@ -111,7 +116,7 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 				if v := getAttr(ce, "maxOccurs"); v != "" {
 					placeholder.MaxOccurs = parseOccurs(v, 1)
 				}
-				qn := c.resolveQName(ce, ref)
+				qn := c.resolveQName(ctx, ce, ref)
 				c.groupRefs[placeholder] = qn
 				td.ContentModel = placeholder
 				if td.ContentType != ContentTypeMixed {
@@ -119,21 +124,21 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 				}
 			}
 		case isXSDElement(ce, elemComplexContent):
-			if err := c.parseComplexContent(ce, td); err != nil {
+			if err := c.parseComplexContent(ctx, ce, td); err != nil {
 				return nil, err
 			}
 		case isXSDElement(ce, elemSimpleContent):
-			c.parseSimpleContent(ce, td)
+			c.parseSimpleContent(ctx, ce, td)
 		case isXSDElement(ce, elemAttribute):
-			au := c.parseAttributeUse(ce)
+			au := c.parseAttributeUse(ctx, ce)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ce, elemAttributeGroup):
 			if ref := getAttr(ce, attrRef); ref != "" {
-				qn := c.resolveQName(ce, ref)
+				qn := c.resolveQName(ctx, ce, ref)
 				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
 			}
 		case isXSDElement(ce, elemAnyAttribute):
-			td.AnyAttribute = c.parseAnyAttribute(ce)
+			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		}
 	}
 
@@ -143,27 +148,30 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 	return td, nil
 }
 
-func (c *compiler) parseComplexContent(elem *helium.Element, td *TypeDef) error {
+func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element, td *TypeDef) error {
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemRestriction):
-			return c.parseRestriction(ce, td)
+			return c.parseRestriction(ctx, ce, td)
 		case isXSDElement(ce, elemExtension):
-			return c.parseExtension(ce, td)
+			return c.parseExtension(ctx, ce, td)
 		}
 	}
 	return nil
 }
 
-func (c *compiler) parseRestriction(elem *helium.Element, td *TypeDef) error {
+func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, td *TypeDef) error {
 	td.Derivation = DerivationRestriction
 	baseRef := getAttr(elem, attrBase)
 	if baseRef != "" {
-		qn := c.resolveQName(elem, baseRef)
+		qn := c.resolveQName(ctx, elem, baseRef)
 		c.typeRefs[td] = qn
 	}
 
@@ -172,10 +180,13 @@ func (c *compiler) parseRestriction(elem *helium.Element, td *TypeDef) error {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemSequence):
-			mg, err := c.parseModelGroup(ce, CompositorSequence)
+			mg, err := c.parseModelGroup(ctx, ce, CompositorSequence)
 			if err != nil {
 				return err
 			}
@@ -184,7 +195,7 @@ func (c *compiler) parseRestriction(elem *helium.Element, td *TypeDef) error {
 				td.ContentType = ContentTypeElementOnly
 			}
 		case isXSDElement(ce, elemChoice):
-			mg, err := c.parseModelGroup(ce, CompositorChoice)
+			mg, err := c.parseModelGroup(ctx, ce, CompositorChoice)
 			if err != nil {
 				return err
 			}
@@ -193,7 +204,7 @@ func (c *compiler) parseRestriction(elem *helium.Element, td *TypeDef) error {
 				td.ContentType = ContentTypeElementOnly
 			}
 		case isXSDElement(ce, elemAll):
-			mg, err := c.parseModelGroup(ce, CompositorAll)
+			mg, err := c.parseModelGroup(ctx, ce, CompositorAll)
 			if err != nil {
 				return err
 			}
@@ -202,25 +213,25 @@ func (c *compiler) parseRestriction(elem *helium.Element, td *TypeDef) error {
 				td.ContentType = ContentTypeElementOnly
 			}
 		case isXSDElement(ce, elemAttribute):
-			au := c.parseAttributeUse(ce)
+			au := c.parseAttributeUse(ctx, ce)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ce, elemAttributeGroup):
 			if ref := getAttr(ce, attrRef); ref != "" {
-				qn := c.resolveQName(ce, ref)
+				qn := c.resolveQName(ctx, ce, ref)
 				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
 			}
 		case isXSDElement(ce, elemAnyAttribute):
-			td.AnyAttribute = c.parseAnyAttribute(ce)
+			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		}
 	}
 	return nil
 }
 
-func (c *compiler) parseExtension(elem *helium.Element, td *TypeDef) error {
+func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td *TypeDef) error {
 	td.Derivation = DerivationExtension
 	baseRef := getAttr(elem, attrBase)
 	if baseRef != "" {
-		qn := c.resolveQName(elem, baseRef)
+		qn := c.resolveQName(ctx, elem, baseRef)
 		c.typeRefs[td] = qn
 	}
 	// Parse child content model (if any).
@@ -228,10 +239,13 @@ func (c *compiler) parseExtension(elem *helium.Element, td *TypeDef) error {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemSequence):
-			mg, err := c.parseModelGroup(ce, CompositorSequence)
+			mg, err := c.parseModelGroup(ctx, ce, CompositorSequence)
 			if err != nil {
 				return err
 			}
@@ -240,7 +254,7 @@ func (c *compiler) parseExtension(elem *helium.Element, td *TypeDef) error {
 				td.ContentType = ContentTypeElementOnly
 			}
 		case isXSDElement(ce, elemChoice):
-			mg, err := c.parseModelGroup(ce, CompositorChoice)
+			mg, err := c.parseModelGroup(ctx, ce, CompositorChoice)
 			if err != nil {
 				return err
 			}
@@ -249,7 +263,7 @@ func (c *compiler) parseExtension(elem *helium.Element, td *TypeDef) error {
 				td.ContentType = ContentTypeElementOnly
 			}
 		case isXSDElement(ce, elemAll):
-			mg, err := c.parseModelGroup(ce, CompositorAll)
+			mg, err := c.parseModelGroup(ctx, ce, CompositorAll)
 			if err != nil {
 				return err
 			}
@@ -260,77 +274,83 @@ func (c *compiler) parseExtension(elem *helium.Element, td *TypeDef) error {
 		case isXSDElement(ce, elemAttribute):
 			if getAttr(ce, attrUse) == attrValProhibited {
 				if c.filename != "" {
-					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserWarning(c.filename, ce.Line(), ce.LocalName(), "attribute",
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, ce.Line(), ce.LocalName(), "attribute",
 						"Skipping attribute use prohibition, since it is pointless when extending a type."), helium.ErrorLevelWarning))
 				}
 				continue
 			}
-			au := c.parseAttributeUse(ce)
+			au := c.parseAttributeUse(ctx, ce)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ce, elemAttributeGroup):
 			if ref := getAttr(ce, attrRef); ref != "" {
-				qn := c.resolveQName(ce, ref)
+				qn := c.resolveQName(ctx, ce, ref)
 				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
 			}
 		case isXSDElement(ce, elemAnyAttribute):
-			td.AnyAttribute = c.parseAnyAttribute(ce)
+			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		}
 	}
 	return nil
 }
 
-func (c *compiler) parseSimpleContent(elem *helium.Element, td *TypeDef) {
+func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element, td *TypeDef) {
 	td.ContentType = ContentTypeSimple
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemExtension):
 			baseRef := getAttr(ce, attrBase)
 			if baseRef != "" {
-				qn := c.resolveQName(ce, baseRef)
+				qn := c.resolveQName(ctx, ce, baseRef)
 				c.typeRefs[td] = qn
 			}
 			td.Derivation = DerivationExtension
-			c.parseSimpleContentChildren(ce, td)
+			c.parseSimpleContentChildren(ctx, ce, td)
 		case isXSDElement(ce, elemRestriction):
 			baseRef := getAttr(ce, attrBase)
 			if baseRef != "" {
-				qn := c.resolveQName(ce, baseRef)
+				qn := c.resolveQName(ctx, ce, baseRef)
 				c.typeRefs[td] = qn
 			}
 			td.Derivation = DerivationRestriction
-			c.parseSimpleContentChildren(ce, td)
+			c.parseSimpleContentChildren(ctx, ce, td)
 		}
 	}
 }
 
 // parseSimpleContentChildren parses attribute/attributeGroup children within
 // a simpleContent extension or restriction element.
-func (c *compiler) parseSimpleContentChildren(derivation *helium.Element, td *TypeDef) {
+func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *helium.Element, td *TypeDef) {
 	for child := range helium.Children(derivation) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ae := child.(*helium.Element)
+		ae, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ae, elemAttribute):
-			au := c.parseAttributeUse(ae)
+			au := c.parseAttributeUse(ctx, ae)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ae, elemAttributeGroup):
 			if ref := getAttr(ae, attrRef); ref != "" {
-				qn := c.resolveQName(ae, ref)
+				qn := c.resolveQName(ctx, ae, ref)
 				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
 			}
 		case isXSDElement(ae, elemAnyAttribute):
-			td.AnyAttribute = c.parseAnyAttribute(ae)
+			td.AnyAttribute = c.parseAnyAttribute(ctx, ae)
 		}
 	}
 }
 
-func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
+func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {
 	td := &TypeDef{
 		ContentType: ContentTypeSimple,
 	}
@@ -339,12 +359,15 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemRestriction):
 			baseRef := getAttr(ce, attrBase)
 			if baseRef != "" {
-				qn := c.resolveQName(ce, baseRef)
+				qn := c.resolveQName(ctx, ce, baseRef)
 				c.typeRefs[td] = qn
 			} else {
 				// Look for inline <simpleType> child as the base type.
@@ -352,9 +375,12 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 					if gc.Type() != helium.ElementNode {
 						continue
 					}
-					gce := gc.(*helium.Element)
+					gce, ok := helium.AsNode[*helium.Element](gc)
+					if !ok {
+						continue
+					}
 					if isXSDElement(gce, elemSimpleType) {
-						baseTD, err := c.parseSimpleType(gce)
+						baseTD, err := c.parseSimpleType(ctx, gce)
 						if err != nil {
 							return nil, err
 						}
@@ -364,12 +390,12 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 				}
 			}
 			td.Derivation = DerivationRestriction
-			td.Facets = c.parseFacets(ce)
+			td.Facets = c.parseFacets(ctx, ce)
 		case isXSDElement(ce, elemList):
 			td.Variety = TypeVarietyList
 			itemRef := getAttr(ce, attrItemType)
 			if itemRef != "" {
-				qn := c.resolveQName(ce, itemRef)
+				qn := c.resolveQName(ctx, ce, itemRef)
 				c.itemTypeRefs[td] = qn
 			} else {
 				// Look for inline <simpleType> child as the item type.
@@ -377,9 +403,12 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 					if gc.Type() != helium.ElementNode {
 						continue
 					}
-					gce := gc.(*helium.Element)
+					gce, ok := helium.AsNode[*helium.Element](gc)
+					if !ok {
+						continue
+					}
 					if isXSDElement(gce, elemSimpleType) {
-						itemTD, err := c.parseSimpleType(gce)
+						itemTD, err := c.parseSimpleType(ctx, gce)
 						if err != nil {
 							return nil, err
 						}
@@ -392,8 +421,8 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 			td.Variety = TypeVarietyUnion
 			// Parse memberTypes attribute (space-separated QNames).
 			if memberTypesAttr := getAttr(ce, attrMemberTypes); memberTypesAttr != "" {
-				for _, ref := range strings.Fields(memberTypesAttr) {
-					qn := c.resolveQName(ce, ref)
+				for ref := range strings.FieldsSeq(memberTypesAttr) {
+					qn := c.resolveQName(ctx, ce, ref)
 					c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{owner: td, name: qn})
 				}
 			}
@@ -402,9 +431,12 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 				if gc.Type() != helium.ElementNode {
 					continue
 				}
-				gce := gc.(*helium.Element)
+				gce, ok := helium.AsNode[*helium.Element](gc)
+				if !ok {
+					continue
+				}
 				if isXSDElement(gce, elemSimpleType) {
-					memberTD, err := c.parseSimpleType(gce)
+					memberTD, err := c.parseSimpleType(ctx, gce)
 					if err != nil {
 						return nil, err
 					}
@@ -418,14 +450,17 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 }
 
 // parseFacets extracts facet constraints from an xs:restriction element.
-func (c *compiler) parseFacets(restriction *helium.Element) *FacetSet {
+func (c *compiler) parseFacets(_ context.Context, restriction *helium.Element) *FacetSet {
 	var fs *FacetSet
 
 	for child := range helium.Children(restriction) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		if ce.URI() != lexicon.NamespaceXSD {
 			continue
 		}
@@ -439,9 +474,7 @@ func (c *compiler) parseFacets(restriction *helium.Element) *FacetSet {
 			fs.Enumeration = append(fs.Enumeration, val)
 			nsCtx := collectNSContext(ce)
 			nsCopy := make(map[string]string, len(nsCtx))
-			for prefix, uri := range nsCtx {
-				nsCopy[prefix] = uri
-			}
+			maps.Copy(nsCopy, nsCtx)
 			fs.EnumerationNS = append(fs.EnumerationNS, nsCopy)
 		case "minInclusive":
 			if fs == nil {

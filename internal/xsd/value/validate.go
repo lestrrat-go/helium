@@ -221,17 +221,14 @@ func validateDateComponents(value string) error {
 	}
 	// Find year-month-day fields: YYYY-MM-DD...
 	// Year is variable-length (4+ digits), so find second '-' after first.
-	firstDash := strings.IndexByte(s, '-')
-	if firstDash < 0 {
+	_, rest, found := strings.Cut(s, "-")
+	if !found {
 		return fmt.Errorf("invalid date")
 	}
-	rest := s[firstDash+1:] // "MM-DD..."
-	secondDash := strings.IndexByte(rest, '-')
-	if secondDash < 0 {
+	monthStr, dayStr, found := strings.Cut(rest, "-")
+	if !found {
 		return fmt.Errorf("invalid date")
 	}
-	monthStr := rest[:secondDash]
-	dayStr := rest[secondDash+1:]
 	// dayStr may have trailing 'T...' or timezone; take first 2 chars.
 	if len(dayStr) < 2 {
 		return fmt.Errorf("invalid date")

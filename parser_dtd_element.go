@@ -17,7 +17,7 @@ func (pctx *parserCtx) parseElementDecl(ctx context.Context) (enum.ElementType, 
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return 0, pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<!ELEMENT") {
 		return enum.UndefinedElementType, pctx.error(ctx, ErrInvalidElementDecl)
@@ -85,7 +85,7 @@ func (pctx *parserCtx) parseElementContentDecl(ctx context.Context) (*ElementCon
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return nil, 0, pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '(' {
 		return nil, enum.UndefinedElementType, pctx.error(ctx, ErrOpenParenRequired)
@@ -129,7 +129,7 @@ func (pctx *parserCtx) parseElementMixedContentDecl(ctx context.Context) (*Eleme
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return nil, pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("#PCDATA") {
 		return nil, pctx.error(ctx, ErrPCDATARequired)
@@ -252,7 +252,7 @@ func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, 
 	pctx.skipBlanks(ctx)
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return nil, pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() == '(' {
 		if err := cur.Advance(1); err != nil {

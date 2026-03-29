@@ -9,6 +9,11 @@ import (
 	"github.com/lestrrat-go/helium/internal/cliutil"
 )
 
+const (
+	flagVersion = "--version"
+	flagTiming  = "--timing"
+)
+
 type ioContextKey struct{}
 
 type ioContext struct {
@@ -84,7 +89,7 @@ func resolveIO(ctx context.Context) (io.Reader, io.Writer, io.Writer, bool) {
 	return stdin, stdout, stderr, stdinTTY
 }
 
-func Execute(ctx context.Context, args []string) int {
+func Execute(ctx context.Context, args []string) int { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}

@@ -2,30 +2,32 @@ package xpath3
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"math/big"
 	"strings"
 	"time"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 // evalGeneralComparison implements general comparison (= != < <= > >=).
 // Per XPath 3.1 Section 3.7.1: atomize both operands, then existentially
 // quantify — true if ANY pair satisfies the value comparison.
-func evalGeneralComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	if result, ok, err := evalGeneralComparisonAgainstRange(evalFn, ec, e); ok {
+func evalGeneralComparison(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	if result, ok, err := evalGeneralComparisonAgainstRange(evalFn, ctx, ec, e); ok {
 		if err != nil {
 			return nil, err
 		}
 		return SingleBoolean(result), nil
 	}
-	left, err := evalFn(ec, e.Left)
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -37,18 +39,18 @@ func evalGeneralComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) 
 	return SingleBoolean(result), nil
 }
 
-func evalGeneralComparisonAgainstRange(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (bool, bool, error) {
+func evalGeneralComparisonAgainstRange(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (bool, bool, error) {
 	if re, ok := e.Right.(RangeExpr); ok {
-		return compareSingletonAgainstRange(evalFn, ec, e.Op, e.Left, re, false)
+		return compareSingletonAgainstRange(evalFn, ctx, ec, e.Op, e.Left, re, false)
 	}
 	if re, ok := e.Left.(RangeExpr); ok {
-		return compareSingletonAgainstRange(evalFn, ec, e.Op, e.Right, re, true)
+		return compareSingletonAgainstRange(evalFn, ctx, ec, e.Op, e.Right, re, true)
 	}
 	return false, false, nil
 }
 
-func compareSingletonAgainstRange(evalFn exprEvaluator, ec *evalContext, op TokenType, singletonExpr Expr, rangeExpr RangeExpr, rangeOnLeft bool) (bool, bool, error) {
-	singletonSeq, err := evalFn(ec, singletonExpr)
+func compareSingletonAgainstRange(evalFn exprEvaluator, ctx context.Context, ec *evalContext, op TokenType, singletonExpr Expr, rangeExpr RangeExpr, rangeOnLeft bool) (bool, bool, error) {
+	singletonSeq, err := evalFn(ctx, ec, singletonExpr)
 	if err != nil {
 		return false, true, err
 	}
@@ -64,9 +66,9 @@ func compareSingletonAgainstRange(evalFn exprEvaluator, ec *evalContext, op Toke
 	}
 	singletonInt, err := coerceToInteger(singletonAtoms[0])
 	if err != nil {
-		return false, false, nil
+		return false, false, nil //nolint:nilerr // non-integer subscript means no match
 	}
-	start, end, empty, err := evalRangeBounds(evalFn, ec, rangeExpr)
+	start, end, empty, err := evalRangeBounds(evalFn, ctx, ec, rangeExpr)
 	if err != nil {
 		return false, true, err
 	}
@@ -80,12 +82,12 @@ func compareSingletonAgainstRange(evalFn exprEvaluator, ec *evalContext, op Toke
 	return compareRangeBounds(op, singletonInt.BigInt(), start, end, rangeOnLeft), true, nil
 }
 
-func evalRangeBounds(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (*big.Int, *big.Int, bool, error) {
-	startSeq, err := evalFn(ec, e.Start)
+func evalRangeBounds(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e RangeExpr) (*big.Int, *big.Int, bool, error) {
+	startSeq, err := evalFn(ctx, ec, e.Start)
 	if err != nil {
 		return nil, nil, false, err
 	}
-	endSeq, err := evalFn(ec, e.End)
+	endSeq, err := evalFn(ctx, ec, e.End)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -183,12 +185,12 @@ func compareRangeBounds(op TokenType, singleton, start, end *big.Int, rangeOnLef
 
 // evalValueComparison implements value comparison (eq ne lt le gt ge).
 // Per XPath 3.1 Section 3.7.2: both operands must be single atomic values.
-func evalValueComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := evalFn(ec, e.Left)
+func evalValueComparison(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +205,7 @@ func evalValueComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (S
 	}
 	// Empty sequence yields empty sequence
 	if len(leftAtoms) == 0 || len(rightAtoms) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	if len(leftAtoms) > 1 || len(rightAtoms) > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "value comparison requires singletons"}
@@ -219,18 +221,18 @@ func evalValueComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (S
 	return SingleBoolean(result), nil
 }
 
-func evalNodeComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := evalFn(ec, e.Left)
+func evalNodeComparison(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
 	// Empty sequence yields empty sequence
 	if seqLen(left) == 0 || seqLen(right) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	if left.Len() > 1 || right.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires singletons"}
@@ -452,15 +454,15 @@ func valueCompareThreeWayWithImplicitTimezone(a, b AtomicValue, coll *collationI
 // comparisonFamily returns a type family string for comparison compatibility checking.
 func comparisonFamily(typeName string) string {
 	if isIntegerDerived(typeName) {
-		return "numeric"
+		return familyNumeric
 	}
 	switch typeName {
 	case TypeDecimal, TypeDouble, TypeFloat:
-		return "numeric"
+		return familyNumeric
 	case TypeString, TypeAnyURI:
-		return "string"
+		return lexicon.TypeString
 	case TypeBoolean:
-		return "boolean"
+		return lexicon.TypeBoolean
 	case TypeDate:
 		return "date"
 	case TypeDateTime:
@@ -640,7 +642,7 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 
 	// Boolean comparison
 	if a.TypeName == TypeBoolean && b.TypeName == TypeBoolean {
-		return compareBooleans(op, a.Value.(bool), b.Value.(bool)), nil
+		return compareBooleans(op, a.Value.(bool), b.Value.(bool)), nil //nolint:forcetypeassert
 	}
 
 	// Numeric comparison — type-preserving
@@ -678,11 +680,11 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 			}
 			return compareDuration(op, a.DurationVal(), b.DurationVal())
 		case TypeBase64Binary:
-			return compareBinary(op, a.Value.([]byte), b.Value.([]byte))
+			return compareBinary(op, a.Value.([]byte), b.Value.([]byte)) //nolint:forcetypeassert
 		case TypeHexBinary:
-			return compareBinary(op, a.Value.([]byte), b.Value.([]byte))
+			return compareBinary(op, a.Value.([]byte), b.Value.([]byte)) //nolint:forcetypeassert
 		case TypeQName:
-			return compareQName(op, a.Value.(QNameValue), b.Value.(QNameValue))
+			return compareQName(op, a.Value.(QNameValue), b.Value.(QNameValue)) //nolint:forcetypeassert
 		case TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
 			// Gregorian partial types only support eq/ne, not ordering
 			if op != TokenEq && op != TokenNe {

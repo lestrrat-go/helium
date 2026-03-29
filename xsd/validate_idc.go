@@ -25,7 +25,7 @@ type idcEntry struct {
 // validateIDConstraints evaluates identity constraints declared on the given element.
 // It collects key-sequences from selector/field XPath expressions and checks
 // uniqueness (unique/key) and referential integrity (keyref).
-func (vc *validationContext) validateIDConstraints(elem *helium.Element, edecl *ElementDecl) error {
+func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *helium.Element, edecl *ElementDecl) error {
 	if len(edecl.IDCs) == 0 {
 		return nil
 	}
@@ -37,7 +37,7 @@ func (vc *validationContext) validateIDConstraints(elem *helium.Element, edecl *
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
 		ev := xpath1.NewEvaluator().AdditionalNamespaces(idc.Namespaces)
-		table, err := evaluateIDC(vc.ctx, ev, elem, idc)
+		table, err := evaluateIDC(ctx, ev, elem, idc)
 		if err != nil {
 			continue
 		}
@@ -45,7 +45,7 @@ func (vc *validationContext) validateIDConstraints(elem *helium.Element, edecl *
 
 		// Check unique/key constraints immediately.
 		if idc.Kind == IDCUnique || idc.Kind == IDCKey {
-			if err := vc.checkUniqueness(table, idc); err != nil {
+			if err := vc.checkUniqueness(ctx, table, idc); err != nil {
 				lastErr = err
 			}
 		}
@@ -72,7 +72,7 @@ func (vc *validationContext) validateIDConstraints(elem *helium.Element, edecl *
 			continue
 		}
 
-		if err := vc.checkKeyRef(table, refTable, idc); err != nil {
+		if err := vc.checkKeyRef(ctx, table, refTable, idc); err != nil {
 			lastErr = err
 		}
 	}
@@ -167,7 +167,7 @@ func nodeStringValue(n helium.Node) string {
 }
 
 // checkUniqueness checks that all key-sequences in the table are unique.
-func (vc *validationContext) checkUniqueness(table *idcTable, idc *IDConstraint) error {
+func (vc *validationContext) checkUniqueness(ctx context.Context, table *idcTable, idc *IDConstraint) error {
 	seen := make(map[string]bool)
 	var lastErr error
 
@@ -179,7 +179,7 @@ func (vc *validationContext) checkUniqueness(table *idcTable, idc *IDConstraint)
 			msg := fmt.Sprintf("Duplicate key-sequence %s in unique identity-constraint '%s'.",
 				formatKeyDisplay(entry.values), idcName)
 			if entry.elem != nil {
-				vc.reportValidityError(vc.filename, entry.elem.Line(), elemName, msg)
+				vc.reportValidityError(ctx, vc.filename, entry.elem.Line(), elemName, msg)
 			}
 			lastErr = fmt.Errorf("duplicate key-sequence")
 		}
@@ -190,7 +190,7 @@ func (vc *validationContext) checkUniqueness(table *idcTable, idc *IDConstraint)
 }
 
 // checkKeyRef checks that every key-sequence in the keyref table has a match in the referenced table.
-func (vc *validationContext) checkKeyRef(keyrefTable, refTable *idcTable, idc *IDConstraint) error {
+func (vc *validationContext) checkKeyRef(ctx context.Context, keyrefTable, refTable *idcTable, idc *IDConstraint) error {
 	// Build set of referenced key-sequences.
 	refKeys := make(map[string]bool, len(refTable.keys))
 	for _, entry := range refTable.keys {
@@ -206,7 +206,7 @@ func (vc *validationContext) checkKeyRef(keyrefTable, refTable *idcTable, idc *I
 			msg := fmt.Sprintf("No match found for key-sequence %s of keyref '%s'.",
 				formatKeyDisplay(entry.values), idcName)
 			if entry.elem != nil {
-				vc.reportValidityError(vc.filename, entry.elem.Line(), elemName, msg)
+				vc.reportValidityError(ctx, vc.filename, entry.elem.Line(), elemName, msg)
 			}
 			lastErr = fmt.Errorf("keyref not found")
 		}

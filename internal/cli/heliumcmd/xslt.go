@@ -126,7 +126,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}
-		defer f.Close() //nolint:errcheck
+		defer f.Close()
 		out = f
 	}
 
@@ -140,7 +140,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 
 func (c *xsltCommand) buildParams(ctx context.Context, cfg *xsltConfig) (*xslt3.Parameters, error) {
 	if len(cfg.params) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	params := xslt3.NewParameters()
@@ -245,9 +245,9 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "--version":
+		case flagVersion:
 			cfg.version = true
-		case "--timing":
+		case flagTiming:
 			cfg.timing = true
 		case "--noout":
 			cfg.noout = true

@@ -1,8 +1,10 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/xsd/value"
@@ -50,7 +52,7 @@ func checkMaxExclusive(v, bound, builtinLocal string) bool {
 	return cmp < 0
 }
 
-func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
+func checkFacets(ctx context.Context, value string, valueNS map[string]string, fs *FacetSet, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
 	var anyErr error
 
 	// Enumeration.
@@ -72,17 +74,12 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 				}
 			}
 		} else {
-			for _, ev := range fs.Enumeration {
-				if value == ev {
-					found = true
-					break
-				}
-			}
+			found = slices.Contains(fs.Enumeration, value)
 		}
 		if !found {
 			set := "'" + strings.Join(fs.Enumeration, "', '") + "'"
 			msg := fmt.Sprintf("[facet 'enumeration'] The value '%s' is not an element of the set {%s}.", value, set)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("enumeration")
 		}
 	}
@@ -91,7 +88,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 	if fs.MinInclusive != nil {
 		if !checkMinInclusive(value, *fs.MinInclusive, builtinLocal) {
 			msg := fmt.Sprintf("[facet 'minInclusive'] The value '%s' is less than the minimum value allowed ('%s').", value, *fs.MinInclusive)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("minInclusive")
 		}
 	}
@@ -100,7 +97,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 	if fs.MaxInclusive != nil {
 		if !checkMaxInclusive(value, *fs.MaxInclusive, builtinLocal) {
 			msg := fmt.Sprintf("[facet 'maxInclusive'] The value '%s' is greater than the maximum value allowed ('%s').", value, *fs.MaxInclusive)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("maxInclusive")
 		}
 	}
@@ -109,7 +106,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 	if fs.MinExclusive != nil {
 		if !checkMinExclusive(value, *fs.MinExclusive, builtinLocal) {
 			msg := fmt.Sprintf("[facet 'minExclusive'] The value '%s' must be greater than '%s'.", value, *fs.MinExclusive)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("minExclusive")
 		}
 	}
@@ -118,7 +115,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 	if fs.MaxExclusive != nil {
 		if !checkMaxExclusive(value, *fs.MaxExclusive, builtinLocal) {
 			msg := fmt.Sprintf("[facet 'maxExclusive'] The value '%s' must be less than '%s'.", value, *fs.MaxExclusive)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("maxExclusive")
 		}
 	}
@@ -128,7 +125,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 		digits := countTotalDigits(value)
 		if digits > *fs.TotalDigits {
 			msg := fmt.Sprintf("[facet 'totalDigits'] The value '%s' has more digits than are allowed ('%d').", value, *fs.TotalDigits)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("totalDigits")
 		}
 	}
@@ -138,7 +135,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 		frac := countFractionDigits(value)
 		if frac > *fs.FractionDigits {
 			msg := fmt.Sprintf("[facet 'fractionDigits'] The value '%s' has more fractional digits than are allowed ('%d').", value, *fs.FractionDigits)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("fractionDigits")
 		}
 	}
@@ -149,7 +146,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 	if fs.Length != nil {
 		if valueLen != *fs.Length {
 			msg := fmt.Sprintf("[facet 'length'] The value has a length of '%d'; this differs from the allowed length of '%d'.", valueLen, *fs.Length)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("length")
 		}
 	}
@@ -157,7 +154,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 	if fs.MinLength != nil {
 		if valueLen < *fs.MinLength {
 			msg := fmt.Sprintf("[facet 'minLength'] The value has a length of '%d'; this underruns the allowed minimum length of '%d'.", valueLen, *fs.MinLength)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("minLength")
 		}
 	}
@@ -165,7 +162,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 	if fs.MaxLength != nil {
 		if valueLen > *fs.MaxLength {
 			msg := fmt.Sprintf("[facet 'maxLength'] The value has a length of '%d'; this exceeds the allowed maximum length of '%d'.", valueLen, *fs.MaxLength)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("maxLength")
 		}
 	}
@@ -175,7 +172,7 @@ func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinL
 		re, err := regexp.Compile("^(?:" + *fs.Pattern + ")$")
 		if err == nil && !re.MatchString(value) {
 			msg := fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the pattern '%s'.", value, *fs.Pattern)
-			vc.reportValidityError(filename, line, elemName, msg)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("pattern")
 		}
 	}

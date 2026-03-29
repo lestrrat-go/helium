@@ -16,7 +16,7 @@ func (pctx *parserCtx) parseVersionInfoFromCursor(ctx context.Context) (string, 
 	cur := pctx.getCursor()
 	pctx.skipBlanks(ctx)
 	if !cur.ConsumeString("version") {
-		return "", pctx.error(ctx, ErrAttrNotFound{Token: "version"})
+		return "", pctx.error(ctx, AttrNotFoundError{Token: "version"})
 	}
 	pctx.skipBlanks(ctx)
 	if cur.Peek() != '=' {
@@ -59,7 +59,7 @@ func (pctx *parserCtx) parseEncodingDeclFromCursor(ctx context.Context) (string,
 	cur := pctx.getCursor()
 	pctx.skipBlanks(ctx)
 	if !cur.ConsumeString("encoding") {
-		return "", ErrAttrNotFound{Token: "encoding"}
+		return "", AttrNotFoundError{Token: "encoding"}
 	}
 	pctx.skipBlanks(ctx)
 	if cur.Peek() != '=' {
@@ -102,7 +102,7 @@ func (pctx *parserCtx) parseStandaloneDeclFromCursor(ctx context.Context) (Docum
 	cur := pctx.getCursor()
 	pctx.skipBlanks(ctx)
 	if !cur.ConsumeString("standalone") {
-		return StandaloneImplicitNo, ErrAttrNotFound{Token: "standalone"}
+		return StandaloneImplicitNo, AttrNotFoundError{Token: "standalone"}
 	}
 	pctx.skipBlanks(ctx)
 	if cur.Peek() != '=' {
@@ -149,7 +149,7 @@ func (pctx *parserCtx) parseStandaloneDeclFromCursor(ctx context.Context) (Docum
 	}
 }
 
-func (e ErrAttrNotFound) Error() string {
+func (e AttrNotFoundError) Error() string {
 	return "attribute token '" + e.Token + "' not found"
 }
 
@@ -174,7 +174,7 @@ func (pctx *parserCtx) parseNamedAttributeBytes(ctx context.Context, name []byte
 
 	pctx.skipBlankBytes(ctx, cur)
 	if !cur.Consume(name) {
-		return "", pctx.error(ctx, ErrAttrNotFound{Token: string(name)})
+		return "", pctx.error(ctx, AttrNotFoundError{Token: string(name)})
 	}
 
 	pctx.skipBlankBytes(ctx, cur)
@@ -213,7 +213,7 @@ func (ctx *parserCtx) parseVersionNum(_ byte) (string, error) {
 			b := bufferPool.Get()
 			defer releaseBuffer(b)
 
-			for x := 0; x < i; x++ {
+			for x := range i {
 				_ = b.WriteByte(cur.PeekAt(x))
 			}
 			if err := cur.Advance(i); err != nil {
@@ -271,7 +271,7 @@ func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (value string, err error)
 
 	cur := ctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", errNoCursor
 	}
 	q := cur.Peek()
 	switch q {
@@ -326,14 +326,14 @@ func (pctx *parserCtx) parseEncodingName(ctx context.Context, _ byte) (string, e
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
-	if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') { // nolint:staticcheck
+	if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') { //nolint:staticcheck
 		return "", pctx.error(ctx, ErrInvalidEncodingName)
 	}
 	_ = buf.WriteByte(c)
 
 	i := 1
 	for c = cur.PeekAt(i); c != 0; c = cur.PeekAt(i) {
-		if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '.' && c != '_' && c != '-' { // nolint:staticcheck
+		if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '.' && c != '_' && c != '-' { //nolint:staticcheck
 			break
 		}
 		_ = buf.WriteByte(c)
@@ -394,7 +394,8 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 
 	b0 := cur.Peek()
@@ -472,7 +473,8 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {
 		prefixBytes, localBytes, nBytes, ok := u8.ScanQNameBytes()
@@ -545,7 +547,7 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
 
 	cur := ctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", errNoCursor
 	}
 
 	off := 0
@@ -593,7 +595,8 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {

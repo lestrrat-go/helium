@@ -15,6 +15,13 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
+// Type family constants used for aggregate, comparison, and collation grouping.
+const (
+	familyNumeric    = "numeric"
+	familyDurationYM = "duration:YM"
+	familyDurationDT = "duration:DT"
+)
+
 // Item is the interface implemented by all XPath 3.1 item types.
 type Item interface {
 	itemTag()
@@ -33,6 +40,10 @@ var (
 	seqItems       = sequence.Items[Item]
 	seqMaterialize = sequence.Materialize[Item]
 )
+
+// validNilSequence is a typed nil Sequence returned when an empty XPath
+// sequence with no error is the intentional result.
+var validNilSequence Sequence
 
 var cloneSequence = sequence.Clone[Item]
 
@@ -88,7 +99,7 @@ const (
 	TypeUntypedAtomic     = "xs:untypedAtomic"
 	TypeAnyAtomicType     = "xs:anyAtomicType"
 
-	// Derived integer types
+	// TypeLong and the following are derived integer types.
 	TypeLong               = "xs:long"
 	TypeInt                = "xs:int"
 	TypeShort              = "xs:short"
@@ -102,7 +113,7 @@ const (
 	TypePositiveInteger    = "xs:positiveInteger"
 	TypeNegativeInteger    = "xs:negativeInteger"
 
-	// Derived string types
+	// TypeNormalizedString and the following are derived string types.
 	TypeNormalizedString = "xs:normalizedString"
 	TypeToken            = "xs:token"
 	TypeLanguage         = "xs:language"
@@ -116,19 +127,19 @@ const (
 	TypeIDREFS           = "xs:IDREFS"
 	TypeENTITIES         = "xs:ENTITIES"
 
-	// Gregorian date part types
+	// TypeGDay and the following are Gregorian date part types.
 	TypeGDay       = "xs:gDay"
 	TypeGMonth     = "xs:gMonth"
 	TypeGMonthDay  = "xs:gMonthDay"
 	TypeGYear      = "xs:gYear"
 	TypeGYearMonth = "xs:gYearMonth"
 
-	// Other derived types
+	// TypeDateTimeStamp and the following are other derived types.
 	TypeDateTimeStamp = "xs:dateTimeStamp"
 	TypeError         = "xs:error"
 	TypeNumeric       = "xs:numeric"
 
-	// Non-atomic / structural types
+	// TypeAnyType and the following are non-atomic / structural types.
 	TypeAnyType       = "xs:anyType"
 	TypeAnySimpleType = "xs:anySimpleType"
 	TypeUntyped       = "xs:untyped"
@@ -152,7 +163,7 @@ func isSubtypeOf(actualType, targetType string) bool {
 	}
 	key := [2]string{actualType, targetType}
 	if v, ok := subtypeCache.Load(key); ok {
-		return v.(bool)
+		return v.(bool) //nolint:forcetypeassert
 	}
 	result := computeIsSubtypeOf(actualType, targetType)
 	subtypeCache.Store(key, result)
@@ -256,7 +267,7 @@ func (AtomicValue) itemTag() {}
 
 // StringVal returns the backing string value. Panics if not a string-backed type.
 func (a AtomicValue) StringVal() string {
-	return a.Value.(string)
+	return a.Value.(string) //nolint:forcetypeassert
 }
 
 // IntegerVal returns the backing int64 value. Panics if the value exceeds int64 range.
@@ -264,7 +275,7 @@ func (a AtomicValue) IntegerVal() int64 {
 	if v, ok := a.Value.(int64); ok {
 		return v
 	}
-	return a.Value.(*big.Int).Int64()
+	return a.Value.(*big.Int).Int64() //nolint:forcetypeassert
 }
 
 // Int64Val returns the int64 value if it fits, or (0, false) otherwise.
@@ -318,37 +329,37 @@ func (a AtomicValue) BigRat() *big.Rat {
 
 // DoubleVal returns the backing float64 value (extracts from *FloatValue).
 func (a AtomicValue) DoubleVal() float64 {
-	return a.Value.(*FloatValue).Float64()
+	return a.Value.(*FloatValue).Float64() //nolint:forcetypeassert
 }
 
 // FloatVal returns the backing *FloatValue.
 func (a AtomicValue) FloatVal() *FloatValue {
-	return a.Value.(*FloatValue)
+	return a.Value.(*FloatValue) //nolint:forcetypeassert
 }
 
 // BooleanVal returns the backing bool value.
 func (a AtomicValue) BooleanVal() bool {
-	return a.Value.(bool)
+	return a.Value.(bool) //nolint:forcetypeassert
 }
 
 // TimeVal returns the backing time.Time value.
 func (a AtomicValue) TimeVal() time.Time {
-	return a.Value.(time.Time)
+	return a.Value.(time.Time) //nolint:forcetypeassert
 }
 
 // DurationVal returns the backing Duration value.
 func (a AtomicValue) DurationVal() Duration {
-	return a.Value.(Duration)
+	return a.Value.(Duration) //nolint:forcetypeassert
 }
 
 // BytesVal returns the backing []byte value.
 func (a AtomicValue) BytesVal() []byte {
-	return a.Value.([]byte)
+	return a.Value.([]byte) //nolint:forcetypeassert
 }
 
 // QNameVal returns the backing QNameValue.
 func (a AtomicValue) QNameVal() QNameValue {
-	return a.Value.(QNameValue)
+	return a.Value.(QNameValue) //nolint:forcetypeassert
 }
 
 // IsNaN returns true if the atomic value is NaN (xs:double or xs:float).
@@ -392,7 +403,7 @@ func (a AtomicValue) ToFloat64() float64 {
 	}
 	switch a.TypeName {
 	case TypeDouble, TypeFloat:
-		return a.Value.(*FloatValue).Float64()
+		return a.Value.(*FloatValue).Float64() //nolint:forcetypeassert
 	case TypeDecimal:
 		r, ok := a.Value.(*big.Rat)
 		if !ok {
@@ -527,17 +538,17 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		// has Go map equality and any numeric type that equals this integer
 		// will also be detected as an exact integer below.
 		if v, ok := key.Value.(int64); ok {
-			return mapKey{typeName: "numeric", value: v}
+			return mapKey{typeName: familyNumeric, value: v}
 		}
 		f := key.ToFloat64()
 		if math.IsNaN(f) {
-			return mapKey{typeName: "numeric", value: "NaN"}
+			return mapKey{typeName: familyNumeric, value: "NaN"}
 		}
 		if math.IsInf(f, 1) {
-			return mapKey{typeName: "numeric", value: "+Inf"}
+			return mapKey{typeName: familyNumeric, value: "+Inf"}
 		}
 		if math.IsInf(f, -1) {
-			return mapKey{typeName: "numeric", value: "-Inf"}
+			return mapKey{typeName: familyNumeric, value: "-Inf"}
 		}
 		// For non-int64 numerics: check if the value is an exact integer
 		// that fits in int64, so it matches the int64 fast path above.
@@ -545,24 +556,24 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		case TypeInteger:
 			bi := key.BigInt()
 			if bi.IsInt64() {
-				return mapKey{typeName: "numeric", value: bi.Int64()}
+				return mapKey{typeName: familyNumeric, value: bi.Int64()}
 			}
-			return mapKey{typeName: "numeric", value: new(big.Rat).SetInt(bi).RatString()}
+			return mapKey{typeName: familyNumeric, value: new(big.Rat).SetInt(bi).RatString()}
 		case TypeDecimal:
 			r := key.BigRat()
 			if r.IsInt() {
 				num := r.Num()
 				if num.IsInt64() {
-					return mapKey{typeName: "numeric", value: num.Int64()}
+					return mapKey{typeName: familyNumeric, value: num.Int64()}
 				}
 			}
-			return mapKey{typeName: "numeric", value: new(big.Rat).Set(r).RatString()}
+			return mapKey{typeName: familyNumeric, value: new(big.Rat).Set(r).RatString()}
 		default: // float, double
 			// Check if float is an exact integer in int64 range
 			if f == math.Trunc(f) && !math.IsInf(f, 0) && f >= math.MinInt64 && f <= math.MaxInt64 {
-				return mapKey{typeName: "numeric", value: int64(f)}
+				return mapKey{typeName: familyNumeric, value: int64(f)}
 			}
-			return mapKey{typeName: "numeric", value: new(big.Rat).SetFloat64(f).RatString()}
+			return mapKey{typeName: familyNumeric, value: new(big.Rat).SetFloat64(f).RatString()}
 		}
 	}
 
@@ -955,8 +966,8 @@ func schemaAnnotationParts(name string) (local, ns string, ok bool) {
 	if strings.HasPrefix(name, "xs:") || strings.HasPrefix(name, "xsd:") {
 		return "", "", false
 	}
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		return name[idx+1:], "", true
+	if _, local, ok := strings.Cut(name, ":"); ok {
+		return local, "", true
 	}
 	if name == "" {
 		return "", "", false
@@ -969,9 +980,9 @@ func schemaAnnotationParts(name string) (local, ns string, ok bool) {
 func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
 	s = strings.TrimSpace(s)
 	prefix, local := "", s
-	if idx := strings.IndexByte(s, ':'); idx >= 0 {
-		prefix = s[:idx]
-		local = s[idx+1:]
+	if p, l, ok2 := strings.Cut(s, ":"); ok2 {
+		prefix = p
+		local = l
 	}
 	var uri string
 	scope := node
@@ -1045,7 +1056,7 @@ func atomizedTypeForAnnotation(annotation string, decls SchemaDeclarations) stri
 	}
 
 	current := annotation
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		local, ns, ok := schemaAnnotationParts(current)
 		if !ok {
 			return ""

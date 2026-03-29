@@ -312,11 +312,11 @@ func (n Element) Attributes() []*Attribute {
 	attrs := []*Attribute{}
 	for attr := n.properties; attr != nil; {
 		attrs = append(attrs, attr)
-		if a := attr.NextSibling(); a != nil {
-			attr = a.(*Attribute)
-		} else {
-			attr = nil
+		next, ok := AsNode[*Attribute](attr.NextSibling())
+		if !ok {
+			break
 		}
+		attr = next
 	}
 
 	return attrs
@@ -339,10 +339,10 @@ func (n Element) ForEachAttribute(fn func(*Attribute) bool) {
 		if !fn(attr) {
 			return
 		}
-		if a := attr.NextSibling(); a != nil {
-			attr = a.(*Attribute)
-		} else {
-			attr = nil
+		next, ok := AsNode[*Attribute](attr.NextSibling())
+		if !ok {
+			return
 		}
+		attr = next
 	}
 }

@@ -45,7 +45,7 @@ func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
@@ -57,14 +57,14 @@ func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	qv := a.QNameVal()
 	if qv.Prefix == "" {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return ItemSlice{AtomicValue{TypeName: TypeNCName, Value: qv.Prefix}}, nil
 }
 
 func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
@@ -79,7 +79,7 @@ func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) 
 
 func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
@@ -98,7 +98,7 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 		return nil, err
 	}
 	if seqLen(args[1]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	ni, ok := args[1].Get(0).(NodeItem)
 	if !ok {
@@ -111,12 +111,12 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 	if ns := helium.LookupNSByPrefix(elem, prefix); ns != nil {
 		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: ns.URI()}), nil
 	}
-	return nil, nil
+	return validNilSequence, nil
 }
 
 func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	qnameStr, err := coerceQNameString(args[0], false, false, "resolve-QName: QName argument must be a string")
 	if err != nil {
@@ -163,9 +163,9 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 func parseLexicalQName(qname string) (string, string, error) {
 	prefix := ""
 	local := qname
-	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
-		prefix = qname[:idx]
-		local = qname[idx+1:]
+	if p, l, ok := strings.Cut(qname, ":"); ok {
+		prefix = p
+		local = l
 		if prefix == "" {
 			return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid QName: " + qname}
 		}
@@ -214,7 +214,7 @@ func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message strin
 
 func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {

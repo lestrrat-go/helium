@@ -187,7 +187,7 @@ func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) 
 		return nil, err
 	}
 	if s == "" {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	runes := []rune(s)
 	result := make(ItemSlice, len(runes))
@@ -203,7 +203,7 @@ func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	s1, err := coerceArgToString(args[0])
 	if err != nil {
@@ -219,7 +219,7 @@ func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
 
 func fnCodepointEqual(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	s1, err := coerceArgToStringOpt(args[0])
 	if err != nil {
@@ -815,14 +815,14 @@ func translateXPathReplacement(repl string, numGroups int) (string, error) {
 
 func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil // input is xs:string? — empty yields empty
+		return validNilSequence, nil // input is xs:string? — empty yields empty
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
 	}
 	if s == "" {
-		return nil, nil
+		return validNilSequence, nil
 	}
 
 	// 1-arg form: normalize XML whitespace (#x20, #x9, #xA, #xD), then split
@@ -1206,7 +1206,7 @@ func detectSimpleUnicodePattern(pattern, flags string) (*unicode.RangeTable, boo
 func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	cacheKey := xpathRegexCacheKey{pattern: pattern, flags: flags}
 	if cached, ok := compiledXPathRegexCache.Load(cacheKey); ok {
-		return cached.(*compiledXPathRegex), nil
+		return cached.(*compiledXPathRegex), nil //nolint:forcetypeassert
 	}
 
 	// Detect simple \p{Name} / \P{Name} patterns for single-rune fast paths
@@ -1293,7 +1293,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 			isSimple:     simpleOk,
 		}
 		actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
-		return actual.(*compiledXPathRegex), nil
+		return actual.(*compiledXPathRegex), nil //nolint:forcetypeassert
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -1306,7 +1306,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 		isSimple:     simpleOk,
 	}
 	actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
-	return actual.(*compiledXPathRegex), nil
+	return actual.(*compiledXPathRegex), nil //nolint:forcetypeassert
 }
 
 // stripFreeSpacing removes unescaped whitespace from a regex pattern (x flag).

@@ -10,8 +10,8 @@ import (
 	"unicode"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
@@ -20,7 +20,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 	// XSLT 3.0: select attribute specifies which node to number.
 	// Evaluate select before the nil-node check so it works inside xsl:function.
 	if inst.Select != nil && inst.Value == nil {
-		result, err := ec.evalXPath(inst.Select, node)
+		result, err := ec.evalXPath(ctx, inst.Select, node)
 		if err != nil {
 			return err
 		}
@@ -58,7 +58,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 
 	if inst.Value != nil {
 		// value attribute: evaluate expression and use result directly
-		result, err := ec.evalXPath(inst.Value, node)
+		result, err := ec.evalXPath(ctx, inst.Value, node)
 		if err != nil {
 			return err
 		}
@@ -80,13 +80,13 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 		var nums []int
 		switch inst.Level {
 		case "single":
-			nums = ec.numberSingle(inst, node)
+			nums = ec.numberSingle(ctx, inst, node)
 		case "multiple":
-			nums = ec.numberMultiple(inst, node)
+			nums = ec.numberMultiple(ctx, inst, node)
 		case "any":
-			nums = ec.numberAny(inst, node)
+			nums = ec.numberAny(ctx, inst, node)
 		default:
-			nums = ec.numberSingle(inst, node)
+			nums = ec.numberSingle(ctx, inst, node)
 		}
 		for _, n := range nums {
 			bigNums = append(bigNums, big.NewInt(int64(n)))
@@ -169,7 +169,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 
 // numberNodeMatches tests if a node matches the count pattern.
 // If no count pattern, matches nodes with the same type and name as the context node.
-func (ec *execContext) numberNodeMatches(inst *numberInst, target helium.Node, contextNode helium.Node) bool {
+func (ec *execContext) numberNodeMatches(ctx context.Context, inst *numberInst, target helium.Node, contextNode helium.Node) bool {
 	if inst.Count != nil {
 		// Special case: count="." matches any non-document node
 		if inst.Count.source == "." && target.Type() != helium.DocumentNode {
@@ -181,7 +181,7 @@ func (ec *execContext) numberNodeMatches(inst *numberInst, target helium.Node, c
 		// to each candidate node during the numbering walk.
 		savedCurrent := ec.currentNode
 		ec.currentNode = target
-		result := inst.Count.matchPattern(ec, target)
+		result := inst.Count.matchPattern(ctx, ec, target)
 		ec.currentNode = savedCurrent
 		return result
 	}
@@ -193,15 +193,15 @@ func (ec *execContext) numberNodeMatches(inst *numberInst, target helium.Node, c
 		return false
 	}
 	if target.Type() == helium.ElementNode {
-		te := target.(*helium.Element)
-		ce := contextNode.(*helium.Element)
+		te, _ := helium.AsNode[*helium.Element](target)
+		ce, _ := helium.AsNode[*helium.Element](contextNode)
 		return te.LocalName() == ce.LocalName() && te.URI() == ce.URI()
 	}
 	return target.Name() == contextNode.Name()
 }
 
 // numberFromMatches tests if a node matches the from pattern.
-func (ec *execContext) numberFromMatches(inst *numberInst, node helium.Node) bool {
+func (ec *execContext) numberFromMatches(ctx context.Context, inst *numberInst, node helium.Node) bool {
 	if inst.From == nil {
 		return false
 	}
@@ -209,16 +209,16 @@ func (ec *execContext) numberFromMatches(inst *numberInst, node helium.Node) boo
 	// the candidate node being tested, not the xsl:number context node.
 	savedCurrent := ec.currentNode
 	ec.currentNode = node
-	result := inst.From.matchPattern(ec, node)
+	result := inst.From.matchPattern(ctx, ec, node)
 	ec.currentNode = savedCurrent
 	return result
 }
 
 // numberSingle implements level="single": find the first ancestor-or-self that
 // matches the count pattern, then count preceding siblings that match.
-func (ec *execContext) numberSingle(inst *numberInst, node helium.Node) []int {
+func (ec *execContext) numberSingle(ctx context.Context, inst *numberInst, node helium.Node) []int {
 	// Find the first ancestor-or-self that matches count
-	target := ec.numberFindAncestorOrSelf(inst, node)
+	target := ec.numberFindAncestorOrSelf(ctx, inst, node)
 	if target == nil {
 		return nil
 	}
@@ -226,7 +226,7 @@ func (ec *execContext) numberSingle(inst *numberInst, node helium.Node) []int {
 	// Count preceding siblings that match count pattern
 	count := 1
 	for sib := target.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
-		if ec.numberNodeMatches(inst, sib, node) {
+		if ec.numberNodeMatches(ctx, inst, sib, node) {
 			count++
 		}
 	}
@@ -235,17 +235,17 @@ func (ec *execContext) numberSingle(inst *numberInst, node helium.Node) []int {
 
 // numberMultiple implements level="multiple": find all ancestors-or-self that match
 // count (stopping at from), and for each count preceding siblings.
-func (ec *execContext) numberMultiple(inst *numberInst, node helium.Node) []int {
+func (ec *execContext) numberMultiple(ctx context.Context, inst *numberInst, node helium.Node) []int {
 	var ancestors []helium.Node
 	for n := node; n != nil; n = n.Parent() {
-		if ec.numberFromMatches(inst, n) {
+		if ec.numberFromMatches(ctx, inst, n) {
 			// Include the from node itself if it matches count
-			if ec.numberNodeMatches(inst, n, node) {
+			if ec.numberNodeMatches(ctx, inst, n, node) {
 				ancestors = append(ancestors, n)
 			}
 			break
 		}
-		if ec.numberNodeMatches(inst, n, node) {
+		if ec.numberNodeMatches(ctx, inst, n, node) {
 			ancestors = append(ancestors, n)
 		}
 		if n.Type() == helium.DocumentNode {
@@ -262,7 +262,7 @@ func (ec *execContext) numberMultiple(inst *numberInst, node helium.Node) []int 
 	for i, anc := range ancestors {
 		count := 1
 		for sib := anc.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
-			if ec.numberNodeMatches(inst, sib, node) {
+			if ec.numberNodeMatches(ctx, inst, sib, node) {
 				count++
 			}
 		}
@@ -274,14 +274,14 @@ func (ec *execContext) numberMultiple(inst *numberInst, node helium.Node) []int 
 // numberAny implements level="any": count all matching nodes in document order
 // that precede (or are) the context node, going back to the nearest from match.
 // The from node itself is included in the count if it matches count.
-func (ec *execContext) numberAny(inst *numberInst, node helium.Node) []int {
+func (ec *execContext) numberAny(ctx context.Context, inst *numberInst, node helium.Node) []int {
 	count := 0
 	cur := node
 	for cur != nil {
-		if ec.numberNodeMatches(inst, cur, node) {
+		if ec.numberNodeMatches(ctx, inst, cur, node) {
 			count++
 		}
-		if ec.numberFromMatches(inst, cur) {
+		if ec.numberFromMatches(ctx, inst, cur) {
 			break
 		}
 		cur = ec.prevInDocOrder(cur)
@@ -309,7 +309,7 @@ func (ec *execContext) prevInDocOrder(node helium.Node) helium.Node {
 // lastDescendant returns the deepest last descendant of node (or node itself if leaf).
 func (ec *execContext) lastDescendant(node helium.Node) helium.Node {
 	if node.Type() == helium.ElementNode {
-		elem := node.(*helium.Element)
+		elem, _ := helium.AsNode[*helium.Element](node)
 		if last := elem.LastChild(); last != nil {
 			return ec.lastDescendant(last)
 		}
@@ -319,9 +319,9 @@ func (ec *execContext) lastDescendant(node helium.Node) helium.Node {
 
 // numberFindAncestorOrSelf finds the first ancestor-or-self that matches
 // the count pattern.
-func (ec *execContext) numberFindAncestorOrSelf(inst *numberInst, node helium.Node) helium.Node {
+func (ec *execContext) numberFindAncestorOrSelf(ctx context.Context, inst *numberInst, node helium.Node) helium.Node {
 	for n := node; n != nil; n = n.Parent() {
-		if ec.numberNodeMatches(inst, n, node) {
+		if ec.numberNodeMatches(ctx, inst, n, node) {
 			return n
 		}
 		// Stop at document node to avoid walking above the tree
@@ -457,7 +457,7 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int, l
 }
 
 // numericOrdinalSuffix returns the suffix for a numeric ordinal (e.g., "st", "nd", "rd", "th").
-func numericOrdinalSuffix(num int, lang string) string {
+func numericOrdinalSuffix(num int, _ string) string {
 	// Default to English ordinal suffixes
 	n := num % 100
 	if n >= 11 && n <= 13 {
@@ -844,7 +844,7 @@ func ordinalRangeLength(r rune) int {
 }
 
 // numberToWords converts a number to English words.
-func numberToWords(n int, upper bool) string {
+func numberToWords(n int, upper bool) string { //nolint:unparam // upper always false but kept for XSLT number-to-words spec
 	if n == 0 {
 		if upper {
 			return "ZERO"

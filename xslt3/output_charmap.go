@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/stream"
 	"golang.org/x/text/encoding/htmlindex"
 	xtunicode "golang.org/x/text/encoding/unicode"
@@ -18,7 +20,7 @@ import (
 // Returns (form, true) on success or (0, false) for unknown/NONE forms.
 func resolveNormForm(form string) (norm.Form, bool) {
 	switch form {
-	case "NFC", "FULLY-NORMALIZED":
+	case "NFC", lexicon.NormFullyNormalized:
 		return norm.NFC, true
 	case "NFD":
 		return norm.NFD, true
@@ -116,7 +118,7 @@ func normalizeXMLContent(data []byte, nf norm.Form) []byte {
 					cdataEnd := i + end
 					out.Write(data[i:cdataStart])
 					out.Write(nf.Bytes(data[cdataStart:cdataEnd]))
-					out.Write([]byte("]]>"))
+					out.WriteString("]]>")
 					i += end + 3
 					continue
 				}
@@ -420,7 +422,7 @@ func applyCharMapToHTMLTag(tag string, charMap map[rune]string) string {
 func hasDOEMarkers(doc *helium.Document) bool {
 	found := false
 	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n.Type() == helium.ProcessingInstructionNode && string(n.Name()) == "disable-output-escaping" {
+		if n.Type() == helium.ProcessingInstructionNode && n.Name() == "disable-output-escaping" {
 			found = true
 		}
 		return nil
@@ -440,7 +442,7 @@ func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
 		return false
 	}
 	// Check Clark notation: {uri}local
-	clark := helium.ClarkName(string(elem.URI()), string(elem.LocalName()))
+	clark := helium.ClarkName(elem.URI(), elem.LocalName())
 	if _, ok := cdataElems[clark]; ok {
 		return true
 	}
@@ -450,7 +452,7 @@ func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
 		return true
 	}
 	// Check local name only (for unprefixed elements)
-	local := string(elem.LocalName())
+	local := elem.LocalName()
 	if _, ok := cdataElems[local]; ok {
 		return true
 	}
@@ -558,9 +560,7 @@ func resolveCharacterMaps(ss *Stylesheet, names []string) map[rune]string {
 			resolve(ref)
 		}
 		// This map's entries override
-		for r, s := range cm.Mappings {
-			merged[r] = s
-		}
+		maps.Copy(merged, cm.Mappings)
 	}
 	for _, name := range names {
 		resolve(name)

@@ -108,9 +108,9 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 				return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
 			}
 			switch s {
-			case "true", "1":
+			case lexicon.ValueTrue, "1":
 				return true, true, nil
-			case "false", "0":
+			case lexicon.ValueFalse, "0":
 				return false, true, nil
 			default:
 				return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
@@ -186,7 +186,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root has invalid child node"}
 		}
 
-		param := child.(*helium.Element)
+		param, _ := helium.AsNode[*helium.Element](child)
 		if param.URI() == "" {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options parameters must be namespace-qualified"}
 		}
@@ -325,7 +325,7 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps has invalid child node"}
 		}
 
-		charMap := child.(*helium.Element)
+		charMap, _ := helium.AsNode[*helium.Element](child)
 		if charMap.URI() != lexicon.NamespaceSerialization || charMap.LocalName() != "character-map" {
 			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps children must be output:character-map"}
 		}
@@ -471,7 +471,7 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 	return "map{" + strings.Join(parts, ",") + "}", nil
 }
 
-func serializeAdaptiveArray(a ArrayItem, opts serializeOptions) (string, error) {
+func serializeAdaptiveArray(a ArrayItem, _ serializeOptions) (string, error) {
 	parts := make([]string, 0, a.Size())
 	for _, member := range a.members0() {
 		text, err := serializeAdaptiveSequence(member, serializeOptions{method: "adaptive", itemSeparator: ","})

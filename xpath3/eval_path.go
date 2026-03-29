@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/big"
@@ -25,7 +26,7 @@ func evalLiteral(e LiteralExpr) (Sequence, error) {
 	return nil, fmt.Errorf("%w: literal %T", ErrUnsupportedExpr, e.Value)
 }
 
-func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
+func evalVariable(ctx context.Context, ec *evalContext, e VariableExpr) (Sequence, error) {
 	if ec.vars != nil {
 		// Try exact name first
 		if v, ok := ec.vars.Lookup(e.Name); ok {
@@ -51,7 +52,7 @@ func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
 	}
 	// Fallback to lazy variable resolver (e.g. for XSLT global variables)
 	if ec.variableResolver != nil {
-		if v, ok, err := ec.variableResolver.ResolveVariable(ec.goCtx, e.Name); err != nil {
+		if v, ok, err := ec.variableResolver.ResolveVariable(ctx, e.Name); err != nil {
 			return nil, err
 		} else if ok {
 			return enrichNodeItems(ec, v), nil
@@ -94,13 +95,13 @@ func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
 	return result
 }
 
-func evalSequenceExpr(evalFn exprEvaluator, ec *evalContext, e SequenceExpr) (Sequence, error) {
+func evalSequenceExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e SequenceExpr) (Sequence, error) {
 	if len(e.Items) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	var result ItemSlice
 	for _, item := range e.Items {
-		seq, err := evalFn(ec, item)
+		seq, err := evalFn(ctx, ec, item)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +110,7 @@ func evalSequenceExpr(evalFn exprEvaluator, ec *evalContext, e SequenceExpr) (Se
 	return result, nil
 }
 
-func evalLocationPath(evalFn exprEvaluator, ec *evalContext, lp *LocationPath) (Sequence, error) {
+func evalLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext, lp *LocationPath) (Sequence, error) {
 	var nodes []helium.Node
 
 	if lp.Absolute {
@@ -132,9 +133,9 @@ func evalLocationPath(evalFn exprEvaluator, ec *evalContext, lp *LocationPath) (
 	var err error
 	for _, step := range lp.Steps {
 		if len(step.Predicates) > 0 {
-			nodes, err = evalStepWithPredicates(evalFn, ec, nodes, step)
+			nodes, err = evalStepWithPredicates(evalFn, ctx, ec, nodes, step)
 		} else {
-			nodes, err = evalStepNoPredicates(ec, nodes, step)
+			nodes, err = evalStepNoPredicates(ctx, ec, nodes, step)
 		}
 		if err != nil {
 			return nil, err
@@ -148,7 +149,7 @@ func evalLocationPath(evalFn exprEvaluator, ec *evalContext, lp *LocationPath) (
 	return result, nil
 }
 
-func evalVMLocationPath(evalFn exprEvaluator, ec *evalContext, lp vmLocationPathExpr) (Sequence, error) {
+func evalVMLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext, lp vmLocationPathExpr) (Sequence, error) {
 	var nodes []helium.Node
 
 	if lp.Absolute {
@@ -171,9 +172,9 @@ func evalVMLocationPath(evalFn exprEvaluator, ec *evalContext, lp vmLocationPath
 	var err error
 	for _, step := range lp.Steps {
 		if len(step.Predicates) > 0 {
-			nodes, err = evalVMStepWithPredicates(evalFn, ec, nodes, step)
+			nodes, err = evalVMStepWithPredicates(evalFn, ctx, ec, nodes, step)
 		} else {
-			nodes, err = evalVMStepNoPredicates(ec, nodes, step)
+			nodes, err = evalVMStepNoPredicates(ctx, ec, nodes, step)
 		}
 		if err != nil {
 			return nil, err
@@ -205,18 +206,18 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 	return ni
 }
 
-func evalStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
+func evalStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	allFiltered := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
 		matched, traversed, err := appendAxisNodeMatches(nil, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
-		if err := ec.countOps(traversed); err != nil {
+		if err := ec.countOps(ctx, traversed); err != nil {
 			return nil, err
 		}
 		for _, pred := range step.Predicates {
-			matched, err = applyPredicate(evalFn, ec, matched, pred)
+			matched, err = applyPredicate(evalFn, ctx, ec, matched, pred)
 			if err != nil {
 				return nil, err
 			}
@@ -226,7 +227,7 @@ func evalStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []heliu
 	return ixpath.DeduplicateNodes(allFiltered, ec.docOrder, ec.maxNodes)
 }
 
-func evalStepNoPredicates(ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
+func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	next := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
 		var traversed int
@@ -235,25 +236,25 @@ func evalStepNoPredicates(ec *evalContext, nodes []helium.Node, step Step) ([]he
 		if err != nil {
 			return nil, err
 		}
-		if err := ec.countOps(traversed); err != nil {
+		if err := ec.countOps(ctx, traversed); err != nil {
 			return nil, err
 		}
 	}
 	return ixpath.DeduplicateNodes(next, ec.docOrder, ec.maxNodes)
 }
 
-func evalVMStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
+func evalVMStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
 	allFiltered := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
 		matched, traversed, err := appendAxisNodeMatches(nil, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
-		if err := ec.countOps(traversed); err != nil {
+		if err := ec.countOps(ctx, traversed); err != nil {
 			return nil, err
 		}
 		for _, pred := range step.Predicates {
-			matched, err = applyVMPredicate(evalFn, ec, matched, pred)
+			matched, err = applyVMPredicate(evalFn, ctx, ec, matched, pred)
 			if err != nil {
 				return nil, err
 			}
@@ -263,16 +264,16 @@ func evalVMStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []hel
 	return ixpath.DeduplicateNodes(allFiltered, ec.docOrder, ec.maxNodes)
 }
 
-func applyVMPredicate(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
+func applyVMPredicate(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
 	switch p := pred.(type) {
 	case vmPositionPredicateExpr:
 		return applyVMPositionPredicate(nodes, p), nil
 	case vmAttributeExistsPredicateExpr:
 		return applyVMAttributeExistsPredicate(ec, nodes, p), nil
 	case vmAttributeEqualsStringPredicateExpr:
-		return applyVMAttributeEqualsStringPredicate(evalFn, ec, nodes, p)
+		return applyVMAttributeEqualsStringPredicate(evalFn, ctx, ec, nodes, p)
 	default:
-		return applyPredicate(evalFn, ec, nodes, pred)
+		return applyPredicate(evalFn, ctx, ec, nodes, pred)
 	}
 }
 
@@ -293,14 +294,14 @@ func applyVMAttributeExistsPredicate(ec *evalContext, nodes []helium.Node, pred 
 	return result
 }
 
-func applyVMAttributeEqualsStringPredicate(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, pred vmAttributeEqualsStringPredicateExpr) ([]helium.Node, error) {
+func applyVMAttributeEqualsStringPredicate(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, pred vmAttributeEqualsStringPredicateExpr) ([]helium.Node, error) {
 	size := len(nodes)
 	result := make([]helium.Node, 0, size)
 	for i, n := range nodes {
 		match, ok := vmAttributeEqualsStringPredicateMatches(ec, n, pred)
 		if !ok {
 			frame := ec.pushNodeContext(n, i+1, size)
-			r, err := evalFn(ec, pred.Fallback)
+			r, err := evalFn(ctx, ec, pred.Fallback)
 			ec.restoreContext(frame)
 			if err != nil {
 				return nil, err
@@ -362,7 +363,7 @@ func nodeHasMatchingAttribute(ec *evalContext, node helium.Node, test NodeTest) 
 	return found
 }
 
-func evalVMStepNoPredicates(ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
+func evalVMStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
 	next := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
 		var traversed int
@@ -371,7 +372,7 @@ func evalVMStepNoPredicates(ec *evalContext, nodes []helium.Node, step vmLocatio
 		if err != nil {
 			return nil, err
 		}
-		if err := ec.countOps(traversed); err != nil {
+		if err := ec.countOps(ctx, traversed); err != nil {
 			return nil, err
 		}
 	}
@@ -725,15 +726,15 @@ func matchTypeTest(test TypeTest, n helium.Node) bool {
 	return false
 }
 
-func applyPredicate(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
-	if err := ec.countOps(len(nodes)); err != nil {
+func applyPredicate(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
+	if err := ec.countOps(ctx, len(nodes)); err != nil {
 		return nil, err
 	}
 	size := len(nodes)
 	var result []helium.Node
 	for i, n := range nodes {
 		frame := ec.pushNodeContext(n, i+1, size)
-		r, err := evalFn(ec, pred)
+		r, err := evalFn(ctx, ec, pred)
 		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
@@ -785,9 +786,7 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 	if strings.HasPrefix(raw, "xs:") {
 		return raw
 	}
-	if idx := strings.IndexByte(raw, ':'); idx >= 0 {
-		prefix := raw[:idx]
-		local := raw[idx+1:]
+	if prefix, local, ok := strings.Cut(raw, ":"); ok {
 		if prefix == "xsd" {
 			return "xs:" + local
 		}

@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -29,11 +30,11 @@ func (idSubtypeDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
 	return typeName == xpath3.QAnnotation("urn:test", "myID") && baseTypeName == xpath3.TypeID
 }
 
-func (idSubtypeDecls) ValidateCast(value, typeName string) error {
+func (idSubtypeDecls) ValidateCast(_ context.Context, value, typeName string) error {
 	return nil
 }
 
-func (idSubtypeDecls) ValidateCastWithNS(value, typeName string, nsMap map[string]string) error {
+func (idSubtypeDecls) ValidateCastWithNS(_ context.Context, value, typeName string, nsMap map[string]string) error {
 	return nil
 }
 

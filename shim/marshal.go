@@ -66,7 +66,7 @@ func (enc *Encoder) marshalReflectValue(val reflect.Value, start *StartElement) 
 			return enc.marshalSimpleValue(val, start)
 		}
 		// Slice/array of elements
-		for i := 0; i < val.Len(); i++ {
+		for i := range val.Len() {
 			if err := enc.marshalReflectValue(val.Index(i), start); err != nil {
 				return err
 			}
@@ -137,8 +137,8 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 
 		// Handle []xml.Attr with any,attr tag
 		if b.isAny && field.Type() == attrSliceType {
-			for i := 0; i < field.Len(); i++ {
-				se.Attr = append(se.Attr, field.Index(i).Interface().(Attr))
+			for i := range field.Len() {
+				se.Attr = append(se.Attr, field.Index(i).Interface().(Attr)) //nolint:forcetypeassert
 			}
 			continue
 		}
@@ -306,7 +306,7 @@ func (enc *Encoder) marshalField(b fieldBinding, field reflect.Value) error {
 
 	// For slices of non-byte elements, marshal each element
 	if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
-		for i := 0; i < field.Len(); i++ {
+		for i := range field.Len() {
 			elem := field.Index(i)
 			start := enc.fieldStartOrNil(b, name, elem)
 			if err := enc.marshalReflectValue(elem, start); err != nil {
@@ -397,12 +397,12 @@ func (enc *Encoder) marshalSimpleValue(val reflect.Value, start *StartElement) e
 // marshalAttr encodes a field binding as an XML attribute.
 func (enc *Encoder) marshalAttr(b fieldBinding, field reflect.Value) (*Attr, error) {
 	if b.omitEmpty && isEmptyValue(field) {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	for field.Kind() == reflect.Pointer {
 		if field.IsNil() {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		field = field.Elem()
 	}
@@ -420,7 +420,7 @@ func (enc *Encoder) marshalAttr(b fieldBinding, field reflect.Value) (*Attr, err
 				return nil, err
 			}
 			if attr.Name.Local == "" {
-				return nil, nil
+				return nil, nil //nolint:nilnil
 			}
 			return &attr, nil
 		}
@@ -432,7 +432,7 @@ func (enc *Encoder) marshalAttr(b fieldBinding, field reflect.Value) (*Attr, err
 				return nil, err
 			}
 			if attr.Name.Local == "" {
-				return nil, nil
+				return nil, nil //nolint:nilnil
 			}
 			return &attr, nil
 		}
@@ -479,7 +479,7 @@ func (enc *Encoder) buildStructStart(val reflect.Value, bindings []fieldBinding,
 		}
 		// If the tag provides a non-empty name, use it.
 		// rawName != "XMLName" distinguishes "name from tag" vs "name from field".
-		if b.rawName != "" && b.rawName != "XMLName" && b.name != "" {
+		if b.rawName != "" && b.rawName != xmlNameField && b.name != "" {
 			name := Name{Local: b.name}
 			if b.hasNameSpace {
 				name.Space = b.nameSpace
@@ -515,7 +515,7 @@ func (enc *Encoder) buildStructStart(val reflect.Value, bindings []fieldBinding,
 		if !b.isXMLName || len(b.index) <= 1 {
 			continue
 		}
-		if b.rawName != "" && b.rawName != "XMLName" && b.name != "" {
+		if b.rawName != "" && b.rawName != xmlNameField && b.name != "" {
 			name := Name{Local: b.name}
 			if b.hasNameSpace {
 				name.Space = b.nameSpace
@@ -547,8 +547,8 @@ func (enc *Encoder) defaultStart(val reflect.Value, start *StartElement) StartEl
 // typeName returns the type name with generic type parameters stripped.
 func typeName(t reflect.Type) string {
 	name := t.Name()
-	if i := strings.IndexByte(name, '['); i >= 0 {
-		return name[:i]
+	if before, _, ok := strings.Cut(name, "["); ok {
+		return before
 	}
 	return name
 }
@@ -648,7 +648,7 @@ func (enc *Encoder) marshalAnyField(b fieldBinding, field reflect.Value) error {
 
 	// For slices, marshal each element individually with any logic
 	if v.Kind() == reflect.Slice && v.Type().Elem().Kind() != reflect.Uint8 {
-		for i := 0; i < v.Len(); i++ {
+		for i := range v.Len() {
 			if err := enc.marshalAnySingleValue(b, v.Index(i)); err != nil {
 				return err
 			}
@@ -678,9 +678,9 @@ func (enc *Encoder) marshalAnySingleValue(b fieldBinding, field reflect.Value) e
 
 func hasOwnXMLName(v reflect.Value) bool {
 	t := v.Type()
-	for i := 0; i < t.NumField(); i++ {
+	for i := range t.NumField() {
 		f := t.Field(i)
-		if f.Name != "XMLName" {
+		if f.Name != xmlNameField {
 			continue
 		}
 		if !isXMLNameType(derefType(f.Type)) {
@@ -704,7 +704,7 @@ func hasOwnXMLName(v reflect.Value) bool {
 		if tag != "" && tag != "-" {
 			parts := strings.Split(tag, ",")
 			name := strings.TrimSpace(parts[0])
-			if name != "" && name != "XMLName" {
+			if name != "" && name != xmlNameField {
 				_, local, _ := parseTagNameSpec(name)
 				if local != "" {
 					return true

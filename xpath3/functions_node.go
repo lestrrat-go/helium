@@ -49,7 +49,7 @@ func fnNodeName(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if n == nil {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	switch n.Type() {
 	case helium.ElementNode, helium.AttributeNode:
@@ -71,7 +71,7 @@ func fnNodeName(ctx context.Context, args []Sequence) (Sequence, error) {
 			Value:    QNameValue{Local: n.Name()},
 		}), nil
 	}
-	return nil, nil
+	return validNilSequence, nil
 }
 
 func fnNilled(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -80,14 +80,14 @@ func fnNilled(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if n == nil {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	// Schema-validated nilled checking is handled by the XSLT engine
 	// override. This default implementation returns false for elements.
 	if n.Type() == helium.ElementNode {
 		return SingleBoolean(false), nil
 	}
-	return nil, nil
+	return validNilSequence, nil
 }
 
 func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -121,11 +121,11 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if n == nil {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	// Namespace nodes have no base URI per the XPath data model.
 	if n.Type() == helium.NamespaceNode {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	// Per XDM: attribute, text, comment, and PI nodes derive their base URI
 	// from their parent element. If they have no parent, their base URI is
@@ -134,7 +134,7 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if nodeType == helium.AttributeNode || nodeType == helium.TextNode ||
 		nodeType == helium.CommentNode || nodeType == helium.ProcessingInstructionNode {
 		if n.Parent() == nil {
-			return nil, nil
+			return validNilSequence, nil
 		}
 	}
 	// Walk up the parent chain to find the actual document the node lives
@@ -145,7 +145,7 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if d, ok := n.(*helium.Document); ok {
 		doc = d
 	} else {
-		cur := helium.Node(n)
+		cur := n
 		for cur.Parent() != nil {
 			cur = cur.Parent()
 		}
@@ -157,7 +157,7 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	base := helium.NodeGetBase(doc, n)
 	if base == "" {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: base}), nil
 }
@@ -168,20 +168,20 @@ func fnDocumentURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if n == nil {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	if n.Type() != helium.DocumentNode {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	if doc, ok := n.(*helium.Document); ok {
 		if doc.HasProperty(helium.DocInternal) {
-			return nil, nil
+			return validNilSequence, nil
 		}
 		if uri := doc.URL(); uri != "" {
 			return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: uri}), nil
 		}
 	}
-	return nil, nil
+	return validNilSequence, nil
 }
 
 func fnRoot(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -190,7 +190,7 @@ func fnRoot(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if n == nil {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return SingleNode(ixpath.DocumentRoot(n)), nil
 }
@@ -201,7 +201,7 @@ func fnPath(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if n == nil {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return SingleString(buildNodePath(n)), nil
 }
@@ -463,7 +463,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		a, err := CastFromString(s, TypeDouble)
 		if err != nil {
-			return SingleDouble(math.NaN()), nil
+			return SingleDouble(math.NaN()), nil //nolint:nilerr // fn:number returns NaN on cast failure per spec
 		}
 		return SingleDouble(a.DoubleVal()), nil
 	}
@@ -481,7 +481,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	dbl, err := CastAtomic(a, TypeDouble)
 	if err != nil {
-		return SingleDouble(math.NaN()), nil
+		return SingleDouble(math.NaN()), nil //nolint:nilerr // fn:number returns NaN on cast failure per spec
 	}
 	return SingleDouble(dbl.DoubleVal()), nil
 }
@@ -499,7 +499,7 @@ func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {
 
 func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {
@@ -519,7 +519,7 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 
 func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {
@@ -544,7 +544,7 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 
 	for cur := first; cur != nil; {
 		next := cur.NextSibling()
-		mn := cur.(helium.MutableNode)
+		mn := cur.(helium.MutableNode) //nolint:forcetypeassert
 		mn.SetPrevSibling(nil)
 		mn.SetNextSibling(nil)
 		if err := doc.AddChild(cur); err != nil {
@@ -578,11 +578,11 @@ func stripXMLTextDeclaration(s string) (string, error) {
 
 	switch len(names) {
 	case 1:
-		if names[0] != "encoding" {
+		if names[0] != lexicon.DeclEncoding {
 			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
 		}
 	case 2:
-		if names[0] != "version" || names[1] != "encoding" {
+		if names[0] != lexicon.DeclVersion || names[1] != lexicon.DeclEncoding {
 			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
 		}
 	default:
@@ -612,7 +612,7 @@ func parseXMLPseudoAttributes(s string) ([]string, error) {
 		}
 		name := s[start:i]
 		switch name {
-		case "version", "encoding":
+		case lexicon.DeclVersion, "encoding":
 		case "standalone":
 			return nil, fmt.Errorf("standalone not allowed")
 		default:
@@ -674,7 +674,7 @@ func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if len(tokens) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 
 	nodes := make([]helium.Node, 0, len(tokens))
@@ -796,7 +796,7 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if len(atoms) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 
 	wanted := make(map[string]struct{}, len(atoms))
@@ -825,7 +825,7 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 			if !isIDRef {
 				continue
 			}
-			for _, token := range strings.Fields(attr.Value()) {
+			for token := range strings.FieldsSeq(attr.Value()) {
 				if _, ok := wanted[token]; ok {
 					nodes = append(nodes, attr)
 					break
@@ -842,7 +842,7 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 				}
 			}
 			if isIDRef {
-				for _, token := range strings.Fields(strings.TrimSpace(ixpath.StringValue(elem))) {
+				for token := range strings.FieldsSeq(strings.TrimSpace(ixpath.StringValue(elem))) {
 					if _, ok := wanted[token]; ok {
 						nodes = append(nodes, elem)
 						break
@@ -916,7 +916,7 @@ func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
 
 func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	uri, err := docURIArg(args[0], "fn:doc")
 	if err != nil {
@@ -1096,7 +1096,7 @@ func idLookupTokens(seq Sequence) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, token := range strings.Fields(s) {
+		for token := range strings.FieldsSeq(s) {
 			if xmlchar.IsValidNCName(token) {
 				tokens = append(tokens, token)
 			}
@@ -1107,7 +1107,7 @@ func idLookupTokens(seq Sequence) ([]string, error) {
 
 func sequenceFromDocOrderedNodes(ctx context.Context, nodes []helium.Node) (Sequence, error) {
 	if len(nodes) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 
 	cache := &ixpath.DocOrderCache{}
@@ -1143,7 +1143,7 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 		return fc.node, nil
 	}
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	if seqLen(args[0]) > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected single node, got sequence of length > 1"}

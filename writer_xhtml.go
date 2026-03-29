@@ -50,7 +50,10 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		return d.writeNode(out, n)
 	}
 
-	e := n.(*Element)
+	e, ok := AsNode[*Element](n)
+	if !ok {
+		return d.writeNode(out, n)
+	}
 	localName := e.LocalName()
 
 	var name string
@@ -208,11 +211,11 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
 		}
 		_, _ = io.WriteString(out, `"`)
 
-		a := attr.NextSibling()
-		if a == nil {
+		next, ok := AsNode[*Attribute](attr.NextSibling())
+		if !ok {
 			break
 		}
-		attr = a.(*Attribute)
+		attr = next
 	}
 
 	if nameAttr != nil && idAttr == nil && xhtmlNameIDElements[localName] {
@@ -247,11 +250,11 @@ func (d *writeSession) headHasContentTypeMeta(head *Element) bool {
 					return true
 				}
 			}
-			a := attr.NextSibling()
-			if a == nil {
+			next, ok := AsNode[*Attribute](attr.NextSibling())
+			if !ok {
 				break
 			}
-			attr = a.(*Attribute)
+			attr = next
 		}
 	}
 	return false

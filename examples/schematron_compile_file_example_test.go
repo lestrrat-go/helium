@@ -15,7 +15,7 @@ func Example_schematron_compile_file() {
 		fmt.Printf("create temp file failed: %s\n", err)
 		return
 	}
-	defer os.Remove(f.Name()) //nolint:errcheck
+	defer os.Remove(f.Name())
 
 	if _, err := f.WriteString(`<schema xmlns="http://www.ascc.net/xml/schematron"><pattern name="book-check"><rule context="book"><assert test="title">title is required</assert></rule></pattern></schema>`); err != nil {
 		fmt.Printf("write temp file failed: %s\n", err)

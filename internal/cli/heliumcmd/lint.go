@@ -109,11 +109,7 @@ func (c *command) runContext(ctx context.Context, args []string) int {
 
 	var cat *catalog.Catalog
 	if cfg.catalogs && !cfg.noCatalogs {
-		var err error
-		cat, err = c.loadCatalogFromEnv(ctx)
-		if err != nil {
-			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
-		}
+		cat = c.loadCatalogFromEnv(ctx)
 	}
 
 	var schema *xsd.Schema
@@ -212,7 +208,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		}
 
 		switch arg {
-		case "--version":
+		case flagVersion:
 			cfg.version = true
 		case "--recover":
 			cfg.parser = cfg.parser.RecoverOnError(true)
@@ -340,12 +336,12 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	return cfg, files
 }
 
-func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) {
+func (c *command) loadCatalogFromEnv(ctx context.Context) *catalog.Catalog {
 	envFiles := os.Getenv("XML_CATALOG_FILES")
 	if envFiles == "" {
-		return nil, nil
+		return nil
 	}
-	for _, f := range strings.Split(envFiles, " ") {
+	for f := range strings.SplitSeq(envFiles, " ") {
 		f = strings.TrimSpace(f)
 		if f == "" {
 			continue
@@ -355,9 +351,9 @@ func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, err
 			_, _ = fmt.Fprintf(c.stderr, "%s: failed to load catalog %s: %s\n", c.prog, f, err)
 			continue
 		}
-		return cat, nil
+		return cat
 	}
-	return nil, nil
+	return nil
 }
 
 func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
@@ -382,7 +378,7 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 	}
 
 	var doc *helium.Document
-	for rep := 0; rep < cfg.repeat; rep++ {
+	for range cfg.repeat {
 		var t0 time.Time
 		if cfg.timing {
 			t0 = time.Now()
@@ -527,7 +523,11 @@ func (c *command) evalXPath(ctx context.Context, cfg *config, doc *helium.Docume
 		for _, n := range res.NodeSet {
 			switch n.Type() {
 			case helium.AttributeNode:
-				attr := n.(*helium.Attribute) //nolint:forcetypeassert // node type checked above
+				attr, ok := helium.AsNode[*helium.Attribute](n)
+				if !ok {
+					_, _ = fmt.Fprintf(c.stderr, "%s: unexpected attribute node type %T\n", c.prog, n)
+					return ExitErr
+				}
 				_, _ = fmt.Fprintf(out, " %s=%q\n", attr.Name(), attr.Value())
 			case helium.NamespaceDeclNode, helium.NamespaceNode:
 				ns, ok := n.(interface {

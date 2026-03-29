@@ -19,8 +19,7 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 	skipped := map[string]struct{}{}
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_DUMP_TEST_FILES"); v != "" {
-		files := strings.Split(v, ",")
-		for _, f := range files {
+		for f := range strings.SplitSeq(v, ",") {
 			n := strings.TrimSpace(f)
 			only[n] = struct{}{}
 		}
@@ -63,7 +62,7 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 		in, err := os.ReadFile(fn)
 		require.NoError(t, err, "os.ReadFile should succeed")
 
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		doc, err := helium.NewParser().Parse(t.Context(), in)
 		require.NoError(t, err, `Parse(...) succeeds`)
 
 		str, err := helium.WriteString(doc)
@@ -105,7 +104,7 @@ func TestDOMToXMLString(t *testing.T) {
 func BenchmarkWriteNonASCII(b *testing.B) {
 	var buf strings.Builder
 	buf.WriteString("<root>")
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		buf.WriteString("<t>caf\u00e9 na\u00efve r\u00e9sum\u00e9 \u00fcber \u00e0 \u00e7a \u00f1</t>")
 	}
 	buf.WriteString("</root>")
@@ -117,7 +116,7 @@ func BenchmarkWriteNonASCII(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		err := w.WriteTo(io.Discard, doc)
 		require.NoError(b, err)
 	}

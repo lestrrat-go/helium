@@ -4,22 +4,20 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/catalog"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/stretchr/testify/require"
 )
 
 func libxml2TestDir() string {
-	_, file, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(file), "..", "testdata", "libxml2-compat", "catalogs")
+	return heliumtest.TestDir("testdata", "libxml2-compat", "catalogs")
 }
 
 func libxml2ResultDir() string {
-	_, file, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(file), "..", "testdata", "libxml2-compat", "catalogs", "result")
+	return heliumtest.TestDir("testdata", "libxml2-compat", "catalogs", "result")
 }
 
 // TestLibxml2Compat runs the same catalog resolution tests as libxml2's
@@ -74,11 +72,11 @@ func TestLibxml2Compat(t *testing.T) {
 				var got string
 				switch cmd.typ {
 				case "resolve":
-					got = cat.Resolve(cmd.arg1, cmd.arg2)
+					got = cat.Resolve(t.Context(), cmd.arg1, cmd.arg2)
 				case "public":
-					got = cat.Resolve(cmd.arg1, "")
+					got = cat.Resolve(t.Context(), cmd.arg1, "")
 				case "system":
-					got = cat.Resolve("", cmd.arg1)
+					got = cat.Resolve(t.Context(), "", cmd.arg1)
 				default:
 					t.Fatalf("unknown command %q at line %d", cmd.typ, i+1)
 				}
@@ -98,7 +96,7 @@ type scriptCmd struct {
 // parseScript parses xmlcatalog --shell commands from a .script file.
 func parseScript(s string) []scriptCmd {
 	var cmds []scriptCmd
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimRight(line, "\r")
 		if line == "" {
 			continue
@@ -159,8 +157,7 @@ func parseArg(s string) (string, string) {
 // trailing "> " (the shell exit prompt) is excluded.
 func parseResults(s string) []string {
 	var results []string
-	lines := strings.Split(s, "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimRight(line, "\r")
 		if !strings.HasPrefix(line, "> ") {
 			continue

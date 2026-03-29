@@ -8,6 +8,25 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
+// AsNode performs a safe type assertion on a [Node], returning the
+// concrete type T and true if the assertion succeeds, or the zero value
+// of T and false otherwise.
+//
+//	if elem, ok := helium.AsNode[*helium.Element](node); ok {
+//	    // use elem
+//	}
+func AsNode[T Node](n Node) (T, bool) {
+	if n == nil {
+		var zero T
+		return zero, false
+	}
+	if v, ok := n.(T); ok {
+		return v, true
+	}
+	var zero T
+	return zero, false
+}
+
 // Node is a read-only view of an XML document tree node (libxml2: xmlNode).
 type Node interface {
 	baseDocNode() *docnode // prevents external implementation
@@ -90,7 +109,7 @@ const (
 	XIncludeStartNode
 	XIncludeEndNode
 
-	// This doesn't exist in libxml2. Do we need it?
+	// NamespaceNode represents a namespace declaration (does not exist in libxml2).
 	NamespaceNode
 )
 
@@ -173,8 +192,10 @@ func (n docnode) Content() []byte {
 func appendText(n MutableNode, b []byte) error {
 	// Fast path: if last child is already a text node, append directly
 	// without allocating a new Text node.
-	if last := n.LastChild(); last != nil && last.Type() == TextNode {
-		return last.(*Text).AppendText(b)
+	if last := n.LastChild(); last != nil {
+		if t, ok := AsNode[*Text](last); ok {
+			return t.AppendText(b)
+		}
 	}
 	// Use slab allocator when the node belongs to a document.
 	if doc := n.OwnerDocument(); doc != nil {
@@ -295,7 +316,7 @@ func addChild(n MutableNode, cur Node) error {
 
 	// AddSibling handles setting the parent, and the
 	// lastChild pointer (also merges adjacent text nodes)
-	if err := l.(MutableNode).AddSibling(cur); err != nil {
+	if err := l.(MutableNode).AddSibling(cur); err != nil { //nolint:forcetypeassert
 		return err
 	}
 
@@ -407,9 +428,9 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	}
 
 	// Determine the true last replacement node
-	last := cur.(MutableNode)
+	last := cur.(MutableNode) //nolint:forcetypeassert
 	for i := 1; i < len(nodes); i++ {
-		c := nodes[i].(MutableNode)
+		c := nodes[i].(MutableNode) //nolint:forcetypeassert
 		c.SetParent(last.Parent())
 		c.SetPrevSibling(last)
 		last.SetNextSibling(c)
@@ -419,13 +440,13 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	// Link last replacement to whatever followed n
 	last.SetNextSibling(afterN)
 	if afterN != nil {
-		afterN.(MutableNode).SetPrevSibling(last)
+		afterN.(MutableNode).SetPrevSibling(last) //nolint:forcetypeassert
 	}
 
 	// Update parent's lastChild if n was the last child and we added more nodes
 	if afterN == nil && len(nodes) > 1 {
 		if parent := cdn.parent; parent != nil {
-			setLastChild(parent.(MutableNode), last)
+			setLastChild(parent.(MutableNode), last) //nolint:forcetypeassert
 		}
 	}
 
@@ -518,7 +539,7 @@ func setListDoc(n MutableNode, doc *Document) {
 
 	for cur := Node(n); cur != nil; cur = cur.NextSibling() {
 		if cur.OwnerDocument() != doc {
-			cur.(MutableNode).SetTreeDoc(doc)
+			cur.(MutableNode).SetTreeDoc(doc) //nolint:forcetypeassert
 		}
 	}
 }
@@ -532,18 +553,17 @@ func setTreeDoc(n MutableNode, doc *Document) {
 		return
 	}
 
-	if n.Type() == ElementNode {
-		e := n.(*Element)
+	if e, ok := AsNode[*Element](n); ok {
 		for prop := e.properties; prop != nil; prop = prop.NextAttribute() {
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
-				setListDoc(child.(MutableNode), doc)
+				setListDoc(child.(MutableNode), doc) //nolint:forcetypeassert
 			}
 		}
 	}
 	if child := n.FirstChild(); child != nil {
-		setListDoc(child.(MutableNode), doc)
+		setListDoc(child.(MutableNode), doc) //nolint:forcetypeassert
 	}
 	n.SetOwnerDocument(doc)
 }

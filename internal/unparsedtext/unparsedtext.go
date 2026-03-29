@@ -21,6 +21,7 @@ import (
 	"golang.org/x/text/transform"
 
 	iencoding "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // URIResolver resolves a URI to a readable stream.
@@ -61,7 +62,7 @@ func LoadText(ctx context.Context, cfg *Config, href, encoding string) (string, 
 		return "", err
 	}
 
-	data, httpEncoding, err := readURIWithEncoding(cfg, resolvedURI)
+	data, httpEncoding, err := readURIWithEncoding(ctx, cfg, resolvedURI)
 	if err != nil {
 		return "", &Error{Code: ErrCodeRetrieval, Message: fmt.Sprintf("cannot retrieve resource: %v", err)}
 	}
@@ -140,7 +141,7 @@ func ResolveURI(_ context.Context, cfg *Config, href string) (string, error) {
 
 // readURIWithEncoding reads the content at the resolved URI and returns
 // an optional encoding hint from HTTP Content-Type headers.
-func readURIWithEncoding(cfg *Config, uri string) ([]byte, string, error) {
+func readURIWithEncoding(ctx context.Context, cfg *Config, uri string) ([]byte, string, error) {
 	if cfg != nil && cfg.URIResolver != nil {
 		rc, err := cfg.URIResolver.ResolveURI(uri)
 		if err != nil {
@@ -156,17 +157,21 @@ func readURIWithEncoding(cfg *Config, uri string) ([]byte, string, error) {
 		return nil, "", err
 	}
 
-	if parsed.Scheme == "http" || parsed.Scheme == "https" {
+	if parsed.Scheme == lexicon.SchemeHTTP || parsed.Scheme == lexicon.SchemeHTTPS {
 		client := http.DefaultClient
 		if cfg != nil && cfg.HTTPClient != nil {
 			client = cfg.HTTPClient
 		}
-		resp, err := client.Get(uri)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+		if err != nil {
+			return nil, "", err
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, "", err
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK {
 			return nil, "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
 		}
 		data, err := io.ReadAll(resp.Body)
@@ -179,7 +184,7 @@ func readURIWithEncoding(cfg *Config, uri string) ([]byte, string, error) {
 	}
 
 	switch parsed.Scheme {
-	case "file":
+	case lexicon.SchemeFile:
 		data, err := os.ReadFile(parsed.Path)
 		return data, "", err
 	case "":
@@ -195,7 +200,7 @@ func extractHTTPCharset(contentType string) string {
 	if contentType == "" {
 		return ""
 	}
-	for _, part := range strings.Split(contentType, ";") {
+	for part := range strings.SplitSeq(contentType, ";") {
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(strings.ToLower(part), "charset=") {
 			charset := part[len("charset="):]
@@ -207,7 +212,7 @@ func extractHTTPCharset(contentType string) string {
 }
 
 // ReadURI reads the content at the resolved URI.
-func ReadURI(_ context.Context, cfg *Config, uri string) ([]byte, error) {
+func ReadURI(ctx context.Context, cfg *Config, uri string) ([]byte, error) {
 	if cfg != nil && cfg.URIResolver != nil {
 		rc, err := cfg.URIResolver.ResolveURI(uri)
 		if err != nil {
@@ -227,19 +232,23 @@ func ReadURI(_ context.Context, cfg *Config, uri string) ([]byte, error) {
 		if cfg != nil && cfg.HTTPClient != nil {
 			client = cfg.HTTPClient
 		}
-		resp, err := client.Get(uri)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
 		}
 		return io.ReadAll(resp.Body)
 	}
 
 	switch parsed.Scheme {
-	case "file":
+	case lexicon.SchemeFile:
 		return os.ReadFile(parsed.Path)
 	case "":
 		return os.ReadFile(uri)
@@ -321,11 +330,10 @@ func detectXMLDeclEncoding(data []byte) string {
 	}
 	decl := string(data[:end])
 	// Look for encoding="..." or encoding='...'.
-	idx := strings.Index(decl, "encoding")
-	if idx < 0 {
+	_, rest, found := strings.Cut(decl, "encoding")
+	if !found {
 		return ""
 	}
-	rest := decl[idx+len("encoding"):]
 	rest = strings.TrimLeft(rest, " \t\r\n")
 	if len(rest) == 0 || rest[0] != '=' {
 		return ""
@@ -339,12 +347,11 @@ func detectXMLDeclEncoding(data []byte) string {
 	if quote != '"' && quote != '\'' {
 		return ""
 	}
-	rest = rest[1:]
-	endQ := strings.IndexByte(rest, quote)
-	if endQ < 0 {
+	encVal, _, found2 := strings.Cut(rest[1:], string(quote))
+	if !found2 {
 		return ""
 	}
-	return rest[:endQ]
+	return encVal
 }
 
 // resolveEncoding determines the effective encoding from the user-specified

@@ -39,7 +39,7 @@ func fnStaticBaseURI(ctx context.Context, _ []Sequence) (Sequence, error) {
 			Value:    ec.baseURI,
 		}), nil
 	}
-	return nil, nil
+	return validNilSequence, nil
 }
 
 func fnDefaultCollation(ctx context.Context, _ []Sequence) (Sequence, error) {
@@ -60,7 +60,7 @@ func fnAvailableEnvVars(_ context.Context, _ []Sequence) (Sequence, error) {
 	}
 	for _, env := range os.Environ() {
 		if eq := len(env); eq > 0 {
-			for i := 0; i < len(env); i++ {
+			for i := range len(env) {
 				if env[i] == '=' {
 					names[env[:i]] = struct{}{}
 					break
@@ -92,7 +92,7 @@ func fnEnvironmentVariable(_ context.Context, args []Sequence) (Sequence, error)
 	}
 	val, ok := os.LookupEnv(name)
 	if !ok {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return SingleString(val), nil
 }

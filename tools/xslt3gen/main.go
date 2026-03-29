@@ -59,9 +59,9 @@ type xslDependencies struct {
 }
 
 type xslDependency struct {
-	XMLName   xml.Name
-	Value     string `xml:"value,attr"`
-	Satisfied string `xml:"satisfied,attr"`
+	XMLName   xml.Name `xml:""`
+	Value     string   `xml:"value,attr"`
+	Satisfied string   `xml:"satisfied,attr"`
 }
 
 type xslEnvironment struct {
@@ -154,8 +154,8 @@ type xslParam struct {
 }
 
 type xslResult struct {
-	XMLName xml.Name
-	Inner   []byte `xml:",innerxml"`
+	XMLName xml.Name `xml:""`
+	Inner   []byte   `xml:",innerxml"`
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ type xmlResultWrapper struct {
 }
 
 type xmlAssertion struct {
-	XMLName  xml.Name
+	XMLName  xml.Name       `xml:""`
 	Code     string         `xml:"code,attr"`
 	File     string         `xml:"file,attr"`
 	URI      string         `xml:"uri,attr"`
@@ -268,7 +268,6 @@ var knownSkips = map[string]string{
 	// targets XSD 1.1 where it is available. The 0151a variant tests XSD 1.1
 	// behavior but is gated behind the XSD_1.1 feature flag.
 	"type-available-0151": "XSD 1.0 test; our processor targets XSD 1.1 (xs:dateTimeStamp is available)",
-
 }
 
 // generatedAssetSourceAliases maps stale upstream asset paths to the source file
@@ -913,7 +912,7 @@ func getOnMultipleMatch(setDeps *xslDependencies, caseDeps *xslDependencies) str
 		}
 		for _, d := range deps.Children {
 			if d.XMLName.Local == "on-multiple-match" {
-				if d.Value == "error" {
+				if d.Value == "error" { //nolint:goconst
 					return "fail"
 				}
 			}
@@ -950,7 +949,7 @@ func getVersionResolution(setDeps *xslDependencies, caseDeps *xslDependencies) s
 }
 
 func specSupported(spec string) bool {
-	for _, s := range strings.Fields(spec) {
+	for s := range strings.FieldsSeq(spec) {
 		switch s {
 		// Our processor is XSLT 3.0.
 		// "X+" means "version X or later" — we satisfy 1.0+, 2.0+, 3.0+.
@@ -1026,9 +1025,7 @@ func resolveQNameWithAttrs(name string, attrs []xml.Attr) string {
 	if name == "" {
 		return ""
 	}
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local := name[idx+1:]
+	if prefix, local, ok := strings.Cut(name, ":"); ok {
 		for _, attr := range attrs {
 			if attr.Name.Space == "xmlns" && attr.Name.Local == prefix {
 				return helium.ClarkName(attr.Value, local)
@@ -1379,7 +1376,7 @@ func loadSchemaKnownFailures(repoRoot string) map[string]struct{} {
 		return nil
 	}
 	result := make(map[string]struct{})
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		name := strings.TrimSpace(line)
 		if name != "" && !strings.HasPrefix(name, "#") {
 			result[name] = struct{}{}

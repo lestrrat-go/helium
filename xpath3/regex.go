@@ -3,6 +3,7 @@ package xpath3
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -880,12 +881,7 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 }
 
 func isOpenCaptureGroup(groupStack []int, ref int) bool {
-	for _, group := range groupStack {
-		if group == ref {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(groupStack, ref)
 }
 
 func resolveXPathBackref(runes []rune, start, captureCount int, groupStack []int) (int, int, int, bool) {
@@ -1049,7 +1045,7 @@ func hasLargeXPathQuantifier(pattern string) bool {
 }
 
 func quantifierExceedsRE2Limit(content string) bool {
-	for _, part := range strings.Split(content, ",") {
+	for part := range strings.SplitSeq(content, ",") {
 		if part == "" {
 			continue
 		}

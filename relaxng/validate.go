@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -12,7 +13,6 @@ import (
 
 // validator holds state during document validation.
 type validator struct {
-	ctx           context.Context
 	grammar       *Grammar
 	filename      string
 	errorHandler  helium.ErrorHandler
@@ -38,7 +38,6 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 	}
 
 	v := &validator{
-		ctx:          ctx,
 		grammar:      grammar,
 		filename:     label,
 		errorHandler: handler,
@@ -140,7 +139,7 @@ func (v *validator) validatePattern(pat *pattern, state *validState) int {
 	}
 }
 
-func (v *validator) validateText(state *validState) int {
+func (v *validator) validateText(state *validState) int { //nolint:unparam // always 0 but matches validatePattern return contract
 	// Text pattern matches any text content (including empty).
 	// Consume text nodes from the sequence.
 	for len(state.seq) > 0 {
@@ -281,7 +280,6 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 // against the instance attributes and content state.
 func (v *validator) validateElementBody(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, contentState *validState) int {
-
 	// Validate direct attr patterns
 	for _, attrPat := range pat.attrs {
 		if !v.matchOneAttr(attrPat, attrs, attrUsed, elem) {
@@ -304,7 +302,6 @@ func (v *validator) validateElementBody(pat *pattern, elem *helium.Element,
 // that appear in mixed-mode (attributes inside groups/choices within elements).
 func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
-
 	if pat == nil {
 		return -1
 	}
@@ -687,7 +684,6 @@ func (b *groupBound) restore(state *validState, attrUsed []bool, v *validator) {
 // we try reducing the flexible child's consumption.
 func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
-
 	children := pat.children
 	if len(children) == 0 {
 		return 0
@@ -766,7 +762,6 @@ func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 	elem *helium.Element, attrs []*helium.Attribute, attrUsed []bool,
 	state *validState, bounds []groupBound) bool {
-
 	for j := failIdx - 1; j >= 0; j-- {
 		child := children[j]
 		isZeroFlex := child.kind == patternZeroOrMore || child.kind == patternOptional
@@ -803,7 +798,7 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 
 			// Run 'iter' iterations of the flexible child.
 			iterOK := true
-			for k := 0; k < iter; k++ {
+			for range iter {
 				savedSt := state.clone()
 				v.suppressDepth++
 				ret := v.validateContentPat(content, elem, attrs, attrUsed, state)
@@ -1307,7 +1302,7 @@ func (v *validator) validateInterleave(pat *pattern, state *validState) int {
 	return 0
 }
 
-func (v *validator) validateOptional(pat *pattern, state *validState) int {
+func (v *validator) validateOptional(pat *pattern, state *validState) int { //nolint:unparam // always 0 but matches validatePattern return contract
 	if len(pat.children) == 0 {
 		return 0
 	}
@@ -1320,7 +1315,7 @@ func (v *validator) validateOptional(pat *pattern, state *validState) int {
 	return 0
 }
 
-func (v *validator) validateZeroOrMore(pat *pattern, state *validState) int {
+func (v *validator) validateZeroOrMore(pat *pattern, state *validState) int { //nolint:unparam // always 0 but matches validatePattern return contract
 	if len(pat.children) == 0 {
 		return 0
 	}
@@ -1488,7 +1483,7 @@ func (v *validator) matchValue(pat *pattern, text string) int {
 	if pat.dataType != nil {
 		switch pat.dataType.library {
 		case "":
-			if pat.dataType.name == "token" {
+			if pat.dataType.name == lexicon.TypeToken {
 				text = normalizeToken(text)
 				expected = normalizeToken(expected)
 			}
@@ -1519,7 +1514,7 @@ func (v *validator) matchData(pat *pattern, text string) int {
 		return validateXSDType(dt.name, text, pat.params)
 	case "":
 		switch dt.name {
-		case "token":
+		case lexicon.TypeToken:
 			return 0
 		case "string":
 			return 0
@@ -1537,7 +1532,7 @@ func validateXSDType(typeName, value string, params []*param) int {
 	case "normalizedString", "token":
 		return 0
 	case "integer", "int", "long", "short", "byte",
-		"nonNegativeInteger", "positiveInteger",
+		"nonNegativeInteger", lexicon.TypePositiveInteger,
 		"nonPositiveInteger", "negativeInteger",
 		"unsignedInt", "unsignedLong", "unsignedShort", "unsignedByte":
 		return validateXSDInteger(typeName, value)
@@ -1904,12 +1899,7 @@ func (v *validator) isNullable(pat *pattern) bool {
 		}
 		return true
 	case patternChoice:
-		for _, child := range pat.children {
-			if v.isNullable(child) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(pat.children, v.isNullable)
 	case patternGroup, patternInterleave:
 		for _, child := range pat.children {
 			if !v.isNullable(child) {

@@ -265,9 +265,9 @@ var (
 	ErrTerminated    = errors.New("xslt3: terminated by xsl:message")
 	ErrInvalidOutput = errors.New("xslt3: invalid output specification")
 
-	errNilStylesheet      = errors.New("xslt3: nil stylesheet")
-	errNilDocument        = errors.New("xslt3: nil document")
-	errZeroInvocation     = errors.New("xslt3: unconfigured invocation")
+	errNilStylesheet  = errors.New("xslt3: nil stylesheet")
+	errNilDocument    = errors.New("xslt3: nil document")
+	errZeroInvocation = errors.New("xslt3: unconfigured invocation")
 )
 
 // XSLTError is a structured error with an XSLT error code.

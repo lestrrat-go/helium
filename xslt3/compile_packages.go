@@ -1,18 +1,20 @@
 package xslt3
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // compileUsePackage handles xsl:use-package by resolving and compiling the
 // referenced package, then merging its public components into the current
 // stylesheet.
-func (c *compiler) compileUsePackage(elem *helium.Element) error {
-	if err := c.ctx.Err(); err != nil {
+func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	pkgName := getAttr(elem, "name")
@@ -38,7 +40,7 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 		return fmt.Errorf("xsl:use-package: cannot read package %q: %w", pkgName, err)
 	}
 
-	doc, err := helium.NewParser().Parse(c.ctx, data)
+	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot parse package %q: %w", pkgName, err)
 	}
@@ -50,7 +52,7 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 		packageResolver: c.packageResolver,
 		isSubPackage:    true,
 	}
-	pkgSS, err := compile(c.ctx, doc, pkgCfg)
+	pkgSS, err := compile(ctx, doc, pkgCfg)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot compile package %q: %w", pkgName, err)
 	}
@@ -58,13 +60,13 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 	c.stylesheet.usedPackages = append(c.stylesheet.usedPackages, pkgSS)
 
 	// Process xsl:override children (compile overrides, validate against package)
-	oset, err := c.processOverrides(elem, pkgSS)
+	oset, err := c.processOverrides(ctx, elem, pkgSS)
 	if err != nil {
 		return err
 	}
 
 	// Merge components from the package, respecting visibility, xsl:accept rules, and overrides.
-	if err := c.mergePackageComponents(pkgSS, elem, oset); err != nil {
+	if err := c.mergePackageComponents(ctx, pkgSS, elem, oset); err != nil {
 		return err
 	}
 
@@ -123,9 +125,9 @@ func isVisibleFromOutside(vis string) bool {
 
 // mergePackageComponents merges components from a used package into the
 // current stylesheet, respecting visibility and xsl:accept rules.
-func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *helium.Element, oset *overrideSet) error {
+func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, usePackageElem *helium.Element, oset *overrideSet) error {
 	// Collect namespace bindings from the use-package element
-	nsBindings := c.collectElemNamespaces(usePackageElem)
+	nsBindings := c.collectElemNamespaces(ctx, usePackageElem)
 
 	// Parse xsl:accept rules
 	acceptRules := parseAcceptRules(usePackageElem, nsBindings)
@@ -139,7 +141,7 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 	}
 
 	// Parse xsl:override children (collect overridden component names)
-	overrideNames := c.collectOverrideNames(usePackageElem, nsBindings)
+	overrideNames := c.collectOverrideNames(ctx, usePackageElem, nsBindings)
 
 	// XTSE3055: it is a static error if an override declaration is homonymous
 	// with any other declaration in the using package, regardless of import
@@ -534,14 +536,14 @@ func resolveTemplateModes(mode string) []string {
 	}
 	if len(fields) == 1 {
 		m := fields[0]
-		if m == "#default" || m == "#unnamed" {
+		if m == lexicon.ModeDefault || m == lexicon.ModeUnnamed {
 			return []string{""}
 		}
 		return []string{m}
 	}
 	var modes []string
 	for _, m := range fields {
-		if m == "#default" || m == "#unnamed" {
+		if m == lexicon.ModeDefault || m == lexicon.ModeUnnamed {
 			m = ""
 		}
 		modes = append(modes, m)
@@ -576,9 +578,9 @@ func isAcceptVisibilityCompatible(declared, accepted string) bool {
 
 // splitOverrideKey splits an override key "type:name" into its components.
 func splitOverrideKey(key string) []string {
-	idx := strings.Index(key, ":")
-	if idx < 0 {
+	typ, name, ok := strings.Cut(key, ":")
+	if !ok {
 		return nil
 	}
-	return []string{key[:idx], key[idx+1:]}
+	return []string{typ, name}
 }

@@ -50,8 +50,8 @@ func (s *sourceInfo) setSourceInfo(line int, module string) {
 
 func (s *sourceInfo) getSourceLine() int        { return s.SourceLine }
 func (s *sourceInfo) getSourceModule() string   { return s.SourceModule }
-func (s *sourceInfo) getStaticBaseURI() string   { return s.StaticBaseURI }
-func (s *sourceInfo) setStaticBaseURI(v string)  { s.StaticBaseURI = v }
+func (s *sourceInfo) getStaticBaseURI() string  { return s.StaticBaseURI }
+func (s *sourceInfo) setStaticBaseURI(v string) { s.StaticBaseURI = v }
 
 // applyTemplatesInst represents xsl:apply-templates.
 type applyTemplatesInst struct {
@@ -249,12 +249,12 @@ func (*copyInst) instructionTag() {}
 // copyOfInst represents xsl:copy-of.
 type copyOfInst struct {
 	sourceInfo
-	Select             *xpath3.Expression
-	Validation         string // "strict", "lax", "preserve", "strip"
-	TypeName           string // type annotation (e.g., "Q{ns}typeName")
-	CopyNamespaces     bool   // copy-namespaces="yes" (default true)
-	CopyNamespacesAVT  *avt   // shadow attr _copy-namespaces (overrides CopyNamespaces)
-	CopyAccumulators   bool   // copy-accumulators="yes" (default false)
+	Select            *xpath3.Expression
+	Validation        string // "strict", "lax", "preserve", "strip"
+	TypeName          string // type annotation (e.g., "Q{ns}typeName")
+	CopyNamespaces    bool   // copy-namespaces="yes" (default true)
+	CopyNamespacesAVT *avt   // shadow attr _copy-namespaces (overrides CopyNamespaces)
+	CopyAccumulators  bool   // copy-accumulators="yes" (default false)
 }
 
 func (*copyOfInst) instructionTag() {}
@@ -343,38 +343,38 @@ type resultDocumentInst struct {
 	sourceInfo
 	Href             *avt
 	Body             []instruction
-	Format           string  // name of xsl:output to use (static format attribute)
-	FormatAVT        *avt    // dynamic format attribute (when it contains {…})
-	Method           string  // output method override (from method attribute)
-	ItemSeparator    *avt   // item-separator override (avt); nil = not specified
-	ItemSeparatorSet bool   // true when item-separator attribute is present (including #absent)
+	Format           string   // name of xsl:output to use (static format attribute)
+	FormatAVT        *avt     // dynamic format attribute (when it contains {…})
+	Method           string   // output method override (from method attribute)
+	ItemSeparator    *avt     // item-separator override (avt); nil = not specified
+	ItemSeparatorSet bool     // true when item-separator attribute is present (including #absent)
 	Validation       string   // "strict", "lax", "preserve", "strip"
 	TypeName         string   // type annotation (e.g., "Q{ns}typeName")
 	UseCharacterMaps []string // names of character maps to use
 
-	NSBindings           map[string]string // compile-time namespace bindings for QName resolution
+	NSBindings map[string]string // compile-time namespace bindings for QName resolution
 	// Serialization parameter AVTs (evaluated at runtime).
-	OutputVersion        *avt
-	Encoding             *avt
-	Indent               *avt
-	OmitXMLDeclaration   *avt
-	Standalone           *avt
-	DoctypeSystem        *avt
-	DoctypePublic        *avt
-	CDATASectionElements *avt
-	ByteOrderMark        *avt
-	MethodAVT            *avt // method as avt (overrides Method if non-nil)
-	MediaType            *avt
-	HTMLVersion          *avt
-	IncludeContentType   *avt
-	AllowDuplicateNames   *avt
-	EscapeURIAttributes       *avt
-	JSONNodeOutputMethodAVT   *avt    // json-node-output-method avt
-	NormalizationForm         *avt     // normalization-form avt
-	SuppressIndentation       []string // suppress-indentation element names
-	ParameterDocAVT           *avt    // parameter-document avt
-	ParameterDocOutputDef *OutputDef // resolved output def from parameter-document (compile-time)
-	BuildTree             *bool  // build-tree: nil=default(true), true/false
+	OutputVersion           *avt
+	Encoding                *avt
+	Indent                  *avt
+	OmitXMLDeclaration      *avt
+	Standalone              *avt
+	DoctypeSystem           *avt
+	DoctypePublic           *avt
+	CDATASectionElements    *avt
+	ByteOrderMark           *avt
+	MethodAVT               *avt // method as avt (overrides Method if non-nil)
+	MediaType               *avt
+	HTMLVersion             *avt
+	IncludeContentType      *avt
+	AllowDuplicateNames     *avt
+	EscapeURIAttributes     *avt
+	JSONNodeOutputMethodAVT *avt       // json-node-output-method avt
+	NormalizationForm       *avt       // normalization-form avt
+	SuppressIndentation     []string   // suppress-indentation element names
+	ParameterDocAVT         *avt       // parameter-document avt
+	ParameterDocOutputDef   *OutputDef // resolved output def from parameter-document (compile-time)
+	BuildTree               *bool      // build-tree: nil=default(true), true/false
 }
 
 func (*resultDocumentInst) instructionTag() {}
@@ -579,15 +579,15 @@ type mergeSource struct {
 type mergeKey struct {
 	Select       *xpath3.Expression
 	Body         []instruction // used when select is absent
-	Order        string // "ascending" or "descending" (static)
-	OrderAVT     *avt   // non-nil when order is an avt
-	DataType     string // "text" or "number" (static)
-	DataTypeAVT  *avt   // non-nil when data-type is an avt
-	HasCollation bool   // true when lang, collation, or case-order is specified
-	Collation    string // collation URI (for XTDE2210 mismatch detection)
-	CollationAVT *avt   // non-nil when collation is an AVT
-	Lang         string // lang attribute value
-	CaseOrder    string // case-order attribute value
+	Order        string        // "ascending" or "descending" (static)
+	OrderAVT     *avt          // non-nil when order is an avt
+	DataType     string        // "text" or "number" (static)
+	DataTypeAVT  *avt          // non-nil when data-type is an avt
+	HasCollation bool          // true when lang, collation, or case-order is specified
+	Collation    string        // collation URI (for XTDE2210 mismatch detection)
+	CollationAVT *avt          // non-nil when collation is an AVT
+	Lang         string        // lang attribute value
+	CaseOrder    string        // case-order attribute value
 }
 
 // documentInst represents xsl:document.
@@ -637,7 +637,7 @@ type evaluateInst struct {
 	NamespaceContext *xpath3.Expression // namespace-context attribute (optional, expression producing a node)
 	WithParamsExpr   *xpath3.Expression // with-params attribute (optional, map expression)
 	As               string             // as attribute (optional sequence type)
-	SchemaAwareAVT *avt // nil = absent; non-nil = schema-aware attribute present
+	SchemaAwareAVT   *avt               // nil = absent; non-nil = schema-aware attribute present
 	Params           []*withParam       // child xsl:with-param elements
 }
 

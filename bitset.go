@@ -9,8 +9,8 @@ type LoadSubsetOption int
 
 const (
 	DetectIDs     LoadSubsetOption = 1 << (iota + 1)
-	CompleteAttrs                                     // 4
-	SkipIDs                                           // 8
+	CompleteAttrs                  // 4
+	SkipIDs                        // 8
 )
 
 func (p *LoadSubsetOption) Set(n LoadSubsetOption) {

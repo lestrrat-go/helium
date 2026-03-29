@@ -41,17 +41,18 @@ var (
 	ErrDuplicateAttribute = errors.New("duplicate attribute")
 	ErrEntityBoundary     = errors.New("entity boundary violation")
 	errParserStopped      = errors.New("parser stopped")
+	errNoCursor           = errors.New("parser has no input")
 )
 
-// ErrDTDDupToken is returned when a DTD attribute enumeration contains
+// DTDDupTokenError is returned when a DTD attribute enumeration contains
 // a duplicate token value.
-type ErrDTDDupToken struct {
+type DTDDupTokenError struct {
 	Name string
 }
 
-// ErrAttrNotFound is returned when a referenced attribute token cannot
+// AttrNotFoundError is returned when a referenced attribute token cannot
 // be found in the DTD attribute declarations.
-type ErrAttrNotFound struct {
+type AttrNotFoundError struct {
 	Token string
 }
 
@@ -73,52 +74,52 @@ type ErrParseError struct {
 // syntactic violation detected by the parser. These errors typically appear
 // as the Err field of an [ErrParseError].
 var (
-	ErrAmpersandRequired            = errors.New("'&' was required here")
-	ErrAttrListNotFinished          = errors.New("attrlist must finish with a ')'")
-	ErrAttrListNotStarted           = errors.New("attrlist must start with a '('")
-	ErrAttributeNameRequired        = errors.New("attribute name was required here (ATTLIST)")
-	ErrByteCursorRequired           = errors.New("inconsistent state: required ByteCursor")
-	ErrDocTypeNameRequired          = errors.New("doctype name required")
-	ErrDocTypeNotFinished           = errors.New("doctype not finished")
-	ErrDocumentEnd                  = errors.New("extra content at document end")
-	ErrEOF                          = errors.New("end of file reached")
-	ErrElementContentNotFinished    = errors.New("element content not finished")
-	ErrEmptyDocument                = errors.New("start tag expected, '<' not found")
-	ErrEntityNotFound               = errors.New("entity not found")
-	ErrEqualSignRequired            = errors.New("'=' was required here")
-	ErrGtRequired                   = errors.New("'>' was required here")
-	ErrHyphenInComment              = errors.New("'--' not allowed in comment")
-	ErrInvalidChar                  = errors.New("invalid char")
-	ErrInvalidComment               = errors.New("invalid comment section")
-	ErrInvalidCDSect                = errors.New("invalid CDATA section")
-	ErrInvalidDocument              = errors.New("invalid document")
-	ErrInvalidDTD                   = errors.New("invalid DTD section")
-	ErrInvalidElementDecl           = errors.New("invalid element declaration")
-	ErrInvalidEncodingName          = errors.New("invalid encoding name")
-	ErrInvalidName                  = errors.New("invalid xml name")
-	ErrInvalidProcessingInstruction = errors.New("invalid processing instruction")
-	ErrInvalidVersionNum            = errors.New("invalid version")
-	ErrInvalidXMLDecl               = errors.New("invalid XML declaration")
-	ErrInvalidParserCtx             = errors.New("invalid parser context")
-	ErrLtSlashRequired              = errors.New("'</' is required")
-	ErrMisplacedCDATAEnd            = errors.New("misplaced CDATA end ']]>'")
-	ErrNameTooLong                  = errors.New("name is too long")
-	ErrNameRequired                 = errors.New("name is required")
-	ErrNmtokenRequired              = errors.New("nmtoken is required")
-	ErrNotationNameRequired         = errors.New("notation name expected in NOTATION declaration")
-	ErrNotationNotFinished          = errors.New("notation must finish with a ')'")
-	ErrNotationNotStarted           = errors.New("notation must start with a '('")
-	ErrOpenParenRequired            = errors.New("'(' is required")
-	ErrPCDATARequired               = errors.New("'#PCDATA' required")
-	ErrPercentRequired              = errors.New("'%' is required")
-	ErrPrematureEOF                 = errors.New("end of document reached")
-	ErrUndeclaredEntity             = errors.New("undeclared entity")
-	ErrSemicolonRequired            = errors.New("';' is required")
+	ErrAmpersandRequired             = errors.New("'&' was required here")
+	ErrAttrListNotFinished           = errors.New("attrlist must finish with a ')'")
+	ErrAttrListNotStarted            = errors.New("attrlist must start with a '('")
+	ErrAttributeNameRequired         = errors.New("attribute name was required here (ATTLIST)")
+	ErrByteCursorRequired            = errors.New("inconsistent state: required ByteCursor")
+	ErrDocTypeNameRequired           = errors.New("doctype name required")
+	ErrDocTypeNotFinished            = errors.New("doctype not finished")
+	ErrDocumentEnd                   = errors.New("extra content at document end")
+	ErrEOF                           = errors.New("end of file reached")
+	ErrElementContentNotFinished     = errors.New("element content not finished")
+	ErrEmptyDocument                 = errors.New("start tag expected, '<' not found")
+	ErrEntityNotFound                = errors.New("entity not found")
+	ErrEqualSignRequired             = errors.New("'=' was required here")
+	ErrGtRequired                    = errors.New("'>' was required here")
+	ErrHyphenInComment               = errors.New("'--' not allowed in comment")
+	ErrInvalidChar                   = errors.New("invalid char")
+	ErrInvalidComment                = errors.New("invalid comment section")
+	ErrInvalidCDSect                 = errors.New("invalid CDATA section")
+	ErrInvalidDocument               = errors.New("invalid document")
+	ErrInvalidDTD                    = errors.New("invalid DTD section")
+	ErrInvalidElementDecl            = errors.New("invalid element declaration")
+	ErrInvalidEncodingName           = errors.New("invalid encoding name")
+	ErrInvalidName                   = errors.New("invalid xml name")
+	ErrInvalidProcessingInstruction  = errors.New("invalid processing instruction")
+	ErrInvalidVersionNum             = errors.New("invalid version")
+	ErrInvalidXMLDecl                = errors.New("invalid XML declaration")
+	ErrInvalidParserCtx              = errors.New("invalid parser context")
+	ErrLtSlashRequired               = errors.New("'</' is required")
+	ErrMisplacedCDATAEnd             = errors.New("misplaced CDATA end ']]>'")
+	ErrNameTooLong                   = errors.New("name is too long")
+	ErrNameRequired                  = errors.New("name is required")
+	ErrNmtokenRequired               = errors.New("nmtoken is required")
+	ErrNotationNameRequired          = errors.New("notation name expected in NOTATION declaration")
+	ErrNotationNotFinished           = errors.New("notation must finish with a ')'")
+	ErrNotationNotStarted            = errors.New("notation must start with a '('")
+	ErrOpenParenRequired             = errors.New("'(' is required")
+	ErrPCDATARequired                = errors.New("'#PCDATA' required")
+	ErrPercentRequired               = errors.New("'%' is required")
+	ErrPrematureEOF                  = errors.New("end of document reached")
+	ErrUndeclaredEntity              = errors.New("undeclared entity")
+	ErrSemicolonRequired             = errors.New("';' is required")
 	ErrConditionalSectionNotFinished = errors.New("conditional section ']]>' expected")
-	ErrConditionalSectionKeyword    = errors.New("INCLUDE or IGNORE keyword expected in conditional section")
-	ErrSpaceRequired                = errors.New("space required")
-	ErrStartTagRequired             = errors.New("start tag expected, '<' not found")
-	ErrValueRequired                = errors.New("value required")
+	ErrConditionalSectionKeyword     = errors.New("INCLUDE or IGNORE keyword expected in conditional section")
+	ErrSpaceRequired                 = errors.New("space required")
+	ErrStartTagRequired              = errors.New("start tag expected, '<' not found")
+	ErrValueRequired                 = errors.New("value required")
 )
 
 // ErrorLevel returns the severity of this parse error, satisfying the
@@ -187,11 +188,8 @@ func (e ErrParseError) FormatError() string {
 		b.WriteByte('\n')
 		b.WriteString(e.Line)
 		b.WriteByte('\n')
-		col := e.Column - 1
-		if col < 0 {
-			col = 0
-		}
-		for i := 0; i < col; i++ {
+		col := max(e.Column-1, 0)
+		for range col {
 			b.WriteByte(' ')
 		}
 		b.WriteByte('^')
@@ -201,6 +199,6 @@ func (e ErrParseError) FormatError() string {
 }
 
 // Error returns the diagnostic message for this duplicate token error.
-func (e ErrDTDDupToken) Error() string {
+func (e DTDDupTokenError) Error() string {
 	return "standalone: attribute enumeration value token " + e.Name + " duplicated"
 }

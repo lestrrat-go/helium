@@ -11,15 +11,15 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
-func evalInstanceOfExpr(evalFn exprEvaluator, ec *evalContext, e InstanceOfExpr) (Sequence, error) {
-	seq, err := evalFn(ec, e.Expr)
+func evalInstanceOfExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e InstanceOfExpr) (Sequence, error) {
+	seq, err := evalFn(ctx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
 	return SingleBoolean(matchesSequenceType(seq, e.Type, ec)), nil
 }
 
-func evalCastExpr(evalFn exprEvaluator, ec *evalContext, e CastExpr) (Sequence, error) {
+func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e CastExpr) (Sequence, error) {
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	if isAbstractCastTarget(targetType) {
 		return nil, &XPathError{
@@ -27,13 +27,13 @@ func evalCastExpr(evalFn exprEvaluator, ec *evalContext, e CastExpr) (Sequence, 
 			Message: fmt.Sprintf("cannot use abstract type %s as cast target", targetType),
 		}
 	}
-	seq, err := evalFn(ec, e.Expr)
+	seq, err := evalFn(ctx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
 	if seqLen(seq) == 0 {
 		if e.AllowEmpty {
-			return nil, nil
+			return validNilSequence, nil
 		}
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "cast requires non-empty sequence"}
 	}
@@ -79,7 +79,7 @@ func evalCastExpr(evalFn exprEvaluator, ec *evalContext, e CastExpr) (Sequence, 
 				// Validate facets for user-defined types using Q{ns}local format.
 				s, _ := AtomicToString(result)
 				annName := QAnnotation(ns, e.Type.Name)
-				if facetErr := ec.schemaDeclarations.ValidateCast(s, annName); facetErr != nil {
+				if facetErr := ec.schemaDeclarations.ValidateCast(ctx, s, annName); facetErr != nil {
 					return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 				}
 				result.TypeName = targetType
@@ -100,7 +100,7 @@ func evalCastExpr(evalFn exprEvaluator, ec *evalContext, e CastExpr) (Sequence, 
 	return SingleAtomic(result), nil
 }
 
-func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Sequence, error) {
+func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e CastableExpr) (Sequence, error) {
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	// Abstract types raise a static error even for castable (XPST0080)
 	if isAbstractCastTarget(targetType) {
@@ -109,7 +109,7 @@ func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Se
 			Message: fmt.Sprintf("cannot use abstract type %s as castable target", targetType),
 		}
 	}
-	seq, err := evalFn(ec, e.Expr)
+	seq, err := evalFn(ctx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Se
 	}
 	av, err := AtomizeItem(seq.Get(0))
 	if err != nil {
-		return SingleBoolean(false), nil
+		return SingleBoolean(false), nil //nolint:nilerr // castable returns false on atomization failure
 	}
 	// xs:QName cast from string requires namespace context
 	if targetType == TypeQName {
@@ -134,7 +134,7 @@ func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Se
 	if targetType == TypeENTITIES || targetType == TypeIDREFS || targetType == TypeNMTOKENS {
 		s, err := AtomicToString(av)
 		if err != nil {
-			return SingleBoolean(false), nil
+			return SingleBoolean(false), nil //nolint:nilerr // castable returns false on conversion failure
 		}
 		return SingleBoolean(isValidListCastable(s, targetType)), nil
 	}
@@ -167,13 +167,13 @@ func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Se
 					av.TypeName == TypeQName || av.TypeName == TypeNOTATION || isQV
 				if srcOK {
 					s, _ := AtomicToString(av)
-					castErr = ec.schemaDeclarations.ValidateCastWithNS(s, annName, ec.namespaces)
+					castErr = ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, ec.namespaces)
 				}
 			} else {
 				result, baseErr := CastAtomic(av, builtinBase)
 				if baseErr == nil {
 					s, _ := AtomicToString(result)
-					castErr = ec.schemaDeclarations.ValidateCast(s, annName)
+					castErr = ec.schemaDeclarations.ValidateCast(ctx, s, annName)
 				} else {
 					castErr = baseErr
 				}
@@ -208,8 +208,8 @@ func isValidListCastable(s string, listType string) bool {
 	return true
 }
 
-func evalTreatAsExpr(evalFn exprEvaluator, ec *evalContext, e TreatAsExpr) (Sequence, error) {
-	seq, err := evalFn(ec, e.Expr)
+func evalTreatAsExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e TreatAsExpr) (Sequence, error) {
+	seq, err := evalFn(ctx, ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +225,7 @@ func evalTreatAsExpr(evalFn exprEvaluator, ec *evalContext, e TreatAsExpr) (Sequ
 func resolveToBuiltinBase(local, ns string, decls SchemaDeclarations) string {
 	current := local
 	currentNS := ns
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		baseType, ok := decls.LookupSchemaType(current, currentNS)
 		if !ok {
 			return ""
@@ -721,7 +721,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 					// Contravariant: the function's declared param type must be a supertype
 					// of (or same as) the test's param type. In practice, this means the
 					// test's param type must be a subtype of the function's param type.
-						if !isSequenceSubtype(testParam, v.ParamTypes[i], ec) {
+					if !isSequenceSubtype(testParam, v.ParamTypes[i], ec) {
 						return false
 					}
 				}
@@ -1035,9 +1035,9 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 	s := strings.TrimSpace(v.StringVal())
 	prefix := ""
 	local := s
-	if idx := strings.IndexByte(s, ':'); idx >= 0 {
-		prefix = s[:idx]
-		local = s[idx+1:]
+	if p, l, ok := strings.Cut(s, ":"); ok {
+		prefix = p
+		local = l
 	}
 
 	if !xmlchar.IsValidNCName(local) || (prefix != "" && !xmlchar.IsValidNCName(prefix)) {

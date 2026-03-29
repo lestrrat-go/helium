@@ -17,7 +17,7 @@ func (pctx *parserCtx) skipBlanks(ctx context.Context) bool {
 	}
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return false
 	}
 	for c := cur.PeekAt(i); isBlankByte(c) && !cur.Done(); c = cur.PeekAt(i) {
 		i++
@@ -92,7 +92,7 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 
 	cur := ctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return false
 	}
 	if c := cur.Peek(); c != '<' && c != 0xD {
 		return false

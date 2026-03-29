@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -279,8 +279,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 // ──────────────────────────────────────────────────────────────────────
 
 func qt3TestDataDir() string {
-	_, f, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "testdata")
+	return heliumtest.TestDir("testdata", "qt3ts", "testdata")
 }
 
 func qt3DefaultBaseURI(tc qt3Test) string {
@@ -365,12 +364,10 @@ func qt3RelativeResourceBase(relPath, uri string) string {
 func qt3NeedsRelativeUnparsedTextBaseURI(expr string) bool {
 	const name = "unparsed-text"
 
-	idx := strings.Index(expr, name)
-	if idx < 0 {
+	_, rest, found := strings.Cut(expr, name)
+	if !found {
 		return false
 	}
-
-	rest := expr[idx+len(name):]
 	return strings.HasPrefix(rest, "(") ||
 		strings.HasPrefix(rest, "-lines(") ||
 		strings.HasPrefix(rest, "-available(")
@@ -433,7 +430,7 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 			seq := make(xpath3.ItemSlice, 0, len(col.SourceDocs))
 			uris := make([]string, 0, len(col.SourceDocs))
 			for _, src := range col.SourceDocs {
-				sourceDoc := qt3ParseDocSource(t, src)
+				sourceDoc := qt3ParseDocSource(t, src) //nolint:contextcheck
 				seq = append(seq, xpath3.NodeItem{Node: sourceDoc})
 				if src.URI != "" {
 					uris = append(uris, src.URI)
@@ -873,11 +870,11 @@ func qt3FormatSeq(seq xpath3.Sequence) string {
 // qt3SharedServer is a package-level shared HTTP test server.
 // All qt3RunTests calls share this single server instead of creating 356 separate ones.
 var qt3SharedServer struct {
-	once     sync.Once
-	srv      *httptest.Server
-	client   *http.Client
-	pathMap  sync.Map // map[string]string: URL path → local file path
-	fotsDir  string
+	once    sync.Once
+	srv     *httptest.Server
+	client  *http.Client
+	pathMap sync.Map // map[string]string: URL path → local file path
+	fotsDir string
 }
 
 func qt3InitSharedServer() {
@@ -898,8 +895,8 @@ func qt3InitSharedServer() {
 		}))
 		qt3SharedServer.client = &http.Client{
 			Transport: &http.Transport{
-				DialContext: func(_ context.Context, network, _ string) (net.Conn, error) {
-					return net.Dial(network, qt3SharedServer.srv.Listener.Addr().String())
+				DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+					return (&net.Dialer{}).DialContext(ctx, network, qt3SharedServer.srv.Listener.Addr().String())
 				},
 			},
 		}
@@ -910,12 +907,9 @@ func qt3InitSharedServer() {
 func qt3RegisterResources(resourceMap map[string]string) {
 	dataDir := qt3TestDataDir()
 	for uri, relPath := range resourceMap {
-		idx := strings.Index(uri, "://")
-		if idx >= 0 {
-			rest := uri[idx+3:]
-			slashIdx := strings.Index(rest, "/")
-			if slashIdx >= 0 {
-				qt3SharedServer.pathMap.Store(rest[slashIdx:], filepath.Join(dataDir, relPath))
+		if _, afterScheme, ok := strings.Cut(uri, "://"); ok {
+			if slashIdx := strings.Index(afterScheme, "/"); slashIdx >= 0 {
+				qt3SharedServer.pathMap.Store(afterScheme[slashIdx:], filepath.Join(dataDir, relPath))
 			}
 		}
 	}

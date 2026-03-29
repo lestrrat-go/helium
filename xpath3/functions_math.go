@@ -28,7 +28,7 @@ func fnMathPi(_ context.Context, _ []Sequence) (Sequence, error) {
 
 func mathUnary(args []Sequence, fn func(float64) float64) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
@@ -55,7 +55,7 @@ func fnMathLog10(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnMathPow(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
@@ -98,7 +98,7 @@ func fnMathAtan(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnMathAtan2(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {

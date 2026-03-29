@@ -13,11 +13,11 @@ import (
 
 // buildLargeDoc generates an XML document with n <item> children, each having
 // a @cat attribute alternating between "a" and "b", and a <val> child.
-func buildLargeDoc(b *testing.B, n int) *helium.Document {
+func buildLargeDoc(b *testing.B, n int) *helium.Document { //nolint:unparam // n always 1000 but kept for flexibility
 	b.Helper()
 	var buf strings.Builder
 	buf.WriteString("<root>")
-	for i := 0; i < n; i++ {
+	for i := range n {
 		cat := "a"
 		if i%2 == 1 {
 			cat = "b"
@@ -40,7 +40,7 @@ func BenchmarkLargePathPredicate(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := eval.Evaluate(context.Background(), expr, doc)
 		require.NoError(b, err)
 		nodes, _ := result.Nodes()
@@ -57,7 +57,7 @@ func BenchmarkLargePathNoPredicate(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := eval.Evaluate(context.Background(), expr, doc)
 		require.NoError(b, err)
 		nodes, _ := result.Nodes()
@@ -74,7 +74,7 @@ func BenchmarkLargeIntersect(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := eval.Evaluate(context.Background(), expr, doc)
 		require.NoError(b, err)
 		nodes, _ := result.Nodes()
@@ -91,7 +91,7 @@ func BenchmarkLargeSimpleMap(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := eval.Evaluate(context.Background(), expr, doc)
 		require.NoError(b, err)
 		nodes, _ := result.Nodes()
@@ -109,7 +109,7 @@ func BenchmarkLargeSequencePredicate(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := eval.Evaluate(context.Background(), expr, doc)
 		require.NoError(b, err)
 	}

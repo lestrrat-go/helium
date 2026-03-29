@@ -1,5 +1,7 @@
 package elements
 
+import "slices"
+
 // ElementContext describes where an XSLT element is allowed.
 type ElementContext int
 
@@ -108,10 +110,5 @@ func (r *Registry) IsValidChild(child, parent string) bool {
 	if !ok {
 		return false
 	}
-	for _, p := range parents {
-		if p == parent {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(parents, parent)
 }

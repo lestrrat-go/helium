@@ -62,10 +62,8 @@ func benchmarkHeliumCorpus(b *testing.B, corpora []experimentCorpus) {
 	}
 
 	for _, mode := range modes {
-		mode := mode
 		b.Run(mode.name, func(b *testing.B) {
 			for _, tc := range corpora {
-				tc := tc
 				b.Run(tc.name, func(b *testing.B) {
 					parser := mode.parser()
 					data := tc.data
@@ -137,12 +135,12 @@ func newCountingSAXHandler() sax.SAX2Handler {
 	s.SetOnComment(sax.CommentFunc(func(context.Context, []byte) error { return nil }))
 	s.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(context.Context, string, string) error { return nil }))
 	s.SetOnReference(sax.ReferenceFunc(func(context.Context, string) error { return nil }))
-	s.SetOnGetEntity(sax.GetEntityFunc(func(context.Context, string) (sax.Entity, error) { return nil, nil }))
-	s.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(context.Context, string) (sax.Entity, error) { return nil, nil }))
+	s.SetOnGetEntity(sax.GetEntityFunc(func(context.Context, string) (sax.Entity, error) { return nil, nil }))                   //nolint:nilnil
+	s.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(context.Context, string) (sax.Entity, error) { return nil, nil })) //nolint:nilnil
 	s.SetOnHasExternalSubset(sax.HasExternalSubsetFunc(func(context.Context) (bool, error) { return false, nil }))
 	s.SetOnHasInternalSubset(sax.HasInternalSubsetFunc(func(context.Context) (bool, error) { return false, nil }))
 	s.SetOnIsStandalone(sax.IsStandaloneFunc(func(context.Context) (bool, error) { return false, nil }))
-	s.SetOnResolveEntity(sax.ResolveEntityFunc(func(context.Context, string, string) (sax.ParseInput, error) { return nil, nil }))
+	s.SetOnResolveEntity(sax.ResolveEntityFunc(func(context.Context, string, string) (sax.ParseInput, error) { return nil, nil })) //nolint:nilnil
 	s.SetOnAttributeDecl(sax.AttributeDeclFunc(func(context.Context, string, string, enum.AttributeType, enum.AttributeDefault, string, sax.Enumeration) error {
 		return nil
 	}))
@@ -161,7 +159,7 @@ func syntheticTinySetupDoc() []byte {
 	var b strings.Builder
 	b.Grow(2048)
 	b.WriteString(`<?xml version="1.0"?><root>`)
-	for i := 0; i < 48; i++ {
+	for range 48 {
 		b.WriteString(`<item id="`)
 		b.WriteString(strings.Repeat("x", 8))
 		b.WriteString(`" class="tiny">v</item>`)
@@ -174,7 +172,7 @@ func syntheticAttrHeavyDoc() []byte {
 	var b strings.Builder
 	b.Grow(80 * 1024)
 	b.WriteString(`<?xml version="1.0"?><root>`)
-	for i := 0; i < 320; i++ {
+	for range 320 {
 		b.WriteString(`<item a="alpha" b="beta" c="gamma" d="delta" e="epsilon" f="zeta" g="eta" h="theta"/>`)
 	}
 	b.WriteString(`</root>`)
@@ -185,7 +183,7 @@ func syntheticNamespaceHeavyDoc() []byte {
 	var b strings.Builder
 	b.Grow(64 * 1024)
 	b.WriteString(`<?xml version="1.0"?><ns0:root xmlns:ns0="urn:root" xmlns:a="urn:a" xmlns:b="urn:b" xmlns:c="urn:c" xmlns:d="urn:d">`)
-	for i := 0; i < 240; i++ {
+	for range 240 {
 		b.WriteString(`<a:item b:kind="kind" c:code="code" d:flag="true"><b:child c:value="value">text</b:child></a:item>`)
 	}
 	b.WriteString(`</ns0:root>`)
@@ -197,7 +195,7 @@ func syntheticTextDenseDoc() []byte {
 	payload := strings.Repeat("Helium text payload with repeated content. ", 128)
 	b.Grow(300 * 1024)
 	b.WriteString(`<?xml version="1.0"?><root>`)
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		b.WriteString(`<section><p>`)
 		b.WriteString(payload)
 		b.WriteString(`</p><p>`)
@@ -212,11 +210,11 @@ func syntheticDeepTreeDoc() []byte {
 	var b bytes.Buffer
 	b.Grow(16 * 1024)
 	b.WriteString(`<?xml version="1.0"?>`)
-	for i := 0; i < 512; i++ {
+	for range 512 {
 		b.WriteString(`<n>`)
 	}
 	b.WriteString(`leaf`)
-	for i := 0; i < 512; i++ {
+	for range 512 {
 		b.WriteString(`</n>`)
 	}
 	return b.Bytes()

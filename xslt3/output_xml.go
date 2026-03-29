@@ -188,10 +188,10 @@ func (ic *xmlIndentCtx) writeIndent(sw *stream.Writer) error {
 
 // expandedElemName returns the expanded name for matching suppress-indentation.
 func expandedElemName(elem *helium.Element) string {
-	if uri := string(elem.URI()); uri != "" {
-		return helium.ClarkName(uri, string(elem.LocalName()))
+	if uri := elem.URI(); uri != "" {
+		return helium.ClarkName(uri, elem.LocalName())
 	}
-	return string(elem.LocalName())
+	return elem.LocalName()
 }
 
 // elemMatchesSuppressSet checks if the element name (with prefix or expanded)
@@ -210,7 +210,7 @@ func elemMatchesSuppressSet(elem *helium.Element, suppressSet map[string]struct{
 		return true
 	}
 	// Check local name
-	if _, ok := suppressSet[string(elem.LocalName())]; ok {
+	if _, ok := suppressSet[elem.LocalName()]; ok {
 		return true
 	}
 	return false
@@ -246,7 +246,7 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 	for _, child := range children {
 		// Handle DOE marker PIs
 		if child.Type() == helium.ProcessingInstructionNode {
-			piName := string(child.Name())
+			piName := child.Name()
 			if piName == "disable-output-escaping" {
 				doeActive = true
 				continue
@@ -258,19 +258,19 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 		}
 		switch child.Type() {
 		case helium.ElementNode:
-			elem := child.(*helium.Element)
+			elem, _ := helium.AsNode[*helium.Element](child)
 			// Write indentation before start tag
 			if err := ictx.writeIndent(sw); err != nil {
 				return err
 			}
-			prefix := string(elem.Prefix())
-			local := string(elem.LocalName())
-			uri := string(elem.URI())
+			prefix := elem.Prefix()
+			local := elem.LocalName()
+			uri := elem.URI()
 			if err := sw.StartElementNS(prefix, local, uri); err != nil {
 				return err
 			}
 			// Write additional namespace declarations not handled by StartElementNS
-			elemPrefix := string(elem.Prefix())
+			elemPrefix := elem.Prefix()
 			for _, ns := range elem.Namespaces() {
 				if ns.Prefix() == elemPrefix {
 					continue // already declared by StartElementNS
@@ -335,7 +335,7 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 				return err
 			}
 		case helium.ProcessingInstructionNode:
-			if err := sw.WritePI(string(child.Name()), string(child.Content())); err != nil {
+			if err := sw.WritePI(child.Name(), string(child.Content())); err != nil {
 				return err
 			}
 		}

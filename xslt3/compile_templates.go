@@ -1,6 +1,8 @@
 package xslt3
 
 import (
+	"context"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -14,16 +16,16 @@ var templateAllowedAttrs = map[string]struct{}{
 	"visibility": {}, "use-when": {},
 }
 
-func (c *compiler) compileTemplate(elem *helium.Element) error {
-	if err := c.ctx.Err(); err != nil {
+func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := c.validateXSLTAttrs(elem, templateAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(ctx, elem, templateAllowedAttrs); err != nil {
 		return err
 	}
 	// Collect namespace declarations and xpath-default-namespace before
 	// evaluating use-when so the expression has the correct namespace context.
-	c.collectNamespaces(elem)
+	c.collectNamespaces(ctx, elem)
 	savedXPathDefaultNS := c.xpathDefaultNS
 	if xdn := getAttr(elem, "xpath-default-namespace"); xdn != "" {
 		c.xpathDefaultNS = xdn
@@ -31,7 +33,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	// Evaluate use-when before compiling the template.
 	if uw := getAttr(elem, "use-when"); uw != "" {
-		include, err := c.evaluateUseWhen(uw)
+		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			c.xpathDefaultNS = savedXPathDefaultNS
 			return err
@@ -84,7 +86,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		return staticError(errCodeXTSE0020, "invalid name %q on xsl:template", nameAttr)
 	}
 	if nameAttr != "" {
-		if err := c.checkQNamePrefix(nameAttr, "xsl:template"); err != nil {
+		if err := c.checkQNamePrefix(ctx, nameAttr, "xsl:template"); err != nil {
 			return err
 		}
 	}
@@ -160,17 +162,17 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 			return staticError(errCodeXTSE0550, "#all must not appear with other modes in xsl:template/@mode")
 		}
 		// Resolve mode QNames to Clark notation for namespace-aware matching
-		tmpl.Mode = c.resolveMode(modeAttr)
+		tmpl.Mode = c.resolveMode(ctx, modeAttr)
 	}
 	// XSLT 3.0 §6.7: if the stylesheet (or an included/imported module) has
 	// default-mode, templates without an explicit mode attribute belong to it.
 	if tmpl.Mode == "" && c.defaultMode != "" {
-		tmpl.Mode = c.resolveMode(c.defaultMode)
+		tmpl.Mode = c.resolveMode(ctx, c.defaultMode)
 	}
 
 	// Record mode usage for XTSE3085 checking (only match templates have modes)
 	if matchAttr != "" {
-		c.recordModeUsage(tmpl.Mode)
+		c.recordModeUsage(ctx, tmpl.Mode)
 	}
 
 	hasExplicitPriority := false
@@ -195,17 +197,15 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	savedExcludes := c.localExcludes
 	if erp := getAttr(elem, "exclude-result-prefixes"); erp != "" {
 		newExcludes := make(map[string]struct{})
-		for k, v := range c.localExcludes {
-			newExcludes[k] = v
-		}
-		if erp == "#all" {
+		maps.Copy(newExcludes, c.localExcludes)
+		if erp == lexicon.ModeAll {
 			for prefix := range c.stylesheet.namespaces {
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExcludes[uri] = struct{}{}
 				}
 			}
 		} else {
-			for _, prefix := range strings.Fields(erp) {
+			for prefix := range strings.FieldsSeq(erp) {
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExcludes[uri] = struct{}{}
 				}
@@ -227,7 +227,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	// Handle xml:space on xsl:template
 	savedPreserveSpace := c.preserveSpace
 	if xs := getAttr(elem, lexicon.QNameXMLSpace); xs != "" {
-		c.preserveSpace = (xs == "preserve")
+		c.preserveSpace = (xs == lexicon.SpacePreserve)
 	}
 
 	// Handle version on xsl:template for forwards-compatible processing
@@ -237,7 +237,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	}
 
 	// Compile template body: first xsl:param elements, then instructions
-	ctxDecl, body, params, err := c.compileTemplateBodyEx(elem, false)
+	ctxDecl, body, params, err := c.compileTemplateBodyEx(ctx, elem, false)
 	c.effectiveVersion = savedVersion
 	c.expandText = savedExpandText
 	c.preserveSpace = savedPreserveSpace
@@ -254,7 +254,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		tmpl.ContextItemUse = ctxDecl.use
 	}
 	tmplAs := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(tmplAs, "xsl:template"); err != nil {
+	if err := c.validateAsSequenceType(ctx, tmplAs, "xsl:template"); err != nil {
 		return err
 	}
 	tmpl.As = tmplAs
@@ -309,7 +309,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 		mode := tmpl.Mode
 		for _, t := range templates {
-			c.registerTemplateInModes(t, mode)
+			c.registerTemplateInModes(ctx, t, mode)
 		}
 	}
 
@@ -317,7 +317,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 }
 
 // registerTemplateInModes adds a template to the appropriate mode template lists.
-func (c *compiler) registerTemplateInModes(tmpl *template, mode string) {
+func (c *compiler) registerTemplateInModes(_ context.Context, tmpl *template, mode string) {
 	if mode == modeAll {
 		// Register in all existing modes plus default
 		for m := range c.stylesheet.modeTemplates {
@@ -330,7 +330,7 @@ func (c *compiler) registerTemplateInModes(tmpl *template, mode string) {
 		return
 	}
 	// XSLT 2.0+: mode can be a whitespace-separated list of mode names.
-	// Each mode name can be a QName, "#default", "#unnamed", or "#all".
+	// Each mode name can be a QName, "#default", "#unnamed", or lexicon.ModeAll.
 	modes := strings.Fields(mode)
 	if len(modes) <= 1 {
 		// Single mode (or empty = default mode)
@@ -358,12 +358,12 @@ type contextItemDecl struct {
 	use string // "required", "optional", "absent"
 }
 
-func (c *compiler) compileTemplateBody(elem *helium.Element) ([]instruction, []*param, error) {
-	_, body, params, err := c.compileTemplateBodyEx(elem, false)
+func (c *compiler) compileTemplateBody(ctx context.Context, elem *helium.Element) ([]instruction, []*param, error) {
+	_, body, params, err := c.compileTemplateBodyEx(ctx, elem, false)
 	return body, params, err
 }
 
-func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) (*contextItemDecl, []instruction, []*param, error) {
+func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Element, isFunction bool) (*contextItemDecl, []instruction, []*param, error) {
 	var params []*param
 	var body []instruction
 	var ctxDecl *contextItemDecl
@@ -374,7 +374,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	for ch := range helium.Children(elem) {
 		if e, ok := ch.(*helium.Element); ok && e.URI() == lexicon.NamespaceXSLT {
 			ln := e.LocalName()
-			if ln == "context-item" || ln == "param" {
+			if ln == "context-item" || ln == lexicon.XSLTElementParam {
 				lastDeclNode = ch
 			}
 		}
@@ -401,7 +401,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 				if len(params) > 0 {
 					return nil, nil, nil, staticError(errCodeXTSE0010, "xsl:context-item must appear before xsl:param")
 				}
-				if err := c.validateContextItem(v); err != nil {
+				if err := c.validateContextItem(ctx, v); err != nil {
 					return nil, nil, nil, err
 				}
 				asVal := getAttr(v, "as")
@@ -422,7 +422,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 					return nil, nil, nil, staticError(errCodeXTSE0020,
 						"xsl:param %q: static attribute is not allowed on template/function parameters", pname)
 				}
-				p, err := c.compileParamDef(v)
+				p, err := c.compileParamDef(ctx, v)
 				if err != nil {
 					return nil, nil, nil, err
 				}
@@ -438,7 +438,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 			}
 			inParams = false
 			sawContent = true
-			inst, err := c.compileInstruction(v)
+			inst, err := c.compileInstruction(ctx, v)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -452,7 +452,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 			if !pastDecls && strings.TrimSpace(text) == "" {
 				continue
 			}
-			if !c.shouldStripText(text) {
+			if !c.shouldStripText(ctx, text) {
 				inParams = false
 				sawContent = true
 				inst := &literalTextInst{Value: text}
@@ -500,9 +500,9 @@ var contextItemAllowedAttrs = map[string]struct{}{
 }
 
 // validateContextItem checks compile-time constraints on xsl:context-item.
-func (c *compiler) validateContextItem(elem *helium.Element) error {
+func (c *compiler) validateContextItem(ctx context.Context, elem *helium.Element) error {
 	// XTSE0090: reject unknown attributes (e.g. select)
-	if err := c.validateXSLTAttrs(elem, contextItemAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(ctx, elem, contextItemAllowedAttrs); err != nil {
 		return err
 	}
 
@@ -537,7 +537,7 @@ func (c *compiler) validateContextItem(elem *helium.Element) error {
 			return staticError(errCodeXTSE0010, "xsl:context-item must be empty")
 		}
 		if child.Type() == helium.TextNode {
-			if !c.shouldStripText(string(child.Content())) {
+			if !c.shouldStripText(ctx, string(child.Content())) {
 				return staticError(errCodeXTSE0010, "xsl:context-item must be empty")
 			}
 		}
@@ -546,12 +546,12 @@ func (c *compiler) validateContextItem(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileParamDef(elem *helium.Element) (*param, error) {
-	savedNS := c.pushElementNamespaces(elem)
+func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*param, error) {
+	savedNS := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = savedNS }()
 
 	// Validate attributes on xsl:param
-	if err := c.validateXSLTAttrs(elem, paramAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(ctx, elem, paramAllowedAttrs); err != nil {
 		return nil, err
 	}
 
@@ -629,7 +629,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*param, error) {
 	}
 
 	asAttr := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(asAttr, "xsl:param "+name); err != nil {
+	if err := c.validateAsSequenceType(ctx, asAttr, "xsl:param "+name); err != nil {
 		return nil, err
 	}
 
@@ -656,7 +656,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*param, error) {
 	}
 
 	if selectAttr == "" {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -666,8 +666,8 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*param, error) {
 	return p, nil
 }
 
-func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
-	savedNS := c.pushElementNamespaces(elem)
+func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Element) error {
+	savedNS := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = savedNS }()
 
 	// Handle expand-text inheritance for this element.
@@ -680,7 +680,7 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	defer func() { c.expandText = savedExpandText }()
 
 	// Validate attributes on xsl:variable
-	if err := c.validateXSLTAttrs(elem, variableAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(ctx, elem, variableAllowedAttrs); err != nil {
 		return err
 	}
 
@@ -708,7 +708,7 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	}
 
 	asAttr := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(asAttr, "xsl:variable "+name); err != nil {
+	if err := c.validateAsSequenceType(ctx, asAttr, "xsl:variable "+name); err != nil {
 		return err
 	}
 
@@ -741,7 +741,7 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	if selectAttr != "" {
 		// XTSE0620: select and non-empty content are mutually exclusive.
 		// Use-when-aware check: elements excluded by use-when don't count as content.
-		if c.hasEffectiveContent(elem) {
+		if c.hasEffectiveContent(ctx, elem) {
 			return staticError(errCodeXTSE0620, "xsl:variable %q has both @select and content", name)
 		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -756,7 +756,7 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 		}
 		v.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return err
 		}
@@ -780,12 +780,12 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileGlobalParam(elem *helium.Element) error {
+func (c *compiler) compileGlobalParam(ctx context.Context, elem *helium.Element) error {
 	// XTSE0020: tunnel="yes" is not allowed on a stylesheet parameter
 	if getAttr(elem, "tunnel") == lexicon.ValueYes {
 		return staticError(errCodeXTSE0020, "tunnel=\"yes\" is not allowed on a stylesheet parameter")
 	}
-	p, err := c.compileParamDef(elem)
+	p, err := c.compileParamDef(ctx, elem)
 	if err != nil {
 		return err
 	}
@@ -809,7 +809,7 @@ func (c *compiler) compileGlobalParam(elem *helium.Element) error {
 // VariableExpr references the given variable name. The name parameter
 // is the raw XSLT name attribute (may be prefixed like "ns:local");
 // nsBindings are used to resolve prefixes for matching.
-func xpathExprReferencesVar(expr xpath3.Expr, name string, nsBindings map[string]string) bool {
+func xpathExprReferencesVar(expr xpath3.Expr, name string, _ map[string]string) bool {
 	if expr == nil {
 		return false
 	}
@@ -818,9 +818,9 @@ func xpathExprReferencesVar(expr xpath3.Expr, name string, nsBindings map[string
 	// In XPath AST, VariableExpr stores Prefix and Name separately.
 	rawLocal := name
 	var rawPrefix string
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		rawPrefix = name[:idx]
-		rawLocal = name[idx+1:]
+	if p, l, ok := strings.Cut(name, ":"); ok {
+		rawPrefix = p
+		rawLocal = l
 	}
 
 	return xpathExprRefsVarWalk(expr, rawLocal, rawPrefix)

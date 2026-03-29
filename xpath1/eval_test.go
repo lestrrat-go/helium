@@ -628,11 +628,11 @@ func TestParseDepthLimit(t *testing.T) {
 	// Build expression with 5100 nested parentheses: (((((...1...)))))
 	var b strings.Builder
 	depth := 5100
-	for i := 0; i < depth; i++ {
+	for range depth {
 		b.WriteString("(")
 	}
 	b.WriteString("1")
-	for i := 0; i < depth; i++ {
+	for range depth {
 		b.WriteString(")")
 	}
 	expr := b.String()

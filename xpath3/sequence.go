@@ -125,8 +125,7 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 			}
 			if listItem != "" {
 				s := ixpath.StringValue(ni.Node)
-				tokens := strings.Fields(s)
-				for _, tok := range tokens {
+				for tok := range strings.FieldsSeq(s) {
 					cast, err := CastFromString(tok, listItem)
 					if err != nil {
 						// For user-defined schema types (Q{ns}local),
@@ -207,7 +206,7 @@ func ebvAtomic(v AtomicValue) (bool, error) {
 	// untypedAtomic, string-derived types, and numeric types only.
 	switch v.TypeName {
 	case TypeBoolean:
-		return v.Value.(bool), nil
+		return v.Value.(bool), nil //nolint:forcetypeassert
 	case TypeString, TypeAnyURI, TypeUntypedAtomic:
 		s, _ := v.Value.(string)
 		return s != "", nil

@@ -30,9 +30,9 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 	// Extract local name for element creation so SetActiveNamespace doesn't double the prefix
 	localName := name
 	prefix := ""
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix = name[:idx]
-		localName = name[idx+1:]
+	if p, l, ok := strings.Cut(name, ":"); ok {
+		prefix = p
+		localName = l
 	}
 
 	elem := ec.resultDoc.CreateElement(localName)
@@ -165,7 +165,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 	// element's text content against the declared type, raising XTTE1510 on
 	// failure.
 	if inst.TypeName != "" {
-		if err := ec.validateAndNormalizeElementContent(elem, inst.TypeName); err != nil {
+		if err := ec.validateAndNormalizeElementContent(ctx, elem, inst.TypeName); err != nil {
 			// XTTE1540: content does not match the declared type.
 			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 				return dynamicError(errCodeXTTE1540,
@@ -186,11 +186,11 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 // when validation="strict" or validation="lax". Returns XTTE1510 when the
 // value is invalid, XTTE1555 when no matching global declaration is found
 // (strict only).
-func (ec *execContext) validateConstructedAttribute(localName, nsURI, value, validation string) error {
+func (ec *execContext) validateConstructedAttribute(ctx context.Context, localName, nsURI, value, validation string) error {
 	if ec.schemaRegistry == nil {
 		return nil
 	}
-	typeName, valid, valErr := ec.schemaRegistry.ValidateAttribute(localName, nsURI, value)
+	typeName, valid, valErr := ec.schemaRegistry.ValidateAttribute(ctx, localName, nsURI, value)
 	if typeName == "" {
 		// No matching global attribute declaration found.
 		if validation == validationStrict {
@@ -211,9 +211,9 @@ func (ec *execContext) validateConstructedAttribute(localName, nsURI, value, val
 // content is invalid. The original text content is preserved in the DOM; the
 // type annotation (stored separately) controls typed-value extraction via
 // data()/atomization at runtime.
-func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, typeName string) error {
+func (ec *execContext) validateAndNormalizeElementContent(ctx context.Context, elem *helium.Element, typeName string) error {
 	// xs:anyType and xs:untyped accept any content — skip validation entirely.
-	if typeName == "xs:anyType" || typeName == "xs:untyped" {
+	if typeName == lexicon.XSAnyType || typeName == lexicon.XSUntyped {
 		return nil
 	}
 
@@ -229,14 +229,14 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 				td, schema := def.TD, def.Schema
 				switch td.ContentType {
 				case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
-					if err := td.ValidateElement(elem, schema); err != nil {
+					if err := td.ValidateElement(ctx, elem, schema); err != nil {
 						lastErr = err
 						continue
 					}
 					return nil
 				case xsd.ContentTypeSimple:
 					content := strings.TrimSpace(elementTextContent(elem))
-					if err := td.Validate(content, nil); err != nil {
+					if err := td.Validate(ctx, content, nil); err != nil {
 						lastErr = err
 						continue
 					}
@@ -264,7 +264,7 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 	if castErr != nil {
 		// Fall back to schema-defined simple type validation.
 		if ec.schemaRegistry != nil {
-			_, schemaErr := ec.schemaRegistry.CastToSchemaType(content, typeName)
+			_, schemaErr := ec.schemaRegistry.CastToSchemaType(ctx, content, typeName)
 			if schemaErr != nil {
 				return dynamicError(errCodeXTTE1510,
 					"content %q is not a valid value for type %s: %v", content, typeName, schemaErr)
@@ -627,7 +627,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 				return err
 			}
 		}
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -680,7 +680,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		if castErr != nil {
 			// Fall back to schema-defined type validation for user-defined types.
 			if ec.schemaRegistry != nil {
-				normalized, schemaErr := ec.schemaRegistry.CastToSchemaType(value, inst.TypeName)
+				normalized, schemaErr := ec.schemaRegistry.CastToSchemaType(ctx, value, inst.TypeName)
 				if schemaErr != nil {
 					return dynamicError(errCodeXTTE1515,
 						"attribute value %q does not match type %s: %v", value, inst.TypeName, schemaErr)
@@ -713,7 +713,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		}
 		// Schema validation when validation attribute is set.
 		if inst.Validation == validationStrict || inst.Validation == validationLax {
-			if err := ec.validateConstructedAttribute(localName, nsURI, value, inst.Validation); err != nil {
+			if err := ec.validateConstructedAttribute(ctx, localName, nsURI, value, inst.Validation); err != nil {
 				return err
 			}
 		}
@@ -761,14 +761,14 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			tmpElem := tmpDoc.CreateElement("_tmp")
 			{
 				if idx := strings.IndexByte(name, ':'); idx >= 0 {
-				prefix := name[:idx]
-				local := name[idx+1:]
-				uri := ec.resolvePrefix(prefix)
-				ns, _ := tmpDoc.CreateNamespace(prefix, uri)
-				_, _ = tmpElem.SetAttributeNS(local, value, ns)
-			} else {
-				_, _ = tmpElem.SetAttribute(name, value)
-			}
+					prefix := name[:idx]
+					local := name[idx+1:]
+					uri := ec.resolvePrefix(prefix)
+					ns, _ := tmpDoc.CreateNamespace(prefix, uri)
+					_, _ = tmpElem.SetAttributeNS(local, value, ns)
+				} else {
+					_, _ = tmpElem.SetAttribute(name, value)
+				}
 				for _, attr := range tmpElem.Attributes() {
 					out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
 					out.noteOutput()
@@ -823,7 +823,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			}
 			// Schema validation when validation attribute is set.
 			if inst.Validation == validationStrict || inst.Validation == validationLax {
-				if err := ec.validateConstructedAttribute(localName, nsURI, value, inst.Validation); err != nil {
+				if err := ec.validateConstructedAttribute(ctx, localName, nsURI, value, inst.Validation); err != nil {
 					return err
 				}
 			}
@@ -855,7 +855,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		}
 		// Schema validation for no-namespace attribute.
 		if inst.Validation == validationStrict || inst.Validation == validationLax {
-			if err := ec.validateConstructedAttribute(name, "", value, inst.Validation); err != nil {
+			if err := ec.validateConstructedAttribute(ctx, name, "", value, inst.Validation); err != nil {
 				return err
 			}
 		}
@@ -867,9 +867,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 	}
 
 	// Handle prefixed attribute names without explicit namespace
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		localName := name[idx+1:]
+	if prefix, localName, ok := strings.Cut(name, ":"); ok {
 		uri := ec.resolvePrefix(prefix)
 		if uri == "" {
 			// XTDE0860: prefix in computed attribute name is undeclared
@@ -878,7 +876,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		}
 		// Schema validation for prefixed attribute.
 		if inst.Validation == validationStrict || inst.Validation == validationLax {
-			if err := ec.validateConstructedAttribute(localName, uri, value, inst.Validation); err != nil {
+			if err := ec.validateConstructedAttribute(ctx, localName, uri, value, inst.Validation); err != nil {
 				return err
 			}
 		}
@@ -902,7 +900,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 
 	// Schema validation for simple unprefixed attribute.
 	if inst.Validation == validationStrict || inst.Validation == validationLax {
-		if err := ec.validateConstructedAttribute(name, "", value, inst.Validation); err != nil {
+		if err := ec.validateConstructedAttribute(ctx, name, "", value, inst.Validation); err != nil {
 			return err
 		}
 	}
@@ -1153,7 +1151,7 @@ func prefixBoundTo(elem *helium.Element, prefix string) string {
 func (ec *execContext) execComment(ctx context.Context, inst *commentInst) error {
 	var value string
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -1190,7 +1188,7 @@ func sanitizeComment(s string) string {
 	var sb strings.Builder
 	sb.Grow(len(s))
 	prevDash := false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == '-' {
 			if prevDash {
 				sb.WriteByte(' ')
@@ -1217,7 +1215,7 @@ func (ec *execContext) execPI(ctx context.Context, inst *piInst) error {
 
 	var value string
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -1265,7 +1263,7 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) e
 
 	var value string
 	if inst.Select != nil {
-		result, evalErr := ec.evalXPath(inst.Select, ec.contextNode)
+		result, evalErr := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if evalErr != nil {
 			return evalErr
 		}
@@ -1441,7 +1439,7 @@ func (ec *execContext) checkQNameAttrConflicts(elem *helium.Element) error {
 	}
 
 	// Check for unresolvable prefixes or conflicts.
-	for i := 0; i < len(qnames); i++ {
+	for i := range qnames {
 		// If the prefix can't be resolved at all, that's an error.
 		if qnames[i].uri == "" {
 			return dynamicError(errCodeXTTE1510,
@@ -1467,4 +1465,3 @@ func isQNameType(typeName string) bool {
 	}
 	return false
 }
-

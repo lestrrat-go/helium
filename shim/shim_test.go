@@ -2,6 +2,7 @@ package shim_test
 
 import (
 	"bytes"
+	"context"
 	stdxml "encoding/xml"
 	"fmt"
 	"io"
@@ -36,7 +37,7 @@ func TestEscapeTextMatchesStdlib(t *testing.T) {
 }
 
 func TestNewDecoderToken(t *testing.T) {
-	dec := shim.NewDecoder(bytes.NewReader([]byte(`<root/>`)))
+	dec := shim.NewDecoder(context.Background(), bytes.NewReader([]byte(`<root/>`)))
 	require.NotNil(t, dec, "NewDecoder returned nil")
 
 	tok, err := dec.Token()
@@ -48,7 +49,7 @@ func TestNewDecoderToken(t *testing.T) {
 
 func TestNewTokenDecoder(t *testing.T) {
 	src := stdxml.NewDecoder(bytes.NewReader([]byte(`<root/>`)))
-	dec := shim.NewTokenDecoder(src)
+	dec := shim.NewTokenDecoder(context.Background(), src)
 	require.NotNil(t, dec, "NewTokenDecoder returned nil")
 
 	tok, err := dec.Token()
@@ -119,8 +120,8 @@ func TestMarshalMarshalIndentUnmarshalBasic(t *testing.T) {
 
 func TestUnmarshalTagSemanticsMatchStdlib(t *testing.T) {
 	type anyNode struct {
-		XMLName stdxml.Name
-		Text    string `xml:",chardata"`
+		XMLName stdxml.Name `xml:""`
+		Text    string      `xml:",chardata"`
 	}
 	type payload struct {
 		XMLName stdxml.Name `xml:"root"`
@@ -158,7 +159,7 @@ func TestUnmarshalRepeatedConsistency(t *testing.T) {
 	var want payload
 	require.NoError(t, stdxml.Unmarshal(input, &want))
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		var got payload
 		require.NoError(t, shim.Unmarshal(input, &got))
 		require.Equal(t, want, got)
@@ -182,11 +183,9 @@ func TestUnmarshalConcurrentConsistency(t *testing.T) {
 
 	errCh := make(chan error, workers*iterations)
 	var wg sync.WaitGroup
-	for w := 0; w < workers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < iterations; i++ {
+	for range workers {
+		wg.Go(func() {
+			for range iterations {
 				var got payload
 				if err := shim.Unmarshal(input, &got); err != nil {
 					errCh <- err
@@ -197,7 +196,7 @@ func TestUnmarshalConcurrentConsistency(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)
@@ -726,8 +725,8 @@ func TestUnmarshalAnySingleAttrStringMatchStdlib(t *testing.T) {
 
 func TestUnmarshalAnySliceElementsMatchStdlib(t *testing.T) {
 	type anyNode struct {
-		XMLName stdxml.Name
-		Text    string `xml:",chardata"`
+		XMLName stdxml.Name `xml:""`
+		Text    string      `xml:",chardata"`
 	}
 	type payload struct {
 		Keep string    `xml:"keep"`
@@ -745,8 +744,8 @@ func TestUnmarshalAnySliceElementsMatchStdlib(t *testing.T) {
 
 func TestUnmarshalAnySingleWithMultipleMatchesMatchStdlib(t *testing.T) {
 	type anyNode struct {
-		XMLName stdxml.Name
-		Text    string `xml:",chardata"`
+		XMLName stdxml.Name `xml:""`
+		Text    string      `xml:",chardata"`
 	}
 	type payload struct {
 		Any anyNode `xml:",any"`
@@ -824,8 +823,8 @@ func TestUnmarshalTagPathConflictMatchStdlib(t *testing.T) {
 	// Build a struct type with duplicate xml:"a>b" tags at runtime
 	// to avoid go vet's static duplicate-tag check.
 	typ := reflect.StructOf([]reflect.StructField{
-		{Name: "A", Type: reflect.TypeOf(""), Tag: `xml:"a>b"`},
-		{Name: "B", Type: reflect.TypeOf(""), Tag: `xml:"a>b"`},
+		{Name: "A", Type: reflect.TypeFor[string](), Tag: `xml:"a>b"`},
+		{Name: "B", Type: reflect.TypeFor[string](), Tag: `xml:"a>b"`},
 	})
 
 	input := []byte(`<root><a><b>x</b></a></root>`)
@@ -963,7 +962,7 @@ func TestDecoderDecodeMatchesStdlib(t *testing.T) {
 	require.NoError(t, stdDec.Decode(&stdItem))
 
 	var shimItem item
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 	require.NoError(t, shimDec.Decode(&shimItem))
 
 	require.Equal(t, stdItem, shimItem, "Decode result mismatch")
@@ -978,9 +977,9 @@ func TestDecoderDecodeElementMatchesStdlib(t *testing.T) {
 	input := []byte(`<root><child>one</child><child>two</child></root>`)
 
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 
-	consumeRootStart := func(next func() (stdxml.Token, error)) stdxml.StartElement {
+	consumeRootStart := func(next func() (stdxml.Token, error)) stdxml.StartElement { //nolint:unparam // result unused but kept for clarity
 		for {
 			tok, err := next()
 			require.NoError(t, err)
@@ -1017,8 +1016,8 @@ func TestDecoderDecodeInvalidTargetMatchStdlib(t *testing.T) {
 
 	// non-pointer
 	nonPtr := any("hello")
-	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr)  //nolint:staticcheck // intentional non-pointer to test error behavior
-	shimErr := shim.NewDecoder(bytes.NewReader(input)).Decode(nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
+	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
+	shimErr := shim.NewDecoder(context.Background(), bytes.NewReader(input)).Decode(nonPtr)
 	require.Error(t, stdErr)
 	require.Error(t, shimErr)
 	require.Equal(t, stdErr.Error(), shimErr.Error())
@@ -1026,7 +1025,7 @@ func TestDecoderDecodeInvalidTargetMatchStdlib(t *testing.T) {
 	// nil pointer
 	var nilPtr *string
 	stdErr = stdxml.NewDecoder(bytes.NewReader(input)).Decode(nilPtr)
-	shimErr = shim.NewDecoder(bytes.NewReader(input)).Decode(nilPtr)
+	shimErr = shim.NewDecoder(context.Background(), bytes.NewReader(input)).Decode(nilPtr)
 	require.Error(t, stdErr)
 	require.Error(t, shimErr)
 	require.Equal(t, stdErr.Error(), shimErr.Error())
@@ -1042,10 +1041,10 @@ func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
 	stdStart := stdTok.(stdxml.StartElement)
 	stdErr := stdDec.DecodeElement(nonPtr, &stdStart) //nolint:staticcheck // intentional non-pointer to test error behavior
 
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 	shimTok, _ := shimDec.Token()
 	shimStart := shimTok.(stdxml.StartElement)
-	shimErr := shimDec.DecodeElement(nonPtr, &shimStart) //nolint:staticcheck // intentional non-pointer to test error behavior
+	shimErr := shimDec.DecodeElement(nonPtr, &shimStart)
 
 	require.Error(t, stdErr)
 	require.Error(t, shimErr)
@@ -1058,7 +1057,7 @@ func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
 	stdStart2 := stdTok2.(stdxml.StartElement)
 	stdErr = stdDec2.DecodeElement(nilPtr, &stdStart2)
 
-	shimDec2 := shim.NewDecoder(bytes.NewReader(input))
+	shimDec2 := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 	shimTok2, _ := shimDec2.Token()
 	shimStart2 := shimTok2.(stdxml.StartElement)
 	shimErr = shimDec2.DecodeElement(nilPtr, &shimStart2)
@@ -1070,7 +1069,7 @@ func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
 
 func TestAPICompilesWithInterfaces(t *testing.T) {
 	var _ io.Reader = bytes.NewReader(nil)
-	_ = shim.NewDecoder(bytes.NewReader(nil))
+	_ = shim.NewDecoder(context.Background(), bytes.NewReader(nil))
 	_ = shim.NewEncoder(io.Discard)
 }
 
@@ -1078,7 +1077,7 @@ func TestRawTokenSequenceMatchesStdlib(t *testing.T) {
 	input := []byte(`<root><a x="1">t</a><!--c--><?pi d?></root>`)
 
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 
 	var stdSeq []string
 	for {
@@ -1107,7 +1106,7 @@ func TestSkipBehaviorMatchesStdlib(t *testing.T) {
 	input := []byte(`<root><skip><a/><b>txt</b></skip><keep/></root>`)
 
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 
 	consumeUntilStart := func(next func() (stdxml.Token, error), name string) {
 		for {
@@ -1151,9 +1150,9 @@ func TestSkipBehaviorMatchesStdlib(t *testing.T) {
 func TestInputOffsetAndPosMatchStdlib(t *testing.T) {
 	input := []byte("<root>abc</root>")
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
-	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(context.Background(), bytes.NewReader(input))
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, err := stdDec.Token()
 		require.NoError(t, err)
 		_, err = shimDec.Token()

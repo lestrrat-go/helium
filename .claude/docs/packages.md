@@ -21,13 +21,14 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - `Node` interface — common for all node types; use ElementType enum to distinguish
 - Parse flags configured via fluent methods on Parser (internal bitset, not public)
 - `ErrorHandler` interface — async error delivery during parsing
-- `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve`, `ResolveURI`)
+- `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve(ctx, pubID, sysID)`, `ResolveURI(ctx, uri)`)
+- `AsNode[T Node](n Node) (T, bool)` — generic safe type assertion for Node types
 - `Document.GetElementByID(id)` — O(1) via hash table, O(n) fallback
 - `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal
 - `CopyNode(src, targetDoc)` — deep copy across documents
 - `NodeGetBase(doc, node)` — effective xml:base URI
 - `BuildURI(base, ref)` — resolve relative URI
-- Files: `parser.go` (API), `parserctx.go` (context/state), `parser_document.go`, `parser_element.go`, `parser_whitespace.go`, `parser_xml_decl.go`, `parser_encoding.go`, `parser_decl.go`, `parser_content.go`, `parser_dtd_subset.go`, `parser_dtd_element.go`, `parser_dtd_attr.go`, `parser_entity_decl.go`, `parser_entity_ref.go`, `parser_push.go`, `parser_state_gen.go`, `document.go`, `element.go`, `attribute.go`, `node.go`, `node_leaf.go`, `node_namespace.go`, `node_base.go`, `tree_builder.go`, `tree_namespaces.go`, `writer.go`, `writer_escape.go`, `writer_dtd.go`, `writer_xhtml.go`, `copy.go`, `dtd.go`, `dtd_attr.go`, `dtd_elem.go`, `iter.go`, `errorhandler.go`, `resolver.go`, `doc.go`
+- Files: `parser.go` (API), `parserctx.go` (context/state), `parser_document.go`, `parser_element.go`, `parser_whitespace.go`, `parser_xml_decl.go`, `parser_encoding.go`, `parser_decl.go`, `parser_content.go`, `parser_dtd_subset.go`, `parser_dtd_element.go`, `parser_dtd_attr.go`, `parser_entity_decl.go`, `parser_entity_ref.go`, `parser_state_gen.go`, `document.go`, `element.go`, `attribute.go`, `node.go`, `node_leaf.go`, `node_namespace.go`, `node_base.go`, `tree_builder.go`, `tree_namespaces.go`, `writer.go`, `writer_escape.go`, `writer_dtd.go`, `writer_xhtml.go`, `copy.go`, `dtd.go`, `dtd_attr.go`, `dtd_elem.go`, `iter.go`, `errorhandler.go`, `resolver.go`, `doc.go`
 
 ## c14n/
 
@@ -132,8 +133,8 @@ XML Schema (XSD) 1.0 compilation and validation.
 - **NewValidator(schema) → Validator** — create fluent builder for validation
   - `Label(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)` — builder methods
   - `Validate(ctx, *Document) → error` — terminal method
-- **(*TypeDef).Validate(value, nsMap) → error** — validate a lexical value against a simple type; nsMap (prefix→URI) may be nil
-- **(*TypeDef).ValidateElement(elem, schema) → error** — validate an element's content against a type
+- **(*TypeDef).Validate(ctx, value, nsMap) → error** — validate a lexical value against a simple type; nsMap (prefix→URI) may be nil
+- **(*TypeDef).ValidateElement(ctx, elem, schema) → error** — validate an element's content against a type
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.NamedTypes()`, `Schema.TargetNamespace()`
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
 - `ErrValidationFailed` — sentinel error returned by `Validate()` on failure; individual errors delivered via `ErrorHandler`
@@ -166,7 +167,7 @@ HTML 4.01 parser producing helium DOM or SAX events.
 
 - **NewParser() → Parser** — create fluent parser builder
 - Parser methods: `SuppressImplied(bool)`, `StripBlanks(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`
-- Terminal: **Parse(ctx, []byte)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
+- Terminal: **Parse(ctx, []byte)**, **ParseReader(ctx, io.Reader)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
 - **NewWriter() → Writer** — create fluent writer builder
 - Writer methods: `DefaultDTD(bool)`, `Format(bool)`, `PreserveCase(bool)`, `EscapeURIAttributes(bool)`, `EscapeControlChars(bool)`
 - Terminal: **WriteTo(io.Writer, Node)**
@@ -217,8 +218,8 @@ Schematron schema compilation and validation.
 OASIS XML Catalog resolution for public/system IDs and URIs.
 
 - **Load(ctx, path, ...LoadOption) → (*Catalog, error)**
-- **Catalog.Resolve(pubID, sysID) → string** — resolve external identifier
-- **Catalog.ResolveURI(uri) → string** — resolve URI reference
+- **Catalog.Resolve(ctx, pubID, sysID) → string** — resolve external identifier
+- **Catalog.ResolveURI(ctx, uri) → string** — resolve URI reference
 - Catalog chaining via nextCatalog; URN urn:publicid: support
 - Files: `catalog.go`, `load.go`
 - Imports: helium, internal/catalog/, internal/lexicon/
@@ -243,11 +244,21 @@ SAX2 event-driven parsing interface definitions.
 - Files: `sax.go`
 - Imports: helium (node types)
 
+## push/
+
+Generic push parser infrastructure shared by both XML and HTML push parsers.
+
+- `Source[T]` interface — any parser with `ParseReader(ctx, io.Reader) (T, error)`
+- `Parser[T]` struct — manages background goroutine, stream, Push/Write/Close
+- `New[T](ctx, Source[T]) → *Parser[T]` — create and start a push parser
+- Both `helium.PushParser` and `html.PushParser` are type aliases for `push.Parser[*helium.Document]`
+- Files: `push.go`
+
 ## shim/
 
 Drop-in replacement for encoding/xml backed by helium parser.
 
-- **NewDecoder(io.Reader) → *Decoder** / **NewEncoder(io.Writer) → *Encoder**
+- **NewDecoder(ctx, io.Reader) → *Decoder** / **NewTokenDecoder(ctx, TokenReader) → *Decoder** / **NewEncoder(io.Writer) → *Encoder**
 - **Marshal(v) → ([]byte, error)** / **Unmarshal([]byte, v) → error**
 - API mirrors encoding/xml; strict mode only; undeclared namespace prefixes rejected
 - Known differences: empty elements self-closed, xmlns before regular attrs, InputOffset approximate
@@ -402,6 +413,15 @@ Generic stack with capacity shrinking.
 
 - **stackPop(StackImpl, n)** — pop n items and shrink if oversized
 - Files: `stack.go`
+
+## internal/heliumtest/
+
+Test helpers shared across helium packages.
+
+- `CallerDir(skip)` — directory of caller's source file
+- `RepoRoot()` — absolute path to repository root (cached)
+- `TestDir(path...)` — join path elements under repo root
+- Files: `callerdir.go`
 
 ## internal/cliutil/
 

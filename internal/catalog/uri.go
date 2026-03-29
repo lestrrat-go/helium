@@ -47,7 +47,7 @@ func HasScheme(s string) bool {
 	if colon < 1 {
 		return false
 	}
-	for i := 0; i < colon; i++ {
+	for i := range colon {
 		c := s[i]
 		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') &&
 			(i == 0 || (c < '0' || c > '9') && c != '+' && c != '-' && c != '.') {

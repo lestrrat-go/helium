@@ -274,7 +274,7 @@ func TestEvalRange(t *testing.T) {
 	t.Run("1 to 5", func(t *testing.T) {
 		seq := evalExpr(t, doc, "1 to 5")
 		require.Equal(t, 5, seq.Len())
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			av := seq.Get(i).(xpath3.AtomicValue)
 			require.Equal(t, int64(i+1), av.IntegerVal())
 		}

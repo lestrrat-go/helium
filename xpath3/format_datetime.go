@@ -518,7 +518,7 @@ func normalizeDateNumericValue(value int64, comp byte, w dtWidth) int64 {
 
 	if w.maxWidth > 0 {
 		mod := int64(1)
-		for i := 0; i < w.maxWidth; i++ {
+		for range w.maxWidth {
 			mod *= 10
 		}
 		value %= mod
@@ -632,7 +632,7 @@ func dayNamesForLang(lang string) []string {
 	}
 }
 
-func applyNameWidth(name string, comp byte, w dtWidth) string {
+func applyNameWidth(name string, _ byte, w dtWidth) string {
 	if w.maxWidth <= 0 && w.minWidth <= 0 {
 		return name
 	}
@@ -776,7 +776,7 @@ func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
 				b.WriteRune(groups[gi].sep)
 				gi++
 			}
-			b.WriteRune(rune(r))
+			b.WriteRune(r)
 		}
 		s = b.String()
 	}

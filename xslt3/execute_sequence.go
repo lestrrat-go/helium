@@ -2,10 +2,11 @@ package xslt3
 
 import (
 	"context"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // checkAtomizable returns FOTY0013 if the sequence contains any map or
@@ -36,7 +37,7 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *valueOfInst) error
 				return err
 			}
 		}
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -158,20 +159,21 @@ func mergeAdjacentTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 			continue
 		}
 		// Merge consecutive text nodes
-		merged := string(ni.Node.Content())
 		j := i + 1
+		var sb strings.Builder
+		sb.Write(ni.Node.Content())
 		for j < seqLen {
 			nj, ok := seq.Get(j).(xpath3.NodeItem)
 			if !ok || nj.Node.Type() != helium.TextNode {
 				break
 			}
-			merged += string(nj.Node.Content())
+			sb.Write(nj.Node.Content())
 			j++
 		}
 		if j > i+1 {
 			// Create a merged text node
 			doc := ni.Node.OwnerDocument()
-			text := doc.CreateText([]byte(merged))
+			text := doc.CreateText([]byte(sb.String()))
 			result = append(result, xpath3.NodeItem{Node: text})
 			i = j - 1
 		} else {
@@ -181,13 +183,9 @@ func mergeAdjacentTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 	return result
 }
 
-func (ec *execContext) execText(inst *textInst) error {
+func (ec *execContext) execText(ctx context.Context, inst *textInst) error {
 	value := inst.Value
 	if inst.TVT != nil {
-		ctx := ec.transformCtx
-		if ctx == nil {
-			ctx = context.Background()
-		}
 		ctx = withExecContext(ctx, ec)
 		var err error
 		value, err = inst.TVT.evaluate(ctx, ec.contextNode)
@@ -249,14 +247,10 @@ func (ec *execContext) execText(inst *textInst) error {
 	return ec.addNode(text)
 }
 
-func (ec *execContext) execLiteralText(inst *literalTextInst) error {
+func (ec *execContext) execLiteralText(ctx context.Context, inst *literalTextInst) error {
 	value := inst.Value
 	if inst.TVT != nil {
 		// Text value template: evaluate like an avt
-		ctx := ec.transformCtx
-		if ctx == nil {
-			ctx = context.Background()
-		}
 		ctx = withExecContext(ctx, ec)
 		var err error
 		value, err = inst.TVT.evaluate(ctx, ec.contextNode)
@@ -286,7 +280,7 @@ func (ec *execContext) execLiteralText(inst *literalTextInst) error {
 }
 
 func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceInst) error {
-	result, err := ec.evalXPath(inst.Select, ec.contextNode)
+	result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -323,7 +317,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceIns
 			}
 			if v.Node.Type() == helium.AttributeNode {
 				// Attribute nodes: add as attribute to current element
-				attr := v.Node.(*helium.Attribute)
+				attr, _ := helium.AsNode[*helium.Attribute](v.Node)
 				elem, ok := out.current.(*helium.Element)
 				if ok {
 					copyAttributeToElement(elem, attr)

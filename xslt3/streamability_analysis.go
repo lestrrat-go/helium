@@ -1,6 +1,8 @@
 package xslt3
 
 import (
+	"slices"
+
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -30,7 +32,7 @@ func lookupFuncStreamability(ss *Stylesheet, localName string, arity int) string
 // When an XTSE3430 violation is detected, the affected mode, source-document,
 // accumulator, or function is demoted to non-streamable and compilation
 // continues.
-func analyzeStreamability(ss *Stylesheet) error {
+func analyzeStreamability(ss *Stylesheet) error { //nolint:unparam // always nil but callers check for future-proofing
 	// Check all templates for source-document streamable="yes" in their body.
 	// On XTSE3430, demote the source-document to non-streamable.
 	for _, tmpl := range ss.templates {
@@ -176,7 +178,6 @@ func streamabilityModeNameForTemplate(tmpl *template) (string, bool) {
 	}
 	return tmpl.Mode, true
 }
-
 
 // checkStreamableTemplateBody checks a template body (or source-document body)
 // for non-streamable constructs.
@@ -538,10 +539,8 @@ func bodyHasDownwardNavigation(body []instruction) bool {
 				return true
 			}
 		}
-		for _, children := range getChildInstructions(inst) {
-			if bodyHasDownwardNavigation(children) {
-				return true
-			}
+		if slices.ContainsFunc(getChildInstructions(inst), bodyHasDownwardNavigation) {
+			return true
 		}
 	}
 	return false

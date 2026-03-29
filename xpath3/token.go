@@ -15,7 +15,7 @@ const (
 	TokenStar                         // * (wildcard name test or multiply)
 	TokenVariableRef                  // $name
 
-	// Operators inherited from XPath 1.0
+	// TokenSlash and the following are operators inherited from XPath 1.0.
 	TokenSlash      // /
 	TokenSlashSlash // //
 	TokenPipe       // |
@@ -32,7 +32,7 @@ const (
 	TokenMod        // mod
 	TokenDiv        // div
 
-	// Punctuation inherited from XPath 1.0
+	// TokenLParen and the following are punctuation inherited from XPath 1.0.
 	TokenLParen     // (
 	TokenRParen     // )
 	TokenLBracket   // [
@@ -44,7 +44,7 @@ const (
 	TokenDotDot     // ..
 	TokenColon      // : (in QName prefix:local)
 
-	// New operators in XPath 3.1
+	// TokenConcat and the following are new operators in XPath 3.1.
 	TokenConcat    // ||
 	TokenBang      // ! (simple map)
 	TokenArrow     // =>
@@ -56,11 +56,11 @@ const (
 	TokenTo        // to (range)
 	TokenUnion     // union (keyword form of |)
 
-	// New punctuation in XPath 3.1
+	// TokenLBrace and the following are new punctuation in XPath 3.1.
 	TokenLBrace // {
 	TokenRBrace // }
 
-	// Value comparison keywords
+	// TokenEq and the following are value comparison keywords.
 	TokenEq // eq
 	TokenNe // ne
 	TokenLt // lt
@@ -68,7 +68,7 @@ const (
 	TokenGt // gt
 	TokenGe // ge
 
-	// FLWOR keywords
+	// TokenFor and the following are FLWOR keywords.
 	TokenFor        // for
 	TokenLet        // let
 	TokenIn         // in
@@ -80,19 +80,19 @@ const (
 	TokenDescending // descending
 	TokenStable     // stable
 
-	// Quantified expression keywords
+	// TokenSome and the following are quantified expression keywords.
 	TokenSome      // some
 	TokenEvery     // every
 	TokenSatisfies // satisfies
 
-	// Control flow keywords
+	// TokenIf and the following are control flow keywords.
 	TokenIf    // if
 	TokenThen  // then
 	TokenElse  // else
 	TokenTry   // try
 	TokenCatch // catch
 
-	// Type expression keywords
+	// TokenInstanceOf and the following are type expression keywords.
 	TokenInstanceOf // instance (followed by "of")
 	TokenOf         // of
 	TokenCastAs     // cast (followed by "as")
@@ -100,12 +100,12 @@ const (
 	TokenTreatAs    // treat (followed by "as")
 	TokenAs         // as
 
-	// Constructor / inline function keywords
+	// TokenFunction and the following are constructor / inline function keywords.
 	TokenFunction // function
 	TokenMap      // map
 	TokenArray    // array
 
-	// Node comparison
+	// TokenIs and the following are node comparison operators.
 	TokenIs      // is
 	TokenNodePre // << (node precedes)
 	TokenNodeFol // >> (node follows)

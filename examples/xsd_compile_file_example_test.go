@@ -21,7 +21,7 @@ func Example_xsd_compile_file() {
 		fmt.Printf("failed to create temp dir: %s\n", err)
 		return
 	}
-	defer os.RemoveAll(dir) //nolint:errcheck
+	defer os.RemoveAll(dir)
 
 	schemaPath := filepath.Join(dir, "greeting.xsd")
 	if err := os.WriteFile(schemaPath, []byte(schemaSrc), 0644); err != nil {

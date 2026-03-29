@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -213,7 +214,7 @@ func (ec *execContext) fnFunctionLookupPackage(ctx context.Context, args []xpath
 	origDef := pkgFn.OriginalFunc
 	if origDef.Visibility == visAbstract {
 		// Original is abstract — no implementation to look up
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	origUF := &xslUserFunc{def: origDef, ec: ec}
 	origFI := xpath3.FunctionItem{
@@ -421,7 +422,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 			_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
 				name, sErr := paramKeyToClark(key)
 				if sErr != nil {
-					return nil
+					return nil //nolint:nilerr // skip unparseable static param keys
 				}
 				nestedCompiler = nestedCompiler.SetStaticParameter(name, value)
 				staticParamValues[name] = value
@@ -551,8 +552,8 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	secondaryResults := make(map[string]*helium.Document)
 	secondaryOutputDefs := make(map[string]*OutputDef)
 	fnTransformCfg := &transformConfig{
-		initialTemplate:   initialTemplate,
-		initialMode:       initialMode,
+		initialTemplate:  initialTemplate,
+		initialMode:      initialMode,
 		initialFunction:  initialFunction,
 		baseOutputURI:    baseOutputURI,
 		resultDocHandler: resultDocCollector{results: secondaryResults, outputDefs: secondaryOutputDefs},
@@ -578,7 +579,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
 			name, sErr := paramKeyToClark(key)
 			if sErr != nil {
-				return nil
+				return nil //nolint:nilerr // skip unparseable param keys
 			}
 			params[name] = value
 			return nil
@@ -634,7 +635,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		// Set up the initial match selection on the exec context.
 		// Enable raw capture when delivery-format is "raw" so function
 		// items and other non-node XDM values are preserved.
-		rawCapture := deliveryFormat == "raw"
+		rawCapture := deliveryFormat == lexicon.OutputRaw
 		var execErr error
 		resultDoc, capturedItems, execErr = executeTransformWithSelection(ctx, sourceDoc, ss, fnTransformCfg, initialMatchSel, rawCapture)
 		if execErr != nil {
@@ -759,7 +760,6 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 		docCache:            make(map[string]*helium.Document),
 		functionResultCache: make(map[string]xpath3.Sequence),
 		accumulatorState:    make(map[string]xpath3.Sequence),
-		transformCtx:        ctx,
 		resultDocuments:     make(map[string]*helium.Document),
 		usedResultURIs:      make(map[string]struct{}),
 		defaultValidation:   ss.defaultValidation,
@@ -831,7 +831,7 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 				ec.contextItem = v
 				ec.position = i + 1
 				ec.size = selLen
-				tmpl, tErr := ec.findAtomicTemplate(v, "")
+				tmpl, tErr := ec.findAtomicTemplate(ctx, v, "")
 				if tErr != nil {
 					return nil, nil, tErr
 				}

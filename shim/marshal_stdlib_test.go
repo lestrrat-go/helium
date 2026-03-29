@@ -6,6 +6,7 @@ package shim_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -402,10 +403,6 @@ type NestedAndCData struct {
 }
 
 func ifaceptr(x any) any {
-	return &x
-}
-
-func stringptr(x string) *string {
 	return &x
 }
 
@@ -1297,12 +1294,12 @@ var marshalTestsStdlib = []struct {
 	// https://golang.org/issue/19063
 	{
 		ExpectXML:   `<IndirComment><T1></T1><!--hi--><T2></T2></IndirComment>`,
-		Value:       &IndirComment{Comment: stringptr("hi")},
+		Value:       &IndirComment{Comment: new("hi")},
 		MarshalOnly: true,
 	},
 	{
 		ExpectXML:   `<IndirComment><T1></T1><T2></T2></IndirComment>`,
-		Value:       &IndirComment{Comment: stringptr("")},
+		Value:       &IndirComment{Comment: new("")},
 		MarshalOnly: true,
 	},
 	{
@@ -1345,21 +1342,21 @@ var marshalTestsStdlib = []struct {
 	},
 	{
 		ExpectXML: `<IndirChardata><T1></T1>hi<T2></T2></IndirChardata>`,
-		Value:     &IndirChardata{Chardata: stringptr("hi")},
+		Value:     &IndirChardata{Chardata: new("hi")},
 	},
 	{
 		ExpectXML:     `<IndirChardata><T1></T1><![CDATA[hi]]><T2></T2></IndirChardata>`,
-		Value:         &IndirChardata{Chardata: stringptr("hi")},
+		Value:         &IndirChardata{Chardata: new("hi")},
 		UnmarshalOnly: true, // marshals without CDATA
 	},
 	{
 		ExpectXML: `<IndirChardata><T1></T1><T2></T2></IndirChardata>`,
-		Value:     &IndirChardata{Chardata: stringptr("")},
+		Value:     &IndirChardata{Chardata: new("")},
 	},
 	{
 		ExpectXML:   `<IndirChardata><T1></T1><T2></T2></IndirChardata>`,
 		Value:       &IndirChardata{Chardata: nil},
-		MarshalOnly: true, // unmarshal leaves Chardata=stringptr("")
+		MarshalOnly: true, // unmarshal leaves Chardata=new("")
 	},
 	{
 		ExpectXML:      `<IfaceChardata><T1></T1>hi<T2></T2></IfaceChardata>`,
@@ -1397,21 +1394,21 @@ var marshalTestsStdlib = []struct {
 	},
 	{
 		ExpectXML: `<IndirCDATA><T1></T1><![CDATA[hi]]><T2></T2></IndirCDATA>`,
-		Value:     &IndirCDATA{CDATA: stringptr("hi")},
+		Value:     &IndirCDATA{CDATA: new("hi")},
 	},
 	{
 		ExpectXML:     `<IndirCDATA><T1></T1>hi<T2></T2></IndirCDATA>`,
-		Value:         &IndirCDATA{CDATA: stringptr("hi")},
+		Value:         &IndirCDATA{CDATA: new("hi")},
 		UnmarshalOnly: true, // marshals with CDATA
 	},
 	{
 		ExpectXML: `<IndirCDATA><T1></T1><T2></T2></IndirCDATA>`,
-		Value:     &IndirCDATA{CDATA: stringptr("")},
+		Value:     &IndirCDATA{CDATA: new("")},
 	},
 	{
 		ExpectXML:   `<IndirCDATA><T1></T1><T2></T2></IndirCDATA>`,
 		Value:       &IndirCDATA{CDATA: nil},
-		MarshalOnly: true, // unmarshal leaves CDATA=stringptr("")
+		MarshalOnly: true, // unmarshal leaves CDATA=new("")
 	},
 	{
 		ExpectXML:      `<IfaceCDATA><T1></T1><![CDATA[hi]]><T2></T2></IfaceCDATA>`,
@@ -1449,12 +1446,12 @@ var marshalTestsStdlib = []struct {
 	},
 	{
 		ExpectXML:   `<IndirInnerXML><T1></T1><hi/><T2></T2></IndirInnerXML>`,
-		Value:       &IndirInnerXML{InnerXML: stringptr("<hi/>")},
+		Value:       &IndirInnerXML{InnerXML: new("<hi/>")},
 		MarshalOnly: true,
 	},
 	{
 		ExpectXML:   `<IndirInnerXML><T1></T1><T2></T2></IndirInnerXML>`,
-		Value:       &IndirInnerXML{InnerXML: stringptr("")},
+		Value:       &IndirInnerXML{InnerXML: new("")},
 		MarshalOnly: true,
 	},
 	{
@@ -1507,11 +1504,11 @@ var marshalTestsStdlib = []struct {
 	},
 	{
 		ExpectXML: `<IndirElement><T1></T1><Element>hi</Element><T2></T2></IndirElement>`,
-		Value:     &IndirElement{Element: stringptr("hi")},
+		Value:     &IndirElement{Element: new("hi")},
 	},
 	{
 		ExpectXML: `<IndirElement><T1></T1><Element></Element><T2></T2></IndirElement>`,
-		Value:     &IndirElement{Element: stringptr("")},
+		Value:     &IndirElement{Element: new("")},
 	},
 	{
 		ExpectXML: `<IndirElement><T1></T1><T2></T2></IndirElement>`,
@@ -1546,17 +1543,17 @@ var marshalTestsStdlib = []struct {
 	},
 	{
 		ExpectXML: `<IndirOmitEmpty><T1></T1><OmitEmpty>hi</OmitEmpty><T2></T2></IndirOmitEmpty>`,
-		Value:     &IndirOmitEmpty{OmitEmpty: stringptr("hi")},
+		Value:     &IndirOmitEmpty{OmitEmpty: new("hi")},
 	},
 	{
 		// Note: Changed in Go 1.8 to include <OmitEmpty> element (because x.OmitEmpty != nil).
 		ExpectXML:   `<IndirOmitEmpty><T1></T1><OmitEmpty></OmitEmpty><T2></T2></IndirOmitEmpty>`,
-		Value:       &IndirOmitEmpty{OmitEmpty: stringptr("")},
+		Value:       &IndirOmitEmpty{OmitEmpty: new("")},
 		MarshalOnly: true,
 	},
 	{
 		ExpectXML:     `<IndirOmitEmpty><T1></T1><OmitEmpty></OmitEmpty><T2></T2></IndirOmitEmpty>`,
-		Value:         &IndirOmitEmpty{OmitEmpty: stringptr("")},
+		Value:         &IndirOmitEmpty{OmitEmpty: new("")},
 		UnmarshalOnly: true,
 	},
 	{
@@ -1592,11 +1589,11 @@ var marshalTestsStdlib = []struct {
 	},
 	{
 		ExpectXML: `<IndirAny><T1></T1><Any>hi</Any><T2></T2></IndirAny>`,
-		Value:     &IndirAny{Any: stringptr("hi")},
+		Value:     &IndirAny{Any: new("hi")},
 	},
 	{
 		ExpectXML: `<IndirAny><T1></T1><Any></Any><T2></T2></IndirAny>`,
-		Value:     &IndirAny{Any: stringptr("")},
+		Value:     &IndirAny{Any: new("")},
 	},
 	{
 		ExpectXML: `<IndirAny><T1></T1><T2></T2></IndirAny>`,
@@ -1631,12 +1628,12 @@ var marshalTestsStdlib = []struct {
 	},
 	{
 		ExpectXML:     `<IndirFoo><T1></T1><Foo>hi</Foo><T2></T2></IndirFoo>`,
-		Value:         &IndirAny{Any: stringptr("hi")},
+		Value:         &IndirAny{Any: new("hi")},
 		UnmarshalOnly: true,
 	},
 	{
 		ExpectXML:     `<IndirFoo><T1></T1><Foo></Foo><T2></T2></IndirFoo>`,
-		Value:         &IndirAny{Any: stringptr("")},
+		Value:         &IndirAny{Any: new("")},
 		UnmarshalOnly: true,
 	},
 	{
@@ -2188,7 +2185,7 @@ var encodeTokenTestsStdlib = []struct {
 			{Name: Name{Space: "space", Local: "a"}, Value: "value"},
 		}},
 	},
-	want: `<foo xmlns:_xmlns="xmlns" _xmlns:x="space"><foo xmlns="space" xmlns="space" xmlns:space="space" space:a="value">`,
+	want: `<foo xmlns:_xmlns="xmlns" _xmlns:x="space"><foo xmlns="space" xmlns="space" xmlns:space="space" space:a="value">`, //nolint:dupword // valid XML output with repeated xmlns
 }, {
 	desc: "nested element uses empty attribute name space when default ns defined",
 	toks: []Token{
@@ -2291,7 +2288,7 @@ var encodeTokenTestsStdlib = []struct {
 		EndElement{Name: Name{Space: "space", Local: "baz"}},
 		EndElement{Name: Name{Space: "space", Local: "foo"}},
 	},
-	want: `<foo xmlns="space" xmlns="space" xmlns:_xmlns="xmlns" _xmlns:bar="space" xmlns:space="space" space:baz="foo"><baz xmlns="space"></baz></foo>`,
+	want: `<foo xmlns="space" xmlns="space" xmlns:_xmlns="xmlns" _xmlns:bar="space" xmlns:space="space" space:baz="foo"><baz xmlns="space"></baz></foo>`, //nolint:dupword // valid XML output with repeated xmlns
 }, {
 	desc: "default name space not used by attributes, not explicitly defined",
 	toks: []Token{
@@ -2303,7 +2300,7 @@ var encodeTokenTestsStdlib = []struct {
 		EndElement{Name: Name{Space: "space", Local: "baz"}},
 		EndElement{Name: Name{Space: "space", Local: "foo"}},
 	},
-	want: `<foo xmlns="space" xmlns="space" xmlns:space="space" space:baz="foo"><baz xmlns="space"></baz></foo>`,
+	want: `<foo xmlns="space" xmlns="space" xmlns:space="space" space:baz="foo"><baz xmlns="space"></baz></foo>`, //nolint:dupword // valid XML output with repeated xmlns
 }, {
 	desc: "impossible xmlns declaration",
 	toks: []Token{
@@ -2403,7 +2400,7 @@ func TestDecodeEncodeStdlib(t *testing.T) {
 <root>
 </root>
 `)
-	dec := NewDecoder(&in)
+	dec := NewDecoder(context.Background(), &in)
 	enc := NewEncoder(&out)
 	for tok, err := dec.Token(); err == nil; tok, err = dec.Token() {
 		err = enc.EncodeToken(tok)
@@ -2420,12 +2417,10 @@ func TestRace9796Stdlib(t *testing.T) {
 		C []A `xml:"X>Y"`
 	}
 	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
+	for range 2 {
+		wg.Go(func() {
 			_, _ = Marshal(B{[]A{{}}})
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -2556,7 +2551,6 @@ var closeTestsStdlib = []struct {
 
 func TestCloseStdlib(t *testing.T) {
 	for _, tt := range closeTestsStdlib {
-		tt := tt
 		t.Run(tt.desc, func(t *testing.T) {
 			var out strings.Builder
 			enc := NewEncoder(&out)

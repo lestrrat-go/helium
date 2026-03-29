@@ -19,7 +19,7 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return nil, pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '(' {
 		return nil, pctx.error(ctx, ErrNotationNotStarted)
@@ -38,7 +38,7 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 			return nil, pctx.error(ctx, ErrNotationNameRequired)
 		}
 		if _, ok := names[name]; ok {
-			return nil, pctx.error(ctx, ErrDTDDupToken{Name: name})
+			return nil, pctx.error(ctx, DTDDupTokenError{Name: name})
 		}
 
 		enumv = append(enumv, name)
@@ -70,7 +70,7 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return nil, pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '(' {
 		return nil, pctx.error(ctx, ErrAttrListNotStarted)
@@ -89,7 +89,7 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 			return nil, pctx.error(ctx, ErrNmtokenRequired)
 		}
 		if _, ok := names[name]; ok {
-			return nil, pctx.error(ctx, ErrDTDDupToken{Name: name})
+			return nil, pctx.error(ctx, DTDDupTokenError{Name: name})
 		}
 
 		enumv = append(enumv, name)
@@ -121,7 +121,7 @@ func (pctx *parserCtx) parseEnumeratedType(ctx context.Context) (enum.AttributeT
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return enum.AttrInvalid, nil, pctx.error(ctx, errNoCursor)
 	}
 	if cur.ConsumeString("NOTATION") {
 		if !isBlankByte(cur.Peek()) {
@@ -151,7 +151,7 @@ func (pctx *parserCtx) parseAttributeType(ctx context.Context) (enum.AttributeTy
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return enum.AttrInvalid, nil, pctx.error(ctx, errNoCursor)
 	}
 	if cur.ConsumeString("CDATA") {
 		return enum.AttrCDATA, nil, nil
@@ -192,7 +192,8 @@ func (pctx *parserCtx) parseDefaultDecl(ctx context.Context) (deftype enum.Attri
 	deftype = enum.AttrDefaultNone
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		err = pctx.error(ctx, errNoCursor)
+		return
 	}
 	if cur.ConsumeString("#REQUIRED") {
 		deftype = enum.AttrDefaultRequired
@@ -315,7 +316,7 @@ func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (enum.At
 	return v, ok
 }
 
-func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefix string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, tree Enumeration) (attr *AttributeDecl, err error) {
+func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefix string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, tree Enumeration) (attr *AttributeDecl, err error) { //nolint:unparam // attr unused by callers but kept for API symmetry
 	if dtd == nil {
 		err = errors.New("dtd required")
 		return
@@ -385,9 +386,9 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 
 	var prefix string
 	var local string
-	if i := strings.IndexByte(attrName, ':'); i > -1 {
-		prefix = attrName[:i]
-		local = attrName[i+1:]
+	if p, l, ok := strings.Cut(attrName, ":"); ok {
+		prefix = p
+		local = l
 	} else {
 		local = attrName
 	}
@@ -418,7 +419,7 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<!ATTLIST") {
 		return nil
@@ -507,7 +508,7 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<!NOTATION") {
 		return pctx.error(ctx, errors.New("<!NOTATION not started"))
@@ -554,7 +555,7 @@ func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
 func (pctx *parserCtx) parseSystemLiteral(ctx context.Context, qch byte) (string, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", pctx.error(ctx, errNoCursor)
 	}
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
@@ -591,7 +592,7 @@ func (pctx *parserCtx) parseSystemLiteral(ctx context.Context, qch byte) (string
 func (pctx *parserCtx) parsePubidLiteral(ctx context.Context, qch byte) (string, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", pctx.error(ctx, errNoCursor)
 	}
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
@@ -633,7 +634,7 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context) (string, string, err
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", "", pctx.error(ctx, errNoCursor)
 	}
 
 	if cur.HasPrefixString("SYSTEM") {

@@ -191,7 +191,7 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *liter
 	// Type-based content validation (xsl:type on LRE).
 	// XTTE1540: invalid content for the declared type.
 	if inst.TypeName != "" {
-		if err := ec.validateAndNormalizeElementContent(elem, inst.TypeName); err != nil {
+		if err := ec.validateAndNormalizeElementContent(ctx, elem, inst.TypeName); err != nil {
 			// Convert XTTE1510 to XTTE1540 for xsl:type on LRE.
 			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 				return dynamicError(errCodeXTTE1540,

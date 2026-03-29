@@ -196,9 +196,7 @@ func (e Evaluator) AdditionalNamespaces(ns map[string]string) Evaluator {
 	if out.cfg.namespaces == nil {
 		out.cfg.namespaces = make(map[string]string, len(ns))
 	}
-	for k, v := range ns {
-		out.cfg.namespaces[k] = v
-	}
+	maps.Copy(out.cfg.namespaces, ns)
 	return out
 }
 
@@ -217,9 +215,7 @@ func (e Evaluator) AdditionalVariables(vars map[string]any) Evaluator {
 	if out.cfg.variables == nil {
 		out.cfg.variables = make(map[string]any, len(vars))
 	}
-	for k, v := range vars {
-		out.cfg.variables[k] = v
-	}
+	maps.Copy(out.cfg.variables, vars)
 	return out
 }
 
@@ -253,8 +249,8 @@ func (e Evaluator) FunctionNS(uri, name string, fn Function) Evaluator {
 
 // Evaluate evaluates a compiled expression against the given context node.
 func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error) {
-	ectx := newEvalContextWithConfig(ctx, node, e.cfg)
-	return eval(ectx, expr.ast)
+	ectx := newEvalContextWithConfig(node, e.cfg)
+	return eval(ctx, ectx, expr.ast)
 }
 
 // Find evaluates a compiled expression and returns the resulting node-set.
@@ -319,8 +315,8 @@ func MustCompile(expr string) *Expression {
 // Evaluate evaluates the compiled expression against the given context node.
 // (libxml2: xmlXPathCompiledEval)
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
-	ectx := newEvalContextWithConfig(ctx, node, nil)
-	return eval(ectx, e.ast)
+	ectx := newEvalContextWithConfig(node, nil)
+	return eval(ctx, ectx, e.ast)
 }
 
 // String returns the original XPath expression string.

@@ -1,12 +1,13 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
 )
 
-func (c *compiler) parseNamedGroup(elem *helium.Element) error {
+func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) error {
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named group missing name")
@@ -17,7 +18,10 @@ func (c *compiler) parseNamedGroup(elem *helium.Element) error {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		var compositor ModelGroupKind
 		switch {
 		case isXSDElement(ce, elemSequence):
@@ -29,7 +33,7 @@ func (c *compiler) parseNamedGroup(elem *helium.Element) error {
 		default:
 			continue
 		}
-		mg, err := c.parseModelGroup(ce, compositor)
+		mg, err := c.parseModelGroup(ctx, ce, compositor)
 		if err != nil {
 			return err
 		}
@@ -40,7 +44,7 @@ func (c *compiler) parseNamedGroup(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) parseNamedAttributeGroup(elem *helium.Element) error {
+func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.Element) error {
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named attributeGroup missing name")
@@ -52,9 +56,12 @@ func (c *compiler) parseNamedAttributeGroup(elem *helium.Element) error {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		if isXSDElement(ce, elemAttribute) {
-			au := c.parseAttributeUse(ce)
+			au := c.parseAttributeUse(ctx, ce)
 			attrs = append(attrs, au)
 		}
 	}
@@ -62,7 +69,7 @@ func (c *compiler) parseNamedAttributeGroup(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKind) (*ModelGroup, error) {
+func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, compositor ModelGroupKind) (*ModelGroup, error) {
 	minOccurs, maxOccurs := parseParticleOccurs(elem)
 	mg := &ModelGroup{
 		Compositor: compositor,
@@ -74,16 +81,19 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce := child.(*helium.Element)
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
 		switch {
 		case isXSDElement(ce, elemElement):
-			p, err := c.parseLocalElement(ce)
+			p, err := c.parseLocalElement(ctx, ce)
 			if err != nil {
 				return nil, err
 			}
 			mg.Particles = append(mg.Particles, p)
 		case isXSDElement(ce, elemSequence):
-			sub, err := c.parseModelGroup(ce, CompositorSequence)
+			sub, err := c.parseModelGroup(ctx, ce, CompositorSequence)
 			if err != nil {
 				return nil, err
 			}
@@ -93,7 +103,7 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 				Term:      sub,
 			})
 		case isXSDElement(ce, elemChoice):
-			sub, err := c.parseModelGroup(ce, CompositorChoice)
+			sub, err := c.parseModelGroup(ctx, ce, CompositorChoice)
 			if err != nil {
 				return nil, err
 			}
@@ -103,7 +113,7 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 				Term:      sub,
 			})
 		case isXSDElement(ce, elemAll):
-			sub, err := c.parseModelGroup(ce, CompositorAll)
+			sub, err := c.parseModelGroup(ctx, ce, CompositorAll)
 			if err != nil {
 				return nil, err
 			}
@@ -113,7 +123,7 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 				Term:      sub,
 			})
 		case isXSDElement(ce, elemAny):
-			p := c.parseWildcard(ce)
+			p := c.parseWildcard(ctx, ce)
 			mg.Particles = append(mg.Particles, p)
 		case isXSDElement(ce, elemGroup):
 			ref := getAttr(ce, attrRef)
@@ -124,7 +134,7 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 					MinOccurs: placeholderMin,
 					MaxOccurs: placeholderMax,
 				}
-				qn := c.resolveQName(ce, ref)
+				qn := c.resolveQName(ctx, ce, ref)
 				c.groupRefs[placeholder] = qn
 				mg.Particles = append(mg.Particles, &Particle{
 					MinOccurs: placeholder.MinOccurs,

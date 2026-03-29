@@ -44,7 +44,7 @@ var (
 )
 
 type builtinFunction struct {
-	callback func(ctx *evalContext, args []*Result) (*Result, error)
+	callback func(ec *evalContext, args []*Result) (*Result, error)
 }
 
 func (f builtinFunction) Eval(ctx context.Context, args []*Result) (*Result, error) {
@@ -97,22 +97,22 @@ func init() {
 	}
 }
 
-func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
-	if err := ctx.countOps(1); err != nil {
+func evalFunctionCall(ctx context.Context, ec *evalContext, fc FunctionCall) (*Result, error) {
+	if err := ec.countOps(1); err != nil {
 		return nil, err
 	}
 
 	// Namespaced function call: resolve prefix to URI and look up in functionsNS.
 	if fc.Prefix != "" {
-		return evalNamespacedFunctionCall(ctx, fc)
+		return evalNamespacedFunctionCall(ctx, ec, fc)
 	}
 
 	// Unqualified: built-ins take priority, then user-registered functions.
 	var fn Function
 	if f, ok := builtinFunctions[fc.Name]; ok {
 		fn = f
-	} else if ctx.functions != nil {
-		fn = ctx.functions[fc.Name]
+	} else if ec.functions != nil {
+		fn = ec.functions[fc.Name]
 	}
 	if fn == nil {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownFunction, fc.Name)
@@ -121,7 +121,7 @@ func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
 	// Pre-evaluate all arguments.
 	args := make([]*Result, len(fc.Args))
 	for i, expr := range fc.Args {
-		r, err := eval(ctx, expr)
+		r, err := eval(ctx, ec, expr)
 		if err != nil {
 			return nil, err
 		}
@@ -130,21 +130,21 @@ func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
 
 	// Stash the evalContext as FunctionContext in the context.Context
 	// so functions can retrieve it via GetFunctionContext.
-	fctx := withFunctionContext(ctx.goCtx, ctx)
+	fctx := withFunctionContext(ctx, ec)
 	return fn.Eval(fctx, args) //nolint:wrapcheck
 }
 
-func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
-	if ctx.namespaces == nil {
+func evalNamespacedFunctionCall(ctx context.Context, ec *evalContext, fc FunctionCall) (*Result, error) {
+	if ec.namespaces == nil {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, fc.Prefix)
 	}
-	uri, ok := ctx.namespaces[fc.Prefix]
+	uri, ok := ec.namespaces[fc.Prefix]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, fc.Prefix)
 	}
 	var fn Function
-	if ctx.functionsNS != nil {
-		fn = ctx.functionsNS[QualifiedName{URI: uri, Name: fc.Name}]
+	if ec.functionsNS != nil {
+		fn = ec.functionsNS[QualifiedName{URI: uri, Name: fc.Name}]
 	}
 	if fn == nil {
 		return nil, fmt.Errorf("%w: {%s}%s", ErrUnknownFunction, uri, fc.Name)
@@ -153,7 +153,7 @@ func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, err
 	// Pre-evaluate all arguments.
 	args := make([]*Result, len(fc.Args))
 	for i, expr := range fc.Args {
-		r, err := eval(ctx, expr)
+		r, err := eval(ctx, ec, expr)
 		if err != nil {
 			return nil, err
 		}
@@ -162,24 +162,24 @@ func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, err
 
 	// Stash the evalContext as FunctionContext in the context.Context
 	// so functions can retrieve it via GetFunctionContext.
-	fctx := withFunctionContext(ctx.goCtx, ctx)
+	fctx := withFunctionContext(ctx, ec)
 	return fn.Eval(fctx, args) //nolint:wrapcheck
 }
 
 // --- Node-set functions ---
 
-func fnLast(ctx *evalContext, args []*Result) (*Result, error) {
+func fnLast(ec *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 0 {
 		return nil, errLastNoArgs
 	}
-	return &Result{Type: NumberResult, Number: float64(ctx.size)}, nil
+	return &Result{Type: NumberResult, Number: float64(ec.size)}, nil
 }
 
-func fnPosition(ctx *evalContext, args []*Result) (*Result, error) {
+func fnPosition(ec *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 0 {
 		return nil, errPositionNoArgs
 	}
-	return &Result{Type: NumberResult, Number: float64(ctx.position)}, nil
+	return &Result{Type: NumberResult, Number: float64(ec.position)}, nil
 }
 
 func fnCount(_ *evalContext, args []*Result) (*Result, error) {
@@ -192,7 +192,7 @@ func fnCount(_ *evalContext, args []*Result) (*Result, error) {
 	return &Result{Type: NumberResult, Number: float64(len(args[0].NodeSet))}, nil
 }
 
-func fnID(ctx *evalContext, args []*Result) (*Result, error) {
+func fnID(ec *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
 		return nil, errIDOneArg
 	}
@@ -203,7 +203,7 @@ func fnID(ctx *evalContext, args []*Result) (*Result, error) {
 	}
 
 	// Get document
-	root := documentRoot(ctx.node)
+	root := documentRoot(ec.node)
 	doc, ok := root.(*helium.Document)
 	if !ok {
 		return &Result{Type: NodeSetResult}, nil
@@ -240,8 +240,8 @@ func collectIDValues(r *Result) []string {
 	return strings.Fields(resultToString(r))
 }
 
-func fnLocalName(ctx *evalContext, args []*Result) (*Result, error) {
-	n, ok, err := nodeArgOrContext(ctx, args)
+func fnLocalName(ec *evalContext, args []*Result) (*Result, error) {
+	n, ok, err := nodeArgOrContext(ec, args)
 	if err != nil {
 		return nil, err
 	}
@@ -251,8 +251,8 @@ func fnLocalName(ctx *evalContext, args []*Result) (*Result, error) {
 	return &Result{Type: StringResult, String: localNameOf(n)}, nil
 }
 
-func fnNamespaceURI(ctx *evalContext, args []*Result) (*Result, error) {
-	n, ok, err := nodeArgOrContext(ctx, args)
+func fnNamespaceURI(ec *evalContext, args []*Result) (*Result, error) {
+	n, ok, err := nodeArgOrContext(ec, args)
 	if err != nil {
 		return nil, err
 	}
@@ -262,8 +262,8 @@ func fnNamespaceURI(ctx *evalContext, args []*Result) (*Result, error) {
 	return &Result{Type: StringResult, String: nodeNamespaceURI(n)}, nil
 }
 
-func fnName(ctx *evalContext, args []*Result) (*Result, error) {
-	n, ok, err := nodeArgOrContext(ctx, args)
+func fnName(ec *evalContext, args []*Result) (*Result, error) {
+	n, ok, err := nodeArgOrContext(ec, args)
 	if err != nil {
 		return nil, err
 	}
@@ -289,9 +289,9 @@ func nameOf(n helium.Node) string {
 // nodeArgOrContext returns the first node from an optional node-set argument,
 // or the context node if no argument is provided.
 // The second return value reports whether a node was found.
-func nodeArgOrContext(ctx *evalContext, args []*Result) (helium.Node, bool, error) {
+func nodeArgOrContext(ec *evalContext, args []*Result) (helium.Node, bool, error) {
 	if len(args) == 0 {
-		return ctx.node, true, nil
+		return ec.node, true, nil
 	}
 	if len(args) != 1 {
 		return nil, false, errExpected01Args
@@ -307,9 +307,9 @@ func nodeArgOrContext(ctx *evalContext, args []*Result) (helium.Node, bool, erro
 
 // --- String functions ---
 
-func fnString(ctx *evalContext, args []*Result) (*Result, error) {
+func fnString(ec *evalContext, args []*Result) (*Result, error) {
 	if len(args) == 0 {
-		s := stringValue(ctx.node)
+		s := stringValue(ec.node)
 		return &Result{Type: StringResult, String: s}, nil
 	}
 	if len(args) != 1 {
@@ -353,11 +353,11 @@ func fnSubstringBefore(_ *evalContext, args []*Result) (*Result, error) {
 	}
 	s := resultToString(args[0])
 	sep := resultToString(args[1])
-	idx := strings.Index(s, sep)
-	if idx < 0 {
+	before, _, found := strings.Cut(s, sep)
+	if !found {
 		return &Result{Type: StringResult}, nil
 	}
-	return &Result{Type: StringResult, String: s[:idx]}, nil
+	return &Result{Type: StringResult, String: before}, nil
 }
 
 func fnSubstringAfter(_ *evalContext, args []*Result) (*Result, error) {
@@ -366,11 +366,11 @@ func fnSubstringAfter(_ *evalContext, args []*Result) (*Result, error) {
 	}
 	s := resultToString(args[0])
 	sep := resultToString(args[1])
-	idx := strings.Index(s, sep)
-	if idx < 0 {
+	_, after, found := strings.Cut(s, sep)
+	if !found {
 		return &Result{Type: StringResult}, nil
 	}
-	return &Result{Type: StringResult, String: s[idx+len(sep):]}, nil
+	return &Result{Type: StringResult, String: after}, nil
 }
 
 func fnSubstring(_ *evalContext, args []*Result) (*Result, error) {
@@ -419,11 +419,11 @@ func fnSubstring2(s string, rStart float64) *Result {
 	return &Result{Type: StringResult, String: b.String()}
 }
 
-func fnStringLength(ctx *evalContext, args []*Result) (*Result, error) {
+func fnStringLength(ec *evalContext, args []*Result) (*Result, error) {
 	var s string
 	switch len(args) {
 	case 0:
-		s = stringValue(ctx.node)
+		s = stringValue(ec.node)
 	case 1:
 		s = resultToString(args[0])
 	default:
@@ -432,11 +432,11 @@ func fnStringLength(ctx *evalContext, args []*Result) (*Result, error) {
 	return &Result{Type: NumberResult, Number: float64(len([]rune(s)))}, nil
 }
 
-func fnNormalizeSpace(ctx *evalContext, args []*Result) (*Result, error) {
+func fnNormalizeSpace(ec *evalContext, args []*Result) (*Result, error) {
 	var s string
 	switch len(args) {
 	case 0:
-		s = stringValue(ctx.node)
+		s = stringValue(ec.node)
 	case 1:
 		s = resultToString(args[0])
 	default:
@@ -523,14 +523,14 @@ func fnFalse(_ *evalContext, args []*Result) (*Result, error) {
 	return &Result{Type: BooleanResult, Bool: false}, nil
 }
 
-func fnLang(ctx *evalContext, args []*Result) (*Result, error) {
+func fnLang(ec *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
 		return nil, errLangOneArg
 	}
 	langArg := strings.ToLower(resultToString(args[0]))
 
 	// Walk up the tree looking for xml:lang
-	for n := ctx.node; n != nil; n = n.Parent() {
+	for n := ec.node; n != nil; n = n.Parent() {
 		elem, ok := n.(*helium.Element)
 		if !ok {
 			continue
@@ -550,9 +550,9 @@ func fnLang(ctx *evalContext, args []*Result) (*Result, error) {
 
 // --- Number functions ---
 
-func fnNumber(ctx *evalContext, args []*Result) (*Result, error) {
+func fnNumber(ec *evalContext, args []*Result) (*Result, error) {
 	if len(args) == 0 {
-		s := stringValue(ctx.node)
+		s := stringValue(ec.node)
 		return &Result{Type: NumberResult, Number: stringToNumber(s)}, nil
 	}
 	if len(args) != 1 {

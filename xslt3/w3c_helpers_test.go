@@ -593,8 +593,7 @@ func checkSerializationResult(method string, result string, expected string) boo
 		return normalizeSpace(actual) == normalizeSpace(expected)
 	case "xml", "xhtml", "html":
 		return xmlEqual(result, expected)
-	case "adaptive":
-		// Adaptive serialization: compare as string
+	case "adaptive": // Adaptive serialization: compare as string
 		return strings.TrimSpace(normLE(result)) == strings.TrimSpace(normLE(expected))
 	default:
 		// Unknown method: compare as string with line-ending normalization
@@ -769,7 +768,7 @@ func w3cCheckAllOf(checks ...w3cCheck) w3cCheck {
 	return c
 }
 
-func w3cCheckError(code string) w3cCheck {
+func w3cCheckError(_ string) w3cCheck {
 	return w3cCheck{fn: func(_ string, _ []string, _ map[string]*helium.Document) bool {
 		// In the "not" context, this checks whether the transform errored.
 		// Since we only reach assertion checking on success, error checks
@@ -1866,7 +1865,7 @@ func normalizeXMLString(s string) string {
 	}
 	var result []byte
 	prevSpace := false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
 			if !prevSpace {
@@ -2567,9 +2566,7 @@ func (r *w3cCollectionResolver) ResolveURICollection(uri string) ([]string, erro
 	}
 	if !ok {
 		// Support ?select=pattern for directory glob (XSLT 3.0 convention)
-		if idx := strings.Index(uri, "?select="); idx >= 0 {
-			dir := uri[:idx]
-			pattern := uri[idx+len("?select="):]
+		if dir, pattern, ok := strings.Cut(uri, "?select="); ok {
 			matches, err := filepath.Glob(filepath.Join(dir, pattern))
 			if err != nil {
 				return nil, fmt.Errorf("uri-collection glob error: %v", err)

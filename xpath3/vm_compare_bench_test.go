@@ -23,7 +23,7 @@ func benchmarkDoc(b *testing.B) *helium.Document {
 
 func BenchmarkCompilePath(b *testing.B) {
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		expr, err := xpath3.NewCompiler().Compile(benchPathExpr)
 		require.NoError(b, err)
 		require.NotNil(b, expr)
@@ -37,7 +37,7 @@ func BenchmarkEvaluateCompiledCount(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := eval.Evaluate(b.Context(), expr, doc)
 		require.NoError(b, err)
 		value, ok := result.IsNumber()
@@ -51,7 +51,7 @@ func BenchmarkEvaluateConvenienceCount(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := evaluate(b.Context(), doc, benchCountExpr)
 		require.NoError(b, err)
 		value, ok := result.IsNumber()
@@ -67,7 +67,7 @@ func BenchmarkEvaluateCompiledFLWOR(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := eval.Evaluate(b.Context(), expr, doc)
 		require.NoError(b, err)
 		value, ok := result.IsString()

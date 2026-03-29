@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"time"
 
@@ -21,9 +22,7 @@ func cloneOutputDef(src *OutputDef) *OutputDef {
 	cp := *src
 	if src.ResolvedCharMap != nil {
 		cp.ResolvedCharMap = make(map[rune]string, len(src.ResolvedCharMap))
-		for k, v := range src.ResolvedCharMap {
-			cp.ResolvedCharMap[k] = v
-		}
+		maps.Copy(cp.ResolvedCharMap, src.ResolvedCharMap)
 	}
 	if src.UseCharacterMaps != nil {
 		cp.UseCharacterMaps = append([]string(nil), src.UseCharacterMaps...)
@@ -63,7 +62,6 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		docCache:            make(map[string]*helium.Document),
 		functionResultCache: make(map[string]xpath3.Sequence),
 		accumulatorState:    make(map[string]xpath3.Sequence),
-		transformCtx:        ctx,
 		currentTime:         time.Now().UTC(),
 		resultDocuments:     make(map[string]*helium.Document),
 		resultDocItems:      make(map[string]xpath3.Sequence),
@@ -199,7 +197,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// (e.g. FOAR0001 from division by zero) are raised before any template
 	// execution begins.  This ensures that global-variable evaluation errors
 	// are non-recoverable and cannot be caught by xsl:try/xsl:catch.
-	if err := ec.evaluateAllGlobals(); err != nil {
+	if err := ec.evaluateAllGlobals(ctx); err != nil {
 		return nil, err
 	}
 
@@ -356,7 +354,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 					ec.contextItem = v
 					ec.position = i + 1
 					ec.size = selLen
-					tmpl, tErr := ec.findAtomicTemplate(v, resolvedMode)
+					tmpl, tErr := ec.findAtomicTemplate(ctx, v, resolvedMode)
 					if tErr != nil {
 						ec.tunnelParams = savedTunnel
 						return nil, tErr
@@ -488,9 +486,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			outDef.ResolvedCharMap = resolveCharacterMaps(ss, ec.primaryCharacterMaps)
 		}
 	} else if len(ec.primaryResolvedCharMap) > 0 {
-		if outDef == nil {
-			outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
-		}
+		outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
 		outDef.ResolvedCharMap = ec.primaryResolvedCharMap
 	}
 

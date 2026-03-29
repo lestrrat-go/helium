@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -24,9 +25,9 @@ func newElementContent(name string, ctype ElementContentType) (*ElementContent, 
 		if name == "" {
 			return nil, errors.New("ElementContent (element) must have name")
 		}
-		if i := strings.IndexByte(name, ':'); i > -1 {
-			prefix = name[:i]
-			local = name[i+1:]
+		if p, l, ok := strings.Cut(name, ":"); ok {
+			prefix = p
+			local = l
 		} else {
 			local = name
 		}
@@ -132,7 +133,7 @@ func isValidNameChar(r rune) bool { return xmlchar.IsNCNameChar(r) }
 
 // validateAttributeValueInternal validates that defvalue is legal for the
 // declared attribute type. Mirrors xmlValidateAttributeDecl() in libxml2.
-func validateAttributeValueInternal(doc *Document, typ enum.AttributeType, defvalue string) error {
+func validateAttributeValueInternal(_ *Document, typ enum.AttributeType, defvalue string) error {
 	switch typ {
 	case enum.AttrCDATA:
 		// Any string is valid for CDATA
@@ -144,7 +145,7 @@ func validateAttributeValueInternal(doc *Document, typ enum.AttributeType, defva
 		}
 	case enum.AttrIDRefs, enum.AttrEntities:
 		// Must match Names production: Name (S Name)*
-		for _, tok := range strings.Fields(defvalue) {
+		for tok := range strings.FieldsSeq(defvalue) {
 			if !isValidName(tok) {
 				return fmt.Errorf("value %q is not a valid Name", tok)
 			}
@@ -157,7 +158,7 @@ func validateAttributeValueInternal(doc *Document, typ enum.AttributeType, defva
 			return fmt.Errorf("value %q is not a valid NMTOKEN", defvalue)
 		}
 	case enum.AttrNmtokens:
-		for _, tok := range strings.Fields(defvalue) {
+		for tok := range strings.FieldsSeq(defvalue) {
 			if !isValidNmtoken(tok) {
 				return fmt.Errorf("value %q is not a valid NMTOKEN", tok)
 			}
@@ -249,11 +250,9 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 
 	// Walk the document tree and validate each element
 	_ = Walk(doc, NodeWalkerFunc(func(n Node) error {
-		if n.Type() != ElementNode {
-			return nil
+		if elem, ok := AsNode[*Element](n); ok {
+			validateOneElement(ctx, doc, elem, vctx)
 		}
-		elem := n.(*Element)
-		validateOneElement(ctx, doc, elem, vctx)
 		return nil
 	}))
 
@@ -296,7 +295,7 @@ func validateOneElement(ctx context.Context, doc *Document, elem *Element, vctx 
 // - No undeclared attributes (if element is fully declared)
 // - ID values are unique across the document
 // - IDREF/IDREFS values are recorded for cross-reference checking
-func validateElementAttributes(ctx context.Context, doc *Document, elem *Element, edecl *ElementDecl, vctx *validCtx) {
+func validateElementAttributes(ctx context.Context, doc *Document, elem *Element, _ *ElementDecl, vctx *validCtx) {
 	ename := elem.LocalName()
 	attrs := elem.Attributes()
 
@@ -337,14 +336,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 
 				// Check enumeration value against declared tokens
 				if adecl.atype == enum.AttrEnumeration && len(adecl.tree) > 0 {
-					inEnum := false
-					for _, token := range adecl.tree {
-						if token == val {
-							inEnum = true
-							break
-						}
-					}
-					if !inEnum {
+					if !slices.Contains(adecl.tree, val) {
 						vctx.addf(ctx, "element %s: attribute %s value %q is not among the enumerated set", ename, aname, val)
 					}
 				}
@@ -360,7 +352,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 				case enum.AttrIDRef:
 					vctx.idrefs[val] = true
 				case enum.AttrIDRefs:
-					for _, ref := range strings.Fields(val) {
+					for ref := range strings.FieldsSeq(val) {
 						vctx.idrefs[ref] = true
 					}
 				case enum.AttrEntity:
@@ -371,7 +363,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 						vctx.addf(ctx, "element %s: attribute %s references entity %q which is not unparsed", ename, aname, val)
 					}
 				case enum.AttrEntities:
-					for _, entName := range strings.Fields(val) {
+					for entName := range strings.FieldsSeq(val) {
 						ent, ok := doc.GetEntity(entName)
 						if !ok {
 							vctx.addf(ctx, "element %s: attribute %s references undeclared entity %q", ename, aname, entName)
@@ -429,7 +421,7 @@ func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Elemen
 
 // validateElementContent validates that the element's children match the
 // declared content model.
-func validateElementContent(ctx context.Context, dtd *DTD, elem *Element, edecl *ElementDecl, vctx *validCtx) {
+func validateElementContent(ctx context.Context, _ *DTD, elem *Element, edecl *ElementDecl, vctx *validCtx) {
 	ename := elem.LocalName()
 
 	switch edecl.decltype {
@@ -469,9 +461,11 @@ func validateMixedContent(ctx context.Context, elem *Element, content *ElementCo
 		case TextNode, CDATASectionNode, EntityRefNode, CommentNode, ProcessingInstructionNode:
 			// Always allowed in mixed content
 		case ElementNode:
-			cname := child.(*Element).LocalName()
-			if _, ok := allowed[cname]; !ok {
-				vctx.addf(ctx, "element %s: child element %s not allowed in mixed content", elem.LocalName(), cname)
+			if ce, ok := AsNode[*Element](child); ok {
+				cname := ce.LocalName()
+				if _, ok := allowed[cname]; !ok {
+					vctx.addf(ctx, "element %s: child element %s not allowed in mixed content", elem.LocalName(), cname)
+				}
 			}
 		}
 	}
@@ -504,7 +498,9 @@ func collectChildElements(elem *Element) []string {
 	for child := range Children(elem) {
 		switch child.Type() {
 		case ElementNode:
-			children = append(children, child.(*Element).LocalName())
+			if ce, ok := AsNode[*Element](child); ok {
+				children = append(children, ce.LocalName())
+			}
 		case TextNode:
 			// In element-only content, whitespace text is allowed (ignorable
 			// whitespace) but non-whitespace text is an error. We skip

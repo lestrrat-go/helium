@@ -3,12 +3,13 @@ package xslt3
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // getParamDocOutputDef returns the effective parameter-document OutputDef for
@@ -70,7 +71,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 		if ec.schemaRegistry != nil {
 			root := findDocumentElement(tmpDoc)
 			if root != nil {
-				if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+				if err := ec.validateAndNormalizeElementContent(ctx, root, inst.TypeName); err != nil {
 					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 						return dynamicError(errCodeXTTE1540,
 							"document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
@@ -167,7 +168,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 				children = append(children, child)
 			}
 			for _, child := range children {
-				helium.UnlinkNode(child.(helium.MutableNode))
+				helium.UnlinkNode(child.(helium.MutableNode)) //nolint:forcetypeassert
 				if err := ec.addNode(child); err != nil {
 					return err
 				}
@@ -240,13 +241,12 @@ func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *resultD
 	if inst.FormatAVT != nil {
 		v, err := inst.FormatAVT.evaluate(ctx, ec.contextNode)
 		if err != nil {
-			return inst.Format, nil
+			return inst.Format, nil //nolint:nilerr // AVT eval failure falls back to static format
 		}
 		v = strings.TrimSpace(v)
 		if v != "" && !strings.HasPrefix(v, "Q{") {
 			// XTDE0290: prefix must have a namespace binding
-			if idx := strings.IndexByte(v, ':'); idx >= 0 {
-				prefix := v[:idx]
+			if prefix, _, ok := strings.Cut(v, ":"); ok {
 				if _, ok := inst.NSBindings[prefix]; !ok {
 					return "", dynamicError(errCodeXTDE0290,
 						"prefix %q in result-document format has no namespace binding", prefix)
@@ -410,7 +410,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 			root := findDocumentElement(tmpDoc)
 			if root != nil && ec.schemaRegistry != nil {
-				if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+				if err := ec.validateAndNormalizeElementContent(ctx, root, inst.TypeName); err != nil {
 					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 						return dynamicError(errCodeXTTE1540,
 							"result document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
@@ -538,7 +538,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 				adnVal, adnErr := inst.AllowDuplicateNames.evaluate(ctx, ec.contextNode)
 				if adnErr == nil {
 					adnVal = strings.TrimSpace(adnVal)
-					if adnVal == lexicon.ValueYes || adnVal == "true" || adnVal == "1" {
+					if adnVal == lexicon.ValueYes || adnVal == lexicon.ValueTrue || adnVal == "1" {
 						allowDupes = true
 					}
 				}
@@ -581,9 +581,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 				if ec.primaryResolvedCharMap == nil {
 					ec.primaryResolvedCharMap = resolved
 				} else {
-					for k, v := range resolved {
-						ec.primaryResolvedCharMap[k] = v
-					}
+					maps.Copy(ec.primaryResolvedCharMap, resolved)
 				}
 			}
 		}
@@ -641,7 +639,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	if inst.TypeName != "" && inst.Validation == "" {
 		root := findDocumentElement(tmpDoc)
 		if root != nil && ec.schemaRegistry != nil {
-			if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+			if err := ec.validateAndNormalizeElementContent(ctx, root, inst.TypeName); err != nil {
 				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 					return dynamicError(errCodeXTTE1540,
 						"result document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
@@ -720,7 +718,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		return nil, fmtErr
 	}
 	if !hasAny && effectiveFormat == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	// Start with parameter-document defaults (lowest priority).
@@ -761,7 +759,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 			return nil, err
 		}
 		switch strings.TrimSpace(v) {
-		case "true", "1":
+		case lexicon.ValueTrue, "1":
 			v = lexicon.ValueYes
 		case "false", "0":
 			v = lexicon.ValueNo
@@ -827,7 +825,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 			for _, name := range base.CDATASections {
 				existing[name] = struct{}{}
 			}
-			for _, name := range strings.Fields(v) {
+			for name := range strings.FieldsSeq(v) {
 				resolved := resolveQName(name, inst.NSBindings)
 				if _, ok := existing[resolved]; !ok {
 					base.CDATASections = append(base.CDATASections, resolved)

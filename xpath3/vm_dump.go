@@ -89,7 +89,11 @@ func (p *vmProgram) dumpTo(w io.Writer) error {
 		if i == p.root {
 			marker = '*'
 		}
-		if _, err := fmt.Fprintf(w, "%c%04d %-18s %s\n", marker, i, inst.op.String(), formatVMExpr(inst.payload.(Expr))); err != nil {
+		exprStr := ""
+		if e, ok := AsExpr[Expr](inst.payload); ok {
+			exprStr = formatVMExpr(e)
+		}
+		if _, err := fmt.Fprintf(w, "%c%04d %-18s %s\n", marker, i, inst.op.String(), exprStr); err != nil {
 			return err
 		}
 	}

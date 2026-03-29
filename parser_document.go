@@ -132,7 +132,7 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	// Doctype declarations and more misc
 	if cur.HasPrefixString("<!DOCTYPE") {
@@ -229,10 +229,10 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 
-	recover := pctx.options.IsSet(parseRecover)
+	doRecover := pctx.options.IsSet(parseRecover)
 
 	for !cur.Done() && !pctx.stopped {
 		if cur.Peek() == '<' && cur.PeekAt(1) == '/' {
@@ -267,7 +267,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 			err = pctx.parseReference(ctx)
 		default:
 			if err := pctx.parseCharData(ctx, false); err != nil {
-				if !recover || errors.Is(err, errParserStopped) {
+				if !doRecover || errors.Is(err, errParserStopped) {
 					return err
 				}
 				if pctx.recoverErr == nil {
@@ -281,7 +281,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 		}
 
 		if err != nil {
-			if !recover || errors.Is(err, errParserStopped) {
+			if !doRecover || errors.Is(err, errParserStopped) {
 				return pctx.error(ctx, err)
 			}
 			if pctx.recoverErr == nil {

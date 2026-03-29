@@ -1,14 +1,16 @@
 package xslt3
 
 import (
+	"context"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-func (c *compiler) compileApplyTemplates(elem *helium.Element) (*applyTemplatesInst, error) {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Element) (*applyTemplatesInst, error) {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"select": {}, "mode": {},
 	}); err != nil {
 		return nil, err
@@ -33,10 +35,10 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*applyTemplatesI
 		mode = c.defaultMode
 	}
 	// Resolve mode QName to Clark notation (namespace-aware)
-	mode = c.resolveMode(mode)
+	mode = c.resolveMode(ctx, mode)
 	// Record mode usage for XTSE3085 checking
 	if mode != modeCurrent {
-		c.recordModeUsage(mode)
+		c.recordModeUsage(ctx, mode)
 	}
 	inst := &applyTemplatesInst{
 		Mode: mode,
@@ -74,7 +76,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*applyTemplatesI
 						"the stable attribute is permitted only on the first xsl:sort element")
 				}
 			}
-			sk, err := c.compileSortKey(childElem)
+			sk, err := c.compileSortKey(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -83,7 +85,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*applyTemplatesI
 				sortCount++
 			}
 		case lexicon.XSLTElementWithParam:
-			wp, err := c.compileWithParam(childElem)
+			wp, err := c.compileWithParam(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -99,8 +101,8 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*applyTemplatesI
 	return inst, nil
 }
 
-func (c *compiler) compileCallTemplate(elem *helium.Element) (*callTemplateInst, error) {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileCallTemplate(ctx context.Context, elem *helium.Element) (*callTemplateInst, error) {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {},
 	}); err != nil {
 		return nil, err
@@ -126,7 +128,7 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*callTemplateInst,
 		if childElem.LocalName() != lexicon.XSLTElementWithParam {
 			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:call-template", childElem.LocalName())
 		}
-		wp, err := c.compileWithParam(childElem)
+		wp, err := c.compileWithParam(ctx, childElem)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +140,7 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*callTemplateInst,
 	return inst, nil
 }
 
-func (c *compiler) compileIf(elem *helium.Element) (*ifInst, error) {
+func (c *compiler) compileIf(ctx context.Context, elem *helium.Element) (*ifInst, error) {
 	testAttr := getAttr(elem, "test")
 	if testAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:if requires test attribute")
@@ -149,7 +151,7 @@ func (c *compiler) compileIf(elem *helium.Element) (*ifInst, error) {
 		return nil, err
 	}
 
-	body, err := c.compileChildren(elem)
+	body, err := c.compileChildren(ctx, elem)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +159,7 @@ func (c *compiler) compileIf(elem *helium.Element) (*ifInst, error) {
 	return &ifInst{Test: expr, Body: body}, nil
 }
 
-func (c *compiler) compileChoose(elem *helium.Element) (*chooseInst, error) {
+func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*chooseInst, error) {
 	inst := &chooseInst{DefaultCollation: c.defaultCollation}
 	hasOtherwise := false
 
@@ -174,7 +176,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*chooseInst, error) {
 		default:
 			continue
 		}
-		childElem := child.(*helium.Element)
+		childElem, _ := helium.AsNode[*helium.Element](child)
 		if childElem.URI() != lexicon.NamespaceXSLT {
 			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:choose", childElem.Name())
 		}
@@ -186,7 +188,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*chooseInst, error) {
 				return nil, staticError(errCodeXTSE0010, "xsl:when must not appear after xsl:otherwise in xsl:choose")
 			}
 			// Push element-local namespace declarations into scope
-			savedBindings := c.pushElementNamespaces(childElem)
+			savedBindings := c.pushElementNamespaces(ctx, childElem)
 			savedNS := c.xpathDefaultNS
 			savedET := c.expandText
 			hasLocal := false
@@ -217,12 +219,10 @@ func (c *compiler) compileChoose(elem *helium.Element) (*chooseInst, error) {
 			var clauseNS map[string]string
 			if len(c.nsBindings) > 0 {
 				clauseNS = make(map[string]string, len(c.nsBindings))
-				for k, v := range c.nsBindings {
-					clauseNS[k] = v
-				}
+				maps.Copy(clauseNS, c.nsBindings)
 			}
 			whenCollation := getAttr(childElem, "default-collation")
-			body, err := c.compileChildren(childElem)
+			body, err := c.compileChildren(ctx, childElem)
 			wc := &whenClause{Test: expr, Body: body, Namespaces: clauseNS, DefaultCollation: whenCollation}
 			wc.XPathDefaultNS = c.xpathDefaultNS
 			wc.HasXPathDefaultNS = hasLocal
@@ -251,7 +251,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*chooseInst, error) {
 					c.expandText = v
 				}
 			}
-			body, err := c.compileChildren(childElem)
+			body, err := c.compileChildren(ctx, childElem)
 			if hasLocal {
 				inst.OtherwiseXPNS = c.xpathDefaultNS
 				inst.HasOtherwiseXPNS = true
@@ -276,7 +276,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*chooseInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileForEach(elem *helium.Element) (*forEachInst, error) {
+func (c *compiler) compileForEach(ctx context.Context, elem *helium.Element) (*forEachInst, error) {
 	// xsl:break / xsl:next-iteration not allowed inside xsl:for-each.
 	savedBreak := c.breakAllowed
 	c.breakAllowed = false
@@ -313,7 +313,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*forEachInst, error) {
 						"the stable attribute is permitted only on the first xsl:sort element")
 				}
 			}
-			sk, err := c.compileSortKey(childElem)
+			sk, err := c.compileSortKey(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -350,7 +350,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*forEachInst, error) {
 				continue
 			}
 			pastSort = true
-			childInst, err := c.compileInstruction(v)
+			childInst, err := c.compileInstruction(ctx, v)
 			if err != nil {
 				return nil, err
 			}
@@ -363,7 +363,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*forEachInst, error) {
 			if !pastSort && strings.TrimSpace(text) == "" {
 				continue
 			}
-			if !c.shouldStripText(text) {
+			if !c.shouldStripText(ctx, text) {
 				lit := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
 					avt, err := compileAVT(text, c.nsBindings)
@@ -391,15 +391,15 @@ func (c *compiler) compileForEach(elem *helium.Element) (*forEachInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileSortKey(elem *helium.Element) (*sortKey, error) {
+func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*sortKey, error) {
 	// Evaluate use-when on xsl:sort before compiling the sort key.
 	if uw := getAttr(elem, "use-when"); uw != "" {
-		include, err := c.evaluateUseWhen(uw)
+		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return nil, err
 		}
 		if !include {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 	}
 
@@ -418,7 +418,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*sortKey, error) {
 
 	selectAttr := getAttr(elem, "select")
 	// XTSE1015: xsl:sort with select must not have content
-	if selectAttr != "" && c.hasEffectiveContent(elem) {
+	if selectAttr != "" && c.hasEffectiveContent(ctx, elem) {
 		return nil, staticError(errCodeXTSE1015, "xsl:sort with a select attribute must not have content")
 	}
 	if selectAttr != "" {
@@ -428,7 +428,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*sortKey, error) {
 		}
 		sk.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -486,25 +486,25 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*sortKey, error) {
 	return sk, nil
 }
 
-func (c *compiler) compileWithParam(elem *helium.Element) (*withParam, error) {
+func (c *compiler) compileWithParam(ctx context.Context, elem *helium.Element) (*withParam, error) {
 	// Check use-when before compiling: skip this with-param if excluded.
 	if uw := getAttr(elem, "use-when"); uw != "" {
-		include, err := c.evaluateUseWhen(uw)
+		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return nil, err
 		}
 		if !include {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 	}
 
 	// Push element-local namespace declarations (for EQName variable refs)
-	saved := c.pushElementNamespaces(elem)
+	saved := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = saved }()
 
 	// Validate attributes: xsl:with-param allows name, select, as, tunnel
 	// but NOT required (that's only for xsl:param)
-	if err := c.validateXSLTAttrs(elem, withParamAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(ctx, elem, withParamAllowedAttrs); err != nil {
 		return nil, err
 	}
 
@@ -521,7 +521,7 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*withParam, error) {
 	}
 
 	asAttr := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(asAttr, "xsl:with-param "+name); err != nil {
+	if err := c.validateAsSequenceType(ctx, asAttr, "xsl:with-param "+name); err != nil {
 		return nil, err
 	}
 
@@ -535,7 +535,7 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*withParam, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		// XTSE0620: select and non-empty content are mutually exclusive.
-		if err := c.validateEmptyElement(elem, "xsl:with-param"); err != nil {
+		if err := c.validateEmptyElement(ctx, elem, "xsl:with-param"); err != nil {
 			return nil, staticError(errCodeXTSE0620, "xsl:with-param %q has both @select and content", name)
 		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -544,7 +544,7 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*withParam, error) {
 		}
 		wp.Select = expr
 	} else {
-		body, err := c.compileChildren(elem)
+		body, err := c.compileChildren(ctx, elem)
 		if err != nil {
 			return nil, err
 		}
@@ -554,7 +554,7 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*withParam, error) {
 	return wp, nil
 }
 
-func (c *compiler) compilePerformSort(elem *helium.Element) (*performSortInst, error) {
+func (c *compiler) compilePerformSort(ctx context.Context, elem *helium.Element) (*performSortInst, error) {
 	inst := &performSortInst{}
 
 	selectAttr := getAttr(elem, "select")
@@ -572,7 +572,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*performSortInst, e
 			}
 			if childElem.URI() == lexicon.NamespaceXSLT {
 				ln := childElem.LocalName()
-				if ln != "sort" && ln != "fallback" {
+				if ln != lexicon.XSLTElementSort && ln != "fallback" {
 					return nil, staticError(errCodeXTSE1040,
 						"xsl:perform-sort with select attribute must not contain xsl:%s", ln)
 				}
@@ -602,7 +602,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*performSortInst, e
 						"the stable attribute is permitted only on the first xsl:sort element")
 				}
 			}
-			sk, err := c.compileSortKey(childElem)
+			sk, err := c.compileSortKey(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -612,7 +612,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*performSortInst, e
 			}
 		} else {
 			pastSort = true
-			childInst, err := c.compileInstruction(childElem)
+			childInst, err := c.compileInstruction(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -625,7 +625,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*performSortInst, e
 	return inst, nil
 }
 
-func (c *compiler) compileNextMatch(elem *helium.Element) (*nextMatchInst, error) {
+func (c *compiler) compileNextMatch(ctx context.Context, elem *helium.Element) (*nextMatchInst, error) {
 	inst := &nextMatchInst{}
 	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
@@ -633,7 +633,7 @@ func (c *compiler) compileNextMatch(elem *helium.Element) (*nextMatchInst, error
 			continue
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementWithParam {
-			wp, err := c.compileWithParam(childElem)
+			wp, err := c.compileWithParam(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -645,8 +645,8 @@ func (c *compiler) compileNextMatch(elem *helium.Element) (*nextMatchInst, error
 	return inst, nil
 }
 
-func (c *compiler) compileApplyImports(elem *helium.Element) (*applyImportsInst, error) {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{}); err != nil {
+func (c *compiler) compileApplyImports(ctx context.Context, elem *helium.Element) (*applyImportsInst, error) {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{}); err != nil {
 		return nil, err
 	}
 	inst := &applyImportsInst{}
@@ -664,7 +664,7 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*applyImportsInst,
 		if childElem.LocalName() != lexicon.XSLTElementWithParam {
 			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:apply-imports", childElem.LocalName())
 		}
-		wp, err := c.compileWithParam(childElem)
+		wp, err := c.compileWithParam(ctx, childElem)
 		if err != nil {
 			return nil, err
 		}
@@ -675,7 +675,7 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*applyImportsInst,
 	return inst, nil
 }
 
-func (c *compiler) compileTry(elem *helium.Element) (*tryCatchInst, error) {
+func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCatchInst, error) {
 	inst := &tryCatchInst{RollbackOutput: true}
 
 	if rb := getAttr(elem, "rollback-output"); rb == lexicon.ValueNo {
@@ -713,13 +713,11 @@ func (c *compiler) compileTry(elem *helium.Element) (*tryCatchInst, error) {
 			if errAttr := getAttr(childElem, "errors"); errAttr != "" {
 				// Build a merged namespace map including catch-element bindings
 				catchNS := make(map[string]string, len(c.nsBindings))
-				for k, v := range c.nsBindings {
-					catchNS[k] = v
-				}
+				maps.Copy(catchNS, c.nsBindings)
 				for _, ns := range childElem.Namespaces() {
 					catchNS[ns.Prefix()] = ns.URI()
 				}
-				for _, code := range strings.Fields(errAttr) {
+				for code := range strings.FieldsSeq(errAttr) {
 					clause.Errors = append(clause.Errors, resolveQName(code, catchNS))
 				}
 			}
@@ -736,7 +734,7 @@ func (c *compiler) compileTry(elem *helium.Element) (*tryCatchInst, error) {
 				}
 				clause.Select = expr
 			} else {
-				body, err := c.compileChildren(childElem)
+				body, err := c.compileChildren(ctx, childElem)
 				if err != nil {
 					return nil, err
 				}
@@ -751,7 +749,7 @@ func (c *compiler) compileTry(elem *helium.Element) (*tryCatchInst, error) {
 			if inst.Select != nil {
 				return nil, staticError(errCodeXTSE3140, "xsl:try with select attribute must not have non-catch/fallback children")
 			}
-			childInst, err := c.compileInstruction(childElem)
+			childInst, err := c.compileInstruction(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -764,7 +762,7 @@ func (c *compiler) compileTry(elem *helium.Element) (*tryCatchInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileForEachGroup(elem *helium.Element) (*forEachGroupInst, error) {
+func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element) (*forEachGroupInst, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:for-each-group requires select attribute")
@@ -827,7 +825,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*forEachGroupInst,
 		if err := validateBooleanAttr("xsl:for-each-group", "composite", comp); err != nil {
 			return nil, err
 		}
-		if comp == lexicon.ValueYes || comp == "true" || comp == "1" {
+		if comp == lexicon.ValueYes || comp == lexicon.ValueTrue || comp == "1" {
 			inst.Composite = true
 		}
 	}
@@ -874,7 +872,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*forEachGroupInst,
 							"the stable attribute is permitted only on the first xsl:sort element")
 					}
 				}
-				sk, sortErr := c.compileSortKey(v)
+				sk, sortErr := c.compileSortKey(ctx, v)
 				if sortErr != nil {
 					return nil, sortErr
 				}
@@ -884,7 +882,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*forEachGroupInst,
 				}
 				continue
 			}
-			childInst, childErr := c.compileInstruction(v)
+			childInst, childErr := c.compileInstruction(ctx, v)
 			if childErr != nil {
 				return nil, childErr
 			}
@@ -893,7 +891,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*forEachGroupInst,
 			}
 		case *helium.Text:
 			text := string(v.Content())
-			if !c.shouldStripText(text) {
+			if !c.shouldStripText(ctx, text) {
 				lit := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
 					avt, err := compileAVT(text, c.nsBindings)
@@ -910,7 +908,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*forEachGroupInst,
 	return inst, nil
 }
 
-func (c *compiler) compileAnalyzeString(elem *helium.Element) (*analyzeStringInst, error) {
+func (c *compiler) compileAnalyzeString(ctx context.Context, elem *helium.Element) (*analyzeStringInst, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:analyze-string requires select attribute")
@@ -968,7 +966,7 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*analyzeStringIns
 				return nil, staticError(errCodeXTSE0010, "xsl:matching-substring must precede xsl:non-matching-substring and xsl:fallback")
 			}
 			phase = phaseMatching
-			body, err := c.compileChildren(childElem)
+			body, err := c.compileChildren(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -978,7 +976,7 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*analyzeStringIns
 				return nil, staticError(errCodeXTSE0010, "xsl:non-matching-substring out of order in xsl:analyze-string")
 			}
 			phase = phaseNonMatch
-			body, err := c.compileChildren(childElem)
+			body, err := c.compileChildren(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}
@@ -997,7 +995,7 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*analyzeStringIns
 }
 
 // compileEvaluate compiles xsl:evaluate.
-func (c *compiler) compileEvaluate(elem *helium.Element) (instruction, error) {
+func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (instruction, error) {
 	inst := &evaluateInst{}
 
 	// xpath attribute is required
@@ -1069,7 +1067,7 @@ func (c *compiler) compileEvaluate(elem *helium.Element) (instruction, error) {
 			continue
 		}
 		if childElem.LocalName() == lexicon.XSLTElementWithParam {
-			wp, err := c.compileWithParam(childElem)
+			wp, err := c.compileWithParam(ctx, childElem)
 			if err != nil {
 				return nil, err
 			}

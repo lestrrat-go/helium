@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,13 +14,13 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-func (c *compiler) compileCharacterMap(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "use-character-maps": {}, "use-when": {},
 	}); err != nil {
 		return err
 	}
-	saved := c.pushElementNamespaces(elem)
+	saved := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = saved }()
 
 	name := getAttr(elem, "name")
@@ -34,7 +35,7 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 	}
 
 	if ucm := getAttr(elem, paramUseCharacterMaps); ucm != "" {
-		for _, n := range strings.Fields(ucm) {
+		for n := range strings.FieldsSeq(ucm) {
 			cm.UseCharacterMaps = append(cm.UseCharacterMaps, resolveQName(n, c.nsBindings))
 		}
 	}
@@ -76,9 +77,7 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 		// Merge: later-compiled mappings override earlier ones for the
 		// same character. Since imports compile before the importing
 		// module, the importing module's mappings naturally take precedence.
-		for r, s := range cm.Mappings {
-			existing.Mappings[r] = s
-		}
+		maps.Copy(existing.Mappings, cm.Mappings)
 		existing.UseCharacterMaps = append(existing.UseCharacterMaps, cm.UseCharacterMaps...)
 	} else {
 		c.stylesheet.characterMaps[name] = cm
@@ -86,15 +85,15 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileKey(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "match": {}, "use": {}, "collation": {}, "composite": {},
 		"use-when": {}, "default-collation": {},
 	}); err != nil {
 		return err
 	}
 	// Collect local namespace declarations (e.g., xmlns:ex="..." on xsl:key)
-	c.collectNamespaces(elem)
+	c.collectNamespaces(ctx, elem)
 
 	// Handle per-element default-collation override (standard attribute)
 	savedDefaultCollation := c.defaultCollation
@@ -164,7 +163,7 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 	}
 
 	useAttr := getAttr(elem, "use")
-	hasContent := c.hasEffectiveContent(elem)
+	hasContent := c.hasEffectiveContent(ctx, elem)
 	// XTSE1205: must have either use attr or content, not both, and not neither
 	if useAttr != "" && hasContent {
 		return staticError(errCodeXTSE1205, "xsl:key must not have both a use attribute and content")
@@ -180,7 +179,7 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 		kd.Use = useExpr
 	} else {
 		// XSLT 2.0+: key may use body content instead of use attribute.
-		body, _, err := c.compileTemplateBody(elem)
+		body, _, err := c.compileTemplateBody(ctx, elem)
 		if err != nil {
 			return err
 		}
@@ -191,8 +190,8 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileOutput(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "method": {}, "version": {}, "encoding": {},
 		"omit-xml-declaration": {}, "standalone": {}, "doctype-public": {},
 		"doctype-system": {}, "cdata-section-elements": {}, "indent": {},
@@ -207,7 +206,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	}); err != nil {
 		return err
 	}
-	saved := c.pushElementNamespaces(elem)
+	saved := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = saved }()
 
 	name := getAttr(elem, "name")
@@ -245,7 +244,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.Method = methodXML
 	}
 	if outDef.Encoding == "" {
-		outDef.Encoding = "UTF-8"
+		outDef.Encoding = lexicon.EncodingUTF8U
 	}
 
 	// Validate and parse boolean output attributes.
@@ -301,9 +300,9 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		switch v {
 		case lexicon.ValueYes, lexicon.ValueNo, "omit":
 			// valid as-is
-		case "true", "1":
+		case lexicon.ValueTrue, "1":
 			v = lexicon.ValueYes
-		case "false", "0":
+		case lexicon.ValueFalse, "0":
 			v = lexicon.ValueNo
 		default:
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
@@ -343,7 +342,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	}
 
 	if ucm := getAttr(elem, paramUseCharacterMaps); ucm != "" {
-		for _, n := range strings.Fields(ucm) {
+		for n := range strings.FieldsSeq(ucm) {
 			outDef.UseCharacterMaps = append(outDef.UseCharacterMaps, resolveQName(n, c.nsBindings))
 		}
 	}
@@ -380,7 +379,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	if v := getAttr(elem, paramParameterDocument); v != "" {
 		outDef.ParameterDocument = v
 		baseURI := stylesheetBaseURI(elem, c.baseURI)
-		if err := c.loadParameterDocument(outDef, baseURI, v); err != nil {
+		if err := c.loadParameterDocument(ctx, outDef, baseURI, v); err != nil {
 			return err
 		}
 	}
@@ -480,8 +479,8 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 // loadParameterDocument loads a serialization parameter document (XSLT 3.0 §9.2)
 // and applies its settings to the given OutputDef. Parameters explicitly set on
 // the xsl:output element take precedence; the parameter document provides defaults.
-func (c *compiler) loadParameterDocument(outDef *OutputDef, baseURI, href string) error {
-	return loadParameterDocumentFromFile(c.ctx, outDef, baseURI, href)
+func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef, baseURI, href string) error {
+	return loadParameterDocumentFromFile(ctx, outDef, baseURI, href)
 }
 
 // loadParameterDocumentFromFile loads a serialization parameter document and
@@ -651,8 +650,8 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 	return nil
 }
 
-func (c *compiler) compileAttributeSet(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "use-attribute-sets": {}, "visibility": {},
 		"streamable": {}, "use-when": {},
 	}); err != nil {
@@ -665,7 +664,7 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 	if !isValidQName(name) && !isValidEQName(name) {
 		return staticError(errCodeXTSE0020, "invalid name %q on xsl:attribute-set", name)
 	}
-	if err := c.checkQNamePrefix(name, "xsl:attribute-set"); err != nil {
+	if err := c.checkQNamePrefix(ctx, name, "xsl:attribute-set"); err != nil {
 		return err
 	}
 	name = resolveQName(name, c.nsBindings)
@@ -686,7 +685,7 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 	}
 
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
-		for _, n := range strings.Fields(uas) {
+		for n := range strings.FieldsSeq(uas) {
 			asd.UseAttrSets = append(asd.UseAttrSets, resolveQName(n, c.nsBindings))
 		}
 	}
@@ -703,7 +702,7 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 		if childElem.URI() != lexicon.NamespaceXSLT || childElem.LocalName() != lexicon.XSLTElementAttribute {
 			return staticError(errCodeXTSE0010, "only xsl:attribute is allowed as a child of xsl:attribute-set")
 		}
-		inst, err := c.compileAttribute(childElem)
+		inst, err := c.compileAttribute(ctx, childElem)
 		if err != nil {
 			return err
 		}
@@ -813,8 +812,8 @@ func checkAttributeSetStreamable(ss *Stylesheet) error {
 	return nil
 }
 
-func (c *compiler) compileDecimalFormat(elem *helium.Element) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileDecimalFormat(ctx context.Context, elem *helium.Element) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "decimal-separator": {}, "grouping-separator": {},
 		"infinity": {}, "minus-sign": {}, "NaN": {}, "percent": {},
 		"per-mille": {}, "zero-digit": {}, "digit": {},
@@ -824,7 +823,7 @@ func (c *compiler) compileDecimalFormat(elem *helium.Element) error {
 		return err
 	}
 	// Push element-local namespace declarations so prefixed names resolve correctly
-	saved := c.pushElementNamespaces(elem)
+	saved := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = saved }()
 
 	name := getAttr(elem, "name")
@@ -834,9 +833,7 @@ func (c *compiler) compileDecimalFormat(elem *helium.Element) error {
 			return staticError(errCodeXTSE0020, "invalid name %q on xsl:decimal-format", name)
 		}
 		qn = xpath3.QualifiedName{Name: name}
-		if idx := strings.IndexByte(name, ':'); idx >= 0 {
-			prefix := name[:idx]
-			local := name[idx+1:]
+		if prefix, local, ok := strings.Cut(name, ":"); ok {
 			if uri, ok := c.nsBindings[prefix]; ok {
 				qn = xpath3.QualifiedName{URI: uri, Name: local}
 			} else {
@@ -883,7 +880,6 @@ func (c *compiler) compileDecimalFormat(elem *helium.Element) error {
 	// If current declaration has higher or equal import precedence, merge properties.
 	// Lower precedence declarations' explicitly-set properties are inherited.
 	if !exists || c.importPrec >= existingPrec {
-
 		// Merge explicitly-set properties
 		if v := getAttr(elem, "decimal-separator"); v != "" {
 			df.DecimalSeparator = firstRune(v)
@@ -968,7 +964,7 @@ func checkDecimalFormatCharConflicts(df xpath3.DecimalFormat) error {
 		{df.PatternSeparator, "pattern-separator"},
 		{df.ExponentSeparator, "exponent-separator"},
 	}
-	for i := 0; i < len(roles); i++ {
+	for i := range roles {
 		for j := i + 1; j < len(roles); j++ {
 			if roles[i].char == roles[j].char {
 				return staticError(errCodeXTSE1300,
@@ -1040,8 +1036,8 @@ func firstRune(s string) rune {
 	return 0
 }
 
-func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error {
-	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
+func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Element, strip bool) error {
+	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"elements": {},
 	}); err != nil {
 		return err
@@ -1051,7 +1047,7 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 	if !strip {
 		kind = "preserve-space"
 	}
-	if err := c.validateEmptyElement(elem, "xsl:"+kind); err != nil {
+	if err := c.validateEmptyElement(ctx, elem, "xsl:"+kind); err != nil {
 		return err
 	}
 	elements := getAttr(elem, "elements")
@@ -1066,7 +1062,7 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 	}
 	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
 
-	for _, name := range strings.Fields(elements) {
+	for name := range strings.FieldsSeq(elements) {
 		nt := nameTest{}
 		// Handle EQName syntax: Q{uri}local
 		if strings.HasPrefix(name, "Q{") {
@@ -1076,9 +1072,9 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 			} else {
 				nt.Local = name
 			}
-		} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
-			nt.Prefix = name[:idx]
-			nt.Local = name[idx+1:]
+		} else if prefix, local, ok := strings.Cut(name, ":"); ok {
+			nt.Prefix = prefix
+			nt.Local = local
 			// XTSE0280: check that the prefix is declared (skip EQName and wildcards)
 			if !strings.HasPrefix(nt.Prefix, "Q{") && nt.Prefix != "*" {
 				if _, ok := c.nsBindings[nt.Prefix]; !ok {
@@ -1104,7 +1100,7 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 
 // nameTestKey returns a canonical key for a nameTest by resolving the prefix
 // to a URI. EQName prefixes of the form "Q{uri}" are used as-is.
-func (c *compiler) nameTestKey(nt nameTest) string {
+func (c *compiler) nameTestKey(_ context.Context, nt nameTest) string {
 	uri := ""
 	if strings.HasPrefix(nt.Prefix, "Q{") {
 		uri = nt.Prefix[2 : len(nt.Prefix)-1]
@@ -1118,16 +1114,16 @@ func (c *compiler) nameTestKey(nt nameTest) string {
 
 // checkSpaceConflicts detects NameTests that appear in both xsl:strip-space
 // and xsl:preserve-space at the same import precedence (XTSE0270).
-func (c *compiler) checkSpaceConflicts() error {
+func (c *compiler) checkSpaceConflicts(ctx context.Context) error {
 	if len(c.stylesheet.stripSpace) == 0 || len(c.stylesheet.preserveSpace) == 0 {
 		return nil
 	}
 	stripKeys := make(map[string]struct{}, len(c.stylesheet.stripSpace))
 	for _, nt := range c.stylesheet.stripSpace {
-		stripKeys[c.nameTestKey(nt)] = struct{}{}
+		stripKeys[c.nameTestKey(ctx, nt)] = struct{}{}
 	}
 	for _, nt := range c.stylesheet.preserveSpace {
-		key := c.nameTestKey(nt)
+		key := c.nameTestKey(ctx, nt)
 		if _, ok := stripKeys[key]; ok {
 			return staticError(errCodeXTSE0270,
 				"conflicting xsl:strip-space and xsl:preserve-space for %q", key)

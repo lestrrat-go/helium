@@ -88,7 +88,7 @@ func (c *xpathCommand) parseArgs(args []string) (*xpathConfig, []string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "--version":
+		case flagVersion:
 			cfg.version = true
 		case "--engine":
 			i++
@@ -256,7 +256,11 @@ func (c *xpathCommand) evalXPath3(ctx context.Context, cfg *xpathConfig, doc *he
 func (c *xpathCommand) printXPathNode(n helium.Node) int {
 	switch n.Type() {
 	case helium.AttributeNode:
-		attr := n.(*helium.Attribute) //nolint:forcetypeassert // node type checked above
+		attr, ok := helium.AsNode[*helium.Attribute](n)
+		if !ok {
+			_, _ = fmt.Fprintf(c.stderr, "%s: unexpected attribute node type %T\n", c.prog, n)
+			return ExitErr
+		}
 		_, _ = fmt.Fprintf(c.stdout, " %s=%q\n", attr.Name(), attr.Value())
 	case helium.NamespaceDeclNode, helium.NamespaceNode:
 		ns, ok := n.(interface {

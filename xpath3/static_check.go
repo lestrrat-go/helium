@@ -3,6 +3,8 @@ package xpath3
 import (
 	"fmt"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // knownXSTypeNames lists valid type local names in the xs: namespace
@@ -68,7 +70,7 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool
 			}
 			continue
 		}
-		if req.prefix == "xs" || req.prefix == "xsd" {
+		if req.prefix == "xs" || req.prefix == lexicon.PrefixXSD {
 			switch req.name {
 			case "NMTOKENS", "IDREFS", "ENTITIES":
 				return &XPathError{
@@ -89,7 +91,6 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool
 	}
 	return nil
 }
-
 
 func (b prefixPlanBuilder) plan() prefixValidationPlan {
 	return prefixValidationPlan{
@@ -275,7 +276,6 @@ func appendStepLocalPrefixChecks(plan *prefixPlanBuilder, s *Step) {
 	appendNodeTestPrefixChecks(plan, s.NodeTest)
 }
 
-
 func appendVMPredicatePrefixChecks(plan *prefixPlanBuilder, pred Expr) {
 	switch p := pred.(type) {
 	case vmPositionPredicateExpr:
@@ -368,8 +368,8 @@ func addVarNamePrefixCheck(plan *prefixPlanBuilder, varName string) {
 	if strings.HasPrefix(varName, "Q{") {
 		return
 	}
-	if idx := strings.IndexByte(varName, ':'); idx >= 0 {
-		addPrefixCheck(plan, varName[:idx])
+	if prefix, _, ok := strings.Cut(varName, ":"); ok {
+		addPrefixCheck(plan, prefix)
 	}
 }
 
@@ -391,8 +391,7 @@ func addCatchCodePrefixCheck(plan *prefixPlanBuilder, code string) {
 	if strings.HasPrefix(code, "Q{") {
 		return // URIQualifiedName, no prefix to validate
 	}
-	if idx := strings.IndexByte(code, ':'); idx >= 0 {
-		prefix := code[:idx]
+	if prefix, _, ok := strings.Cut(code, ":"); ok {
 		if prefix != "*" {
 			addPrefixCheck(plan, prefix)
 		}

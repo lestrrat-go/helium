@@ -93,13 +93,13 @@ var builtinFunctions3 = map[QualifiedName]Function{}
 //  2. User-registered functions by QualifiedName (ec.fnsNS)
 //  3. Built-in functions by QualifiedName (builtinFunctions3)
 //  4. Default fn: namespace (no prefix = fn:)
-func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function, error) {
+func resolveFunction(ctx context.Context, ec *evalContext, prefix, name string, arity int) (Function, error) {
 	// Handle Q{uri}local URIQualifiedName syntax from the lexer
 	if prefix == "" && strings.HasPrefix(name, "Q{") {
 		if idx := strings.Index(name, "}"); idx >= 0 {
 			uri := name[2:idx]
 			local := name[idx+1:]
-			return resolveFunctionByURI(ec, uri, local, arity)
+			return resolveFunctionByURI(ctx, ec, uri, local, arity)
 		}
 	}
 
@@ -119,10 +119,10 @@ func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function,
 		return nil, err
 	}
 
-	return resolveFunctionByURI(ec, uri, name, arity)
+	return resolveFunctionByURI(ctx, ec, uri, name, arity)
 }
 
-func resolveFunctionByURI(ec *evalContext, uri, name string, arity int) (Function, error) {
+func resolveFunctionByURI(ctx context.Context, ec *evalContext, uri, name string, arity int) (Function, error) {
 	// User functions by qualified name
 	if ec.fnsNS != nil {
 		qn := QualifiedName{URI: uri, Name: name}
@@ -145,7 +145,7 @@ func resolveFunctionByURI(ec *evalContext, uri, name string, arity int) (Functio
 
 	// Check function resolver (not visible to function-lookup)
 	if ec.functionResolver != nil {
-		if fn, ok, err := ec.functionResolver.ResolveFunction(ec.goCtx, uri, name, arity); err != nil {
+		if fn, ok, err := ec.functionResolver.ResolveFunction(ctx, uri, name, arity); err != nil {
 			return nil, err
 		} else if ok {
 			return fn, nil
@@ -173,13 +173,13 @@ func resolvePrefix(ec *evalContext, prefix string) (string, error) {
 }
 
 func checkArity(fn Function, name string, arity int) error {
-	min := fn.MinArity()
-	max := fn.MaxArity()
-	if arity < min {
-		return fmt.Errorf("%w: %s requires at least %d arguments, got %d", ErrArityMismatch, name, min, arity)
+	minArity := fn.MinArity()
+	maxArity := fn.MaxArity()
+	if arity < minArity {
+		return fmt.Errorf("%w: %s requires at least %d arguments, got %d", ErrArityMismatch, name, minArity, arity)
 	}
-	if max >= 0 && arity > max {
-		return fmt.Errorf("%w: %s accepts at most %d arguments, got %d", ErrArityMismatch, name, max, arity)
+	if maxArity >= 0 && arity > maxArity {
+		return fmt.Errorf("%w: %s accepts at most %d arguments, got %d", ErrArityMismatch, name, maxArity, arity)
 	}
 	return nil
 }
@@ -221,16 +221,16 @@ func BuiltinFunctionAcceptsArity(uri, name string, arity int) bool {
 }
 
 // registerFn is a convenience for registering a built-in function in the fn: namespace.
-func registerFn(name string, min, max int, fn func(context.Context, []Sequence) (Sequence, error)) {
+func registerFn(name string, minArity, maxArity int, fn func(context.Context, []Sequence) (Sequence, error)) {
 	builtinFunctions3[QualifiedName{URI: NSFn, Name: name}] = &builtinFunc{
-		name: name, min: min, max: max, fn: fn,
+		name: name, min: minArity, max: maxArity, fn: fn,
 	}
 }
 
 // registerNS is a convenience for registering a built-in function in a specific namespace.
-func registerNS(uri, name string, min, max int, fn func(context.Context, []Sequence) (Sequence, error)) {
+func registerNS(uri, name string, minArity, maxArity int, fn func(context.Context, []Sequence) (Sequence, error)) {
 	builtinFunctions3[QualifiedName{URI: uri, Name: name}] = &builtinFunc{
-		name: name, min: min, max: max, fn: fn,
+		name: name, min: minArity, max: maxArity, fn: fn,
 	}
 }
 
@@ -287,9 +287,6 @@ func coerceArgToString(seq Sequence) (string, error) {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
 	a := atoms[0]
-	if err != nil {
-		return "", err
-	}
 	switch a.TypeName {
 	case TypeString, TypeAnyURI, TypeUntypedAtomic,
 		TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,

@@ -1,23 +1,24 @@
 package xpath3
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/big"
 	"time"
 )
 
-func evalArithmetic(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := evalFn(ec, e.Left)
+func evalArithmetic(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := evalFn(ec, e.Right)
+	right, err := evalFn(ctx, ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
 	if seqLen(left) == 0 || seqLen(right) == 0 {
-		return nil, nil // empty sequence
+		return validNilSequence, nil // empty sequence
 	}
 	if left.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be a single item"}
@@ -327,13 +328,13 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 	return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(result)}), nil
 }
 
-func evalUnaryExpr(evalFn exprEvaluator, ec *evalContext, e UnaryExpr) (Sequence, error) {
-	r, err := evalFn(ec, e.Operand)
+func evalUnaryExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e UnaryExpr) (Sequence, error) {
+	r, err := evalFn(ctx, ec, e.Operand)
 	if err != nil {
 		return nil, err
 	}
 	if seqLen(r) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	if r.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "unary minus operand must be a single item"}

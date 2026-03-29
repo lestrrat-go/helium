@@ -18,7 +18,7 @@ func (ec *execContext) fnElementAvailable(_ context.Context, args []xpath3.Seque
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr // element-available returns false on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 
@@ -36,9 +36,8 @@ func (ec *execContext) fnElementAvailable(_ context.Context, args []xpath3.Seque
 			ns = name[2:end]
 			local = name[end+1:]
 		}
-	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local = name[idx+1:]
+	} else if prefix, l, ok := strings.Cut(name, ":"); ok {
+		local = l
 		resolved := false
 		if uri, ok := ec.stylesheet.namespaces[prefix]; ok {
 			ns = uri
@@ -71,7 +70,7 @@ func (ec *execContext) fnFunctionAvailable(_ context.Context, args []xpath3.Sequ
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr // function-available returns false on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 
@@ -123,9 +122,7 @@ func (ec *execContext) fnFunctionAvailable(_ context.Context, args []xpath3.Sequ
 	}
 
 	// Check user-defined functions (prefixed)
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local := name[idx+1:]
+	if prefix, local, ok := strings.Cut(name, ":"); ok {
 		uri, ok := ec.stylesheet.namespaces[prefix]
 		if !ok {
 			// XTDE1400: undeclared namespace prefix in function name
@@ -172,7 +169,7 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr // type-available returns false on atomization failure
 	}
 	name, _ := xpath3.AtomicToString(av)
 
@@ -184,9 +181,8 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 
 	// XTDE1428: if it's a prefixed QName, the prefix must have a namespace declaration
 	if !strings.HasPrefix(name, "Q{") {
-		if idx := strings.IndexByte(name, ':'); idx >= 0 {
-			prefix := name[:idx]
-			if prefix != "xs" && prefix != "xsd" {
+		if prefix, _, ok := strings.Cut(name, ":"); ok {
+			if prefix != "xs" && prefix != lexicon.PrefixXSD {
 				if _, ok := ec.stylesheet.namespaces[prefix]; !ok {
 					return nil, dynamicError(errCodeXTDE1428,
 						"type-available: prefix %q has no namespace declaration", prefix)
@@ -201,9 +197,7 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 	if strings.HasPrefix(resolved, "{"+lexicon.NamespaceXSD+"}") {
 		local := resolved[len("{"+lexicon.NamespaceXSD+"}"):]
 		resolved = "xs:" + local
-	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local := name[idx+1:]
+	} else if prefix, local, ok := strings.Cut(name, ":"); ok {
 		if prefix == "xs" || prefix == "xsd" {
 			resolved = "xs:" + local
 		} else if uri, ok := ec.stylesheet.namespaces[prefix]; ok && uri == lexicon.NamespaceXSD {
@@ -235,8 +229,8 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 				ns = resolved[1:closeIdx]
 				local = resolved[closeIdx+1:]
 			}
-		} else if idx := strings.IndexByte(resolved, ':'); idx >= 0 {
-			local = resolved[idx+1:]
+		} else if _, l, ok := strings.Cut(resolved, ":"); ok {
+			local = l
 			// prefix was not resolved to a namespace — try schema target namespace
 			ns = schema.TargetNamespace()
 		} else {
@@ -314,11 +308,11 @@ func (ec *execContext) accumulatorLookup(
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.EmptySequence(), nil
+		return xpath3.EmptySequence(), nil //nolint:nilerr // accumulator lookup returns empty on atomization failure
 	}
 	name, err := xpath3.AtomicToString(av)
 	if err != nil {
-		return xpath3.EmptySequence(), nil
+		return xpath3.EmptySequence(), nil //nolint:nilerr // accumulator lookup returns empty on string conversion failure
 	}
 	// XTDE3340: validate the name is a valid EQName
 	if !isValidQName(name) && !isValidEQName(name) {
@@ -456,7 +450,7 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 	// those accumulators are accessible from templates in that mode.
 	if md := ec.effectiveModeDefs()[ec.currentMode]; md != nil && md.UseAccumulators != nil {
 		switch *md.UseAccumulators {
-		case "#all":
+		case lexicon.ModeAll:
 			// all accumulators allowed
 		case "":
 			// use-accumulators="" means NO accumulators allowed
@@ -464,7 +458,7 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 				"accumulator %q is not applicable in mode %q (use-accumulators is empty)", name, ec.currentMode)
 		default:
 			allowed := make(map[string]struct{})
-			for _, n := range strings.Fields(*md.UseAccumulators) {
+			for n := range strings.FieldsSeq(*md.UseAccumulators) {
 				allowed[n] = struct{}{}
 			}
 			if _, ok := allowed[name]; !ok {

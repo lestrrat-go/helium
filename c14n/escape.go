@@ -93,7 +93,7 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 // \r → &#xD;
 func escapePIOrComment(w io.Writer, s []byte) error {
 	last := 0
-	for i := 0; i < len(s); i++ {
+	for i := range s {
 		if s[i] == '\r' {
 			if _, err := w.Write(s[last:i]); err != nil {
 				return err

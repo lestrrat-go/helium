@@ -2,12 +2,13 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTemplatesInst) error {
@@ -15,7 +16,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 
 	var atomicItems xpath3.ItemSlice // XSLT 3.0: atomic values from select
 	if inst.Select != nil {
-		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -92,12 +93,8 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 	savedTunnel := ec.tunnelParams
 	if newTunnelParams != nil {
 		merged := make(map[string]xpath3.Sequence)
-		for k, v := range ec.tunnelParams {
-			merged[k] = v
-		}
-		for k, v := range newTunnelParams {
-			merged[k] = v
-		}
+		maps.Copy(merged, ec.tunnelParams)
+		maps.Copy(merged, newTunnelParams)
 		ec.tunnelParams = merged
 	}
 
@@ -164,7 +161,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 	ec.size = len(atomicItems)
 	for i, item := range atomicItems {
 		ec.position = i + 1
-		tmpl, err := ec.findAtomicTemplate(item, mode)
+		tmpl, err := ec.findAtomicTemplate(ctx, item, mode)
 		if err != nil {
 			return err
 		}
@@ -233,7 +230,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 			}
 			continue
 		}
-		tmpl, err := ec.findAtomicTemplate(item, mode)
+		tmpl, err := ec.findAtomicTemplate(ctx, item, mode)
 		if err != nil {
 			return err
 		}
@@ -282,7 +279,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 func (ec *execContext) evaluateWithParam(ctx context.Context, wp *withParam) (xpath3.Sequence, error) {
 	var val xpath3.Sequence
 	if wp.Select != nil {
-		result, err := ec.evalXPath(wp.Select, ec.contextNode)
+		result, err := ec.evalXPath(ctx, wp.Select, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
@@ -316,7 +313,7 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *withParam) (xp
 	// Type check against the declared as type
 	if wp.As != "" {
 		st := parseSequenceType(wp.As)
-		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "with-param $"+wp.Name, ec)
+		checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "with-param $"+wp.Name, ec)
 		if err != nil {
 			return nil, err
 		}
@@ -407,9 +404,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 		if wp.Tunnel {
 			if !hasTunnelOverrides {
 				merged := make(map[string]xpath3.Sequence)
-				for k, v := range ec.tunnelParams {
-					merged[k] = v
-				}
+				maps.Copy(merged, ec.tunnelParams)
 				ec.tunnelParams = merged
 				hasTunnelOverrides = true
 			}
@@ -494,7 +489,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 		}
 
 		if !fromCaller && p.Select != nil {
-			result, err := ec.evalXPath(p.Select, ec.contextNode)
+			result, err := ec.evalXPath(ctx, p.Select, ec.contextNode)
 			if err != nil {
 				return err
 			}
@@ -523,7 +518,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 			if fromCaller {
 				errCode = errCodeXTTE0590
 			}
-			checked, err := checkSequenceType(val, st, errCode, "param $"+p.Name, ec)
+			checked, err := checkSequenceType(ctx, val, st, errCode, "param $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -563,9 +558,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 		}
 		if hasTunnel {
 			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
-			for k, v := range ec.tunnelParams {
-				newTunnel[k] = v
-			}
+			maps.Copy(newTunnel, ec.tunnelParams)
 			ec.tunnelParams = newTunnel
 		}
 		for _, wp := range inst.Params {
@@ -594,7 +587,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 				foundCurrent = true
 				continue
 			}
-			if foundCurrent && tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, ec.contextItem) {
+			if foundCurrent && tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, ec.contextItem) {
 				return ec.executeAtomicTemplate(ctx, tmpl, ec.contextItem, mode)
 			}
 		}
@@ -622,7 +615,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 		if !foundCurrent {
 			continue
 		}
-		if tmpl.Match == nil || !tmpl.Match.matchPattern(ec, node) {
+		if tmpl.Match == nil || !tmpl.Match.matchPattern(ctx, ec, node) {
 			continue
 		}
 		// Check for conflict at the same priority/import-precedence
@@ -635,7 +628,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 				if len(other.Body) > 0 && len(tmpl.Body) > 0 && &other.Body[0] == &tmpl.Body[0] {
 					continue
 				}
-				if other.Match != nil && other.Match.matchPattern(ec, node) {
+				if other.Match != nil && other.Match.matchPattern(ctx, ec, node) {
 					return dynamicError(errCodeXTRE0540,
 						"ambiguous rule match for node %v in mode %q (on-multiple-match=fail)",
 						node, mode)
@@ -677,9 +670,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 		}
 		if hasTunnel {
 			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
-			for k, v := range ec.tunnelParams {
-				newTunnel[k] = v
-			}
+			maps.Copy(newTunnel, ec.tunnelParams)
 			ec.tunnelParams = newTunnel
 		}
 		for _, wp := range inst.Params {
@@ -714,7 +705,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 			if tmpl.ImportPrec >= maxPrec || tmpl.ImportPrec < minPrec {
 				continue
 			}
-			if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, ec.contextItem) {
+			if tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, ec.contextItem) {
 				return ec.executeAtomicTemplate(ctx, tmpl, ec.contextItem, mode)
 			}
 		}
@@ -736,7 +727,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 		if tmpl.ImportPrec >= maxPrec || tmpl.ImportPrec < minPrec {
 			continue
 		}
-		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
+		if tmpl.Match != nil && tmpl.Match.matchPattern(ctx, ec, node) {
 			return ec.executeTemplate(ctx, tmpl, node, mode, pv)
 		}
 	}
@@ -796,27 +787,27 @@ func (ec *execContext) checkContextItemType(tmpl *template) error {
 // requires "instance of" semantics per XSLT 3.0 §9.8.
 func instanceOfItemType(item xpath3.Item, itemType string, ec *execContext) bool {
 	switch itemType {
-	case "item()":
+	case lexicon.NodeTestItem:
 		return true
-	case "node()":
+	case lexicon.NodeTestNode:
 		_, ok := item.(xpath3.NodeItem)
 		return ok
-	case "element()":
+	case lexicon.NodeTestElement:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.ElementNode
-	case "attribute()":
+	case lexicon.NodeTestAttribute:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.AttributeNode
-	case "text()":
+	case lexicon.NodeTestText:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && (ni.Node.Type() == helium.TextNode || ni.Node.Type() == helium.CDATASectionNode)
-	case "comment()":
+	case lexicon.NodeTestComment:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.CommentNode
-	case "processing-instruction()":
+	case lexicon.NodeTestPI:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.ProcessingInstructionNode
-	case "document-node()":
+	case lexicon.NodeTestDocumentNode:
 		ni, ok := item.(xpath3.NodeItem)
 		return ok && ni.Node.Type() == helium.DocumentNode
 	}
@@ -871,7 +862,7 @@ func instanceOfItemType(item xpath3.Item, itemType string, ec *execContext) bool
 		return false
 	}
 	target := normalizeTypeName(itemType, ec)
-	if target == "xs:anyAtomicType" {
+	if target == lexicon.XSAnyAtomicType {
 		return true
 	}
 	if av.TypeName == target {

@@ -123,7 +123,7 @@ func fnMapGet(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	val, ok := m.Get(ka)
 	if !ok {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return val, nil
 }

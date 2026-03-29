@@ -44,13 +44,13 @@ type Entity interface {
 // ATTLIST declaration (libxml2: xmlEnumeration). The helium root
 // package provides the concrete []string implementation; this
 // interface allows the SAX layer to pass it without a circular import.
-type Enumeration interface{}
+type Enumeration any
 
 // ElementContent represents a content model from an ELEMENT declaration
 // (libxml2: xmlElementContent). The helium root package provides the
 // concrete implementation; this interface allows the SAX layer to pass
 // it without a circular import.
-type ElementContent interface{}
+type ElementContent any
 
 type Namespace interface {
 	Prefix() string
@@ -91,15 +91,9 @@ type NotationDeclFunc func(ctx context.Context, name string, publicID string, sy
 type ProcessingInstructionFunc func(ctx context.Context, target string, data string) error
 type ReferenceFunc func(ctx context.Context, name string) error
 
-/*
- * The entity loader, to control the loading of external entities,
- * the application can either:
- *    - override this resolveEntity() callback in the SAX block
- *    - or better use the xmlSetExternalEntityLoader() function to
- *      set up it's own entity resolution routine
- *
- * Returns the xmlParserInputPtr if inlined or NULL for DOM behaviour.
- */
+// ResolveEntityFunc controls the loading of external entities.
+// The application can either override this callback in the SAX block
+// or use a custom entity resolution routine.
 type ResolveEntityFunc func(ctx context.Context, publicID string, systemID string) (ParseInput, error)
 type SetDocumentLocatorFunc func(ctx context.Context, locator DocumentLocator) error
 type StartDocumentFunc func(ctx context.Context) error

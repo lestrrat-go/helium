@@ -455,7 +455,7 @@ func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, er
 
 func fnXSError(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	return nil, &XPathError{
 		Code:    errCodeFORG0001,

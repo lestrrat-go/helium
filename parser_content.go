@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
@@ -26,7 +28,7 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 
 	cur := ctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return "", errNoCursor
 	}
 
 	off := 0
@@ -107,7 +109,7 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<?") {
 		return pctx.error(ctx, ErrInvalidProcessingInstruction)
@@ -204,14 +206,12 @@ func (pctx *parserCtx) parsePITarget(ctx context.Context) (string, error) {
 		return "", pctx.error(ctx, err)
 	}
 
-	if name == "xml" {
+	if name == lexicon.PrefixXML {
 		return "", errors.New("XML declaration allowed only at the start of the document")
 	}
 
-	for _, knownpi := range knownPIs {
-		if knownpi == name {
-			return name, nil
-		}
+	if slices.Contains(knownPIs, name) {
+		return name, nil
 	}
 
 	if strings.IndexByte(name, ':') > -1 {
@@ -250,7 +250,7 @@ func (pctx *parserCtx) parseCDSect(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<![CDATA[") {
 		return pctx.error(ctx, ErrInvalidCDSect)
@@ -302,7 +302,7 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	if cur == nil {
-		panic("did not get rune cursor")
+		return pctx.error(ctx, errNoCursor)
 	}
 	if !cur.ConsumeString("<!--") {
 		return pctx.error(ctx, ErrInvalidComment)

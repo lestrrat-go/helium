@@ -77,9 +77,9 @@ func (p *parser) tryParseDirectFunctionCall() (Expr, bool, error) {
 	// Reserved kind test names (element, text, comment, etc.) are not function calls.
 	if p.lexer.PeekAt(1).Type == TokenLParen {
 		switch tok.Value {
-		case "node", "text", "comment", "processing-instruction",
-			"element", "attribute", "document-node", "schema-element",
-			"schema-attribute", "namespace-node", "item", "empty-sequence":
+		case lexicon.KindNode, lexicon.KindText, lexicon.KindComment, lexicon.KindPI,
+			lexicon.KindElement, lexicon.KindAttribute, lexicon.KindDocumentNode, lexicon.KindSchemaElement,
+			lexicon.KindSchemaAttribute, lexicon.KindNamespaceNode, "item", "empty-sequence":
 			return nil, false, nil
 		}
 	}
@@ -276,7 +276,7 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 	if p.lexer.PeekAt(1).Type == TokenLParen {
 		// Node kind tests: node(), text(), comment(), processing-instruction(), etc.
 		switch tok.Value {
-		case "node":
+		case lexicon.KindNode:
 			p.lexer.Next() // name
 			p.lexer.Next() // (
 			if p.lexer.Peek().Type != TokenRParen {
@@ -284,7 +284,7 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 			}
 			p.lexer.Next() // )
 			return TypeTest{Kind: NodeKindNode}, true, nil
-		case "text":
+		case lexicon.KindText:
 			p.lexer.Next()
 			p.lexer.Next()
 			if p.lexer.Peek().Type != TokenRParen {
@@ -292,7 +292,7 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 			}
 			p.lexer.Next()
 			return TypeTest{Kind: NodeKindText}, true, nil
-		case "comment":
+		case lexicon.KindComment:
 			p.lexer.Next()
 			p.lexer.Next()
 			if p.lexer.Peek().Type != TokenRParen {
@@ -300,7 +300,7 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 			}
 			p.lexer.Next()
 			return TypeTest{Kind: NodeKindComment}, true, nil
-		case "processing-instruction":
+		case lexicon.KindPI:
 			p.lexer.Next()
 			p.lexer.Next()
 			target := ""
@@ -372,7 +372,7 @@ func (p *parser) parseDirectPredicates() ([]Expr, error) {
 		}
 		if !ok || p.lexer.Peek().Type != TokenRBracket {
 			if predStart >= 0 {
-				p.lexer.(*lexer).idx = predStart
+				p.lexer.(*lexer).idx = predStart //nolint:forcetypeassert
 			}
 			pred, err = p.parseExpression()
 			if err != nil {

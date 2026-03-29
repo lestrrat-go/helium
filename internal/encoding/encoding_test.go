@@ -16,7 +16,7 @@ func TestISO88591(t *testing.T) {
 
 	dec := e.NewDecoder()
 	enc := e.NewEncoder()
-	for i := 0; i <= 255; i++ {
+	for i := range 256 {
 		v := string([]byte{byte(i)})
 		s, err := dec.String(v)
 		require.NoError(t, err)

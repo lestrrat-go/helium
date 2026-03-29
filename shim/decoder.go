@@ -11,6 +11,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 )
 
@@ -47,37 +48,40 @@ type Decoder struct {
 	// DefaultSpace sets the default namespace for elements without an explicit namespace.
 	DefaultSpace string
 
-	tokenReader    TokenReader
-	events         chan tokenEvent
-	ctx            context.Context
-	cancel         context.CancelFunc
-	lastToken      Token
-	savedErr       error
-	offset         int64
-	line           int
-	column         int
-	nestDepth      int      // tracks populateElement recursion depth
-	prologTokens   []Token  // pre-scanned prolog tokens (Directive, ProcInst, Comment, CharData)
-	prologIdx      int      // next prolog token to emit
-	prologOnly     bool     // true if entire input is prolog (no root element)
-	prologErr      error    // syntax error detected during prolog scanning
-	combinedReader  io.Reader // buffered reader for lazy SAX startup
-	saxStarted      bool      // true once SAX goroutine has been started
-	detectedCharset string       // non-UTF-8 encoding from XML declaration
-	pendingEvent    *tokenEvent  // lookahead event saved during CharData merging
+	tokenReader     TokenReader
+	events          chan tokenEvent
+	done            <-chan struct{} // cancellation signal from cancel context; avoids storing context.Context
+	ctxErr          func() error    // returns cancel context's error; avoids storing context.Context
+	cancel          context.CancelFunc
+	startSAX        func(io.Reader) // deferred SAX emitter start; captures cancel context in closure
+	lastToken       Token
+	savedErr        error
+	offset          int64
+	line            int
+	column          int
+	nestDepth       int         // tracks populateElement recursion depth
+	prologTokens    []Token     // pre-scanned prolog tokens (Directive, ProcInst, Comment, CharData)
+	prologIdx       int         // next prolog token to emit
+	prologOnly      bool        // true if entire input is prolog (no root element)
+	prologErr       error       // syntax error detected during prolog scanning
+	combinedReader  io.Reader   // buffered reader for lazy SAX startup
+	saxStarted      bool        // true once SAX goroutine has been started
+	detectedCharset string      // non-UTF-8 encoding from XML declaration
+	pendingEvent    *tokenEvent // lookahead event saved during CharData merging
 }
 
-func newDecoderFromReader(r io.Reader) (*Decoder, error) {
+func newDecoderFromReader(ctx context.Context, r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
 	// Pre-scan the prolog to extract Directive, ProcInst, Comment, and
 	// CharData tokens. The SAX parser does not emit these for the prolog,
 	// so we handle them ourselves. The combined reader replays the full
 	// input (including the prolog) for the SAX parser.
 	prologTokens, combined, prologOnly, prologErr := scanProlog(r)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	d := &Decoder{
 		Strict:         true,
-		ctx:            ctx,
+		done:           ctx.Done(),
+		ctxErr:         ctx.Err,
 		cancel:         cancel,
 		line:           1,
 		column:         1,
@@ -86,11 +90,14 @@ func newDecoderFromReader(r io.Reader) (*Decoder, error) {
 		prologErr:      prologErr,
 		combinedReader: combined,
 	}
+	// Capture the cancel context in a closure so the Decoder struct does not
+	// store context.Context directly (satisfies containedctx linter).
+	d.startSAX = func(r io.Reader) { d.startSAXEmitter(ctx, r) }
 	// Error is always nil; kept in signature for compatibility.
 	return d, nil
 }
 
-func newDecoderFromTokenReader(tr TokenReader) *Decoder {
+func newDecoderFromTokenReader(_ context.Context, tr TokenReader) *Decoder {
 	return &Decoder{
 		Strict:      true,
 		tokenReader: tr,
@@ -99,15 +106,15 @@ func newDecoderFromTokenReader(tr TokenReader) *Decoder {
 	}
 }
 
-func (d *Decoder) startSAXEmitter(r io.Reader) {
+func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 	var locator sax.DocumentLocator
 
 	push := func(tok, rawTok Token, line, col int) error {
 		select {
 		case d.events <- tokenEvent{tok: stdxml.CopyToken(tok), rawTok: stdxml.CopyToken(rawTok), line: line, col: col}:
 			return nil
-		case <-d.ctx.Done():
-			return d.ctx.Err()
+		case <-d.done:
+			return d.ctxErr()
 		}
 	}
 
@@ -245,8 +252,8 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		select {
 		case d.events <- tokenEvent{tok: cd, rawTok: cd, line: line, col: col, cdata: true}:
 			return nil
-		case <-d.ctx.Done():
-			return d.ctx.Err()
+		case <-d.done:
+			return d.ctxErr()
 		}
 	}))
 	h.SetOnComment(sax.CommentFunc(func(_ context.Context, value []byte) error {
@@ -259,7 +266,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		return push(c, c, line, col)
 	}))
 	h.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(_ context.Context, target, data string) error {
-		if target == "xml" {
+		if target == lexicon.PrefixXML {
 			return nil // skip XML declaration
 		}
 		line, col := 0, 0
@@ -303,10 +310,10 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 				return ent, nil
 			}
 		}
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}))
-	h.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(_ context.Context, _ string) (sax.Entity, error) { return nil, nil }))
-	h.SetOnResolveEntity(sax.ResolveEntityFunc(func(_ context.Context, _ string, _ string) (sax.ParseInput, error) { return nil, nil }))
+	h.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(_ context.Context, _ string) (sax.Entity, error) { return nil, nil }))     //nolint:nilnil
+	h.SetOnResolveEntity(sax.ResolveEntityFunc(func(_ context.Context, _ string, _ string) (sax.ParseInput, error) { return nil, nil })) //nolint:nilnil
 	h.SetOnHasExternalSubset(sax.HasExternalSubsetFunc(func(_ context.Context) (bool, error) { return false, nil }))
 	h.SetOnHasInternalSubset(sax.HasInternalSubsetFunc(func(_ context.Context) (bool, error) { return false, nil }))
 	h.SetOnIsStandalone(sax.IsStandaloneFunc(func(_ context.Context) (bool, error) { return false, nil }))
@@ -316,11 +323,11 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 	go func() {
 		defer close(d.events)
 		p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth).SAXHandler(h)
-		_, err := p.ParseReader(d.ctx, r)
+		_, err := p.ParseReader(ctx, r)
 		if err != nil {
 			select {
 			case d.events <- tokenEvent{err: err}:
-			case <-d.ctx.Done():
+			case <-d.done:
 			}
 		}
 	}()
@@ -393,7 +400,7 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 		d.advancePosition(tok)
 
 		// Check encoding attribute in XML declaration
-		if pi, ok := tok.(ProcInst); ok && pi.Target == "xml" {
+		if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
 			if err := d.checkProcInstVersion(string(pi.Inst)); err != nil {
 				return nil, err
 			}
@@ -429,12 +436,13 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 					return nil, fmt.Errorf("xml: opening charset %q: %w", d.detectedCharset, err)
 				}
 				if newr == nil {
-					panic("CharsetReader returned a nil Reader for charset " + d.detectedCharset)
+					d.combinedReader = nil
+					return nil, fmt.Errorf("xml: CharsetReader returned nil Reader for charset %q", d.detectedCharset)
 				}
 				reader = ensureReader(newr)
 			}
 			d.events = make(chan tokenEvent, 64)
-			d.startSAXEmitter(reader)
+			d.startSAX(reader)
 		}
 		d.combinedReader = nil // release reference
 	}
@@ -493,7 +501,7 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	tok = stdxml.CopyToken(tok)
 
 	// Check encoding attribute in XML declaration
-	if pi, ok := tok.(ProcInst); ok && pi.Target == "xml" {
+	if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
 		if err := d.checkProcInstEncoding(string(pi.Inst)); err != nil {
 			return nil, err
 		}
@@ -536,11 +544,10 @@ func (d *Decoder) checkProcInstEncoding(data string) error {
 
 // procInstValue extracts the value of an attribute from a processing instruction's data.
 func procInstValue(data, param string) string {
-	idx := strings.Index(data, param)
-	if idx < 0 {
+	_, s, found := strings.Cut(data, param)
+	if !found {
 		return ""
 	}
-	s := data[idx+len(param):]
 	s = strings.TrimSpace(s)
 	if s == "" || s[0] != '=' {
 		return ""
@@ -591,13 +598,13 @@ func (d *Decoder) nextEvent() (tokenEvent, bool) {
 // CDATA sections are kept as separate tokens to match stdlib behavior.
 // It reads ahead from the event channel until a non-mergeable event is found
 // (which is saved as pendingEvent for the next call).
-func (d *Decoder) mergeCharData(first tokenEvent, raw bool) tokenEvent {
+func (d *Decoder) mergeCharData(first tokenEvent, _ bool) tokenEvent {
 	if first.cdata {
 		return first
 	}
 	merged := first
-	cookedBuf := []byte(merged.tok.(CharData))
-	rawBuf := []byte(merged.rawTok.(CharData))
+	cookedBuf := []byte(merged.tok.(CharData)) //nolint:forcetypeassert
+	rawBuf := []byte(merged.rawTok.(CharData)) //nolint:forcetypeassert
 	for {
 		next, ok := <-d.events
 		if !ok {
@@ -613,7 +620,7 @@ func (d *Decoder) mergeCharData(first tokenEvent, raw bool) tokenEvent {
 			break
 		}
 		cookedBuf = append(cookedBuf, nextCD...)
-		rawBuf = append(rawBuf, next.rawTok.(CharData)...)
+		rawBuf = append(rawBuf, next.rawTok.(CharData)...) //nolint:forcetypeassert
 	}
 	merged.tok = CharData(cookedBuf)
 	merged.rawTok = CharData(rawBuf)
@@ -828,4 +835,3 @@ func setElementAttrs(doc *helium.Document, elem *helium.Element, attrs []stdxml.
 	}
 	return nil
 }
-

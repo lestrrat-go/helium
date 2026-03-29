@@ -185,7 +185,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 			val := args[i]
 			if param.As != "" {
 				st := parseSequenceType(param.As)
-				checked, err := checkSequenceType(val, st, errCodeXTTE0790, "param $"+param.Name, ec)
+				checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0790, "param $"+param.Name, ec)
 				if err != nil {
 					return nil, err
 				}
@@ -193,7 +193,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 			}
 			ec.setVar(param.Name, val)
 		} else if param.Select != nil {
-			result, err := ec.evalXPath(param.Select, ec.contextNode)
+			result, err := ec.evalXPath(ctx, param.Select, ec.contextNode)
 			if err != nil {
 				return nil, err
 			}
@@ -264,7 +264,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	// Type check against the declared as type
 	if f.def.As != "" {
 		st := parseSequenceType(f.def.As)
-		checked, err := checkSequenceType(result, st, errCodeXTTE0780, "function "+f.def.Name.Name, ec)
+		checked, err := checkSequenceType(ctx, result, st, errCodeXTTE0780, "function "+f.def.Name.Name, ec)
 		if err != nil {
 			return nil, err
 		}
@@ -414,7 +414,7 @@ func (ec *execContext) collectNodeChildren(node helium.Node) xpath3.ItemSlice {
 		children = append(children, child)
 	}
 	for _, child := range children {
-		helium.UnlinkNode(child.(helium.MutableNode))
+		helium.UnlinkNode(child.(helium.MutableNode)) //nolint:forcetypeassert
 		seq = append(seq, xpath3.NodeItem{Node: child})
 	}
 	return seq
@@ -433,8 +433,8 @@ func isAtomicTypeName(as string) bool {
 	}
 	// unprefixed atomic types (rare but possible)
 	switch name {
-	case "string", "integer", "boolean", "double", "float", "decimal",
-		"date", "dateTime", "time", "duration", "anyURI":
+	case lexicon.TypeString, lexicon.TypeInteger, lexicon.TypeBoolean, lexicon.TypeDouble, lexicon.TypeFloat, "decimal",
+		lexicon.TypeDate, "dateTime", lexicon.TypeTime, lexicon.TypeDuration, lexicon.TypeAnyURI:
 		return true
 	}
 	return false

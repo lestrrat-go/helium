@@ -27,6 +27,9 @@ type collationImpl struct {
 	key       func(s string) []byte
 }
 
+// validNilCollation is a typed nil returned when "use default collation" is intended.
+var validNilCollation *collationImpl
+
 // codepointCollation is the default XPath collation using byte-level comparison.
 var codepointCollation = &collationImpl{
 	compare: strings.Compare,
@@ -130,13 +133,13 @@ func makeUCACollation(params string) (*collationImpl, error) {
 		return projectVariableRunes(s).value
 	}
 	cmp := func(a, b string) int {
-		cl := mainPool.Get().(*collate.Collator)
+		cl := mainPool.Get().(*collate.Collator) //nolint:forcetypeassert
 		r := cl.CompareString(normalize(a), normalize(b))
 		mainPool.Put(cl)
 		return r
 	}
 	key := func(s string) []byte {
-		cl := mainPool.Get().(*collate.Collator)
+		cl := mainPool.Get().(*collate.Collator) //nolint:forcetypeassert
 		buf := &collate.Buffer{}
 		k := append([]byte(nil), cl.KeyFromString(buf, normalize(s))...)
 		mainPool.Put(cl)
@@ -153,7 +156,7 @@ func makeUCACollation(params string) (*collationImpl, error) {
 		caseFirst := opts.caseFirst
 		key = func(s string) []byte {
 			s = normalize(s)
-			cl := caseBlindPool.Get().(*collate.Collator)
+			cl := caseBlindPool.Get().(*collate.Collator) //nolint:forcetypeassert
 			buf := &collate.Buffer{}
 			base := append([]byte(nil), cl.KeyFromString(buf, s)...)
 			caseBlindPool.Put(cl)
@@ -216,8 +219,7 @@ func parseUCAParams(query string) (ucaParams, error) {
 		return p, nil
 	}
 
-	params := strings.Split(query, ";")
-	for _, param := range params {
+	for param := range strings.SplitSeq(query, ";") {
 		if param == "" {
 			continue
 		}
@@ -395,12 +397,9 @@ func ucaIndexOfRange(cmp func(a, b string) int, s, substr string, numeric bool) 
 	subRuneLen := len([]rune(substr))
 	sRunes := []rune(s)
 
-	for i := 0; i < len(sRunes); i++ {
+	for i := range sRunes {
 		// Try match lengths from subRuneLen to end of string
-		minLen := subRuneLen
-		if minLen > len(sRunes)-i {
-			minLen = len(sRunes) - i
-		}
+		minLen := min(subRuneLen, len(sRunes)-i)
 		maxLen := len(sRunes) - i
 		for matchLen := minLen; matchLen <= maxLen; matchLen++ {
 			candidate := string(sRunes[i : i+matchLen])
@@ -568,7 +567,7 @@ func ucaVariableHasSuffix(cmp func(a, b string) int, s, suffix string, numeric b
 func foldASCIIString(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c >= 'A' && c <= 'Z' {
 			c += 'a' - 'A'
@@ -612,7 +611,6 @@ func IsCollationSupported(uri string) bool {
 	return err == nil
 }
 
-
 // caseblindCollationURI is the QT3 test suite's case-blind collation URI.
 const caseblindCollationURI = "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind"
 
@@ -639,11 +637,11 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 		return htmlASCIICaseInsensitiveCollation, nil
 	case strings.HasPrefix(uri, lexicon.CollationUCA):
 		if cached, ok := ucaCollationCache.Load(uri); ok {
-			return cached.(*collationImpl), nil
+			return cached.(*collationImpl), nil //nolint:forcetypeassert
 		}
 		params := ""
-		if idx := strings.Index(uri, "?"); idx >= 0 {
-			params = uri[idx+1:]
+		if _, after, ok := strings.Cut(uri, "?"); ok {
+			params = after
 		}
 		cl, err := makeUCACollation(params)
 		if err != nil {
@@ -687,11 +685,11 @@ func CollationHasUnsupportedOptions(uri string) bool {
 	if !strings.HasPrefix(uri, lexicon.CollationUCA) {
 		return false
 	}
-	idx := strings.Index(uri, "?")
-	if idx < 0 {
+	_, query, found := strings.Cut(uri, "?")
+	if !found {
 		return false
 	}
-	params, err := parseUCAParams(uri[idx+1:])
+	params, err := parseUCAParams(query)
 	if err != nil {
 		return true // parse error = unsupported
 	}

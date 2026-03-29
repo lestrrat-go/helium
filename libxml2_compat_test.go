@@ -45,7 +45,7 @@ func TestLibxml2Compat(t *testing.T) {
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_LIBXML2_TEST_FILES"); v != "" {
-		for _, f := range strings.Split(v, ",") {
+		for f := range strings.SplitSeq(v, ",") {
 			only[strings.TrimSpace(f)] = struct{}{}
 		}
 	}
@@ -203,7 +203,7 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.getEntity(%s)\n", name)
 		ent, ok := entities[name]
 		if !ok {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		return ent, nil
 	}))
@@ -211,7 +211,7 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.getParameterEntity(%s)\n", name)
 		ent, ok := peEntities[name]
 		if !ok {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 		return ent, nil
 	}))
@@ -235,7 +235,7 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.pcdata(%s, %d)\n", output, len(data))
 		return nil
 	}))
-	charHandler := func(name string, _ context.Context, data []byte) error {
+	charHandler := func(name string, _ context.Context, data []byte) error { //nolint:unparam // always nil but matches SAX handler signature
 		output := string(data)
 		if len(output) > 30 {
 			output = output[:30]
@@ -451,7 +451,7 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_LIBXML2_SAX2_TEST_FILES"); v != "" {
-		for _, f := range strings.Split(v, ",") {
+		for f := range strings.SplitSeq(v, ",") {
 			only[strings.TrimSpace(f)] = struct{}{}
 		}
 	}

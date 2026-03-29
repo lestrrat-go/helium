@@ -80,7 +80,7 @@ func TestPushParser(t *testing.T) {
 		want, err := p.Parse(t.Context(), input)
 		require.NoError(t, err)
 		pp := p.NewPushParser(t.Context())
-		for i := 0; i < len(input); i++ {
+		for i := range input {
 			require.NoError(t, pp.Push(input[i:i+1]))
 		}
 
@@ -232,10 +232,7 @@ func TestPushParser(t *testing.T) {
 		// Push in 64-byte chunks
 		pp := p.NewPushParser(t.Context())
 		for i := 0; i < len(input); i += 64 {
-			end := i + 64
-			if end > len(input) {
-				end = len(input)
-			}
+			end := min(i+64, len(input))
 			require.NoError(t, pp.Push(input[i:end]))
 		}
 

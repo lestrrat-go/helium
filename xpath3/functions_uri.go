@@ -37,7 +37,7 @@ func coerceArgToStringOpt(seq Sequence) (string, error) {
 // as defined by RFC 3986: A-Z a-z 0-9 - _ . ~
 func encodeForURI(s string) string {
 	var b strings.Builder
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if isUnreservedChar(c) {
 			b.WriteByte(c)
@@ -65,7 +65,7 @@ func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
 	// Keep: unreserved, reserved, and already percent-encoded sequences.
 	// Escape: space, <, >, ", {, }, |, \, ^, `, non-ASCII (>0x7E), and control chars (<0x20).
 	var b strings.Builder
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c == '%' && i+2 < len(s) && isHexDigit(s[i+1]) && isHexDigit(s[i+2]) {
 			// Already percent-encoded: pass through
@@ -84,7 +84,7 @@ func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil
+		return validNilSequence, nil
 	}
 	relative, err := coerceArgToString(args[0])
 	if err != nil {
@@ -169,8 +169,8 @@ func validateIRI(s string) error {
 		return err
 	}
 	// A URI reference may contain at most one '#' (fragment separator).
-	if idx := strings.IndexByte(s, '#'); idx >= 0 {
-		if strings.IndexByte(s[idx+1:], '#') >= 0 {
+	if _, after, ok := strings.Cut(s, "#"); ok {
+		if strings.IndexByte(after, '#') >= 0 {
 			return fmt.Errorf("invalid IRI: multiple '#' characters")
 		}
 	}
@@ -185,7 +185,7 @@ func validateIRI(s string) error {
 // iriToURI percent-encodes non-ASCII characters and spaces for use with Go's url.Parse.
 func iriToURI(s string) string {
 	var b strings.Builder
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c > 0x7E || c == ' ' {
 			fmt.Fprintf(&b, "%%%02X", c)
@@ -238,7 +238,7 @@ func fnEscapeHTMLURI(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	// Per XPath F&O: escape non-ASCII and control characters, keep printable ASCII as-is
 	var b strings.Builder
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c > 0x7E || c < 0x20 {
 			fmt.Fprintf(&b, "%%%02X", c)

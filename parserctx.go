@@ -170,7 +170,7 @@ const (
 )
 
 func (pctx *parserCtx) fireSAXCallback(ctx context.Context, typ int, args ...any) error {
-	// This is ugly, but I *REALLY* wanted to catch all occurences of
+	// This is ugly, but I *REALLY* wanted to catch all occurrences of
 	// SAX callbacks being fired in one shot. optimize it later
 
 	s := pctx.sax
@@ -187,16 +187,16 @@ func (pctx *parserCtx) fireSAXCallback(ctx context.Context, typ int, args ...any
 			g := pdebug.Marker("EntityDecl callback")
 			defer g.End()
 		}
-		return s.EntityDecl(ctx, args[0].(string), enum.InternalParameterEntity, "", "", args[1].(string))
+		return s.EntityDecl(ctx, args[0].(string), enum.InternalParameterEntity, "", "", args[1].(string)) //nolint:forcetypeassert
 	case cbGetParameterEntity:
 		if pdebug.Enabled {
 			g := pdebug.Marker("GetParameterEntity callback")
 			defer g.End()
 		}
 
-		entity, err := s.GetParameterEntity(ctx, args[1].(string))
+		entity, err := s.GetParameterEntity(ctx, args[1].(string)) //nolint:forcetypeassert
 		if err == nil {
-			ret := args[0].(*sax.Entity)
+			ret := args[0].(*sax.Entity) //nolint:forcetypeassert
 			*ret = entity
 			if pdebug.Enabled {
 				pdebug.Printf("got entity %s", entity)
@@ -260,7 +260,7 @@ func (ctx *parserCtx) lookupNamespace(prefix string) string {
 	return ctx.nsTab.Lookup(prefix)
 }
 
-func (ctx *parserCtx) release() error {
+func (ctx *parserCtx) release() error { //nolint:unparam // always nil but callers check for future-proofing
 	ctx.sax = nil
 	return nil
 }
@@ -363,7 +363,7 @@ func (ctx *parserCtx) getCursor() strcursor.Cursor {
 	return nil
 }
 
-func (ctx *parserCtx) popInput() any {
+func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for type generality
 	ctx.cachedCursor = nil // invalidate cache
 	return ctx.inputTab.Pop()
 }
@@ -460,10 +460,7 @@ func (pctx *parserCtx) deliverCharacters(ctx context.Context, handler func(conte
 			}
 			if end == 0 {
 				// Should not happen with valid UTF-8, but avoid infinite loop.
-				end = bufSize
-				if end > len(data) {
-					end = len(data)
-				}
+				end = min(bufSize, len(data))
 			}
 		}
 
