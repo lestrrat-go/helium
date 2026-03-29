@@ -1,0 +1,22 @@
+version: 2
+
+builds:
+  - main: ./cmd/helium
+    binary: helium
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  use: github-native
