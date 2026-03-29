@@ -67,4 +67,16 @@ const (
 
 	// CollationHTMLASCII is the HTML ASCII case-insensitive collation URI.
 	CollationHTMLASCII = "http://www.w3.org/2005/xpath-functions/collation/html-ascii-case-insensitive"
+
+	// NamespaceDSig is the W3C XML Digital Signatures namespace.
+	NamespaceDSig = "http://www.w3.org/2000/09/xmldsig#"
+
+	// NamespaceDSig11 is the W3C XML Digital Signatures 1.1 namespace.
+	NamespaceDSig11 = "http://www.w3.org/2009/xmldsig11#"
+
+	// NamespaceXMLEnc is the W3C XML Encryption namespace.
+	NamespaceXMLEnc = "http://www.w3.org/2001/04/xmlenc#"
+
+	// NamespaceXMLEnc11 is the W3C XML Encryption 1.1 namespace.
+	NamespaceXMLEnc11 = "http://www.w3.org/2009/xmlenc11#"
 )
