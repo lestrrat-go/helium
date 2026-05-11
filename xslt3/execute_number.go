@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/big"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -918,8 +919,8 @@ func applyGroupingSeparator(s string, sep string, size int) string {
 		if j > 0 && j%size == 0 {
 			// Prepend separator (reversed, will be re-reversed)
 			sepRunes := []rune(sep)
-			for k := len(sepRunes) - 1; k >= 0; k-- {
-				result = append(result, sepRunes[k])
+			for _, v := range slices.Backward(sepRunes) {
+				result = append(result, v)
 			}
 		}
 		result = append(result, runes[i])

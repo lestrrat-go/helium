@@ -116,16 +116,16 @@ var operatorKeywords = map[string]TokenType{
 // alwaysKeywords are recognized regardless of context because they appear
 // only at the start of an expression or sub-expression.
 var alwaysKeywords = map[string]TokenType{
-	"for":      TokenFor,
-	"let":      TokenLet,
-	"some":     TokenSome,
-	"every":    TokenEvery,
-	"if":       TokenIf,
-	"try":      TokenTry,
-	"catch":    TokenCatch,
-	"function": TokenFunction,
-	"map":      TokenMap,
-	"array":    TokenArray,
+	"for":         TokenFor,
+	"let":         TokenLet,
+	"some":        TokenSome,
+	"every":       TokenEvery,
+	"if":          TokenIf,
+	"try":         TokenTry,
+	"catch":       TokenCatch,
+	"function":    TokenFunction,
+	nsPrefixMap:   TokenMap,
+	nsPrefixArray: TokenArray,
 }
 
 func (l *lexer) tokenize() error {

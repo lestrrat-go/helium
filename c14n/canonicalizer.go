@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -651,8 +652,8 @@ func (c *canonicalizer) collectInScopeNamespaces(e *helium.Element) map[string]s
 	}
 
 	// Process from outermost to innermost (so innermost wins)
-	for i := len(ancestors) - 1; i >= 0; i-- {
-		anc := ancestors[i]
+	for _, v := range slices.Backward(ancestors) {
+		anc := v
 		for _, ns := range anc.Namespaces() {
 			nsMap[ns.Prefix()] = ns.URI()
 		}
@@ -889,8 +890,8 @@ func (c *canonicalizer) effectiveBaseURI(e *helium.Element) string {
 	base := c.documentBaseURI()
 
 	// Process from outermost to innermost
-	for i := len(chain) - 1; i >= 0; i-- {
-		elem := chain[i]
+	for _, v := range slices.Backward(chain) {
+		elem := v
 		xmlBase := getXMLBaseAttr(elem)
 		if xmlBase == "" {
 			continue

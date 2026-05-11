@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"slices"
 	"strings"
 	"time"
 
@@ -103,7 +104,7 @@ func evalRangeBounds(evalFn exprEvaluator, ctx context.Context, ec *evalContext,
 		return nil, nil, false, err
 	}
 	if len(startAtoms) != 1 || len(endAtoms) != 1 {
-		return nil, nil, false, &XPathError{Code: errCodeXPTY0004, Message: "range bounds must be singletons"}
+		return nil, nil, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "range bounds must be singletons"}
 	}
 	startInt, err := coerceToInteger(startAtoms[0])
 	if err != nil {
@@ -208,7 +209,7 @@ func evalValueComparison(evalFn exprEvaluator, ctx context.Context, ec *evalCont
 		return validNilSequence, nil
 	}
 	if len(leftAtoms) > 1 || len(rightAtoms) > 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "value comparison requires singletons"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "value comparison requires singletons"}
 	}
 	la := leftAtoms[0]
 	ra := rightAtoms[0]
@@ -235,15 +236,15 @@ func evalNodeComparison(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 		return validNilSequence, nil
 	}
 	if left.Len() > 1 || right.Len() > 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires singletons"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "node comparison requires singletons"}
 	}
 	ln, ok := left.Get(0).(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires node operands"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "node comparison requires node operands"}
 	}
 	rn, ok := right.Get(0).(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires node operands"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "node comparison requires node operands"}
 	}
 	switch e.Op {
 	case TokenIs:
@@ -335,8 +336,8 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 
 		if arr, ok := item.(ArrayItem); ok {
 			members := arr.members0()
-			for i := len(members) - 1; i >= 0; i-- {
-				it.stack = append(it.stack, atomicSeqFrame{seq: members[i]})
+			for _, v := range slices.Backward(members) {
+				it.stack = append(it.stack, atomicSeqFrame{seq: v})
 			}
 			continue
 		}
@@ -676,7 +677,7 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 		case TypeDuration:
 			// xs:duration supports eq/ne only, not ordering
 			if op != TokenEq && op != TokenNe {
-				return false, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration values are not orderable"}
+				return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xs:duration values are not orderable"}
 			}
 			return compareDuration(op, a.DurationVal(), b.DurationVal())
 		case TypeBase64Binary:
@@ -688,7 +689,7 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 		case TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
 			// Gregorian partial types only support eq/ne, not ordering
 			if op != TokenEq && op != TokenNe {
-				return false, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("%s values are not orderable", a.TypeName)}
+				return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("%s values are not orderable", a.TypeName)}
 			}
 			ta, okA := parseGTypeToTime(a.TypeName, stringFromAtomic(a))
 			tb, okB := parseGTypeToTime(b.TypeName, stringFromAtomic(b))
@@ -709,13 +710,13 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 		// xs:duration supports eq/ne only (not ordering)
 		if a.TypeName == TypeDuration || b.TypeName == TypeDuration {
 			if op != TokenEq && op != TokenNe {
-				return false, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration values are not orderable"}
+				return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xs:duration values are not orderable"}
 			}
 		}
 		// Cross-subtype (YMD vs DTD): eq/ne only, ordering is XPTY0004
 		if a.TypeName != b.TypeName && a.TypeName != TypeDuration && b.TypeName != TypeDuration {
 			if op != TokenEq && op != TokenNe {
-				return false, &XPathError{Code: errCodeXPTY0004, Message: "cannot order xs:yearMonthDuration and xs:dayTimeDuration"}
+				return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "cannot order xs:yearMonthDuration and xs:dayTimeDuration"}
 			}
 		}
 		return compareDuration(op, a.DurationVal(), b.DurationVal())
@@ -737,7 +738,7 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 
 	// Types are not comparable
 	return false, &XPathError{
-		Code:    errCodeXPTY0004,
+		Code:    lexicon.ErrXPTY0004,
 		Message: fmt.Sprintf("cannot compare %s with %s", a.TypeName, b.TypeName),
 	}
 }
@@ -974,10 +975,10 @@ func compareDuration(op TokenType, a, b Duration) (bool, error) {
 	case TokenLt, TokenLe, TokenGt, TokenGe:
 		// Ordering is only defined for yearMonthDuration and dayTimeDuration (not mixed)
 		if aMonths != 0 && aSecs != 0 {
-			return false, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration values are not orderable"}
+			return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xs:duration values are not orderable"}
 		}
 		if bMonths != 0 && bSecs != 0 {
-			return false, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration values are not orderable"}
+			return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xs:duration values are not orderable"}
 		}
 		// Compare months-only or seconds-only
 		if aMonths != 0 || bMonths != 0 {
@@ -1001,7 +1002,7 @@ func compareQName(op TokenType, a, b QNameValue) (bool, error) {
 	case TokenNe:
 		return a.URI != b.URI || a.Local != b.Local, nil
 	default:
-		return false, &XPathError{Code: errCodeXPTY0004, Message: "QName values only support eq/ne"}
+		return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "QName values only support eq/ne"}
 	}
 }
 

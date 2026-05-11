@@ -10,6 +10,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
@@ -63,9 +64,9 @@ func TestParseXMLDecl(t *testing.T) {
 		encoding   string
 		standalone int
 	}{
-		`<?xml version="1.0"?>` + content:                                   {"1.0", "utf8", int(helium.StandaloneImplicitNo)},
-		`<?xml version="1.0" encoding="euc-jp"?>` + content:                 {"1.0", "euc-jp", int(helium.StandaloneImplicitNo)},
-		`<?xml version="1.0" encoding="cp932" standalone='yes'?>` + content: {"1.0", "cp932", int(helium.StandaloneExplicitYes)},
+		`<?xml version="1.0"?>` + content:                                   {lexicon.XSLTVersion10, "utf8", int(helium.StandaloneImplicitNo)},
+		`<?xml version="1.0" encoding="euc-jp"?>` + content:                 {lexicon.XSLTVersion10, "euc-jp", int(helium.StandaloneImplicitNo)},
+		`<?xml version="1.0" encoding="cp932" standalone='yes'?>` + content: {lexicon.XSLTVersion10, "cp932", int(helium.StandaloneExplicitYes)},
 	}
 
 	for input, expect := range inputs {
@@ -1373,28 +1374,28 @@ func TestParseLenientXMLDecl(t *testing.T) {
 		{
 			name:       "standard order: version encoding standalone",
 			input:      `<?xml version="1.0" encoding="utf-8" standalone="yes"?>` + content,
-			version:    "1.0",
+			version:    lexicon.XSLTVersion10,
 			encoding:   "utf-8",
 			standalone: helium.StandaloneExplicitYes,
 		},
 		{
 			name:       "encoding before version",
 			input:      `<?xml encoding="utf-8" version="1.0"?>` + content,
-			version:    "1.0",
+			version:    lexicon.XSLTVersion10,
 			encoding:   "utf-8",
 			standalone: helium.StandaloneImplicitNo,
 		},
 		{
 			name:       "standalone before version",
 			input:      `<?xml standalone="no" version="1.0"?>` + content,
-			version:    "1.0",
+			version:    lexicon.XSLTVersion10,
 			encoding:   "",
 			standalone: helium.StandaloneExplicitNo,
 		},
 		{
 			name:       "encoding standalone version",
 			input:      `<?xml encoding="euc-jp" standalone="yes" version="1.0"?>` + content,
-			version:    "1.0",
+			version:    lexicon.XSLTVersion10,
 			encoding:   "euc-jp",
 			standalone: helium.StandaloneExplicitYes,
 		},
@@ -1408,7 +1409,7 @@ func TestParseLenientXMLDecl(t *testing.T) {
 		{
 			name:       "version only",
 			input:      `<?xml version="1.0"?>` + content,
-			version:    "1.0",
+			version:    lexicon.XSLTVersion10,
 			encoding:   "",
 			standalone: helium.StandaloneImplicitNo,
 		},

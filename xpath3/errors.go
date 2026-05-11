@@ -3,11 +3,11 @@ package xpath3
 import (
 	"errors"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 const errCodeXPST0003 = "XPST0003"
-const errCodeXPTY0004 = "XPTY0004"
 const errCodeXPDY0002 = "XPDY0002"
 const errCodeXPDY0050 = "XPDY0050"
 const errCodeXPST0080 = "XPST0080"
@@ -44,6 +44,13 @@ const errCodeFOJS0003 = "FOJS0003"
 const errCodeFOJS0005 = "FOJS0005"
 const errCodeFOJS0006 = "FOJS0006"
 const errCodeFOJS0007 = "FOJS0007"
+const errCodeFORG0002 = "FORG0002"
+
+// Error message constants reused across the package.
+const (
+	errMsgContextItemAbsent                = "context item is absent"
+	errMsgParseXMLFragmentMalformedTextDec = "parse-xml-fragment: malformed text declaration"
+)
 
 // Sentinel errors for the xpath3 package.
 var (
@@ -123,7 +130,7 @@ func (e *XPathError) qname() QNameValue {
 	if e.Code == "" {
 		return QNameValue{}
 	}
-	return QNameValue{Prefix: "err", URI: NSErr, Local: e.Code}
+	return QNameValue{Prefix: lexicon.PrefixErr, URI: NSErr, Local: e.Code}
 }
 
 func (e *XPathError) displayCode() string {

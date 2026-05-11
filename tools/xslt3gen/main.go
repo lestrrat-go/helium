@@ -1178,7 +1178,10 @@ func collectSchemaDeps(xsdPath string, visited map[string]struct{}, result *[]st
 // Assertion parsing
 // ──────────────────────────────────────────────────────────────────────
 
-const xslTestNS = "http://www.w3.org/2012/10/xslt-test-catalog"
+const (
+	xslTestNS         = "http://www.w3.org/2012/10/xslt-test-catalog"
+	w3cAssertSkipCall = "w3cAssertSkip()"
+)
 
 func parseResultAssertions(tc xslTestCase, tsDir string) []assertion {
 	resultXML := "<result xmlns=\"" + xslTestNS + "\">" + string(tc.Result.Inner) + "</result>"
@@ -1316,7 +1319,7 @@ func classifyUnsupportedAssertions(gt *generatedTest) {
 		return
 	}
 	for _, e := range exprs {
-		if e != "w3cAssertSkip()" {
+		if e != w3cAssertSkipCall {
 			return
 		}
 	}
@@ -1642,7 +1645,7 @@ func emitAssertions(assertions []assertion) []string {
 	// would cause a t.Skip that hides the passing real assertion.
 	hasReal := false
 	for _, e := range out {
-		if e != "w3cAssertSkip()" {
+		if e != w3cAssertSkipCall {
 			hasReal = true
 			break
 		}
@@ -1650,7 +1653,7 @@ func emitAssertions(assertions []assertion) []string {
 	if hasReal {
 		filtered := out[:0]
 		for _, e := range out {
-			if e != "w3cAssertSkip()" {
+			if e != w3cAssertSkipCall {
 				filtered = append(filtered, e)
 			}
 		}
@@ -1698,7 +1701,7 @@ func emitAssertion(a assertion) []string {
 			childChecks = append(childChecks, emitCheck(child))
 		}
 		if len(childChecks) == 0 {
-			return []string{"w3cAssertSkip()"}
+			return []string{w3cAssertSkipCall}
 		}
 		return []string{fmt.Sprintf("w3cAssertResultDocument(%q, %s)", a.URI, strings.Join(childChecks, ", "))}
 	case "assert-serialization":
@@ -1722,13 +1725,13 @@ func emitAssertion(a assertion) []string {
 			checks = append(checks, emitCheck(child))
 		}
 		if len(checks) == 0 {
-			return []string{"w3cAssertSkip()"}
+			return []string{w3cAssertSkipCall}
 		}
 		return []string{fmt.Sprintf("w3cAssertNot(%s)", strings.Join(checks, ", "))}
 	case "assert-posture-and-sweep":
-		return []string{"w3cAssertSkip()"}
+		return []string{w3cAssertSkipCall}
 	default:
-		return []string{"w3cAssertSkip()"}
+		return []string{w3cAssertSkipCall}
 	}
 }
 

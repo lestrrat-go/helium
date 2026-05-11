@@ -29,6 +29,11 @@ const (
 	// NamespaceErr is the XPath/XQuery error namespace.
 	NamespaceErr = "http://www.w3.org/2005/xqt-errors"
 
+	// ErrXPTY0004 is the W3C XPath/XQuery type-error code raised when an
+	// operand's type is not appropriate for the operation. Used by xpath3
+	// internally and asserted by both xpath3 and xslt3 test fixtures.
+	ErrXPTY0004 = "XPTY0004"
+
 	// NamespaceXML is the XML namespace URI (predeclared, prefix "xml").
 	NamespaceXML = "http://www.w3.org/XML/1998/namespace"
 

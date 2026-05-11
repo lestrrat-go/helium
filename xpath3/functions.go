@@ -65,12 +65,12 @@ const (
 
 // Default prefix → URI mappings.
 var defaultPrefixNS = map[string]string{
-	"fn":    NSFn,
-	"math":  NSMath,
-	"map":   NSMap,
-	"array": NSArray,
-	"err":   NSErr,
-	"xs":    NSXS,
+	"fn":              NSFn,
+	"math":            NSMath,
+	nsPrefixMap:       NSMap,
+	nsPrefixArray:     NSArray,
+	lexicon.PrefixErr: NSErr,
+	"xs":              NSXS,
 }
 
 // namespacePrefixFor returns the conventional prefix for a known namespace URI.
@@ -248,7 +248,7 @@ func seqToStringErr(seq Sequence) (string, error) {
 		return "", nil
 	}
 	if len(atoms) > 1 {
-		return "", &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected single string, got sequence of length %d", len(atoms))}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected single string, got sequence of length %d", len(atoms))}
 	}
 	return atomicToString(atoms[0])
 }
@@ -257,7 +257,7 @@ func seqToStringErr(seq Sequence) (string, error) {
 // Like coerceArgToString but rejects empty sequences (for non-optional string parameters).
 func coerceArgToStringRequired(seq Sequence) (string, error) {
 	if seqLen(seq) == 0 {
-		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string, got empty sequence"}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:string, got empty sequence"}
 	}
 	return coerceArgToString(seq)
 }
@@ -271,7 +271,7 @@ func coerceArgToString(seq Sequence) (string, error) {
 		return "", nil
 	case 1:
 	default:
-		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
 	// Use AtomizeSequence (not AtomizeItem) to properly expand list types.
 	// For nodes with list type annotations, atomization produces multiple
@@ -284,7 +284,7 @@ func coerceArgToString(seq Sequence) (string, error) {
 		return "", nil
 	}
 	if len(atoms) > 1 {
-		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
 	a := atoms[0]
 	switch a.TypeName {
@@ -301,7 +301,7 @@ func coerceArgToString(seq Sequence) (string, error) {
 		if s, ok := a.Value.(string); ok {
 			return s, nil
 		}
-		return "", &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:string?, got %s", a.TypeName)}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected xs:string?, got %s", a.TypeName)}
 	}
 }
 
@@ -311,10 +311,10 @@ func coerceArgToString(seq Sequence) (string, error) {
 func coerceArgToInteger(seq Sequence) (int64, error) {
 	switch seqLen(seq) {
 	case 0:
-		return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:integer, got empty sequence"}
+		return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:integer, got empty sequence"}
 	case 1:
 	default:
-		return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:integer, got sequence of length > 1"}
+		return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:integer, got sequence of length > 1"}
 	}
 	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
@@ -323,12 +323,12 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 	if a.TypeName == TypeUntypedAtomic {
 		casted, cerr := castToInteger(a)
 		if cerr != nil {
-			return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
+			return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
 		}
 		a = casted
 	}
 	if !isSubtypeOf(a.TypeName, TypeInteger) {
-		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
+		return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
 	}
 	switch v := a.Value.(type) {
 	case int64:
@@ -348,9 +348,9 @@ func coerceArgToDoubleRequired(seq Sequence) (float64, error) {
 		if xpErr, ok := errors.AsType[*XPathError](err); ok {
 			switch {
 			case strings.Contains(xpErr.Message, "empty sequence"):
-				return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:double, got empty sequence"}
+				return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:double, got empty sequence"}
 			case strings.Contains(xpErr.Message, "length > 1"):
-				return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:double, got sequence of length > 1"}
+				return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:double, got sequence of length > 1"}
 			}
 		}
 		return 0, err
@@ -358,12 +358,12 @@ func coerceArgToDoubleRequired(seq Sequence) (float64, error) {
 	if a.TypeName == TypeUntypedAtomic {
 		casted, cerr := CastAtomic(a, TypeDouble)
 		if cerr != nil {
-			return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:double", a.TypeName)}
+			return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:double", a.TypeName)}
 		}
 		a = casted
 	}
 	if !a.IsNumeric() {
-		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:double, got %s", a.TypeName)}
+		return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected xs:double, got %s", a.TypeName)}
 	}
 	a = PromoteSchemaType(a)
 	return a.ToFloat64(), nil
@@ -374,11 +374,11 @@ func coerceArgToDoubleRequired(seq Sequence) (float64, error) {
 func extractSingleAtomicArg(seq Sequence, fnName string) (AtomicValue, error) {
 	switch seqLen(seq) {
 	case 0:
-		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected single atomic value, got empty sequence"}
+		return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fnName + ": expected single atomic value, got empty sequence"}
 	case 1:
 		return AtomizeItem(seq.Get(0))
 	default:
-		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected single atomic value, got sequence of length > 1"}
+		return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fnName + ": expected single atomic value, got sequence of length > 1"}
 	}
 }
 
@@ -389,12 +389,12 @@ func coerceToInteger(a AtomicValue) (AtomicValue, error) {
 	if a.TypeName == TypeUntypedAtomic {
 		casted, cerr := castToInteger(a)
 		if cerr != nil {
-			return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
+			return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
 		}
 		return casted, nil
 	}
 	if !isSubtypeOf(a.TypeName, TypeInteger) {
-		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
+		return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
 	}
 	return a, nil
 }
@@ -448,7 +448,7 @@ func init() {
 }
 
 func fnError(_ context.Context, args []Sequence) (Sequence, error) {
-	code := QNameValue{Prefix: "err", URI: NSErr, Local: errCodeFOER0000}
+	code := QNameValue{Prefix: lexicon.PrefixErr, URI: NSErr, Local: errCodeFOER0000}
 	msg := "error() called"
 	if len(args) > 0 {
 		qv, hasCode, err := coerceErrorCode(args[0])
@@ -475,7 +475,7 @@ func coerceErrorCode(seq Sequence) (QNameValue, bool, error) {
 		return QNameValue{}, false, nil
 	case 1:
 	default:
-		return QNameValue{}, false, &XPathError{Code: errCodeXPTY0004, Message: "fn:error code argument must be xs:QName?"}
+		return QNameValue{}, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:error code argument must be xs:QName?"}
 	}
 
 	a, err := AtomizeItem(seq.Get(0))
@@ -483,7 +483,7 @@ func coerceErrorCode(seq Sequence) (QNameValue, bool, error) {
 		return QNameValue{}, false, err
 	}
 	if a.TypeName != TypeQName {
-		return QNameValue{}, false, &XPathError{Code: errCodeXPTY0004, Message: "fn:error code argument must be xs:QName?"}
+		return QNameValue{}, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:error code argument must be xs:QName?"}
 	}
 	return a.QNameVal(), true, nil
 }

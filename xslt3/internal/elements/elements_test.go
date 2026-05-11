@@ -12,37 +12,37 @@ import (
 // Every element listed here must be known to the registry.
 var xsltElementVersion = map[string]string{
 	// XSLT 1.0
-	"apply-imports": "1.0", "apply-templates": "1.0", "attribute": "1.0",
-	"attribute-set": "1.0", "call-template": "1.0", "choose": "1.0",
-	"comment": "1.0", "copy": "1.0", "copy-of": "1.0",
-	"decimal-format": "1.0", "element": "1.0",
-	"fallback": "1.0", "for-each": "1.0", "if": "1.0",
-	"import": "1.0", "include": "1.0", "key": "1.0",
-	"message": "1.0", "namespace-alias": "1.0",
-	"number": "1.0", "otherwise": "1.0", "output": "1.0",
-	"param": "1.0", "processing-instruction": "1.0",
-	"sort": "1.0", "strip-space": "1.0",
-	"preserve-space": "1.0", "stylesheet": "1.0", "template": "1.0",
-	"text": "1.0", "transform": "1.0", "value-of": "1.0",
-	"variable": "1.0", "when": "1.0", "with-param": "1.0",
+	"apply-imports": lexicon.XSLTVersion10, "apply-templates": lexicon.XSLTVersion10, "attribute": lexicon.XSLTVersion10,
+	"attribute-set": lexicon.XSLTVersion10, "call-template": lexicon.XSLTVersion10, "choose": lexicon.XSLTVersion10,
+	"comment": lexicon.XSLTVersion10, "copy": lexicon.XSLTVersion10, "copy-of": lexicon.XSLTVersion10,
+	"decimal-format": lexicon.XSLTVersion10, "element": lexicon.XSLTVersion10,
+	"fallback": lexicon.XSLTVersion10, "for-each": lexicon.XSLTVersion10, "if": lexicon.XSLTVersion10,
+	"import": lexicon.XSLTVersion10, "include": lexicon.XSLTVersion10, "key": lexicon.XSLTVersion10,
+	"message": lexicon.XSLTVersion10, "namespace-alias": lexicon.XSLTVersion10,
+	"number": lexicon.XSLTVersion10, "otherwise": lexicon.XSLTVersion10, "output": lexicon.XSLTVersion10,
+	"param": lexicon.XSLTVersion10, "processing-instruction": lexicon.XSLTVersion10,
+	"sort": lexicon.XSLTVersion10, "strip-space": lexicon.XSLTVersion10,
+	"preserve-space": lexicon.XSLTVersion10, "stylesheet": lexicon.XSLTVersion10, "template": lexicon.XSLTVersion10,
+	"text": lexicon.XSLTVersion10, "transform": lexicon.XSLTVersion10, "value-of": lexicon.XSLTVersion10,
+	"variable": lexicon.XSLTVersion10, "when": lexicon.XSLTVersion10, "with-param": lexicon.XSLTVersion10,
 	// XSLT 2.0
-	"analyze-string": "2.0", "character-map": "2.0", "document": "2.0",
-	"for-each-group": "2.0", "function": "2.0",
-	"import-schema": "2.0", "matching-substring": "2.0",
-	"namespace": "2.0", "next-match": "2.0",
-	"non-matching-substring": "2.0", "output-character": "2.0",
-	"perform-sort": "2.0", "result-document": "2.0", "sequence": "2.0",
+	"analyze-string": lexicon.XSLTVersion20, "character-map": lexicon.XSLTVersion20, "document": lexicon.XSLTVersion20,
+	"for-each-group": lexicon.XSLTVersion20, "function": lexicon.XSLTVersion20,
+	"import-schema": lexicon.XSLTVersion20, "matching-substring": lexicon.XSLTVersion20,
+	"namespace": lexicon.XSLTVersion20, "next-match": lexicon.XSLTVersion20,
+	"non-matching-substring": lexicon.XSLTVersion20, "output-character": lexicon.XSLTVersion20,
+	"perform-sort": lexicon.XSLTVersion20, "result-document": lexicon.XSLTVersion20, "sequence": lexicon.XSLTVersion20,
 	// XSLT 3.0
-	"try": "3.0", "catch": "3.0", "evaluate": "3.0", "where-populated": "3.0",
-	"on-empty": "3.0", "on-non-empty": "3.0", "merge": "3.0",
-	"merge-source": "3.0", "merge-action": "3.0", "merge-key": "3.0",
-	"assert": "3.0", "accumulator": "3.0", "accumulator-rule": "3.0",
-	"fork": "3.0", "iterate": "3.0", "break": "3.0",
-	"next-iteration": "3.0", "map": "3.0", "map-entry": "3.0",
-	"array": "3.0", "accept": "3.0", "expose": "3.0",
-	"override": "3.0", "use-package": "3.0", "package": "3.0",
-	"global-context-item": "3.0", "context-item": "3.0",
-	"source-document": "3.0", "mode": "3.0", "on-completion": "3.0",
+	"try": lexicon.XSLTVersion30, "catch": lexicon.XSLTVersion30, "evaluate": lexicon.XSLTVersion30, "where-populated": lexicon.XSLTVersion30,
+	"on-empty": lexicon.XSLTVersion30, "on-non-empty": lexicon.XSLTVersion30, "merge": lexicon.XSLTVersion30,
+	"merge-source": lexicon.XSLTVersion30, "merge-action": lexicon.XSLTVersion30, "merge-key": lexicon.XSLTVersion30,
+	"assert": lexicon.XSLTVersion30, "accumulator": lexicon.XSLTVersion30, "accumulator-rule": lexicon.XSLTVersion30,
+	"fork": lexicon.XSLTVersion30, "iterate": lexicon.XSLTVersion30, "break": lexicon.XSLTVersion30,
+	"next-iteration": lexicon.XSLTVersion30, "map": lexicon.XSLTVersion30, "map-entry": lexicon.XSLTVersion30,
+	"array": lexicon.XSLTVersion30, "accept": lexicon.XSLTVersion30, "expose": lexicon.XSLTVersion30,
+	"override": lexicon.XSLTVersion30, "use-package": lexicon.XSLTVersion30, "package": lexicon.XSLTVersion30,
+	"global-context-item": lexicon.XSLTVersion30, "context-item": lexicon.XSLTVersion30,
+	"source-document": lexicon.XSLTVersion30, "mode": lexicon.XSLTVersion30, "on-completion": lexicon.XSLTVersion30,
 }
 
 func TestAllVersionedElementsAreKnown(t *testing.T) {
@@ -164,21 +164,21 @@ func TestMinVersion(t *testing.T) {
 	r := elements.NewRegistry()
 
 	// XSLT 1.0
-	require.Equal(t, "1.0", r.MinVersion("apply-templates"))
-	require.Equal(t, "1.0", r.MinVersion("if"))
-	require.Equal(t, "1.0", r.MinVersion("variable"))
-	require.Equal(t, "1.0", r.MinVersion("stylesheet"))
+	require.Equal(t, lexicon.XSLTVersion10, r.MinVersion("apply-templates"))
+	require.Equal(t, lexicon.XSLTVersion10, r.MinVersion("if"))
+	require.Equal(t, lexicon.XSLTVersion10, r.MinVersion("variable"))
+	require.Equal(t, lexicon.XSLTVersion10, r.MinVersion("stylesheet"))
 
 	// XSLT 2.0
-	require.Equal(t, "2.0", r.MinVersion("analyze-string"))
-	require.Equal(t, "2.0", r.MinVersion("function"))
-	require.Equal(t, "2.0", r.MinVersion("sequence"))
+	require.Equal(t, lexicon.XSLTVersion20, r.MinVersion("analyze-string"))
+	require.Equal(t, lexicon.XSLTVersion20, r.MinVersion("function"))
+	require.Equal(t, lexicon.XSLTVersion20, r.MinVersion("sequence"))
 
 	// XSLT 3.0
-	require.Equal(t, "3.0", r.MinVersion("try"))
-	require.Equal(t, "3.0", r.MinVersion("iterate"))
-	require.Equal(t, "3.0", r.MinVersion("merge"))
-	require.Equal(t, "3.0", r.MinVersion("package"))
+	require.Equal(t, lexicon.XSLTVersion30, r.MinVersion("try"))
+	require.Equal(t, lexicon.XSLTVersion30, r.MinVersion("iterate"))
+	require.Equal(t, lexicon.XSLTVersion30, r.MinVersion("merge"))
+	require.Equal(t, lexicon.XSLTVersion30, r.MinVersion("package"))
 
 	// Unknown
 	require.Equal(t, "", r.MinVersion("nonexistent"))

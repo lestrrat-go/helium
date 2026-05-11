@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -100,7 +101,7 @@ func concatToString(seq Sequence) (string, error) {
 		return "", nil
 	}
 	if seq.Len() > 1 {
-		return "", &XPathError{Code: errCodeXPTY0004, Message: "cannot get string value of sequence of length > 1"}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "cannot get string value of sequence of length > 1"}
 	}
 	switch seq.Get(0).(type) {
 	case FunctionItem:

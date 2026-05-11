@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -210,8 +211,8 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 			prevs := nsScopePrevStack[len(nsScopePrevStack)-1]
 			nsScopePrevStack = nsScopePrevStack[:len(nsScopePrevStack)-1]
 			nsScopeCounts = nsScopeCounts[:len(nsScopeCounts)-1]
-			for i := len(prevs) - 1; i >= 0; i-- {
-				p := prevs[i]
+			for _, v := range slices.Backward(prevs) {
+				p := v
 				if p.had {
 					nsScope[p.prefix] = p.uri
 				} else {

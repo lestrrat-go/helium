@@ -775,7 +775,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 	if xpathstream.ExprUsesFunction(dynExpr, "current") {
 		return dynamicError(errCodeXTDE3160, "xsl:evaluate: current() is not allowed in dynamically evaluated expressions")
 	}
-	for _, blocked := range []string{"system-property", "current-output-uri", "available-system-properties", "document"} {
+	for _, blocked := range []string{funcSystemProperty, "current-output-uri", funcAvailableSystemProperties, "document"} {
 		if xpathstream.ExprUsesFunction(dynExpr, blocked) {
 			return dynamicError(errCodeXTDE3160, "xsl:evaluate: %s() is not allowed in dynamically evaluated expressions", blocked)
 		}

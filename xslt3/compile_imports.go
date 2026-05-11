@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -15,7 +16,7 @@ import (
 
 func (c *compiler) compileImport(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"href": {}, "use-when": {},
+		"href": {}, xslAttrUseWhen: {},
 	}); err != nil {
 		return err
 	}
@@ -60,7 +61,7 @@ func (c *compiler) resolveIncludeURI(_ context.Context, elem *helium.Element) (s
 func (c *compiler) collectIncludeImports(ctx context.Context, elem *helium.Element) error {
 	// Check use-when before loading the included file (avoids loading
 	// non-existent files when use-when="false()").
-	if uw := getAttr(elem, "use-when"); uw != "" {
+	if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return err
@@ -202,7 +203,7 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 
 	// Check use-when on the included/imported stylesheet's root element.
 	// If use-when evaluates to false, skip the entire module.
-	if uw := getAttr(root, "use-when"); uw != "" {
+	if uw := getAttr(root, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return nil, err
@@ -417,12 +418,12 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 			bases = append(bases, xmlBase)
 		}
 	}
-	for i := len(bases) - 1; i >= 0; i-- {
+	for _, v := range slices.Backward(bases) {
 		if base == "" {
-			base = bases[i]
+			base = v
 			continue
 		}
-		base = helium.BuildURI(bases[i], base)
+		base = helium.BuildURI(v, base)
 	}
 	return base
 }
@@ -545,7 +546,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 
 	// Check use-when on the imported/included stylesheet's root element.
 	// If use-when evaluates to false, skip the entire module.
-	if uw := getAttr(importedRoot, "use-when"); uw != "" {
+	if uw := getAttr(importedRoot, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return err
@@ -644,7 +645,7 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 	}
 	c := &compiler{
 		stylesheet: &Stylesheet{
-			version:          "3.0",
+			version:          lexicon.XSLTVersion30,
 			namedTemplates:   make(map[string]*template),
 			modeTemplates:    make(map[string][]*template),
 			keys:             make(map[string][]*keyDef),

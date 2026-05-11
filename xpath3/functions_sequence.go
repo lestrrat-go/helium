@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -57,7 +58,7 @@ func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
 func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	target := args[0]
 	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:insert-before: position argument is an empty sequence"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:insert-before: position argument is an empty sequence"}
 	}
 	a, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
@@ -114,7 +115,7 @@ func fnReverse(_ context.Context, args []Sequence) (Sequence, error) {
 func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
 	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position is required"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position is required"}
 	}
 	a, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
@@ -124,11 +125,11 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	if a.TypeName == TypeUntypedAtomic {
 		a, err = CastAtomic(a, TypeDouble)
 		if err != nil {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be numeric"}
 		}
 	}
 	if !isSubtypeOf(a.TypeName, TypeNumeric) {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be numeric"}
 	}
 	startF := math.Round(a.ToFloat64())
 
@@ -145,11 +146,11 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 		if la.TypeName == TypeUntypedAtomic {
 			la, err = CastAtomic(la, TypeDouble)
 			if err != nil {
-				return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be numeric"}
 			}
 		}
 		if !isSubtypeOf(la.TypeName, TypeNumeric) {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be numeric"}
 		}
 		lengthF = math.Round(la.ToFloat64())
 	}
@@ -475,7 +476,7 @@ func deepEqualArray(a, b ArrayItem, opts deepEqualOptions) (bool, error) {
 
 func fnIndexOf(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "index-of: search value must not be empty sequence"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "index-of: search value must not be empty sequence"}
 	}
 	search, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
@@ -483,7 +484,7 @@ func fnIndexOf(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	// Explicit 3rd arg with empty sequence is a type error (xs:string, not xs:string?)
 	if len(args) > 2 && seqLen(args[2]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "collation argument must not be empty"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "collation argument must not be empty"}
 	}
 	// Resolve collation: explicit 3rd arg, or default collation
 	coll, err := getCollation(ctx, args, 2)

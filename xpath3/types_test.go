@@ -6,14 +6,15 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAtomicValueAccessors(t *testing.T) {
 	t.Run("string", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "hello"}
-		require.Equal(t, "hello", v.StringVal())
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: testHello}
+		require.Equal(t, testHello, v.StringVal())
 		require.False(t, v.IsNumeric())
 	})
 
@@ -158,7 +159,7 @@ func TestMapItem(t *testing.T) {
 			{Key: strKey("a"), Value: value},
 		})
 
-		value.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		value.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: testMutated}
 
 		got, ok := m.Get(strKey("a"))
 		require.True(t, ok)
@@ -172,7 +173,7 @@ func TestMapItem(t *testing.T) {
 
 		got, ok := m.Get(strKey("a"))
 		require.True(t, ok)
-		got.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		got.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: testMutated}
 
 		again, ok := m.Get(strKey("a"))
 		require.True(t, ok)
@@ -298,7 +299,7 @@ func TestArrayItem(t *testing.T) {
 		member := xpath3.SingleString("original")
 		a := xpath3.NewArray([]xpath3.Sequence{member})
 
-		member.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		member.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: testMutated}
 
 		got, err := a.Get(1)
 		require.NoError(t, err)
@@ -310,7 +311,7 @@ func TestArrayItem(t *testing.T) {
 
 		got, err := a.Get(1)
 		require.NoError(t, err)
-		got.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		got.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: testMutated}
 
 		again, err := a.Get(1)
 		require.NoError(t, err)
@@ -321,7 +322,7 @@ func TestArrayItem(t *testing.T) {
 		a := xpath3.NewArray([]xpath3.Sequence{xpath3.SingleString("original")})
 
 		members := a.Members()
-		members[0].(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		members[0].(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: testMutated}
 
 		again, err := a.Get(1)
 		require.NoError(t, err)
@@ -351,7 +352,7 @@ func TestEBV(t *testing.T) {
 		err    bool
 	}{
 		{"empty", xpath3.EmptySequence(), false, false},
-		{"true", xpath3.SingleBoolean(true), true, false},
+		{lexicon.ValueTrue, xpath3.SingleBoolean(true), true, false},
 		{"false", xpath3.SingleBoolean(false), false, false},
 		{"nonempty string", xpath3.SingleString("x"), true, false},
 		{"empty string", xpath3.SingleString(""), false, false},
@@ -375,18 +376,18 @@ func TestEBV(t *testing.T) {
 
 func TestAtomizeSequence(t *testing.T) {
 	seq := xpath3.ItemSlice{
-		xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "hello"},
+		xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: testHello},
 		xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)},
 	}
 	atoms, err := xpath3.AtomizeSequence(seq)
 	require.NoError(t, err)
 	require.Len(t, atoms, 2)
-	require.Equal(t, "hello", atoms[0].StringVal())
+	require.Equal(t, testHello, atoms[0].StringVal())
 	require.Equal(t, int64(42), atoms[1].IntegerVal())
 }
 
 func TestAtomizeFunction(t *testing.T) {
-	seq := xpath3.ItemSlice{xpath3.FunctionItem{Arity: 0, Name: "test"}}
+	seq := xpath3.ItemSlice{xpath3.FunctionItem{Arity: 0, Name: testValue}}
 	_, err := xpath3.AtomizeSequence(seq)
 	require.Error(t, err)
 }

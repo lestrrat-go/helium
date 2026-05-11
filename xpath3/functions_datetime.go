@@ -5,6 +5,8 @@ import (
 	"math"
 	"math/big"
 	"time"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -61,7 +63,7 @@ func extractTime(seq Sequence, allowedTypes ...string) (time.Time, bool, error) 
 	}
 	t, ok := a.Value.(time.Time)
 	if !ok {
-		return time.Time{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
+		return time.Time{}, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
 	}
 	if len(allowedTypes) > 0 {
 		matched := false
@@ -74,7 +76,7 @@ func extractTime(seq Sequence, allowedTypes ...string) (time.Time, bool, error) 
 		// For user-defined types, the Go value is time.Time which we already
 		// validated above — accept it without type-name check.
 		if !matched && IsKnownXSDType(a.TypeName) {
-			return time.Time{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
+			return time.Time{}, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
 		}
 	}
 	return t, true, nil
@@ -90,7 +92,7 @@ func extractDuration(seq Sequence, allowedTypes ...string) (Duration, bool, erro
 	}
 	d, ok := a.Value.(Duration)
 	if !ok {
-		return Duration{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected duration type, got " + a.TypeName}
+		return Duration{}, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected duration type, got " + a.TypeName}
 	}
 	if len(allowedTypes) > 0 {
 		matched := false
@@ -101,7 +103,7 @@ func extractDuration(seq Sequence, allowedTypes ...string) (Duration, bool, erro
 			}
 		}
 		if !matched {
-			return Duration{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
+			return Duration{}, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
 		}
 	}
 	return d, true, nil
@@ -136,11 +138,11 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	d, ok := dateA.Value.(time.Time)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "first arg must be xs:date, got " + dateA.TypeName}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "first arg must be xs:date, got " + dateA.TypeName}
 	}
 	t, ok := timeA.Value.(time.Time)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "second arg must be xs:time, got " + timeA.TypeName}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "second arg must be xs:time, got " + timeA.TypeName}
 	}
 
 	// Per XPath F&O 3.0 §5.2.1: determine timezone from arguments.
@@ -563,7 +565,7 @@ func getTargetTimezone(ctx context.Context, args []Sequence) (*time.Location, er
 			return nil, err
 		}
 		if !ok {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected dayTimeDuration"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected dayTimeDuration"}
 		}
 		if err := validateTimezoneOffset(d); err != nil {
 			return nil, err

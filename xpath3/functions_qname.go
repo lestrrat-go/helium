@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -53,7 +54,7 @@ func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	a = PromoteSchemaType(a)
 	if a.TypeName != TypeQName {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected QName"}
 	}
 	qv := a.QNameVal()
 	if qv.Prefix == "" {
@@ -72,7 +73,7 @@ func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) 
 	}
 	a = PromoteSchemaType(a)
 	if a.TypeName != TypeQName {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected QName"}
 	}
 	return ItemSlice{AtomicValue{TypeName: TypeNCName, Value: a.QNameVal().Local}}, nil
 }
@@ -87,7 +88,7 @@ func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, erro
 	}
 	a = PromoteSchemaType(a)
 	if a.TypeName != TypeQName {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected QName"}
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: a.QNameVal().URI}), nil
 }
@@ -102,11 +103,11 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 	}
 	ni, ok := args[1].Get(0).(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected element node"}
 	}
 	elem, ok := ni.Node.(*helium.Element)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected element node"}
 	}
 	if ns := helium.LookupNSByPrefix(elem, prefix); ns != nil {
 		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: ns.URI()}), nil
@@ -123,15 +124,15 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: element argument is empty"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: element argument is empty"}
 	}
 	ni, ok := args[1].Get(0).(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: expected element node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: expected element node"}
 	}
 	elem, ok := ni.Node.(*helium.Element)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: expected element node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: expected element node"}
 	}
 
 	prefix, local, err := parseLexicalQName(qnameStr)
@@ -185,10 +186,10 @@ func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message strin
 		if allowEmpty {
 			return "", nil
 		}
-		return "", &XPathError{Code: errCodeXPTY0004, Message: message}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
 	case 1:
 	default:
-		return "", &XPathError{Code: errCodeXPTY0004, Message: message}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
 	}
 
 	a, err := AtomizeItem(seq.Get(0))
@@ -199,10 +200,10 @@ func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message strin
 	case TypeString, TypeUntypedAtomic:
 	case TypeAnyURI:
 		if !allowAnyURI {
-			return "", &XPathError{Code: errCodeXPTY0004, Message: message}
+			return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
 		}
 	default:
-		return "", &XPathError{Code: errCodeXPTY0004, Message: message}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
 	}
 
 	s, ok := a.Value.(string)
@@ -218,17 +219,17 @@ func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected element node"}
 	}
 	elem, ok := ni.Node.(*helium.Element)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected element node"}
 	}
 
 	// Walk from the context element outward so namespace undeclarations mask
 	// ancestor bindings for the same prefix.
-	prefixes := map[string]bool{"xml": true}
-	resolved := map[string]bool{"xml": true}
+	prefixes := map[string]bool{lexicon.PrefixXML: true}
+	resolved := map[string]bool{lexicon.PrefixXML: true}
 	for cur := elem; cur != nil; {
 		for _, ns := range cur.Namespaces() {
 			prefix := ns.Prefix()

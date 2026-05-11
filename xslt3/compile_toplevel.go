@@ -210,7 +210,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 		switch elem.LocalName() {
 		case lexicon.XSLTElementImport:
 			if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-				"href": {}, "use-when": {},
+				"href": {}, xslAttrUseWhen: {},
 			}); err != nil {
 				return err
 			}
@@ -219,7 +219,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 				return err
 			}
 			// Check use-when before loading imports (avoids loading non-existent files)
-			if uw := getAttr(elem, "use-when"); uw != "" {
+			if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 				include, err := c.evaluateUseWhen(ctx, uw)
 				if err != nil {
 					return err
@@ -233,7 +233,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 			}
 		case lexicon.XSLTElementInclude:
 			if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-				"href": {}, "use-when": {},
+				"href": {}, xslAttrUseWhen: {},
 			}); err != nil {
 				return err
 			}
@@ -242,7 +242,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 				return err
 			}
 			// Check use-when before loading includes (avoids loading non-existent files)
-			if uw := getAttr(elem, "use-when"); uw != "" {
+			if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 				include, err := c.evaluateUseWhen(ctx, uw)
 				if err != nil {
 					return err
@@ -262,7 +262,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 				return staticError(errCodeXTSE3008,
 					"xsl:use-package is not allowed in an imported stylesheet module")
 			}
-			if uw := getAttr(elem, "use-when"); uw != "" {
+			if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 				include, err := c.evaluateUseWhen(ctx, uw)
 				if err != nil {
 					return err
@@ -418,7 +418,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 		// handle it in pass 2. All other declarations are checked here.
 		ln := elem.LocalName()
 		if ln != "import" && ln != "include" && ln != "use-package" && ln != "template" {
-			if uw := getAttr(elem, "use-when"); uw != "" {
+			if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 				// A static param/variable must not reference itself in
 				// use-when (XPST0008). Temporarily remove it from the
 				// static vars context so self-references are detected.
@@ -458,7 +458,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 			// Already processed in pass 2
 		case lexicon.XSLTElementInclude:
 			// Skip includes excluded by use-when in pass 2.
-			if uw := getAttr(elem, "use-when"); uw != "" {
+			if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 				include, err := c.evaluateUseWhen(ctx, uw)
 				if err != nil {
 					return err
@@ -615,7 +615,7 @@ func (c *compiler) checkConflictingNamespaceAliases(_ context.Context) error {
 // compileNamespaceAlias compiles an xsl:namespace-alias declaration.
 func (c *compiler) compileNamespaceAlias(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"stylesheet-prefix": {}, "result-prefix": {}, "use-when": {},
+		"stylesheet-prefix": {}, "result-prefix": {}, xslAttrUseWhen: {},
 	}); err != nil {
 		return err
 	}

@@ -12,7 +12,7 @@ import (
 
 func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"as": {}, "use": {}, "use-when": {},
+		"as": {}, "use": {}, xslAttrUseWhen: {},
 	}); err != nil {
 		return err
 	}
@@ -69,15 +69,15 @@ func isReservedFunctionNS(uri string) bool {
 
 func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"name": {}, "as": {}, "visibility": {}, "streamable": {},
+		xslAttrName: {}, "as": {}, xslAttrVisibility: {}, "streamable": {},
 		"streamability":               {},
 		"override-extension-function": {}, "override": {},
 		"identity-sensitive": {}, "cache": {}, "new-each-time": {},
-		"use-when": {},
+		xslAttrUseWhen: {},
 	}); err != nil {
 		return err
 	}
-	name := getAttr(elem, "name")
+	name := getAttr(elem, xslAttrName)
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:function requires name attribute")
 	}
@@ -274,9 +274,9 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 
 func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"name": {}, "streamable": {}, "on-no-match": {}, "on-multiple-match": {},
+		xslAttrName: {}, "streamable": {}, "on-no-match": {}, "on-multiple-match": {},
 		"warning-on-no-match": {}, "warning-on-multiple-match": {},
-		"typed": {}, "visibility": {}, "use-when": {}, "use-accumulators": {},
+		"typed": {}, xslAttrVisibility: {}, xslAttrUseWhen: {}, "use-accumulators": {},
 	}); err != nil {
 		return err
 	}

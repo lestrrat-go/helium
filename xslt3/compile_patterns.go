@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -810,7 +811,7 @@ func matchPathExprPattern(ctx context.Context, ec *execContext, e xpath3.PathExp
 	filterAlt := &patternAlt{expr: e.Filter}
 	// The filter needs to match the ancestor above the remaining steps
 	cur := parent
-	for i := len(remaining) - 1; i >= 0; i-- {
+	for range slices.Backward(remaining) {
 		cur = cur.Parent()
 		if cur == nil {
 			return false

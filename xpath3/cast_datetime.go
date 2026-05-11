@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // castToGType casts a date/dateTime value to a Gregorian partial type.
@@ -19,7 +21,7 @@ func castToGType(v AtomicValue, targetType string, format func(time.Time) string
 		return CastFromString(v.StringVal(), targetType)
 	}
 	return AtomicValue{}, &XPathError{
-		Code:    errCodeXPTY0004,
+		Code:    lexicon.ErrXPTY0004,
 		Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, targetType),
 	}
 }

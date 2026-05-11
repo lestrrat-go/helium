@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -48,13 +49,13 @@ func TestFnString(t *testing.T) {
 		{`concat("a", "b", "c")`, "abc"},
 		{`string-join(("a","b","c"), "-")`, "a-b-c"},
 		{`upper-case("hello")`, "HELLO"},
-		{`lower-case("HELLO")`, "hello"},
+		{`lower-case("HELLO")`, testHello},
 		{`substring("12345", 2, 3)`, "234"},
 		{`substring("12345", 2)`, "2345"},
-		{`starts-with("hello", "he")`, "true"},
-		{`ends-with("hello", "lo")`, "true"},
-		{`contains("hello world", "world")`, "true"},
-		{`substring-before("hello-world", "-")`, "hello"},
+		{`starts-with("hello", "he")`, lexicon.ValueTrue},
+		{`ends-with("hello", "lo")`, lexicon.ValueTrue},
+		{`contains("hello world", "world")`, lexicon.ValueTrue},
+		{`substring-before("hello-world", "-")`, testHello},
 		{`substring-after("hello-world", "-")`, "world"},
 		{`translate("abc", "abc", "ABC")`, "ABC"},
 		{`normalize-space("  hello   world  ")`, "hello world"},

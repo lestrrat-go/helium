@@ -17,6 +17,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	. "github.com/lestrrat-go/helium/shim"
 )
 
@@ -38,7 +39,7 @@ func (t *toksStdlib) Token() (Token, error) {
 }
 
 func TestDecodeEOFStdlib(t *testing.T) {
-	start := StartElement{Name: Name{Local: "test"}}
+	start := StartElement{Name: Name{Local: testTest}}
 	tests := []struct {
 		name   string
 		tokens []Token
@@ -108,7 +109,7 @@ func TestDecodeNilTokenStdlib(t *testing.T) {
 	for _, strict := range []bool{true, false} {
 		name := fmt.Sprintf("Strict=%v", strict)
 		t.Run(name, func(t *testing.T) {
-			start := StartElement{Name: Name{Local: "test"}}
+			start := StartElement{Name: Name{Local: testTest}}
 			bad := StartElement{Name: Name{Local: "bad"}}
 			d := NewTokenDecoder(context.Background(), &toksNilStdlib{
 				// Malformed
@@ -129,7 +130,7 @@ const testInputStdlib = `
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<body xmlns:foo="ns1" xmlns="ns2" xmlns:tag="ns3" ` +
+<body xmlns:foo="ns1" xmlns=testNs2 xmlns:tag="ns3" ` +
 	"\r\n\t" + `  >
   <hello lang="en">World &lt;&gt;&apos;&quot; &#x767d;&#40300;翔</hello>
   <query>&何; &is-it;</query>
@@ -146,16 +147,16 @@ var testEntityStdlib = map[string]string{"何": "What", "is-it": "is it?"}
 
 var rawTokensStdlib = []Token{
 	CharData("\n"),
-	ProcInst{Target: "xml", Inst: []byte(`version="1.0" encoding="UTF-8"`)},
+	ProcInst{Target: lexicon.PrefixXML, Inst: []byte(`version="1.0" encoding="UTF-8"`)},
 	CharData("\n"),
 	Directive(`DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"`),
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "body"}, Attr: []Attr{{Name: Name{Space: "xmlns", Local: "foo"}, Value: "ns1"}, {Name: Name{Space: "", Local: "xmlns"}, Value: "ns2"}, {Name: Name{Space: "xmlns", Local: "tag"}, Value: "ns3"}}},
+	StartElement{Name: Name{Space: "", Local: "body"}, Attr: []Attr{{Name: Name{Space: lexicon.PrefixXMLNS, Local: testFoo}, Value: "ns1"}, {Name: Name{Space: "", Local: lexicon.PrefixXMLNS}, Value: testNs2}, {Name: Name{Space: lexicon.PrefixXMLNS, Local: testTag}, Value: "ns3"}}},
 	CharData("\n  "),
-	StartElement{Name: Name{Space: "", Local: "hello"}, Attr: []Attr{{Name: Name{Space: "", Local: "lang"}, Value: "en"}}},
+	StartElement{Name: Name{Space: "", Local: testHello}, Attr: []Attr{{Name: Name{Space: "", Local: "lang"}, Value: "en"}}},
 	CharData("World <>'\" 白鵬翔"),
-	EndElement{Name: Name{Space: "", Local: "hello"}},
+	EndElement{Name: Name{Space: "", Local: testHello}},
 	CharData("\n  "),
 	StartElement{Name: Name{Space: "", Local: "query"}, Attr: []Attr{}},
 	CharData("What is it?"),
@@ -164,18 +165,18 @@ var rawTokensStdlib = []Token{
 	StartElement{Name: Name{Space: "", Local: "goodbye"}, Attr: []Attr{}},
 	EndElement{Name: Name{Space: "", Local: "goodbye"}},
 	CharData("\n  "),
-	StartElement{Name: Name{Space: "", Local: "outer"}, Attr: []Attr{{Name: Name{Space: "foo", Local: "attr"}, Value: "value"}, {Name: Name{Space: "xmlns", Local: "tag"}, Value: "ns4"}}},
+	StartElement{Name: Name{Space: "", Local: "outer"}, Attr: []Attr{{Name: Name{Space: testFoo, Local: testAttr}, Value: lexicon.AttrValue}, {Name: Name{Space: lexicon.PrefixXMLNS, Local: testTag}, Value: "ns4"}}},
 	CharData("\n    "),
 	StartElement{Name: Name{Space: "", Local: "inner"}, Attr: []Attr{}},
 	EndElement{Name: Name{Space: "", Local: "inner"}},
 	CharData("\n  "),
 	EndElement{Name: Name{Space: "", Local: "outer"}},
 	CharData("\n  "),
-	StartElement{Name: Name{Space: "tag", Local: "name"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: testTag, Local: "name"}, Attr: []Attr{}},
 	CharData("\n    "),
 	CharData("Some text here."),
 	CharData("\n  "),
-	EndElement{Name: Name{Space: "tag", Local: "name"}},
+	EndElement{Name: Name{Space: testTag, Local: "name"}},
 	CharData("\n"),
 	EndElement{Name: Name{Space: "", Local: "body"}},
 	Comment(" missing final newline "),
@@ -183,30 +184,30 @@ var rawTokensStdlib = []Token{
 
 var cookedTokensStdlib = []Token{
 	CharData("\n"),
-	ProcInst{Target: "xml", Inst: []byte(`version="1.0" encoding="UTF-8"`)},
+	ProcInst{Target: lexicon.PrefixXML, Inst: []byte(`version="1.0" encoding="UTF-8"`)},
 	CharData("\n"),
 	Directive(`DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"`),
 	CharData("\n"),
-	StartElement{Name: Name{Space: "ns2", Local: "body"}, Attr: []Attr{{Name: Name{Space: "xmlns", Local: "foo"}, Value: "ns1"}, {Name: Name{Space: "", Local: "xmlns"}, Value: "ns2"}, {Name: Name{Space: "xmlns", Local: "tag"}, Value: "ns3"}}},
+	StartElement{Name: Name{Space: testNs2, Local: "body"}, Attr: []Attr{{Name: Name{Space: lexicon.PrefixXMLNS, Local: testFoo}, Value: "ns1"}, {Name: Name{Space: "", Local: lexicon.PrefixXMLNS}, Value: testNs2}, {Name: Name{Space: lexicon.PrefixXMLNS, Local: testTag}, Value: "ns3"}}},
 	CharData("\n  "),
-	StartElement{Name: Name{Space: "ns2", Local: "hello"}, Attr: []Attr{{Name: Name{Space: "", Local: "lang"}, Value: "en"}}},
+	StartElement{Name: Name{Space: testNs2, Local: testHello}, Attr: []Attr{{Name: Name{Space: "", Local: "lang"}, Value: "en"}}},
 	CharData("World <>'\" 白鵬翔"),
-	EndElement{Name: Name{Space: "ns2", Local: "hello"}},
+	EndElement{Name: Name{Space: testNs2, Local: testHello}},
 	CharData("\n  "),
-	StartElement{Name: Name{Space: "ns2", Local: "query"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: testNs2, Local: "query"}, Attr: []Attr{}},
 	CharData("What is it?"),
-	EndElement{Name: Name{Space: "ns2", Local: "query"}},
+	EndElement{Name: Name{Space: testNs2, Local: "query"}},
 	CharData("\n  "),
-	StartElement{Name: Name{Space: "ns2", Local: "goodbye"}, Attr: []Attr{}},
-	EndElement{Name: Name{Space: "ns2", Local: "goodbye"}},
+	StartElement{Name: Name{Space: testNs2, Local: "goodbye"}, Attr: []Attr{}},
+	EndElement{Name: Name{Space: testNs2, Local: "goodbye"}},
 	CharData("\n  "),
-	StartElement{Name: Name{Space: "ns2", Local: "outer"}, Attr: []Attr{{Name: Name{Space: "ns1", Local: "attr"}, Value: "value"}, {Name: Name{Space: "xmlns", Local: "tag"}, Value: "ns4"}}},
+	StartElement{Name: Name{Space: testNs2, Local: "outer"}, Attr: []Attr{{Name: Name{Space: "ns1", Local: testAttr}, Value: lexicon.AttrValue}, {Name: Name{Space: lexicon.PrefixXMLNS, Local: testTag}, Value: "ns4"}}},
 	CharData("\n    "),
-	StartElement{Name: Name{Space: "ns2", Local: "inner"}, Attr: []Attr{}},
-	EndElement{Name: Name{Space: "ns2", Local: "inner"}},
+	StartElement{Name: Name{Space: testNs2, Local: "inner"}, Attr: []Attr{}},
+	EndElement{Name: Name{Space: testNs2, Local: "inner"}},
 	CharData("\n  "),
-	EndElement{Name: Name{Space: "ns2", Local: "outer"}},
+	EndElement{Name: Name{Space: testNs2, Local: "outer"}},
 	CharData("\n  "),
 	StartElement{Name: Name{Space: "ns3", Local: "name"}, Attr: []Attr{}},
 	CharData("\n    "),
@@ -214,7 +215,7 @@ var cookedTokensStdlib = []Token{
 	CharData("\n  "),
 	EndElement{Name: Name{Space: "ns3", Local: "name"}},
 	CharData("\n"),
-	EndElement{Name: Name{Space: "ns2", Local: "body"}},
+	EndElement{Name: Name{Space: testNs2, Local: "body"}},
 	Comment(" missing final newline "),
 }
 
@@ -224,11 +225,11 @@ const testInputAltEncodingStdlib = `
 
 var rawTokensAltEncodingStdlib = []Token{
 	CharData("\n"),
-	ProcInst{Target: "xml", Inst: []byte(`version="1.0" encoding="x-testing-uppercase"`)},
+	ProcInst{Target: lexicon.PrefixXML, Inst: []byte(`version="1.0" encoding="x-testing-uppercase"`)},
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "tag"}, Attr: []Attr{}},
-	CharData("value"),
-	EndElement{Name: Name{Space: "", Local: "tag"}},
+	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
+	CharData(lexicon.AttrValue),
+	EndElement{Name: Name{Space: "", Local: testTag}},
 }
 
 var xmlInputStdlib = []string{
@@ -296,37 +297,37 @@ const nonStrictInputStdlib = `
 
 var nonStrictTokensStdlib = []Token{
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "tag"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
 	CharData("non&entity"),
-	EndElement{Name: Name{Space: "", Local: "tag"}},
+	EndElement{Name: Name{Space: "", Local: testTag}},
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "tag"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
 	CharData("&unknown;entity"),
-	EndElement{Name: Name{Space: "", Local: "tag"}},
+	EndElement{Name: Name{Space: "", Local: testTag}},
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "tag"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
 	CharData("&#123"),
-	EndElement{Name: Name{Space: "", Local: "tag"}},
+	EndElement{Name: Name{Space: "", Local: testTag}},
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "tag"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
 	CharData("&#zzz;"),
-	EndElement{Name: Name{Space: "", Local: "tag"}},
+	EndElement{Name: Name{Space: "", Local: testTag}},
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "tag"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
 	CharData("&なまえ3;"),
-	EndElement{Name: Name{Space: "", Local: "tag"}},
+	EndElement{Name: Name{Space: "", Local: testTag}},
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "tag"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
 	CharData("&lt-gt;"),
-	EndElement{Name: Name{Space: "", Local: "tag"}},
+	EndElement{Name: Name{Space: "", Local: testTag}},
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "tag"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
 	CharData("&;"),
-	EndElement{Name: Name{Space: "", Local: "tag"}},
+	EndElement{Name: Name{Space: "", Local: testTag}},
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "tag"}, Attr: []Attr{}},
+	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
 	CharData("&0a;"),
-	EndElement{Name: Name{Space: "", Local: "tag"}},
+	EndElement{Name: Name{Space: "", Local: testTag}},
 	CharData("\n"),
 }
 
@@ -676,14 +677,14 @@ func TestUnquotedAttrsStdlib(t *testing.T) {
 	if _, ok := err.(*SyntaxError); ok {
 		t.Errorf("Unexpected error: %v", err)
 	}
-	if token.(StartElement).Name.Local != "tag" {
+	if token.(StartElement).Name.Local != testTag {
 		t.Errorf("Unexpected tag name: %v", token.(StartElement).Name.Local)
 	}
 	attr := token.(StartElement).Attr[0]
 	if attr.Value != "azAZ09:-_" {
 		t.Errorf("Unexpected attribute value: %v", attr.Value)
 	}
-	if attr.Name.Local != "attr" {
+	if attr.Name.Local != testAttr {
 		t.Errorf("Unexpected attribute name: %v", attr.Name.Local)
 	}
 }
@@ -730,7 +731,7 @@ func TestCopyTokenCharDataStdlib(t *testing.T) {
 }
 
 func TestCopyTokenStartElementStdlib(t *testing.T) {
-	elt := StartElement{Name: Name{Space: "", Local: "hello"}, Attr: []Attr{{Name: Name{Space: "", Local: "lang"}, Value: "en"}}}
+	elt := StartElement{Name: Name{Space: "", Local: testHello}, Attr: []Attr{{Name: Name{Space: "", Local: "lang"}, Value: "en"}}}
 	var tok1 Token = elt
 	tok2 := CopyToken(tok1)
 	if tok1.(StartElement).Attr[0].Value != "en" {
@@ -970,7 +971,7 @@ func encodeXMLNS1Stdlib() ([]byte, error) {
 		Body    string
 	}
 
-	s := &T{Ns: "http://example.com/ns", Body: "hello world"}
+	s := &T{Ns: "http://example.com/ns", Body: testHelloWorld}
 	return Marshal(s)
 }
 
@@ -979,7 +980,7 @@ func encodeXMLNS2Stdlib() ([]byte, error) {
 		Body string `xml:"http://example.com/ns body"`
 	}
 
-	s := &Test{Body: "hello world"}
+	s := &Test{Body: testHelloWorld}
 	return Marshal(s)
 }
 
@@ -989,7 +990,7 @@ func encodeXMLNS3Stdlib() ([]byte, error) {
 		Body    string
 	}
 
-	s := &Test{Body: "hello world"}
+	s := &Test{Body: testHelloWorld}
 	return Marshal(s)
 }
 
@@ -999,7 +1000,7 @@ func encodeXMLNS4Stdlib() ([]byte, error) {
 		Body string
 	}
 
-	s := &Test{Ns: "http://example.com/ns", Body: "hello world"}
+	s := &Test{Ns: "http://example.com/ns", Body: testHelloWorld}
 	return Marshal(s)
 }
 
@@ -1397,7 +1398,7 @@ func BenchmarkHTMLAutoCloseStdlib(b *testing.B) {
 func TestHTMLAutoCloseStdlib(t *testing.T) {
 	t.Skip("shim: HTMLAutoClose not implemented")
 	wantTokens := []Token{
-		ProcInst{Target: "xml", Inst: []byte(`version="1.0" encoding="UTF-8"`)},
+		ProcInst{Target: lexicon.PrefixXML, Inst: []byte(`version="1.0" encoding="UTF-8"`)},
 		CharData("\n"),
 		StartElement{Name: Name{Space: "", Local: "br"}, Attr: []Attr{}},
 		EndElement{Name: Name{Space: "", Local: "br"}},
@@ -1428,7 +1429,7 @@ func TestHTMLAutoCloseStdlib(t *testing.T) {
 		CharData("\n"),
 		StartElement{Name: Name{Space: "", Local: "BR"}, Attr: []Attr{}},
 		EndElement{Name: Name{Space: "", Local: "BR"}},
-		StartElement{Name: Name{Space: "", Local: "span"}, Attr: []Attr{{Name: Name{Space: "", Local: "id"}, Value: "test"}}},
+		StartElement{Name: Name{Space: "", Local: "span"}, Attr: []Attr{{Name: Name{Space: "", Local: "id"}, Value: testTest}}},
 		CharData("abc"),
 		EndElement{Name: Name{Space: "", Local: "span"}},
 		StartElement{Name: Name{Space: "", Local: "br"}, Attr: []Attr{}},

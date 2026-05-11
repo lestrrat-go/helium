@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -246,7 +247,7 @@ func TestStringCoercionRejectsMultiItemSequence(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "XPTY0004", xpErr.Code)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
 }
 
 func TestIntegerCoercionRejectsMultiItemSequence(t *testing.T) {
@@ -256,7 +257,7 @@ func TestIntegerCoercionRejectsMultiItemSequence(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "XPTY0004", xpErr.Code)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
 }
 
 func TestPublicStringArgsRejectMultiItemSequence(t *testing.T) {
@@ -298,7 +299,7 @@ func TestPublicStringArgsRejectMultiItemSequence(t *testing.T) {
 
 			var xpErr *xpath3.XPathError
 			require.ErrorAs(t, err, &xpErr)
-			require.Equal(t, "XPTY0004", xpErr.Code)
+			require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
 		})
 	}
 }
@@ -557,11 +558,11 @@ func TestStringFunctionsRejectMultiItemSequences(t *testing.T) {
 		expr string
 		code string
 	}{
-		{name: "upper-case", expr: `upper-case(("a", "b"))`, code: "XPTY0004"},
-		{name: "substring source", expr: `substring(("abc", "def"), 2)`, code: "XPTY0004"},
-		{name: "substring position", expr: `substring("abc", (1, 2))`, code: "XPTY0004"},
-		{name: "resolve-uri", expr: `resolve-uri(("a", "b"), "http://example.com/")`, code: "XPTY0004"},
-		{name: "regex input", expr: `matches(("abc", "def"), "a")`, code: "XPTY0004"},
+		{name: "upper-case", expr: `upper-case(("a", "b"))`, code: lexicon.ErrXPTY0004},
+		{name: "substring source", expr: `substring(("abc", "def"), 2)`, code: lexicon.ErrXPTY0004},
+		{name: "substring position", expr: `substring("abc", (1, 2))`, code: lexicon.ErrXPTY0004},
+		{name: "resolve-uri", expr: `resolve-uri(("a", "b"), "http://example.com/")`, code: lexicon.ErrXPTY0004},
+		{name: "regex input", expr: `matches(("abc", "def"), "a")`, code: lexicon.ErrXPTY0004},
 		{name: "concat operator map", expr: `map{} || "x"`, code: "FOTY0014"},
 	}
 
@@ -737,7 +738,7 @@ func TestComparisons(t *testing.T) {
 		want bool
 	}{
 		{`1 = 1`, true},
-		{`1 != 2`, true},
+		{testExpr1Ne2, true},
 		{`1 < 2`, true},
 		{`2 > 1`, true},
 		{`1 <= 1`, true},
@@ -1021,7 +1022,7 @@ func TestErrorRejectsNonQNameCode(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "XPTY0004", xpErr.Code)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
 }
 
 func TestApplyRejectsEmptyArrayArgument(t *testing.T) {
@@ -1032,7 +1033,7 @@ func TestApplyRejectsEmptyArrayArgument(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "XPTY0004", xpErr.Code)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
 }
 
 // --- Context with variables ---

@@ -14,7 +14,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// always outputs UTF-8. The encoding conversion is handled by
 	// serializeResult's transcoding layer.
 	targetEnc := strings.ToLower(outDef.Encoding)
-	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8"
+	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != lexicon.EncodingUTF8Alt
 	// When the document has no document element (e.g., result-document
 	// producing only comments and text), use the stream-based serializer
 	// which does not inject newlines between top-level children.
@@ -23,7 +23,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 		return serializeXMLWithCharMap(w, doc, outDef, charMap)
 	}
 	// Set encoding on the document so the XML declaration includes it.
-	if outDef.Encoding != "" && doc.Encoding() == "utf8" {
+	if outDef.Encoding != "" && doc.Encoding() == lexicon.EncodingUTF8Alt {
 		doc.SetEncoding(outDef.Encoding)
 	}
 	// Per XSLT spec, doctype-public without doctype-system is ignored for xml method.
@@ -115,9 +115,9 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 	if !outDef.OmitDeclaration {
 		enc := outDef.Encoding
 		if enc == "" {
-			enc = "UTF-8"
+			enc = lexicon.EncodingUTF8U
 		}
-		if err := sw.StartDocument("1.0", enc, ""); err != nil {
+		if err := sw.StartDocument(lexicon.XSLTVersion10, enc, ""); err != nil {
 			return err
 		}
 	}

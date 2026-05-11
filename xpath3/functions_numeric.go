@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/lestrrat-go/helium/internal/icu"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -32,7 +33,7 @@ func promoteToNumeric(item Item) (AtomicValue, error) {
 		return castToDouble(a)
 	}
 	if !a.IsNumeric() {
-		return a, &XPathError{Code: errCodeXPTY0004, Message: "expected numeric type, got " + a.TypeName}
+		return a, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected numeric type, got " + a.TypeName}
 	}
 	// User-defined types: promote to the built-in numeric base type.
 	a = PromoteSchemaType(a)
@@ -396,7 +397,7 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(s), nil
 	}
 	if seqLen(args[0]) != 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "format-number() first argument must be a singleton numeric value"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "format-number() first argument must be a singleton numeric value"}
 	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
@@ -409,7 +410,7 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	if !isSubtypeOf(a.TypeName, TypeNumeric) {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("format-number() first argument must be numeric, got %s", a.TypeName)}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("format-number() first argument must be numeric, got %s", a.TypeName)}
 	}
 
 	picture, err := coerceArgToStringRequired(args[1])

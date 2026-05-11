@@ -8,6 +8,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -27,11 +29,11 @@ func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 	if valAtom.TypeName == TypeUntypedAtomic || valAtom.TypeName == TypeString {
 		valAtom, err = CastAtomic(valAtom, TypeInteger)
 		if err != nil {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", valAtom.TypeName)}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", valAtom.TypeName)}
 		}
 	}
 	if !isSubtypeOf(valAtom.TypeName, TypeInteger) {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("format-integer: expected xs:integer, got %s", valAtom.TypeName)}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("format-integer: expected xs:integer, got %s", valAtom.TypeName)}
 	}
 	var n *big.Int
 	switch v := valAtom.Value.(type) {
@@ -782,12 +784,12 @@ func formatIntegerDecimal(n *big.Int, picture string) (string, error) {
 		if shouldRepeat {
 			sep := groupSeps[numSeps-1] // use rightmost separator character
 			var result []rune
-			for i := len(sRunes) - 1; i >= 0; i-- {
+			for i, v := range slices.Backward(sRunes) {
 				digitPos := len(sRunes) - 1 - i
 				if digitPos > 0 && digitPos%interval == 0 {
 					result = append(result, sep)
 				}
-				result = append(result, sRunes[i])
+				result = append(result, v)
 			}
 			for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
 				result[i], result[j] = result[j], result[i]
@@ -808,12 +810,12 @@ func formatIntegerDecimal(n *big.Int, picture string) (string, error) {
 				sepAt[p] = sepChars[i]
 			}
 			var result []rune
-			for i := len(sRunes) - 1; i >= 0; i-- {
+			for i, v := range slices.Backward(sRunes) {
 				digitPos := len(sRunes) - 1 - i
 				if sep, ok := sepAt[digitPos]; ok {
 					result = append(result, sep)
 				}
-				result = append(result, sRunes[i])
+				result = append(result, v)
 			}
 			for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
 				result[i], result[j] = result[j], result[i]
@@ -878,7 +880,7 @@ func formatWordsLang(n *big.Int, lang, caseStyle string) string {
 
 func intToGermanWords(n *big.Int) string {
 	if n.Sign() == 0 {
-		return "null" //nolint:goconst
+		return "null"
 	}
 	if !n.IsInt64() {
 		return n.String()

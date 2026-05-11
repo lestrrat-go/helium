@@ -214,8 +214,8 @@ func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Seque
 	}
 
 	switch local {
-	case "version":
-		return xpath3.SingleString("3.0"), nil
+	case paramVersion:
+		return xpath3.SingleString(lexicon.XSLTVersion30), nil
 	case "vendor":
 		return xpath3.SingleString("helium"), nil
 	case "vendor-url":

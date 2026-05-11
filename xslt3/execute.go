@@ -1179,8 +1179,8 @@ func (ec *execContext) collectAllVars(ctx context.Context) map[string]xpath3.Seq
 	for s := ec.localVars; s != nil; s = s.parent {
 		scopes = append(scopes, s)
 	}
-	for i := len(scopes) - 1; i >= 0; i-- {
-		maps.Copy(vars, scopes[i].vars)
+	for _, v := range slices.Backward(scopes) {
+		maps.Copy(vars, v.vars)
 	}
 
 	// When executing in a used package, remove variables that the

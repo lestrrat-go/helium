@@ -3,6 +3,9 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"slices"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -44,7 +47,7 @@ func fnFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	// Per XPath 3.1, the callback must have arity 1
 	if fi.Arity >= 0 && fi.Arity != 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:filter callback must have arity 1, got %d", fi.Arity)}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:filter callback must have arity 1, got %d", fi.Arity)}
 	}
 	var result ItemSlice
 	callArgs := make([]Sequence, 1)
@@ -56,11 +59,11 @@ func fnFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		// Per XPath 3.1, the callback must return exactly one xs:boolean
 		if seqLen(r) != 1 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:filter callback must return a single xs:boolean value"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:filter callback must return a single xs:boolean value"}
 		}
 		av, ok := r.Get(0).(AtomicValue)
 		if !ok || av.TypeName != TypeBoolean {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:filter callback must return a single xs:boolean value"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:filter callback must return a single xs:boolean value"}
 		}
 		if av.BooleanVal() {
 			result = append(result, item)
@@ -97,8 +100,8 @@ func fnFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	items := seqMaterialize(seq)
 	callArgs := make([]Sequence, 2)
-	for i := len(items) - 1; i >= 0; i-- {
-		callArgs[0] = ItemSlice{items[i]}
+	for _, v := range slices.Backward(items) {
+		callArgs[0] = ItemSlice{v}
 		callArgs[1] = acc
 		acc, err = fi.Invoke(ctx, callArgs)
 		if err != nil {
@@ -117,7 +120,7 @@ func fnForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	// Per XPath 3.1, the callback must have arity 2
 	if fi.Arity >= 0 && fi.Arity != 2 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:for-each-pair callback must have arity 2, got %d", fi.Arity)}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
 	size := min(seqLen(seq1), seqLen(seq2))
 	var result ItemSlice
@@ -140,11 +143,11 @@ func fnApply(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if seqLen(args[1]) != 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "apply() second argument must be a single array"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "apply() second argument must be a single array"}
 	}
 	arr, ok := args[1].Get(0).(ArrayItem)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "apply() second argument must be array"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "apply() second argument must be array"}
 	}
 	if fi.Arity >= 0 && arr.Size() != fi.Arity {
 		return nil, &XPathError{Code: errCodeFOAP0001, Message: fmt.Sprintf("fn:apply: function has arity %d but array has %d members", fi.Arity, arr.Size())}
@@ -169,7 +172,7 @@ func fnFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if nameArg.TypeName != TypeQName {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "function-lookup() first argument must be QName"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "function-lookup() first argument must be QName"}
 	}
 	arityArg, err := extractSingleAtomicArg(args[1], "function-lookup()")
 	if err != nil {
@@ -246,7 +249,7 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 		ReturnType: returnType,
 		Invoke: func(ctx context.Context, callArgs []Sequence) (Sequence, error) {
 			if len(callArgs) != arity {
-				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
 			}
 			return fn.Call(ctx, callArgs)
 		},
@@ -254,7 +257,7 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 	_ = capturedCtx
 	fi.Invoke = func(_ context.Context, callArgs []Sequence) (Sequence, error) {
 		if len(callArgs) != arity {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
 		}
 		return fn.Call(capturedCtx, callArgs)
 	}
@@ -290,7 +293,7 @@ func fnFunctionName(_ context.Context, args []Sequence) (Sequence, error) {
 
 func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 	if seqLen(seq) != 1 {
-		return FunctionItem{}, &XPathError{Code: errCodeXPTY0004, Message: "expected single function item"}
+		return FunctionItem{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected single function item"}
 	}
 	switch v := seq.Get(0).(type) {
 	case FunctionItem:
@@ -301,7 +304,7 @@ func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 			Arity: 1,
 			Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
 				if len(args) != 1 || seqLen(args[0]) != 1 {
-					return nil, &XPathError{Code: errCodeXPTY0004, Message: "map lookup requires exactly one argument"}
+					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map lookup requires exactly one argument"}
 				}
 				key, err := AtomizeItem(args[0].Get(0))
 				if err != nil {
@@ -320,7 +323,7 @@ func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 			Arity: 1,
 			Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
 				if len(args) != 1 || seqLen(args[0]) != 1 {
-					return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires exactly one argument"}
+					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires exactly one argument"}
 				}
 				key, err := AtomizeItem(args[0].Get(0))
 				if err != nil {
@@ -329,11 +332,11 @@ func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 				if key.TypeName == TypeUntypedAtomic {
 					key, err = CastAtomic(key, TypeInteger)
 					if err != nil {
-						return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires xs:integer index"}
+						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
 					}
 				}
 				if !isIntegerDerived(key.TypeName) {
-					return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires xs:integer index"}
+					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
 				}
 				iv, ok := key.Int64Val()
 				if !ok {
@@ -344,6 +347,6 @@ func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 			},
 		}, nil
 	default:
-		return FunctionItem{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected function item, got %T", seq.Get(0))}
+		return FunctionItem{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected function item, got %T", seq.Get(0))}
 	}
 }

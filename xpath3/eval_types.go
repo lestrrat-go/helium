@@ -35,10 +35,10 @@ func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 		if e.AllowEmpty {
 			return validNilSequence, nil
 		}
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "cast requires non-empty sequence"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "cast requires non-empty sequence"}
 	}
 	if seqLen(seq) > 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "cast requires singleton"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "cast requires singleton"}
 	}
 	av, err := AtomizeItem(seq.Get(0))
 	if err != nil {
@@ -422,7 +422,7 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
 			if len(args) != len(paramTypes) {
 				return nil, &XPathError{
-					Code:    errCodeXPTY0004,
+					Code:    lexicon.ErrXPTY0004,
 					Message: fmt.Sprintf("arity mismatch: expected %d arguments, got %d", len(paramTypes), len(args)),
 				}
 			}
@@ -439,7 +439,7 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 					coerced, ok := coerceToSequenceType(arg, actual.ParamTypes[i], invokeCtx)
 					if !ok {
 						return nil, &XPathError{
-							Code:    errCodeXPTY0004,
+							Code:    lexicon.ErrXPTY0004,
 							Message: fmt.Sprintf("function argument %d does not match required type %v", i+1, actual.ParamTypes[i]),
 						}
 					}
@@ -455,7 +455,7 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 			coercedResult, ok := coerceToSequenceType(result, target.ReturnType, invokeCtx)
 			if !ok {
 				return nil, &XPathError{
-					Code:    errCodeXPTY0004,
+					Code:    lexicon.ErrXPTY0004,
 					Message: fmt.Sprintf("function result does not match required type %v", target.ReturnType),
 				}
 			}
@@ -1027,7 +1027,7 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 	// Only string and untypedAtomic can be cast to QName
 	if v.TypeName != TypeString && v.TypeName != TypeUntypedAtomic {
 		return AtomicValue{}, &XPathError{
-			Code:    errCodeXPTY0004,
+			Code:    lexicon.ErrXPTY0004,
 			Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, TypeQName),
 		}
 	}

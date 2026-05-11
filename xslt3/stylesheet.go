@@ -68,6 +68,16 @@ const (
 
 	// on-multiple-match values for xsl:mode.
 	onMultipleMatchUseLast = "use-last"
+
+	// XSLT attribute names used across compile/validation.
+	xslAttrName    = "name"
+	xslAttrSelect  = "select"
+	xslAttrUseWhen = "use-when"
+
+	// XSLT/XPath function names referenced in multiple places.
+	funcSystemProperty            = "system-property"
+	funcAvailableSystemProperties = "available-system-properties"
+	funcSnapshot                  = "snapshot"
 )
 
 // funcKey identifies an xsl:function by its expanded QName and arity.

@@ -16,7 +16,7 @@ func TestRunXSDValidateVersion(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", "--version"})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, flagVersion})
 	require.Equal(t, heliumcmd.ExitOK, code)
 	require.Contains(t, stderr.String(), "using helium")
 }
@@ -26,7 +26,7 @@ func TestXSDValidateMissingSchemaArg(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate"})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate})
 	require.Equal(t, heliumcmd.ExitErr, code)
 	require.Contains(t, stderr.String(), "schema is required")
 }
@@ -36,7 +36,7 @@ func TestXSDValidateUnknownOption(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", "--schema"})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, "--schema"})
 	require.Equal(t, heliumcmd.ExitErr, code)
 	require.Contains(t, stderr.String(), "unrecognized option --schema")
 }
@@ -52,7 +52,7 @@ func TestXSDValidateValid(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 }
 
@@ -67,7 +67,7 @@ func TestXSDValidateInvalid(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitValidation, code)
 }
 
@@ -79,7 +79,7 @@ func TestXSDValidateSchemaCompileError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitSchemaComp, code)
 }
 
@@ -93,7 +93,7 @@ func TestXSDValidateFileReadError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", schemaFile, filepath.Join(dir, "missing.xml")})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, schemaFile, filepath.Join(dir, "missing.xml")})
 	require.Equal(t, heliumcmd.ExitReadFile, code)
 }
 
@@ -108,7 +108,7 @@ func TestXSDValidateParseError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitErr, code)
 }
 
@@ -124,7 +124,7 @@ func TestXSDValidateMultipleFiles(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", schemaFile, validXML, invalidXML})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, schemaFile, validXML, invalidXML})
 	require.Equal(t, heliumcmd.ExitValidation, code)
 }
 
@@ -142,6 +142,6 @@ func TestXSDValidateStdIn(t *testing.T) {
 		io.Discard,
 	)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", schemaFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, schemaFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 }

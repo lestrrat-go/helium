@@ -669,7 +669,7 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 // function (produces grounded, non-streaming output).
 func isGroundingFuncName(name string) bool {
 	switch name {
-	case "snapshot", "copy-of", "copy", "current-group",
+	case funcSnapshot, "copy-of", "copy", "current-group",
 		"outermost", "innermost", "parse-xml", "parse-xml-fragment",
 		"doc", "document", "sort", "reverse", "head":
 		return true
@@ -743,7 +743,7 @@ func isAtomicResultExpr(expr xpath3.Expr) bool {
 		if fc.Prefix == "" {
 			switch fc.Name {
 			case "tokenize", "string", "data", "number", "boolean",
-				"name", "local-name", "namespace-uri", "string-length",
+				xslAttrName, "local-name", "namespace-uri", "string-length",
 				"normalize-space", "count", "sum", "avg", "min", "max",
 				"string-join", "concat", "contains", "starts-with",
 				"ends-with", "matches", "replace", "translate",

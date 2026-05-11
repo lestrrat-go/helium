@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -442,7 +444,7 @@ func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, er
 	}
 	if seq.Len() > 1 {
 		return AtomicValue{}, false, &XPathError{
-			Code:    errCodeXPTY0004,
+			Code:    lexicon.ErrXPTY0004,
 			Message: fmt.Sprintf("%s constructor requires a singleton argument", typeName),
 		}
 	}

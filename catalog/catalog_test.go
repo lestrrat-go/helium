@@ -12,6 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testIDToto        = "toto"
+	docbookDbcentxMod = "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod"
+	docbookXDtd       = "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd"
+)
+
 func testdataDir() string {
 	return heliumtest.TestDir("testdata", "libxml2-compat", "catalogs")
 }
@@ -38,29 +44,29 @@ func TestDocbook(t *testing.T) {
 	}{
 		{
 			name:   "resolve with rewriteSystem",
-			pubID:  "toto",
+			pubID:  testIDToto,
 			sysID:  "http://www.oasis-open.org/docbook/xml/4.1.2/dbpoolx.mod",
 			expect: "/usr/share/xml/docbook/xml/4.1.2/dbpoolx.mod",
 		},
 		{
 			name:   "public match",
 			pubID:  "-//OASIS//ENTITIES DocBook XML Character Entities V4.1.2//EN",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod",
+			expect: docbookDbcentxMod,
 		},
 		{
 			name:   "system URN unwrap",
 			sysID:  "urn:publicid:-:OASIS:DTD+DocBook+XML+V4.1.2:EN",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd",
+			expect: docbookXDtd,
 		},
 		{
 			name:   "public URN unwrap",
 			pubID:  "urn:publicid:-:OASIS:DTD+DocBook+XML+V4.1.2:EN",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd",
+			expect: docbookXDtd,
 		},
 		{
 			name:   "nextCatalog public match",
-			pubID:  "toto",
-			sysID:  "toto",
+			pubID:  testIDToto,
+			sysID:  testIDToto,
 			expect: "file:///usr/share/xml/toto/toto.dtd",
 		},
 		{
@@ -90,14 +96,14 @@ func TestRegistry(t *testing.T) {
 	}{
 		{
 			name:   "delegateSystem with rewriteSystem in delegate",
-			pubID:  "toto",
+			pubID:  testIDToto,
 			sysID:  "http://www.oasis-open.org/docbook/xml/4.1.2/dbpoolx.mod",
 			expect: "/usr/share/xml/docbook/xml/4.1.2/dbpoolx.mod",
 		},
 		{
 			name:   "delegatePublic",
 			pubID:  "-//OASIS//ENTITIES DocBook XML Character Entities V4.1.2//EN",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod",
+			expect: docbookDbcentxMod,
 		},
 		{
 			name:   "delegateSystem exact",
@@ -107,7 +113,7 @@ func TestRegistry(t *testing.T) {
 		{
 			name:   "system URN unwrap through delegate",
 			sysID:  "urn:publicid:-:OASIS:DTD+DocBook+XML+V4.1.2:EN",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd",
+			expect: docbookXDtd,
 		},
 		{
 			name:   "no match",
@@ -143,32 +149,32 @@ func TestWhitex(t *testing.T) {
 		{
 			name:   "public with tab in ID (normalized to match)",
 			pubID:  "-//OASIS//ENTITIES\tDocBook XML Character Entities V4.1.2//EN",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod",
+			expect: docbookDbcentxMod,
 		},
 		{
 			name:   "public with leading space (normalized to match)",
 			pubID:  " -//OASIS//ENTITIES DocBook XML Character Entities V4.1.2//EN",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod",
+			expect: docbookDbcentxMod,
 		},
 		{
 			name:   "public with trailing space (normalized to match)",
 			pubID:  "-//OASIS//ENTITIES DocBook XML Character Entities V4.1.2//EN ",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod",
+			expect: docbookDbcentxMod,
 		},
 		{
 			name:   "system URN with leading/trailing spaces in unwrapped ID",
 			sysID:  "urn:publicid:+-:OASIS:DTD+++DocBook+XML+V4.1.2:EN+",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd",
+			expect: docbookXDtd,
 		},
 		{
 			name:   "public URN with multiple spaces in unwrapped ID",
 			pubID:  "urn:publicid:+-:OASIS:DTD+DocBook+XML+++V4.1.2:EN+",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd",
+			expect: docbookXDtd,
 		},
 		{
 			name:   "nextCatalog resolve with whitespace pubID",
 			pubID:  "\ttoto\t",
-			sysID:  "toto",
+			sysID:  testIDToto,
 			expect: "file:///usr/share/xml/toto/toto.dtd",
 		},
 	}
@@ -198,7 +204,7 @@ func TestRepeatedNextCatalog(t *testing.T) {
 
 	// Should still resolve correctly through the deduplicated nextCatalogs.
 	got := cat.Resolve(t.Context(), "-//OASIS//ENTITIES DocBook XML Character Entities V4.1.2//EN", "")
-	require.Equal(t, "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod", got)
+	require.Equal(t, docbookDbcentxMod, got)
 }
 
 func TestNormalizePublicID(t *testing.T) {

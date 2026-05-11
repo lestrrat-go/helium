@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const sharedCatalogXML = "shared.xml"
+
 func TestResolveURIUnwrapsURN(t *testing.T) {
 	t.Parallel()
 
@@ -105,8 +107,8 @@ func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 
 	root := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
-			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
+			{Type: catalog.EntryNextCatalog, URL: sharedCatalogXML},
+			{Type: catalog.EntryNextCatalog, URL: sharedCatalogXML},
 		},
 		Loader: loader,
 	}
@@ -114,7 +116,7 @@ func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 	got := root.Resolve(t.Context(), "", "http://example.com/notfound.dtd")
 	require.Equal(t, "", got)
 
-	cnt := loader.counts["shared.xml"]
+	cnt := loader.counts[sharedCatalogXML]
 	require.NotNil(t, cnt)
 }
 
@@ -134,8 +136,8 @@ func TestVisitedCacheStillResolves(t *testing.T) {
 
 	root := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
-			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
+			{Type: catalog.EntryNextCatalog, URL: sharedCatalogXML},
+			{Type: catalog.EntryNextCatalog, URL: sharedCatalogXML},
 		},
 		Loader: loader,
 	}
@@ -161,7 +163,7 @@ func TestVisitedCachePerQuery(t *testing.T) {
 
 	root := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
+			{Type: catalog.EntryNextCatalog, URL: sharedCatalogXML},
 		},
 		Loader: loader,
 	}

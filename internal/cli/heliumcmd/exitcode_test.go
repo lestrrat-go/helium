@@ -24,7 +24,7 @@ func TestMergeExitCode(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "//book", filepath.Join(dir, "missing.xml"), badXML})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, xpathBook, filepath.Join(dir, "missing.xml"), badXML})
 	require.Equal(t, heliumcmd.ExitReadFile, code)
 }
 
@@ -43,6 +43,6 @@ func TestXSDValidateMultipleFilesUsesHighestExitCode(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", schemaFile, filepath.Join(dir, "missing.xml"), invalidXML})
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, schemaFile, filepath.Join(dir, "missing.xml"), invalidXML})
 	require.Equal(t, heliumcmd.ExitReadFile, code)
 }

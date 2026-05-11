@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/shim"
 	"github.com/stretchr/testify/require"
 )
@@ -76,7 +77,7 @@ func requireEncodeTokenSequence(t *testing.T, enc interface {
 }) {
 	t.Helper()
 	require.NoError(t, enc.EncodeToken(stdxml.StartElement{Name: stdxml.Name{Local: "root"}}), "EncodeToken(start) failed")
-	require.NoError(t, enc.EncodeToken(stdxml.CharData([]byte("hello"))), "EncodeToken(chardata) failed")
+	require.NoError(t, enc.EncodeToken(stdxml.CharData([]byte(testHello))), "EncodeToken(chardata) failed")
 	require.NoError(t, enc.EncodeToken(stdxml.EndElement{Name: stdxml.Name{Local: "root"}}), "EncodeToken(end) failed")
 	require.NoError(t, enc.Flush(), "Flush failed")
 }
@@ -96,7 +97,7 @@ func TestMarshalMarshalIndentUnmarshalBasic(t *testing.T) {
 		Title   string    `xml:"title"`
 	}
 
-	in := payload{ID: "b1", Title: "hello"}
+	in := payload{ID: "b1", Title: testHello}
 
 	stdOut, stdErr := stdxml.Marshal(in)
 	shimOut, shimErr := shim.Marshal(in)
@@ -330,7 +331,7 @@ func TestUnmarshalInvalidTargetErrorsMatchStdlib(t *testing.T) {
 
 	// Use any() to hide the non-pointer from go vet's static analysis.
 	// This is intentional: we're testing that both decoders reject non-pointer targets.
-	nonPtr := any("hello")
+	nonPtr := any(testHello)
 	stdNonPtrErr := stdxml.Unmarshal(input, nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
 	shimNonPtrErr := shim.Unmarshal(input, nonPtr)
 	require.Error(t, stdNonPtrErr)
@@ -431,7 +432,7 @@ func TestUnmarshalTopLevelStringMatchStdlib(t *testing.T) {
 
 	require.NoError(t, stdErr)
 	require.NoError(t, shimErr)
-	require.Equal(t, "value", stdOut)
+	require.Equal(t, lexicon.AttrValue, stdOut)
 	require.Equal(t, stdOut, shimOut)
 }
 
@@ -446,7 +447,7 @@ func TestUnmarshalTopLevelBytesMatchStdlib(t *testing.T) {
 
 	require.NoError(t, stdErr)
 	require.NoError(t, shimErr)
-	require.Equal(t, []byte("value"), stdOut)
+	require.Equal(t, []byte(lexicon.AttrValue), stdOut)
 	require.Equal(t, stdOut, shimOut)
 }
 
@@ -1015,7 +1016,7 @@ func TestDecoderDecodeInvalidTargetMatchStdlib(t *testing.T) {
 	input := []byte(`<root>value</root>`)
 
 	// non-pointer
-	nonPtr := any("hello")
+	nonPtr := any(testHello)
 	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
 	shimErr := shim.NewDecoder(context.Background(), bytes.NewReader(input)).Decode(nonPtr)
 	require.Error(t, stdErr)
@@ -1035,7 +1036,7 @@ func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
 	input := []byte(`<root>value</root>`)
 
 	// non-pointer with DecodeElement
-	nonPtr := any("hello")
+	nonPtr := any(testHello)
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
 	stdTok, _ := stdDec.Token()
 	stdStart := stdTok.(stdxml.StartElement)
@@ -1173,18 +1174,18 @@ func TestEncoderEncodeAndEncodeElementMatchStdlib(t *testing.T) {
 		Value   string      `xml:",chardata"`
 	}
 
-	val := item{Value: "hello"}
+	val := item{Value: testHello}
 
 	var stdBuf bytes.Buffer
 	stdEnc := stdxml.NewEncoder(&stdBuf)
 	require.NoError(t, stdEnc.Encode(val))
-	require.NoError(t, stdEnc.EncodeElement(item{Value: "world"}, stdxml.StartElement{Name: stdxml.Name{Local: "x"}}))
+	require.NoError(t, stdEnc.EncodeElement(item{Value: testWorld}, stdxml.StartElement{Name: stdxml.Name{Local: "x"}}))
 	require.NoError(t, stdEnc.Flush())
 
 	var shimBuf bytes.Buffer
 	shimEnc := shim.NewEncoder(&shimBuf)
 	require.NoError(t, shimEnc.Encode(val))
-	require.NoError(t, shimEnc.EncodeElement(item{Value: "world"}, stdxml.StartElement{Name: stdxml.Name{Local: "x"}}))
+	require.NoError(t, shimEnc.EncodeElement(item{Value: testWorld}, stdxml.StartElement{Name: stdxml.Name{Local: "x"}}))
 	require.NoError(t, shimEnc.Flush())
 
 	require.Equal(t, stdBuf.Bytes(), shimBuf.Bytes(), "Encode/EncodeElement output mismatch")

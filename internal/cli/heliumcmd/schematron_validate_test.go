@@ -16,7 +16,7 @@ func TestRunSchematronValidateVersion(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate", "--version"})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, flagVersion})
 	require.Equal(t, heliumcmd.ExitOK, code)
 	require.Contains(t, stderr.String(), "using helium")
 }
@@ -26,7 +26,7 @@ func TestSchematronValidateMissingSchemaArg(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate"})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate})
 	require.Equal(t, heliumcmd.ExitErr, code)
 	require.Contains(t, stderr.String(), "schema is required")
 }
@@ -36,7 +36,7 @@ func TestSchematronValidateUnknownOption(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate", "--schema"})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, "--schema"})
 	require.Equal(t, heliumcmd.ExitErr, code)
 	require.Contains(t, stderr.String(), "unrecognized option --schema")
 }
@@ -56,7 +56,7 @@ func TestSchematronValidateValid(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 }
 
@@ -76,7 +76,7 @@ func TestSchematronValidateInvalid(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitValidation, code)
 	require.Contains(t, stderr.String(), "fails to validate")
 	require.Contains(t, stderr.String(), "child element is required")
@@ -90,7 +90,7 @@ func TestSchematronValidateSchemaCompileError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate", filepath.Join(dir, "missing.sch"), xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, filepath.Join(dir, "missing.sch"), xmlFile})
 	require.Equal(t, heliumcmd.ExitSchemaComp, code)
 }
 
@@ -108,7 +108,7 @@ func TestSchematronValidateFileReadError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate", schemaFile, filepath.Join(dir, "missing.xml")})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile, filepath.Join(dir, "missing.xml")})
 	require.Equal(t, heliumcmd.ExitReadFile, code)
 }
 
@@ -127,7 +127,7 @@ func TestSchematronValidateParseError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitErr, code)
 }
 
@@ -147,7 +147,7 @@ func TestSchematronValidateMultipleFiles(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate", schemaFile, validXML, invalidXML})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile, validXML, invalidXML})
 	require.Equal(t, heliumcmd.ExitValidation, code)
 }
 
@@ -169,6 +169,6 @@ func TestSchematronValidateStdIn(t *testing.T) {
 		io.Discard,
 	)
 
-	code := heliumcmd.Execute(ctx, []string{"schematron", "validate", schemaFile})
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 }

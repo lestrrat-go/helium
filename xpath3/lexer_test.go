@@ -186,7 +186,7 @@ func TestLexerXPath3Tokens(t *testing.T) {
 		},
 		{
 			name:  "not equals with bang",
-			input: "1 != 2",
+			input: testExpr1Ne2,
 			expect: []xpath3.TokenType{
 				xpath3.TokenNumber, xpath3.TokenNotEquals, xpath3.TokenNumber,
 			},

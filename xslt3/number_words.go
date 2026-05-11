@@ -6,6 +6,14 @@ import (
 	"unicode"
 )
 
+// germanOne is the German cardinal for the digit one ("eins"). Used in the
+// ones-table and in special-case logic that switches to the prefix form "ein"
+// when followed by another component.
+const (
+	germanOne       = "eins"
+	germanOnePrefix = "ein"
+)
+
 // numberToWordsLang converts a number to words in the given language and case.
 // caseMode is "lower", "upper", or "title".
 // ordinal is the ordinal hint (e.g., "yes", "%spellout-ordinal-masculine").
@@ -171,7 +179,7 @@ func germanCardinal(n int) string {
 	if n < 0 {
 		return "minus " + germanCardinal(-n)
 	}
-	ones := []string{"", "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun",
+	ones := []string{"", germanOne, "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun",
 		"zehn", "elf", "zwölf", "dreizehn", "vierzehn", "fünfzehn", "sechzehn", "siebzehn", "achtzehn", "neunzehn"}
 	tens := []string{"", "", "zwanzig", "dreißig", "vierzig", "fünfzig", "sechzig", "siebzig", "achtzig", "neunzig"}
 
@@ -183,15 +191,15 @@ func germanCardinal(n int) string {
 			return tens[n/10]
 		}
 		o := ones[n%10]
-		if o == "eins" {
-			o = "ein" //nolint:goconst
+		if o == germanOne {
+			o = germanOnePrefix
 		}
 		return o + "und" + tens[n/10]
 	}
 	if n < 1000 {
 		w := ones[n/100]
-		if w == "eins" {
-			w = "ein"
+		if w == germanOne {
+			w = germanOnePrefix
 		}
 		w += "hundert"
 		if n%100 != 0 {
@@ -203,7 +211,7 @@ func germanCardinal(n int) string {
 		q := n / 1000
 		w := ""
 		if q == 1 {
-			w = "ein"
+			w = germanOnePrefix
 		} else {
 			w = germanCardinal(q)
 		}
@@ -270,7 +278,7 @@ func germanOrdinalStem(n int) string {
 		r := n % 1000
 		w := ""
 		if q == 1 {
-			w = "ein"
+			w = germanOnePrefix
 		} else {
 			w = germanCardinal(q)
 		}
@@ -283,10 +291,10 @@ func germanOrdinalStem(n int) string {
 	if n >= 100 {
 		q := n / 100
 		r := n % 100
-		ones := []string{"", "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun"}
+		ones := []string{"", germanOne, "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun"}
 		w := ones[q]
-		if w == "eins" {
-			w = "ein"
+		if w == germanOne {
+			w = germanOnePrefix
 		}
 		w += "hundert"
 		if r == 0 {

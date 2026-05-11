@@ -70,13 +70,13 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root bool) (*helium.Element, error) {
-	name := "null"
+	name := jsonKindNull
 	switch v := item.(type) {
 	case MapItem:
-		name = "map"
+		name = jsonKindMap
 		_ = v
 	case ArrayItem:
-		name = "array"
+		name = jsonKindArray
 	case AtomicValue:
 		switch v.TypeName {
 		case TypeString:
@@ -171,18 +171,18 @@ func jsonSequenceToItem(seq Sequence) Item {
 
 func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
-		duplicates: "use-first",
+		duplicates: duplicatesUseFirst,
 	}
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
 	}
 	if seqLen(args[1]) != 1 {
-		return opts, &XPathError{Code: errCodeXPTY0004, Message: "json-to-xml options must be a single map"}
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "json-to-xml options must be a single map"}
 	}
 
 	m, ok := args[1].Get(0).(MapItem)
 	if !ok {
-		return opts, &XPathError{Code: errCodeXPTY0004, Message: "json-to-xml options must be a map"}
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "json-to-xml options must be a map"}
 	}
 
 	readBool := func(name string) (bool, bool, error) {
@@ -192,11 +192,11 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 			return false, false, nil
 		}
 		if seqLen(v) != 1 {
-			return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("option '%s' must be a single xs:boolean", name)}
+			return false, true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("option '%s' must be a single xs:boolean", name)}
 		}
 		av, ok := v.Get(0).(AtomicValue)
 		if !ok || av.TypeName != TypeBoolean {
-			return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("option '%s' must be xs:boolean", name)}
+			return false, true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("option '%s' must be xs:boolean", name)}
 		}
 		return av.BooleanVal(), true, nil
 	}
@@ -225,14 +225,14 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 	dupKey := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 	if v, found := m.Get(dupKey); found {
 		if seqLen(v) != 1 {
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'duplicates' must be a single xs:string"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be a single xs:string"}
 		}
 		s, err := coerceArgToString(v)
 		if err != nil {
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'duplicates' must be xs:string"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'duplicates' must be xs:string"}
 		}
 		switch s {
-		case "reject", "use-first", "retain":
+		case duplicatesReject, duplicatesUseFirst, "retain":
 			opts.duplicates = s
 		case "use-last":
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must not be 'use-last' for json-to-xml"}
@@ -247,21 +247,21 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 	if validateSet && validate {
 		dupKey2 := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 		if _, found := m.Get(dupKey2); !found {
-			opts.duplicates = "reject"
+			opts.duplicates = duplicatesReject
 		}
 	}
 
 	fbKey := AtomicValue{TypeName: TypeString, Value: "fallback"}
 	if v, found := m.Get(fbKey); found {
 		if seqLen(v) != 1 {
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'fallback' must be a single function item"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'fallback' must be a single function item"}
 		}
 		fi, ok := v.Get(0).(FunctionItem)
 		if !ok {
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'fallback' must be a function item"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'fallback' must be a function item"}
 		}
 		if fi.Arity != 1 {
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("option 'fallback' must have arity 1, got %d", fi.Arity)}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("option 'fallback' must have arity 1, got %d", fi.Arity)}
 		}
 		opts.fallback = &fi
 	}
@@ -295,7 +295,7 @@ func fnXMLToJSON(_ context.Context, args []Sequence) (Sequence, error) {
 		return validNilSequence, nil
 	}
 	if seqLen(args[0]) != 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json expects zero or one node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xml-to-json expects zero or one node"}
 	}
 
 	opts, err := parseXMLToJSONOptions(args)
@@ -305,7 +305,7 @@ func fnXMLToJSON(_ context.Context, args []Sequence) (Sequence, error) {
 
 	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json expects an element or document node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xml-to-json expects an element or document node"}
 	}
 
 	root, err := xmlToJSONRootElement(ni.Node)
@@ -326,21 +326,21 @@ func parseXMLToJSONOptions(args []Sequence) (xmlToJSONOptions, error) {
 		return opts, nil
 	}
 	if seqLen(args[1]) != 1 {
-		return opts, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json options must be a single map"}
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xml-to-json options must be a single map"}
 	}
 	m, ok := args[1].Get(0).(MapItem)
 	if !ok {
-		return opts, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json options must be a map"}
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xml-to-json options must be a map"}
 	}
 
 	key := AtomicValue{TypeName: TypeString, Value: "indent"}
 	if v, found := m.Get(key); found {
 		if seqLen(v) != 1 {
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'indent' must be a single xs:boolean"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'indent' must be a single xs:boolean"}
 		}
 		av, ok := v.Get(0).(AtomicValue)
 		if !ok || av.TypeName != TypeBoolean {
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'indent' must be xs:boolean"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "option 'indent' must be xs:boolean"}
 		}
 		opts.indent = av.BooleanVal()
 	}
@@ -368,7 +368,7 @@ func xmlToJSONRootElement(node helium.Node) (*helium.Element, error) {
 	case *helium.Element:
 		return n, nil
 	default:
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json expects an element or document node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xml-to-json expects an element or document node"}
 	}
 }
 
@@ -379,7 +379,7 @@ func serializeJSONXMLElement(elem *helium.Element, inherited xmlJSONInherited, o
 	}
 
 	switch meta.kind {
-	case "map":
+	case jsonKindMap:
 		children, err := jsonElementChildren(elem, true)
 		if err != nil {
 			return "", xmlJSONMeta{}, err
@@ -401,7 +401,7 @@ func serializeJSONXMLElement(elem *helium.Element, inherited xmlJSONInherited, o
 			parts = append(parts, `"`+childMeta.keyEncoded+`":`+valueSeparator(opts.indent)+value)
 		}
 		return formatJSONComposite("{", "}", parts, depth, opts.indent), meta, nil
-	case "array":
+	case jsonKindArray:
 		children, err := jsonElementChildren(elem, false)
 		if err != nil {
 			return "", xmlJSONMeta{}, err
@@ -448,11 +448,11 @@ func serializeJSONXMLElement(elem *helium.Element, inherited xmlJSONInherited, o
 			return "", xmlJSONMeta{}, err
 		}
 		return boolean, meta, nil
-	case "null":
+	case jsonKindNull:
 		if err := validateNullElement(elem); err != nil {
 			return "", xmlJSONMeta{}, err
 		}
-		return "null", meta, nil
+		return jsonKindNull, meta, nil
 	default:
 		return "", xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: unsupported element %s", meta.kind)}
 	}
@@ -469,7 +469,7 @@ func parseXMLJSONMeta(elem *helium.Element, inherited xmlJSONInherited) (xmlJSON
 	}
 
 	switch meta.kind {
-	case "map", "array", lexicon.TypeString, "number", "boolean", "null":
+	case jsonKindMap, jsonKindArray, lexicon.TypeString, "number", "boolean", jsonKindNull:
 	default:
 		return xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid element %q", meta.kind)}
 	}
@@ -526,9 +526,9 @@ func jsonElementChildren(elem *helium.Element, insideMap bool) ([]*helium.Elemen
 			children = append(children, v)
 		case *helium.Text, *helium.CDATASection:
 			if strings.TrimSpace(string(child.Content())) != "" {
-				kind := "array"
+				kind := jsonKindArray
 				if insideMap {
-					kind = "map"
+					kind = jsonKindMap
 				}
 				return nil, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: %s contains non-whitespace text", kind)}
 			}
