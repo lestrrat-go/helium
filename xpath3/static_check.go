@@ -426,7 +426,7 @@ func validatePrefix(prefix string, namespaces map[string]string, strict bool) er
 			return nil
 		}
 	}
-	if prefix == "xml" || prefix == "xmlns" {
+	if prefix == lexicon.PrefixXML || prefix == "xmlns" {
 		return nil
 	}
 	return &XPathError{

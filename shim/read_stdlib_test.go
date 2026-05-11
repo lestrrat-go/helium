@@ -325,10 +325,10 @@ type BadPathEmbeddedB struct {
 var badPathTestsStdlib = []struct {
 	v, e any
 }{
-	{&BadPathTestA{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestA](), Field1: "First", Tag1: "items>item1", Field2: "Second", Tag2: "items"}},
-	{&BadPathTestB{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestB](), Field1: "First", Tag1: "items>item1", Field2: "Second", Tag2: "items>item1>value"}},
-	{&BadPathTestC{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestC](), Field1: "First", Tag1: "", Field2: "Second", Tag2: "First"}},
-	{&BadPathTestD{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestD](), Field1: "First", Tag1: "", Field2: "Second", Tag2: "First"}},
+	{&BadPathTestA{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestA](), Field1: testFirst, Tag1: "items>item1", Field2: "Second", Tag2: "items"}},
+	{&BadPathTestB{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestB](), Field1: testFirst, Tag1: "items>item1", Field2: "Second", Tag2: "items>item1>value"}},
+	{&BadPathTestC{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestC](), Field1: testFirst, Tag1: "", Field2: "Second", Tag2: testFirst}},
+	{&BadPathTestD{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestD](), Field1: testFirst, Tag1: "", Field2: "Second", Tag2: testFirst}},
 }
 
 func TestUnmarshalBadPathsStdlib(t *testing.T) {
@@ -419,21 +419,21 @@ var tablesStdlib = []struct {
 			`<table xmlns="http://www.w3.org/TR/html4/">hello</table>` +
 			`<table xmlns="http://www.w3schools.com/furniture">world</table>` +
 			`</Tables>`,
-		tab: Tables{"hello", "world"},
+		tab: Tables{testHello, testWorld},
 	},
 	{
 		xml: `<Tables>` +
 			`<table xmlns="http://www.w3schools.com/furniture">world</table>` +
 			`<table xmlns="http://www.w3.org/TR/html4/">hello</table>` +
 			`</Tables>`,
-		tab: Tables{"hello", "world"},
+		tab: Tables{testHello, testWorld},
 	},
 	{
 		xml: `<Tables xmlns:f="http://www.w3schools.com/furniture" xmlns:h="http://www.w3.org/TR/html4/">` +
 			`<f:table>world</f:table>` +
 			`<h:table>hello</h:table>` +
 			`</Tables>`,
-		tab: Tables{"hello", "world"},
+		tab: Tables{testHello, testWorld},
 	},
 	{
 		xml: `<Tables>` +
@@ -487,7 +487,7 @@ func TestUnmarshalNSStdlib(t *testing.T) {
 }
 
 func TestMarshalNSStdlib(t *testing.T) {
-	dst := Tables{"hello", "world"}
+	dst := Tables{testHello, testWorld}
 	data, err := Marshal(&dst)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -522,33 +522,33 @@ var tableAttrsStdlib = []struct {
 		xml: `<TableAttrs xmlns:f="http://www.w3schools.com/furniture" xmlns:h="http://www.w3.org/TR/html4/"><TAttr ` +
 			`h:table="hello" f:table="world" ` +
 			`/></TableAttrs>`,
-		tab: TableAttrs{TAttr{HTable: "hello", FTable: "world"}},
+		tab: TableAttrs{TAttr{HTable: testHello, FTable: testWorld}},
 	},
 	{
 		xml: `<TableAttrs><TAttr xmlns:f="http://www.w3schools.com/furniture" xmlns:h="http://www.w3.org/TR/html4/" ` +
 			`h:table="hello" f:table="world" ` +
 			`/></TableAttrs>`,
-		tab: TableAttrs{TAttr{HTable: "hello", FTable: "world"}},
+		tab: TableAttrs{TAttr{HTable: testHello, FTable: testWorld}},
 	},
 	{
 		xml: `<TableAttrs><TAttr ` +
 			`h:table="hello" f:table="world" xmlns:f="http://www.w3schools.com/furniture" xmlns:h="http://www.w3.org/TR/html4/" ` +
 			`/></TableAttrs>`,
-		tab: TableAttrs{TAttr{HTable: "hello", FTable: "world"}},
+		tab: TableAttrs{TAttr{HTable: testHello, FTable: testWorld}},
 	},
 	{
 		// Default space does not apply to attribute names.
 		xml: `<TableAttrs xmlns="http://www.w3schools.com/furniture" xmlns:h="http://www.w3.org/TR/html4/"><TAttr ` +
 			`h:table="hello" table="world" ` +
 			`/></TableAttrs>`,
-		tab: TableAttrs{TAttr{HTable: "hello", FTable: ""}},
+		tab: TableAttrs{TAttr{HTable: testHello, FTable: ""}},
 	},
 	{
 		// Default space does not apply to attribute names.
 		xml: `<TableAttrs xmlns:f="http://www.w3schools.com/furniture"><TAttr xmlns="http://www.w3.org/TR/html4/" ` +
 			`table="hello" f:table="world" ` +
 			`/></TableAttrs>`,
-		tab: TableAttrs{TAttr{HTable: "", FTable: "world"}},
+		tab: TableAttrs{TAttr{HTable: "", FTable: testWorld}},
 	},
 	{
 		xml: `<TableAttrs><TAttr ` +
@@ -561,7 +561,7 @@ var tableAttrsStdlib = []struct {
 		xml: `<TableAttrs xmlns:h="http://www.w3.org/TR/html4/"><TAttr ` +
 			`h:table="hello" table="world" ` +
 			`/></TableAttrs>`,
-		tab: TableAttrs{TAttr{HTable: "hello", FTable: ""}},
+		tab: TableAttrs{TAttr{HTable: testHello, FTable: ""}},
 		ns:  "http://www.w3schools.com/furniture",
 	},
 	{
@@ -569,7 +569,7 @@ var tableAttrsStdlib = []struct {
 		xml: `<TableAttrs xmlns:f="http://www.w3schools.com/furniture"><TAttr ` +
 			`table="hello" f:table="world" ` +
 			`/></TableAttrs>`,
-		tab: TableAttrs{TAttr{HTable: "", FTable: "world"}},
+		tab: TableAttrs{TAttr{HTable: "", FTable: testWorld}},
 		ns:  "http://www.w3.org/TR/html4/",
 	},
 	{
@@ -604,7 +604,7 @@ func TestUnmarshalNSAttrStdlib(t *testing.T) {
 }
 
 func TestMarshalNSAttrStdlib(t *testing.T) {
-	src := TableAttrs{TAttr{"hello", "world", "en_US", "other1", "other2", "other3", "other4"}}
+	src := TableAttrs{TAttr{testHello, testWorld, "en_US", "other1", "other2", "other3", "other4"}}
 	data, err := Marshal(&src)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -683,7 +683,7 @@ func TestUnmarshalerStdlib(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if m.Data == nil || m.Attr == nil || m.Data.body != "hello world" || m.Attr.attr != "attr1" || m.Data2.body != "howdy world" || m.Attr2.attr != "attr2" {
+	if m.Data == nil || m.Attr == nil || m.Data.body != testHelloWorld || m.Attr.attr != "attr1" || m.Data2.body != "howdy world" || m.Attr2.attr != "attr2" {
 		t.Errorf("m=%#+v\n", m)
 	}
 }

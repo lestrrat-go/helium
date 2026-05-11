@@ -117,4 +117,13 @@ const (
 const (
 	FnPosition = "position"
 	FnLast     = "last"
+	FnName     = "name"
+)
+
+// XSLT spec version strings used for MinVersion fields and version-attribute
+// comparisons across compile/streamability/element-info tables.
+const (
+	XSLTVersion10 = "1.0"
+	XSLTVersion20 = "2.0"
+	XSLTVersion30 = "3.0"
 )

@@ -3,6 +3,7 @@ package lexicon
 const (
 	PrefixXML   = "xml"
 	PrefixXMLNS = "xmlns"
+	PrefixErr   = "err"
 
 	AttrBase  = "base"
 	AttrID    = "id"
@@ -67,6 +68,7 @@ const (
 	XSUntypedAtomic = "xs:untypedAtomic"
 	XSInteger       = "xs:integer"
 	XSBoolean       = "xs:boolean"
+	XSString        = "xs:string"
 )
 
 // XSD type local name constants (unprefixed).
@@ -143,9 +145,10 @@ const (
 
 // Output encoding constants.
 const (
-	EncodingUTF8  = "utf-8"
-	EncodingUTF8U = "UTF-8"
-	EncodingUTF16 = "utf-16"
+	EncodingUTF8    = "utf-8"
+	EncodingUTF8U   = "UTF-8"
+	EncodingUTF8Alt = "utf8"
+	EncodingUTF16   = "utf-16"
 )
 
 // WellKnownNames is the set of all lexicon string constants, suitable for

@@ -288,13 +288,13 @@ func (p *parser) currentName() string {
 
 // pushName pushes an element name onto the stack and tracks insert mode.
 func (p *parser) pushName(name string) {
-	if name == "html" {
+	if name == elemHTML {
 		p.sawRoot = true
 	}
-	if p.mode < insertInHead && name == "head" { //nolint:goconst
+	if p.mode < insertInHead && name == elemHead {
 		p.mode = insertInHead
 	}
-	if p.mode < insertInBody && name == "body" { //nolint:goconst
+	if p.mode < insertInBody && name == elemBody {
 		p.mode = insertInBody
 	}
 	p.nameStack = append(p.nameStack, name)
@@ -320,12 +320,12 @@ func (p *parser) hasOnStack(name string) bool {
 // HTMLparser.c misplaced-element detection.
 func (p *parser) isMisplacedStructural(name string) bool {
 	switch name {
-	case "html":
+	case elemHTML:
 		return len(p.nameStack) > 0
-	case "head":
+	case elemHead:
 		return len(p.nameStack) != 1
-	case "body":
-		return p.hasOnStack("body")
+	case elemBody:
+		return p.hasOnStack(elemBody)
 	}
 	return false
 }
@@ -353,12 +353,12 @@ func (p *parser) htmlAutoCloseOnClose(endTag string) {
 
 	// Check if the end tag matches anything on the stack
 	found := false
-	for i := len(p.nameStack) - 1; i >= 0; i-- {
-		if p.nameStack[i] == endTag {
+	for _, v := range slices.Backward(p.nameStack) {
+		if v == endTag {
 			found = true
 			break
 		}
-		if getEndPriority(p.nameStack[i]) > priority {
+		if getEndPriority(v) > priority {
 			return
 		}
 	}
@@ -392,17 +392,17 @@ func (p *parser) htmlCheckImplied(newTag string) {
 	if p.cfg.noImplied {
 		return
 	}
-	if newTag == "html" {
+	if newTag == elemHTML {
 		return
 	}
 
 	// Ensure <html> exists
 	if len(p.nameStack) == 0 {
-		p.pushName("html")
-		_ = p.sax.StartElement("html", nil)
+		p.pushName(elemHTML)
+		_ = p.sax.StartElement(elemHTML, nil)
 	}
 
-	if newTag == "body" || newTag == "head" {
+	if newTag == elemBody || newTag == elemHead {
 		return
 	}
 
@@ -411,24 +411,24 @@ func (p *parser) htmlCheckImplied(newTag string) {
 		if p.mode >= insertInHead {
 			return
 		}
-		p.pushName("head")
-		_ = p.sax.StartElement("head", nil)
+		p.pushName(elemHead)
+		_ = p.sax.StartElement(elemHead, nil)
 		return
 	}
 
 	// Body elements
-	if newTag != "noframes" && newTag != "frame" && newTag != "frameset" {
+	if newTag != "noframes" && newTag != "frame" && newTag != elemFrameset {
 		if p.mode >= insertInBody {
 			return
 		}
 		// Check if body or head is already on the stack
 		for _, n := range p.nameStack {
-			if n == "body" || n == "head" {
+			if n == elemBody || n == elemHead {
 				return
 			}
 		}
-		p.pushName("body")
-		_ = p.sax.StartElement("body", nil)
+		p.pushName(elemBody)
+		_ = p.sax.StartElement(elemBody, nil)
 	}
 }
 
@@ -570,7 +570,7 @@ func (p *parser) parseEndTag() {
 	}
 
 	// Skip end tags for discarded misplaced structural elements
-	if (name == "html" || name == "head" || name == "body") && p.depth > 0 {
+	if (name == elemHTML || name == elemHead || name == elemBody) && p.depth > 0 {
 		p.depth--
 		return
 	}
@@ -730,7 +730,7 @@ func (p *parser) parseCharacters() {
 	// We need to split at whitespace→non-whitespace boundaries when inside
 	// <head> so that whitespace is emitted in <head> and non-whitespace
 	// triggers head-close + body-open.
-	inHead := p.currentName() == "head"
+	inHead := p.currentName() == elemHead
 
 	n := 0
 	for {
@@ -797,7 +797,7 @@ func (p *parser) parseCharacters() {
 // htmlStartCharData() which auto-closes head and ensures body is open.
 func (p *parser) htmlStartCharData() {
 	// If current element is <head>, auto-close it
-	if p.currentName() == "head" {
+	if p.currentName() == elemHead {
 		p.htmlAutoClose("p")
 	}
 	p.htmlCheckImplied("p")

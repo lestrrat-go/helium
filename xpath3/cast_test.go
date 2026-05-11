@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +43,7 @@ func TestCastFromString(t *testing.T) {
 		},
 		{
 			name:  "string to double INF",
-			input: "INF", targetType: xpath3.TypeDouble,
+			input: lexicon.FloatINF, targetType: xpath3.TypeDouble,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				t.Helper()
 				require.True(t, math.IsInf(v.DoubleVal(), 1))
@@ -58,7 +59,7 @@ func TestCastFromString(t *testing.T) {
 		},
 		{
 			name:  "string to boolean true",
-			input: "true", targetType: xpath3.TypeBoolean,
+			input: lexicon.ValueTrue, targetType: xpath3.TypeBoolean,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				t.Helper()
 				require.True(t, v.BooleanVal())
@@ -237,7 +238,7 @@ func TestCastAtomic(t *testing.T) {
 	})
 
 	t.Run("same type is identity", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "hello"}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: testHello}
 		result, err := xpath3.CastAtomic(v, xpath3.TypeString)
 		require.NoError(t, err)
 		require.Equal(t, v, result)
@@ -301,9 +302,9 @@ func TestAtomicToString(t *testing.T) {
 		{"integer", xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)}, "42"},
 		{"double", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(3.14)}, "3.14"},
 		{"double zero", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(0.0)}, "0"},
-		{"double INF", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.Inf(1))}, "INF"},
+		{"double INF", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.Inf(1))}, lexicon.FloatINF},
 		{"double NaN", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.NaN())}, "NaN"},
-		{"true", xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: true}, "true"},
+		{lexicon.ValueTrue, xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: true}, lexicon.ValueTrue},
 		{"false", xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: false}, "false"},
 	}
 	for _, tc := range tests {

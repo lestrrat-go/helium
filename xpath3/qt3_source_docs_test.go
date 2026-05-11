@@ -10,8 +10,8 @@ func TestQT3VariableSourceDocs(t *testing.T) {
 			Name:  "bind source docs to variables",
 			XPath: `number($works/works/employee[1]/hours[1]) + number($staff/staff/employee[2]/grade[1])`,
 			SourceDocs: []qt3SourceDoc{
-				{Name: "works", DocPath: "docs/works.xml"},
-				{Name: "staff", DocPath: "docs/staff.xml"},
+				{Name: docNameWorks, DocPath: docPathWorks},
+				{Name: docNameStaff, DocPath: docPathStaff},
 			},
 			Assertions: []qt3Assertion{qt3AssertEq("50")},
 		},
@@ -19,7 +19,7 @@ func TestQT3VariableSourceDocs(t *testing.T) {
 			Name:  "evaluate params against source docs",
 			XPath: `string($target)`,
 			SourceDocs: []qt3SourceDoc{
-				{Name: "staff", DocPath: "docs/staff.xml"},
+				{Name: docNameStaff, DocPath: docPathStaff},
 			},
 			Params: []qt3Param{
 				{Name: "target", Select: "$staff/staff/employee[2]/empname[1]"},

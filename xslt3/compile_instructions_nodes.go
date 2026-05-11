@@ -110,7 +110,7 @@ func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*e
 
 	// Validate attributes
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"name": {}, "namespace": {}, "inherit-namespaces": {},
+		xslAttrName: {}, "namespace": {}, "inherit-namespaces": {},
 		"use-attribute-sets": {}, "type": {}, "validation": {},
 	}); err != nil {
 		return nil, err
@@ -654,11 +654,11 @@ func (c *compiler) compileDocument(ctx context.Context, elem *helium.Element) (*
 
 func (c *compiler) compileSequence(ctx context.Context, elem *helium.Element) (instruction, error) {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"select": {},
+		xslAttrSelect: {},
 	}); err != nil {
 		return nil, err
 	}
-	selectAttr := getAttr(elem, "select")
+	selectAttr := getAttr(elem, xslAttrSelect)
 	if selectAttr != "" {
 		// XTSE3185: when @select is present, only xsl:fallback children are allowed.
 		if hasSignificantChildren(elem) {

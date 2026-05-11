@@ -11,7 +11,7 @@ import (
 
 func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Element) (*applyTemplatesInst, error) {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"select": {}, "mode": {},
+		xslAttrSelect: {}, "mode": {},
 	}); err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Eleme
 		Mode: mode,
 	}
 
-	selectAttr := getAttr(elem, "select")
+	selectAttr := getAttr(elem, xslAttrSelect)
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -103,11 +103,11 @@ func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Eleme
 
 func (c *compiler) compileCallTemplate(ctx context.Context, elem *helium.Element) (*callTemplateInst, error) {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"name": {},
+		xslAttrName: {},
 	}); err != nil {
 		return nil, err
 	}
-	name := strings.TrimSpace(getAttr(elem, "name"))
+	name := strings.TrimSpace(getAttr(elem, xslAttrName))
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:call-template requires name attribute")
 	}
@@ -393,7 +393,7 @@ func (c *compiler) compileForEach(ctx context.Context, elem *helium.Element) (*f
 
 func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*sortKey, error) {
 	// Evaluate use-when on xsl:sort before compiling the sort key.
-	if uw := getAttr(elem, "use-when"); uw != "" {
+	if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return nil, err
@@ -488,7 +488,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 
 func (c *compiler) compileWithParam(ctx context.Context, elem *helium.Element) (*withParam, error) {
 	// Check use-when before compiling: skip this with-param if excluded.
-	if uw := getAttr(elem, "use-when"); uw != "" {
+	if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			return nil, err

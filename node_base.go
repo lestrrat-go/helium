@@ -3,6 +3,7 @@ package helium
 import (
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -29,8 +30,8 @@ func NodeGetBase(doc *Document, n Node) string {
 			// Resolve from outermost to innermost, starting from the
 			// entity base URI instead of the document URL.
 			base := ebu
-			for i := len(bases) - 1; i >= 0; i-- {
-				base = BuildURI(bases[i], base)
+			for _, v := range slices.Backward(bases) {
+				base = BuildURI(v, base)
 			}
 			return base
 		}
@@ -43,11 +44,11 @@ func NodeGetBase(doc *Document, n Node) string {
 	}
 
 	// Resolve from outermost ancestor inward (reverse order).
-	for i := len(bases) - 1; i >= 0; i-- {
+	for _, v := range slices.Backward(bases) {
 		if base == "" {
-			base = bases[i]
+			base = v
 		} else {
-			base = BuildURI(bases[i], base)
+			base = BuildURI(v, base)
 		}
 	}
 

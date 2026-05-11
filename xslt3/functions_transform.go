@@ -43,9 +43,9 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 
 	// Register XSLT built-in functions in the fn: namespace so they are
 	// discoverable via function-lookup with an explicit namespace.
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "system-property"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: funcSystemProperty}] =
 		&xsltFunc{min: 1, max: 1, fn: ec.fnSystemProperty}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "available-system-properties"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: funcAvailableSystemProperties}] =
 		&xsltFunc{min: 0, max: 0, fn: ec.fnAvailableSystemProperties}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "current-output-uri"}] =
 		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrentOutputURI}
@@ -91,7 +91,7 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 		}}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "copy-of"}] =
 		&xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "snapshot"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: funcSnapshot}] =
 		&xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "transform"}] =
 		&xsltFunc{min: 1, max: 1, fn: ec.fnTransform}

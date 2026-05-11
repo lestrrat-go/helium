@@ -321,7 +321,7 @@ func fnHasChildren(ctx context.Context, args []Sequence) (Sequence, error) {
 func fnInnermost(ctx context.Context, args []Sequence) (Sequence, error) {
 	nodes, ok := NodesFrom(args[0])
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "innermost() requires node-set"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "innermost() requires node-set"}
 	}
 	nodeSet := make(map[helium.Node]bool, len(nodes))
 	for _, n := range nodes {
@@ -350,7 +350,7 @@ func fnInnermost(ctx context.Context, args []Sequence) (Sequence, error) {
 func fnOutermost(ctx context.Context, args []Sequence) (Sequence, error) {
 	nodes, ok := NodesFrom(args[0])
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "outermost() requires node-set"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "outermost() requires node-set"}
 	}
 	nodeSet := make(map[helium.Node]bool, len(nodes))
 	for _, n := range nodes {
@@ -382,16 +382,16 @@ func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) > 1 {
 		nodes, ok := NodesFrom(args[1])
 		if !ok || len(nodes) == 0 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:lang second argument must be a node"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:lang second argument must be a node"}
 		}
 		n = nodes[0]
 	} else {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		if fc.node == nil {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item is not a node for fn:lang"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "context item is not a node for fn:lang"}
 		}
 		n = fc.node
 	}
@@ -455,7 +455,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
@@ -563,30 +563,30 @@ func stripXMLTextDeclaration(s string) (string, error) {
 
 	end := strings.Index(s, "?>")
 	if end < 0 {
-		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 	}
 
 	decl := s[len("<?xml"):end]
 	names, err := parseXMLPseudoAttributes(decl)
 	if err != nil {
-		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 	}
 
 	if len(names) == 0 {
-		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 	}
 
 	switch len(names) {
 	case 1:
 		if names[0] != lexicon.DeclEncoding {
-			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+			return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 		}
 	case 2:
 		if names[0] != lexicon.DeclVersion || names[1] != lexicon.DeclEncoding {
-			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+			return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 		}
 	default:
-		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 	}
 
 	return s[end+2:], nil
@@ -974,7 +974,7 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 
 func docURIArg(seq Sequence, fnName string) (string, error) {
 	if seqLen(seq) > 1 {
-		return "", &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected xs:string?, got sequence of length > 1"}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: fnName + ": expected xs:string?, got sequence of length > 1"}
 	}
 	return coerceArgToString(seq)
 }
@@ -1057,22 +1057,22 @@ func resolveIDLookupDocument(ctx context.Context, args []Sequence) (*helium.Docu
 	var node helium.Node
 	if len(args) > 1 {
 		if seqLen(args[1]) != 1 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:id second argument must be a single node"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:id second argument must be a single node"}
 		}
 		ni, ok := args[1].Get(0).(NodeItem)
 		if !ok {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:id second argument must be a node"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:id second argument must be a node"}
 		}
 		node = ni.Node
 	} else {
 		fc := getFnContext(ctx)
 		switch {
 		case fc == nil || (fc.node == nil && fc.contextItem == nil):
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 		case fc.node != nil:
 			node = fc.node
 		default:
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item is not a node"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "context item is not a node"}
 		}
 	}
 
@@ -1135,10 +1135,10 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		if fc.node == nil {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item is not a node"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "context item is not a node"}
 		}
 		return fc.node, nil
 	}
@@ -1146,11 +1146,11 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 		return nil, nil //nolint:nilnil
 	}
 	if seqLen(args[0]) > 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected single node, got sequence of length > 1"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected single node, got sequence of length > 1"}
 	}
 	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected node"}
 	}
 	return ni.Node, nil
 }

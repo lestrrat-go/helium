@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -171,8 +172,8 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 	// "tail position" where xsl:break and xsl:next-iteration are allowed
 	// (XTSE3120). xsl:fallback compiles to nil so it does not count.
 	lastSignificant := -1
-	for i := len(bodyChildren) - 1; i >= 0; i-- {
-		bc := bodyChildren[i]
+	for i, v := range slices.Backward(bodyChildren) {
+		bc := v
 		if bc.elem != nil && bc.elem.URI() == lexicon.NamespaceXSLT && bc.elem.LocalName() == lexicon.XSLTElementFallback {
 			continue
 		}
@@ -830,8 +831,8 @@ func (c *compiler) compileMerge(ctx context.Context, elem *helium.Element) (inst
 
 // mergeSourceAllowedAttrs lists the valid attributes on xsl:merge-source.
 var mergeSourceAllowedAttrs = map[string]struct{}{
-	"name": {}, "for-each-item": {}, "for-each-source": {},
-	"select": {}, "streamable": {}, "sort-before-merge": {},
+	xslAttrName: {}, "for-each-item": {}, "for-each-source": {},
+	xslAttrSelect: {}, "streamable": {}, "sort-before-merge": {},
 	"use-accumulators": {}, "validation": {}, "type": {},
 }
 

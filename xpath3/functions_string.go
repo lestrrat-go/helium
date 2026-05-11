@@ -13,6 +13,7 @@ import (
 
 	"github.com/dlclark/regexp2"
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -51,11 +52,11 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item has no string value"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "context item has no string value"}
 		}
 		return SingleString(s), nil
 	}
@@ -63,7 +64,7 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(""), nil
 	}
 	if seqLen(args[0]) > 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:string requires a single item, got sequence of length > 1"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:string requires a single item, got sequence of length > 1"}
 	}
 	item := args[0].Get(0)
 	// fn:string does not accept function items, maps, or arrays
@@ -328,7 +329,7 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 	} else {
 		if seqLen(args[0]) > 1 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("string-length: expected single item, got sequence of length %d", seqLen(args[0]))}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("string-length: expected single item, got sequence of length %d", seqLen(args[0]))}
 		}
 		var err error
 		s, err = seqToStringErr(args[0])
@@ -344,11 +345,11 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		sv, ok := fc.contextStringValue()
 		if !ok {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item has no string value"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "context item has no string value"}
 		}
 		s = sv
 	} else {
@@ -608,7 +609,7 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:matches pattern must not be empty sequence"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:matches pattern must not be empty sequence"}
 	}
 	pattern, err := coerceArgToStringRequired(args[1])
 	if err != nil {
@@ -617,7 +618,7 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 	flags := ""
 	if len(args) > 2 {
 		if seqLen(args[2]) == 0 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:matches flags must not be empty sequence"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:matches flags must not be empty sequence"}
 		}
 		flags, err = coerceArgToStringRequired(args[2])
 		if err != nil {
@@ -671,14 +672,14 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:replace pattern must not be empty sequence"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:replace pattern must not be empty sequence"}
 	}
 	pattern, err := coerceArgToStringRequired(args[1])
 	if err != nil {
 		return nil, err
 	}
 	if seqLen(args[2]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:replace replacement must not be empty sequence"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:replace replacement must not be empty sequence"}
 	}
 	replacement, err := coerceArgToStringRequired(args[2])
 	if err != nil {
@@ -687,7 +688,7 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 	flags := ""
 	if len(args) > 3 {
 		if seqLen(args[3]) == 0 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:replace flags must not be empty sequence"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:replace flags must not be empty sequence"}
 		}
 		flags, err = coerceArgToStringRequired(args[3])
 		if err != nil {
@@ -836,7 +837,7 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:tokenize pattern must not be empty sequence"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:tokenize pattern must not be empty sequence"}
 	}
 	pattern, err := coerceArgToStringRequired(args[1])
 	if err != nil {
@@ -845,7 +846,7 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	flags := ""
 	if len(args) > 2 {
 		if seqLen(args[2]) == 0 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:tokenize flags must not be empty sequence"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:tokenize flags must not be empty sequence"}
 		}
 		flags, err = coerceArgToStringRequired(args[2])
 		if err != nil {

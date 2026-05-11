@@ -4,8 +4,21 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 	"github.com/stretchr/testify/require"
+)
+
+// Test-fixture-only literals (no lexicon equivalent).
+const (
+	testAbc      = "abc"
+	testP1Y      = "P1Y"
+	test1foo     = "1foo"
+	testUnderBar = "_bar"
+	testDT0      = "2023-01-15T10:30:00"
+	testT0       = "10:30:00"
+	testAB       = "a:b"
+	testFoo      = "foo"
 )
 
 func TestBuiltinTypeValidation(t *testing.T) {
@@ -15,83 +28,83 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		invalid  []string
 	}{
 		{
-			typeName: "float",
-			valid:    []string{"1.0", "-1.5", "+3.14", "1", ".5", "1.", "1e10", "1.5E-3", "INF", "-INF", "+INF", "NaN"},
-			invalid:  []string{"", "abc", "1.2.3", "inf", "nan", "Inf"},
+			typeName: lexicon.TypeFloat,
+			valid:    []string{lexicon.XSLTVersion10, "-1.5", "+3.14", "1", ".5", "1.", "1e10", "1.5E-3", lexicon.FloatINF, lexicon.FloatNegINF, "+INF", lexicon.FloatNaN},
+			invalid:  []string{"", testAbc, "1.2.3", "inf", "nan", "Inf"},
 		},
 		{
-			typeName: "double",
-			valid:    []string{"1.0", "-1.5", "1e10", "INF", "-INF", "NaN"},
-			invalid:  []string{"", "abc", "inf", "nan"},
+			typeName: lexicon.TypeDouble,
+			valid:    []string{lexicon.XSLTVersion10, "-1.5", "1e10", lexicon.FloatINF, lexicon.FloatNegINF, lexicon.FloatNaN},
+			invalid:  []string{"", testAbc, "inf", "nan"},
 		},
 		{
-			typeName: "dateTime",
-			valid:    []string{"2023-01-15T10:30:00", "2023-01-15T10:30:00Z", "2023-01-15T10:30:00.123", "2023-01-15T10:30:00+09:00", "2023-01-15T10:30:00-05:00", "-0001-01-01T00:00:00"},
-			invalid:  []string{"", "2023-01-15", "10:30:00", "2023-01-15 10:30:00", "2023-1-15T10:30:00"},
+			typeName: lexicon.TypeDateTime,
+			valid:    []string{testDT0, "2023-01-15T10:30:00Z", "2023-01-15T10:30:00.123", "2023-01-15T10:30:00+09:00", "2023-01-15T10:30:00-05:00", "-0001-01-01T00:00:00"},
+			invalid:  []string{"", "2023-01-15", testT0, "2023-01-15 10:30:00", "2023-1-15T10:30:00"},
 		},
 		{
-			typeName: "time",
-			valid:    []string{"10:30:00", "10:30:00Z", "10:30:00.123", "10:30:00+09:00", "10:30:00-05:00", "00:00:00"},
-			invalid:  []string{"", "10:30", "abc"},
+			typeName: lexicon.TypeTime,
+			valid:    []string{testT0, "10:30:00Z", "10:30:00.123", "10:30:00+09:00", "10:30:00-05:00", "00:00:00"},
+			invalid:  []string{"", "10:30", testAbc},
 		},
 		{
-			typeName: "duration",
-			valid:    []string{"P1Y", "P1M", "P1D", "PT1H", "PT1M", "PT1S", "P1Y2M3D", "P1Y2M3DT4H5M6S", "PT1.5S", "-P1Y", "P0Y"},
-			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", "abc"},
+			typeName: lexicon.TypeDuration,
+			valid:    []string{testP1Y, "P1M", "P1D", "PT1H", "PT1M", "PT1S", "P1Y2M3D", "P1Y2M3DT4H5M6S", "PT1.5S", "-P1Y", "P0Y"},
+			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", testAbc},
 		},
 		{
 			typeName: "gYear",
 			valid:    []string{"2023", "-0001", "2023Z", "2023+09:00", "10000"},
-			invalid:  []string{"", "23", "abc", "2023-01"},
+			invalid:  []string{"", "23", testAbc, "2023-01"},
 		},
 		{
 			typeName: "gYearMonth",
 			valid:    []string{"2023-01", "2023-12", "-0001-06", "2023-01Z", "2023-01+09:00"},
-			invalid:  []string{"", "2023", "2023-1", "abc"},
+			invalid:  []string{"", "2023", "2023-1", testAbc},
 		},
 		{
 			typeName: "gMonth",
 			valid:    []string{"--01", "--12", "--06Z", "--06+09:00"},
-			invalid:  []string{"", "-01", "01", "abc"},
+			invalid:  []string{"", "-01", "01", testAbc},
 		},
 		{
 			typeName: "gMonthDay",
 			valid:    []string{"--01-15", "--12-31", "--06-01Z", "--06-01+09:00"},
-			invalid:  []string{"", "--0115", "-01-15", "abc"},
+			invalid:  []string{"", "--0115", "-01-15", testAbc},
 		},
 		{
 			typeName: "gDay",
 			valid:    []string{"---01", "---31", "---15Z", "---15+09:00"},
-			invalid:  []string{"", "--01", "01", "abc"},
+			invalid:  []string{"", "--01", "01", testAbc},
 		},
 		{
 			typeName: "Name",
-			valid:    []string{"foo", "_bar", ":baz", "a.b", "a-b", "a:b", "A123"},
-			invalid:  []string{"", "1foo", ".foo", "-foo"},
+			valid:    []string{testFoo, testUnderBar, ":baz", "a.b", "a-b", testAB, "A123"},
+			invalid:  []string{"", test1foo, ".foo", "-foo"},
 		},
 		{
 			typeName: "NCName",
-			valid:    []string{"foo", "_bar", "a.b", "a-b", "A123"},
-			invalid:  []string{"", "1foo", ".foo", "-foo", "a:b", ":foo"},
+			valid:    []string{testFoo, testUnderBar, "a.b", "a-b", "A123"},
+			invalid:  []string{"", test1foo, ".foo", "-foo", testAB, ":foo"},
 		},
 		{
 			typeName: "ID",
-			valid:    []string{"foo", "_bar", "myId123"},
-			invalid:  []string{"", "1foo", "a:b"},
+			valid:    []string{testFoo, testUnderBar, "myId123"},
+			invalid:  []string{"", test1foo, testAB},
 		},
 		{
 			typeName: "IDREF",
-			valid:    []string{"foo", "_bar"},
-			invalid:  []string{"", "1foo", "a:b"},
+			valid:    []string{testFoo, testUnderBar},
+			invalid:  []string{"", test1foo, testAB},
 		},
 		{
 			typeName: "ENTITY",
-			valid:    []string{"foo", "_bar"},
-			invalid:  []string{"", "1foo", "a:b"},
+			valid:    []string{testFoo, testUnderBar},
+			invalid:  []string{"", test1foo, testAB},
 		},
 		{
 			typeName: "NMTOKEN",
-			valid:    []string{"foo", "1foo", ".foo", "-foo", "a:b", "A.1-2:3_4"},
+			valid:    []string{testFoo, test1foo, ".foo", "-foo", testAB, "A.1-2:3_4"},
 			invalid:  []string{"", "foo bar", "foo\ttab"},
 		},
 		{
@@ -111,13 +124,13 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		},
 		{
 			typeName: "QName",
-			valid:    []string{"foo", "xs:string", "a:b", "_foo:_bar"},
-			invalid:  []string{"", "1foo", "a:b:c", ":foo"},
+			valid:    []string{testFoo, "xs:string", testAB, "_foo:_bar"},
+			invalid:  []string{"", test1foo, "a:b:c", ":foo"},
 		},
 		{
 			typeName: "NOTATION",
-			valid:    []string{"foo", "ns:notation"},
-			invalid:  []string{"", "1foo"},
+			valid:    []string{testFoo, "ns:notation"},
+			invalid:  []string{"", test1foo},
 		},
 		{
 			typeName: "anyURI",
@@ -127,7 +140,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		{
 			typeName: "byte",
 			valid:    []string{"-128", "0", "127", "+0"},
-			invalid:  []string{"-129", "128", "999", "abc"},
+			invalid:  []string{"-129", "128", "999", testAbc},
 		},
 		{
 			typeName: "short",
@@ -209,11 +222,11 @@ func TestCompareValues(t *testing.T) {
 		ok   bool // false means indeterminate
 	}{
 		// decimal
-		{"decimal", "1.0", "2.0", -1, true},
-		{"decimal", "2.0", "1.0", 1, true},
-		{"decimal", "3.14", "3.14", 0, true},
-		{"decimal", "-1", "1", -1, true},
-		{"decimal", "0.5", "0.50", 0, true},
+		{lexicon.TypeDecimal, lexicon.XSLTVersion10, "2.0", -1, true},
+		{lexicon.TypeDecimal, "2.0", lexicon.XSLTVersion10, 1, true},
+		{lexicon.TypeDecimal, "3.14", "3.14", 0, true},
+		{lexicon.TypeDecimal, "-1", "1", -1, true},
+		{lexicon.TypeDecimal, "0.5", "0.50", 0, true},
 
 		// integer (uses decimal path)
 		{"integer", "10", "20", -1, true},
@@ -221,28 +234,28 @@ func TestCompareValues(t *testing.T) {
 		{"integer", "-5", "5", -1, true},
 
 		// float
-		{"float", "1.0", "2.0", -1, true},
-		{"float", "2.0", "1.0", 1, true},
-		{"float", "3.14", "3.14", 0, true},
-		{"float", "INF", "1.0", 1, true},
-		{"float", "-INF", "1.0", -1, true},
-		{"float", "-INF", "INF", -1, true},
-		{"float", "INF", "INF", 0, true},
-		{"float", "NaN", "1.0", 0, false},
-		{"float", "1.0", "NaN", 0, false},
-		{"float", "NaN", "NaN", 0, false},
-		{"float", "1e2", "100", 0, true},
-		{"float", "1.5E-3", "0.0015", 0, true},
+		{lexicon.TypeFloat, lexicon.XSLTVersion10, "2.0", -1, true},
+		{lexicon.TypeFloat, "2.0", lexicon.XSLTVersion10, 1, true},
+		{lexicon.TypeFloat, "3.14", "3.14", 0, true},
+		{lexicon.TypeFloat, lexicon.FloatINF, lexicon.XSLTVersion10, 1, true},
+		{lexicon.TypeFloat, lexicon.FloatNegINF, lexicon.XSLTVersion10, -1, true},
+		{lexicon.TypeFloat, lexicon.FloatNegINF, lexicon.FloatINF, -1, true},
+		{lexicon.TypeFloat, lexicon.FloatINF, lexicon.FloatINF, 0, true},
+		{lexicon.TypeFloat, lexicon.FloatNaN, lexicon.XSLTVersion10, 0, false},
+		{lexicon.TypeFloat, lexicon.XSLTVersion10, lexicon.FloatNaN, 0, false},
+		{lexicon.TypeFloat, lexicon.FloatNaN, lexicon.FloatNaN, 0, false},
+		{lexicon.TypeFloat, "1e2", "100", 0, true},
+		{lexicon.TypeFloat, "1.5E-3", "0.0015", 0, true},
 
 		// double (same path as float)
-		{"double", "INF", "-INF", 1, true},
-		{"double", "1e10", "9999999999", 1, true},
+		{lexicon.TypeDouble, lexicon.FloatINF, lexicon.FloatNegINF, 1, true},
+		{lexicon.TypeDouble, "1e10", "9999999999", 1, true},
 
 		// dateTime
-		{"dateTime", "2023-01-15T10:30:00", "2023-01-15T10:30:00", 0, true},
-		{"dateTime", "2023-01-15T10:30:00", "2023-01-16T10:30:00", -1, true},
-		{"dateTime", "2023-01-15T10:30:00Z", "2023-01-15T11:30:00+01:00", 0, true},
-		{"dateTime", "2023-01-15T10:30:00Z", "2023-01-15T10:30:00", 0, false}, // mixed TZ
+		{lexicon.TypeDateTime, testDT0, testDT0, 0, true},
+		{lexicon.TypeDateTime, testDT0, "2023-01-16T10:30:00", -1, true},
+		{lexicon.TypeDateTime, "2023-01-15T10:30:00Z", "2023-01-15T11:30:00+01:00", 0, true},
+		{lexicon.TypeDateTime, "2023-01-15T10:30:00Z", testDT0, 0, false}, // mixed TZ
 
 		// date
 		{"date", "2023-01-15", "2023-01-16", -1, true},
@@ -251,10 +264,10 @@ func TestCompareValues(t *testing.T) {
 		{"date", "2023-01-15Z", "2023-01-15+00:00", 0, true},
 
 		// time
-		{"time", "10:30:00", "11:30:00", -1, true},
-		{"time", "10:30:00", "10:30:00", 0, true},
-		{"time", "23:59:59", "00:00:00", 1, true},
-		{"time", "10:30:00Z", "11:30:00+01:00", 0, true},
+		{lexicon.TypeTime, testT0, "11:30:00", -1, true},
+		{lexicon.TypeTime, testT0, testT0, 0, true},
+		{lexicon.TypeTime, "23:59:59", "00:00:00", 1, true},
+		{lexicon.TypeTime, "10:30:00Z", "11:30:00+01:00", 0, true},
 
 		// gYear
 		{"gYear", "2023", "2024", -1, true},
@@ -281,14 +294,14 @@ func TestCompareValues(t *testing.T) {
 		{"gMonthDay", "--12-31", "--01-01", 1, true},
 
 		// duration
-		{"duration", "P1Y", "P2Y", -1, true},
-		{"duration", "P1Y", "P1Y", 0, true},
-		{"duration", "P2Y", "P1Y", 1, true},
-		{"duration", "PT3600S", "PT1H", 0, true},
-		{"duration", "P1D", "PT86400S", 0, true},
-		{"duration", "-P1Y", "P1Y", -1, true},
-		{"duration", "P1Y2M", "P1Y3M", -1, true},
-		{"duration", "P1M", "P30D", 0, false}, // indeterminate: months vs days
+		{lexicon.TypeDuration, testP1Y, "P2Y", -1, true},
+		{lexicon.TypeDuration, testP1Y, testP1Y, 0, true},
+		{lexicon.TypeDuration, "P2Y", testP1Y, 1, true},
+		{lexicon.TypeDuration, "PT3600S", "PT1H", 0, true},
+		{lexicon.TypeDuration, "P1D", "PT86400S", 0, true},
+		{lexicon.TypeDuration, "-P1Y", testP1Y, -1, true},
+		{lexicon.TypeDuration, "P1Y2M", "P1Y3M", -1, true},
+		{lexicon.TypeDuration, "P1M", "P30D", 0, false}, // indeterminate: months vs days
 	}
 
 	for _, tt := range tests {

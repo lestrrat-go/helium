@@ -778,7 +778,7 @@ func exprUsesCurrentGroupConsumingly(expr *xpath3.Expression) bool {
 				return
 			}
 			// snapshot() grounds its arguments — current-group() inside is not consuming.
-			if v.Prefix == "" && v.Name == "snapshot" {
+			if v.Prefix == "" && v.Name == funcSnapshot {
 				for _, arg := range v.Args {
 					walk(arg, true)
 				}

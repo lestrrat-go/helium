@@ -1,5 +1,7 @@
 package c14n
 
+import "slices"
+
 // visibleNSStack tracks which (prefix, URI) pairs have been rendered
 // by visible ancestors, so we can determine which namespace declarations
 // need to be output on the current element.
@@ -33,8 +35,8 @@ func (s *visibleNSStack) restore() {
 // lookup checks if a (prefix, URI) pair has already been rendered
 // by an ancestor frame.
 func (s *visibleNSStack) lookup(prefix string) (string, bool) {
-	for i := len(s.frames) - 1; i >= 0; i-- {
-		if uri, ok := s.frames[i].rendered[prefix]; ok {
+	for _, v := range slices.Backward(s.frames) {
+		if uri, ok := v.rendered[prefix]; ok {
 			return uri, true
 		}
 	}

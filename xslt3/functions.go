@@ -25,7 +25,7 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		"document":                  &xsltFunc{min: 1, max: 2, fn: ec.fnDocument},
 		"key":                       &xsltFunc{min: 2, max: 3, fn: ec.fnKey},
 		"generate-id":               &xsltFunc{min: 0, max: 1, fn: ec.fnGenerateID},
-		"system-property":           &xsltFunc{min: 1, max: 1, fn: ec.fnSystemProperty},
+		funcSystemProperty:          &xsltFunc{min: 1, max: 1, fn: ec.fnSystemProperty},
 		"unparsed-entity-uri":       &xsltFunc{min: 1, max: 2, fn: ec.fnUnparsedEntityURI},
 		"unparsed-entity-public-id": &xsltFunc{min: 1, max: 2, fn: ec.fnUnparsedEntityPublicID},
 		"element-available":         &xsltFunc{min: 1, max: 1, fn: ec.fnElementAvailable},
@@ -44,10 +44,10 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 			})
 		}},
 		"copy-of":                     &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
-		"snapshot":                    &xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot},
+		funcSnapshot:                  &xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot},
 		"regex-group":                 &regexGroupFunc{ec: ec},
 		"transform":                   &xsltFunc{min: 1, max: 1, fn: ec.fnTransform},
-		"available-system-properties": &xsltFunc{min: 0, max: 0, fn: ec.fnAvailableSystemProperties},
+		funcAvailableSystemProperties: &xsltFunc{min: 0, max: 0, fn: ec.fnAvailableSystemProperties},
 		"stream-available":            &xsltFunc{min: 1, max: 1, fn: ec.fnStreamAvailable},
 		"current-output-uri":          &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentOutputURI},
 	}

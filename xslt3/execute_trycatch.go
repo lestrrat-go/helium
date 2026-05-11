@@ -250,7 +250,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 	if xErr, ok := errors.AsType[*XSLTError](tryErr); ok {
 		errCode = xErr.Code
 		errDesc = xErr.Message
-		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
+		errQName = xpath3.QNameValue{Prefix: lexicon.PrefixErr, URI: errNS, Local: errCode}
 		// If this is a wrapper error (like XTDE0045 for avt), check inner
 		// cause for a more specific error code.
 		if xErr.Cause != nil {
@@ -261,7 +261,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 			} else if innerXS, ok := errors.AsType[*XSLTError](xErr.Cause); ok {
 				errCode = innerXS.Code
 				errDesc = innerXS.Message
-				errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: innerXS.Code}
+				errQName = xpath3.QNameValue{Prefix: lexicon.PrefixErr, URI: errNS, Local: innerXS.Code}
 			}
 		}
 	} else if xpErr, ok := errors.AsType[*xpath3.XPathError](tryErr); ok {
@@ -270,7 +270,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 		errQName = xpErr.CodeQName()
 	}
 	if errQName.Local == "" {
-		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
+		errQName = xpath3.QNameValue{Prefix: lexicon.PrefixErr, URI: errNS, Local: errCode}
 	}
 
 	// Build Clark-notation error code for matching against compiled catch patterns
@@ -401,7 +401,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 	if xErr, ok := errors.AsType[*XSLTError](tryErr); ok {
 		errCode = xErr.Code
 		errDesc = xErr.Message
-		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
+		errQName = xpath3.QNameValue{Prefix: lexicon.PrefixErr, URI: errNS, Local: errCode}
 		// Unwrap wrapper errors (same logic as rollback path) to find the
 		// most specific error code for catch clause matching.
 		if xErr.Cause != nil {
@@ -412,7 +412,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 			} else if innerXS, ok := errors.AsType[*XSLTError](xErr.Cause); ok {
 				errCode = innerXS.Code
 				errDesc = innerXS.Message
-				errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: innerXS.Code}
+				errQName = xpath3.QNameValue{Prefix: lexicon.PrefixErr, URI: errNS, Local: innerXS.Code}
 			}
 		}
 	} else if xpErr, ok := errors.AsType[*xpath3.XPathError](tryErr); ok {
@@ -421,7 +421,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 		errQName = xpErr.CodeQName()
 	}
 	if errQName.Local == "" {
-		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
+		errQName = xpath3.QNameValue{Prefix: lexicon.PrefixErr, URI: errNS, Local: errCode}
 	}
 
 	// Build Clark-notation error code for matching against compiled catch patterns

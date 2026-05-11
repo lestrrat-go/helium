@@ -3,6 +3,8 @@ package xpath3
 import (
 	"context"
 	"fmt"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func evalFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e FunctionCall) (Sequence, error) {
@@ -41,7 +43,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 		return nil, err
 	}
 	if seqLen(funcSeq) != 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "dynamic function call requires single function item"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "dynamic function call requires single function item"}
 	}
 
 	// Check for placeholder arguments (partial application)
@@ -69,7 +71,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 	if hasPlaceholders {
 		fi, ok := funcSeq.Get(0).(FunctionItem)
 		if !ok {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "partial application requires function item"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "partial application requires function item"}
 		}
 		// Check that the number of supplied arguments matches the function's arity
 		if fi.Arity >= 0 && len(e.Args) != fi.Arity {
@@ -89,7 +91,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 			Invoke: func(ctx context.Context, partialArgs []Sequence) (Sequence, error) {
 				if len(partialArgs) != len(placeholderIndices) {
 					return nil, &XPathError{
-						Code:    errCodeXPTY0004,
+						Code:    lexicon.ErrXPTY0004,
 						Message: fmt.Sprintf("arity mismatch: expected %d arguments, got %d", len(placeholderIndices), len(partialArgs)),
 					}
 				}
@@ -113,7 +115,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 	case MapItem:
 		// Maps are functions: $map($key) → value
 		if len(args) != 1 || seqLen(args[0]) != 1 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map lookup requires exactly one argument"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map lookup requires exactly one argument"}
 		}
 		key, err := AtomizeItem(args[0].Get(0))
 		if err != nil {
@@ -127,7 +129,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 	case ArrayItem:
 		// Arrays are functions: $array($index) → member
 		if len(args) != 1 || seqLen(args[0]) != 1 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires exactly one argument"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires exactly one argument"}
 		}
 		key, err := AtomizeItem(args[0].Get(0))
 		if err != nil {
@@ -136,11 +138,11 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 		if key.TypeName == TypeUntypedAtomic {
 			key, err = CastAtomic(key, TypeInteger)
 			if err != nil {
-				return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires xs:integer index"}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
 			}
 		}
 		if !isIntegerDerived(key.TypeName) {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires xs:integer index"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
 		}
 		idx, err := checkedArrayIndex(key)
 		if err != nil {
@@ -148,7 +150,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 		}
 		return v.Get(idx)
 	default:
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("dynamic function call requires function item, got %T", funcSeq.Get(0))}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("dynamic function call requires function item, got %T", funcSeq.Get(0))}
 	}
 }
 
@@ -211,14 +213,14 @@ func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionR
 		ReturnType: returnType,
 		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
 			if len(args) < minArity {
-				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:%s requires at least %d arguments, got %d", e.Name, minArity, len(args))}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s requires at least %d arguments, got %d", e.Name, minArity, len(args))}
 			}
 			// Type-check arguments against declared parameter types
 			if paramTypes != nil {
 				for i, arg := range args {
 					if i < len(paramTypes) {
 						if _, ok := coerceToSequenceType(arg, paramTypes[i], nil); !ok {
-							return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, i+1, paramTypes[i])}
+							return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, i+1, paramTypes[i])}
 						}
 					}
 				}
@@ -249,7 +251,7 @@ func evalInlineFunctionExpr(evalFn exprEvaluator, _ context.Context, ec *evalCon
 		ReturnType: e.ReturnType,
 		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
 			if len(args) != len(e.Params) {
-				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("inline function requires %d arguments, got %d", len(e.Params), len(args))}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("inline function requires %d arguments, got %d", len(e.Params), len(args))}
 			}
 			// Use caller's evalContext for mutable state (opCount, docOrder, docCache)
 			// if available, otherwise fall back to the captured context.
@@ -270,7 +272,7 @@ func evalInlineFunctionExpr(evalFn exprEvaluator, _ context.Context, ec *evalCon
 				if param.TypeHint != nil {
 					coerced, ok := coerceToSequenceType(arg, *param.TypeHint, &innerCtx)
 					if !ok {
-						return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("inline function parameter $%s: value does not match required type %v", param.Name, *param.TypeHint)}
+						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("inline function parameter $%s: value does not match required type %v", param.Name, *param.TypeHint)}
 					}
 					arg = coerced
 				}
@@ -284,7 +286,7 @@ func evalInlineFunctionExpr(evalFn exprEvaluator, _ context.Context, ec *evalCon
 			if e.ReturnType != nil {
 				coerced, ok := coerceToSequenceType(result, *e.ReturnType, &innerCtx)
 				if !ok {
-					return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("inline function return value does not match required type %v", *e.ReturnType)}
+					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("inline function return value does not match required type %v", *e.ReturnType)}
 				}
 				result = coerced
 			}
@@ -321,7 +323,7 @@ func partialApply(ctx context.Context, ec *evalContext, e FunctionCall, fixedArg
 		Invoke: func(ctx context.Context, partialArgs []Sequence) (Sequence, error) {
 			if len(partialArgs) != len(placeholderIndices) {
 				return nil, &XPathError{
-					Code:    errCodeXPTY0004,
+					Code:    lexicon.ErrXPTY0004,
 					Message: fmt.Sprintf("arity mismatch in partial application: expected %d arguments, got %d", len(placeholderIndices), len(partialArgs)),
 				}
 			}
@@ -335,7 +337,7 @@ func partialApply(ctx context.Context, ec *evalContext, e FunctionCall, fixedArg
 				for pi, idx := range placeholderIndices {
 					if idx < len(paramTypes) {
 						if _, ok := coerceToSequenceType(partialArgs[pi], paramTypes[idx], nil); !ok {
-							return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, idx+1, paramTypes[idx])}
+							return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, idx+1, paramTypes[idx])}
 						}
 					}
 				}
@@ -355,7 +357,7 @@ func evalMapConstructorExpr(evalFn exprEvaluator, ctx context.Context, ec *evalC
 			return nil, err
 		}
 		if seqLen(keySeq) != 1 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map key must be a single atomic value"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map key must be a single atomic value"}
 		}
 		ka, err := AtomizeItem(keySeq.Get(0))
 		if err != nil {

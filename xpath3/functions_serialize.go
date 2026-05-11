@@ -58,7 +58,7 @@ func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
 		return parseSerializeOptionsMap(opts, m)
 	}
 	if seqLen(args[1]) != 1 {
-		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options must be a singleton"}
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options must be a singleton"}
 	}
 	node, ok := args[1].Get(0).(NodeItem)
 	if !ok {
@@ -74,15 +74,15 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 			return "", false, nil
 		}
 		if seqLen(v) != 1 {
-			return "", true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be a singleton", name)}
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a singleton", name)}
 		}
 		av, ok := v.Get(0).(AtomicValue)
 		if !ok {
-			return "", true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be atomic", name)}
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be atomic", name)}
 		}
 		s, err := atomicToString(av)
 		if err != nil {
-			return "", true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be string-like", name)}
+			return "", true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be string-like", name)}
 		}
 		return s, true, nil
 	}
@@ -93,11 +93,11 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 			return false, false, nil
 		}
 		if seqLen(v) != 1 {
-			return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be a single xs:boolean", name)}
+			return false, true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be a single xs:boolean", name)}
 		}
 		av, ok := v.Get(0).(AtomicValue)
 		if !ok {
-			return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
+			return false, true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
 		}
 		switch av.TypeName {
 		case TypeBoolean:
@@ -105,7 +105,7 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 		case TypeUntypedAtomic:
 			s, err := atomicToString(av)
 			if err != nil {
-				return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
+				return false, true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
 			}
 			switch s {
 			case lexicon.ValueTrue, "1":
@@ -113,10 +113,10 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 			case lexicon.ValueFalse, "0":
 				return false, true, nil
 			default:
-				return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
+				return false, true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
 			}
 		default:
-			return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
+			return false, true, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
 		}
 	}
 
@@ -162,13 +162,13 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeOptions, error) {
 	elem, ok := n.(*helium.Element)
 	if !ok {
-		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options node must be an element"}
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options node must be an element"}
 	}
 	if elem.URI() != lexicon.NamespaceSerialization || elem.LocalName() != "serialization-parameters" {
-		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root must be output:serialization-parameters"}
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options root must be output:serialization-parameters"}
 	}
 	if len(elem.Attributes()) != 0 {
-		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root must not have attributes"}
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options root must not have attributes"}
 	}
 
 	seen := make(map[string]struct{})
@@ -178,22 +178,22 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 			if strings.TrimSpace(string(child.Content())) == "" {
 				continue
 			}
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root must not contain text"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options root must not contain text"}
 		case helium.CommentNode, helium.ProcessingInstructionNode:
 			continue
 		case helium.ElementNode:
 		default:
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root has invalid child node"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options root has invalid child node"}
 		}
 
 		param, _ := helium.AsNode[*helium.Element](child)
 		if param.URI() == "" {
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options parameters must be namespace-qualified"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options parameters must be namespace-qualified"}
 		}
 
 		key := param.URI() + "|" + param.LocalName()
 		if _, exists := seen[key]; exists {
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options parameter must not appear more than once"}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize options parameter must not appear more than once"}
 		}
 		seen[key] = struct{}{}
 
@@ -256,7 +256,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 				return opts, err
 			}
 		default:
-			return opts, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("unsupported serialize parameter %q", param.LocalName())}
+			return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("unsupported serialize parameter %q", param.LocalName())}
 		}
 	}
 
@@ -265,15 +265,15 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 
 func readSerializeParamValue(elem *helium.Element) (string, error) {
 	if hasNonWhitespaceContent(elem) {
-		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter must not have child content"}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter must not have child content"}
 	}
 	attrs := elem.Attributes()
 	if len(attrs) != 1 {
-		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter must have exactly one value attribute"}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter must have exactly one value attribute"}
 	}
 	attr := attrs[0]
 	if attr.URI() != "" || attr.LocalName() != "value" {
-		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter must use an unqualified value attribute"}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter must use an unqualified value attribute"}
 	}
 	return attr.Value(), nil
 }
@@ -289,7 +289,7 @@ func readSerializeParamYesNo(elem *helium.Element) (bool, error) {
 	case lexicon.ValueNo, "false", "0":
 		return false, nil
 	default:
-		return false, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize parameter %q must be yes/no", elem.LocalName())}
+		return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("serialize parameter %q must be yes/no", elem.LocalName())}
 	}
 }
 
@@ -302,13 +302,13 @@ func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 	case lexicon.ValueYes, lexicon.ValueNo, "omit":
 		return value, nil
 	default:
-		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter \"standalone\" must be yes/no/omit"}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter \"standalone\" must be yes/no/omit"}
 	}
 }
 
 func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 	if len(elem.Attributes()) != 0 {
-		return &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
+		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
 	}
 	seen := make(map[string]struct{})
 	for child := range helium.Children(elem) {
@@ -317,26 +317,26 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 			if strings.TrimSpace(string(child.Content())) == "" {
 				continue
 			}
-			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps must not contain text"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps must not contain text"}
 		case helium.CommentNode, helium.ProcessingInstructionNode:
 			continue
 		case helium.ElementNode:
 		default:
-			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps has invalid child node"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps has invalid child node"}
 		}
 
 		charMap, _ := helium.AsNode[*helium.Element](child)
 		if charMap.URI() != lexicon.NamespaceSerialization || charMap.LocalName() != "character-map" {
-			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps children must be output:character-map"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "use-character-maps children must be output:character-map"}
 		}
 		if hasNonWhitespaceContent(charMap) {
-			return &XPathError{Code: errCodeXPTY0004, Message: "character-map must not have child content"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map must not have child content"}
 		}
 
 		var character, mapString string
 		for _, attr := range charMap.Attributes() {
 			if attr.URI() != "" {
-				return &XPathError{Code: errCodeXPTY0004, Message: "character-map attributes must be unqualified"}
+				return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map attributes must be unqualified"}
 			}
 			switch attr.LocalName() {
 			case "character":
@@ -344,17 +344,17 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 			case "map-string":
 				mapString = attr.Value()
 			default:
-				return &XPathError{Code: errCodeXPTY0004, Message: "character-map has unsupported attribute"}
+				return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map has unsupported attribute"}
 			}
 		}
 		if character == "" || mapString == "" {
-			return &XPathError{Code: errCodeXPTY0004, Message: "character-map requires character and map-string"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map requires character and map-string"}
 		}
 		if utf8.RuneCountInString(character) != 1 {
-			return &XPathError{Code: errCodeXPTY0004, Message: "character-map character must be a single character"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map character must be a single character"}
 		}
 		if _, exists := seen[character]; exists {
-			return &XPathError{Code: errCodeXPTY0004, Message: "character-map entries must be unique"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "character-map entries must be unique"}
 		}
 		seen[character] = struct{}{}
 	}
@@ -379,26 +379,26 @@ func hasNonWhitespaceContent(elem *helium.Element) bool {
 
 func validateSerializeCharacterMaps(v Sequence) error {
 	if seqLen(v) != 1 {
-		return &XPathError{Code: errCodeXPTY0004, Message: "serialize option 'use-character-maps' must be a singleton map"}
+		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a singleton map"}
 	}
 	m, ok := v.Get(0).(MapItem)
 	if !ok {
-		return &XPathError{Code: errCodeXPTY0004, Message: "serialize option 'use-character-maps' must be a map"}
+		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a map"}
 	}
 	return m.ForEach(func(key AtomicValue, value Sequence) error {
 		if key.TypeName != TypeString && key.TypeName != TypeUntypedAtomic {
-			return &XPathError{Code: errCodeXPTY0004, Message: "serialize use-character-maps keys must be strings"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize use-character-maps keys must be strings"}
 		}
 		keyString, err := atomicToString(key)
 		if err != nil || utf8.RuneCountInString(keyString) != 1 {
-			return &XPathError{Code: errCodeXPTY0004, Message: "serialize use-character-maps keys must be single characters"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize use-character-maps keys must be single characters"}
 		}
 		if seqLen(value) != 1 {
-			return &XPathError{Code: errCodeXPTY0004, Message: "serialize use-character-maps values must be singleton strings"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize use-character-maps values must be singleton strings"}
 		}
 		av, ok := value.Get(0).(AtomicValue)
 		if !ok || (av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic) {
-			return &XPathError{Code: errCodeXPTY0004, Message: "serialize use-character-maps values must be strings"}
+			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize use-character-maps values must be strings"}
 		}
 		_, err = atomicToString(av)
 		return err
@@ -488,7 +488,7 @@ func serializeJSONSequence(seq Sequence, opts serializeOptions) (string, error) 
 		return "", &XPathError{Code: errCodeFOER0000, Message: "json serialization requires at most one top-level item"}
 	}
 	if seqLen(seq) == 0 {
-		return "null", nil
+		return jsonKindNull, nil
 	}
 	return serializeJSONItem(seq.Get(0), opts)
 }
@@ -501,7 +501,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		parts := make([]string, 0, v.Size())
 		for _, member := range v.members0() {
 			if seqLen(member) == 0 {
-				parts = append(parts, "null")
+				parts = append(parts, jsonKindNull)
 				continue
 			}
 			for memberItem := range seqItems(member) {
@@ -528,7 +528,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 			if seqLen(value) > 1 {
 				return &XPathError{Code: errCodeFOER0000, Message: "json serialization map values must be singleton or empty"}
 			}
-			valText := "null"
+			valText := jsonKindNull
 			if seqLen(value) == 1 {
 				valText, err = serializeJSONItem(value.Get(0), opts)
 				if err != nil {
@@ -543,7 +543,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		}
 		return formatJSONComposite("{", "}", parts, 0, opts.indent), nil
 	case NodeItem:
-		text, err := serializeNodeItem(v, serializeOptions{method: "xml", omitXMLDeclaration: true})
+		text, err := serializeNodeItem(v, serializeOptions{method: lexicon.PrefixXML, omitXMLDeclaration: true})
 		if err != nil {
 			return "", err
 		}

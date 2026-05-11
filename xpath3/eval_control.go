@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 var (
@@ -23,7 +25,7 @@ func checkedArrayIndex(a AtomicValue) (int, error) {
 		}
 		return int(v.Int64()), nil
 	default:
-		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", a.TypeName)}
+		return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", a.TypeName)}
 	}
 }
 
@@ -48,7 +50,7 @@ func evalUnaryLookupExpr(evalFn exprEvaluator, ctx context.Context, ec *evalCont
 		return lookupItem(evalFn, ctx, ec, ec.contextItem, e.Key, e.All)
 	}
 	if ec.node == nil {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 	}
 	return lookupItem(evalFn, ctx, ec, NodeItem{Node: ec.node}, e.Key, e.All)
 }
@@ -107,11 +109,11 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 			if ka.TypeName == TypeUntypedAtomic {
 				ka, err = CastAtomic(ka, TypeInteger)
 				if err != nil {
-					return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
+					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
 				}
 			}
 			if !isIntegerDerived(ka.TypeName) {
-				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
+				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
 			}
 			idx, err := checkedArrayIndex(ka)
 			if err != nil {
@@ -125,7 +127,7 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 		}
 		return result, nil
 	default:
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("lookup requires map or array, got %T", item)}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("lookup requires map or array, got %T", item)}
 	}
 }
 
@@ -337,12 +339,12 @@ func catchCodeMatches(catchCode string, errQName QNameValue) bool {
 	// Wildcard forms
 	if catchLocal == "*" {
 		// prefix:* — for err:*, matches all XPath errors
-		return catchPrefix == "" || (catchPrefix == "err" && errQName.URI == NSErr)
+		return catchPrefix == "" || (catchPrefix == lexicon.PrefixErr && errQName.URI == NSErr)
 	}
 	if catchPrefix == "*" {
 		return catchLocal == errQName.Local // *:CODE matches the bare code
 	}
-	if catchPrefix == "err" {
+	if catchPrefix == lexicon.PrefixErr {
 		return errQName.URI == NSErr && catchLocal == errQName.Local
 	}
 	if catchPrefix != "" {
@@ -357,7 +359,7 @@ func catchCodeMatches(catchCode string, errQName QNameValue) bool {
 func buildCatchContext(ec *evalContext, xpErr *XPathError) *evalContext {
 	errQName := xpErr.qname()
 	if errQName.Local == "" {
-		errQName = QNameValue{Prefix: "err", URI: NSErr, Local: errCodeFOER0000}
+		errQName = QNameValue{Prefix: lexicon.PrefixErr, URI: NSErr, Local: errCodeFOER0000}
 	}
 	errQN := SingleAtomic(AtomicValue{
 		TypeName: TypeQName,

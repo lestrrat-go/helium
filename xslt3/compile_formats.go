@@ -16,14 +16,14 @@ import (
 
 func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"name": {}, "use-character-maps": {}, "use-when": {},
+		xslAttrName: {}, "use-character-maps": {}, xslAttrUseWhen: {},
 	}); err != nil {
 		return err
 	}
 	saved := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = saved }()
 
-	name := getAttr(elem, "name")
+	name := getAttr(elem, xslAttrName)
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:character-map requires name attribute")
 	}
@@ -87,8 +87,8 @@ func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element
 
 func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"name": {}, "match": {}, "use": {}, "collation": {}, "composite": {},
-		"use-when": {}, "default-collation": {},
+		xslAttrName: {}, "match": {}, "use": {}, "collation": {}, "composite": {},
+		xslAttrUseWhen: {}, "default-collation": {},
 	}); err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 
 func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"name": {}, "method": {}, "version": {}, "encoding": {},
+		xslAttrName: {}, paramMethod: {}, paramVersion: {}, "encoding": {},
 		"omit-xml-declaration": {}, "standalone": {}, "doctype-public": {},
 		"doctype-system": {}, "cdata-section-elements": {}, "indent": {},
 		"media-type": {}, "byte-order-mark": {}, "escape-uri-attributes": {},
@@ -202,14 +202,14 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		"item-separator": {}, "json-node-output-method": {},
 		"parameter-document": {}, "build-tree": {},
 		"allow-duplicate-names": {},
-		"use-when":              {},
+		xslAttrUseWhen:          {},
 	}); err != nil {
 		return err
 	}
 	saved := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = saved }()
 
-	name := getAttr(elem, "name")
+	name := getAttr(elem, xslAttrName)
 	if name != "" {
 		name = resolveQName(name, c.nsBindings)
 	}
@@ -652,12 +652,12 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 
 func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"name": {}, "use-attribute-sets": {}, "visibility": {},
-		"streamable": {}, "use-when": {},
+		xslAttrName: {}, "use-attribute-sets": {}, xslAttrVisibility: {},
+		"streamable": {}, xslAttrUseWhen: {},
 	}); err != nil {
 		return err
 	}
-	name := getAttr(elem, "name")
+	name := getAttr(elem, xslAttrName)
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:attribute-set requires name attribute")
 	}
@@ -814,11 +814,11 @@ func checkAttributeSetStreamable(ss *Stylesheet) error {
 
 func (c *compiler) compileDecimalFormat(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
-		"name": {}, "decimal-separator": {}, "grouping-separator": {},
+		xslAttrName: {}, "decimal-separator": {}, "grouping-separator": {},
 		"infinity": {}, "minus-sign": {}, "NaN": {}, "percent": {},
 		"per-mille": {}, "zero-digit": {}, "digit": {},
 		"pattern-separator": {}, "exponent-separator": {},
-		"use-when": {},
+		xslAttrUseWhen: {},
 	}); err != nil {
 		return err
 	}
@@ -826,7 +826,7 @@ func (c *compiler) compileDecimalFormat(ctx context.Context, elem *helium.Elemen
 	saved := c.pushElementNamespaces(ctx, elem)
 	defer func() { c.nsBindings = saved }()
 
-	name := getAttr(elem, "name")
+	name := getAttr(elem, xslAttrName)
 	qn := xpath3.QualifiedName{}
 	if name != "" {
 		if !isValidQName(name) && !isValidEQName(name) {

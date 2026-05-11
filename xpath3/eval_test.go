@@ -51,7 +51,7 @@ func TestEvalLiteral(t *testing.T) {
 		seq := evalExpr(t, doc, `"hello"`)
 		require.Equal(t, 1, seq.Len())
 		av := seq.Get(0).(xpath3.AtomicValue)
-		require.Equal(t, "hello", av.StringVal())
+		require.Equal(t, testHello, av.StringVal())
 	})
 
 	t.Run("numeric literal", func(t *testing.T) {
@@ -229,7 +229,7 @@ func TestEvalComparison(t *testing.T) {
 	}{
 		// General comparisons
 		{`1 = 1`, true},
-		{`1 != 2`, true},
+		{testExpr1Ne2, true},
 		{`1 < 2`, true},
 		{`2 > 1`, true},
 		{`1 <= 1`, true},
@@ -619,7 +619,7 @@ func TestUndeclaredPrefixErrorOnEvaluate(t *testing.T) {
 		StrictPrefixes().
 		Evaluate(t.Context(), compiled, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "foo")
+	require.Contains(t, err.Error(), testFoo)
 }
 
 func TestDeclaredPrefixResolvesOnEvaluate(t *testing.T) {
@@ -631,7 +631,7 @@ func TestDeclaredPrefixResolvesOnEvaluate(t *testing.T) {
 	// but the error should NOT be about an undeclared prefix).
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		StrictPrefixes().
-		Namespaces(map[string]string{"foo": "urn:test"}).
+		Namespaces(map[string]string{testFoo: "urn:test"}).
 		Evaluate(t.Context(), compiled, nil)
 	if err != nil {
 		require.NotContains(t, err.Error(), "undeclared namespace prefix")

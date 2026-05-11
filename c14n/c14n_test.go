@@ -12,20 +12,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testdataBase = "../testdata/libxml2-compat/c14n"
+const (
+	testdataBase       = "../testdata/libxml2-compat/c14n"
+	parseFailDupNSDecl = "duplicate namespace declaration handling"
+)
 
 // knownParseFailures lists test cases that fail during parsing due to
 // helium parser limitations (not C14N bugs).
 var knownParseFailures = map[string]string{
-	"without-comments/example-3":     "duplicate namespace declaration handling",
+	"without-comments/example-3":     parseFailDupNSDecl,
 	"without-comments/example-4":     "entity reference in single-quoted attribute",
-	"without-comments/test-2":        "duplicate namespace declaration handling",
-	"without-comments/test-3":        "duplicate namespace declaration handling",
-	"with-comments/example-3":        "duplicate namespace declaration handling",
+	"without-comments/test-2":        parseFailDupNSDecl,
+	"without-comments/test-3":        parseFailDupNSDecl,
+	"with-comments/example-3":        parseFailDupNSDecl,
 	"with-comments/example-4":        "entity reference in single-quoted attribute",
-	"exc-without-comments/test-0":    "duplicate namespace declaration handling",
-	"exc-without-comments/test-1":    "duplicate namespace declaration handling",
-	"1-1-without-comments/example-3": "duplicate namespace declaration handling",
+	"exc-without-comments/test-0":    parseFailDupNSDecl,
+	"exc-without-comments/test-1":    parseFailDupNSDecl,
+	"1-1-without-comments/example-3": parseFailDupNSDecl,
 	"1-1-without-comments/example-4": "entity reference in single-quoted attribute",
 }
 

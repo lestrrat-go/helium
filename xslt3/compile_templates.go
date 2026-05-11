@@ -12,8 +12,8 @@ import (
 )
 
 var templateAllowedAttrs = map[string]struct{}{
-	"match": {}, "name": {}, "priority": {}, "mode": {}, "as": {},
-	"visibility": {}, "use-when": {},
+	"match": {}, xslAttrName: {}, "priority": {}, "mode": {}, "as": {},
+	xslAttrVisibility: {}, xslAttrUseWhen: {},
 }
 
 func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) error {
@@ -32,7 +32,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	}
 
 	// Evaluate use-when before compiling the template.
-	if uw := getAttr(elem, "use-when"); uw != "" {
+	if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
 			c.xpathDefaultNS = savedXPathDefaultNS

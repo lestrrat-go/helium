@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"slices"
 	"strings"
 )
 
@@ -749,7 +750,7 @@ func FormatBigInt(n *big.Int, minDigits int, groupingSizes []int, repeatGrouping
 	count := 0
 	groupSize := groupingSizes[0]
 
-	for i := len(runes) - 1; i >= 0; i-- {
+	for _, v := range slices.Backward(runes) {
 		if groupSize > 0 && count > 0 && count == groupSize {
 			result = append(result, df.GroupingSeparator)
 			count = 0
@@ -760,7 +761,7 @@ func FormatBigInt(n *big.Int, minDigits int, groupingSizes []int, repeatGrouping
 				groupSize = 0
 			}
 		}
-		result = append(result, runes[i])
+		result = append(result, v)
 		count++
 	}
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	htmlparser "github.com/lestrrat-go/helium/html"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
@@ -32,6 +33,28 @@ const (
 
 	// w3cMaxParallel limits how many W3C subtests run concurrently.
 	w3cMaxParallel = 20
+
+	// Variable / XPath identifiers used by raw-result assertions and skip-key labels.
+	xpathVarResult = "result"
+
+	// Test outcome labels used by the W3C test catalog.
+	w3cOutcomeFail = "fail"
+
+	// Error code constants used in W3C test fixtures and assertions.
+	// XSLT-specific; XPath codes like XPTY0004 use lexicon.ErrXPTY0004.
+	errCodeXTSE3430 = "XTSE3430"
+
+	// Version-resolution policy keyword for xsl:use-package selection.
+	versionResolutionLowest = "lowest"
+
+	// W3C test skip messages reused by multiple tests.
+	skipXML11NSUndecl       = "XML 1.1: namespace undeclaration not supported by parser"
+	skipParserEntityInAttr  = "parser limitation: entity ref in single-quoted attribute value"
+	skipJSONToXMLValidate   = "json-to-xml validate option does not annotate result nodes"
+	skipSchemaAttrTypeCheck = "schema-attribute type check fails"
+
+	// Collection URI used by merge tests for log-file collections.
+	w3cLogFilesCollectionURI = "log-files"
 )
 
 // w3cSem gates concurrent W3C test execution.
@@ -421,7 +444,7 @@ func evalRawResultXPath(t *testing.T, expr string, rawResult xpath3.Sequence) bo
 
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": rawResult,
+		xpathVarResult: rawResult,
 	}))
 
 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
@@ -452,7 +475,7 @@ func evalRawXPathBool(expr string, rawResult xpath3.Sequence) bool {
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": rawResult,
+		xpathVarResult: rawResult,
 	}))
 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
 	if err != nil {
@@ -1144,7 +1167,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		switch tc.OnMultipleMatch {
 		case "use-last":
 			inv = inv.OnMultipleMatch(xslt3.OnMultipleMatchUseLast)
-		case "fail":
+		case w3cOutcomeFail:
 			inv = inv.OnMultipleMatch(xslt3.OnMultipleMatchFail)
 		}
 	}
@@ -1251,7 +1274,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	// XTSE3430: a Basic XSLT Processor may fall back to non-streaming
 	// execution instead of raising the error. Both outcomes are valid,
 	// so accept successful transformation as passing.
-	if tc.ExpectError && tc.ErrorCode == "XTSE3430" {
+	if tc.ExpectError && tc.ErrorCode == errCodeXTSE3430 {
 		return
 	}
 	if tc.ExpectError && !expectSerializationError {
@@ -1494,15 +1517,15 @@ var w3cImplicitSkips = map[string]string{
 	"result-document-1402": "W3C dependency default_html_version=4; HTML5 companion result-document-1402b passes",
 
 	// XML 1.1 features: namespace undeclaration (xmlns:a="") not supported
-	"xml-version-026": "XML 1.1: namespace undeclaration not supported by parser",
-	"xml-version-027": "XML 1.1: namespace undeclaration not supported by parser",
-	"xml-version-028": "XML 1.1: namespace undeclaration not supported by parser",
-	"xml-version-031": "XML 1.1: namespace undeclaration not supported by parser",
-	"xml-version-032": "XML 1.1: namespace undeclaration not supported by parser",
-	"xml-version-035": "XML 1.1: namespace undeclaration not supported by parser",
-	"xml-version-037": "XML 1.1: namespace undeclaration not supported by parser",
-	"xml-version-039": "XML 1.1: namespace undeclaration not supported by parser",
-	"xml-version-042": "XML 1.1: namespace undeclaration not supported by parser",
+	"xml-version-026": skipXML11NSUndecl,
+	"xml-version-027": skipXML11NSUndecl,
+	"xml-version-028": skipXML11NSUndecl,
+	"xml-version-031": skipXML11NSUndecl,
+	"xml-version-032": skipXML11NSUndecl,
+	"xml-version-035": skipXML11NSUndecl,
+	"xml-version-037": skipXML11NSUndecl,
+	"xml-version-039": skipXML11NSUndecl,
+	"xml-version-042": skipXML11NSUndecl,
 
 	// XML 1.1 features: control characters (&#x1;..&#x8;, &#x7;) not supported
 	"xml-version-002": "XML 1.1: control characters in stylesheet not supported by parser",
@@ -1521,18 +1544,18 @@ var w3cImplicitSkips = map[string]string{
 	"xml-version-018": "XML 1.1: control character serialization as numeric refs not implemented",
 
 	// regex-070*: XSL file uses entity reference pattern that trips parser
-	"regex-070a": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070b": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070c": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070d": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070e": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070f": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070g": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070h": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070i": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070j": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070k": "parser limitation: entity ref in single-quoted attribute value",
-	"regex-070l": "parser limitation: entity ref in single-quoted attribute value",
+	"regex-070a": skipParserEntityInAttr,
+	"regex-070b": skipParserEntityInAttr,
+	"regex-070c": skipParserEntityInAttr,
+	"regex-070d": skipParserEntityInAttr,
+	"regex-070e": skipParserEntityInAttr,
+	"regex-070f": skipParserEntityInAttr,
+	"regex-070g": skipParserEntityInAttr,
+	"regex-070h": skipParserEntityInAttr,
+	"regex-070i": skipParserEntityInAttr,
+	"regex-070j": skipParserEntityInAttr,
+	"regex-070k": skipParserEntityInAttr,
+	"regex-070l": skipParserEntityInAttr,
 
 	// whitespace-011: external parameter entity resolution not supported
 	"whitespace-011": "parser limitation: external parameter entity resolution not supported",
@@ -1541,13 +1564,13 @@ var w3cImplicitSkips = map[string]string{
 	"nodetest-032": "child::schema-attribute axis conversion vs XPath 2.0 expected output mismatch",
 
 	// json-to-xml typed tests: fn:json-to-xml validate option does not type-annotate result
-	"json-to-xml-typed-001": "json-to-xml validate option does not annotate result nodes",
-	"json-to-xml-typed-002": "json-to-xml validate option does not annotate result nodes",
-	"json-to-xml-typed-003": "json-to-xml validate option does not annotate result nodes",
-	"json-to-xml-typed-004": "json-to-xml validate option does not annotate result nodes",
-	"json-to-xml-typed-005": "json-to-xml validate option does not annotate result nodes",
-	"json-to-xml-typed-006": "json-to-xml validate option does not annotate result nodes",
-	"json-to-xml-typed-007": "json-to-xml validate option does not annotate result nodes",
+	"json-to-xml-typed-001": skipJSONToXMLValidate,
+	"json-to-xml-typed-002": skipJSONToXMLValidate,
+	"json-to-xml-typed-003": skipJSONToXMLValidate,
+	"json-to-xml-typed-004": skipJSONToXMLValidate,
+	"json-to-xml-typed-005": skipJSONToXMLValidate,
+	"json-to-xml-typed-006": skipJSONToXMLValidate,
+	"json-to-xml-typed-007": skipJSONToXMLValidate,
 
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
@@ -1571,12 +1594,12 @@ var w3cImplicitSkips = map[string]string{
 	"validation-1204": "instance of schema-element fails",
 
 	// as tests: schema-attribute type checks
-	"as-1812": "schema-attribute type check fails",
-	"as-1813": "schema-attribute type check fails",
-	"as-1814": "schema-attribute type check fails",
-	"as-3601": "schema-attribute type check fails",
-	"as-3602": "schema-attribute type check fails",
-	"as-3603": "schema-attribute type check fails",
+	"as-1812": skipSchemaAttrTypeCheck,
+	"as-1813": skipSchemaAttrTypeCheck,
+	"as-1814": skipSchemaAttrTypeCheck,
+	"as-3601": skipSchemaAttrTypeCheck,
+	"as-3602": skipSchemaAttrTypeCheck,
+	"as-3603": skipSchemaAttrTypeCheck,
 
 	// override: schema-aware union types from xsl:import-schema
 	"override-f-031": "schema-aware union type conversion fails",
@@ -1954,7 +1977,7 @@ func evalXPathAssertWithDoc(t *testing.T, expr string, doc *helium.Document) boo
 	}
 
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
 	}))
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
@@ -2056,7 +2079,7 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 	// Bind $result to the document node so W3C assertions like
 	// deep-equal($result, ...) can reference the transformation output.
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
 	}))
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
@@ -2114,7 +2137,7 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 	}
 
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
 	}))
 
 	if annotations != nil {
@@ -2131,13 +2154,13 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 		// string equality (e.g. @list = "1 2 3") are not schema-aware and
 		// expect untyped comparison semantics.
 		var xpErr *xpath3.XPathError
-		if errors.As(err, &xpErr) && xpErr.Code == "XPTY0004" {
+		if errors.As(err, &xpErr) && xpErr.Code == lexicon.ErrXPTY0004 {
 			evalPlain := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 			if len(ns) > 0 {
 				evalPlain = evalPlain.Namespaces(ns)
 			}
 			evalPlain = evalPlain.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-				"result": xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+				xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
 			}))
 			res2, err2 := evalPlain.Evaluate(context.TODO(), compiled, doc)
 			if err2 == nil {
@@ -2231,7 +2254,7 @@ func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, r
 
 	// Bind $result to the raw XDM sequence (preserves atomic types).
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": rawResult,
+		xpathVarResult: rawResult,
 	}))
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
@@ -2396,7 +2419,7 @@ func (r w3cPackageResolver) ResolvePackage(name string, version string) (io.Read
 	// Default is highest; "lowest" selects the lowest.
 	best := matches[0]
 	for _, m := range matches[1:] {
-		if r.versionResolution == "lowest" {
+		if r.versionResolution == versionResolutionLowest {
 			if m.version.Compare(best.version) < 0 {
 				best = m
 			}
@@ -2429,8 +2452,8 @@ type w3cPkgMeta struct {
 // caller supplies an xs:string.
 func castAtomicForParam(av xpath3.AtomicValue, asType string) xpath3.AtomicValue {
 	switch asType {
-	case "xs:string":
-		return xpath3.AtomicValue{TypeName: "xs:string", Value: fmt.Sprintf("%v", av.Value)}
+	case lexicon.XSString:
+		return xpath3.AtomicValue{TypeName: lexicon.XSString, Value: fmt.Sprintf("%v", av.Value)}
 	case "xs:untypedAtomic":
 		return xpath3.AtomicValue{TypeName: "xs:untypedAtomic", Value: fmt.Sprintf("%v", av.Value)}
 	default:
@@ -2586,7 +2609,7 @@ func w3cInferCollections(tc w3cTest) []w3cCollection {
 	if strings.Contains(tc.StylesheetPath, "insn/merge/") {
 		return []w3cCollection{
 			{
-				URI: "log-files",
+				URI: w3cLogFilesCollectionURI,
 				DocPaths: []string{
 					"tests/insn/merge/log-file-1.xml",
 					"tests/insn/merge/log-file-4.xml",

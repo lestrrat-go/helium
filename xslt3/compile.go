@@ -523,9 +523,9 @@ func (c *compiler) hasEffectiveContent(ctx context.Context, elem *helium.Element
 			// Check use-when: XSLT elements use "use-when", LREs use "xsl:use-when"
 			var uw string
 			if v.URI() == lexicon.NamespaceXSLT {
-				uw = getAttr(v, "use-when")
+				uw = getAttr(v, xslAttrUseWhen)
 			} else {
-				uw, _ = v.GetAttributeNS("use-when", lexicon.NamespaceXSLT)
+				uw, _ = v.GetAttributeNS(xslAttrUseWhen, lexicon.NamespaceXSLT)
 			}
 			if uw != "" {
 				include, err := c.evaluateUseWhen(ctx, uw)
@@ -973,7 +973,7 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	fns := map[string]xpath3.Function{
 		"function-available": &xsltFunc{min: 1, max: 2, fn: c.useWhenFunctionAvailable},
-		"system-property":    &xsltFunc{min: 1, max: 1, fn: c.useWhenSystemProperty},
+		funcSystemProperty:   &xsltFunc{min: 1, max: 1, fn: c.useWhenSystemProperty},
 		"type-available":     &xsltFunc{min: 1, max: 1, fn: c.useWhenTypeAvailable},
 		"element-available":  &xsltFunc{min: 1, max: 1, fn: c.useWhenElementAvailable},
 	}
@@ -1155,12 +1155,12 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 
 	// Read version — required on xsl:stylesheet and xsl:transform (XTSE0010).
 	// Allow _version shadow attribute (resolved later) to satisfy the check.
-	c.stylesheet.version = getAttr(root, "version")
+	c.stylesheet.version = getAttr(root, paramVersion)
 	if c.stylesheet.version == "" {
 		if _, hasShadow := root.GetAttribute("_version"); !hasShadow {
 			return nil, staticError(errCodeXTSE0010, "xsl:%s requires a version attribute", localName)
 		}
-		c.stylesheet.version = "3.0" // placeholder until shadow resolution
+		c.stylesheet.version = lexicon.XSLTVersion30 // placeholder until shadow resolution
 	} else if !isXSDecimal(c.stylesheet.version) {
 		// XTSE0110: version must be a valid xs:decimal value
 		return nil, staticError(errCodeXTSE0110,
@@ -1170,10 +1170,10 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 
 	// Validate attributes on root element now that effectiveVersion is known.
 	if err := c.validateXSLTAttrs(ctx, root, map[string]struct{}{
-		"version": {}, "id": {}, "default-mode": {},
+		paramVersion: {}, "id": {}, "default-mode": {},
 		"default-validation": {}, "input-type-annotations": {},
-		"default-collation": {}, "use-when": {},
-		"name": {}, "package-version": {}, "declared-modes": {},
+		"default-collation": {}, xslAttrUseWhen: {},
+		xslAttrName: {}, "package-version": {}, "declared-modes": {},
 	}); err != nil {
 		return nil, err
 	}

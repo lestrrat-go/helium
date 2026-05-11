@@ -264,14 +264,14 @@ func evalContextItemExpr(ec *evalContext) (Sequence, error) {
 		return ItemSlice{ec.contextItem}, nil
 	}
 	if ixpath.IsNilNode(ec.node) {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 	}
 	return ItemSlice{nodeItemFor(ec, ec.node)}, nil
 }
 
 func evalRootExpr(ec *evalContext) (Sequence, error) {
 	if ixpath.IsNilNode(ec.node) {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
 	}
 	root := ixpath.DocumentRoot(ec.node)
 	// XPDY0050: the root of the context node's tree must be a document node.

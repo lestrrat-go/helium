@@ -14,6 +14,10 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
+// pseudoRootName is the internal element name used for the synthetic root
+// wrapping fragment content during entity/external-subset parsing.
+const pseudoRootName = "pseudoroot"
+
 type stopFuncKey struct{}
 
 // StopParser tells the parser to stop at the next opportunity. Call this
@@ -666,8 +670,8 @@ found:
 	}
 
 	// Create pseudoroot element, push to node stack.
-	newRoot := doc.CreateElement("pseudoroot")
-	newctx.pushNodeEntry(nodeEntry{local: "pseudoroot", qname: "pseudoroot"})
+	newRoot := doc.CreateElement(pseudoRootName)
+	newctx.pushNodeEntry(nodeEntry{local: pseudoRootName, qname: pseudoRootName})
 	newctx.elem = newRoot
 	if err := doc.AddChild(newRoot); err != nil {
 		return nil, err

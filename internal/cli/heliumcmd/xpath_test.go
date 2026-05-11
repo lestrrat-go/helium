@@ -15,7 +15,7 @@ func TestRunXPathVersion(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "--version"})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, flagVersion})
 	require.Equal(t, heliumcmd.ExitOK, code)
 	require.Contains(t, stderr.String(), "using helium")
 }
@@ -24,7 +24,7 @@ func TestXPathMissingExpr(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath"})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath})
 	require.Equal(t, heliumcmd.ExitErr, code)
 }
 
@@ -32,7 +32,7 @@ func TestXPathInvalidEngine(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "--engine", "2", "//book"})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, "--engine", "2", xpathBook})
 	require.Equal(t, heliumcmd.ExitErr, code)
 }
 
@@ -44,7 +44,7 @@ func TestXPathEngine1File(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), &stdout, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "--engine", "1", "count(//book)", xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, "--engine", "1", "count(//book)", xmlFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 	require.Equal(t, "2\n", stdout.String())
 }
@@ -57,7 +57,7 @@ func TestXPathEngine3DefaultFile(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), &stdout, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "count(//book)", xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, "count(//book)", xmlFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 	require.Equal(t, "2\n", stdout.String())
 }
@@ -71,7 +71,7 @@ func TestXPathEngine3StdInXML(t *testing.T) {
 		io.Discard,
 	)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "//book"})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, xpathBook})
 	require.Equal(t, heliumcmd.ExitOK, code)
 	require.Contains(t, stdout.String(), "<book>one</book>")
 }
@@ -84,7 +84,7 @@ func TestXPathEngine3AtomicSequence(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), &stdout, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "(1,2,3)", xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, "(1,2,3)", xmlFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 	require.Equal(t, "1\n2\n3\n", stdout.String())
 }
@@ -96,7 +96,7 @@ func TestXPathInvalidExpression(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "///invalid[[[", xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, "///invalid[[[", xmlFile})
 	require.Equal(t, heliumcmd.ExitXPath, code)
 }
 
@@ -104,7 +104,7 @@ func TestXPathReadFileError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "//book", "/missing.xml"})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, xpathBook, "/missing.xml"})
 	require.Equal(t, heliumcmd.ExitReadFile, code)
 }
 
@@ -115,6 +115,6 @@ func TestXPathParseError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"xpath", "//book", xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdXPath, xpathBook, xmlFile})
 	require.Equal(t, heliumcmd.ExitErr, code)
 }

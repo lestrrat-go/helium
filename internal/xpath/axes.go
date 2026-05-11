@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"reflect"
+	"slices"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -462,8 +463,8 @@ func axisNamespace(node helium.Node) []helium.Node {
 func NamespacePrefixesInScope(ancestors []helium.Node) map[string]bool {
 	type nser interface{ Namespaces() []*helium.Namespace }
 	inScope := map[string]bool{}
-	for i := len(ancestors) - 1; i >= 0; i-- {
-		ns, ok := ancestors[i].(nser)
+	for _, v := range slices.Backward(ancestors) {
+		ns, ok := v.(nser)
 		if !ok {
 			continue
 		}
@@ -509,8 +510,8 @@ func CollectNamespaceNodes(ancestors []helium.Node, inScope map[string]bool, ele
 	// Second pass: output in document order (outermost to innermost), but
 	// use the innermost URI for each prefix.
 	emitted := map[string]struct{}{"xml": {}}
-	for i := len(ancestors) - 1; i >= 0; i-- {
-		ns, ok := ancestors[i].(nser)
+	for _, v := range slices.Backward(ancestors) {
+		ns, ok := v.(nser)
 		if !ok {
 			continue
 		}

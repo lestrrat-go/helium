@@ -22,7 +22,7 @@ func TestErrParseError(t *testing.T) {
 		pe := helium.ErrParseError{
 			Err:        helium.ErrSpaceRequired,
 			Level:      helium.ErrorLevelError,
-			Line:       "<foo>",
+			Line:       testLineFoo,
 			LineNumber: 1,
 			Column:     5,
 		}
@@ -36,7 +36,7 @@ func TestErrParseError(t *testing.T) {
 			Err:        helium.ErrSpaceRequired,
 			File:       "test.xml",
 			Level:      helium.ErrorLevelError,
-			Line:       "<foo>",
+			Line:       testLineFoo,
 			LineNumber: 3,
 			Column:     10,
 		}
@@ -48,7 +48,7 @@ func TestErrParseError(t *testing.T) {
 		require.Equal(t, helium.ErrorLevelError, extracted.Level)
 		require.Equal(t, 3, extracted.LineNumber)
 		require.Equal(t, 10, extracted.Column)
-		require.Equal(t, "<foo>", extracted.Line)
+		require.Equal(t, testLineFoo, extracted.Line)
 	})
 
 	t.Run("ErrorString", func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestErrParseError(t *testing.T) {
 			pe := helium.ErrParseError{
 				Err:        helium.ErrSpaceRequired,
 				Level:      helium.ErrorLevelError,
-				Line:       "<foo>",
+				Line:       testLineFoo,
 				LineNumber: 1,
 				Column:     5,
 			}
@@ -76,7 +76,7 @@ func TestErrParseError(t *testing.T) {
 				Err:        helium.ErrSpaceRequired,
 				File:       "test.xml",
 				Level:      helium.ErrorLevelError,
-				Line:       "<foo>",
+				Line:       testLineFoo,
 				LineNumber: 1,
 				Column:     5,
 			}
@@ -300,7 +300,7 @@ func TestFormatError(t *testing.T) {
 		pe := helium.ErrParseError{
 			Err:        helium.ErrSpaceRequired,
 			Level:      helium.ErrorLevelError,
-			Line:       "<foo>",
+			Line:       testLineFoo,
 			LineNumber: 1,
 			Column:     5,
 		}

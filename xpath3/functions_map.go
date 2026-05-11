@@ -3,6 +3,8 @@ package xpath3
 import (
 	"context"
 	"fmt"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -20,11 +22,11 @@ func init() {
 
 func extractMap(seq Sequence) (MapItem, error) {
 	if seqLen(seq) != 1 {
-		return MapItem{}, &XPathError{Code: errCodeXPTY0004, Message: "expected single map"}
+		return MapItem{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected single map"}
 	}
 	m, ok := seq.Get(0).(MapItem)
 	if !ok {
-		return MapItem{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected map, got %T", seq.Get(0))}
+		return MapItem{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected map, got %T", seq.Get(0))}
 	}
 	return m, nil
 }
@@ -33,7 +35,7 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 	duplicates := MergeUseFirst
 	if len(args) > 1 {
 		if seqLen(args[1]) == 0 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:merge: options argument must be a map, got empty sequence"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:merge: options argument must be a map, got empty sequence"}
 		}
 		// The options map should contain "duplicates" key
 		optMap, ok := args[1].Get(0).(MapItem)
@@ -45,11 +47,11 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 					return nil, err
 				}
 				switch s {
-				case "use-first":
+				case duplicatesUseFirst:
 					duplicates = MergeUseFirst
 				case "use-last":
 					duplicates = MergeUseLast
-				case "reject":
+				case duplicatesReject:
 					duplicates = MergeReject
 				case "combine":
 					duplicates = MergeCombine
@@ -61,7 +63,7 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 	for item := range seqItems(args[0]) {
 		m, ok := item.(MapItem)
 		if !ok {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:merge requires sequence of maps"}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:merge requires sequence of maps"}
 		}
 		mergeErr := m.ForEach(func(k AtomicValue, v Sequence) error {
 			return builder.Add(k, v)
@@ -112,10 +114,10 @@ func fnMapGet(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:get requires a key argument"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:get requires a key argument"}
 	}
 	if seqLen(args[1]) > 1 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:get key must be a single atomic value"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:get key must be a single atomic value"}
 	}
 	ka, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
@@ -134,7 +136,7 @@ func fnMapPut(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:put requires key"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:put requires key"}
 	}
 	ka, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
@@ -145,7 +147,7 @@ func fnMapPut(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnMapEntry(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:entry requires key"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:entry requires key"}
 	}
 	ka, err := AtomizeItem(args[0].Get(0))
 	if err != nil {

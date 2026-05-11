@@ -16,7 +16,7 @@ func TestRunRelaxNGValidateVersion(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", "--version"})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, flagVersion})
 	require.Equal(t, heliumcmd.ExitOK, code)
 	require.Contains(t, stderr.String(), "using helium")
 }
@@ -26,7 +26,7 @@ func TestRelaxNGValidateMissingSchemaArg(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate"})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate})
 	require.Equal(t, heliumcmd.ExitErr, code)
 	require.Contains(t, stderr.String(), "schema is required")
 }
@@ -36,7 +36,7 @@ func TestRelaxNGValidateUnknownOption(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", "--schema"})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, "--schema"})
 	require.Equal(t, heliumcmd.ExitErr, code)
 	require.Contains(t, stderr.String(), "unrecognized option --schema")
 }
@@ -54,7 +54,7 @@ func TestRelaxNGValidateValid(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 }
 
@@ -71,7 +71,7 @@ func TestRelaxNGValidateInvalid(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitValidation, code)
 }
 
@@ -82,7 +82,7 @@ func TestRelaxNGValidateSchemaCompileError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", filepath.Join(dir, "missing.rng"), xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, filepath.Join(dir, "missing.rng"), xmlFile})
 	require.Equal(t, heliumcmd.ExitSchemaComp, code)
 }
 
@@ -98,7 +98,7 @@ func TestRelaxNGValidateFileReadError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", schemaFile, filepath.Join(dir, "missing.xml")})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, schemaFile, filepath.Join(dir, "missing.xml")})
 	require.Equal(t, heliumcmd.ExitReadFile, code)
 }
 
@@ -115,7 +115,7 @@ func TestRelaxNGValidateParseError(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", schemaFile, xmlFile})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, schemaFile, xmlFile})
 	require.Equal(t, heliumcmd.ExitErr, code)
 }
 
@@ -133,7 +133,7 @@ func TestRelaxNGValidateMultipleFiles(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", schemaFile, validXML, invalidXML})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, schemaFile, validXML, invalidXML})
 	require.Equal(t, heliumcmd.ExitValidation, code)
 }
 
@@ -153,6 +153,6 @@ func TestRelaxNGValidateStdIn(t *testing.T) {
 		io.Discard,
 	)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", schemaFile})
+	code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, schemaFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 }

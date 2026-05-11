@@ -25,7 +25,7 @@ func TestEvaluator(t *testing.T) {
 		nodes, err := result.Nodes()
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
-		require.Equal(t, "hello", string(nodes[0].Content()))
+		require.Equal(t, testHello, string(nodes[0].Content()))
 	})
 
 	t.Run("with variables", func(t *testing.T) {
@@ -103,7 +103,7 @@ func TestEvaluator(t *testing.T) {
 		nodes, err := result.Nodes()
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
-		require.Equal(t, "hello", string(nodes[0].Content()))
+		require.Equal(t, testHello, string(nodes[0].Content()))
 	})
 
 	t.Run("zero value evaluator with fluent methods", func(t *testing.T) {

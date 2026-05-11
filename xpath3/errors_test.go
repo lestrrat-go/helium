@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,23 +18,23 @@ func TestXPathErrorErrorNilReceiver(t *testing.T) {
 
 func TestXPathErrorIs(t *testing.T) {
 	t.Run("same code matches", func(t *testing.T) {
-		err := &xpath3.XPathError{Code: "XPTY0004", Message: "type mismatch"}
-		assert.True(t, errors.Is(err, &xpath3.XPathError{Code: "XPTY0004"}))
+		err := &xpath3.XPathError{Code: lexicon.ErrXPTY0004, Message: "type mismatch"}
+		assert.True(t, errors.Is(err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004}))
 	})
 
 	t.Run("different code does not match", func(t *testing.T) {
-		err := &xpath3.XPathError{Code: "XPTY0004", Message: "type mismatch"}
+		err := &xpath3.XPathError{Code: lexicon.ErrXPTY0004, Message: "type mismatch"}
 		assert.False(t, errors.Is(err, &xpath3.XPathError{Code: "FOAR0002"}))
 	})
 
 	t.Run("empty code target does not match", func(t *testing.T) {
-		err := &xpath3.XPathError{Code: "XPTY0004", Message: "type mismatch"}
+		err := &xpath3.XPathError{Code: lexicon.ErrXPTY0004, Message: "type mismatch"}
 		assert.False(t, errors.Is(err, &xpath3.XPathError{}))
 	})
 
 	t.Run("nil receiver does not match", func(t *testing.T) {
 		var err *xpath3.XPathError
-		assert.False(t, errors.Is(err, &xpath3.XPathError{Code: "XPTY0004"}))
+		assert.False(t, errors.Is(err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004}))
 	})
 
 	t.Run("wrapped XPathError matches via errors.Is", func(t *testing.T) {

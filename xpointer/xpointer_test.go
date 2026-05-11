@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const schemeElement = "element"
+
 func TestEvaluateXPath1(t *testing.T) {
 	t.Parallel()
 
@@ -31,7 +33,7 @@ func TestParseFragmentID(t *testing.T) {
 		{"foo", "", "foo"},
 		{"xpointer(//p)", "xpointer", "//p"},
 		{"xpath1(/root/child)", "xpath1", "/root/child"},
-		{"element(/1/2)", "element", "/1/2"},
+		{"element(/1/2)", schemeElement, "/1/2"},
 	}
 
 	for _, test := range tests {
@@ -108,11 +110,11 @@ func TestXPointerEscaping(t *testing.T) {
 		wantErr  bool
 		wantType string // expected node type or "error" for error cases
 	}{
-		{"simple expression", "element(/1)", false, "element"},
-		{"xpath expression", "xpath1(//root)", false, "element"},
-		{"fragment id simple", "testid", false, "element"},
-		{"xmlns binding", "xmlns(t=test) xpath1(//root)", false, "element"},
-		{"cascading parts", "element(nonexist)element(/1)", false, "element"},
+		{"simple expression", "element(/1)", false, schemeElement},
+		{"xpath expression", "xpath1(//root)", false, schemeElement},
+		{"fragment id simple", "testid", false, schemeElement},
+		{"xmlns binding", "xmlns(t=test) xpath1(//root)", false, schemeElement},
+		{"cascading parts", "element(nonexist)element(/1)", false, schemeElement},
 		{"invalid expression", "xpointer(:::invalid)", true, "error"},
 	}
 
@@ -129,7 +131,7 @@ func TestXPointerEscaping(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			if tt.wantType == "element" {
+			if tt.wantType == schemeElement {
 				require.NotNil(t, nodes)
 				require.Greater(t, len(nodes), 0)
 			}
@@ -151,7 +153,7 @@ func TestParseFragmentIDTable(t *testing.T) {
 		{"bare name", "foo", "", "foo", false},
 		{"xpointer scheme", "xpointer(//p)", "xpointer", "//p", false},
 		{"xpath1 scheme", "xpath1(/root/child)", "xpath1", "/root/child", false},
-		{"element scheme", "element(/1/2)", "element", "/1/2", false},
+		{"element scheme", "element(/1/2)", schemeElement, "/1/2", false},
 		{"xmlns scheme", "xmlns(ns=uri)", "xmlns", "ns=uri", false},
 	}
 

@@ -58,7 +58,7 @@ func TestXIncludeBasicXML(t *testing.T) {
 
 	resolver := &stringResolver{
 		files: map[string]string{
-			"included.xml": `<chapter>Hello</chapter>`,
+			includedXMLFile: `<chapter>Hello</chapter>`,
 		},
 	}
 
@@ -189,7 +189,7 @@ func TestXIncludeMarkerNodes(t *testing.T) {
 
 	resolver := &stringResolver{
 		files: map[string]string{
-			"included.xml": `<chapter>Hello</chapter>`,
+			includedXMLFile: `<chapter>Hello</chapter>`,
 		},
 	}
 
@@ -370,7 +370,7 @@ func TestXIncludeNewNamespace(t *testing.T) {
 
 	resolver := &stringResolver{
 		files: map[string]string{
-			"included.xml": `<chapter>Hello 2003</chapter>`,
+			includedXMLFile: `<chapter>Hello 2003</chapter>`,
 		},
 	}
 
@@ -543,7 +543,7 @@ func TestXIncludeParseFlags(t *testing.T) {
 
 	resolver := &stringResolver{
 		files: map[string]string{
-			"included.xml": `<chapter>Hello</chapter>`,
+			includedXMLFile: `<chapter>Hello</chapter>`,
 		},
 	}
 
@@ -831,7 +831,7 @@ func TestXIncludeNamespacedAttr(t *testing.T) {
 
 	resolver := &stringResolver{
 		files: map[string]string{
-			"included.xml": `<chapter>Namespaced</chapter>`,
+			includedXMLFile: `<chapter>Namespaced</chapter>`,
 		},
 	}
 

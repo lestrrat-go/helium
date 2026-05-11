@@ -15,13 +15,13 @@ import (
 // Allowed attribute sets for XSLT elements (unprefixed attributes only).
 var (
 	withParamAllowedAttrs = map[string]struct{}{
-		"name": {}, "select": {}, "as": {}, "tunnel": {},
+		xslAttrName: {}, xslAttrSelect: {}, "as": {}, "tunnel": {},
 	}
 	paramAllowedAttrs = map[string]struct{}{
-		"name": {}, "select": {}, "as": {}, "required": {}, "tunnel": {}, "static": {},
+		xslAttrName: {}, xslAttrSelect: {}, "as": {}, "required": {}, "tunnel": {}, "static": {},
 	}
 	variableAllowedAttrs = map[string]struct{}{
-		"name": {}, "select": {}, "as": {}, "static": {}, "visibility": {},
+		xslAttrName: {}, xslAttrSelect: {}, "as": {}, "static": {}, xslAttrVisibility: {},
 	}
 	// XSLT-namespace attributes allowed on literal result elements
 	lreAllowedXSLTAttrs = map[string]struct{}{
@@ -30,14 +30,14 @@ var (
 		"xpath-default-namespace":    {},
 		"exclude-result-prefixes":    {},
 		"extension-element-prefixes": {},
-		"version":                    {},
+		paramVersion:                 {},
 		"type":                       {},
 		"validation":                 {},
 		"default-collation":          {},
 		"default-mode":               {},
 		"default-validation":         {},
 		"inherit-namespaces":         {},
-		"use-when":                   {},
+		xslAttrUseWhen:               {},
 	}
 )
 
@@ -60,9 +60,9 @@ var xsltStandardAttrs = map[string]struct{}{
 	"exclude-result-prefixes":    {},
 	"expand-text":                {},
 	"extension-element-prefixes": {},
-	"use-when":                   {},
+	xslAttrUseWhen:               {},
 	"xpath-default-namespace":    {},
-	"version":                    {},
+	paramVersion:                 {},
 }
 
 // validateXSLTAttrs checks that an XSLT element has only allowed unprefixed attributes
@@ -74,7 +74,7 @@ func (c *compiler) validateXSLTAttrs(_ context.Context, elem *helium.Element, al
 	fc := isForwardsCompatible(c.effectiveVersion)
 	if !fc {
 		// Also check the element's own version attribute
-		if elemVer := getAttr(elem, "version"); elemVer != "" {
+		if elemVer := getAttr(elem, paramVersion); elemVer != "" {
 			fc = isForwardsCompatible(elemVer)
 		}
 	}
@@ -175,7 +175,7 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 	// Evaluate use-when: on XSLT elements check "use-when" attribute,
 	// on LREs check "xsl:use-when" (in XSLT namespace).
 	if elem.URI() == lexicon.NamespaceXSLT {
-		if uw := getAttr(elem, "use-when"); uw != "" {
+		if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 			include, err := c.evaluateUseWhen(ctx, uw)
 			if err != nil {
 				return nil, err
@@ -185,7 +185,7 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 			}
 		}
 	} else {
-		if uw, ok := elem.GetAttributeNS("use-when", lexicon.NamespaceXSLT); ok {
+		if uw, ok := elem.GetAttributeNS(xslAttrUseWhen, lexicon.NamespaceXSLT); ok {
 			include, err := c.evaluateUseWhen(ctx, uw)
 			if err != nil {
 				return nil, err
@@ -415,9 +415,9 @@ func (c *compiler) validateDescendantUseWhen(ctx context.Context, parent *helium
 		// Check use-when on XSLT elements and xsl:use-when on LREs
 		var uw string
 		if childElem.URI() == lexicon.NamespaceXSLT {
-			uw = getAttr(childElem, "use-when")
+			uw = getAttr(childElem, xslAttrUseWhen)
 		} else {
-			uw, _ = childElem.GetAttributeNS("use-when", lexicon.NamespaceXSLT)
+			uw, _ = childElem.GetAttributeNS(xslAttrUseWhen, lexicon.NamespaceXSLT)
 		}
 		if uw != "" {
 			if _, err := c.evaluateUseWhen(ctx, uw); err != nil {
@@ -488,8 +488,8 @@ func (c *compiler) useWhenFunctionAvailable(_ context.Context, args []xpath3.Seq
 	// Runtime-only functions (current, key, document, generate-id, etc.)
 	// are NOT available in the use-when static context per XSLT 3.0 spec 3.4.6.
 	switch name {
-	case "function-available", "system-property", "type-available",
-		"element-available", "available-system-properties":
+	case "function-available", funcSystemProperty, "type-available",
+		"element-available", funcAvailableSystemProperties:
 		return xpath3.SingleBoolean(true), nil
 	}
 

@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const encUTF8 = "utf-8"
+
 func TestSplitLines(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -107,15 +109,15 @@ func TestEncodingsCompatible(t *testing.T) {
 		detected  string
 		want      bool
 	}{
-		{"utf-8", "utf-8", true},
-		{"UTF-8", "utf-8", true},
-		{"utf_8", "utf-8", true},
+		{encUTF8, encUTF8, true},
+		{"UTF-8", encUTF8, true},
+		{"utf_8", encUTF8, true},
 		{"utf-16", "utf-16le", true},
 		{"utf-16", "utf-16be", true},
 		{"UTF-16", "utf-16le", true},
-		{"utf-8", "utf-16le", false},
+		{encUTF8, "utf-16le", false},
 		{"utf-16le", "utf-16be", false},
-		{"iso-8859-1", "utf-8", false},
+		{"iso-8859-1", encUTF8, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.specified+"_vs_"+tt.detected, func(t *testing.T) {
@@ -140,7 +142,7 @@ func TestDecodeText(t *testing.T) {
 
 	t.Run("utf-8 with BOM and explicit encoding", func(t *testing.T) {
 		data := append([]byte{0xEF, 0xBB, 0xBF}, []byte("hello")...)
-		text, err := unparsedtext.DecodeText(data, "utf-8")
+		text, err := unparsedtext.DecodeText(data, encUTF8)
 		require.NoError(t, err)
 		require.Equal(t, "hello", text)
 	})
@@ -187,7 +189,7 @@ func TestDecodeText(t *testing.T) {
 
 	t.Run("encoding conflicts with BOM", func(t *testing.T) {
 		data := append([]byte{0xFF, 0xFE}, []byte{0x68, 0x00}...) // LE BOM
-		_, err := unparsedtext.DecodeText(data, "utf-8")
+		_, err := unparsedtext.DecodeText(data, encUTF8)
 		require.Error(t, err)
 		var ue *unparsedtext.Error
 		require.ErrorAs(t, err, &ue)
