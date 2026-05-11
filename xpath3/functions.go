@@ -67,8 +67,8 @@ const (
 var defaultPrefixNS = map[string]string{
 	"fn":              NSFn,
 	"math":            NSMath,
-	nsPrefixMap:       NSMap,
-	nsPrefixArray:     NSArray,
+	keywordMap:        NSMap,
+	keywordArray:      NSArray,
 	lexicon.PrefixErr: NSErr,
 	"xs":              NSXS,
 }

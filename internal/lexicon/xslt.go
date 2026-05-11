@@ -117,6 +117,7 @@ const (
 const (
 	FnPosition = "position"
 	FnLast     = "last"
+	FnName     = "name"
 )
 
 // XSLT spec version strings used for MinVersion fields and version-attribute
