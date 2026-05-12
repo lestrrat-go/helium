@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,6 +13,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpointer"
 )
@@ -69,11 +70,35 @@ func (p Processor) NoBaseFixup() Processor {
 	return p
 }
 
-// Resolver sets a custom resource resolver.
+// Resolver sets a custom resource resolver. When unset, an FS-backed
+// resolver opens any OS path verbatim via [os.Open], preserving
+// historical behavior. Callers handling untrusted documents should
+// supply a Resolver backed by a stricter [fs.FS] — see [NewFSResolver].
 func (p Processor) Resolver(r Resolver) Processor {
 	p = p.clone()
 	p.cfg.resolver = r
 	return p
+}
+
+// NewFSResolver returns a [Resolver] that opens hrefs through the given
+// [fs.FS]. Relative hrefs are resolved against the document's base URI
+// (only file:// or scheme-less bases are honored) and joined with
+// [filepath.Join] before being passed to fsys.Open. A nil fsys is
+// treated as the permissive default that opens any OS path verbatim.
+//
+// Note: because the name handed to fsys.Open is the [filepath.Join]
+// result, it may be absolute and may use OS-specific separators on
+// Windows. FS implementations that enforce [fs.ValidPath] (notably
+// [os.DirFS] and [testing/fstest.MapFS]) will reject those names.
+// Sandboxing XInclude behind such an FS requires path normalization
+// that is not yet performed by this package; for now, supply an FS
+// implementation that accepts OS-style names, or use [Processor.Resolver]
+// with a fully custom resolver that controls its own path resolution.
+func NewFSResolver(fsys fs.FS) Resolver {
+	if fsys == nil {
+		fsys = iofs.PermissiveRoot{}
+	}
+	return &fsResolver{fsys: fsys}
 }
 
 // BaseURI sets the base URI for resolving relative hrefs.
@@ -150,7 +175,7 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		txtCache:     make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
-		p.resolver = &fileResolver{}
+		p.resolver = NewFSResolver(nil)
 	}
 
 	if err := p.processNode(ctx, node); err != nil {
@@ -1164,10 +1189,15 @@ func (p *processor) computeFixupBases(inc *helium.Element, sourceURI string) (st
 	return relSource, effectiveBaseURI(inc, relTarget)
 }
 
-// fileResolver resolves URIs by reading from the filesystem.
-type fileResolver struct{}
+// fsResolver resolves URIs by reading from an [fs.FS]. The default FS
+// is [iofs.PermissiveRoot] which opens any OS path verbatim; callers
+// handling untrusted input should construct one with a stricter fs.FS
+// via [NewFSResolver].
+type fsResolver struct {
+	fsys fs.FS
+}
 
-func (r *fileResolver) Resolve(href, base string) (io.ReadCloser, error) {
+func (r *fsResolver) Resolve(href, base string) (io.ReadCloser, error) {
 	path := href
 	if !filepath.IsAbs(path) && base != "" {
 		baseURL, err := url.Parse(base)
@@ -1179,5 +1209,5 @@ func (r *fileResolver) Resolve(href, base string) (io.ReadCloser, error) {
 			path = filepath.Join(filepath.Dir(basePath), href)
 		}
 	}
-	return os.Open(path) //nolint:gosec,wrapcheck // path is constructed from caller-supplied href/base; file access is the intended behavior
+	return r.fsys.Open(path) //nolint:wrapcheck // resolver errors propagate to caller verbatim
 }

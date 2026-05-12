@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
@@ -993,6 +994,44 @@ func TestWithAnnotations(t *testing.T) {
 	require.Equal(t, "xs:string", byName["elem:name"])
 	require.Equal(t, "xs:integer", byName["elem:age"])
 	require.Equal(t, "xs:ID", byName["attr:id"])
+}
+
+func TestCompilerFS(t *testing.T) {
+	t.Parallel()
+
+	const baseXSD = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="part.xsd"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	const partXSD = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="part-t">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`
+
+	t.Run("include resolved through injected FS", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(baseXSD))
+		require.NoError(t, err)
+
+		fsys := fstest.MapFS{
+			"part.xsd": &fstest.MapFile{Data: []byte(partXSD)},
+		}
+		_, err = xsd.NewCompiler().FS(fsys).Compile(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
+	t.Run("nil FS restores default", func(t *testing.T) {
+		t.Parallel()
+		var c xsd.Compiler
+		require.NotPanics(t, func() {
+			_ = c.FS(fstest.MapFS{}).FS(nil)
+		})
+	})
 }
 
 func TestZeroCompilerFluent(t *testing.T) {

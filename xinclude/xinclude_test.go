@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xinclude"
@@ -48,6 +49,43 @@ type resolveError struct {
 
 func (e *resolveError) Error() string {
 	return "not found: " + e.href
+}
+
+func TestXIncludeNewFSResolver(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reads through injected FS", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="fs-target.xml"/>
+		</root>`)
+
+		fsys := fstest.MapFS{
+			"fs-target.xml": &fstest.MapFile{Data: []byte(`<loaded>FromFS</loaded>`)},
+		}
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(fsys)).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		root := docElement(doc)
+		require.NotNil(t, root)
+		var found bool
+		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == helium.ElementNode && c.(*helium.Element).LocalName() == "loaded" {
+				found = true
+				require.Equal(t, "FromFS", string(c.Content()))
+			}
+		}
+		require.True(t, found, "loaded element from FS not found")
+	})
+
+	t.Run("nil FS yields a permissive default", func(t *testing.T) {
+		t.Parallel()
+		require.NotNil(t, xinclude.NewFSResolver(nil))
+	})
 }
 
 func TestXIncludeBasicXML(t *testing.T) {

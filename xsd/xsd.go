@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/iofs"
 )
 
 // ErrValidationFailed is returned by Validate when the document does not
@@ -19,6 +21,7 @@ var ErrValidationFailed = errors.New("xsd: validation failed")
 type compileConfig struct {
 	label        string // label for error messages (e.g. source filename)
 	baseDir      string // base directory for resolving relative includes
+	fsys         fs.FS  // filesystem for loading xs:include/xs:import/xs:redefine targets
 	errorHandler helium.ErrorHandler
 }
 
@@ -72,6 +75,28 @@ func (c Compiler) Label(name string) Compiler {
 func (c Compiler) BaseDir(dir string) Compiler {
 	c = c.clone()
 	c.cfg.baseDir = dir
+	return c
+}
+
+// FS sets the [fs.FS] used to load schemas referenced by xs:include,
+// xs:import, and xs:redefine during compilation. A nil value restores
+// the default, which opens any path supplied to the compiler via
+// [os.Open].
+//
+// Note: the names handed to the FS are built with [filepath.Join] from
+// [Compiler.BaseDir] and the include location, so they may be absolute
+// and may use OS-specific separators on Windows. FS implementations
+// that enforce [fs.ValidPath] (notably [os.DirFS] and
+// [testing/fstest.MapFS]) will reject those names. Sandboxing schema
+// loading behind such an FS requires path normalization that is not yet
+// performed by this package; for now, supply an FS implementation that
+// accepts OS-style names.
+func (c Compiler) FS(fsys fs.FS) Compiler {
+	c = c.clone()
+	if fsys == nil {
+		fsys = iofs.PermissiveRoot{}
+	}
+	c.cfg.fsys = fsys
 	return c
 }
 

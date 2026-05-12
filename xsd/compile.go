@@ -3,10 +3,12 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"sort"
 	"strconv"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
@@ -14,6 +16,7 @@ import (
 type compiler struct {
 	schema  *Schema
 	baseDir string // directory of the schema file, for resolving relative paths
+	fsys    fs.FS  // filesystem for loading xs:include/xs:import/xs:redefine targets
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName
@@ -70,6 +73,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, fmt.Errorf("xsd: root element is not xs:schema")
 	}
 
+	fsys := fs.FS(iofs.PermissiveRoot{})
+	if cfg != nil && cfg.fsys != nil {
+		fsys = cfg.fsys
+	}
 	c := &compiler{
 		schema: &Schema{
 			elements:    make(map[QName]*ElementDecl),
@@ -80,6 +87,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 			substGroups: make(map[QName][]*ElementDecl),
 		},
 		baseDir:           baseDir,
+		fsys:              fsys,
 		typeRefs:          make(map[*TypeDef]QName),
 		elemRefs:          make(map[*ElementDecl]QName),
 		elemRefSources:    make(map[*ElementDecl]elemRefSource),

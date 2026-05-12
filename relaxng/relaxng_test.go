@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/relaxng"
@@ -542,6 +543,44 @@ func TestCheckRules(t *testing.T) {
   <define name="foo"><value>x</value></define>
 </grammar>`)
 		require.Contains(t, errs, "Found forbidden pattern data/except//ref")
+	})
+}
+
+func TestCompilerFS(t *testing.T) {
+	t.Parallel()
+
+	const baseRNG = `<?xml version="1.0"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <include href="part.rng"/>
+  <start><ref name="root"/></start>
+</grammar>`
+
+	const partRNG = `<?xml version="1.0"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <define name="root">
+    <element name="root"><text/></element>
+  </define>
+</grammar>`
+
+	t.Run("include resolved through injected FS", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(baseRNG))
+		require.NoError(t, err)
+
+		fsys := fstest.MapFS{
+			"part.rng": &fstest.MapFile{Data: []byte(partRNG)},
+		}
+		_, err = relaxng.NewCompiler().FS(fsys).Compile(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
+	t.Run("nil FS restores default", func(t *testing.T) {
+		t.Parallel()
+		var c relaxng.Compiler
+		require.NotPanics(t, func() {
+			_ = c.FS(fstest.MapFS{}).FS(nil)
+		})
 	})
 }
 

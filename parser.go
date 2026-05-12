@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/push"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
@@ -39,6 +41,7 @@ type parserConfig struct {
 	options        parseOption
 	baseURI        string
 	catalog        CatalogResolver
+	fsys           fs.FS
 	maxDepth       int
 	errorHandler   ErrorHandler
 }
@@ -53,7 +56,8 @@ type Parser struct {
 // NewParser creates a new Parser with default settings.
 func NewParser() Parser {
 	return Parser{cfg: &parserConfig{
-		sax: NewTreeBuilder(),
+		sax:  NewTreeBuilder(),
+		fsys: iofs.PermissiveRoot{},
 	}}
 }
 
@@ -445,6 +449,27 @@ func (p Parser) MaxDepth(depth int) Parser {
 func (p Parser) Catalog(c CatalogResolver) Parser {
 	p = p.clone()
 	p.cfg.catalog = c
+	return p
+}
+
+// FS sets the [fs.FS] used to load external resources referenced by the
+// document — external DTDs ([LoadExternalDTD]) and external entities
+// resolved through [TreeBuilder.ResolveEntity]. A nil value restores the
+// default, which opens any path supplied to the parser via [os.Open].
+//
+// Note: the names handed to the FS are built with [filepath.Join] against
+// the document's base URI, so they may be absolute and may use
+// OS-specific separators on Windows. FS implementations that enforce
+// [fs.ValidPath] (notably [os.DirFS] and [testing/fstest.MapFS]) will
+// reject those names. Sandboxing the loader behind such an FS requires
+// path normalization that is not yet performed by this package; for now,
+// supply an FS implementation that accepts OS-style names.
+func (p Parser) FS(fsys fs.FS) Parser {
+	p = p.clone()
+	if fsys == nil {
+		fsys = iofs.PermissiveRoot{}
+	}
+	p.cfg.fsys = fsys
 	return p
 }
 
