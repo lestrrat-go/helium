@@ -1,8 +1,14 @@
 // Package unparsedtext implements the text resource loading pipeline for
-// XPath 3.1 fn:unparsed-text, fn:unparsed-text-available, and
-// fn:unparsed-text-lines. It handles URI resolution, content retrieval,
-// BOM detection, encoding conversion, XML character validation, and
-// line splitting.
+// XPath 3.1 fn:unparsed-text, fn:unparsed-text-available, fn:unparsed-text-lines,
+// and the document retrieval that backs fn:doc / fn:json-doc.
+//
+// Resource loading is opt-in. With no URIResolver and no HTTPClient supplied,
+// every retrieval attempt fails with ErrCodeRetrieval — there is no implicit
+// network access and no implicit filesystem access. Callers who want network
+// access must pass an explicit *http.Client (via Config.HTTPClient) — the
+// caller owns the transport, timeouts, and redirect policy. Callers who want
+// filesystem access must supply a URIResolver such as FileURIResolver or one
+// returned from NewFileResolver(fs.FS).
 package unparsedtext
 
 import (
@@ -10,9 +16,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -141,58 +149,68 @@ func ResolveURI(_ context.Context, cfg *Config, href string) (string, error) {
 
 // readURIWithEncoding reads the content at the resolved URI and returns
 // an optional encoding hint from HTTP Content-Type headers.
+//
+// Retrieval is opt-in: file/path URIs require an explicit URIResolver;
+// http/https URIs require either an explicit HTTPClient or a URIResolver
+// that accepts those schemes. There is no implicit os.ReadFile and no
+// implicit http.DefaultClient — see the package-level documentation.
+//
+// When both HTTPClient and URIResolver are configured, HTTPClient wins
+// for http/https so the Content-Type charset hint is preserved.
 func readURIWithEncoding(ctx context.Context, cfg *Config, uri string) ([]byte, string, error) {
-	if cfg != nil && cfg.URIResolver != nil {
-		rc, err := cfg.URIResolver.ResolveURI(uri)
-		if err != nil {
-			return nil, "", err
-		}
-		defer func() { _ = rc.Close() }()
-		data, err := io.ReadAll(rc)
-		return data, "", err
-	}
-
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return nil, "", err
 	}
 
 	if parsed.Scheme == lexicon.SchemeHTTP || parsed.Scheme == lexicon.SchemeHTTPS {
-		client := http.DefaultClient
 		if cfg != nil && cfg.HTTPClient != nil {
-			client = cfg.HTTPClient
+			return doHTTPGet(ctx, cfg.HTTPClient, uri)
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
-		if err != nil {
-			return nil, "", err
+		if cfg != nil && cfg.URIResolver != nil {
+			return readViaResolver(cfg.URIResolver, uri)
 		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, "", err
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			return nil, "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
-		}
-		data, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, "", err
-		}
-		// Extract charset from Content-Type header.
-		enc := extractHTTPCharset(resp.Header.Get("Content-Type"))
-		return data, enc, nil
+		return nil, "", fmt.Errorf("network retrieval requires an explicit HTTPClient or URIResolver: %s", uri)
 	}
 
-	switch parsed.Scheme {
-	case lexicon.SchemeFile:
-		data, err := os.ReadFile(parsed.Path)
-		return data, "", err
-	case "":
-		data, err := os.ReadFile(uri)
-		return data, "", err
-	default:
-		return nil, "", fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)
+	if cfg != nil && cfg.URIResolver != nil {
+		return readViaResolver(cfg.URIResolver, uri)
 	}
+
+	// file:// and bare paths require an explicit URIResolver.
+	return nil, "", fmt.Errorf("retrieval of %q requires a URIResolver", uri)
+}
+
+func readViaResolver(r URIResolver, uri string) ([]byte, string, error) {
+	rc, err := r.ResolveURI(uri)
+	if err != nil {
+		return nil, "", err
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	return data, "", err
+}
+
+// doHTTPGet performs an HTTP GET using the caller-supplied client.
+func doHTTPGet(ctx context.Context, client *http.Client, uri string) ([]byte, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+	enc := extractHTTPCharset(resp.Header.Get("Content-Type"))
+	return data, enc, nil
 }
 
 // extractHTTPCharset parses the charset parameter from a Content-Type header value.
@@ -212,49 +230,13 @@ func extractHTTPCharset(contentType string) string {
 }
 
 // ReadURI reads the content at the resolved URI.
+//
+// Retrieval is opt-in: file/path URIs require an explicit URIResolver;
+// http/https URIs require either an explicit HTTPClient or a URIResolver.
+// See the package-level documentation.
 func ReadURI(ctx context.Context, cfg *Config, uri string) ([]byte, error) {
-	if cfg != nil && cfg.URIResolver != nil {
-		rc, err := cfg.URIResolver.ResolveURI(uri)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = rc.Close() }()
-		return io.ReadAll(rc)
-	}
-
-	parsed, err := url.Parse(uri)
-	if err != nil {
-		return nil, err
-	}
-
-	if parsed.Scheme == "http" || parsed.Scheme == "https" {
-		client := http.DefaultClient
-		if cfg != nil && cfg.HTTPClient != nil {
-			client = cfg.HTTPClient
-		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
-		}
-		return io.ReadAll(resp.Body)
-	}
-
-	switch parsed.Scheme {
-	case lexicon.SchemeFile:
-		return os.ReadFile(parsed.Path)
-	case "":
-		return os.ReadFile(uri)
-	default:
-		return nil, fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)
-	}
+	data, _, err := readURIWithEncoding(ctx, cfg, uri)
+	return data, err
 }
 
 // DecodeText decodes raw bytes to a string, handling BOM detection,
@@ -473,7 +455,9 @@ func EncodingsCompatible(specified, detected string) bool {
 }
 
 // FileURIResolver resolves file:// URIs and relative file paths against a
-// base directory.
+// base directory. Resolution is confined to BaseDir: paths outside (via
+// "../" traversal or absolute paths that don't share the BaseDir prefix)
+// are refused.
 type FileURIResolver struct {
 	BaseDir string
 }
@@ -485,25 +469,136 @@ func (r *FileURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	var path string
+	var target string
 	switch parsed.Scheme {
-	case "file":
-		path = parsed.Path
+	case lexicon.SchemeFile:
+		target = parsed.Path
 	case "":
 		if filepath.IsAbs(uri) {
-			path = uri
+			target = uri
 		} else {
-			path = filepath.Join(r.BaseDir, uri)
+			target = filepath.Join(r.BaseDir, uri)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)
 	}
 
-	f, err := os.Open(path)
+	if err := ensureWithin(r.BaseDir, target); err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(target)
 	if err != nil {
 		return nil, err
 	}
 	return f, nil
+}
+
+// ensureWithin verifies that target is inside baseDir after symlink-free
+// path cleaning. Both arguments are resolved to absolute, cleaned forms.
+// Note that this is a path-level check; callers that must defend against
+// symlink races should supply a URIResolver that uses io/fs primitives
+// (see NewFileResolver).
+func ensureWithin(baseDir, target string) error {
+	if baseDir == "" {
+		return fmt.Errorf("FileURIResolver: BaseDir is empty")
+	}
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return err
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(absBase, absTarget)
+	if err != nil {
+		return fmt.Errorf("path %q is outside base %q", target, baseDir)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path %q is outside base %q", target, baseDir)
+	}
+	return nil
+}
+
+// NewHTTPResolver returns a URIResolver that fetches http/https URIs using
+// the supplied client. The caller owns the client's transport, timeouts,
+// and redirect policy. Non-http(s) schemes are refused.
+func NewHTTPResolver(client *http.Client) URIResolver {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return &httpResolver{client: client}
+}
+
+type httpResolver struct {
+	client *http.Client
+}
+
+func (r *httpResolver) ResolveURI(uri string) (io.ReadCloser, error) {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Scheme != lexicon.SchemeHTTP && parsed.Scheme != lexicon.SchemeHTTPS {
+		return nil, fmt.Errorf("unsupported URI scheme for HTTP resolver: %s", parsed.Scheme)
+	}
+	req, err := http.NewRequest(http.MethodGet, uri, nil) //nolint:noctx // request-scoped contexts are passed by the ReadURI/ReadURIWithEncoding caller via cancellation of the underlying transport; this resolver has no ctx
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
+	}
+	return resp.Body, nil
+}
+
+// NewFileResolver returns a URIResolver backed by an io/fs.FS. URIs are
+// interpreted as fs paths (slash-separated, relative to the FS root).
+// file:// URIs are accepted but only their cleaned, non-absolute path
+// component is used to look up against fsys; absolute paths and "../"
+// traversal are refused.
+func NewFileResolver(fsys fs.FS) URIResolver {
+	return &fsResolver{fsys: fsys}
+}
+
+type fsResolver struct {
+	fsys fs.FS
+}
+
+func (r *fsResolver) ResolveURI(uri string) (io.ReadCloser, error) {
+	if r.fsys == nil {
+		return nil, fmt.Errorf("fsResolver: nil FS")
+	}
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	var name string
+	switch parsed.Scheme {
+	case lexicon.SchemeFile:
+		name = parsed.Path
+	case "":
+		name = uri
+	default:
+		return nil, fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)
+	}
+
+	name = strings.TrimPrefix(name, "/")
+	if name == "" {
+		return nil, fmt.Errorf("empty path")
+	}
+	cleaned := path.Clean(name)
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") || path.IsAbs(cleaned) {
+		return nil, fmt.Errorf("path %q escapes the FS root", name)
+	}
+	return r.fsys.Open(cleaned)
 }
 
 func normalizeEncodingName(s string) string {
