@@ -557,7 +557,7 @@ func TestStringFunctionsRejectMultiItemSequences(t *testing.T) {
 		expr string
 		code string
 	}{
-		{name: "upper-case", expr: `upper-case(("a", "b"))`, code: "XPTY0004"},
+		{name: "upper-case", expr: `upper-case(("a", "b"))`, code: "XPTY0004"}, //nolint:goconst
 		{name: "substring source", expr: `substring(("abc", "def"), 2)`, code: "XPTY0004"},
 		{name: "substring position", expr: `substring("abc", (1, 2))`, code: "XPTY0004"},
 		{name: "resolve-uri", expr: `resolve-uri(("a", "b"), "http://example.com/")`, code: "XPTY0004"},
@@ -737,7 +737,7 @@ func TestComparisons(t *testing.T) {
 		want bool
 	}{
 		{`1 = 1`, true},
-		{`1 != 2`, true},
+		{`1 != 2`, true}, //nolint:goconst
 		{`1 < 2`, true},
 		{`2 > 1`, true},
 		{`1 <= 1`, true},

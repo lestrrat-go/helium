@@ -115,7 +115,7 @@ func evalLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 
 	if lp.Absolute {
 		if ixpath.IsNilNode(ec.node) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: msgContextItemAbsent}
 		}
 		root := ixpath.DocumentRoot(ec.node)
 		// XPDY0050: the root of the context node's tree must be a document node.
@@ -125,7 +125,7 @@ func evalLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		nodes = []helium.Node{root}
 	} else {
 		if ixpath.IsNilNode(ec.node) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: msgContextItemAbsent}
 		}
 		nodes = []helium.Node{ec.node}
 	}
@@ -154,7 +154,7 @@ func evalVMLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 
 	if lp.Absolute {
 		if ixpath.IsNilNode(ec.node) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: msgContextItemAbsent}
 		}
 		root := ixpath.DocumentRoot(ec.node)
 		// XPDY0050: the root of the context node's tree must be a document node.
@@ -164,7 +164,7 @@ func evalVMLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 		nodes = []helium.Node{root}
 	} else {
 		if ixpath.IsNilNode(ec.node) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: msgContextItemAbsent}
 		}
 		nodes = []helium.Node{ec.node}
 	}
@@ -699,7 +699,7 @@ func matchPrefix(prefix string, n helium.Node, ec *evalContext) bool {
 		}
 	}
 	// The xml prefix is always bound per the XML Namespaces spec.
-	if prefix == "xml" {
+	if prefix == prefixXML {
 		return ixpath.NodeNamespaceURI(n) == lexicon.NamespaceXML
 	}
 	// Check built-in XPath prefixes (fn, xs, math, map, array, err).

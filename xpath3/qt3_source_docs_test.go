@@ -10,8 +10,8 @@ func TestQT3VariableSourceDocs(t *testing.T) {
 			Name:  "bind source docs to variables",
 			XPath: `number($works/works/employee[1]/hours[1]) + number($staff/staff/employee[2]/grade[1])`,
 			SourceDocs: []qt3SourceDoc{
-				{Name: "works", DocPath: "docs/works.xml"},
-				{Name: "staff", DocPath: "docs/staff.xml"},
+				{Name: "works", DocPath: "docs/works.xml"}, //nolint:goconst
+				{Name: "staff", DocPath: "docs/staff.xml"}, //nolint:goconst
 			},
 			Assertions: []qt3Assertion{qt3AssertEq("50")},
 		},

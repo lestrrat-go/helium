@@ -227,8 +227,8 @@ func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 
 	// Walk from the context element outward so namespace undeclarations mask
 	// ancestor bindings for the same prefix.
-	prefixes := map[string]bool{"xml": true}
-	resolved := map[string]bool{"xml": true}
+	prefixes := map[string]bool{prefixXML: true}
+	resolved := map[string]bool{prefixXML: true}
 	for cur := elem; cur != nil; {
 		for _, ns := range cur.Namespaces() {
 			prefix := ns.Prefix()

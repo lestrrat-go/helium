@@ -186,7 +186,7 @@ func TestLexerXPath3Tokens(t *testing.T) {
 		},
 		{
 			name:  "not equals with bang",
-			input: "1 != 2",
+			input: "1 != 2", //nolint:goconst
 			expect: []xpath3.TokenType{
 				xpath3.TokenNumber, xpath3.TokenNotEquals, xpath3.TokenNumber,
 			},

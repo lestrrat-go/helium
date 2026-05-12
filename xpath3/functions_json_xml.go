@@ -70,13 +70,13 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root bool) (*helium.Element, error) {
-	name := "null"
+	name := jsonNull
 	switch v := item.(type) {
 	case MapItem:
-		name = "map"
+		name = keywordMap
 		_ = v
 	case ArrayItem:
-		name = "array"
+		name = keywordArray
 	case AtomicValue:
 		switch v.TypeName {
 		case TypeString:
@@ -171,7 +171,7 @@ func jsonSequenceToItem(seq Sequence) Item {
 
 func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
-		duplicates: "use-first",
+		duplicates: duplicatesUseFirst,
 	}
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
@@ -232,9 +232,9 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'duplicates' must be xs:string"}
 		}
 		switch s {
-		case "reject", "use-first", "retain":
+		case duplicatesReject, duplicatesUseFirst, duplicatesRetain:
 			opts.duplicates = s
-		case "use-last":
+		case duplicatesUseLast:
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must not be 'use-last' for json-to-xml"}
 		default:
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("invalid value for 'duplicates' option: %q", s)}
@@ -247,7 +247,7 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 	if validateSet && validate {
 		dupKey2 := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 		if _, found := m.Get(dupKey2); !found {
-			opts.duplicates = "reject"
+			opts.duplicates = duplicatesReject
 		}
 	}
 
@@ -448,11 +448,11 @@ func serializeJSONXMLElement(elem *helium.Element, inherited xmlJSONInherited, o
 			return "", xmlJSONMeta{}, err
 		}
 		return boolean, meta, nil
-	case "null":
+	case jsonNull:
 		if err := validateNullElement(elem); err != nil {
 			return "", xmlJSONMeta{}, err
 		}
-		return "null", meta, nil
+		return jsonNull, meta, nil
 	default:
 		return "", xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: unsupported element %s", meta.kind)}
 	}
@@ -469,7 +469,7 @@ func parseXMLJSONMeta(elem *helium.Element, inherited xmlJSONInherited) (xmlJSON
 	}
 
 	switch meta.kind {
-	case "map", "array", lexicon.TypeString, "number", "boolean", "null":
+	case keywordMap, keywordArray, lexicon.TypeString, "number", "boolean", jsonNull:
 	default:
 		return xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid element %q", meta.kind)}
 	}

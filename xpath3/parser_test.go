@@ -64,7 +64,7 @@ func TestParseExpressions(t *testing.T) {
 		{"and", "true() and false()"},
 		{"or", "true() or false()"},
 		{"equality", "1 = 1"},
-		{"inequality", "1 != 2"},
+		{"inequality", "1 != 2"}, //nolint:goconst
 		{"less than", "1 < 2"},
 		{"greater equal", "1 >= 1"},
 		{"value eq", "$x eq $y"},

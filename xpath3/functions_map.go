@@ -45,11 +45,11 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 					return nil, err
 				}
 				switch s {
-				case "use-first":
+				case duplicatesUseFirst:
 					duplicates = MergeUseFirst
-				case "use-last":
+				case duplicatesUseLast:
 					duplicates = MergeUseLast
-				case "reject":
+				case duplicatesReject:
 					duplicates = MergeReject
 				case "combine":
 					duplicates = MergeCombine

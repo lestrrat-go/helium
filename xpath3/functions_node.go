@@ -388,7 +388,7 @@ func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
 	} else {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: msgContextItemAbsent}
 		}
 		if fc.node == nil {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item is not a node for fn:lang"}
@@ -455,7 +455,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: msgContextItemAbsent}
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
@@ -563,30 +563,30 @@ func stripXMLTextDeclaration(s string) (string, error) {
 
 	end := strings.Index(s, "?>")
 	if end < 0 {
-		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		return "", &XPathError{Code: errCodeFODC0006, Message: msgMalformedTextDecl}
 	}
 
 	decl := s[len("<?xml"):end]
 	names, err := parseXMLPseudoAttributes(decl)
 	if err != nil {
-		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		return "", &XPathError{Code: errCodeFODC0006, Message: msgMalformedTextDecl}
 	}
 
 	if len(names) == 0 {
-		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		return "", &XPathError{Code: errCodeFODC0006, Message: msgMalformedTextDecl}
 	}
 
 	switch len(names) {
 	case 1:
 		if names[0] != lexicon.DeclEncoding {
-			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+			return "", &XPathError{Code: errCodeFODC0006, Message: msgMalformedTextDecl}
 		}
 	case 2:
 		if names[0] != lexicon.DeclVersion || names[1] != lexicon.DeclEncoding {
-			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+			return "", &XPathError{Code: errCodeFODC0006, Message: msgMalformedTextDecl}
 		}
 	default:
-		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		return "", &XPathError{Code: errCodeFODC0006, Message: msgMalformedTextDecl}
 	}
 
 	return s[end+2:], nil
@@ -1068,7 +1068,7 @@ func resolveIDLookupDocument(ctx context.Context, args []Sequence) (*helium.Docu
 		fc := getFnContext(ctx)
 		switch {
 		case fc == nil || (fc.node == nil && fc.contextItem == nil):
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: msgContextItemAbsent}
 		case fc.node != nil:
 			node = fc.node
 		default:
@@ -1135,7 +1135,7 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: msgContextItemAbsent}
 		}
 		if fc.node == nil {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item is not a node"}

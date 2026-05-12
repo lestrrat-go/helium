@@ -65,12 +65,12 @@ const (
 
 // Default prefix → URI mappings.
 var defaultPrefixNS = map[string]string{
-	"fn":    NSFn,
-	"math":  NSMath,
-	"map":   NSMap,
-	"array": NSArray,
-	"err":   NSErr,
-	"xs":    NSXS,
+	"fn":         NSFn,
+	"math":       NSMath,
+	keywordMap:   NSMap,
+	keywordArray: NSArray,
+	prefixErr:    NSErr,
+	"xs":         NSXS,
 }
 
 // namespacePrefixFor returns the conventional prefix for a known namespace URI.
@@ -448,7 +448,7 @@ func init() {
 }
 
 func fnError(_ context.Context, args []Sequence) (Sequence, error) {
-	code := QNameValue{Prefix: "err", URI: NSErr, Local: errCodeFOER0000}
+	code := QNameValue{Prefix: prefixErr, URI: NSErr, Local: errCodeFOER0000}
 	msg := "error() called"
 	if len(args) > 0 {
 		qv, hasCode, err := coerceErrorCode(args[0])

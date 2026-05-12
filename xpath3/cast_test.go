@@ -42,7 +42,7 @@ func TestCastFromString(t *testing.T) {
 		},
 		{
 			name:  "string to double INF",
-			input: "INF", targetType: xpath3.TypeDouble,
+			input: "INF", targetType: xpath3.TypeDouble, //nolint:goconst
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				t.Helper()
 				require.True(t, math.IsInf(v.DoubleVal(), 1))
@@ -58,7 +58,7 @@ func TestCastFromString(t *testing.T) {
 		},
 		{
 			name:  "string to boolean true",
-			input: "true", targetType: xpath3.TypeBoolean,
+			input: "true", targetType: xpath3.TypeBoolean, //nolint:goconst
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				t.Helper()
 				require.True(t, v.BooleanVal())
@@ -237,7 +237,7 @@ func TestCastAtomic(t *testing.T) {
 	})
 
 	t.Run("same type is identity", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "hello"}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "hello"} //nolint:goconst
 		result, err := xpath3.CastAtomic(v, xpath3.TypeString)
 		require.NoError(t, err)
 		require.Equal(t, v, result)

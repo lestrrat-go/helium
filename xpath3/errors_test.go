@@ -17,7 +17,7 @@ func TestXPathErrorErrorNilReceiver(t *testing.T) {
 
 func TestXPathErrorIs(t *testing.T) {
 	t.Run("same code matches", func(t *testing.T) {
-		err := &xpath3.XPathError{Code: "XPTY0004", Message: "type mismatch"}
+		err := &xpath3.XPathError{Code: "XPTY0004", Message: "type mismatch"} //nolint:goconst
 		assert.True(t, errors.Is(err, &xpath3.XPathError{Code: "XPTY0004"}))
 	})
 

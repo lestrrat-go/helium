@@ -13,8 +13,8 @@ func TestQT3Collections(t *testing.T) {
 				{
 					URI: "urn:qt3:docs",
 					SourceDocs: []qt3SourceDoc{
-						{DocPath: "docs/works.xml", URI: "urn:qt3:works"},
-						{DocPath: "docs/staff.xml", URI: "urn:qt3:staff"},
+						{DocPath: "docs/works.xml", URI: "urn:qt3:works"}, //nolint:goconst
+						{DocPath: "docs/staff.xml", URI: "urn:qt3:staff"}, //nolint:goconst
 					},
 				},
 			},

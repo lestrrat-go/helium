@@ -229,7 +229,7 @@ func TestEvalComparison(t *testing.T) {
 	}{
 		// General comparisons
 		{`1 = 1`, true},
-		{`1 != 2`, true},
+		{`1 != 2`, true}, //nolint:goconst
 		{`1 < 2`, true},
 		{`2 > 1`, true},
 		{`1 <= 1`, true},
@@ -631,7 +631,7 @@ func TestDeclaredPrefixResolvesOnEvaluate(t *testing.T) {
 	// but the error should NOT be about an undeclared prefix).
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		StrictPrefixes().
-		Namespaces(map[string]string{"foo": "urn:test"}).
+		Namespaces(map[string]string{"foo": "urn:test"}). //nolint:goconst
 		Evaluate(t.Context(), compiled, nil)
 	if err != nil {
 		require.NotContains(t, err.Error(), "undeclared namespace prefix")

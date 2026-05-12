@@ -34,6 +34,7 @@ const errCodeFONS0004 = "FONS0004"
 const errCodeFORG0001 = "FORG0001"
 const errCodeFORG0006 = "FORG0006"
 const errCodeFOER0000 = "FOER0000"
+const errCodeFORG0002 = "FORG0002"
 const errCodeFORX0001 = "FORX0001"
 const errCodeFORX0002 = "FORX0002"
 const errCodeFORX0003 = "FORX0003"
@@ -123,7 +124,7 @@ func (e *XPathError) qname() QNameValue {
 	if e.Code == "" {
 		return QNameValue{}
 	}
-	return QNameValue{Prefix: "err", URI: NSErr, Local: e.Code}
+	return QNameValue{Prefix: prefixErr, URI: NSErr, Local: e.Code}
 }
 
 func (e *XPathError) displayCode() string {

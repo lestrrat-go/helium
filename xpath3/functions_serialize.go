@@ -488,7 +488,7 @@ func serializeJSONSequence(seq Sequence, opts serializeOptions) (string, error) 
 		return "", &XPathError{Code: errCodeFOER0000, Message: "json serialization requires at most one top-level item"}
 	}
 	if seqLen(seq) == 0 {
-		return "null", nil
+		return jsonNull, nil
 	}
 	return serializeJSONItem(seq.Get(0), opts)
 }
@@ -501,7 +501,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		parts := make([]string, 0, v.Size())
 		for _, member := range v.members0() {
 			if seqLen(member) == 0 {
-				parts = append(parts, "null")
+				parts = append(parts, jsonNull)
 				continue
 			}
 			for memberItem := range seqItems(member) {
@@ -528,7 +528,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 			if seqLen(value) > 1 {
 				return &XPathError{Code: errCodeFOER0000, Message: "json serialization map values must be singleton or empty"}
 			}
-			valText := "null"
+			valText := jsonNull
 			if seqLen(value) == 1 {
 				valText, err = serializeJSONItem(value.Get(0), opts)
 				if err != nil {
@@ -543,7 +543,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		}
 		return formatJSONComposite("{", "}", parts, 0, opts.indent), nil
 	case NodeItem:
-		text, err := serializeNodeItem(v, serializeOptions{method: "xml", omitXMLDeclaration: true})
+		text, err := serializeNodeItem(v, serializeOptions{method: serializeMethodXML, omitXMLDeclaration: true})
 		if err != nil {
 			return "", err
 		}

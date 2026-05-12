@@ -48,10 +48,10 @@ func TestFnString(t *testing.T) {
 		{`concat("a", "b", "c")`, "abc"},
 		{`string-join(("a","b","c"), "-")`, "a-b-c"},
 		{`upper-case("hello")`, "HELLO"},
-		{`lower-case("HELLO")`, "hello"},
+		{`lower-case("HELLO")`, "hello"}, //nolint:goconst
 		{`substring("12345", 2, 3)`, "234"},
 		{`substring("12345", 2)`, "2345"},
-		{`starts-with("hello", "he")`, "true"},
+		{`starts-with("hello", "he")`, "true"}, //nolint:goconst
 		{`ends-with("hello", "lo")`, "true"},
 		{`contains("hello world", "world")`, "true"},
 		{`substring-before("hello-world", "-")`, "hello"},

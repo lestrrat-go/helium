@@ -878,7 +878,7 @@ func formatWordsLang(n *big.Int, lang, caseStyle string) string {
 
 func intToGermanWords(n *big.Int) string {
 	if n.Sign() == 0 {
-		return "null" //nolint:goconst
+		return "null"
 	}
 	if !n.IsInt64() {
 		return n.String()

@@ -123,10 +123,10 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: relative}), nil
 	}
 	if err := validateIRI(base); err != nil {
-		return nil, &XPathError{Code: "FORG0002", Message: "invalid base URI: " + base}
+		return nil, &XPathError{Code: errCodeFORG0002, Message: "invalid base URI: " + base}
 	}
 	if err := validateIRI(relative); err != nil {
-		return nil, &XPathError{Code: "FORG0002", Message: "invalid relative URI: " + relative}
+		return nil, &XPathError{Code: errCodeFORG0002, Message: "invalid relative URI: " + relative}
 	}
 
 	// Check if relative URI is already absolute
@@ -143,21 +143,21 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	parsedBase, err := parseURIReference(base)
 	if err != nil {
-		return nil, &XPathError{Code: "FORG0002", Message: "invalid base URI: " + base}
+		return nil, &XPathError{Code: errCodeFORG0002, Message: "invalid base URI: " + base}
 	}
 	if parsedBase.Scheme == "" {
-		return nil, &XPathError{Code: "FORG0002", Message: "base URI is not absolute: " + base}
+		return nil, &XPathError{Code: errCodeFORG0002, Message: "base URI is not absolute: " + base}
 	}
 	if parsedBase.Fragment != "" {
-		return nil, &XPathError{Code: "FORG0002", Message: "base URI must not contain a fragment: " + base}
+		return nil, &XPathError{Code: errCodeFORG0002, Message: "base URI must not contain a fragment: " + base}
 	}
 	_, err = parseURIReference(relative)
 	if err != nil {
-		return nil, &XPathError{Code: "FORG0002", Message: "invalid relative URI: " + relative}
+		return nil, &XPathError{Code: errCodeFORG0002, Message: "invalid relative URI: " + relative}
 	}
 	result, err := resolveURIReference(base, relative)
 	if err != nil {
-		return nil, &XPathError{Code: "FORG0002", Message: "invalid relative URI: " + relative}
+		return nil, &XPathError{Code: errCodeFORG0002, Message: "invalid relative URI: " + relative}
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: result}), nil
 }

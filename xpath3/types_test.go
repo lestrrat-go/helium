@@ -12,7 +12,7 @@ import (
 
 func TestAtomicValueAccessors(t *testing.T) {
 	t.Run("string", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "hello"}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "hello"} //nolint:goconst
 		require.Equal(t, "hello", v.StringVal())
 		require.False(t, v.IsNumeric())
 	})
@@ -158,7 +158,7 @@ func TestMapItem(t *testing.T) {
 			{Key: strKey("a"), Value: value},
 		})
 
-		value.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		value.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"} //nolint:goconst
 
 		got, ok := m.Get(strKey("a"))
 		require.True(t, ok)
@@ -351,7 +351,7 @@ func TestEBV(t *testing.T) {
 		err    bool
 	}{
 		{"empty", xpath3.EmptySequence(), false, false},
-		{"true", xpath3.SingleBoolean(true), true, false},
+		{"true", xpath3.SingleBoolean(true), true, false}, //nolint:goconst
 		{"false", xpath3.SingleBoolean(false), false, false},
 		{"nonempty string", xpath3.SingleString("x"), true, false},
 		{"empty string", xpath3.SingleString(""), false, false},
@@ -386,7 +386,7 @@ func TestAtomizeSequence(t *testing.T) {
 }
 
 func TestAtomizeFunction(t *testing.T) {
-	seq := xpath3.ItemSlice{xpath3.FunctionItem{Arity: 0, Name: "test"}}
+	seq := xpath3.ItemSlice{xpath3.FunctionItem{Arity: 0, Name: "test"}} //nolint:goconst
 	_, err := xpath3.AtomizeSequence(seq)
 	require.Error(t, err)
 }

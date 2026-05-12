@@ -48,7 +48,7 @@ func evalUnaryLookupExpr(evalFn exprEvaluator, ctx context.Context, ec *evalCont
 		return lookupItem(evalFn, ctx, ec, ec.contextItem, e.Key, e.All)
 	}
 	if ec.node == nil {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: msgContextItemAbsent}
 	}
 	return lookupItem(evalFn, ctx, ec, NodeItem{Node: ec.node}, e.Key, e.All)
 }
@@ -337,12 +337,12 @@ func catchCodeMatches(catchCode string, errQName QNameValue) bool {
 	// Wildcard forms
 	if catchLocal == "*" {
 		// prefix:* — for err:*, matches all XPath errors
-		return catchPrefix == "" || (catchPrefix == "err" && errQName.URI == NSErr)
+		return catchPrefix == "" || (catchPrefix == prefixErr && errQName.URI == NSErr)
 	}
 	if catchPrefix == "*" {
 		return catchLocal == errQName.Local // *:CODE matches the bare code
 	}
-	if catchPrefix == "err" {
+	if catchPrefix == prefixErr {
 		return errQName.URI == NSErr && catchLocal == errQName.Local
 	}
 	if catchPrefix != "" {
@@ -357,7 +357,7 @@ func catchCodeMatches(catchCode string, errQName QNameValue) bool {
 func buildCatchContext(ec *evalContext, xpErr *XPathError) *evalContext {
 	errQName := xpErr.qname()
 	if errQName.Local == "" {
-		errQName = QNameValue{Prefix: "err", URI: NSErr, Local: errCodeFOER0000}
+		errQName = QNameValue{Prefix: prefixErr, URI: NSErr, Local: errCodeFOER0000}
 	}
 	errQN := SingleAtomic(AtomicValue{
 		TypeName: TypeQName,
