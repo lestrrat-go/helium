@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// duplicateIDElementName walks the doc element subtree, finds an element
-// whose name local part matches elementLocalName carrying an Id/ID attribute
+// findByLocalNameAndID walks the doc element subtree, finds an element
+// whose name local part matches localName carrying an Id/ID attribute
 // equal to id, and returns the *first* such element. Test helper only.
 func findByLocalNameAndID(doc *helium.Document, localName, id string) *helium.Element {
 	var found *helium.Element
