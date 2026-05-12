@@ -291,7 +291,7 @@ func TestParseQNameFunctionCall(t *testing.T) {
 	})
 
 	ev := xpath1.NewEvaluator().
-		Namespaces(map[string]string{"ext": "urn:ext"}).
+		Namespaces(map[string]string{"ext": "urn:ext"}). //nolint:goconst
 		FunctionNS("urn:ext", "hello", fn)
 	expr, err := xpath1.Compile("ext:hello('x')")
 	require.NoError(t, err)

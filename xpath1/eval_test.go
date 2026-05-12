@@ -682,7 +682,7 @@ func TestCustomFunctionNamespaced(t *testing.T) {
 
 	ev := xpath1.NewEvaluator().
 		Namespaces(map[string]string{
-			"ext": "urn:test:ext",
+			"ext": "urn:test:ext", //nolint:goconst
 		}).
 		FunctionNS("urn:test:ext", "hello", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
 			if len(args) != 1 {

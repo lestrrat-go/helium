@@ -16,7 +16,7 @@ func TestRunRelaxNGValidateVersion(t *testing.T) {
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
 	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", "--version"})
+	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", "--version"}) //nolint:goconst
 	require.Equal(t, heliumcmd.ExitOK, code)
 	require.Contains(t, stderr.String(), "using helium")
 }

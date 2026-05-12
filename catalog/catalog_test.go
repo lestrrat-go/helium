@@ -38,19 +38,19 @@ func TestDocbook(t *testing.T) {
 	}{
 		{
 			name:   "resolve with rewriteSystem",
-			pubID:  "toto",
+			pubID:  "toto", //nolint:goconst
 			sysID:  "http://www.oasis-open.org/docbook/xml/4.1.2/dbpoolx.mod",
 			expect: "/usr/share/xml/docbook/xml/4.1.2/dbpoolx.mod",
 		},
 		{
 			name:   "public match",
 			pubID:  "-//OASIS//ENTITIES DocBook XML Character Entities V4.1.2//EN",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod",
+			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/dbcentx.mod", //nolint:goconst
 		},
 		{
 			name:   "system URN unwrap",
 			sysID:  "urn:publicid:-:OASIS:DTD+DocBook+XML+V4.1.2:EN",
-			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd",
+			expect: "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd", //nolint:goconst
 		},
 		{
 			name:   "public URN unwrap",

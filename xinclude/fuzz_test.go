@@ -52,7 +52,7 @@ func FuzzProcess(f *testing.F) {
 			BaseURI("file:///fuzz/root.xml").
 			Resolver(fuzzResolver{
 				files: map[string][]byte{
-					"included.xml": xmlData,
+					"included.xml": xmlData, //nolint:goconst
 					"included.txt": textData,
 					"nested.xml":   xmlData,
 				},

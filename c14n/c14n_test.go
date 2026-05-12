@@ -17,7 +17,7 @@ const testdataBase = "../testdata/libxml2-compat/c14n"
 // knownParseFailures lists test cases that fail during parsing due to
 // helium parser limitations (not C14N bugs).
 var knownParseFailures = map[string]string{
-	"without-comments/example-3":     "duplicate namespace declaration handling",
+	"without-comments/example-3":     "duplicate namespace declaration handling", //nolint:goconst
 	"without-comments/example-4":     "entity reference in single-quoted attribute",
 	"without-comments/test-2":        "duplicate namespace declaration handling",
 	"without-comments/test-3":        "duplicate namespace declaration handling",

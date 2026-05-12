@@ -63,7 +63,7 @@ func TestParseXMLDecl(t *testing.T) {
 		encoding   string
 		standalone int
 	}{
-		`<?xml version="1.0"?>` + content:                                   {"1.0", "utf8", int(helium.StandaloneImplicitNo)},
+		`<?xml version="1.0"?>` + content:                                   {"1.0", "utf8", int(helium.StandaloneImplicitNo)}, //nolint:goconst
 		`<?xml version="1.0" encoding="euc-jp"?>` + content:                 {"1.0", "euc-jp", int(helium.StandaloneImplicitNo)},
 		`<?xml version="1.0" encoding="cp932" standalone='yes'?>` + content: {"1.0", "cp932", int(helium.StandaloneExplicitYes)},
 	}

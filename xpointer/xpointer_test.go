@@ -31,7 +31,7 @@ func TestParseFragmentID(t *testing.T) {
 		{"foo", "", "foo"},
 		{"xpointer(//p)", "xpointer", "//p"},
 		{"xpath1(/root/child)", "xpath1", "/root/child"},
-		{"element(/1/2)", "element", "/1/2"},
+		{"element(/1/2)", "element", "/1/2"}, //nolint:goconst
 	}
 
 	for _, test := range tests {

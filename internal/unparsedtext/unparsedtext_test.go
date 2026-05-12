@@ -107,7 +107,7 @@ func TestEncodingsCompatible(t *testing.T) {
 		detected  string
 		want      bool
 	}{
-		{"utf-8", "utf-8", true},
+		{"utf-8", "utf-8", true}, //nolint:goconst
 		{"UTF-8", "utf-8", true},
 		{"utf_8", "utf-8", true},
 		{"utf-16", "utf-16le", true},

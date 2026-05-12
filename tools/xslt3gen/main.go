@@ -1316,7 +1316,7 @@ func classifyUnsupportedAssertions(gt *generatedTest) {
 		return
 	}
 	for _, e := range exprs {
-		if e != "w3cAssertSkip()" {
+		if e != "w3cAssertSkip()" { //nolint:goconst
 			return
 		}
 	}

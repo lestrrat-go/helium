@@ -25,23 +25,23 @@ func TestRunUnknownSubcommand(t *testing.T) {
 }
 
 func TestRunLintVersion(t *testing.T) {
-	require.Equal(t, heliumcmd.ExitOK, executeDiscard(t, []string{"lint", "--version"}))
+	require.Equal(t, heliumcmd.ExitOK, executeDiscard(t, []string{"lint", "--version"})) //nolint:goconst
 }
 
 func TestRunXPathNoArgs(t *testing.T) {
-	require.Equal(t, heliumcmd.ExitErr, executeDiscard(t, []string{"xpath"}))
+	require.Equal(t, heliumcmd.ExitErr, executeDiscard(t, []string{"xpath"})) //nolint:goconst
 }
 
 func TestRunRelaxNGNoArgs(t *testing.T) {
-	require.Equal(t, heliumcmd.ExitErr, executeDiscard(t, []string{"relaxng"}))
+	require.Equal(t, heliumcmd.ExitErr, executeDiscard(t, []string{"relaxng"})) //nolint:goconst
 }
 
 func TestRunSchematronNoArgs(t *testing.T) {
-	require.Equal(t, heliumcmd.ExitErr, executeDiscard(t, []string{"schematron"}))
+	require.Equal(t, heliumcmd.ExitErr, executeDiscard(t, []string{"schematron"})) //nolint:goconst
 }
 
 func TestRunXSDNoArgs(t *testing.T) {
-	require.Equal(t, heliumcmd.ExitErr, executeDiscard(t, []string{"xsd"}))
+	require.Equal(t, heliumcmd.ExitErr, executeDiscard(t, []string{"xsd"})) //nolint:goconst
 }
 
 func TestRunRelaxNGUnknownSubcommand(t *testing.T) {

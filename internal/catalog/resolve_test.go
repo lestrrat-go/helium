@@ -105,7 +105,7 @@ func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 
 	root := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
+			{Type: catalog.EntryNextCatalog, URL: "shared.xml"}, //nolint:goconst
 			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
 		},
 		Loader: loader,

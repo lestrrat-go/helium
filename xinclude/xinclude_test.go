@@ -58,7 +58,7 @@ func TestXIncludeBasicXML(t *testing.T) {
 
 	resolver := &stringResolver{
 		files: map[string]string{
-			"included.xml": `<chapter>Hello</chapter>`,
+			"included.xml": `<chapter>Hello</chapter>`, //nolint:goconst
 		},
 	}
 

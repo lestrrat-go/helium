@@ -22,7 +22,7 @@ func TestErrParseError(t *testing.T) {
 		pe := helium.ErrParseError{
 			Err:        helium.ErrSpaceRequired,
 			Level:      helium.ErrorLevelError,
-			Line:       "<foo>",
+			Line:       "<foo>", //nolint:goconst
 			LineNumber: 1,
 			Column:     5,
 		}
