@@ -19,9 +19,9 @@ import (
 func TestFnDocNoNetworkByDefault(t *testing.T) {
 	t.Parallel()
 	// If any request reaches the server, the test fails.
-	var hits int32
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
+		hits.Add(1)
 		_, _ = w.Write([]byte("<root/>"))
 	}))
 	defer srv.Close()
@@ -36,7 +36,7 @@ func TestFnDocNoNetworkByDefault(t *testing.T) {
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
 	require.Equal(t, "FODC0002", xpErr.Code)
-	require.Zero(t, atomic.LoadInt32(&hits), "no HTTP request should be issued by default")
+	require.Zero(t, hits.Load(), "no HTTP request should be issued by default")
 }
 
 func TestFnDocNoFileReadByDefault(t *testing.T) {
@@ -77,9 +77,9 @@ func TestFnDocNoFileURIReadByDefault(t *testing.T) {
 
 func TestFnUnparsedTextNoNetworkByDefault(t *testing.T) {
 	t.Parallel()
-	var hits int32
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
+		hits.Add(1)
 		_, _ = w.Write([]byte("hello"))
 	}))
 	defer srv.Close()
@@ -94,7 +94,7 @@ func TestFnUnparsedTextNoNetworkByDefault(t *testing.T) {
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
 	require.Equal(t, "FOUT1170", xpErr.Code)
-	require.Zero(t, atomic.LoadInt32(&hits), "no HTTP request should be issued by default")
+	require.Zero(t, hits.Load(), "no HTTP request should be issued by default")
 }
 
 func TestFnUnparsedTextNoFileReadByDefault(t *testing.T) {

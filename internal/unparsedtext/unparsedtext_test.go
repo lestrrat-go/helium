@@ -426,9 +426,9 @@ func TestFileURIResolver(t *testing.T) {
 }
 
 func TestReadURINoNetworkByDefault(t *testing.T) {
-	var hits int32
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
+		hits.Add(1)
 		_, _ = w.Write([]byte("nope"))
 	}))
 	defer srv.Close()
@@ -436,11 +436,11 @@ func TestReadURINoNetworkByDefault(t *testing.T) {
 	// nil config and config without HTTPClient/URIResolver must refuse.
 	_, err := unparsedtext.ReadURI(t.Context(), nil, srv.URL+"/x")
 	require.Error(t, err)
-	require.Zero(t, atomic.LoadInt32(&hits))
+	require.Zero(t, hits.Load())
 
 	_, err = unparsedtext.ReadURI(t.Context(), &unparsedtext.Config{}, srv.URL+"/x")
 	require.Error(t, err)
-	require.Zero(t, atomic.LoadInt32(&hits))
+	require.Zero(t, hits.Load())
 }
 
 func TestReadURINoFileReadByDefault(t *testing.T) {
@@ -458,9 +458,9 @@ func TestReadURINoFileReadByDefault(t *testing.T) {
 }
 
 func TestLoadTextNoNetworkByDefault(t *testing.T) {
-	var hits int32
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
+		hits.Add(1)
 		_, _ = w.Write([]byte("nope"))
 	}))
 	defer srv.Close()
@@ -470,7 +470,7 @@ func TestLoadTextNoNetworkByDefault(t *testing.T) {
 	var ue *unparsedtext.Error
 	require.ErrorAs(t, err, &ue)
 	require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
-	require.Zero(t, atomic.LoadInt32(&hits))
+	require.Zero(t, hits.Load())
 }
 
 func TestLoadTextNoFileReadByDefault(t *testing.T) {
