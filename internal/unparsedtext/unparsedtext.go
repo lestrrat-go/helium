@@ -564,9 +564,9 @@ func (r *httpResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 
 // NewFileResolver returns a URIResolver backed by an io/fs.FS. URIs are
 // interpreted as fs paths (slash-separated, relative to the FS root).
-// file:// URIs are accepted but only their cleaned, non-absolute path
-// component is used to look up against fsys; absolute paths and "../"
-// traversal are refused.
+// Bare relative paths and file: URIs without an authority are accepted;
+// absolute paths (anything beginning with "/", including file:// URIs
+// such as file:///etc/passwd) and "../" traversal are refused.
 func NewFileResolver(fsys fs.FS) URIResolver {
 	return &fsResolver{fsys: fsys}
 }
@@ -594,12 +594,14 @@ func (r *fsResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)
 	}
 
-	name = strings.TrimPrefix(name, "/")
 	if name == "" {
 		return nil, fmt.Errorf("empty path")
 	}
+	if strings.HasPrefix(name, "/") {
+		return nil, fmt.Errorf("absolute path %q is not allowed", name)
+	}
 	cleaned := path.Clean(name)
-	if cleaned == ".." || strings.HasPrefix(cleaned, "../") || path.IsAbs(cleaned) {
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
 		return nil, fmt.Errorf("path %q escapes the FS root", name)
 	}
 	return r.fsys.Open(cleaned)

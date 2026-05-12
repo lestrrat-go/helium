@@ -539,6 +539,11 @@ func TestNewFileResolver(t *testing.T) {
 	// Traversal must be refused.
 	_, err = unparsedtext.ReadURI(t.Context(), cfg, "../etc/passwd")
 	require.Error(t, err)
+
+	// Absolute file URIs must be refused, not silently rewritten to relative.
+	_, err = unparsedtext.ReadURI(t.Context(), cfg, "file:///etc/passwd")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "absolute path")
 }
 
 func TestErrorType(t *testing.T) {
