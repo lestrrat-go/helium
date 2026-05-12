@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/c14n"
+	"github.com/lestrrat-go/helium/enum"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -127,49 +128,62 @@ func collectSubtreeNodes(n helium.Node) []helium.Node {
 	return nodes
 }
 
-// resolveReference resolves a Reference URI to the target node(s).
+// resolveReference resolves a Reference URI to the target node.
 // For URI="" (enveloped), returns the document element.
-// For URI="#id", returns the element with that ID.
+// For URI="#id", returns the unique element with that ID. If more than one
+// element matches the ID, returns ErrAmbiguousReference — this is the
+// primary defense against XML Signature Wrapping (XSW) attacks where an
+// attacker injects a duplicate-ID element containing malicious content.
 func resolveReference(doc *helium.Document, uri string) (*helium.Element, error) {
 	if uri == "" {
 		return doc.DocumentElement(), nil
 	}
 	if strings.HasPrefix(uri, "#") {
 		id := uri[1:]
-		// Try the standard GetElementByID first (DTD-declared + xml:id).
-		elem := doc.GetElementByID(id)
-		if elem != nil {
-			return elem, nil
+		// Walk the tree once and collect every candidate. We accept matches
+		// from any of: DTD-declared ID, xml:id, or the common "Id"/"ID"
+		// attribute conventions used by XMLDSig/SAML. We refuse to resolve
+		// the reference if more than one element matches.
+		matches := findElementsByID(doc, id)
+		switch len(matches) {
+		case 0:
+			return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
+		case 1:
+			return matches[0], nil
+		default:
+			return nil, fmt.Errorf("%w: %s (matched %d elements)", ErrAmbiguousReference, uri, len(matches))
 		}
-		// Fallback: search for common Id/ID attributes used by XMLDSig/SAML.
-		elem = findElementByIDAttr(doc, id)
-		if elem != nil {
-			return elem, nil
-		}
-		return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
 	}
 	return nil, fmt.Errorf("%w: external references not supported: %s", ErrReferenceNotFound, uri)
 }
 
-// findElementByIDAttr walks the document tree looking for an element with
-// an "Id" or "ID" attribute matching the given value. This handles the common
-// case where documents use Id attributes without DTD declarations (e.g., SAML).
-func findElementByIDAttr(doc *helium.Document, id string) *helium.Element {
-	var found *helium.Element
+// findElementsByID walks the entire document tree and returns every element
+// whose ID (xml:id, an "Id"/"ID" attribute, or a DTD-declared ID-typed
+// attribute) matches the given value. The walk is exhaustive — it never
+// short-circuits — so that duplicate IDs are surfaced to the caller rather
+// than silently masked. We do NOT consult Document.GetElementByID: its
+// underlying ID table is keyed by ID value and Document.RegisterID
+// overwrites on collision, which would hide the duplicate-xml:id case that
+// XSW hardening relies on.
+func findElementsByID(doc *helium.Document, id string) []*helium.Element {
+	var matches []*helium.Element
 	var walk func(helium.Node)
 	walk = func(n helium.Node) {
-		if found != nil {
-			return
-		}
 		elem, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
 			return
 		}
 		for _, attr := range elem.Attributes() {
 			name := attr.Name()
-			if (name == "Id" || name == "ID") && attr.Value() == id {
-				found = elem
-				return
+			isIDAttr := name == "Id" || name == "ID" || name == "xml:id" || attr.AType() == enum.AttrID
+			if !isIDAttr {
+				continue
+			}
+			// xs:ID derives from xs:NCName, which collapses whitespace;
+			// match libxml2/helium normalization for xml:id.
+			if strings.TrimSpace(attr.Value()) == id {
+				matches = append(matches, elem)
+				break
 			}
 		}
 		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
@@ -177,5 +191,5 @@ func findElementByIDAttr(doc *helium.Document, id string) *helium.Element {
 		}
 	}
 	walk(doc.DocumentElement())
-	return found
+	return matches
 }

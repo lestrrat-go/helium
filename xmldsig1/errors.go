@@ -30,6 +30,17 @@ var (
 	// ErrReferenceNotFound is returned when a Reference URI cannot be resolved.
 	ErrReferenceNotFound = errors.New("xmldsig1: reference URI not resolved")
 
+	// ErrAmbiguousReference is returned when a Reference URI resolves to more
+	// than one element. This is the primary defense against XML Signature
+	// Wrapping (XSW) attacks where an attacker injects a duplicate-ID element
+	// containing malicious content alongside the legitimately signed element.
+	ErrAmbiguousReference = errors.New("xmldsig1: reference URI matches multiple elements")
+
+	// ErrAmbiguousSignature is returned when the document contains more than
+	// one Signature element and Verify cannot decide which one to verify.
+	// Callers must use VerifyElement to disambiguate.
+	ErrAmbiguousSignature = errors.New("xmldsig1: document contains multiple Signature elements")
+
 	// ErrInvalidKeyInfo is returned when KeyInfo content cannot be parsed.
 	ErrInvalidKeyInfo = errors.New("xmldsig1: invalid KeyInfo")
 

@@ -31,10 +31,10 @@ type parsedTransform struct {
 	prefixes  []string // for Exclusive C14N InclusiveNamespaces
 }
 
-func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element) error {
+func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element) (*VerifyResult, error) {
 	parsed, err := parseSignatureElement(sigElem)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Resolve key.
@@ -42,40 +42,48 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	if parsed.keyInfoElem != nil {
 		keyInfoData, err = parseKeyInfo(parsed.keyInfoElem)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	key, err := cfg.keySource.ResolveKey(ctx, keyInfoData, parsed.signatureAlg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Canonicalize SignedInfo.
 	canonical, err := canonicalizeSubtree(parsed.c14nMethod, parsed.signedInfoElem, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Verify signature value.
 	if err := verifyBytes(parsed.signatureAlg, key, canonical, parsed.signatureValue); err != nil {
-		return &VerificationError{Reference: -1, Err: err}
+		return nil, &VerificationError{Reference: -1, Err: err}
 	}
 
-	// Verify each reference.
+	// Verify each reference and record the resolved element so callers can
+	// confirm that the element they intend to consume is actually covered.
+	result := &VerifyResult{Signature: sigElem}
 	for i, ref := range parsed.references {
-		if err := verifyReference(doc, sigElem, ref); err != nil {
-			return &VerificationError{Reference: i, URI: ref.uri, Err: err}
+		target, err := verifyReference(doc, sigElem, ref)
+		if err != nil {
+			return nil, &VerificationError{Reference: i, URI: ref.uri, Err: err}
 		}
+		result.References = append(result.References, VerifiedReference{
+			URI:             ref.uri,
+			Element:         target,
+			DigestAlgorithm: ref.digestAlgorithm,
+		})
 	}
 
-	return nil
+	return result, nil
 }
 
-func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedReference) error {
+func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, error) {
 	target, err := resolveReference(doc, ref.uri)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Check for enveloped-signature transform.
@@ -87,12 +95,13 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		}
 	}
 
-	// Temporarily detach the Signature element for enveloped signatures.
-	var sigParent *helium.Element
+	// Temporarily detach the Signature element for enveloped signatures,
+	// remembering its exact position so we can restore it after
+	// canonicalization. Naive reattach-via-AddChild would move the
+	// Signature to the end of its parent and silently restructure the doc.
+	var anchor sigAnchor
 	if hasEnveloped {
-		if p, ok := helium.AsNode[*helium.Element](sigElem.Parent()); ok {
-			sigParent = p
-		}
+		anchor = captureAnchor(sigElem)
 		helium.UnlinkNode(sigElem)
 	}
 
@@ -114,26 +123,28 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
 	}
 
-	// Reattach the Signature element.
-	if hasEnveloped && sigParent != nil {
-		_ = sigParent.AddChild(sigElem)
+	// Reattach the Signature element at its original sibling position.
+	if hasEnveloped {
+		if rerr := anchor.restore(sigElem); rerr != nil && err == nil {
+			err = rerr
+		}
 	}
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Compute and compare digest.
 	computed, err := computeDigest(ref.digestAlgorithm, canonical)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if !digestEqual(computed, ref.digestValue) {
-		return ErrDigestMismatch
+		return nil, ErrDigestMismatch
 	}
 
-	return nil
+	return target, nil
 }
 
 func digestEqual(a, b []byte) bool {

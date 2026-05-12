@@ -224,8 +224,12 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		}
 	}
 
-	// For enveloped signature, temporarily detach the Signature element.
+	// For enveloped signature, temporarily detach the Signature element,
+	// remembering its exact position so we can restore it after
+	// canonicalization.
+	var anchor sigAnchor
 	if hasEnveloped {
+		anchor = captureAnchor(sigElem)
 		helium.UnlinkNode(sigElem)
 	}
 
@@ -250,11 +254,10 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
 	}
 
-	// Reattach the Signature element.
+	// Reattach the Signature element at its original sibling position.
 	if hasEnveloped {
-		parent := target
-		if err2 := parent.AddChild(sigElem); err2 != nil {
-			return err2
+		if rerr := anchor.restore(sigElem); rerr != nil {
+			return rerr
 		}
 	}
 

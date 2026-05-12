@@ -53,10 +53,12 @@ func Example_xmldsig1_sign_verify() {
 	// public key. StaticKey always returns the same key; for SAML you
 	// would typically use X509CertKeySource with the IdP's certificate.
 	//
-	// Verify checks the first ds:Signature element in the document.
-	// It validates both the SignatureValue (cryptographic signature over
-	// the canonical SignedInfo) and each Reference digest.
-	err = xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+	// Verify requires the document to contain exactly one ds:Signature
+	// element; it returns ErrAmbiguousSignature when more than one is
+	// present (use VerifyElement to disambiguate in that case). It
+	// validates both the SignatureValue (cryptographic signature over the
+	// canonical SignedInfo) and each Reference digest.
+	_, err = xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
 		Verify(context.Background(), doc)
 	if err != nil {
 		fmt.Printf("verification failed: %s\n", err)

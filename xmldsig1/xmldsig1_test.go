@@ -76,7 +76,7 @@ func TestSignVerifyRoundTripRSASHA256(t *testing.T) {
 	require.NoError(t, err)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	err = verifier.Verify(t.Context(), doc)
+	_, err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
 
@@ -96,7 +96,7 @@ func TestSignVerifyRoundTripRSASHA1(t *testing.T) {
 	require.NoError(t, err)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	err = verifier.Verify(t.Context(), doc)
+	_, err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
 
@@ -112,7 +112,7 @@ func TestSignVerifyRoundTripECDSASHA256(t *testing.T) {
 	require.NoError(t, err)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	err = verifier.Verify(t.Context(), doc)
+	_, err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
 
@@ -132,7 +132,7 @@ func TestSignVerifyRoundTripECDSASHA384(t *testing.T) {
 	require.NoError(t, err)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	err = verifier.Verify(t.Context(), doc)
+	_, err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
 
@@ -151,7 +151,7 @@ func TestSignVerifyRoundTripHMACSHA256(t *testing.T) {
 	require.NoError(t, err)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(secret))
-	err = verifier.Verify(t.Context(), doc)
+	_, err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
 
@@ -167,7 +167,7 @@ func TestSignVerifyRoundTripEd25519(t *testing.T) {
 	require.NoError(t, err)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(key.Public()))
-	err = verifier.Verify(t.Context(), doc)
+	_, err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
 
@@ -185,7 +185,7 @@ func TestSignVerifyWithX509CertKeySource(t *testing.T) {
 	require.NoError(t, err)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.X509CertKeySource(cert))
-	err = verifier.Verify(t.Context(), doc)
+	_, err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
 
@@ -207,7 +207,7 @@ func TestVerifyTamperedDocument(t *testing.T) {
 	doc2 := mustParseXML(t, tampered)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	err = verifier.Verify(t.Context(), doc2)
+	_, err = verifier.Verify(t.Context(), doc2)
 	require.Error(t, err)
 }
 
@@ -224,7 +224,7 @@ func TestVerifyWrongKey(t *testing.T) {
 	require.NoError(t, err)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key2.PublicKey))
-	err = verifier.Verify(t.Context(), doc)
+	_, err = verifier.Verify(t.Context(), doc)
 	require.Error(t, err)
 }
 
@@ -233,7 +233,7 @@ func TestVerifyNoSignature(t *testing.T) {
 	key := generateRSAKey(t)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	err := verifier.Verify(t.Context(), doc)
+	_, err := verifier.Verify(t.Context(), doc)
 	require.ErrorIs(t, err, xmldsig1.ErrSignatureNotFound)
 }
 
@@ -298,6 +298,6 @@ func TestSignVerifyWithFragmentReference(t *testing.T) {
 	require.NoError(t, err)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	err = verifier.Verify(t.Context(), doc)
+	_, err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
