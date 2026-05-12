@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"unicode/utf16"
 
@@ -272,22 +273,23 @@ func TestResolveURI(t *testing.T) {
 }
 
 func TestReadURI(t *testing.T) {
-	t.Run("file path", func(t *testing.T) {
+	t.Run("file path via resolver", func(t *testing.T) {
 		dir := t.TempDir()
-		path := filepath.Join(dir, "test.txt")
-		require.NoError(t, os.WriteFile(path, []byte("content"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("content"), 0644))
 
-		data, err := unparsedtext.ReadURI(t.Context(), nil, path)
+		cfg := &unparsedtext.Config{URIResolver: unparsedtext.NewFileResolver(os.DirFS(dir))}
+		data, err := unparsedtext.ReadURI(t.Context(), cfg, "test.txt")
 		require.NoError(t, err)
 		require.Equal(t, "content", string(data))
 	})
 
-	t.Run("file URI", func(t *testing.T) {
+	t.Run("file URI via resolver", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "test.txt")
 		require.NoError(t, os.WriteFile(path, []byte("file-uri"), 0644))
 
-		data, err := unparsedtext.ReadURI(t.Context(), nil, "file://"+path)
+		cfg := &unparsedtext.Config{URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir}}
+		data, err := unparsedtext.ReadURI(t.Context(), cfg, "file://"+path)
 		require.NoError(t, err)
 		require.Equal(t, "file-uri", string(data))
 	})
@@ -333,12 +335,14 @@ func TestReadURI(t *testing.T) {
 }
 
 func TestLoadText(t *testing.T) {
-	t.Run("basic file load", func(t *testing.T) {
+	t.Run("basic file load via resolver", func(t *testing.T) {
 		dir := t.TempDir()
-		path := filepath.Join(dir, "test.txt")
-		require.NoError(t, os.WriteFile(path, []byte("hello world"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello world"), 0644))
 
-		cfg := &unparsedtext.Config{BaseURI: "file://" + dir + "/"}
+		cfg := &unparsedtext.Config{
+			BaseURI:     "file://" + dir + "/",
+			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
+		}
 		text, err := unparsedtext.LoadText(t.Context(), cfg, "test.txt", "")
 		require.NoError(t, err)
 		require.Equal(t, "hello world", text)
@@ -349,7 +353,8 @@ func TestLoadText(t *testing.T) {
 		path := filepath.Join(dir, "bad.txt")
 		require.NoError(t, os.WriteFile(path, []byte("hello\x00world"), 0644))
 
-		text, err := unparsedtext.LoadText(t.Context(), nil, "file://"+path, "")
+		cfg := &unparsedtext.Config{URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir}}
+		text, err := unparsedtext.LoadText(t.Context(), cfg, "file://"+path, "")
 		require.Error(t, err)
 		require.Empty(t, text)
 		var ue *unparsedtext.Error
@@ -357,8 +362,10 @@ func TestLoadText(t *testing.T) {
 		require.Equal(t, unparsedtext.ErrCodeEncoding, ue.Code)
 	})
 
-	t.Run("nonexistent file", func(t *testing.T) {
-		_, err := unparsedtext.LoadText(t.Context(), nil, "file:///nonexistent/file.txt", "")
+	t.Run("nonexistent file via resolver", func(t *testing.T) {
+		dir := t.TempDir()
+		cfg := &unparsedtext.Config{URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir}}
+		_, err := unparsedtext.LoadText(t.Context(), cfg, "nope.txt", "")
 		require.Error(t, err)
 		var ue *unparsedtext.Error
 		require.ErrorAs(t, err, &ue)
@@ -371,7 +378,8 @@ func TestLoadTextLines(t *testing.T) {
 	path := filepath.Join(dir, "lines.txt")
 	require.NoError(t, os.WriteFile(path, []byte("line1\r\nline2\nline3"), 0644))
 
-	lines, err := unparsedtext.LoadTextLines(t.Context(), nil, "file://"+path, "")
+	cfg := &unparsedtext.Config{URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir}}
+	lines, err := unparsedtext.LoadTextLines(t.Context(), cfg, "file://"+path, "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"line1", "line2", "line3"}, lines)
 }
@@ -381,8 +389,9 @@ func TestIsAvailable(t *testing.T) {
 	path := filepath.Join(dir, "exists.txt")
 	require.NoError(t, os.WriteFile(path, []byte("ok"), 0644))
 
-	require.True(t, unparsedtext.IsAvailable(t.Context(), nil, "file://"+path, ""))
-	require.False(t, unparsedtext.IsAvailable(t.Context(), nil, "file://"+filepath.Join(dir, "nope.txt"), ""))
+	cfg := &unparsedtext.Config{URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir}}
+	require.True(t, unparsedtext.IsAvailable(t.Context(), cfg, "file://"+path, ""))
+	require.False(t, unparsedtext.IsAvailable(t.Context(), cfg, "file://"+filepath.Join(dir, "nope.txt"), ""))
 }
 
 func TestFileURIResolver(t *testing.T) {
@@ -414,6 +423,122 @@ func TestFileURIResolver(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "unsupported URI scheme")
 	})
+}
+
+func TestReadURINoNetworkByDefault(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		_, _ = w.Write([]byte("nope"))
+	}))
+	defer srv.Close()
+
+	// nil config and config without HTTPClient/URIResolver must refuse.
+	_, err := unparsedtext.ReadURI(t.Context(), nil, srv.URL+"/x")
+	require.Error(t, err)
+	require.Zero(t, atomic.LoadInt32(&hits))
+
+	_, err = unparsedtext.ReadURI(t.Context(), &unparsedtext.Config{}, srv.URL+"/x")
+	require.Error(t, err)
+	require.Zero(t, atomic.LoadInt32(&hits))
+}
+
+func TestReadURINoFileReadByDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "secret.txt")
+	require.NoError(t, os.WriteFile(path, []byte("secret"), 0644))
+
+	// nil config — raw path
+	_, err := unparsedtext.ReadURI(t.Context(), nil, path)
+	require.Error(t, err)
+
+	// nil config — file:// URI
+	_, err = unparsedtext.ReadURI(t.Context(), nil, "file://"+path)
+	require.Error(t, err)
+}
+
+func TestLoadTextNoNetworkByDefault(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		_, _ = w.Write([]byte("nope"))
+	}))
+	defer srv.Close()
+
+	_, err := unparsedtext.LoadText(t.Context(), nil, srv.URL+"/x", "")
+	require.Error(t, err)
+	var ue *unparsedtext.Error
+	require.ErrorAs(t, err, &ue)
+	require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
+	require.Zero(t, atomic.LoadInt32(&hits))
+}
+
+func TestLoadTextNoFileReadByDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "secret.txt")
+	require.NoError(t, os.WriteFile(path, []byte("secret"), 0644))
+
+	_, err := unparsedtext.LoadText(t.Context(), nil, "file://"+path, "")
+	require.Error(t, err)
+	var ue *unparsedtext.Error
+	require.ErrorAs(t, err, &ue)
+	require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
+}
+
+func TestFileURIResolverRejectsTraversal(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(filepath.Dir(dir), "outside.txt")
+	require.NoError(t, os.WriteFile(outside, []byte("escape"), 0644))
+	t.Cleanup(func() { _ = os.Remove(outside) })
+
+	r := &unparsedtext.FileURIResolver{BaseDir: dir}
+
+	t.Run("dotdot relative path refused", func(t *testing.T) {
+		_, err := r.ResolveURI("../outside.txt")
+		require.Error(t, err)
+	})
+
+	t.Run("absolute path refused", func(t *testing.T) {
+		_, err := r.ResolveURI(outside)
+		require.Error(t, err)
+	})
+
+	t.Run("file URI with absolute path refused", func(t *testing.T) {
+		_, err := r.ResolveURI("file://" + outside)
+		require.Error(t, err)
+	})
+}
+
+func TestNewHTTPResolver(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("via-http-resolver"))
+	}))
+	defer srv.Close()
+
+	r := unparsedtext.NewHTTPResolver(srv.Client())
+	require.NotNil(t, r)
+
+	cfg := &unparsedtext.Config{URIResolver: r}
+	data, err := unparsedtext.ReadURI(t.Context(), cfg, srv.URL+"/x")
+	require.NoError(t, err)
+	require.Equal(t, "via-http-resolver", string(data))
+}
+
+func TestNewFileResolver(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ok.txt"), []byte("via-fs"), 0644))
+
+	r := unparsedtext.NewFileResolver(os.DirFS(dir))
+	require.NotNil(t, r)
+
+	cfg := &unparsedtext.Config{URIResolver: r}
+	data, err := unparsedtext.ReadURI(t.Context(), cfg, "ok.txt")
+	require.NoError(t, err)
+	require.Equal(t, "via-fs", string(data))
+
+	// Traversal must be refused.
+	_, err = unparsedtext.ReadURI(t.Context(), cfg, "../etc/passwd")
+	require.Error(t, err)
 }
 
 func TestErrorType(t *testing.T) {
