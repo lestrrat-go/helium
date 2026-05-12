@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/subtle"
 	"fmt"
 	"io"
 )
@@ -19,29 +20,44 @@ func keySizeForAlgorithm(algorithm string) (int, error) {
 	}
 }
 
+// blockEncrypt encrypts plaintext with the given algorithm. For AEAD
+// algorithms (GCM) the algorithm URI is bound into the additional
+// authenticated data so that an attacker cannot substitute a different
+// EncryptionMethod/@Algorithm on the wire.
 func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
 	switch algorithm {
 	case AES128CBC, AES256CBC:
 		return encryptCBC(key, plaintext)
 	case AES128GCM, AES256GCM:
-		return encryptGCM(key, plaintext)
+		return encryptGCM(key, plaintext, []byte(algorithm))
 	default:
 		return nil, &UnsupportedAlgorithmError{Algorithm: algorithm}
 	}
 }
 
+// blockDecrypt decrypts ciphertext. For AEAD algorithms (GCM) the
+// algorithm URI is verified as additional authenticated data. For CBC
+// the function returns ErrDecryptionFailed for ANY failure (cipher,
+// padding, or downstream parse) so callers cannot mount a padding
+// oracle by distinguishing the cause.
 func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
 	switch algorithm {
 	case AES128CBC, AES256CBC:
 		return decryptCBC(key, ciphertext)
 	case AES128GCM, AES256GCM:
-		return decryptGCM(key, ciphertext)
+		return decryptGCM(key, ciphertext, []byte(algorithm))
 	default:
 		return nil, &UnsupportedAlgorithmError{Algorithm: algorithm}
 	}
 }
 
 // AES-CBC
+//
+// CBC ciphertexts produced by this package are NOT authenticated. The
+// XML-Encryption 1.0 CBC mode is vulnerable to padding-oracle attacks
+// (Jager/Somorovsky 2011) and has been deprecated by XML-Encryption 1.1.
+// Decryption with CBC requires an explicit caller opt-in via
+// Decryptor.AllowUnauthenticatedCBC(true).
 
 func encryptCBC(key, plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
@@ -66,14 +82,12 @@ func encryptCBC(key, plaintext []byte) ([]byte, error) {
 func decryptCBC(key, data []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
+		// Caller error (wrong key size), not an oracle signal.
+		return nil, ErrDecryptionFailed
 	}
 
-	if len(data) < aes.BlockSize*2 {
-		return nil, fmt.Errorf("%w: ciphertext too short", ErrDecryptionFailed)
-	}
-	if len(data)%aes.BlockSize != 0 {
-		return nil, fmt.Errorf("%w: ciphertext not block-aligned", ErrDecryptionFailed)
+	if len(data) < aes.BlockSize*2 || len(data)%aes.BlockSize != 0 {
+		return nil, ErrDecryptionFailed
 	}
 
 	iv := data[:aes.BlockSize]
@@ -83,12 +97,19 @@ func decryptCBC(key, data []byte) ([]byte, error) {
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(plaintext, ciphertext)
 
-	return pkcs7Unpad(plaintext, aes.BlockSize)
+	out, ok := pkcs7UnpadConstantTime(plaintext, aes.BlockSize)
+	if !ok {
+		// Do not distinguish "bad padding" from any other downstream
+		// failure: surface the same opaque ErrDecryptionFailed so the
+		// caller cannot build a padding oracle.
+		return nil, ErrDecryptionFailed
+	}
+	return out, nil
 }
 
 // AES-GCM
 
-func encryptGCM(key, plaintext []byte) ([]byte, error) {
+func encryptGCM(key, plaintext, aad []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
@@ -104,11 +125,11 @@ func encryptGCM(key, plaintext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
 	}
 
-	// nonce || ciphertext || tag
-	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+	// nonce || ciphertext || tag, with aad bound into the tag.
+	return gcm.Seal(nonce, nonce, plaintext, aad), nil
 }
 
-func decryptGCM(key, data []byte) ([]byte, error) {
+func decryptGCM(key, data, aad []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
@@ -127,7 +148,7 @@ func decryptGCM(key, data []byte) ([]byte, error) {
 	nonce := data[:nonceSize]
 	ciphertext := data[nonceSize:]
 
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, aad)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}
@@ -146,18 +167,37 @@ func pkcs7Pad(data []byte, blockSize int) []byte {
 	return padded
 }
 
-func pkcs7Unpad(data []byte, blockSize int) ([]byte, error) {
-	if len(data) == 0 {
-		return nil, ErrInvalidPadding
+// pkcs7UnpadConstantTime removes PKCS#7 padding without short-circuiting
+// on the first invalid byte. The return value ok is false iff the
+// padding is invalid; valid is computed by walking every padding byte
+// regardless of intermediate mismatches.
+//
+// Note: the work performed depends on the *padding length byte*, which
+// is observable in cache-timing studies but is the same trade-off as
+// stdlib `crypto/tls`'s legacy CBC unpadding. This is a defense in
+// depth on top of the primary mitigation (require opt-in for CBC). For
+// strong authentication use AES-GCM.
+func pkcs7UnpadConstantTime(data []byte, blockSize int) ([]byte, bool) {
+	if len(data) == 0 || len(data)%blockSize != 0 {
+		return nil, false
 	}
 	padding := int(data[len(data)-1])
+	// Bounds check on the padding length.
+	good := 1
 	if padding == 0 || padding > blockSize || padding > len(data) {
-		return nil, ErrInvalidPadding
+		good = 0
+		// Continue with a safe value so the inner loop still runs to
+		// completion on a fixed range.
+		padding = blockSize
 	}
+	// Compare every byte of the (assumed) padding region in constant
+	// time relative to `padding`.
+	want := byte(padding)
 	for i := len(data) - padding; i < len(data); i++ {
-		if data[i] != byte(padding) {
-			return nil, ErrInvalidPadding
-		}
+		good &= subtle.ConstantTimeByteEq(data[i], want)
 	}
-	return data[:len(data)-padding], nil
+	if good != 1 {
+		return nil, false
+	}
+	return data[:len(data)-int(data[len(data)-1])], true
 }

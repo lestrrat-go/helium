@@ -47,8 +47,8 @@ func TestEncryptDecryptElementRSAOAEP_AES128CBC(t *testing.T) {
 	require.Contains(t, xml, "EncryptedData")
 	require.NotContains(t, xml, "user@example.com")
 
-	// Decrypt.
-	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	// Decrypt. CBC requires explicit opt-in (see ErrCBCRequiresOptIn).
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key).AllowUnauthenticatedCBC(true)
 	nodes, err := decryptor.Decrypt(t.Context(), edElem)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -124,7 +124,7 @@ func TestEncryptDecryptWithAESKeyWrap(t *testing.T) {
 	edElem, err := encryptor.EncryptElement(t.Context(), elem)
 	require.NoError(t, err)
 
-	decryptor := xmlenc1.NewDecryptor().KeyEncryptionKey(kek)
+	decryptor := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).AllowUnauthenticatedCBC(true)
 	nodes, err := decryptor.Decrypt(t.Context(), edElem)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -149,7 +149,7 @@ func TestEncryptDecryptWithSessionKey(t *testing.T) {
 	edElem, err := encryptor.EncryptElement(t.Context(), elem)
 	require.NoError(t, err)
 
-	decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)
+	decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey).AllowUnauthenticatedCBC(true)
 	nodes, err := decryptor.Decrypt(t.Context(), edElem)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -205,8 +205,9 @@ func TestDecryptWrongKey(t *testing.T) {
 	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
 	require.NoError(t, err)
 
-	// Decrypt with wrong key.
-	decryptor := xmlenc1.NewDecryptor().PrivateKey(key2)
+	// Decrypt with wrong key. Opt in to CBC so the failure exercises
+	// the wrong-key (RSA) path rather than the CBC opt-in gate.
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key2).AllowUnauthenticatedCBC(true)
 	_, err = decryptor.Decrypt(t.Context(), edElem)
 	require.Error(t, err)
 }
@@ -232,7 +233,7 @@ func TestAESKeyWrapRFC3394(t *testing.T) {
 	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
 	require.NoError(t, err)
 
-	decryptor := xmlenc1.NewDecryptor().KeyEncryptionKey(kek)
+	decryptor := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).AllowUnauthenticatedCBC(true)
 	nodes, err := decryptor.Decrypt(t.Context(), edElem)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)

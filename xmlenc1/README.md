@@ -6,6 +6,21 @@ The `xmlenc1` package implements W3C XML Encryption 1.1 for helium documents.
 
 Import path: `github.com/lestrrat-go/helium/xmlenc1`
 
+## Security
+
+- Prefer AES-GCM. The package binds the `EncryptionMethod/@Algorithm`
+  URI into the AEAD additional-authenticated-data so an attacker cannot
+  substitute a different algorithm URI on the wire.
+- AES-CBC is unauthenticated and vulnerable to padding-oracle attacks
+  (Jager/Somorovsky 2011). `Decryptor` refuses CBC by default and
+  returns `ErrCBCRequiresOptIn`. Pass `AllowUnauthenticatedCBC(true)`
+  only if you must accept legacy CBC and you have verified that
+  decryption errors are not exposed to remote attackers.
+- The inner parser used on the decrypted plaintext has DTD loading,
+  external entity resolution, and network access all disabled. Decrypted
+  bytes are attacker-controlled, so a relaxed parser would constitute an
+  XXE oracle.
+
 <!-- INCLUDE(examples/xmlenc1_encrypt_decrypt_example_test.go) -->
 ```go
 package examples_test
