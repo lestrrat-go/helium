@@ -127,35 +127,59 @@ func NewVerifier(ks KeySource) Verifier {
 	return Verifier{cfg: &verifierConfig{keySource: ks}}
 }
 
-// Verify verifies the first Signature element found in the document.
-func (v Verifier) Verify(ctx context.Context, doc *helium.Document) error {
-	sig := findSignatureElement(doc.DocumentElement())
-	if sig == nil {
-		return ErrSignatureNotFound
+// Verify verifies the Signature element in the document. The document must
+// contain exactly one ds:Signature element; if it contains more than one
+// the function returns ErrAmbiguousSignature and the caller must use
+// VerifyElement to disambiguate.
+//
+// On success the returned VerifyResult exposes the set of elements actually
+// covered by the signature so callers can confirm — by pointer identity —
+// that the element they intend to consume was signed. This is the primary
+// defense against XML Signature Wrapping (XSW) attacks at the application
+// layer.
+func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResult, error) {
+	sigs := findSignatureElements(doc.DocumentElement())
+	switch len(sigs) {
+	case 0:
+		return nil, ErrSignatureNotFound
+	case 1:
+		return verifySignature(ctx, v.cfg, doc, sigs[0])
+	default:
+		return nil, ErrAmbiguousSignature
 	}
+}
+
+// VerifyElement verifies a specific Signature element. Use this when the
+// document contains more than one Signature, or when the caller wants
+// explicit control over which Signature is targeted.
+func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *helium.Element) (*VerifyResult, error) {
 	return verifySignature(ctx, v.cfg, doc, sig)
 }
 
-// VerifyElement verifies a specific Signature element.
-func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *helium.Element) error {
-	return verifySignature(ctx, v.cfg, doc, sig)
-}
-
-// findSignatureElement searches for the first ds:Signature element in the tree.
-func findSignatureElement(n helium.Node) *helium.Element {
-	elem, ok := helium.AsNode[*helium.Element](n)
-	if !ok {
-		return nil
-	}
-	if localName(elem) == "Signature" && isDSigNS(elem) {
-		return elem
-	}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		if found := findSignatureElement(child); found != nil {
-			return found
+// findSignatureElements walks the tree and returns every ds:Signature
+// element. The walk is exhaustive so that multiple-Signature documents are
+// detected rather than silently resolved to the first match.
+func findSignatureElements(n helium.Node) []*helium.Element {
+	var out []*helium.Element
+	var walk func(helium.Node)
+	walk = func(node helium.Node) {
+		elem, ok := helium.AsNode[*helium.Element](node)
+		if !ok {
+			return
+		}
+		if localName(elem) == "Signature" && isDSigNS(elem) {
+			out = append(out, elem)
+			// Do not descend into a Signature — a Signature inside
+			// another Signature (e.g. inside KeyInfo) is not itself a
+			// signature to be verified at the document level.
+			return
+		}
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			walk(child)
 		}
 	}
-	return nil
+	walk(n)
+	return out
 }
 
 func isDSigNS(e *helium.Element) bool {

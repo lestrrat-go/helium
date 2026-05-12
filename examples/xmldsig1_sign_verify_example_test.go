@@ -56,7 +56,7 @@ func Example_xmldsig1_sign_verify() {
 	// Verify checks the first ds:Signature element in the document.
 	// It validates both the SignatureValue (cryptographic signature over
 	// the canonical SignedInfo) and each Reference digest.
-	err = xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+	_, err = xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
 		Verify(context.Background(), doc)
 	if err != nil {
 		fmt.Printf("verification failed: %s\n", err)

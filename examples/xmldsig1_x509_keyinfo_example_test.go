@@ -64,7 +64,7 @@ func Example_xmldsig1_x509_keyinfo() {
 	fmt.Println(strings.Contains(out, "ds:X509Certificate"))
 
 	// Verify using the trusted certificate.
-	err = xmldsig1.NewVerifier(xmldsig1.X509CertKeySource(cert)).
+	_, err = xmldsig1.NewVerifier(xmldsig1.X509CertKeySource(cert)).
 		Verify(context.Background(), doc)
 	if err != nil {
 		fmt.Printf("verify error: %s\n", err)
