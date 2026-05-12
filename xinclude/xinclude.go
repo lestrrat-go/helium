@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,6 +13,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpointer"
 )
@@ -32,6 +33,7 @@ type processorCfg struct {
 	noMarkers    bool
 	noBaseFixup  bool
 	resolver     Resolver
+	fsys         fs.FS
 	baseURI      string
 	errorHandler helium.ErrorHandler
 }
@@ -69,10 +71,29 @@ func (p Processor) NoBaseFixup() Processor {
 	return p
 }
 
-// Resolver sets a custom resource resolver.
+// Resolver sets a custom resource resolver. A non-nil Resolver takes
+// precedence over [Processor.FS]: the FS-backed default is only used
+// when no explicit Resolver is configured.
 func (p Processor) Resolver(r Resolver) Processor {
 	p = p.clone()
 	p.cfg.resolver = r
+	return p
+}
+
+// FS sets the [fs.FS] used by the default file-based resolver to load
+// XInclude targets (both parse="xml" and parse="text"). A nil value
+// restores the default, which opens any path supplied via [os.Open] —
+// preserving historical behavior. Callers handling untrusted documents
+// should supply a stricter FS (for example one produced by [os.DirFS]).
+//
+// If a Resolver is also configured via [Processor.Resolver], it takes
+// precedence and this FS is ignored.
+func (p Processor) FS(fsys fs.FS) Processor {
+	p = p.clone()
+	if fsys == nil {
+		fsys = iofs.Root{}
+	}
+	p.cfg.fsys = fsys
 	return p
 }
 
@@ -150,7 +171,11 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		txtCache:     make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
-		p.resolver = &fileResolver{}
+		fsys := cfg.fsys
+		if fsys == nil {
+			fsys = iofs.Root{}
+		}
+		p.resolver = &fileResolver{fsys: fsys}
 	}
 
 	if err := p.processNode(ctx, node); err != nil {
@@ -1164,8 +1189,12 @@ func (p *processor) computeFixupBases(inc *helium.Element, sourceURI string) (st
 	return relSource, effectiveBaseURI(inc, relTarget)
 }
 
-// fileResolver resolves URIs by reading from the filesystem.
-type fileResolver struct{}
+// fileResolver resolves URIs by reading from an [fs.FS]. The default FS
+// (an internal/iofs.Root{}) opens any OS path. Substitute a stricter
+// fs.FS through [Processor.FS] for untrusted input.
+type fileResolver struct {
+	fsys fs.FS
+}
 
 func (r *fileResolver) Resolve(href, base string) (io.ReadCloser, error) {
 	path := href
@@ -1179,5 +1208,5 @@ func (r *fileResolver) Resolve(href, base string) (io.ReadCloser, error) {
 			path = filepath.Join(filepath.Dir(basePath), href)
 		}
 	}
-	return os.Open(path) //nolint:gosec,wrapcheck // path is constructed from caller-supplied href/base; file access is the intended behavior
+	return r.fsys.Open(path) //nolint:wrapcheck // resolver errors propagate to caller verbatim
 }
