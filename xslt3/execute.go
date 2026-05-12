@@ -989,6 +989,14 @@ func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator 
 	if resolver := ec.collectionResolver(); resolver != nil {
 		eval = eval.CollectionResolver(resolver)
 	}
+	if ec.transformConfig != nil {
+		if r := ec.transformConfig.uriResolver; r != nil {
+			eval = eval.URIResolver(r)
+		}
+		if c := ec.transformConfig.httpClient; c != nil {
+			eval = eval.HTTPClient(c)
+		}
+	}
 	return eval
 }
 

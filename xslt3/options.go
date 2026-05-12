@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"io"
+	"net/http"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -46,7 +47,9 @@ type transformConfig struct {
 	initialFunctionParams []xpath3.Sequence // positional params for initial function
 	resultDocHandler      ResultDocumentHandler
 	collectionResolver    xpath3.CollectionResolver
-	onMultipleMatch       string // "use-last" or "fail" — overrides default mode's on-multiple-match
+	uriResolver           xpath3.URIResolver // resolver for fn:doc, fn:unparsed-text, fn:json-doc
+	httpClient            *http.Client       // explicit HTTP client for fn:doc/fn:unparsed-text — opt-in network
+	onMultipleMatch       string             // "use-last" or "fail" — overrides default mode's on-multiple-match
 	rawResultHandler      RawResultHandler
 	baseOutputURI         string // base output URI for current-output-uri()
 	annotationHandler     AnnotationHandler

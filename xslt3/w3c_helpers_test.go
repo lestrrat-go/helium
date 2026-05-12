@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	htmlparser "github.com/lestrrat-go/helium/html"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/unparsedtext"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/xslt3"
@@ -138,6 +140,12 @@ var (
 	// result documents, keyed by "testName\x00href". Populated by the test
 	// runner and read by w3cAssertResultDocument for proper serialization.
 	w3cResultDocOutputDefs sync.Map // "testName\x00href" → *xslt3.OutputDef
+
+	// w3cTestFileResolver is the explicit opt-in file URI resolver used by
+	// the W3C XSLT test harness. The base directory is the filesystem root
+	// so absolute file:// URIs from the catalog resolve. Production callers
+	// must NOT do this; supply a tightly scoped resolver instead.
+	w3cTestFileResolver = &unparsedtext.FileURIResolver{BaseDir: string(filepath.Separator)}
 )
 
 // w3cPackageDep describes a secondary package dependency for a W3C test.
@@ -1239,6 +1247,13 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		resolver := w3cBuildCollectionResolver(t, collections)
 		inv = inv.CollectionResolver(resolver)
 	}
+
+	// The W3C XSLT 3.0 test suite fixtures live on the local filesystem
+	// and are referenced via absolute file:// URIs. A handful of tests
+	// also fetch real http(s) URLs from www.w3.org. The harness opts in
+	// to both — production callers must NOT replicate this; supply a
+	// tightly scoped URIResolver / scoped HTTPClient instead.
+	inv = inv.URIResolver(w3cTestFileResolver).HTTPClient(http.DefaultClient)
 
 	// Set base output URI for current-output-uri(). Use explicit value if
 	// provided, otherwise auto-compute for tests in the known list.
