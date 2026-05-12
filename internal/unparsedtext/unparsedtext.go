@@ -543,7 +543,11 @@ func (r *httpResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	if parsed.Scheme != lexicon.SchemeHTTP && parsed.Scheme != lexicon.SchemeHTTPS {
 		return nil, fmt.Errorf("unsupported URI scheme for HTTP resolver: %s", parsed.Scheme)
 	}
-	req, err := http.NewRequest(http.MethodGet, uri, nil) //nolint:noctx // request-scoped contexts are passed by the ReadURI/ReadURIWithEncoding caller via cancellation of the underlying transport; this resolver has no ctx
+	// The URIResolver interface intentionally has no context parameter, so
+	// callers cannot cancel an in-flight request via ctx. Cancellation and
+	// deadlines must be enforced through the supplied http.Client's Timeout
+	// and Transport settings.
+	req, err := http.NewRequest(http.MethodGet, uri, nil) //nolint:noctx // URIResolver has no ctx; rely on client Timeout/Transport for cancellation
 	if err != nil {
 		return nil, err
 	}
