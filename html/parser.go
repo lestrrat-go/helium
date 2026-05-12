@@ -288,7 +288,7 @@ func (p *parser) currentName() string {
 
 // pushName pushes an element name onto the stack and tracks insert mode.
 func (p *parser) pushName(name string) {
-	if name == "html" {
+	if name == elemHTML {
 		p.sawRoot = true
 	}
 	if p.mode < insertInHead && name == "head" { //nolint:goconst
@@ -320,7 +320,7 @@ func (p *parser) hasOnStack(name string) bool {
 // HTMLparser.c misplaced-element detection.
 func (p *parser) isMisplacedStructural(name string) bool {
 	switch name {
-	case "html":
+	case elemHTML:
 		return len(p.nameStack) > 0
 	case "head":
 		return len(p.nameStack) != 1
@@ -392,14 +392,14 @@ func (p *parser) htmlCheckImplied(newTag string) {
 	if p.cfg.noImplied {
 		return
 	}
-	if newTag == "html" {
+	if newTag == elemHTML {
 		return
 	}
 
 	// Ensure <html> exists
 	if len(p.nameStack) == 0 {
-		p.pushName("html")
-		_ = p.sax.StartElement("html", nil)
+		p.pushName(elemHTML)
+		_ = p.sax.StartElement(elemHTML, nil)
 	}
 
 	if newTag == "body" || newTag == "head" {
@@ -417,7 +417,7 @@ func (p *parser) htmlCheckImplied(newTag string) {
 	}
 
 	// Body elements
-	if newTag != "noframes" && newTag != "frame" && newTag != "frameset" {
+	if newTag != "noframes" && newTag != "frame" && newTag != elemFrameset {
 		if p.mode >= insertInBody {
 			return
 		}
@@ -570,7 +570,7 @@ func (p *parser) parseEndTag() {
 	}
 
 	// Skip end tags for discarded misplaced structural elements
-	if (name == "html" || name == "head" || name == "body") && p.depth > 0 {
+	if (name == elemHTML || name == "head" || name == "body") && p.depth > 0 {
 		p.depth--
 		return
 	}

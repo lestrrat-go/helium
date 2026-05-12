@@ -29,6 +29,8 @@ type htmlElemDesc struct {
 
 // html40ElementTable is the full HTML 4.0 element table from libxml2.
 // name, startTag, endTag, saveEnd, empty, depr, dtd, inline, dataMode
+//
+//nolint:goconst // element names are the data; extracting constants adds no value
 var html40ElementTable = []htmlElemDesc{
 	{"a", 0, 0, 0, false, false, 0, 1, dataNormal},
 	{"abbr", 0, 0, 0, false, false, 0, 1, dataNormal},
@@ -163,6 +165,7 @@ func isHeadElement(name string) bool {
 var htmlStartClose map[string]map[string]bool
 
 func init() {
+	//nolint:goconst // tag names are the data; extracting constants adds no value
 	entries := [][2]string{
 		{"a", "a"},
 		{"a", "fieldset"},

@@ -7,6 +7,8 @@ import "unicode/utf8"
 // DO NOT EDIT.
 
 // 2125 named character references.
+//
+//nolint:goconst // entity names are the data; extracting constants adds no value
 var htmlEntityTable = map[string]string{
 	"AElig": "\u00C6",
 	"AMP": "&",
