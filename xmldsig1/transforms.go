@@ -2,6 +2,7 @@ package xmldsig1
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/c14n"
@@ -178,7 +179,7 @@ func findElementsByID(doc *helium.Document, id string) []*helium.Element {
 		for _, attr := range elem.Attributes() {
 			name := attr.Name()
 			if (name == "Id" || name == "ID") && attr.Value() == id {
-				if !containsElem(matches, elem) {
+				if !slices.Contains(matches, elem) {
 					matches = append(matches, elem)
 				}
 				break
@@ -190,13 +191,4 @@ func findElementsByID(doc *helium.Document, id string) []*helium.Element {
 	}
 	walk(doc.DocumentElement())
 	return matches
-}
-
-func containsElem(s []*helium.Element, e *helium.Element) bool {
-	for _, x := range s {
-		if x == e {
-			return true
-		}
-	}
-	return false
 }

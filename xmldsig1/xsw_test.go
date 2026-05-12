@@ -25,8 +25,8 @@ func findByLocalNameAndID(doc *helium.Document, localName, id string) *helium.El
 		}
 		name := elem.Name()
 		l := name
-		if i := strings.IndexByte(name, ':'); i >= 0 {
-			l = name[i+1:]
+		if _, after, ok := strings.Cut(name, ":"); ok {
+			l = after
 		}
 		if l == localName {
 			for _, a := range elem.Attributes() {
