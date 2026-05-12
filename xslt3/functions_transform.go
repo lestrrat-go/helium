@@ -549,6 +549,11 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	}
 
 	// Build a fresh transform config for the inner fn:transform call.
+	// Inherit the outer Invocation's URIResolver and HTTPClient so that
+	// fn:doc / fn:unparsed-text inside the inner transform see the same
+	// opt-in resource access as the caller. Without this, secure-by-default
+	// retrieval would refuse network/filesystem access even when the outer
+	// Invocation enabled it.
 	secondaryResults := make(map[string]*helium.Document)
 	secondaryOutputDefs := make(map[string]*OutputDef)
 	fnTransformCfg := &transformConfig{
@@ -557,6 +562,10 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		initialFunction:  initialFunction,
 		baseOutputURI:    baseOutputURI,
 		resultDocHandler: resultDocCollector{results: secondaryResults, outputDefs: secondaryOutputDefs},
+	}
+	if ec.transformConfig != nil {
+		fnTransformCfg.uriResolver = ec.transformConfig.uriResolver
+		fnTransformCfg.httpClient = ec.transformConfig.httpClient
 	}
 
 	// Apply map-valued options from the fn:transform options map.
