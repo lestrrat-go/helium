@@ -51,19 +51,21 @@ func (e *resolveError) Error() string {
 	return "not found: " + e.href
 }
 
-func TestXIncludeFS(t *testing.T) {
+func TestXIncludeNewFSResolver(t *testing.T) {
 	t.Parallel()
 
-	t.Run("default resolver reads from injected FS", func(t *testing.T) {
+	t.Run("reads through injected FS", func(t *testing.T) {
 		t.Parallel()
 		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
-			<xi:include href="included.xml"/>
+			<xi:include href="fs-target.xml"/>
 		</root>`)
 
 		fsys := fstest.MapFS{
-			"included.xml": &fstest.MapFile{Data: []byte(`<chapter>FromFS</chapter>`)},
+			"fs-target.xml": &fstest.MapFile{Data: []byte(`<loaded>FromFS</loaded>`)},
 		}
-		count, err := xinclude.NewProcessor().FS(fsys).NoXIncludeMarkers().NoBaseFixup().
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(fsys)).
+			NoXIncludeMarkers().NoBaseFixup().
 			Process(t.Context(), doc)
 		require.NoError(t, err)
 		require.Equal(t, 1, count)
@@ -72,49 +74,17 @@ func TestXIncludeFS(t *testing.T) {
 		require.NotNil(t, root)
 		var found bool
 		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
-			if c.Type() == helium.ElementNode && c.(*helium.Element).LocalName() == "chapter" {
+			if c.Type() == helium.ElementNode && c.(*helium.Element).LocalName() == "loaded" {
 				found = true
 				require.Equal(t, "FromFS", string(c.Content()))
 			}
 		}
-		require.True(t, found, "<chapter> from FS not found")
+		require.True(t, found, "loaded element from FS not found")
 	})
 
-	t.Run("Resolver takes precedence over FS", func(t *testing.T) {
+	t.Run("nil FS yields a permissive default", func(t *testing.T) {
 		t.Parallel()
-		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
-			<xi:include href="included.xml"/>
-		</root>`)
-
-		// FS would return "<from-fs/>" but Resolver returns "<from-resolver/>";
-		// Resolver wins.
-		fsys := fstest.MapFS{
-			"included.xml": &fstest.MapFile{Data: []byte(`<from-fs/>`)},
-		}
-		res := &stringResolver{files: map[string]string{"included.xml": `<from-resolver/>`}}
-		count, err := xinclude.NewProcessor().FS(fsys).Resolver(res).NoXIncludeMarkers().NoBaseFixup().
-			Process(t.Context(), doc)
-		require.NoError(t, err)
-		require.Equal(t, 1, count)
-
-		root := docElement(doc)
-		require.NotNil(t, root)
-		var localName string
-		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
-			if c.Type() == helium.ElementNode {
-				localName = c.(*helium.Element).LocalName()
-				break
-			}
-		}
-		require.Equal(t, "from-resolver", localName)
-	})
-
-	t.Run("nil FS restores default", func(t *testing.T) {
-		t.Parallel()
-		var p xinclude.Processor
-		require.NotPanics(t, func() {
-			_ = p.FS(fstest.MapFS{}).FS(nil)
-		})
+		require.NotNil(t, xinclude.NewFSResolver(nil))
 	})
 }
 
