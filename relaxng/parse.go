@@ -3,12 +3,13 @@ package relaxng
 import (
 	"context"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
@@ -21,6 +22,7 @@ const (
 type compiler struct {
 	grammar      *Grammar
 	baseDir      string
+	fsys         fs.FS // filesystem for loading include/externalRef targets
 	filename     string
 	errorHandler helium.ErrorHandler
 	errorCount   int
@@ -56,11 +58,16 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		label = "(string)"
 	}
 
+	fsys := fs.FS(iofs.Root{})
+	if cfg.fsys != nil {
+		fsys = cfg.fsys
+	}
 	c := &compiler{
 		grammar: &Grammar{
 			defines: make(map[string]*pattern),
 		},
 		baseDir:      baseDir,
+		fsys:         fsys,
 		filename:     label,
 		errorHandler: eh,
 		includeLimit: 1000,
@@ -376,7 +383,7 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 	defer func() { c.includeStack = c.includeStack[:len(c.includeStack)-1] }()
 
 	// Read and parse the included file
-	data, err := os.ReadFile(path)
+	data, err := fs.ReadFile(c.fsys, path)
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
@@ -783,7 +790,7 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 	c.includeStack = append(c.includeStack, path)
 	defer func() { c.includeStack = c.includeStack[:len(c.includeStack)-1] }()
 
-	data, err := os.ReadFile(path)
+	data, err := fs.ReadFile(c.fsys, path)
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
