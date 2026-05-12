@@ -146,6 +146,11 @@ var (
 	// so absolute file:// URIs from the catalog resolve. Production callers
 	// must NOT do this; supply a tightly scoped resolver instead.
 	w3cTestFileResolver = &unparsedtext.FileURIResolver{BaseDir: string(filepath.Separator)}
+
+	// w3cTestHTTPClient is used for the handful of W3C tests that fetch
+	// real http(s) URLs (e.g. www.w3.org). A bounded Timeout keeps the
+	// suite from hanging when the remote host is slow or unreachable.
+	w3cTestHTTPClient = &http.Client{Timeout: 30 * time.Second}
 )
 
 // w3cPackageDep describes a secondary package dependency for a W3C test.
@@ -1253,7 +1258,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	// also fetch real http(s) URLs from www.w3.org. The harness opts in
 	// to both — production callers must NOT replicate this; supply a
 	// tightly scoped URIResolver / scoped HTTPClient instead.
-	inv = inv.URIResolver(w3cTestFileResolver).HTTPClient(http.DefaultClient)
+	inv = inv.URIResolver(w3cTestFileResolver).HTTPClient(w3cTestHTTPClient)
 
 	// Set base output URI for current-output-uri(). Use explicit value if
 	// provided, otherwise auto-compute for tests in the known list.
