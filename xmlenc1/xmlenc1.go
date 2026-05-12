@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -254,9 +255,10 @@ func removeChildren(elem *helium.Element) {
 
 // decryptConfig holds the configuration for a Decryptor.
 type decryptConfig struct {
-	privateKey       *rsa.PrivateKey
-	keyEncryptionKey []byte
-	sessionKey       []byte
+	privateKey              *rsa.PrivateKey
+	keyEncryptionKey        []byte
+	sessionKey              []byte
+	allowUnauthenticatedCBC bool
 }
 
 // Decryptor decrypts XML EncryptedData elements. It uses clone-on-write
@@ -299,6 +301,23 @@ func (d Decryptor) SessionKey(key []byte) Decryptor {
 	return d
 }
 
+// AllowUnauthenticatedCBC opts the Decryptor in to decrypting AES-CBC
+// ciphertexts. AES-CBC under XML Encryption 1.0 is unauthenticated and
+// vulnerable to padding-oracle attacks (Jager/Somorovsky 2011); XML
+// Encryption 1.1 deprecated CBC in favor of AES-GCM.
+//
+// By default the Decryptor refuses CBC and returns
+// [ErrCBCRequiresOptIn]. Set this to true only if you must accept
+// legacy CBC ciphertexts AND you have verified that decryption errors
+// are not exposed to remote attackers (e.g. by surfacing the same
+// generic error for every failure path and never timing-sidechannel
+// distinguishing them).
+func (d Decryptor) AllowUnauthenticatedCBC(v bool) Decryptor {
+	d = d.clone()
+	d.cfg.allowUnauthenticatedCBC = v
+	return d
+}
+
 // Decrypt decrypts an EncryptedData element and returns the decrypted nodes.
 func (d Decryptor) Decrypt(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
 	return decryptElement(ctx, d.cfg, elem)
@@ -320,35 +339,69 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	if ed.EncryptionMethod == nil {
 		return nil, fmt.Errorf("%w: missing EncryptionMethod", ErrMalformedEncrypted)
 	}
-	plaintext, err := blockDecrypt(ed.EncryptionMethod.Algorithm, sessionKey, ed.CipherValue)
+
+	alg := ed.EncryptionMethod.Algorithm
+	switch alg {
+	case AES128CBC, AES256CBC:
+		if !cfg.allowUnauthenticatedCBC {
+			return nil, ErrCBCRequiresOptIn
+		}
+	}
+
+	plaintext, err := blockDecrypt(alg, sessionKey, ed.CipherValue)
 	if err != nil {
+		// Squash all decryption errors to the same sentinel — and
+		// crucially, the same string — so callers cannot distinguish
+		// "bad padding" from "bad cipher" from "downstream parse"
+		// when CBC is in use. GCM authenticates so this collapse is
+		// safe there too.
+		if errors.Is(err, ErrDecryptionFailed) || errors.Is(err, ErrInvalidPadding) {
+			return nil, ErrDecryptionFailed
+		}
 		return nil, err
 	}
 
-	// Parse decrypted XML.
+	// Parse decrypted XML through a hardened parser: no external DTD,
+	// no XXE entity loading, no network. The plaintext is attacker-
+	// controlled (it is the output of the attacker's ciphertext under
+	// the recipient's key) and must not be allowed to fetch external
+	// resources.
+	parser := newHardenedInnerParser()
 	isContent := ed.Type == TypeContent
 
 	var nodes []helium.Node
 	if isContent {
 		// Content may be multiple children; wrap in a temporary root.
 		wrapped := "<_wrap>" + string(plaintext) + "</_wrap>"
-		tmpDoc, err := helium.NewParser().Parse(ctx, []byte(wrapped))
+		tmpDoc, err := parser.Parse(ctx, []byte(wrapped))
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
+			return nil, ErrDecryptionFailed
 		}
 		root := tmpDoc.DocumentElement()
 		for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 			nodes = append(nodes, child)
 		}
 	} else {
-		tmpDoc, err := helium.NewParser().Parse(ctx, plaintext)
+		tmpDoc, err := parser.Parse(ctx, plaintext)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
+			return nil, ErrDecryptionFailed
 		}
 		nodes = append(nodes, tmpDoc.DocumentElement())
 	}
 
 	return nodes, nil
+}
+
+// newHardenedInnerParser returns the helium parser used to parse the
+// decrypted plaintext of an EncryptedData element. Decrypted bytes are
+// attacker-controlled (an attacker who can submit ciphertexts to a
+// decryption oracle can choose the recovered plaintext), so DTD loading,
+// external entity resolution, and network access are all disabled.
+func newHardenedInnerParser() helium.Parser {
+	return helium.NewParser().
+		BlockXXE(true).
+		LoadExternalDTD(false).
+		AllowNetwork(false)
 }
 
 func resolveSessionKey(cfg *decryptConfig, ed *EncryptedData) ([]byte, error) {

@@ -26,6 +26,18 @@ var (
 
 	// ErrMissingConfig is returned when required encryption config is missing.
 	ErrMissingConfig = errors.New("xmlenc1: missing required configuration")
+
+	// ErrCBCRequiresOptIn is returned when a Decryptor is asked to
+	// decrypt an AES-CBC ciphertext but the caller has not opted in
+	// to unauthenticated CBC via Decryptor.AllowUnauthenticatedCBC(true).
+	//
+	// AES-CBC under XML Encryption 1.0 is unauthenticated and is
+	// vulnerable to padding-oracle attacks (Jager/Somorovsky 2011).
+	// XML Encryption 1.1 deprecated CBC in favor of AES-GCM. Callers
+	// that must interoperate with legacy CBC ciphertexts can opt in
+	// after evaluating the attack surface (e.g. ensuring decryption
+	// errors are not exposed to remote attackers).
+	ErrCBCRequiresOptIn = errors.New("xmlenc1: AES-CBC decryption requires AllowUnauthenticatedCBC(true)")
 )
 
 // UnsupportedAlgorithmError is returned for unrecognized algorithm URIs.
