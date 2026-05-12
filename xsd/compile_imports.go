@@ -3,8 +3,8 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
 
 	helium "github.com/lestrrat-go/helium"
@@ -80,7 +80,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		path = filepath.Join(c.baseDir, location)
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path is constructed from schema baseDir + user-supplied location
+	data, err := fs.ReadFile(c.fsys, path)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
@@ -161,7 +161,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		path = filepath.Join(c.baseDir, location)
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path is constructed from schema baseDir + user-supplied location
+	data, err := fs.ReadFile(c.fsys, path)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
@@ -369,7 +369,7 @@ func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
 		path = filepath.Join(c.baseDir, location)
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path is constructed from schema baseDir + import location
+	data, err := fs.ReadFile(c.fsys, path)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}
@@ -401,6 +401,7 @@ func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
 			substGroups: make(map[QName][]*ElementDecl),
 		},
 		baseDir:           filepath.Dir(path),
+		fsys:              c.fsys,
 		typeRefs:          make(map[*TypeDef]QName),
 		elemRefs:          make(map[*ElementDecl]QName),
 		elemRefSources:    make(map[*ElementDecl]elemRefSource),
