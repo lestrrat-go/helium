@@ -38,7 +38,7 @@ func (t *toksStdlib) Token() (Token, error) {
 }
 
 func TestDecodeEOFStdlib(t *testing.T) {
-	start := StartElement{Name: Name{Local: "test"}}
+	start := StartElement{Name: Name{Local: "test"}} //nolint:goconst
 	tests := []struct {
 		name   string
 		tokens []Token
@@ -146,14 +146,14 @@ var testEntityStdlib = map[string]string{"何": "What", "is-it": "is it?"}
 
 var rawTokensStdlib = []Token{
 	CharData("\n"),
-	ProcInst{Target: "xml", Inst: []byte(`version="1.0" encoding="UTF-8"`)},
+	ProcInst{Target: "xml", Inst: []byte(`version="1.0" encoding="UTF-8"`)}, //nolint:goconst
 	CharData("\n"),
 	Directive(`DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"`),
 	CharData("\n"),
-	StartElement{Name: Name{Space: "", Local: "body"}, Attr: []Attr{{Name: Name{Space: "xmlns", Local: "foo"}, Value: "ns1"}, {Name: Name{Space: "", Local: "xmlns"}, Value: "ns2"}, {Name: Name{Space: "xmlns", Local: "tag"}, Value: "ns3"}}},
+	StartElement{Name: Name{Space: "", Local: "body"}, Attr: []Attr{{Name: Name{Space: "xmlns", Local: "foo"}, Value: "ns1"}, {Name: Name{Space: "", Local: "xmlns"}, Value: "ns2"}, {Name: Name{Space: "xmlns", Local: "tag"}, Value: "ns3"}}}, //nolint:goconst
 	CharData("\n  "),
-	StartElement{Name: Name{Space: "", Local: "hello"}, Attr: []Attr{{Name: Name{Space: "", Local: "lang"}, Value: "en"}}},
+	StartElement{Name: Name{Space: "", Local: "hello"}, Attr: []Attr{{Name: Name{Space: "", Local: "lang"}, Value: "en"}}}, //nolint:goconst
 	CharData("World <>'\" 白鵬翔"),
 	EndElement{Name: Name{Space: "", Local: "hello"}},
 	CharData("\n  "),
@@ -164,7 +164,7 @@ var rawTokensStdlib = []Token{
 	StartElement{Name: Name{Space: "", Local: "goodbye"}, Attr: []Attr{}},
 	EndElement{Name: Name{Space: "", Local: "goodbye"}},
 	CharData("\n  "),
-	StartElement{Name: Name{Space: "", Local: "outer"}, Attr: []Attr{{Name: Name{Space: "foo", Local: "attr"}, Value: "value"}, {Name: Name{Space: "xmlns", Local: "tag"}, Value: "ns4"}}},
+	StartElement{Name: Name{Space: "", Local: "outer"}, Attr: []Attr{{Name: Name{Space: "foo", Local: "attr"}, Value: "value"}, {Name: Name{Space: "xmlns", Local: "tag"}, Value: "ns4"}}}, //nolint:goconst
 	CharData("\n    "),
 	StartElement{Name: Name{Space: "", Local: "inner"}, Attr: []Attr{}},
 	EndElement{Name: Name{Space: "", Local: "inner"}},
@@ -970,7 +970,7 @@ func encodeXMLNS1Stdlib() ([]byte, error) {
 		Body    string
 	}
 
-	s := &T{Ns: "http://example.com/ns", Body: "hello world"}
+	s := &T{Ns: "http://example.com/ns", Body: "hello world"} //nolint:goconst
 	return Marshal(s)
 }
 

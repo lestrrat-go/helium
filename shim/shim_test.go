@@ -96,7 +96,7 @@ func TestMarshalMarshalIndentUnmarshalBasic(t *testing.T) {
 		Title   string    `xml:"title"`
 	}
 
-	in := payload{ID: "b1", Title: "hello"}
+	in := payload{ID: "b1", Title: "hello"} //nolint:goconst
 
 	stdOut, stdErr := stdxml.Marshal(in)
 	shimOut, shimErr := shim.Marshal(in)
@@ -1178,7 +1178,7 @@ func TestEncoderEncodeAndEncodeElementMatchStdlib(t *testing.T) {
 	var stdBuf bytes.Buffer
 	stdEnc := stdxml.NewEncoder(&stdBuf)
 	require.NoError(t, stdEnc.Encode(val))
-	require.NoError(t, stdEnc.EncodeElement(item{Value: "world"}, stdxml.StartElement{Name: stdxml.Name{Local: "x"}}))
+	require.NoError(t, stdEnc.EncodeElement(item{Value: "world"}, stdxml.StartElement{Name: stdxml.Name{Local: "x"}})) //nolint:goconst
 	require.NoError(t, stdEnc.Flush())
 
 	var shimBuf bytes.Buffer

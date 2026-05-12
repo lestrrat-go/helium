@@ -347,7 +347,7 @@ type MyMarshalerAttrTest struct {
 var _ MarshalerAttr = (*MyMarshalerAttrTest)(nil)
 
 func (m *MyMarshalerAttrTest) MarshalXMLAttr(name Name) (Attr, error) {
-	return Attr{Name: name, Value: "hello world"}, nil
+	return Attr{Name: name, Value: "hello world"}, nil //nolint:goconst
 }
 
 func (m *MyMarshalerAttrTest) UnmarshalXMLAttr(attr Attr) error {
@@ -565,7 +565,7 @@ var marshalTestsStdlib = []struct {
 	// Test value types
 	{Value: &Plain{true}, ExpectXML: `<Plain><V>true</V></Plain>`},
 	{Value: &Plain{false}, ExpectXML: `<Plain><V>false</V></Plain>`},
-	{Value: &Plain{int(42)}, ExpectXML: `<Plain><V>42</V></Plain>`},
+	{Value: &Plain{int(42)}, ExpectXML: `<Plain><V>42</V></Plain>`}, //nolint:goconst
 	{Value: &Plain{int8(42)}, ExpectXML: `<Plain><V>42</V></Plain>`},
 	{Value: &Plain{int16(42)}, ExpectXML: `<Plain><V>42</V></Plain>`},
 	{Value: &Plain{int32(42)}, ExpectXML: `<Plain><V>42</V></Plain>`},
@@ -962,7 +962,7 @@ var marshalTestsStdlib = []struct {
 
 	// xml.Name works in a plain field as well.
 	{
-		Value:     &NameInField{Name{Space: "ns", Local: "foo"}},
+		Value:     &NameInField{Name{Space: "ns", Local: "foo"}}, //nolint:goconst
 		ExpectXML: `<NameInField><foo xmlns="ns"></foo></NameInField>`,
 	},
 	{
@@ -986,7 +986,7 @@ var marshalTestsStdlib = []struct {
 			Float: 23.5,
 			Uint8: 255,
 			Bool:  true,
-			Str:   "str",
+			Str:   "str", //nolint:goconst
 			Bytes: []byte("byt"),
 		},
 		ExpectXML: `<AttrTest Int="8" int="9" Float="23.5" Uint8="255"` +
@@ -1268,7 +1268,7 @@ var marshalTestsStdlib = []struct {
 	},
 	{
 		ExpectXML: `<test xmlns="outerns" int="10"></test>`,
-		Value:     &OuterNamedStruct{XMLName: Name{Space: "outerns", Local: "test"}, IntAttr: 10},
+		Value:     &OuterNamedStruct{XMLName: Name{Space: "outerns", Local: "test"}, IntAttr: 10}, //nolint:goconst
 	},
 	{
 		ExpectXML: `<test xmlns="outerns" int="10"></test>`,
@@ -1361,7 +1361,7 @@ var marshalTestsStdlib = []struct {
 	{
 		ExpectXML:      `<IfaceChardata><T1></T1>hi<T2></T2></IfaceChardata>`,
 		Value:          &IfaceChardata{Chardata: string("hi")},
-		UnmarshalError: "cannot unmarshal into interface {}",
+		UnmarshalError: "cannot unmarshal into interface {}", //nolint:goconst
 	},
 	{
 		ExpectXML:      `<IfaceChardata><T1></T1><![CDATA[hi]]><T2></T2></IfaceChardata>`,
@@ -1992,7 +1992,7 @@ var encodeTokenTestsStdlib = []struct {
 }{{
 	desc: "start element with name space",
 	toks: []Token{
-		StartElement{Name: Name{Space: "space", Local: "local"}, Attr: nil},
+		StartElement{Name: Name{Space: "space", Local: "local"}, Attr: nil}, //nolint:goconst
 	},
 	want: `<local xmlns="space">`,
 }, {
@@ -2070,7 +2070,7 @@ var encodeTokenTestsStdlib = []struct {
 }, {
 	desc: "end tag without start tag",
 	toks: []Token{
-		EndElement{Name: Name{Space: "foo", Local: "bar"}},
+		EndElement{Name: Name{Space: "foo", Local: "bar"}}, //nolint:goconst
 	},
 	err: "xml: end tag </bar> without start tag",
 }, {
@@ -2093,8 +2093,8 @@ var encodeTokenTestsStdlib = []struct {
 	desc: "start element with explicit namespace",
 	toks: []Token{
 		StartElement{Name: Name{Space: "space", Local: "local"}, Attr: []Attr{
-			{Name: Name{Space: "xmlns", Local: "x"}, Value: "space"},
-			{Name: Name{Space: "space", Local: "foo"}, Value: "value"},
+			{Name: Name{Space: "xmlns", Local: "x"}, Value: "space"},   //nolint:goconst
+			{Name: Name{Space: "space", Local: "foo"}, Value: "value"}, //nolint:goconst
 		}},
 	},
 	want: `<local xmlns="space" xmlns:_xmlns="xmlns" _xmlns:x="space" xmlns:space="space" space:foo="value">`,
@@ -2193,7 +2193,7 @@ var encodeTokenTestsStdlib = []struct {
 			{Name: Name{Space: "", Local: "xmlns"}, Value: "space"},
 		}},
 		StartElement{Name: Name{Space: "space", Local: "foo"}, Attr: []Attr{
-			{Name: Name{Space: "", Local: "attr"}, Value: "value"},
+			{Name: Name{Space: "", Local: "attr"}, Value: "value"}, //nolint:goconst
 		}},
 	},
 	want: `<foo xmlns="space" xmlns="space"><foo xmlns="space" attr="value">`,
@@ -2209,7 +2209,7 @@ var encodeTokenTestsStdlib = []struct {
 	desc: "xmlns with explicit name space #1",
 	toks: []Token{
 		StartElement{Name: Name{Space: "space", Local: "foo"}, Attr: []Attr{
-			{Name: Name{Space: "xml", Local: "xmlns"}, Value: "space"},
+			{Name: Name{Space: "xml", Local: "xmlns"}, Value: "space"}, //nolint:goconst
 		}},
 	},
 	want: `<foo xmlns="space" xmlns:_xml="xml" _xml:xmlns="space">`,
@@ -2282,7 +2282,7 @@ var encodeTokenTestsStdlib = []struct {
 		StartElement{Name: Name{Space: "space", Local: "foo"}, Attr: []Attr{
 			{Name: Name{Space: "", Local: "xmlns"}, Value: "space"},
 			{Name: Name{Space: "xmlns", Local: "bar"}, Value: "space"},
-			{Name: Name{Space: "space", Local: "baz"}, Value: "foo"},
+			{Name: Name{Space: "space", Local: "baz"}, Value: "foo"}, //nolint:goconst
 		}},
 		StartElement{Name: Name{Space: "space", Local: "baz"}, Attr: nil},
 		EndElement{Name: Name{Space: "space", Local: "baz"}},

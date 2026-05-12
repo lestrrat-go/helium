@@ -325,7 +325,7 @@ type BadPathEmbeddedB struct {
 var badPathTestsStdlib = []struct {
 	v, e any
 }{
-	{&BadPathTestA{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestA](), Field1: "First", Tag1: "items>item1", Field2: "Second", Tag2: "items"}},
+	{&BadPathTestA{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestA](), Field1: "First", Tag1: "items>item1", Field2: "Second", Tag2: "items"}}, //nolint:goconst
 	{&BadPathTestB{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestB](), Field1: "First", Tag1: "items>item1", Field2: "Second", Tag2: "items>item1>value"}},
 	{&BadPathTestC{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestC](), Field1: "First", Tag1: "", Field2: "Second", Tag2: "First"}},
 	{&BadPathTestD{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestD](), Field1: "First", Tag1: "", Field2: "Second", Tag2: "First"}},
@@ -419,7 +419,7 @@ var tablesStdlib = []struct {
 			`<table xmlns="http://www.w3.org/TR/html4/">hello</table>` +
 			`<table xmlns="http://www.w3schools.com/furniture">world</table>` +
 			`</Tables>`,
-		tab: Tables{"hello", "world"},
+		tab: Tables{"hello", "world"}, //nolint:goconst
 	},
 	{
 		xml: `<Tables>` +
@@ -683,7 +683,7 @@ func TestUnmarshalerStdlib(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if m.Data == nil || m.Attr == nil || m.Data.body != "hello world" || m.Attr.attr != "attr1" || m.Data2.body != "howdy world" || m.Attr2.attr != "attr2" {
+	if m.Data == nil || m.Attr == nil || m.Data.body != "hello world" || m.Attr.attr != "attr1" || m.Data2.body != "howdy world" || m.Attr2.attr != "attr2" { //nolint:goconst
 		t.Errorf("m=%#+v\n", m)
 	}
 }
