@@ -86,6 +86,11 @@ type CollectionResolver interface {
 }
 ```
 
+**Resource loading is opt-in.** Without an explicit `URIResolver` or `HTTPClient`, `fn:doc`, `fn:doc-available`, `fn:json-doc`, and the `fn:unparsed-text*` family error with `FODC0002` / `FOUT1170` for every URI — there is no implicit `http.DefaultClient` and no implicit `os.ReadFile`. Built-in helpers in `internal/unparsedtext`:
+- `FileURIResolver{BaseDir}` — file resolver confined to `BaseDir` (refuses `..` traversal and absolute paths outside it)
+- `NewFileResolver(fs.FS)` — file resolver backed by `io/fs`
+- `NewHTTPResolver(*http.Client)` — http(s) resolver; caller owns transport, timeouts, redirect policy
+
 User functions registered via `WithFunctionsNS` CANNOT override built-ins in `fn:` namespace.
 
 `Compile()` uses a direct compile fast path where possible, otherwise lowers parsed AST to VM program using an ownership-taking lowering path that can reuse parsed slices. `CompileExpr()` uses a non-mutating lowering path, with raw AST fallback for unsupported custom Expr implementations.

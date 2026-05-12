@@ -79,7 +79,9 @@ Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-
 `parse-json`, `json-doc`, `json-to-xml`, `xml-to-json`, `serialize`
 
 `json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
-`WithBaseURI` → relative resolution, `WithURIResolver` → first fetch hook, `WithHTTPClient` → HTTP fallback.
+`WithBaseURI` → relative resolution, `WithURIResolver` → resolver for all schemes, `WithHTTPClient` → opt-in HTTP fetch.
+
+**Secure by default.** With no `URIResolver` and no `HTTPClient`, `fn:doc`, `fn:doc-available`, `fn:json-doc`, `fn:unparsed-text`, `fn:unparsed-text-available`, and `fn:unparsed-text-lines` cannot reach the filesystem or network — they error with `FODC0002` / `FOUT1170`. To allow access, supply a `URIResolver` (e.g. `unparsedtext.FileURIResolver{BaseDir:...}`, `unparsedtext.NewFileResolver(fs.FS)`, or `unparsedtext.NewHTTPResolver(*http.Client)`), or set an explicit `HTTPClient` whose transport/timeouts/redirect policy you control. `fn:doc` parses retrieved bytes with `BlockXXE(true).AllowNetwork(false)` so the returned document cannot pull additional externals.
 
 ### `functions_qname.go`
 `QName`, `resolve-QName`, `prefix-from-QName`, `local-name-from-QName`, `namespace-uri-from-QName`, `namespace-uri-for-prefix`, `in-scope-prefixes`

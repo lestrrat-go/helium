@@ -93,7 +93,7 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
 - **Compiler.Compile(ctx, *Document) → (*Stylesheet, error)** / **Compiler.MustCompile(ctx, *Document) → *Stylesheet** — terminal compile methods
 - **Transform(ctx, *Document, *Stylesheet) → (*Document, error)** / **TransformToWriter(ctx, *Document, *Stylesheet, io.Writer) → error** / **TransformString(ctx, *Document, *Stylesheet) → (string, error)** — convenience wrappers; nil `*Stylesheet` returns error here
 - **Stylesheet.Transform(*Document) → Invocation** / **Stylesheet.ApplyTemplates(*Document) → Invocation** / **Stylesheet.CallTemplate(string) → Invocation** / **Stylesheet.CallFunction(string, ...Sequence) → Invocation** — invocation entrypoints
-- **Invocation.SourceDocument(*Document) → Invocation** / **Mode(string)** / **Selection(Sequence)** *(ApplyTemplates only)* / **GlobalParameters(*Parameters)** / **TunnelParameters(*Parameters)** / **SetParameter(string, Sequence)** / **SetTunnelParameter(string, Sequence)** / **SetInitialTemplateParameter(string, Sequence)** / **SetInitialModeParameter(string, Sequence)** / **MessageHandler(MessageHandler)** / **ResultDocumentHandler(ResultDocumentHandler)** / **RawResultHandler(RawResultHandler)** / **PrimaryItemsHandler(PrimaryItemsHandler)** / **AnnotationHandler(AnnotationHandler)** / **CollectionResolver(xpath3.CollectionResolver)** / **BaseOutputURI(string)** / **SourceSchemas(...*xsd.Schema)** / **OnMultipleMatch(OnMultipleMatchMode)** / **TraceWriter(io.Writer)** — fluent runtime configuration
+- **Invocation.SourceDocument(*Document) → Invocation** / **Mode(string)** / **Selection(Sequence)** *(ApplyTemplates only)* / **GlobalParameters(*Parameters)** / **TunnelParameters(*Parameters)** / **SetParameter(string, Sequence)** / **SetTunnelParameter(string, Sequence)** / **SetInitialTemplateParameter(string, Sequence)** / **SetInitialModeParameter(string, Sequence)** / **MessageHandler(MessageHandler)** / **ResultDocumentHandler(ResultDocumentHandler)** / **RawResultHandler(RawResultHandler)** / **PrimaryItemsHandler(PrimaryItemsHandler)** / **AnnotationHandler(AnnotationHandler)** / **CollectionResolver(xpath3.CollectionResolver)** / **URIResolver(xpath3.URIResolver)** / **HTTPClient(\*http.Client)** / **BaseOutputURI(string)** / **SourceSchemas(...*xsd.Schema)** / **OnMultipleMatch(OnMultipleMatchMode)** / **TraceWriter(io.Writer)** — fluent runtime configuration. `URIResolver` and `HTTPClient` are the opt-in for runtime `fn:doc`/`fn:unparsed-text` retrieval; without them those functions error per spec.
 - **Invocation.Do(ctx) → (*Document, error)** / **Invocation.Serialize(ctx) → (string, error)** / **Invocation.WriteTo(ctx, io.Writer) → error** / **Invocation.ResolvedOutputDef() → *OutputDef** — terminal execution + resolved primary output metadata
 - **NewParameters() → *Parameters** — mutable XSLT parameter carrier keyed by expanded name
 - Key types: `Stylesheet`, `Compiler`, `Invocation`, `Parameters`, `OutputDef`, `URIResolver`, `PackageResolver`, `MessageHandler`, `ResultDocumentHandler`, `RawResultHandler`, `PrimaryItemsHandler`, `AnnotationHandler`
@@ -387,10 +387,10 @@ String cursor for character-by-character parsing.
 
 ## internal/unparsedtext/
 
-Shared `fn:unparsed-text` / `fn:unparsed-text-lines` resource loading.
+Shared resource loading for `fn:doc`, `fn:doc-available`, `fn:json-doc`, `fn:unparsed-text`, `fn:unparsed-text-available`, `fn:unparsed-text-lines`. Secure by default: with no `URIResolver` and no `HTTPClient`, every retrieval errors out (no implicit `http.DefaultClient`, no implicit `os.ReadFile`). Constructors: `NewHTTPResolver(*http.Client)`, `NewFileResolver(fs.FS)`; `FileURIResolver{BaseDir}` refuses `..` traversal outside `BaseDir`.
 
 - Files: `unparsedtext.go`
-- Imports: none
+- Imports: `internal/encoding`, `internal/lexicon`
 
 ## internal/xpathstream/
 
