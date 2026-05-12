@@ -15,9 +15,9 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		invalid  []string
 	}{
 		{
-			typeName: "float", //nolint:goconst
+			typeName: "float",                                                                                           //nolint:goconst
 			valid:    []string{"1.0", "-1.5", "+3.14", "1", ".5", "1.", "1e10", "1.5E-3", "INF", "-INF", "+INF", "NaN"}, //nolint:goconst
-			invalid:  []string{"", "abc", "1.2.3", "inf", "nan", "Inf"}, //nolint:goconst
+			invalid:  []string{"", "abc", "1.2.3", "inf", "nan", "Inf"},                                                 //nolint:goconst
 		},
 		{
 			typeName: "double",
@@ -25,9 +25,9 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			invalid:  []string{"", "abc", "inf", "nan"},
 		},
 		{
-			typeName: "dateTime", //nolint:goconst
+			typeName: "dateTime",                                                                                                                                                           //nolint:goconst
 			valid:    []string{"2023-01-15T10:30:00", "2023-01-15T10:30:00Z", "2023-01-15T10:30:00.123", "2023-01-15T10:30:00+09:00", "2023-01-15T10:30:00-05:00", "-0001-01-01T00:00:00"}, //nolint:goconst
-			invalid:  []string{"", "2023-01-15", "10:30:00", "2023-01-15 10:30:00", "2023-1-15T10:30:00"}, //nolint:goconst
+			invalid:  []string{"", "2023-01-15", "10:30:00", "2023-01-15 10:30:00", "2023-1-15T10:30:00"},                                                                                  //nolint:goconst
 		},
 		{
 			typeName: "time", //nolint:goconst
@@ -35,7 +35,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			invalid:  []string{"", "10:30", "abc"},
 		},
 		{
-			typeName: "duration", //nolint:goconst
+			typeName: "duration",                                                                                                  //nolint:goconst
 			valid:    []string{"P1Y", "P1M", "P1D", "PT1H", "PT1M", "PT1S", "P1Y2M3D", "P1Y2M3DT4H5M6S", "PT1.5S", "-P1Y", "P0Y"}, //nolint:goconst
 			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", "abc"},
 		},
@@ -67,7 +67,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		{
 			typeName: "Name",
 			valid:    []string{"foo", "_bar", ":baz", "a.b", "a-b", "a:b", "A123"}, //nolint:goconst
-			invalid:  []string{"", "1foo", ".foo", "-foo"}, //nolint:goconst
+			invalid:  []string{"", "1foo", ".foo", "-foo"},                         //nolint:goconst
 		},
 		{
 			typeName: "NCName",

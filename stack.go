@@ -1,8 +1,10 @@
 package helium
 
-import "slices"
+import (
+	"slices"
 
-import "github.com/lestrrat-go/helium/internal/stack"
+	"github.com/lestrrat-go/helium/internal/stack"
+)
 
 // nodeEntry is a lightweight record for the parser's element stack.
 // It stores only the data needed for end-tag matching and SAX callbacks,
