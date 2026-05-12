@@ -83,14 +83,17 @@ func (p Processor) Resolver(r Resolver) Processor {
 // NewFSResolver returns a [Resolver] that opens hrefs through the given
 // [fs.FS]. Relative hrefs are resolved against the document's base URI
 // (only file:// or scheme-less bases are honored) and joined with
-// filepath.Join before being passed to fsys.Open. A nil fsys is treated
-// as the permissive default that opens any OS path verbatim.
+// [filepath.Join] before being passed to fsys.Open. A nil fsys is
+// treated as the permissive default that opens any OS path verbatim.
 //
-// Pair this with [Processor.Resolver] to sandbox XInclude — for example
-//
-//	xinclude.NewProcessor().
-//	    Resolver(xinclude.NewFSResolver(os.DirFS("/var/data"))).
-//	    Process(ctx, doc)
+// Note: because the name handed to fsys.Open is the [filepath.Join]
+// result, it may be absolute and may use OS-specific separators on
+// Windows. FS implementations that enforce [fs.ValidPath] (notably
+// [os.DirFS] and [testing/fstest.MapFS]) will reject those names.
+// Sandboxing XInclude behind such an FS requires path normalization
+// that is not yet performed by this package; for now, supply an FS
+// implementation that accepts OS-style names, or use [Processor.Resolver]
+// with a fully custom resolver that controls its own path resolution.
 func NewFSResolver(fsys fs.FS) Resolver {
 	if fsys == nil {
 		fsys = iofs.PermissiveRoot{}

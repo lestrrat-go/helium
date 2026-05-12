@@ -66,9 +66,16 @@ func (c Compiler) BaseDir(dir string) Compiler {
 
 // FS sets the [fs.FS] used to load schemas referenced by include and
 // externalRef during compilation. A nil value restores the default,
-// which opens any path supplied to the compiler via [os.Open]. Callers
-// handling untrusted schemas should supply a stricter FS (for example
-// one produced by [os.DirFS]).
+// which opens any path supplied to the compiler via [os.Open].
+//
+// Note: the names handed to the FS are built with [filepath.Join] from
+// [Compiler.BaseDir] and the include href, so they may be absolute and
+// may use OS-specific separators on Windows. FS implementations that
+// enforce [fs.ValidPath] (notably [os.DirFS] and
+// [testing/fstest.MapFS]) will reject those names. Sandboxing schema
+// loading behind such an FS requires path normalization that is not yet
+// performed by this package; for now, supply an FS implementation that
+// accepts OS-style names.
 func (c Compiler) FS(fsys fs.FS) Compiler {
 	c = c.clone()
 	if fsys == nil {

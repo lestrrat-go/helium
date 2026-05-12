@@ -15,9 +15,16 @@ import (
 //
 // It exists to preserve helium's historical behavior of opening any
 // path supplied to the parser, schema compilers, and XInclude processor.
-// Callers handling untrusted input should substitute a stricter fs.FS
-// on the relevant builder, for example one produced by [os.DirFS] or
-// [os.OpenRoot].
+//
+// Note: the helium packages that consume this FS build the names they
+// pass to Open via [filepath.Join] against the document's base URI /
+// base dir, so those names may be absolute and may use OS-specific
+// separators on Windows. A caller-supplied FS that enforces
+// [fs.ValidPath] (such as [os.DirFS] or [os.OpenRoot]) will reject
+// those names. Sandboxing the loader behind such an FS requires path
+// normalization that is not yet performed by helium; until then,
+// PermissiveRoot is the only configuration that accepts OS-style
+// names end-to-end.
 type PermissiveRoot struct{}
 
 // Open implements [fs.FS].

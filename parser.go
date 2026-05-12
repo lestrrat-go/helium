@@ -456,8 +456,14 @@ func (p Parser) Catalog(c CatalogResolver) Parser {
 // document — external DTDs ([LoadExternalDTD]) and external entities
 // resolved through [TreeBuilder.ResolveEntity]. A nil value restores the
 // default, which opens any path supplied to the parser via [os.Open].
-// Callers handling untrusted input should supply a stricter FS — for
-// example one rooted at the document's directory via [os.DirFS].
+//
+// Note: the names handed to the FS are built with [filepath.Join] against
+// the document's base URI, so they may be absolute and may use
+// OS-specific separators on Windows. FS implementations that enforce
+// [fs.ValidPath] (notably [os.DirFS] and [testing/fstest.MapFS]) will
+// reject those names. Sandboxing the loader behind such an FS requires
+// path normalization that is not yet performed by this package; for now,
+// supply an FS implementation that accepts OS-style names.
 func (p Parser) FS(fsys fs.FS) Parser {
 	p = p.clone()
 	if fsys == nil {
