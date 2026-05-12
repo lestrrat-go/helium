@@ -58,7 +58,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		label = "(string)"
 	}
 
-	fsys := fs.FS(iofs.Root{})
+	fsys := fs.FS(iofs.PermissiveRoot{})
 	if cfg.fsys != nil {
 		fsys = cfg.fsys
 	}

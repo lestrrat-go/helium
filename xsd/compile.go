@@ -73,7 +73,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, fmt.Errorf("xsd: root element is not xs:schema")
 	}
 
-	fsys := fs.FS(iofs.Root{})
+	fsys := fs.FS(iofs.PermissiveRoot{})
 	if cfg != nil && cfg.fsys != nil {
 		fsys = cfg.fsys
 	}

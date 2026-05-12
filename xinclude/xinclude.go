@@ -91,7 +91,7 @@ func (p Processor) Resolver(r Resolver) Processor {
 func (p Processor) FS(fsys fs.FS) Processor {
 	p = p.clone()
 	if fsys == nil {
-		fsys = iofs.Root{}
+		fsys = iofs.PermissiveRoot{}
 	}
 	p.cfg.fsys = fsys
 	return p
@@ -173,7 +173,7 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 	if p.resolver == nil {
 		fsys := cfg.fsys
 		if fsys == nil {
-			fsys = iofs.Root{}
+			fsys = iofs.PermissiveRoot{}
 		}
 		p.resolver = &fileResolver{fsys: fsys}
 	}
@@ -1190,7 +1190,7 @@ func (p *processor) computeFixupBases(inc *helium.Element, sourceURI string) (st
 }
 
 // fileResolver resolves URIs by reading from an [fs.FS]. The default FS
-// (an internal/iofs.Root{}) opens any OS path. Substitute a stricter
+// (an internal/iofs.PermissiveRoot{}) opens any OS path. Substitute a stricter
 // fs.FS through [Processor.FS] for untrusted input.
 type fileResolver struct {
 	fsys fs.FS

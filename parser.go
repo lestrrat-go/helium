@@ -57,7 +57,7 @@ type Parser struct {
 func NewParser() Parser {
 	return Parser{cfg: &parserConfig{
 		sax:  NewTreeBuilder(),
-		fsys: iofs.Root{},
+		fsys: iofs.PermissiveRoot{},
 	}}
 }
 
@@ -461,7 +461,7 @@ func (p Parser) Catalog(c CatalogResolver) Parser {
 func (p Parser) FS(fsys fs.FS) Parser {
 	p = p.clone()
 	if fsys == nil {
-		fsys = iofs.Root{}
+		fsys = iofs.PermissiveRoot{}
 	}
 	p.cfg.fsys = fsys
 	return p

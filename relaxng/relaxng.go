@@ -72,7 +72,7 @@ func (c Compiler) BaseDir(dir string) Compiler {
 func (c Compiler) FS(fsys fs.FS) Compiler {
 	c = c.clone()
 	if fsys == nil {
-		fsys = iofs.Root{}
+		fsys = iofs.PermissiveRoot{}
 	}
 	c.cfg.fsys = fsys
 	return c

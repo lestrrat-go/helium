@@ -424,7 +424,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 		ctx.maxElemDepth = p.maxDepth
 	}
 	if ctx.fsys == nil {
-		ctx.fsys = iofs.Root{}
+		ctx.fsys = iofs.PermissiveRoot{}
 	}
 	return nil
 }
