@@ -217,7 +217,10 @@ func TestVerifyMultipleSignatures(t *testing.T) {
 	// Inject a second copy of the (legitimate) Signature element. From
 	// Verify's perspective the document is now ambiguous.
 	sigStart := strings.Index(signed, "<ds:Signature")
-	sigEnd := strings.Index(signed, "</ds:Signature>") + len("</ds:Signature>")
+	require.GreaterOrEqual(t, sigStart, 0, "signed output must contain a ds:Signature open tag")
+	sigEnd := strings.Index(signed, "</ds:Signature>")
+	require.Greater(t, sigEnd, sigStart, "signed output must contain a matching ds:Signature close tag")
+	sigEnd += len("</ds:Signature>")
 	sigBlock := signed[sigStart:sigEnd]
 	doubled := signed[:sigEnd] + sigBlock + signed[sigEnd:]
 
