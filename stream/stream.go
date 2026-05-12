@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/encoding"
@@ -291,8 +292,8 @@ func (w *Writer) emitPendingNS() {
 // lookupNS checks if the prefix is already bound to the given URI in
 // the current namespace stack.
 func (w *Writer) lookupNS(prefix, uri string) bool {
-	for i := len(w.nsStack) - 1; i >= 0; i-- {
-		for _, ns := range w.nsStack[i].decls {
+	for _, v := range slices.Backward(w.nsStack) {
+		for _, ns := range v.decls {
 			if ns.prefix == prefix {
 				return ns.uri == uri
 			}
@@ -304,8 +305,8 @@ func (w *Writer) lookupNS(prefix, uri string) bool {
 // hasDefaultNSInScope returns true if any ancestor has declared a
 // non-empty default namespace (xmlns="...") that is still in scope.
 func (w *Writer) hasDefaultNSInScope() bool {
-	for i := len(w.nsStack) - 1; i >= 0; i-- {
-		for _, ns := range w.nsStack[i].decls {
+	for _, v := range slices.Backward(w.nsStack) {
+		for _, ns := range v.decls {
 			if ns.prefix == "" {
 				return ns.uri != ""
 			}

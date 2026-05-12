@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 )
 
@@ -325,8 +326,8 @@ func fnArrayFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	members := a.members0()
-	for i := len(members) - 1; i >= 0; i-- {
-		acc, err = fi.Invoke(ctx, []Sequence{members[i], acc})
+	for _, v := range slices.Backward(members) {
+		acc, err = fi.Invoke(ctx, []Sequence{v, acc})
 		if err != nil {
 			return nil, err
 		}

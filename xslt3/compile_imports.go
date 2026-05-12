@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -417,12 +418,12 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 			bases = append(bases, xmlBase)
 		}
 	}
-	for i := len(bases) - 1; i >= 0; i-- {
+	for _, v := range slices.Backward(bases) {
 		if base == "" {
-			base = bases[i]
+			base = v
 			continue
 		}
-		base = helium.BuildURI(bases[i], base)
+		base = helium.BuildURI(v, base)
 	}
 	return base
 }

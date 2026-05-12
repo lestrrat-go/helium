@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"slices"
 )
 
 func init() {
@@ -97,8 +98,8 @@ func fnFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	items := seqMaterialize(seq)
 	callArgs := make([]Sequence, 2)
-	for i := len(items) - 1; i >= 0; i-- {
-		callArgs[0] = ItemSlice{items[i]}
+	for _, v := range slices.Backward(items) {
+		callArgs[0] = ItemSlice{v}
 		callArgs[1] = acc
 		acc, err = fi.Invoke(ctx, callArgs)
 		if err != nil {

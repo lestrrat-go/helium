@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -1070,8 +1071,8 @@ func effectiveBaseURI(node helium.Node, docURI string) string {
 
 	// Apply xml:base values from root to leaf
 	result := docURI
-	for i := len(bases) - 1; i >= 0; i-- {
-		result = resolveBase(result, bases[i])
+	for _, v := range slices.Backward(bases) {
+		result = resolveBase(result, v)
 	}
 	return result
 }

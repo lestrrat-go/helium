@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -541,8 +542,8 @@ func applyDateGrouping(s string, formatRunes []rune, zeroDigit rune) string {
 	var sepPositions []int // positions from the right
 	var sepChars []rune
 	digitCount := 0
-	for i := len(formatRunes) - 1; i >= 0; i-- {
-		r := formatRunes[i]
+	for _, v := range slices.Backward(formatRunes) {
+		r := v
 		if r == '#' || isDecimalDigitInRange(r, zeroDigit) {
 			digitCount++
 		} else {
@@ -565,12 +566,12 @@ func applyDateGrouping(s string, formatRunes []rune, zeroDigit rune) string {
 	}
 
 	var result []rune
-	for i := len(sRunes) - 1; i >= 0; i-- {
+	for i, v := range slices.Backward(sRunes) {
 		digitPos := len(sRunes) - 1 - i
 		if sep, ok := sepAt[digitPos]; ok {
 			result = append(result, sep)
 		}
-		result = append(result, sRunes[i])
+		result = append(result, v)
 	}
 
 	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {

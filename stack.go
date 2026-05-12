@@ -1,5 +1,7 @@
 package helium
 
+import "slices"
+
 import "github.com/lestrrat-go/helium/internal/stack"
 
 // nodeEntry is a lightweight record for the parser's element stack.
@@ -80,9 +82,9 @@ func (s *nsStack) Lookup(prefix string) string {
 // prefix shadowing, not duplicates).
 func (s *nsStack) LookupInTopN(prefix string, n int) string {
 	entries := s.Peek(n)
-	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].prefix == prefix {
-			return entries[i].href
+	for _, v := range slices.Backward(entries) {
+		if v.prefix == prefix {
+			return v.href
 		}
 	}
 	return ""

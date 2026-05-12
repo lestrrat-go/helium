@@ -353,12 +353,12 @@ func (p *parser) htmlAutoCloseOnClose(endTag string) {
 
 	// Check if the end tag matches anything on the stack
 	found := false
-	for i := len(p.nameStack) - 1; i >= 0; i-- {
-		if p.nameStack[i] == endTag {
+	for _, v := range slices.Backward(p.nameStack) {
+		if v == endTag {
 			found = true
 			break
 		}
-		if getEndPriority(p.nameStack[i]) > priority {
+		if getEndPriority(v) > priority {
 			return
 		}
 	}

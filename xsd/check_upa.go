@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -199,8 +200,8 @@ func modelGroupLastSet(mg *ModelGroup, schema *Schema) []firstSetEntry {
 		// Last set = last set of last non-optional particle
 		// (union with previous particles if later ones are optional).
 		var result []firstSetEntry
-		for i := len(mg.Particles) - 1; i >= 0; i-- {
-			p := mg.Particles[i]
+		for _, v := range slices.Backward(mg.Particles) {
+			p := v
 			result = append(result, particleLastSet(p, schema)...)
 			if p.MinOccurs > 0 {
 				break

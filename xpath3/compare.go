@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"slices"
 	"strings"
 	"time"
 
@@ -335,8 +336,8 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 
 		if arr, ok := item.(ArrayItem); ok {
 			members := arr.members0()
-			for i := len(members) - 1; i >= 0; i-- {
-				it.stack = append(it.stack, atomicSeqFrame{seq: members[i]})
+			for _, v := range slices.Backward(members) {
+				it.stack = append(it.stack, atomicSeqFrame{seq: v})
 			}
 			continue
 		}

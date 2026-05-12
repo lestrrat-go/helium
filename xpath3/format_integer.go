@@ -782,12 +782,12 @@ func formatIntegerDecimal(n *big.Int, picture string) (string, error) {
 		if shouldRepeat {
 			sep := groupSeps[numSeps-1] // use rightmost separator character
 			var result []rune
-			for i := len(sRunes) - 1; i >= 0; i-- {
+			for i, v := range slices.Backward(sRunes) {
 				digitPos := len(sRunes) - 1 - i
 				if digitPos > 0 && digitPos%interval == 0 {
 					result = append(result, sep)
 				}
-				result = append(result, sRunes[i])
+				result = append(result, v)
 			}
 			for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
 				result[i], result[j] = result[j], result[i]
@@ -808,12 +808,12 @@ func formatIntegerDecimal(n *big.Int, picture string) (string, error) {
 				sepAt[p] = sepChars[i]
 			}
 			var result []rune
-			for i := len(sRunes) - 1; i >= 0; i-- {
+			for i, v := range slices.Backward(sRunes) {
 				digitPos := len(sRunes) - 1 - i
 				if sep, ok := sepAt[digitPos]; ok {
 					result = append(result, sep)
 				}
-				result = append(result, sRunes[i])
+				result = append(result, v)
 			}
 			for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
 				result[i], result[j] = result[j], result[i]
