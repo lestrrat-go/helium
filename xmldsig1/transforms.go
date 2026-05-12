@@ -2,10 +2,10 @@ package xmldsig1
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/c14n"
+	"github.com/lestrrat-go/helium/enum"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -158,18 +158,15 @@ func resolveReference(doc *helium.Document, uri string) (*helium.Element, error)
 }
 
 // findElementsByID walks the entire document tree and returns every element
-// whose ID (DTD-declared, xml:id, or an "Id"/"ID" attribute) matches the
-// given value. The walk is exhaustive — it never short-circuits — so that
-// duplicate IDs are surfaced to the caller rather than silently masked.
+// whose ID (xml:id, an "Id"/"ID" attribute, or a DTD-declared ID-typed
+// attribute) matches the given value. The walk is exhaustive — it never
+// short-circuits — so that duplicate IDs are surfaced to the caller rather
+// than silently masked. We do NOT consult Document.GetElementByID: its
+// underlying ID table is keyed by ID value and Document.RegisterID
+// overwrites on collision, which would hide the duplicate-xml:id case that
+// XSW hardening relies on.
 func findElementsByID(doc *helium.Document, id string) []*helium.Element {
 	var matches []*helium.Element
-	// First, consult the document's GetElementByID — this covers DTD-declared
-	// IDs and xml:id. The result is added unconditionally; the attribute walk
-	// below de-duplicates pointers.
-	if elem := doc.GetElementByID(id); elem != nil {
-		matches = append(matches, elem)
-	}
-
 	var walk func(helium.Node)
 	walk = func(n helium.Node) {
 		elem, ok := helium.AsNode[*helium.Element](n)
@@ -178,10 +175,14 @@ func findElementsByID(doc *helium.Document, id string) []*helium.Element {
 		}
 		for _, attr := range elem.Attributes() {
 			name := attr.Name()
-			if (name == "Id" || name == "ID") && attr.Value() == id {
-				if !slices.Contains(matches, elem) {
-					matches = append(matches, elem)
-				}
+			isIDAttr := name == "Id" || name == "ID" || name == "xml:id" || attr.AType() == enum.AttrID
+			if !isIDAttr {
+				continue
+			}
+			// xs:ID derives from xs:NCName, which collapses whitespace;
+			// match libxml2/helium normalization for xml:id.
+			if strings.TrimSpace(attr.Value()) == id {
+				matches = append(matches, elem)
 				break
 			}
 		}

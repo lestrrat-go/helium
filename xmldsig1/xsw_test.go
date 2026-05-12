@@ -81,6 +81,42 @@ func TestXSW_DuplicateIDFailsVerify(t *testing.T) {
 	require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference)
 }
 
+// TestXSW_DuplicateXMLIDFailsVerify is the xml:id variant of the
+// duplicate-ID XSW shape. It guards against the failure mode where the
+// document-level ID table (populated via xml:id during parse) silently
+// overwrites duplicates and hands a single hit back to the reference
+// resolver. The resolver MUST walk the tree and surface both matches.
+func TestXSW_DuplicateXMLIDFailsVerify(t *testing.T) {
+	xml := `<root xmlns:xml="http://www.w3.org/XML/1998/namespace"><payload xml:id="target"><val>good</val></payload></root>`
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, xml)
+
+	ref := xmldsig1.ReferenceConfig{
+		URI:             "#target",
+		DigestAlgorithm: xmldsig1.DigestSHA256,
+		Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+	}
+
+	sigElem, err := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(ref).
+		SignDetached(t.Context(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	signed, err := helium.WriteString(doc)
+	require.NoError(t, err)
+
+	evil := `<payload xml:id="target"><val>evil</val></payload>`
+	tampered := strings.Replace(signed, `<payload xml:id="target">`, evil+`<payload xml:id="target">`, 1)
+	require.NotEqual(t, signed, tampered)
+
+	doc2 := mustParseXML(t, tampered)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+	_, err = verifier.Verify(t.Context(), doc2)
+	require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference)
+}
+
 // TestVerifyResult_ExposesSignedElement asserts that Verify returns the
 // resolved element pointer for each Reference, so the caller can compare
 // pointer equality against the element they are about to consume.
