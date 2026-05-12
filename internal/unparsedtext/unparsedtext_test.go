@@ -520,6 +520,11 @@ func TestNewHTTPResolver(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	require.PanicsWithValue(t,
+		"unparsedtext.NewHTTPResolver: client must not be nil",
+		func() { unparsedtext.NewHTTPResolver(nil) },
+	)
+
 	r := unparsedtext.NewHTTPResolver(srv.Client())
 	require.NotNil(t, r)
 

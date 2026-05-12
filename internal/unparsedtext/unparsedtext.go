@@ -532,10 +532,13 @@ func ensureWithin(baseDir, target string) error {
 
 // NewHTTPResolver returns a URIResolver that fetches http/https URIs using
 // the supplied client. The caller owns the client's transport, timeouts,
-// and redirect policy. Non-http(s) schemes are refused.
+// and redirect policy. Non-http(s) schemes are refused. The client must be
+// non-nil; passing nil panics. There is intentionally no fallback to
+// http.DefaultClient — that would reintroduce the unbounded-timeout
+// behavior this package is designed to keep out of XPath evaluation.
 func NewHTTPResolver(client *http.Client) URIResolver {
 	if client == nil {
-		client = http.DefaultClient
+		panic("unparsedtext.NewHTTPResolver: client must not be nil")
 	}
 	return &httpResolver{client: client}
 }
