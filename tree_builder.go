@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -400,7 +400,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		resolved = filepath.Join(filepath.Dir(ctx.baseURI), uri)
 	}
 
-	data, err := os.ReadFile(resolved)
+	data, err := fs.ReadFile(ctx.fsys, resolved)
 	if err != nil {
 		// Silently ignore missing external DTDs
 		return nil
@@ -704,7 +704,7 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 	ctx := t.pctx(ctxif)
 	if ctx.catalog != nil {
 		if resolved := ctx.catalog.Resolve(ctxif, publicID, systemID); resolved != "" {
-			f, err := os.Open(resolved)
+			f, err := ctx.fsys.Open(resolved)
 			if err == nil {
 				return &fileParseInput{ReadCloser: f, uri: resolved}, nil
 			}
@@ -715,7 +715,7 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 	// is the entity's resolved URI (built from system ID + base URI in
 	// EntityDecl). Try opening it as a file path.
 	if systemID != "" {
-		f, err := os.Open(systemID)
+		f, err := ctx.fsys.Open(systemID)
 		if err == nil {
 			return &fileParseInput{ReadCloser: f, uri: systemID}, nil
 		}

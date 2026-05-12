@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/push"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
@@ -39,6 +41,7 @@ type parserConfig struct {
 	options        parseOption
 	baseURI        string
 	catalog        CatalogResolver
+	fsys           fs.FS
 	maxDepth       int
 	errorHandler   ErrorHandler
 }
@@ -53,7 +56,8 @@ type Parser struct {
 // NewParser creates a new Parser with default settings.
 func NewParser() Parser {
 	return Parser{cfg: &parserConfig{
-		sax: NewTreeBuilder(),
+		sax:  NewTreeBuilder(),
+		fsys: iofs.Root{},
 	}}
 }
 
@@ -445,6 +449,21 @@ func (p Parser) MaxDepth(depth int) Parser {
 func (p Parser) Catalog(c CatalogResolver) Parser {
 	p = p.clone()
 	p.cfg.catalog = c
+	return p
+}
+
+// FS sets the [fs.FS] used to load external resources referenced by the
+// document — external DTDs ([LoadExternalDTD]) and external entities
+// resolved through [TreeBuilder.ResolveEntity]. A nil value restores the
+// default, which opens any path supplied to the parser via [os.Open].
+// Callers handling untrusted input should supply a stricter FS — for
+// example one rooted at the document's directory via [os.DirFS].
+func (p Parser) FS(fsys fs.FS) Parser {
+	p = p.clone()
+	if fsys == nil {
+		fsys = iofs.Root{}
+	}
+	p.cfg.fsys = fsys
 	return p
 }
 

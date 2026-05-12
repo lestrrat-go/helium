@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
@@ -929,6 +931,53 @@ func TestBlockXXE(t *testing.T) {
 		_ = err
 		require.False(t, resolved, "external DTD should not be loaded with BlockXXE")
 	})
+}
+
+func TestParserFS(t *testing.T) {
+	t.Parallel()
+
+	t.Run("external DTD loaded from custom FS", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc SYSTEM "ext.dtd">
+<doc/>`
+
+		fsys := fstest.MapFS{
+			"ext.dtd": &fstest.MapFile{Data: []byte("<!ELEMENT doc EMPTY>\n")},
+		}
+
+		p := helium.NewParser().LoadExternalDTD(true).FS(fsys)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("FS error surfaces as missing resource (silent)", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc SYSTEM "nope.dtd">
+<doc/>`
+
+		p := helium.NewParser().LoadExternalDTD(true).FS(fstest.MapFS{})
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "missing external DTD is silently ignored, same as before")
+	})
+
+	t.Run("nil FS restores default", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?><doc/>`
+
+		// Set a custom FS then clear it; parsing a doc that needs no external
+		// resources must still work.
+		p := helium.NewParser().FS(fstest.MapFS{}).FS(nil)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	// Compile-time check that fs.FS is the parameter type.
+	var _ = helium.NewParser().FS(fs.FS(fstest.MapFS{}))
 }
 
 func TestSkipIDs(t *testing.T) {

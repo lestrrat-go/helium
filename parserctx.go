@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/pool"
 	"github.com/lestrrat-go/helium/internal/strcursor"
@@ -95,6 +97,7 @@ type parserCtx struct {
 	charBufferSize    int
 	baseURI           string          // document base URI for resolving external references
 	catalog           CatalogResolver // XML catalog for entity resolution
+	fsys              fs.FS           // filesystem for loading external DTDs and entities
 	elem              *Element        // current context element
 
 	nsTab       nsStack
@@ -396,6 +399,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 		ctx.charBufferSize = p.charBufferSize
 		ctx.options = p.options
 		ctx.catalog = p.catalog
+		ctx.fsys = p.fsys
 		if ctx.options.IsSet(parseNoBlanks) {
 			ctx.keepBlanks = false
 		}
@@ -418,6 +422,9 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 			ctx.loadsubset.Set(SkipIDs)
 		}
 		ctx.maxElemDepth = p.maxDepth
+	}
+	if ctx.fsys == nil {
+		ctx.fsys = iofs.Root{}
 	}
 	return nil
 }
