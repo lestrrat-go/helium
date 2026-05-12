@@ -75,7 +75,7 @@ State affects parsing rules: e.g., external entity refs forbidden in `psAttribut
 - `attsDefault map[string][]*Attribute` — default attributes from DTD
 - `inSubset int` — 0=not in subset, 1=internal, 2=external
 - `replaceEntities bool` — expand entity refs (set by SubstituteEntities(true))
-- `fsys fs.FS` — filesystem used to load external DTDs/entities; defaults to `internal/iofs.Root{}` (passthrough to os.Open), overridden via `Parser.FS()`. Used by `TreeBuilder.ExternalSubset` and `TreeBuilder.ResolveEntity`.
+- `fsys fs.FS` — filesystem used to load external DTDs/entities; defaults to `internal/iofs.PermissiveRoot{}` (passthrough to os.Open), overridden via `Parser.FS()`. Used by `TreeBuilder.ExternalSubset` and `TreeBuilder.ResolveEntity`.
 
 ### Entity Amplification Guard
 - `sizeentcopy int64` — cumulative entity expansion bytes
