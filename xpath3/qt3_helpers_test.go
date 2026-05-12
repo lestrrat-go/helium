@@ -3,11 +3,13 @@ package xpath3_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,9 +21,33 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/heliumtest"
+	"github.com/lestrrat-go/helium/internal/unparsedtext"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
+
+// qt3Resolver returns a URIResolver that lets QT3 tests reach both the
+// shared HTTP fixture server and the local testdata tree. It's the QT3
+// harness's explicit opt-in to network + filesystem access.
+func qt3Resolver(client *http.Client) xpath3.URIResolver {
+	return &qt3CombinedResolver{
+		httpR: unparsedtext.NewHTTPResolver(client),
+		fileR: &unparsedtext.FileURIResolver{BaseDir: string(filepath.Separator)},
+	}
+}
+
+type qt3CombinedResolver struct {
+	httpR xpath3.URIResolver
+	fileR xpath3.URIResolver
+}
+
+func (r *qt3CombinedResolver) ResolveURI(uri string) (io.ReadCloser, error) {
+	parsed, err := url.Parse(uri)
+	if err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") {
+		return r.httpR.ResolveURI(uri)
+	}
+	return r.fileR.ResolveURI(uri)
+}
 
 // qt3Assertion checks a result sequence, calling t.Fatal on failure.
 type qt3Assertion func(t *testing.T, seq xpath3.Sequence)
@@ -184,6 +210,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			opts := []qt3EvalMutator{
 				func(e xpath3.Evaluator) xpath3.Evaluator { return e.ImplicitTimezone(qt3ImplicitTZ) },
 				func(e xpath3.Evaluator) xpath3.Evaluator { return e.HTTPClient(httpClient) },
+				func(e xpath3.Evaluator) xpath3.Evaluator { return e.URIResolver(qt3Resolver(httpClient)) },
 			}
 			if tc.DefaultDecimal != nil {
 				df := tc.DefaultDecimal.toXPath3()

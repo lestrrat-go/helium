@@ -961,7 +961,10 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
 	}
 
-	doc, err := helium.NewParser().Parse(ctx, data)
+	// Block external entity expansion and network access in the retrieved
+	// document. Without this, an attacker who controls the resource body
+	// could chain XXE/SSRF on top of the doc() retrieval.
+	doc, err := helium.NewParser().BlockXXE(true).AllowNetwork(false).Parse(ctx, data)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
 	}

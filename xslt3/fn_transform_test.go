@@ -310,3 +310,63 @@ func TestFnTransformCustomURIScheme(t *testing.T) {
 	require.Contains(t, resolver.calledWith, "mem://pkg/inner.xsl",
 		"resolver should receive properly resolved URI, got: %v", resolver.calledWith)
 }
+
+// httpResolverFunc adapts a function to the xpath3.URIResolver interface.
+type httpResolverFunc func(uri string) (io.ReadCloser, error)
+
+func (f httpResolverFunc) ResolveURI(uri string) (io.ReadCloser, error) { return f(uri) }
+
+// TestFnTransformInheritsRuntimeResolver verifies that fn:unparsed-text
+// called from inside an inner stylesheet invoked via fn:transform()
+// inherits the outer Invocation's URIResolver, instead of being refused
+// by secure-by-default retrieval.
+func TestFnTransformInheritsRuntimeResolver(t *testing.T) {
+	const dataURI = "http://example.invalid/data/hello.txt"
+
+	var calledWith []string
+	runtimeResolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
+		calledWith = append(calledWith, uri)
+		if uri != dataURI {
+			return nil, &xpath3.XPathError{Code: "FOUT1170", Message: "not found: " + uri}
+		}
+		return io.NopCloser(strings.NewReader("hello-from-resolver")), nil
+	})
+
+	innerXSLT := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <inner><xsl:value-of select="unparsed-text('` + dataURI + `')"/></inner>
+  </xsl:template>
+</xsl:stylesheet>`
+	outerXSLT := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:template match="/">
+    <xsl:variable name="result" select="transform(map{
+      'stylesheet-location': 'mem://stylesheets/inner.xsl',
+      'delivery-format': 'serialized'
+    })"/>
+    <result><xsl:value-of select="$result('output')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	compileResolver := &memResolver{
+		files: map[string]string{
+			"mem://stylesheets/inner.xsl": innerXSLT,
+		},
+	}
+
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(outerXSLT))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().URIResolver(compileResolver).Compile(ctx, doc)
+	require.NoError(t, err)
+
+	src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	out, err := ss.Transform(src).URIResolver(runtimeResolver).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "hello-from-resolver",
+		"inner fn:unparsed-text should resolve via outer Invocation's URIResolver")
+	require.Contains(t, calledWith, dataURI)
+}

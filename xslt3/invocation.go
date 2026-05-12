@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/http"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -84,6 +85,8 @@ type invocationConfig struct {
 	primaryItemsHandler PrimaryItemsHandler
 	annotationHandler   AnnotationHandler
 	collectionResolver  xpath3.CollectionResolver
+	uriResolver         xpath3.URIResolver
+	httpClient          *http.Client
 	baseOutputURI       string
 	sourceSchemas       []*xsd.Schema
 	onMultipleMatch     OnMultipleMatchMode
@@ -245,6 +248,27 @@ func (inv Invocation) CollectionResolver(r xpath3.CollectionResolver) Invocation
 	return inv
 }
 
+// URIResolver sets a custom URI resolver used by fn:doc, fn:unparsed-text,
+// fn:unparsed-text-lines, fn:unparsed-text-available, fn:doc-available,
+// and fn:json-doc during the transformation. Without this (and without an
+// HTTPClient) those functions cannot reach the filesystem or network and
+// return their spec-mandated retrieval errors.
+func (inv Invocation) URIResolver(r xpath3.URIResolver) Invocation {
+	inv = inv.clone()
+	inv.cfg.uriResolver = r
+	return inv
+}
+
+// HTTPClient sets the HTTP client used to fetch http/https URIs for
+// fn:doc / fn:unparsed-text / fn:json-doc when no URIResolver is supplied.
+// The caller owns the client's transport, timeouts, and redirect policy.
+// Without this (and without a URIResolver), network retrieval is refused.
+func (inv Invocation) HTTPClient(client *http.Client) Invocation {
+	inv = inv.clone()
+	inv.cfg.httpClient = client
+	return inv
+}
+
 // BaseOutputURI sets the base output URI for current-output-uri().
 func (inv Invocation) BaseOutputURI(uri string) Invocation {
 	inv = inv.clone()
@@ -401,6 +425,8 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 	c := inv.cfg
 	tcfg := &transformConfig{
 		collectionResolver: c.collectionResolver,
+		uriResolver:        c.uriResolver,
+		httpClient:         c.httpClient,
 		baseOutputURI:      c.baseOutputURI,
 		sourceSchemas:      c.sourceSchemas,
 		onMultipleMatch:    c.onMultipleMatch.String(),
