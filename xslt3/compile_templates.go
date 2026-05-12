@@ -11,6 +11,10 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// templateAllowedAttrs lists the valid attributes on xsl:template.
+// XSLT attribute names are spec vocabulary, not duplicated code constants.
+//
+//nolint:goconst // XSLT attribute vocabulary DATA
 var templateAllowedAttrs = map[string]struct{}{
 	"match": {}, "name": {}, "priority": {}, "mode": {}, "as": {},
 	"visibility": {}, "use-when": {},

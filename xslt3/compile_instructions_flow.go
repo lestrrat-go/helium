@@ -10,6 +10,7 @@ import (
 )
 
 func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Element) (*applyTemplatesInst, error) {
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"select": {}, "mode": {},
 	}); err != nil {
@@ -102,6 +103,7 @@ func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Eleme
 }
 
 func (c *compiler) compileCallTemplate(ctx context.Context, elem *helium.Element) (*callTemplateInst, error) {
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {},
 	}); err != nil {

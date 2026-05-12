@@ -15,6 +15,7 @@ import (
 )
 
 func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element) error {
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "use-character-maps": {}, "use-when": {},
 	}); err != nil {
@@ -651,6 +652,7 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 }
 
 func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element) error {
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "use-attribute-sets": {}, "visibility": {},
 		"streamable": {}, "use-when": {},

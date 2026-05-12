@@ -297,7 +297,7 @@ func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 		if fc, ok := e.(xpath3.FunctionCall); ok {
 			if fc.Prefix == "" {
 				switch fc.Name {
-				case "head", "tail", "copy-of", "snapshot", "string-join",
+				case "head", "tail", "copy-of", fnSnapshot, "string-join",
 					"serialize", "deep-equal", "sort", "reverse",
 					"empty", "exists", "count", "sum", "avg", "min", "max",
 					"string", "data", lexicon.TypeBoolean:

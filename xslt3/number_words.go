@@ -171,6 +171,7 @@ func germanCardinal(n int) string {
 	if n < 0 {
 		return "minus " + germanCardinal(-n)
 	}
+	//nolint:goconst // German number-word vocabulary DATA
 	ones := []string{"", "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun",
 		"zehn", "elf", "zwölf", "dreizehn", "vierzehn", "fünfzehn", "sechzehn", "siebzehn", "achtzehn", "neunzehn"}
 	tens := []string{"", "", "zwanzig", "dreißig", "vierzig", "fünfzig", "sechzig", "siebzig", "achtzig", "neunzig"}

@@ -68,6 +68,21 @@ const (
 
 	// on-multiple-match values for xsl:mode.
 	onMultipleMatchUseLast = "use-last"
+
+	// Common encoding names used as serialization defaults.
+	encodingUTF8     = "UTF-8"
+	encodingUTF8Low  = "utf-8"
+	encodingUTF8Alt  = "utf8"
+	encodingUTF16Low = "utf-16"
+	encodingUTF16Alt = "utf16"
+
+	// XSLT static-context function names (available in use-when and at runtime).
+	fnSystemProperty            = "system-property"
+	fnAvailableSystemProperties = "available-system-properties"
+	fnSnapshot                  = "snapshot"
+
+	// Error namespace prefix for xsl:try / xsl:catch error variables.
+	errVarPrefix = "err"
 )
 
 // funcKey identifies an xsl:function by its expanded QName and arity.

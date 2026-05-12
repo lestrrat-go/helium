@@ -10,6 +10,8 @@ import (
 
 // xsltElementVersion mirrors the version map from xslt3/functions.go.
 // Every element listed here must be known to the registry.
+//
+//nolint:goconst // version-string DATA, not duplicated logic
 var xsltElementVersion = map[string]string{
 	// XSLT 1.0
 	"apply-imports": "1.0", "apply-templates": "1.0", "attribute": "1.0",

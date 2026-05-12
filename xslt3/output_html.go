@@ -466,7 +466,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	}
 	enc := outDef.Encoding
 	if enc == "" {
-		enc = "UTF-8"
+		enc = encodingUTF8
 	}
 	mediaType := outDef.MediaType
 	if mediaType == "" {

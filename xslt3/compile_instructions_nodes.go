@@ -109,6 +109,7 @@ func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*e
 	defer func() { c.breakAllowed = savedBreak }()
 
 	// Validate attributes
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "namespace": {}, "inherit-namespaces": {},
 		"use-attribute-sets": {}, "type": {}, "validation": {},
@@ -653,6 +654,7 @@ func (c *compiler) compileDocument(ctx context.Context, elem *helium.Element) (*
 }
 
 func (c *compiler) compileSequence(ctx context.Context, elem *helium.Element) (instruction, error) {
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"select": {},
 	}); err != nil {

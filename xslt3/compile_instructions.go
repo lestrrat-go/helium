@@ -13,6 +13,9 @@ import (
 )
 
 // Allowed attribute sets for XSLT elements (unprefixed attributes only).
+// XSLT attribute names are spec vocabulary, not duplicated code constants.
+//
+//nolint:goconst // XSLT attribute vocabulary DATA
 var (
 	withParamAllowedAttrs = map[string]struct{}{
 		"name": {}, "select": {}, "as": {}, "tunnel": {},
@@ -488,8 +491,8 @@ func (c *compiler) useWhenFunctionAvailable(_ context.Context, args []xpath3.Seq
 	// Runtime-only functions (current, key, document, generate-id, etc.)
 	// are NOT available in the use-when static context per XSLT 3.0 spec 3.4.6.
 	switch name {
-	case "function-available", "system-property", "type-available",
-		"element-available", "available-system-properties":
+	case "function-available", fnSystemProperty, "type-available",
+		"element-available", fnAvailableSystemProperties:
 		return xpath3.SingleBoolean(true), nil
 	}
 

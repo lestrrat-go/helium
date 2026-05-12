@@ -14,7 +14,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// always outputs UTF-8. The encoding conversion is handled by
 	// serializeResult's transcoding layer.
 	targetEnc := strings.ToLower(outDef.Encoding)
-	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8"
+	isNonUTF8 := targetEnc != "" && targetEnc != encodingUTF8Low && targetEnc != encodingUTF8Alt
 	// When the document has no document element (e.g., result-document
 	// producing only comments and text), use the stream-based serializer
 	// which does not inject newlines between top-level children.
@@ -115,7 +115,7 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 	if !outDef.OmitDeclaration {
 		enc := outDef.Encoding
 		if enc == "" {
-			enc = "UTF-8"
+			enc = encodingUTF8
 		}
 		if err := sw.StartDocument("1.0", enc, ""); err != nil {
 			return err

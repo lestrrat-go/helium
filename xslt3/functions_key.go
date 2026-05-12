@@ -214,7 +214,7 @@ func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Seque
 	}
 
 	switch local {
-	case "version":
+	case paramVersion:
 		return xpath3.SingleString("3.0"), nil
 	case "vendor":
 		return xpath3.SingleString("helium"), nil
@@ -327,7 +327,7 @@ func (ec *execContext) fnCurrentOutputURI(_ context.Context, _ []xpath3.Sequence
 
 func (ec *execContext) fnAvailableSystemProperties(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
 	props := []string{
-		"version", "vendor", "vendor-url", "product-name", "product-version",
+		paramVersion, "vendor", "vendor-url", "product-name", "product-version",
 		"is-schema-aware", "supports-serialization",
 		"supports-backwards-compatibility", "supports-namespace-axis",
 		"supports-streaming", "supports-dynamic-evaluation",

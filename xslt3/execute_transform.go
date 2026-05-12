@@ -479,21 +479,21 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			}
 		}
 	} else if len(ec.primaryCharacterMaps) > 0 {
-		outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
+		outDef = &OutputDef{Method: methodXML, Encoding: encodingUTF8}
 		if len(ec.primaryResolvedCharMap) > 0 {
 			outDef.ResolvedCharMap = ec.primaryResolvedCharMap
 		} else {
 			outDef.ResolvedCharMap = resolveCharacterMaps(ss, ec.primaryCharacterMaps)
 		}
 	} else if len(ec.primaryResolvedCharMap) > 0 {
-		outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
+		outDef = &OutputDef{Method: methodXML, Encoding: encodingUTF8}
 		outDef.ResolvedCharMap = ec.primaryResolvedCharMap
 	}
 
 	// Apply serialization parameter overrides from primary xsl:result-document.
 	if ec.primaryOutputOverrides != nil {
 		if outDef == nil {
-			outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
+			outDef = &OutputDef{Method: methodXML, Encoding: encodingUTF8}
 		}
 		ov := ec.primaryOutputOverrides
 		if ov.Method != "" {

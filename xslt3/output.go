@@ -188,8 +188,8 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 
 	// Check if we need encoding conversion (non-UTF-8)
 	enc := strings.ToLower(outDef.Encoding)
-	isUTF16 := enc == lexicon.EncodingUTF16 || enc == "utf16"
-	needsEncodingConversion := enc != "" && enc != lexicon.EncodingUTF8 && enc != "utf8" && !isUTF16 //nolint:goconst
+	isUTF16 := enc == lexicon.EncodingUTF16 || enc == encodingUTF16Alt
+	needsEncodingConversion := enc != "" && enc != lexicon.EncodingUTF8 && enc != encodingUTF8Alt && !isUTF16
 
 	// Check if we need Unicode normalization
 	needsNormalization := outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE"
@@ -435,7 +435,7 @@ func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string) e
 func defaultOutputDef() *OutputDef {
 	return &OutputDef{
 		Method:   methodXML,
-		Encoding: "UTF-8",
+		Encoding: encodingUTF8,
 		Version:  "1.0",
 	}
 }

@@ -830,6 +830,9 @@ func (c *compiler) compileMerge(ctx context.Context, elem *helium.Element) (inst
 }
 
 // mergeSourceAllowedAttrs lists the valid attributes on xsl:merge-source.
+// XSLT attribute names are spec vocabulary, not duplicated code constants.
+//
+//nolint:goconst // XSLT attribute vocabulary DATA
 var mergeSourceAllowedAttrs = map[string]struct{}{
 	"name": {}, "for-each-item": {}, "for-each-source": {},
 	"select": {}, "streamable": {}, "sort-before-merge": {},

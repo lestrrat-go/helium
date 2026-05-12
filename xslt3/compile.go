@@ -973,7 +973,7 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	fns := map[string]xpath3.Function{
 		"function-available": &xsltFunc{min: 1, max: 2, fn: c.useWhenFunctionAvailable},
-		"system-property":    &xsltFunc{min: 1, max: 1, fn: c.useWhenSystemProperty},
+		fnSystemProperty:     &xsltFunc{min: 1, max: 1, fn: c.useWhenSystemProperty},
 		"type-available":     &xsltFunc{min: 1, max: 1, fn: c.useWhenTypeAvailable},
 		"element-available":  &xsltFunc{min: 1, max: 1, fn: c.useWhenElementAvailable},
 	}
@@ -1169,6 +1169,8 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	c.effectiveVersion = c.stylesheet.version
 
 	// Validate attributes on root element now that effectiveVersion is known.
+	// XSLT attribute names are spec vocabulary, not duplicated code constants.
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, root, map[string]struct{}{
 		"version": {}, "id": {}, "default-mode": {},
 		"default-validation": {}, "input-type-annotations": {},

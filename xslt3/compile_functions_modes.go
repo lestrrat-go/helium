@@ -11,6 +11,7 @@ import (
 )
 
 func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.Element) error {
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"as": {}, "use": {}, "use-when": {},
 	}); err != nil {
@@ -68,6 +69,7 @@ func isReservedFunctionNS(uri string) bool {
 }
 
 func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) error {
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"name": {}, "as": {}, "visibility": {}, "streamable": {},
 		"streamability":               {},

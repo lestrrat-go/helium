@@ -15,6 +15,7 @@ import (
 )
 
 func (c *compiler) compileImport(ctx context.Context, elem *helium.Element) error {
+	//nolint:goconst // XSLT attribute vocabulary DATA
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		"href": {}, "use-when": {},
 	}); err != nil {

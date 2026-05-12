@@ -2,6 +2,10 @@ package elements
 
 import "github.com/lestrrat-go/helium/internal/lexicon"
 
+// elementDefs returns the XSLT element registry. The version literals ("1.0",
+// "2.0", "3.0") are spec-defined data values, not duplicated code constants.
+//
+//nolint:goconst // version-string DATA, not duplicated logic
 func elementDefs() map[string]ElementInfo {
 	return map[string]ElementInfo{
 		// ── Root elements ──────────────────────────────────────────────

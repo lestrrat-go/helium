@@ -32,6 +32,18 @@ const (
 
 	// w3cMaxParallel limits how many W3C subtests run concurrently.
 	w3cMaxParallel = 20
+
+	// XSLT/XPath error codes referenced by the W3C test harness.
+	w3cErrXTSE3430 = "XTSE3430"
+	w3cErrXPTY0004 = "XPTY0004"
+
+	// XPath atomic type name used in W3C param-casting logic.
+	w3cTypeXSString = "xs:string"
+
+	// W3C raw-result XPath variable / version-resolution / merge URI literals.
+	w3cVarResult         = "result"
+	w3cVersionLowest     = "lowest"
+	w3cMergeCollectionID = "log-files"
 )
 
 // w3cSem gates concurrent W3C test execution.
@@ -421,7 +433,7 @@ func evalRawResultXPath(t *testing.T, expr string, rawResult xpath3.Sequence) bo
 
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": rawResult,
+		w3cVarResult: rawResult,
 	}))
 
 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
@@ -452,7 +464,7 @@ func evalRawXPathBool(expr string, rawResult xpath3.Sequence) bool {
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": rawResult,
+		w3cVarResult: rawResult,
 	}))
 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
 	if err != nil {
@@ -1144,7 +1156,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		switch tc.OnMultipleMatch {
 		case "use-last":
 			inv = inv.OnMultipleMatch(xslt3.OnMultipleMatchUseLast)
-		case "fail":
+		case "fail": //nolint:goconst // XSLT attribute value DATA
 			inv = inv.OnMultipleMatch(xslt3.OnMultipleMatchFail)
 		}
 	}
@@ -1251,7 +1263,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	// XTSE3430: a Basic XSLT Processor may fall back to non-streaming
 	// execution instead of raising the error. Both outcomes are valid,
 	// so accept successful transformation as passing.
-	if tc.ExpectError && tc.ErrorCode == "XTSE3430" {
+	if tc.ExpectError && tc.ErrorCode == w3cErrXTSE3430 {
 		return
 	}
 	if tc.ExpectError && !expectSerializationError {
@@ -1486,6 +1498,8 @@ func w3cImplicitSkipReason(name string) string {
 
 // w3cImplicitSkips maps individual test names to skip reasons for tests
 // blocked by known parser or runtime limitations.
+//
+//nolint:goconst // skip-reason DATA, not duplicated logic
 var w3cImplicitSkips = map[string]string{
 	// W3C dependency: default_html_version=4 / feature=HTML4
 	// These tests require the processor to default html-version to 4; ours defaults to 5.
@@ -1954,7 +1968,7 @@ func evalXPathAssertWithDoc(t *testing.T, expr string, doc *helium.Document) boo
 	}
 
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+		w3cVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
 	}))
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
@@ -2056,7 +2070,7 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 	// Bind $result to the document node so W3C assertions like
 	// deep-equal($result, ...) can reference the transformation output.
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+		w3cVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
 	}))
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
@@ -2114,7 +2128,7 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 	}
 
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+		w3cVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
 	}))
 
 	if annotations != nil {
@@ -2131,13 +2145,13 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 		// string equality (e.g. @list = "1 2 3") are not schema-aware and
 		// expect untyped comparison semantics.
 		var xpErr *xpath3.XPathError
-		if errors.As(err, &xpErr) && xpErr.Code == "XPTY0004" {
+		if errors.As(err, &xpErr) && xpErr.Code == w3cErrXPTY0004 {
 			evalPlain := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 			if len(ns) > 0 {
 				evalPlain = evalPlain.Namespaces(ns)
 			}
 			evalPlain = evalPlain.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-				"result": xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+				w3cVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
 			}))
 			res2, err2 := evalPlain.Evaluate(context.TODO(), compiled, doc)
 			if err2 == nil {
@@ -2231,7 +2245,7 @@ func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, r
 
 	// Bind $result to the raw XDM sequence (preserves atomic types).
 	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
-		"result": rawResult,
+		w3cVarResult: rawResult,
 	}))
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
@@ -2396,7 +2410,7 @@ func (r w3cPackageResolver) ResolvePackage(name string, version string) (io.Read
 	// Default is highest; "lowest" selects the lowest.
 	best := matches[0]
 	for _, m := range matches[1:] {
-		if r.versionResolution == "lowest" {
+		if r.versionResolution == w3cVersionLowest {
 			if m.version.Compare(best.version) < 0 {
 				best = m
 			}
@@ -2429,8 +2443,8 @@ type w3cPkgMeta struct {
 // caller supplies an xs:string.
 func castAtomicForParam(av xpath3.AtomicValue, asType string) xpath3.AtomicValue {
 	switch asType {
-	case "xs:string":
-		return xpath3.AtomicValue{TypeName: "xs:string", Value: fmt.Sprintf("%v", av.Value)}
+	case w3cTypeXSString:
+		return xpath3.AtomicValue{TypeName: w3cTypeXSString, Value: fmt.Sprintf("%v", av.Value)}
 	case "xs:untypedAtomic":
 		return xpath3.AtomicValue{TypeName: "xs:untypedAtomic", Value: fmt.Sprintf("%v", av.Value)}
 	default:
@@ -2586,7 +2600,7 @@ func w3cInferCollections(tc w3cTest) []w3cCollection {
 	if strings.Contains(tc.StylesheetPath, "insn/merge/") {
 		return []w3cCollection{
 			{
-				URI: "log-files",
+				URI: w3cMergeCollectionID,
 				DocPaths: []string{
 					"tests/insn/merge/log-file-1.xml",
 					"tests/insn/merge/log-file-4.xml",

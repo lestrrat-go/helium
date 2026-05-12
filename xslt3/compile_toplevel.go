@@ -209,6 +209,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 		}
 		switch elem.LocalName() {
 		case lexicon.XSLTElementImport:
+			//nolint:goconst // XSLT attribute vocabulary DATA
 			if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 				"href": {}, "use-when": {},
 			}); err != nil {
