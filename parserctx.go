@@ -45,6 +45,10 @@ var errInvalidUTF8Name = errors.New("invalid UTF-8 sequence in name")
 
 const MaxNameLength = 50000
 
+// pseudorootName is the placeholder element wrapping content parsed in a
+// detached context (push-parser top-level chunk, external entity body).
+const pseudorootName = "pseudoroot"
+
 const (
 	entityAllowedExpansion int64 = 1_000_000 // 1 MB baseline before ratio check
 	entityFixedCost        int64 = 20        // fixed byte cost per entity reference

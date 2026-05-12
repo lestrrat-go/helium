@@ -666,8 +666,8 @@ found:
 	}
 
 	// Create pseudoroot element, push to node stack.
-	newRoot := doc.CreateElement("pseudoroot")
-	newctx.pushNodeEntry(nodeEntry{local: "pseudoroot", qname: "pseudoroot"})
+	newRoot := doc.CreateElement(pseudorootName)
+	newctx.pushNodeEntry(nodeEntry{local: pseudorootName, qname: pseudorootName})
 	newctx.elem = newRoot
 	if err := doc.AddChild(newRoot); err != nil {
 		return nil, err
