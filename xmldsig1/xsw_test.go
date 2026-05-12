@@ -116,13 +116,13 @@ func TestVerifyResult_ExposesSignedElement(t *testing.T) {
 	require.True(t, res.Covers(target))
 }
 
-// TestVerifyPreservesSiblingPosition signs an enveloped signature, then
-// inserts a sibling AFTER the Signature element and asserts that, after
-// Verify, the canonical bytes of the whole document are unchanged.
+// TestVerifyPreservesSiblingPosition signs an enveloped signature and
+// asserts that Verify is non-mutating — the serialized bytes of the
+// document must be identical before and after Verify, even though Verify
+// internally detaches the Signature element to canonicalize the enveloped
+// content. The non-trailing variant below covers the case where naive
+// AddChild reattachment would visibly relocate the Signature.
 func TestVerifyPreservesSiblingPosition(t *testing.T) {
-	// Use a doc with multiple children; SignEnveloped appends the Signature
-	// at the end. After signing we insert a benign trailing comment by
-	// re-parsing — what we really care about is invariance across Verify.
 	key := generateRSAKey(t)
 	doc := mustParseXML(t, samlAssertion)
 
