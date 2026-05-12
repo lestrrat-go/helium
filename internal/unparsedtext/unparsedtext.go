@@ -5,15 +5,17 @@
 // Resource loading is opt-in. With no URIResolver and no HTTPClient supplied,
 // every retrieval attempt fails with ErrCodeRetrieval — there is no implicit
 // network access and no implicit filesystem access. Callers who want network
-// access must pass an explicit *http.Client (via Config.HTTPClient) — the
-// caller owns the transport, timeouts, and redirect policy. Callers who want
-// filesystem access must supply a URIResolver such as FileURIResolver or one
-// returned from NewFileResolver(fs.FS).
+// access must either pass an explicit *http.Client via Config.HTTPClient
+// (caller owns the transport, timeouts, and redirect policy) or supply a
+// URIResolver that accepts http(s) schemes. Callers who want filesystem
+// access must supply a URIResolver such as FileURIResolver or one returned
+// from NewFileResolver(fs.FS).
 package unparsedtext
 
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -236,7 +238,14 @@ func extractHTTPCharset(contentType string) string {
 // See the package-level documentation.
 func ReadURI(ctx context.Context, cfg *Config, uri string) ([]byte, error) {
 	data, _, err := readURIWithEncoding(ctx, cfg, uri)
-	return data, err
+	if err != nil {
+		var e *Error
+		if errors.As(err, &e) {
+			return nil, err
+		}
+		return nil, &Error{Code: ErrCodeRetrieval, Message: fmt.Sprintf("cannot retrieve resource: %v", err)}
+	}
+	return data, nil
 }
 
 // DecodeText decodes raw bytes to a string, handling BOM detection,

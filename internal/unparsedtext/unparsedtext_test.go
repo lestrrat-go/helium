@@ -451,10 +451,15 @@ func TestReadURINoFileReadByDefault(t *testing.T) {
 	// nil config — raw path
 	_, err := unparsedtext.ReadURI(t.Context(), nil, path)
 	require.Error(t, err)
+	var ue *unparsedtext.Error
+	require.ErrorAs(t, err, &ue)
+	require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
 
 	// nil config — file:// URI
 	_, err = unparsedtext.ReadURI(t.Context(), nil, "file://"+path)
 	require.Error(t, err)
+	require.ErrorAs(t, err, &ue)
+	require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
 }
 
 func TestLoadTextNoNetworkByDefault(t *testing.T) {
