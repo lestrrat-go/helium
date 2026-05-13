@@ -610,23 +610,59 @@ type latin1EncodingWriter struct {
 }
 
 func (lw *latin1EncodingWriter) Write(p []byte) (int, error) {
-	out := utf8ToLatin1(p, lw.strict)
-	_, err := lw.w.Write(out)
-	// Report the original input length as consumed
+	out, align := utf8ToLatin1WithAlign(p, lw.strict)
+	n, err := lw.w.Write(out)
+	// A well-behaved [io.Writer] reports err != nil when n < len(out).
+	// Defensively promote a silent short write to io.ErrShortWrite so a
+	// non-conformant inner writer cannot mask data loss as success.
+	if err == nil && n < len(out) {
+		err = io.ErrShortWrite
+	}
 	if err != nil {
-		return 0, err
+		// align is nil on the ASCII fast path (1:1 mapping); otherwise it
+		// records (inputBytes, outputBytes) at every rune boundary. Return
+		// the largest input prefix whose encoded output fully fit within
+		// the inner writer's reported n bytes, so callers see an honest
+		// consumed count for io.Copy-style bookkeeping.
+		if align == nil {
+			return n, err
+		}
+		return inputConsumedAt(align, n), err
 	}
 	return len(p), nil
 }
 
-// utf8ToLatin1 converts UTF-8 encoded data back to Latin-1/Windows-1252.
+// alignPoint records that consuming inputBytes of the source produced
+// outputBytes of encoded output at a clean rune boundary.
+type alignPoint struct{ inputBytes, outputBytes int }
+
+// inputConsumedAt returns the largest inputBytes from align where
+// outputBytes <= n. align must be monotonically increasing in both fields.
+func inputConsumedAt(align []alignPoint, n int) int {
+	consumed := 0
+	for _, ap := range align {
+		if ap.outputBytes > n {
+			break
+		}
+		consumed = ap.inputBytes
+	}
+	return consumed
+}
+
+// utf8ToLatin1WithAlign converts UTF-8 encoded data back to Latin-1 /
+// Windows-1252 and additionally returns an alignment table recording
+// (inputBytes, outputBytes) at every rune boundary, so callers can map a
+// partial-output byte count back to a precise consumed-input prefix.
+//
 // Runes U+0080-U+00FF are written as single bytes.
 // When strict is true (explicit ISO-8859-1), runes > U+00FF are emitted
 // as numeric character references (&#N;).
 // When strict is false (auto-detected Win-1252), Windows-1252 runes are
 // reverse-mapped to single bytes and other runes pass through as UTF-8.
-func utf8ToLatin1(data []byte, strict bool) []byte {
-	// Fast path: if all bytes are ASCII, no conversion needed
+//
+// On the all-ASCII fast path the returned slice is the input verbatim and
+// align is nil — input and output are 1:1 so no table is needed.
+func utf8ToLatin1WithAlign(data []byte, strict bool) ([]byte, []alignPoint) {
 	allASCII := true
 	for _, b := range data {
 		if b >= 0x80 {
@@ -635,16 +671,19 @@ func utf8ToLatin1(data []byte, strict bool) []byte {
 		}
 	}
 	if allASCII {
-		return data
+		return data, nil
 	}
 
 	var buf bytes.Buffer
 	buf.Grow(len(data))
+	align := make([]alignPoint, 0, len(data)/2+1)
+	align = append(align, alignPoint{0, 0})
 	for i := 0; i < len(data); {
 		b := data[i]
 		if b < 0x80 {
 			buf.WriteByte(b)
 			i++
+			align = append(align, alignPoint{i, buf.Len()})
 			continue
 		}
 		r, size := utf8.DecodeRune(data[i:])
@@ -658,8 +697,9 @@ func utf8ToLatin1(data []byte, strict bool) []byte {
 			buf.Write(data[i : i+size])
 		}
 		i += size
+		align = append(align, alignPoint{i, buf.Len()})
 	}
-	return buf.Bytes()
+	return buf.Bytes(), align
 }
 
 // isURISafe returns true if the byte should NOT be percent-encoded.
