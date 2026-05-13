@@ -16,7 +16,7 @@ import (
 // treating it as a warning the way it treats ordinary I/O failures.
 var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
 
-// processIncludesAndImports handles xs:include and xs:import elements.
+// processIncludes handles xs:include and xs:import elements.
 func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) error {
 	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
