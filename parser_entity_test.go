@@ -92,7 +92,11 @@ func TestEntityAmplification(t *testing.T) {
 	})
 
 	t.Run("RelaxLimits still capped by absolute ceiling", func(t *testing.T) {
-		t.Parallel()
+		// Intentionally NOT t.Parallel: this subtest drives expansion up
+		// to entityHardCeiling (1 GiB). Running it alongside the parallel
+		// subtests above amplified peak memory under loaded CI runners.
+		// The ceiling does eventually trip, but the parser still
+		// materializes nontrivial intermediate state, so we serialize it.
 		// A bigger billion-laughs that would expand to many GB even with
 		// the ratio check disabled. The absolute ceiling (entityHardCeiling
 		// in parserctx.go) must still trip and abort the parse.
