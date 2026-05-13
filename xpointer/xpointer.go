@@ -57,7 +57,7 @@ func Compile(expr string) (*Expression, error) {
 		case "xpointer", "xpath1":
 			c, cerr := xpath1.Compile(p.body)
 			if cerr != nil {
-				return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", cerr)
+				return nil, fmt.Errorf("xpointer: XPath compilation failed in %s(%s): %w", p.scheme, p.body, cerr)
 			}
 			compiled[i] = c
 		case "xmlns":
