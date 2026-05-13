@@ -104,4 +104,3 @@ func TestFnDoc_HTTPClientEnablesNetwork(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "fetched", "doc() should have fetched and embedded the document")
 }
-
