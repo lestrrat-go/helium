@@ -37,7 +37,7 @@ func TestCompile_ImportCycle_BoundedByDepth(t *testing.T) {
 		"c.xsd": &fstest.MapFile{Data: []byte(mkSchema(nsC, nsA, "a.xsd"))},
 	}
 
-	data, err := fstest.MapFS(fsys).ReadFile("a.xsd")
+	data, err := fsys.ReadFile("a.xsd")
 	require.NoError(t, err)
 	doc, err := helium.NewParser().Parse(t.Context(), data)
 	require.NoError(t, err)
