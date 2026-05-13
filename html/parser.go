@@ -79,7 +79,7 @@ func (p *parser) handleSAXErr(err error) {
 		}
 		return
 	}
-	_ = p.emitWarning("%v", err)
+	_ = p.emitWarning("%w", err)
 }
 
 // emitWarning routes a parser-tolerated condition to the SAX warning slot.

@@ -20,13 +20,15 @@ func TestSAXErrors_DuplicateDoctype_DefaultParseStillSucceeds(t *testing.T) {
 
 // A caller-supplied handler whose callback returns a non-ErrHandlerUnspecified
 // error must have that error routed through OnWarning, not silently dropped.
+// The forwarded warning must wrap (not stringify) the original error so
+// callers can recover it via errors.Is / errors.As.
 func TestSAXErrors_NonUnspecifiedRoutedToOnWarning(t *testing.T) {
 	customErr := errors.New("caller-supplied: cannot accept this event")
 
-	var warnings []string
+	var warnings []error
 	sax := &html.SAXCallbacks{}
 	sax.SetOnWarning(html.WarningFunc(func(err error) error {
-		warnings = append(warnings, err.Error())
+		warnings = append(warnings, err)
 		return nil
 	}))
 	sax.SetOnInternalSubset(html.InternalSubsetFunc(func(_, _, _ string) error {
@@ -37,7 +39,8 @@ func TestSAXErrors_NonUnspecifiedRoutedToOnWarning(t *testing.T) {
 	err := html.NewParser().ParseWithSAX(t.Context(), []byte(input), sax)
 	require.NoError(t, err, "non-strict parse must keep going past handler errors")
 	require.NotEmpty(t, warnings, "OnWarning must observe the handler's error")
-	require.Contains(t, warnings[0], "cannot accept this event")
+	require.ErrorIs(t, warnings[0], customErr,
+		"forwarded warning must preserve the original error chain")
 }
 
 // With Strict(true), a tree-builder objection from the default Parse path
