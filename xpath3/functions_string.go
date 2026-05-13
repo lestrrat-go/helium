@@ -1069,13 +1069,19 @@ var compiledXPathRegexCache sync.Map
 // using features outside RE2 (backreferences, character-class subtraction,
 // large quantifiers) are compiled with [regexp2], a backtracking engine
 // that is vulnerable to catastrophic-backtracking ReDoS on adversary-
-// supplied inputs. The default of 1 second is a defense-in-depth ceiling
-// for those patterns; pure RE2-compatible patterns are unaffected.
+// supplied inputs. The default is a defense-in-depth ceiling for those
+// patterns; pure RE2-compatible patterns are unaffected.
+//
+// regexp2's fastclock has ~100ms granularity, which can fire spurious
+// timeouts on loaded shared CI runners when the configured budget is
+// only a few hundred milliseconds. The default of 5s gives generous
+// headroom while still terminating a pathological ReDoS attempt long
+// before it exhausts a request budget.
 //
 // Set to 0 to disable the timeout entirely. Mutating this value affects
 // only subsequently-compiled regexes; already-cached compilations keep
 // the timeout in effect at the time they were compiled.
-var DefaultRegexMatchTimeout = 1 * time.Second
+var DefaultRegexMatchTimeout = 5 * time.Second
 
 func (r *compiledXPathRegex) MatchString(s string) (bool, error) {
 	if r.backtrack != nil {
