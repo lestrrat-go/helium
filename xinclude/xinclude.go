@@ -884,7 +884,7 @@ func resolveURI(href, base string) (string, error) {
 		if basePath == "" {
 			basePath = base
 		}
-		return filepath.Join(filepath.Dir(basePath), href), nil
+		return filepath.Clean(filepath.Join(filepath.Dir(basePath), href)), nil
 	}
 
 	return baseURL.ResolveReference(hrefURL).String(), nil
@@ -1209,5 +1209,9 @@ func (r *fsResolver) Resolve(href, base string) (io.ReadCloser, error) {
 			path = filepath.Join(filepath.Dir(basePath), href)
 		}
 	}
-	return r.fsys.Open(path) //nolint:wrapcheck // resolver errors propagate to caller verbatim
+	// Canonicalize the path so a sandboxing fs.FS (os.DirFS, fstest.MapFS,
+	// os.OpenRoot) sees consistent input. Clean resolves "sub/../target"
+	// down to "target"; any remaining ".." prefix means the join ascended
+	// above the base and will be rejected by an fs.ValidPath-enforcing FS.
+	return r.fsys.Open(filepath.Clean(path)) //nolint:wrapcheck // resolver errors propagate to caller verbatim
 }
