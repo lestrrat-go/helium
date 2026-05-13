@@ -41,8 +41,13 @@ func (vc *validationContext) reportValidityError(ctx context.Context, file strin
 	if vc.suppressDepth > 0 {
 		return
 	}
-	errStr := validityError(file, line, elemName, msg)
-	vc.errorHandler.Handle(ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
+	ve := &ValidationError{
+		Filename: file,
+		Line:     line,
+		Element:  elemName,
+		Message:  msg,
+	}
+	vc.errorHandler.Handle(ctx, newLeveledValidationError(ve, helium.ErrorLevelError))
 }
 
 // reportValidityErrorAttr formats an attribute validation error and sends it to the ErrorHandler.
@@ -50,8 +55,14 @@ func (vc *validationContext) reportValidityErrorAttr(ctx context.Context, file s
 	if vc.suppressDepth > 0 {
 		return
 	}
-	errStr := validityErrorAttr(file, line, elemName, attrName, msg)
-	vc.errorHandler.Handle(ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
+	ve := &ValidationError{
+		Filename:      file,
+		Line:          line,
+		Element:       elemName,
+		AttributeName: attrName,
+		Message:       msg,
+	}
+	vc.errorHandler.Handle(ctx, newLeveledValidationError(ve, helium.ErrorLevelError))
 }
 
 // Validate validates a lexical value against this simple type definition.

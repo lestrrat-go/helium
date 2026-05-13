@@ -26,7 +26,7 @@ type compiler struct {
 	filename     string
 	errorHandler helium.ErrorHandler
 	errorCount   int
-	includeStack []string // recursion guard for include/externalRef
+	includeStack map[string]struct{} // recursion guard for include/externalRef (lookup in O(1))
 	includeLimit int
 	// grammarStack tracks nested grammars for parentRef resolution.
 	grammarStack []*grammarScope
@@ -367,7 +367,7 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 	path := c.resolveHref(ctx, elem, href)
 
 	// Recursion guard
-	if slices.Contains(c.includeStack, path) {
+	if _, recursing := c.includeStack[path]; recursing {
 		msg := fmt.Sprintf("Detected an Include recursion for %s", href)
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
 		c.errorCount++
@@ -379,8 +379,11 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 		return
 	}
 
-	c.includeStack = append(c.includeStack, path)
-	defer func() { c.includeStack = c.includeStack[:len(c.includeStack)-1] }()
+	if c.includeStack == nil {
+		c.includeStack = make(map[string]struct{})
+	}
+	c.includeStack[path] = struct{}{}
+	defer delete(c.includeStack, path)
 
 	// Read and parse the included file
 	data, err := fs.ReadFile(c.fsys, path)
@@ -775,7 +778,7 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 	path := c.resolveHref(ctx, node, href)
 
 	// Recursion guard
-	if slices.Contains(c.includeStack, path) {
+	if _, recursing := c.includeStack[path]; recursing {
 		msg := fmt.Sprintf("Detected an externalRef recursion for %s", href)
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
 		c.errorCount++
@@ -787,8 +790,11 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 		return nil
 	}
 
-	c.includeStack = append(c.includeStack, path)
-	defer func() { c.includeStack = c.includeStack[:len(c.includeStack)-1] }()
+	if c.includeStack == nil {
+		c.includeStack = make(map[string]struct{})
+	}
+	c.includeStack[path] = struct{}{}
+	defer delete(c.includeStack, path)
 
 	data, err := fs.ReadFile(c.fsys, path)
 	if err != nil {

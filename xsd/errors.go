@@ -3,8 +3,51 @@ package xsd
 import (
 	"fmt"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
+
+// ValidationError represents a single XSD validation error with structured
+// fields. It implements the error interface and can be extracted from the
+// values passed to a [helium.ErrorHandler] via [errors.As].
+//
+// AttributeName is empty for element-level errors; non-empty when the error
+// concerns a specific attribute on the element.
+type ValidationError struct {
+	Filename      string // source filename
+	Line          int    // line number in the source document
+	Element       string // element name
+	AttributeName string // attribute name (optional)
+	Message       string // human-readable error description
+}
+
+// Error implements the error interface and produces libxml2-compatible output.
+func (e *ValidationError) Error() string {
+	if e.AttributeName != "" {
+		return validityErrorAttr(e.Filename, e.Line, e.Element, e.AttributeName, e.Message)
+	}
+	return validityError(e.Filename, e.Line, e.Element, e.Message)
+}
+
+// leveledValidationError wraps a *ValidationError with an ErrorLevel so the
+// existing ErrorHandler pipeline can transport typed validation errors while
+// preserving the libxml2-compatible formatted output that callers currently
+// rely on.
+type leveledValidationError struct {
+	*ValidationError
+	level helium.ErrorLevel
+}
+
+func (e *leveledValidationError) ErrorLevel() helium.ErrorLevel { return e.level }
+
+func (e *leveledValidationError) Unwrap() error { return e.ValidationError }
+
+// newLeveledValidationError pairs a *ValidationError with an ErrorLevel for
+// transport through helium.ErrorHandler. The returned error unwraps to the
+// embedded *ValidationError so callers can [errors.As] for it.
+func newLeveledValidationError(ve *ValidationError, level helium.ErrorLevel) error {
+	return &leveledValidationError{ValidationError: ve, level: level}
+}
 
 // validityError formats a validation error in libxml2 format:
 //
