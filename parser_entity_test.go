@@ -90,6 +90,32 @@ func TestEntityAmplification(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, doc)
 	})
+
+	t.Run("RelaxLimits still capped by absolute ceiling", func(t *testing.T) {
+		t.Parallel()
+		// A bigger billion-laughs that would expand to many GB even with
+		// the ratio check disabled. The absolute ceiling (entityHardCeiling
+		// in parserctx.go) must still trip and abort the parse.
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE lolz [
+  <!ENTITY lol "lol">
+  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+  <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+  <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
+  <!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
+  <!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
+  <!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
+]>
+<root>&lol9;</root>`
+
+		p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err, "absolute ceiling must trip even with RelaxLimits")
+		require.Contains(t, err.Error(), "maximum entity expansion size",
+			"error must explain the ceiling, got: %v", err)
+	})
 }
 
 func TestPredefinedEntities(t *testing.T) {

@@ -51,6 +51,13 @@ const (
 	entityAllowedExpansion int64 = 1_000_000 // 1 MB baseline before ratio check
 	entityFixedCost        int64 = 20        // fixed byte cost per entity reference
 	entityMaxAmplDefault         = 5         // default max amplification factor
+	// entityHardCeiling caps total entity expansion even when the ratio
+	// check is disabled (maxAmpl=0 via [Parser.RelaxLimits]). Without it,
+	// RelaxLimits permits unbounded amplification — a single document
+	// could expand to many GB of resident memory. 1 GB is permissive enough
+	// for any realistic XML workload but blocks the unbounded billion-laughs
+	// path that a hostile document could otherwise exploit.
+	entityHardCeiling int64 = 1_000_000_000 // 1 GB absolute cap, survives RelaxLimits
 )
 
 const (

@@ -668,16 +668,27 @@ func saturatedAdd(a, b int64) int64 {
 }
 
 func (ctx *parserCtx) entityCheck(ent sax.Entity, size int) error {
-	if ctx.maxAmpl == 0 {
-		return nil
-	}
-
+	// Account expanded bytes even when the ratio check is disabled
+	// (maxAmpl=0 via RelaxLimits) so the absolute ceiling below can
+	// catch unbounded growth.
 	if e, ok := ent.(*Entity); ok && e != nil && e.Checked() {
 		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, e.expandedSize)
 		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, entityFixedCost)
 	} else {
 		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, int64(size))
 		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, entityFixedCost)
+	}
+
+	// Absolute ceiling: enforced even when RelaxLimits disables the
+	// amplification-ratio check. A document opting into "relaxed limits"
+	// is asserting that legitimate large entities are OK, not that
+	// unbounded billion-laughs expansion is OK.
+	if ctx.sizeentcopy > entityHardCeiling {
+		return errors.New("maximum entity expansion size exceeded")
+	}
+
+	if ctx.maxAmpl == 0 {
+		return nil
 	}
 
 	if ctx.sizeentcopy > entityAllowedExpansion {
