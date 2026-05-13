@@ -18,23 +18,52 @@ import (
 func TestCompile_RejectsParentEscapeInSchemaLocation(t *testing.T) {
 	t.Parallel()
 
-	includer := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:include schemaLocation="../escape.xsd"/>
+	const escapeXSD = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/>`
+	const importerEscape = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="urn:escape" schemaLocation="../escape.xsd"/>
 </xs:schema>`
 
-	fsys := fstest.MapFS{
-		"schemas/main.xsd": &fstest.MapFile{Data: []byte(includer)},
-		// A file at the parent level the attacker might want to read.
-		"escape.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/>`)},
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "include",
+			body: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="../escape.xsd"/>
+</xs:schema>`,
+		},
+		{
+			name: "import",
+			body: importerEscape,
+		},
+		{
+			name: "redefine",
+			body: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="../escape.xsd"/>
+</xs:schema>`,
+		},
 	}
 
-	data, err := fsys.ReadFile("schemas/main.xsd")
-	require.NoError(t, err)
-	doc, err := helium.NewParser().Parse(t.Context(), data)
-	require.NoError(t, err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	_, err = xsd.NewCompiler().FS(fsys).BaseDir("schemas").Label("schemas/main.xsd").Compile(t.Context(), doc)
-	require.Error(t, err, "compile must reject schemaLocation that escapes baseDir")
-	require.True(t, strings.Contains(err.Error(), "escapes base directory"),
-		"error should mention escape; got: %v", err)
+			fsys := fstest.MapFS{
+				"schemas/main.xsd": &fstest.MapFile{Data: []byte(tc.body)},
+				// A file at the parent level the attacker might want to read.
+				"escape.xsd": &fstest.MapFile{Data: []byte(escapeXSD)},
+			}
+
+			data, err := fsys.ReadFile("schemas/main.xsd")
+			require.NoError(t, err)
+			doc, err := helium.NewParser().Parse(t.Context(), data)
+			require.NoError(t, err)
+
+			_, err = xsd.NewCompiler().FS(fsys).BaseDir("schemas").Label("schemas/main.xsd").Compile(t.Context(), doc)
+			require.Error(t, err, "compile must reject schemaLocation that escapes baseDir")
+			require.True(t, strings.Contains(err.Error(), "escapes base directory"),
+				"error should mention escape; got: %v", err)
+		})
+	}
 }

@@ -17,6 +17,12 @@ import (
 // treating it as a warning the way it treats ordinary I/O failures.
 var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
 
+// errSchemaPathEscape signals that a schemaLocation joined onto baseDir
+// would escape upward via ".." segments. processIncludes surfaces this
+// as a fatal error rather than swallowing it as a generic I/O warning,
+// so the containment violation is visible to callers.
+var errSchemaPathEscape = errors.New("xsd: schema location escapes base directory")
+
 // validateSchemaPath joins location onto baseDir and refuses paths that
 // escape upward via ".." segments. The escape check compares the joined
 // path back to baseDir via [filepath.Rel] — a relative result that begins
@@ -27,6 +33,13 @@ var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
 // will reject absolute paths and ValidPath violations on its own), but
 // catching the escape here gives consistent behavior with permissive FS
 // implementations.
+//
+// Note: [filepath.Join] does not preserve an absolute prefix on the second
+// argument — Join("schemas", "/etc/passwd") returns "schemas/etc/passwd",
+// which lives inside baseDir and is not an escape. Absolute schemaLocation
+// values therefore do not bypass this check; they land inside baseDir.
+// (When baseDir is empty there is nothing to escape from, and the
+// configured fs.FS decides what to accept.)
 func validateSchemaPath(baseDir, location string) (string, error) {
 	if baseDir == "" {
 		return filepath.Clean(location), nil
@@ -39,7 +52,7 @@ func validateSchemaPath(baseDir, location string) (string, error) {
 		return path, nil //nolint:nilerr
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("schema location %q escapes base directory", location)
+		return "", fmt.Errorf("%w: %q", errSchemaPathEscape, location)
 	}
 	return path, nil
 }
@@ -81,9 +94,10 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 			}
 
 			if err := c.loadImport(ctx, loc, ns); err != nil {
-				// Depth-exceeded is a security limit, not an I/O hiccup;
-				// surface it as a fatal compilation error.
-				if errors.Is(err, errImportDepthExceeded) {
+				// Depth-exceeded and baseDir-escape are security limits,
+				// not I/O hiccups; surface them as fatal compilation
+				// errors rather than demoting to an I/O warning.
+				if errors.Is(err, errImportDepthExceeded) || errors.Is(err, errSchemaPathEscape) {
 					return err
 				}
 				// Import failure — report warning if we have a filename.
