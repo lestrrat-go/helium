@@ -54,7 +54,10 @@ type compiler struct {
 }
 
 // defaultMaxImportDepth is the limit applied when no caller-specified
-// limit is provided. Mirrors relaxng/parse.go's includeLimit.
+// limit is provided. This bounds xs:import recursion depth (not a flat
+// import count), so a modest value is enough to terminate adversarial
+// namespace-cycling chains while leaving generous headroom for real
+// schema hierarchies, which rarely nest more than a few levels deep.
 const defaultMaxImportDepth = 40
 
 // elemRefSource tracks source location for error reporting.
