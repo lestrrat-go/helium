@@ -13,10 +13,17 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
-const (
-	maxRecursionDepth = ixpath.DefaultMaxRecursionDepth
-	maxNodeSetLength  = ixpath.DefaultMaxNodeSetLength
-)
+const maxNodeSetLength = ixpath.DefaultMaxNodeSetLength
+
+// DefaultMaxRecursionDepth bounds the maximum nested-expression depth the
+// evaluator will explore before returning [ErrRecursionLimit]. The default
+// matches libxml2's XPATH_MAX_RECURSION_DEPTH and is large enough for any
+// realistic XPath. Lower it when accepting untrusted expressions to fail
+// fast on adversarial input that tries to consume the goroutine stack.
+//
+// Mutating this value affects only evaluations started after the change.
+// 0 disables the limit (NOT recommended for untrusted input).
+var DefaultMaxRecursionDepth = ixpath.DefaultMaxRecursionDepth
 
 // evalContext holds the evaluation state for an XPath 3.1 expression.
 type evalContext struct {
@@ -251,7 +258,7 @@ type exprEvaluator func(context.Context, *evalContext, Expr) (Sequence, error)
 
 func evalWith(evalFn exprEvaluator, ctx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
 	ec.depth++
-	if ec.depth > maxRecursionDepth {
+	if limit := DefaultMaxRecursionDepth; limit > 0 && ec.depth > limit {
 		return nil, ErrRecursionLimit
 	}
 	defer func() { ec.depth-- }()
