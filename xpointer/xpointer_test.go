@@ -22,6 +22,39 @@ func TestEvaluateXPath1(t *testing.T) {
 	require.Equal(t, "child", nodes[0].Name())
 }
 
+// A compiled expression must produce the same results as one-shot Evaluate
+// across multiple documents, with parsing + XPath compilation done once.
+func TestCompile_ReuseAcrossDocuments(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := xpointer.Compile("xpath1(/root/child)")
+	require.NoError(t, err)
+
+	for _, src := range []string{
+		"<root><child>a</child></root>",
+		"<root><child>b</child><child>c</child></root>",
+		"<root><other/><child>d</child></root>",
+	} {
+		doc, perr := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, perr, src)
+
+		nodes, eerr := compiled.Evaluate(t.Context(), doc)
+		require.NoError(t, eerr, src)
+		require.NotEmpty(t, nodes, src)
+		for _, n := range nodes {
+			require.Equal(t, "child", n.Name(), src)
+		}
+	}
+}
+
+// Compile must surface XPath syntax errors at compile time rather than
+// deferring them to each Evaluate call.
+func TestCompile_ReportsXPathSyntaxErrorEarly(t *testing.T) {
+	t.Parallel()
+	_, err := xpointer.Compile("xpath1(///)")
+	require.Error(t, err, "compile should reject malformed xpath1 body")
+}
+
 func TestParseFragmentID(t *testing.T) {
 	t.Parallel()
 

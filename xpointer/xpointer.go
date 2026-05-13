@@ -24,33 +24,59 @@ type xptrPart struct {
 	body   string
 }
 
-// Evaluate evaluates an XPointer expression against a document and returns
-// the matching nodes. It supports:
-//   - xpointer(expr) / xpath1(expr) scheme: delegates to XPath
-//   - xmlns(prefix=uri) scheme: registers namespace bindings for subsequent parts
-//   - element(/1/2/3) scheme: child-sequence navigation
-//   - shorthand pointer: looks up by ID via Document.GetElementByID
+// Expression is a parsed XPointer expression with any embedded XPath
+// fragments already compiled. Reuse an Expression across multiple Evaluate
+// calls to amortize parsing and XPath compilation when the same XPointer
+// is applied to many documents (e.g. an XInclude that references the same
+// xpointer="..." against repeated includes).
 //
-// Multiple scheme parts are evaluated left-to-right with cascading fallback:
-// the first part that produces a non-empty result wins. xmlns() parts
-// accumulate namespace bindings for all subsequent parts.
-func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.Node, error) {
+// Expression is safe for concurrent use by multiple goroutines.
+type Expression struct {
+	parts []xptrPart
+	// compiled[i] holds the pre-compiled XPath for parts[i] when the part's
+	// scheme is xpointer or xpath1; nil for other schemes. Slot indices
+	// match parts indices 1:1.
+	compiled []*xpath1.Expression
+}
+
+// Compile parses an XPointer expression and pre-compiles any XPath
+// fragments inside xpointer() or xpath1() schemes. XPath syntax errors
+// and malformed xmlns() bodies are reported here. element() and
+// shorthand child-sequence bodies are validated lazily during
+// [Expression.Evaluate] (e.g. non-integer child indices). Use
+// [Expression.Evaluate] to apply the compiled expression to one or
+// more documents.
+func Compile(expr string) (*Expression, error) {
 	parts, err := parseParts(expr)
 	if err != nil {
 		return nil, err
 	}
-
-	// Evaluate parts left-to-right with cascading fallback.
-	// xmlns() parts accumulate namespace bindings; other parts are
-	// tried in order and the first non-empty result is returned.
-	var nsMap map[string]string
-	var lastErr error
-	for _, p := range parts {
-		if p.scheme == "xmlns" {
-			prefix, uri, ok := parseXmlnsBody(p.body)
-			if !ok {
+	compiled := make([]*xpath1.Expression, len(parts))
+	for i, p := range parts {
+		switch p.scheme {
+		case "xpointer", "xpath1":
+			c, cerr := xpath1.Compile(p.body)
+			if cerr != nil {
+				return nil, fmt.Errorf("xpointer: XPath compilation failed in %s(%s): %w", p.scheme, p.body, cerr)
+			}
+			compiled[i] = c
+		case "xmlns":
+			if _, _, ok := parseXmlnsBody(p.body); !ok {
 				return nil, fmt.Errorf("xpointer: invalid xmlns() body %q", p.body)
 			}
+		}
+	}
+	return &Expression{parts: parts, compiled: compiled}, nil
+}
+
+// Evaluate evaluates the compiled XPointer against a document, returning
+// the matching nodes. Cascading fallback semantics match [Evaluate].
+func (e *Expression) Evaluate(ctx context.Context, doc *helium.Document) ([]helium.Node, error) {
+	var nsMap map[string]string
+	var lastErr error
+	for i, p := range e.parts {
+		if p.scheme == "xmlns" {
+			prefix, uri, _ := parseXmlnsBody(p.body) // validated in Compile
 			if nsMap == nil {
 				nsMap = make(map[string]string)
 			}
@@ -58,7 +84,7 @@ func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.
 			continue
 		}
 
-		nodes, err := evaluatePart(ctx, doc, p, nsMap)
+		nodes, err := e.evaluatePart(ctx, doc, p, i, nsMap)
 		if err != nil {
 			// Unknown schemes allow cascade to continue (try next part).
 			// Syntax errors from known schemes abort immediately.
@@ -74,25 +100,29 @@ func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.
 		// Empty result — try next part.
 	}
 
-	// All parts exhausted with no non-empty result.
 	if lastErr != nil {
 		return nil, lastErr
 	}
 	return nil, nil
 }
 
-// evaluatePart evaluates a single non-xmlns XPointer part.
-func evaluatePart(ctx context.Context, doc *helium.Document, p xptrPart, nsMap map[string]string) ([]helium.Node, error) {
+// evaluatePart evaluates a single non-xmlns XPointer part using the
+// pre-compiled state in e.
+func (e *Expression) evaluatePart(ctx context.Context, doc *helium.Document, p xptrPart, partIdx int, nsMap map[string]string) ([]helium.Node, error) {
 	switch p.scheme {
 	case "xpointer", "xpath1":
+		ev := xpath1.NewEvaluator()
 		if len(nsMap) > 0 {
-			return findWithContext(ctx, doc, p.body, nsMap)
+			ev = ev.AdditionalNamespaces(nsMap)
 		}
-		nodes, findErr := xpath1.Find(ctx, doc, p.body)
-		if findErr != nil {
-			return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", findErr)
+		r, err := ev.Evaluate(ctx, e.compiled[partIdx], doc)
+		if err != nil {
+			return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", err)
 		}
-		return nodes, nil
+		if r.Type != xpath1.NodeSetResult {
+			return nil, xpath1.ErrNotNodeSet
+		}
+		return r.NodeSet, nil
 	case "element":
 		return evaluateElement(doc, p.body)
 	case "": // shorthand pointer or bare child sequence
@@ -111,22 +141,26 @@ func evaluatePart(ctx context.Context, doc *helium.Document, p xptrPart, nsMap m
 	}
 }
 
-// findWithContext compiles an XPath expression and evaluates it with
-// namespace bindings, returning a node-set.
-func findWithContext(ctx context.Context, node helium.Node, expr string, nsMap map[string]string) ([]helium.Node, error) {
-	compiled, err := xpath1.Compile(expr)
+// Evaluate evaluates an XPointer expression against a document and returns
+// the matching nodes. It supports:
+//   - xpointer(expr) / xpath1(expr) scheme: delegates to XPath
+//   - xmlns(prefix=uri) scheme: registers namespace bindings for subsequent parts
+//   - element(/1/2/3) scheme: child-sequence navigation
+//   - shorthand pointer: looks up by ID via Document.GetElementByID
+//
+// Multiple scheme parts are evaluated left-to-right with cascading fallback:
+// the first part that produces a non-empty result wins. xmlns() parts
+// accumulate namespace bindings for all subsequent parts.
+//
+// Evaluate is a one-shot convenience wrapper around [Compile] +
+// [Expression.Evaluate]. When the same XPointer is reused across documents,
+// call Compile once and reuse the resulting [*Expression].
+func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.Node, error) {
+	e, err := Compile(expr)
 	if err != nil {
-		return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", err)
+		return nil, err
 	}
-	ev := xpath1.NewEvaluator().AdditionalNamespaces(nsMap)
-	r, err := ev.Evaluate(ctx, compiled, node)
-	if err != nil {
-		return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", err)
-	}
-	if r.Type != xpath1.NodeSetResult {
-		return nil, xpath1.ErrNotNodeSet
-	}
-	return r.NodeSet, nil
+	return e.Evaluate(ctx, doc)
 }
 
 // parseXmlnsBody parses "prefix=uri" from an xmlns() body.
