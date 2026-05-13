@@ -339,6 +339,13 @@ func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 // resolveHref resolves a relative href against xml:base ancestors and the
 // compiler's baseDir. This mirrors libxml2's xmlRelaxNGCleanupTree xml:base
 // fixup for <include> and <externalRef> hrefs.
+//
+// When the result is computed by joining baseDir+href, any ".." segments
+// that would ascend above baseDir return an empty string — the caller
+// reports an Include load failure with a clear error message rather than
+// silently reading from an unintended directory. Mirrors xsd's
+// validateSchemaPath; defense-in-depth alongside whatever path
+// constraints the configured fs.FS enforces.
 func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href string) string {
 	if filepath.IsAbs(href) {
 		return href
@@ -350,7 +357,13 @@ func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href str
 		}
 	}
 	if c.baseDir != "" {
-		return filepath.Join(c.baseDir, href)
+		joined := filepath.Join(c.baseDir, href)
+		if rel, err := filepath.Rel(c.baseDir, joined); err == nil {
+			if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return ""
+			}
+		}
+		return joined
 	}
 	return href
 }
