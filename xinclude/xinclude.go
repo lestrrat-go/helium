@@ -884,7 +884,7 @@ func resolveURI(href, base string) (string, error) {
 		if basePath == "" {
 			basePath = base
 		}
-		return filepath.Clean(filepath.Join(filepath.Dir(basePath), href)), nil
+		return filepath.Join(filepath.Dir(basePath), href), nil
 	}
 
 	return baseURL.ResolveReference(hrefURL).String(), nil
