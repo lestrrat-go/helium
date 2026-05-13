@@ -611,9 +611,19 @@ type latin1EncodingWriter struct {
 
 func (lw *latin1EncodingWriter) Write(p []byte) (int, error) {
 	out := utf8ToLatin1(p, lw.strict)
-	_, err := lw.w.Write(out)
-	// Report the original input length as consumed
+	n, err := lw.w.Write(out)
+	// A well-behaved [io.Writer] reports err != nil when n < len(out).
+	// Defensively promote a silent short write to io.ErrShortWrite so a
+	// non-conformant inner writer cannot mask data loss as success.
+	if err == nil && n < len(out) {
+		err = io.ErrShortWrite
+	}
 	if err != nil {
+		// Encoded bytes may have been partially flushed to lw.w, but we
+		// cannot reverse-map n bytes of out to k bytes of p (the UTF-8 to
+		// Latin-1 conversion is not 1:1). Returning 0 keeps the io.Writer
+		// contract honest — callers cannot assume k input bytes were
+		// consumed — while still surfacing the error.
 		return 0, err
 	}
 	return len(p), nil
