@@ -6,6 +6,9 @@ type parseConfig struct {
 	noBlanks  bool
 	noError   bool
 	noWarning bool
+	// strict promotes warnings forwarded from silenced SAX callbacks into a
+	// fatal parse error. Default false preserves libxml2-style tolerance.
+	strict bool
 }
 
 // Writer configures HTML serialization. It is a value-style wrapper:
