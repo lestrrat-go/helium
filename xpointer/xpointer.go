@@ -40,9 +40,12 @@ type Expression struct {
 }
 
 // Compile parses an XPointer expression and pre-compiles any XPath
-// fragments inside xpointer() or xpath1() schemes. Syntax errors in any
-// known scheme are reported here. Use [Expression.Evaluate] to apply the
-// compiled expression to one or more documents.
+// fragments inside xpointer() or xpath1() schemes. XPath syntax errors
+// and malformed xmlns() bodies are reported here. element() and
+// shorthand child-sequence bodies are validated lazily during
+// [Expression.Evaluate] (e.g. non-integer child indices). Use
+// [Expression.Evaluate] to apply the compiled expression to one or
+// more documents.
 func Compile(expr string) (*Expression, error) {
 	parts, err := parseParts(expr)
 	if err != nil {
