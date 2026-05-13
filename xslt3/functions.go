@@ -3,7 +3,9 @@ package xslt3
 import (
 	"bytes"
 	"context"
-	"os"
+	"fmt"
+	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 
@@ -334,7 +336,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 		return doc, nil
 	}
 
-	data, err := os.ReadFile(resolvedURI)
+	data, err := ec.retrieveDocumentBytes(ctx, resolvedURI)
 	if err != nil {
 		// XTDE1160: when the URI contains a fragment identifier, use XTDE1160
 		// (fragment identifier error) instead of FODC0002.
@@ -349,6 +351,15 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// preserves the infoset for XSLT document() loads over the W3C source tree.
 	data = bytes.ReplaceAll(data, []byte("\uFFFD"), []byte("&#xFFFD;"))
 
+	// NOTE: this inner parser intentionally keeps LoadExternalDTD /
+	// SubstituteEntities enabled. The xpath3 fn:doc landed in #417 uses
+	// BlockXXE(true).AllowNetwork(false), but XSLT 3.0 W3C tests
+	// (e.g. base-uri-051) rely on resolving external SYSTEM entities in
+	// documents loaded via doc()/document(). Hardening this against XXE
+	// requires a coordinated opt-in flag plus harness updates and is
+	// scoped to a separate PR. The default-deny on retrieval above
+	// already blocks the most common SSRF/LFI vector — callers cannot
+	// fn:doc anything without first installing a URIResolver.
 	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).SubstituteEntities(true).FixBaseURIs(false).BaseURI(resolvedURI)
 	doc, err := p.Parse(ctx, data)
 	if err != nil {
@@ -397,6 +408,62 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	}
 
 	return doc, nil
+}
+
+// retrieveDocumentBytes fetches the bytes at resolvedURI using the
+// transformation's configured URIResolver / HTTPClient. There is no
+// implicit os.ReadFile and no implicit http.DefaultClient fallback —
+// retrieval is opt-in. Callers grant access by setting
+// [Invocation.URIResolver] and/or [Invocation.HTTPClient]. Mirrors the
+// secure-by-default fn:doc retrieval landed in #417 for xpath3.
+func (ec *execContext) retrieveDocumentBytes(ctx context.Context, resolvedURI string) ([]byte, error) {
+	isHTTP := strings.HasPrefix(resolvedURI, "http://") || strings.HasPrefix(resolvedURI, "https://")
+	var resolver xpath3.URIResolver
+	var httpClient *http.Client
+	if ec.transformConfig != nil {
+		resolver = ec.transformConfig.uriResolver
+		httpClient = ec.transformConfig.httpClient
+	}
+
+	if isHTTP {
+		if httpClient != nil {
+			return fetchHTTPBytes(ctx, httpClient, resolvedURI)
+		}
+		if resolver != nil {
+			return fetchViaResolver(resolver, resolvedURI)
+		}
+		return nil, fmt.Errorf("no HTTPClient or URIResolver configured for %q", resolvedURI)
+	}
+
+	if resolver != nil {
+		return fetchViaResolver(resolver, resolvedURI)
+	}
+	return nil, fmt.Errorf("no URIResolver configured for %q", resolvedURI)
+}
+
+func fetchViaResolver(r xpath3.URIResolver, uri string) ([]byte, error) {
+	rc, err := r.ResolveURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+	return io.ReadAll(rc)
+}
+
+func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP %d for %q", resp.StatusCode, uri)
+	}
+	return io.ReadAll(resp.Body)
 }
 
 // resolveAgainstBaseURI resolves a relative URI against an effective base URI.
