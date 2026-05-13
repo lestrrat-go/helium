@@ -3,6 +3,7 @@ package html
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -55,7 +56,40 @@ type parser struct {
 	// position when the first U+FFFD is encountered in emitCharacters.
 	encodingSanitizer *utf8SanitizeReader
 
+	// fatalSAXErr is set by handleSAXErr when cfg.strict is true and a SAX
+	// callback returns a non-ErrHandlerUnspecified error. parse() surfaces
+	// this value as the parse error. Outside strict mode it stays nil.
+	fatalSAXErr error
+
 	cfg parseConfig
+}
+
+// handleSAXErr filters the by-design ErrHandlerUnspecified signal and routes
+// every other non-nil return from a SAX callback. In the default (non-strict)
+// mode the error is forwarded to the warning channel and parsing continues,
+// preserving HTML's libxml2-compatible tolerance. In strict mode the first
+// such error is captured and surfaced from parse().
+func (p *parser) handleSAXErr(err error) {
+	if err == nil || errors.Is(err, ErrHandlerUnspecified) {
+		return
+	}
+	if p.cfg.strict {
+		if p.fatalSAXErr == nil {
+			p.fatalSAXErr = err
+		}
+		return
+	}
+	_ = p.emitWarning("%w", err)
+}
+
+// emitWarning routes a parser-tolerated condition to the SAX warning slot.
+// Mirrors emitError but fires Warning(...) and is gated by cfg.noWarning so
+// callers can silence these messages alongside emitError's output.
+func (p *parser) emitWarning(msg string, args ...any) error {
+	if p.cfg.noWarning {
+		return nil
+	}
+	return p.sax.Warning(fmt.Errorf(msg, args...))
 }
 
 // parserLocator implements DocumentLocator.
@@ -343,7 +377,7 @@ func getEndPriority(name string) int {
 func (p *parser) htmlAutoClose(newTag string) {
 	for p.currentName() != "" && shouldAutoClose(p.currentName(), newTag) {
 		name := p.popName()
-		_ = p.sax.EndElement(name)
+		p.handleSAXErr(p.sax.EndElement(name))
 	}
 }
 
@@ -375,7 +409,7 @@ func (p *parser) htmlAutoCloseOnClose(endTag string) {
 			_ = p.emitError("Opening and ending tag mismatch: %s and %s", endTag, cur)
 		}
 		p.popName()
-		_ = p.sax.EndElement(cur)
+		p.handleSAXErr(p.sax.EndElement(cur))
 	}
 }
 
@@ -383,7 +417,7 @@ func (p *parser) htmlAutoCloseOnClose(endTag string) {
 func (p *parser) htmlAutoCloseOnEnd() {
 	for len(p.nameStack) > 0 {
 		name := p.popName()
-		_ = p.sax.EndElement(name)
+		p.handleSAXErr(p.sax.EndElement(name))
 	}
 }
 
@@ -399,7 +433,7 @@ func (p *parser) htmlCheckImplied(newTag string) {
 	// Ensure <html> exists
 	if len(p.nameStack) == 0 {
 		p.pushName(elemHTML)
-		_ = p.sax.StartElement(elemHTML, nil)
+		p.handleSAXErr(p.sax.StartElement(elemHTML, nil))
 	}
 
 	if newTag == elemBody || newTag == elemHead {
@@ -412,7 +446,7 @@ func (p *parser) htmlCheckImplied(newTag string) {
 			return
 		}
 		p.pushName(elemHead)
-		_ = p.sax.StartElement(elemHead, nil)
+		p.handleSAXErr(p.sax.StartElement(elemHead, nil))
 		return
 	}
 
@@ -428,14 +462,14 @@ func (p *parser) htmlCheckImplied(newTag string) {
 			}
 		}
 		p.pushName(elemBody)
-		_ = p.sax.StartElement(elemBody, nil)
+		p.handleSAXErr(p.sax.StartElement(elemBody, nil))
 	}
 }
 
 // parse runs the main parsing loop.
 func (p *parser) parse(ctx context.Context) error {
-	_ = p.sax.SetDocumentLocator(p.locator)
-	_ = p.sax.StartDocument()
+	p.handleSAXErr(p.sax.SetDocumentLocator(p.locator))
+	p.handleSAXErr(p.sax.StartDocument())
 
 	for !p.cur.Done() {
 		if err := ctx.Err(); err != nil {
@@ -469,8 +503,8 @@ func (p *parser) parse(ctx context.Context) error {
 	}
 
 	p.htmlAutoCloseOnEnd()
-	_ = p.sax.EndDocument()
-	return nil
+	p.handleSAXErr(p.sax.EndDocument())
+	return p.fatalSAXErr
 }
 
 // parseStartTag parses an HTML start tag: <tagname attrs...>
@@ -510,13 +544,13 @@ func (p *parser) parseStartTag() {
 
 	// Fire SAX event
 	p.pushName(name)
-	_ = p.sax.StartElement(name, attrs)
+	p.handleSAXErr(p.sax.StartElement(name, attrs))
 
 	// Handle void elements — immediately close
 	desc := lookupElement(name)
 	if desc != nil && desc.empty {
 		p.popName()
-		_ = p.sax.EndElement(name)
+		p.handleSAXErr(p.sax.EndElement(name))
 		return
 	}
 
@@ -592,7 +626,7 @@ func (p *parser) parseEndTag() {
 	// If the current open element matches, close it
 	if p.currentName() == name {
 		p.popName()
-		_ = p.sax.EndElement(name)
+		p.handleSAXErr(p.sax.EndElement(name))
 	}
 }
 
@@ -604,13 +638,13 @@ func (p *parser) parseComment() {
 	if p.cur.Peek() == '>' {
 		// <!-->  — empty comment
 		_ = p.cur.Advance(1)
-		_ = p.sax.Comment(nil)
+		p.handleSAXErr(p.sax.Comment(nil))
 		return
 	}
 	if p.cur.Peek() == '-' && p.cur.PeekAt(1) == '>' {
 		// <!---> — empty comment
 		_ = p.cur.Advance(2)
-		_ = p.sax.Comment(nil)
+		p.handleSAXErr(p.sax.Comment(nil))
 		return
 	}
 
@@ -624,14 +658,14 @@ func (p *parser) parseComment() {
 		if b == '-' && p.cur.PeekAt(n+1) == '-' && p.cur.PeekAt(n+2) == '>' {
 			data := p.cur.PeekString(n)
 			_ = p.cur.Advance(n + 3) // skip data + '-->'
-			_ = p.sax.Comment([]byte(data))
+			p.handleSAXErr(p.sax.Comment([]byte(data)))
 			return
 		}
 		// Also handle incorrectly closed comment: --!>
 		if b == '-' && p.cur.PeekAt(n+1) == '-' && p.cur.PeekAt(n+2) == '!' && p.cur.PeekAt(n+3) == '>' {
 			data := p.cur.PeekString(n)
 			_ = p.cur.Advance(n + 4) // skip data + '--!>'
-			_ = p.sax.Comment([]byte(data))
+			p.handleSAXErr(p.sax.Comment([]byte(data)))
 			return
 		}
 		n++
@@ -640,7 +674,7 @@ func (p *parser) parseComment() {
 	// Unterminated comment — emit everything as comment
 	data := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
-	_ = p.sax.Comment([]byte(data))
+	p.handleSAXErr(p.sax.Comment([]byte(data)))
 }
 
 // parseBogusComment parses a bogus comment: <! ... >
@@ -659,7 +693,7 @@ func (p *parser) parseBogusComment() {
 	if p.cur.Peek() == '>' {
 		_ = p.cur.Advance(1)
 	}
-	_ = p.sax.Comment([]byte(data))
+	p.handleSAXErr(p.sax.Comment([]byte(data)))
 }
 
 // parsePI parses a processing instruction in HTML mode.
@@ -677,14 +711,14 @@ func (p *parser) parsePI() {
 		if b == '>' {
 			data := p.cur.PeekString(n)
 			_ = p.cur.Advance(n + 1) // skip data + '>'
-			_ = p.sax.Comment([]byte(data))
+			p.handleSAXErr(p.sax.Comment([]byte(data)))
 			return
 		}
 		n++
 	}
 	data := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
-	_ = p.sax.Comment([]byte(data))
+	p.handleSAXErr(p.sax.Comment([]byte(data)))
 }
 
 // parseDoctype parses a DOCTYPE declaration.
@@ -721,7 +755,7 @@ func (p *parser) parseDoctype() {
 		_ = p.cur.Advance(1)
 	}
 
-	_ = p.sax.InternalSubset(name, externalID, systemID)
+	p.handleSAXErr(p.sax.InternalSubset(name, externalID, systemID))
 }
 
 // parseCharacters parses character data (text content).
@@ -1016,7 +1050,7 @@ func (p *parser) parseRawContent(tagName string) {
 					}
 					// In normal or escaped state, </script> closes the element
 					if content.Len() > 0 {
-						_ = p.sax.CDataBlock(content.Bytes())
+						p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
 					}
 					return // Let the main loop handle the end tag
 				}
@@ -1028,7 +1062,7 @@ func (p *parser) parseRawContent(tagName string) {
 
 	// Unterminated — emit everything as cdata
 	if content.Len() > 0 {
-		_ = p.sax.CDataBlock(content.Bytes())
+		p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
 	}
 }
 
@@ -1088,7 +1122,7 @@ func (p *parser) parsePlaintext() {
 	if n > 0 {
 		text := p.cur.PeekString(n)
 		_ = p.cur.Advance(n)
-		_ = p.sax.Characters([]byte(text))
+		p.handleSAXErr(p.sax.Characters([]byte(text)))
 	}
 }
 

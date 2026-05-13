@@ -90,6 +90,15 @@ Note: line number appears twice (prefix and message suffix).
 
 Context extraction matches libxml2's `xmlParserInputGetWindow`: skip-eol, walk back 80, forward 80, cap caret.
 
+#### HTML SAX-callback error routing (`html/parser.go`)
+
+When a SAX callback (e.g. `InternalSubset`, `StartElement`, `Characters`) returns a non-nil error other than `ErrHandlerUnspecified`, `handleSAXErr` forwards it through one of two paths:
+
+- Default (`Parser.Strict(false)`): wrapped as a warning and delivered to the SAX `Warning(err)` slot (via `emitWarning`, gated by `cfg.noWarning`). The parser continues — HTML's libxml2-style tolerance.
+- `Parser.Strict(true)`: captured in `parser.fatalSAXErr` and returned from `parse()` after the parser reaches a stable state. `ErrHandlerUnspecified` is filtered in both modes.
+
+This is distinct from `emitError` (parser-detected malformed input → `Error(err)` slot, gated by `cfg.noError`), which has been the existing convention for tokenization/structure errors.
+
 ### XSLT 3.0 (`xslt3/errors.go`)
 
 **`XSLTError`** — structured error with W3C XSLT error code:

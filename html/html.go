@@ -73,6 +73,22 @@ func (p Parser) SuppressWarnings(v bool) Parser {
 	return p
 }
 
+// Strict controls whether non-[ErrHandlerUnspecified] return values from a
+// SAX callback abort the parse. With Strict(false) (the default), such
+// returns are forwarded to the parser's [WarningHandler] (see
+// [SAXCallbacks.SetOnWarning]) and parsing continues — matching libxml2's
+// "tolerate and produce a best-effort DOM" semantics. With Strict(true),
+// the first such return is captured and surfaced as the [Parser.Parse]
+// error after parsing reaches a stable state. [ErrHandlerUnspecified]
+// is always filtered before either path.
+//
+// Default: false.
+func (p Parser) Strict(v bool) Parser {
+	p = p.clone()
+	p.cfg.strict = v
+	return p
+}
+
 func (p Parser) parseConfig() parseConfig {
 	if p.cfg == nil {
 		return parseConfig{}
