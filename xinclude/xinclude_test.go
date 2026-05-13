@@ -109,6 +109,24 @@ func TestXIncludeNewFSResolver(t *testing.T) {
 		require.Equal(t, 1, count)
 	})
 
+	t.Run("OS-native href separators are normalized for fs.FS", func(t *testing.T) {
+		t.Parallel()
+
+		// Upstream resolveURI uses filepath.Join which on Windows produces
+		// backslash-separated paths. The fs.FS contract requires slash-
+		// only names, so the resolver must call filepath.ToSlash before
+		// Open. On Linux filepath.Join already returns slashes, so this
+		// test is a no-op there; it exercises the conversion only on
+		// Windows.
+		href := filepath.Join("dir", "target.xml")
+		fsys := fstest.MapFS{
+			"dir/target.xml": &fstest.MapFile{Data: []byte(`<ok/>`)},
+		}
+		rc, err := xinclude.NewFSResolver(fsys).Resolve(href, "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = rc.Close() })
+	})
+
 	t.Run("escaping href is rejected by os.DirFS-style FS", func(t *testing.T) {
 		t.Parallel()
 

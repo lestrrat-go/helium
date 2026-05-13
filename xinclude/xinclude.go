@@ -1197,15 +1197,18 @@ type fsResolver struct {
 }
 
 func (r *fsResolver) Resolve(href, base string) (io.ReadCloser, error) {
-	p := href
+	// Upstream URI resolution (e.g. resolveURI) may produce OS-specific
+	// separators via filepath.Join on Windows. fs.FS requires slash-
+	// separated names, so normalize both inputs before joining.
+	p := filepath.ToSlash(href)
 	if !path.IsAbs(p) && base != "" {
 		baseURL, err := url.Parse(base)
 		if err == nil && (baseURL.Scheme == "" || baseURL.Scheme == "file") {
-			basePath := baseURL.Path
+			basePath := filepath.ToSlash(baseURL.Path)
 			if basePath == "" {
-				basePath = base
+				basePath = filepath.ToSlash(base)
 			}
-			p = path.Join(path.Dir(basePath), href)
+			p = path.Join(path.Dir(basePath), p)
 		}
 	}
 	// fs.FS uses slash-separated paths; using path (not filepath) keeps
