@@ -88,11 +88,19 @@ func (p Processor) Resolver(r Resolver) Processor {
 // treated as the permissive default that opens any OS path verbatim.
 //
 // Names handed to fsys.Open use forward slashes and are canonicalized
-// with [path.Clean], so [fs.FS] implementations that enforce
-// [fs.ValidPath] (notably [os.DirFS] and [testing/fstest.MapFS]) see
-// valid names. Relative hrefs that escape the base (e.g. "../foo")
-// leave a leading ".." in the cleaned result and will be rejected by
-// such an FS, giving path-traversal containment for sandboxed input.
+// with [path.Clean]. Relative hrefs that escape the base (e.g. "../foo")
+// leave a leading ".." in the cleaned result and will be rejected by an
+// [fs.ValidPath]-enforcing FS, giving path-traversal containment.
+//
+// Sandboxing note: when paired with [os.DirFS], [testing/fstest.MapFS],
+// or [os.OpenRoot], the document's base URI must be FS-relative — no
+// leading slash and no file:// URL. An absolute base URI (e.g. set via
+// [Processor.BaseURI] with "/abs/path/main.xml" or "file:///abs/main.xml")
+// produces an absolute resolved name that fs.ValidPath rejects with
+// [fs.ErrInvalid], even when the href itself does not escape. This is a
+// deliberate fail-loud contract — silently trimming the leading slash
+// would re-anchor absolute paths under the FS root, masking caller
+// mistakes and risking wrong-file opens.
 func NewFSResolver(fsys fs.FS) Resolver {
 	if fsys == nil {
 		fsys = iofs.PermissiveRoot{}
