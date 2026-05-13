@@ -3,6 +3,7 @@ package xinclude_test
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,23 +109,42 @@ func TestXIncludeNewFSResolver(t *testing.T) {
 		require.Equal(t, 1, count)
 	})
 
+	t.Run("OS-native href separators are normalized for fs.FS", func(t *testing.T) {
+		t.Parallel()
+
+		// Upstream resolveURI uses filepath.Join which on Windows produces
+		// backslash-separated paths. The fs.FS contract requires slash-
+		// only names, so the resolver must call filepath.ToSlash before
+		// Open. On Linux filepath.Join already returns slashes, so this
+		// test is a no-op there; it exercises the conversion only on
+		// Windows.
+		href := filepath.Join("dir", "target.xml")
+		fsys := fstest.MapFS{
+			"dir/target.xml": &fstest.MapFile{Data: []byte(`<ok/>`)},
+		}
+		rc, err := xinclude.NewFSResolver(fsys).Resolve(href, "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = rc.Close() })
+	})
+
 	t.Run("escaping href is rejected by os.DirFS-style FS", func(t *testing.T) {
 		t.Parallel()
 
 		// xi:include href="../escape.xml" resolves to "../escape.xml" after
-		// cleaning — which fstest.MapFS (fs.ValidPath enforced) rejects.
+		// cleaning. os.DirFS enforces fs.ValidPath and returns fs.ErrInvalid
+		// for names that start with "..", proving path-traversal containment.
+		// (Note: fstest.MapFS also rejects via fs.ValidPath but surfaces
+		// fs.ErrNotExist, so we use os.DirFS to assert the specific reason.)
 		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 			<xi:include href="../escape.xml"/>
 		</root>`)
 
-		fsys := fstest.MapFS{
-			"main.xml": &fstest.MapFile{Data: []byte(`<root/>`)},
-		}
+		fsys := os.DirFS(t.TempDir())
 		_, err := xinclude.NewProcessor().
 			Resolver(xinclude.NewFSResolver(fsys)).
 			NoXIncludeMarkers().NoBaseFixup().
 			Process(t.Context(), doc)
-		require.Error(t, err, "expected Process to fail when resolver path escapes FS root")
+		require.ErrorIs(t, err, fs.ErrInvalid, "expected fs.ValidPath rejection when href escapes FS root")
 	})
 }
 

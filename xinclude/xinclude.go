@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"net/url"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -83,17 +84,23 @@ func (p Processor) Resolver(r Resolver) Processor {
 // NewFSResolver returns a [Resolver] that opens hrefs through the given
 // [fs.FS]. Relative hrefs are resolved against the document's base URI
 // (only file:// or scheme-less bases are honored) and joined with
-// [filepath.Join] before being passed to fsys.Open. A nil fsys is
+// [path.Join] before being passed to fsys.Open. A nil fsys is
 // treated as the permissive default that opens any OS path verbatim.
 //
-// Note: because the name handed to fsys.Open is the [filepath.Join]
-// result, it may be absolute and may use OS-specific separators on
-// Windows. FS implementations that enforce [fs.ValidPath] (notably
-// [os.DirFS] and [testing/fstest.MapFS]) will reject those names.
-// Sandboxing XInclude behind such an FS requires path normalization
-// that is not yet performed by this package; for now, supply an FS
-// implementation that accepts OS-style names, or use [Processor.Resolver]
-// with a fully custom resolver that controls its own path resolution.
+// Names handed to fsys.Open use forward slashes and are canonicalized
+// with [path.Clean]. Relative hrefs that escape the base (e.g. "../foo")
+// leave a leading ".." in the cleaned result and will be rejected by an
+// [fs.ValidPath]-enforcing FS, giving path-traversal containment.
+//
+// Sandboxing note: when paired with [os.DirFS], [testing/fstest.MapFS],
+// or [os.OpenRoot], the document's base URI must be FS-relative — no
+// leading slash and no file:// URL. An absolute base URI (e.g. set via
+// [Processor.BaseURI] with "/abs/path/main.xml" or "file:///abs/main.xml")
+// produces an absolute resolved name that fs.ValidPath rejects with
+// [fs.ErrInvalid], even when the href itself does not escape. This is a
+// deliberate fail-loud contract — silently trimming the leading slash
+// would re-anchor absolute paths under the FS root, masking caller
+// mistakes and risking wrong-file opens.
 func NewFSResolver(fsys fs.FS) Resolver {
 	if fsys == nil {
 		fsys = iofs.PermissiveRoot{}
@@ -884,7 +891,7 @@ func resolveURI(href, base string) (string, error) {
 		if basePath == "" {
 			basePath = base
 		}
-		return filepath.Clean(filepath.Join(filepath.Dir(basePath), href)), nil
+		return filepath.Join(filepath.Dir(basePath), href), nil
 	}
 
 	return baseURL.ResolveReference(hrefURL).String(), nil
@@ -1198,20 +1205,24 @@ type fsResolver struct {
 }
 
 func (r *fsResolver) Resolve(href, base string) (io.ReadCloser, error) {
-	path := href
-	if !filepath.IsAbs(path) && base != "" {
+	// Upstream URI resolution (e.g. resolveURI) may produce OS-specific
+	// separators via filepath.Join on Windows. fs.FS requires slash-
+	// separated names, so normalize both inputs before joining.
+	p := filepath.ToSlash(href)
+	if !path.IsAbs(p) && base != "" {
 		baseURL, err := url.Parse(base)
 		if err == nil && (baseURL.Scheme == "" || baseURL.Scheme == "file") {
-			basePath := baseURL.Path
+			basePath := filepath.ToSlash(baseURL.Path)
 			if basePath == "" {
-				basePath = base
+				basePath = filepath.ToSlash(base)
 			}
-			path = filepath.Join(filepath.Dir(basePath), href)
+			p = path.Join(path.Dir(basePath), p)
 		}
 	}
-	// Canonicalize the path so a sandboxing fs.FS (os.DirFS, fstest.MapFS,
-	// os.OpenRoot) sees consistent input. Clean resolves "sub/../target"
-	// down to "target"; any remaining ".." prefix means the join ascended
-	// above the base and will be rejected by an fs.ValidPath-enforcing FS.
-	return r.fsys.Open(filepath.Clean(path)) //nolint:wrapcheck // resolver errors propagate to caller verbatim
+	// fs.FS uses slash-separated paths; using path (not filepath) keeps
+	// names valid on Windows. path.Clean canonicalizes so a sandboxing
+	// fs.FS (os.DirFS, fstest.MapFS, os.OpenRoot) sees consistent input,
+	// and any remaining ".." prefix means the join ascended above the
+	// base and will be rejected by an fs.ValidPath-enforcing FS.
+	return r.fsys.Open(path.Clean(p)) //nolint:wrapcheck // resolver errors propagate to caller verbatim
 }
