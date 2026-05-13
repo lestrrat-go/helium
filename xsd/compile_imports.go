@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"maps"
 	"path/filepath"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -15,6 +16,46 @@ import (
 // configured limit. processIncludes propagates this error rather than
 // treating it as a warning the way it treats ordinary I/O failures.
 var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
+
+// errSchemaPathEscape signals that a schemaLocation joined onto baseDir
+// would escape upward via ".." segments. processIncludes surfaces this
+// as a fatal error rather than swallowing it as a generic I/O warning,
+// so the containment violation is visible to callers.
+var errSchemaPathEscape = errors.New("xsd: schema location escapes base directory")
+
+// validateSchemaPath joins location onto baseDir and refuses paths that
+// escape upward via ".." segments. The escape check compares the joined
+// path back to baseDir via [filepath.Rel] — a relative result that begins
+// with ".." means location ascended above baseDir (independently of
+// whether baseDir itself contains ".." segments, which is common in test
+// fixtures). Mirrors the defense-in-depth path normalization in xinclude
+// (#420/#425) — the configured fs.FS may further constrain (and os.DirFS
+// will reject absolute paths and ValidPath violations on its own), but
+// catching the escape here gives consistent behavior with permissive FS
+// implementations.
+//
+// Note: [filepath.Join] does not preserve an absolute prefix on the second
+// argument — Join("schemas", "/etc/passwd") returns "schemas/etc/passwd",
+// which lives inside baseDir and is not an escape. Absolute schemaLocation
+// values therefore do not bypass this check; they land inside baseDir.
+// (When baseDir is empty there is nothing to escape from, and the
+// configured fs.FS decides what to accept.)
+func validateSchemaPath(baseDir, location string) (string, error) {
+	if baseDir == "" {
+		return filepath.Clean(location), nil
+	}
+	path := filepath.Join(baseDir, location)
+	rel, err := filepath.Rel(baseDir, path)
+	if err != nil {
+		// Rel only fails when one is absolute and the other isn't;
+		// nothing actionable here — accept and let fs.FS decide.
+		return path, nil //nolint:nilerr
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%w: %q", errSchemaPathEscape, location)
+	}
+	return path, nil
+}
 
 // processIncludes handles xs:include and xs:import elements.
 func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) error {
@@ -53,9 +94,10 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 			}
 
 			if err := c.loadImport(ctx, loc, ns); err != nil {
-				// Depth-exceeded is a security limit, not an I/O hiccup;
-				// surface it as a fatal compilation error.
-				if errors.Is(err, errImportDepthExceeded) {
+				// Depth-exceeded and baseDir-escape are security limits,
+				// not I/O hiccups; surface them as fatal compilation
+				// errors rather than demoting to an I/O warning.
+				if errors.Is(err, errImportDepthExceeded) || errors.Is(err, errSchemaPathEscape) {
 					return err
 				}
 				// Import failure — report warning if we have a filename.
@@ -86,9 +128,9 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 
 // loadInclude loads and merges an included schema file.
 func (c *compiler) loadInclude(ctx context.Context, location string, includeElem *helium.Element) error {
-	path := location
-	if c.baseDir != "" {
-		path = filepath.Join(c.baseDir, location)
+	path, err := validateSchemaPath(c.baseDir, location)
+	if err != nil {
+		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
 
 	data, err := fs.ReadFile(c.fsys, path)
@@ -167,9 +209,9 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 // redefinitions for complexType, simpleType, group, and attributeGroup children.
 func (c *compiler) loadRedefine(ctx context.Context, location string, redefineElem *helium.Element) error {
 	// Phase A: Load the redefined schema (same as include).
-	path := location
-	if c.baseDir != "" {
-		path = filepath.Join(c.baseDir, location)
+	path, err := validateSchemaPath(c.baseDir, location)
+	if err != nil {
+		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
 
 	data, err := fs.ReadFile(c.fsys, path)
@@ -383,9 +425,9 @@ func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
 		return fmt.Errorf("%w (limit=%d, location=%q)", errImportDepthExceeded, c.maxImportDepth, location)
 	}
 
-	path := location
-	if c.baseDir != "" {
-		path = filepath.Join(c.baseDir, location)
+	path, err := validateSchemaPath(c.baseDir, location)
+	if err != nil {
+		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}
 
 	data, err := fs.ReadFile(c.fsys, path)

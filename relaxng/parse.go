@@ -339,20 +339,33 @@ func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 // resolveHref resolves a relative href against xml:base ancestors and the
 // compiler's baseDir. This mirrors libxml2's xmlRelaxNGCleanupTree xml:base
 // fixup for <include> and <externalRef> hrefs.
-func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href string) string {
+//
+// When the result is computed by joining baseDir+href, any ".." segments
+// that would ascend above baseDir produce a non-nil error — the caller
+// reports an Include load failure with a clear "escapes base directory"
+// message rather than silently reading from an unintended directory.
+// Mirrors xsd's validateSchemaPath; defense-in-depth alongside whatever
+// path constraints the configured fs.FS enforces.
+func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href string) (string, error) {
 	if filepath.IsAbs(href) {
-		return href
+		return href, nil
 	}
 	if doc := elem.OwnerDocument(); doc != nil {
 		base := helium.NodeGetBase(doc, elem)
 		if base != "" {
-			return helium.BuildURI(href, base)
+			return helium.BuildURI(href, base), nil
 		}
 	}
 	if c.baseDir != "" {
-		return filepath.Join(c.baseDir, href)
+		joined := filepath.Join(c.baseDir, href)
+		if rel, err := filepath.Rel(c.baseDir, joined); err == nil {
+			if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return "", fmt.Errorf("href %q escapes base directory", href)
+			}
+		}
+		return joined, nil
 	}
-	return href
+	return href, nil
 }
 
 // parseInclude parses an <include> element.
@@ -364,7 +377,13 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 		return
 	}
 
-	path := c.resolveHref(ctx, elem, href)
+	path, err := c.resolveHref(ctx, elem, href)
+	if err != nil {
+		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s: %s", href, err)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
+		return
+	}
 
 	// Recursion guard
 	if _, recursing := c.includeStack[path]; recursing {
@@ -775,7 +794,13 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 		return nil
 	}
 
-	path := c.resolveHref(ctx, node, href)
+	path, err := c.resolveHref(ctx, node, href)
+	if err != nil {
+		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s: %s", href, err)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
+		return nil
+	}
 
 	// Recursion guard
 	if _, recursing := c.includeStack[path]; recursing {
