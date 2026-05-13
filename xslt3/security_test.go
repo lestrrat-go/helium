@@ -104,3 +104,28 @@ func TestFnDoc_HTTPClientEnablesNetwork(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "fetched", "doc() should have fetched and embedded the document")
 }
+
+// URI schemes are case-insensitive per RFC 3986. A URL spelled "HTTP://..."
+// must still be classified as HTTP and dispatched to the HTTPClient path —
+// otherwise an opt-in caller would silently fall through to "no URIResolver".
+func TestFnDoc_HTTPClientHandlesUppercaseScheme(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<root>fetched</root>"))
+	}))
+	defer srv.Close()
+
+	// Uppercase scheme: HTTP://host:port/x
+	upper := "HTTP" + strings.TrimPrefix(srv.URL, "http") + "/x"
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+	ss := compileFnDocStylesheet(t)
+
+	out, err := ss.Transform(source).
+		SetParameter("url", stringSeq(upper)).
+		HTTPClient(srv.Client()).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "fetched")
+}

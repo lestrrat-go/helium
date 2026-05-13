@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -417,7 +419,13 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 // [Invocation.URIResolver] and/or [Invocation.HTTPClient]. Mirrors the
 // secure-by-default fn:doc retrieval landed in #417 for xpath3.
 func (ec *execContext) retrieveDocumentBytes(ctx context.Context, resolvedURI string) ([]byte, error) {
-	isHTTP := strings.HasPrefix(resolvedURI, "http://") || strings.HasPrefix(resolvedURI, "https://")
+	// URI schemes are case-insensitive per RFC 3986; url.Parse lowercases
+	// .Scheme so the equality compares are scheme-correct regardless of
+	// how the caller spelled "HTTP" / "Https" / ...
+	var isHTTP bool
+	if u, err := url.Parse(resolvedURI); err == nil {
+		isHTTP = u.Scheme == lexicon.SchemeHTTP || u.Scheme == lexicon.SchemeHTTPS
+	}
 	var resolver xpath3.URIResolver
 	var httpClient *http.Client
 	if ec.transformConfig != nil {
