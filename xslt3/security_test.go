@@ -15,10 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func stringSeq(s string) xpath3.Sequence {
-	return xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: s}}
-}
-
 // Mirrors the xpath3 security tests landed in #417 for the xslt3 internal
 // loadDocument path. XSLT 3.0's document() / fn:doc() now refuse to fall
 // back to os.ReadFile or http.DefaultClient. A caller must opt in by
@@ -55,7 +51,7 @@ func TestFnDoc_NoFileReadByDefault(t *testing.T) {
 	ss := compileFnDocStylesheet(t)
 
 	_, err = ss.Transform(source).
-		SetParameter("url", stringSeq(path)).
+		SetParameter("url", xpath3.SingleString(path)).
 		Serialize(t.Context())
 	require.Error(t, err, "default-deny: doc() must refuse filesystem access without URIResolver")
 	require.True(t, strings.Contains(err.Error(), "no URIResolver"),
@@ -78,7 +74,7 @@ func TestFnDoc_NoNetworkByDefault(t *testing.T) {
 	ss := compileFnDocStylesheet(t)
 
 	_, err = ss.Transform(source).
-		SetParameter("url", stringSeq(srv.URL+"/x")).
+		SetParameter("url", xpath3.SingleString(srv.URL+"/x")).
 		Serialize(t.Context())
 	require.Error(t, err, "default-deny: doc() must refuse network access without HTTPClient/URIResolver")
 	require.Zero(t, hits.Load(), "no HTTP request should reach the test server")
@@ -98,7 +94,7 @@ func TestFnDoc_HTTPClientEnablesNetwork(t *testing.T) {
 	ss := compileFnDocStylesheet(t)
 
 	out, err := ss.Transform(source).
-		SetParameter("url", stringSeq(srv.URL+"/x")).
+		SetParameter("url", xpath3.SingleString(srv.URL+"/x")).
 		HTTPClient(srv.Client()).
 		Serialize(t.Context())
 	require.NoError(t, err)
@@ -123,7 +119,7 @@ func TestFnDoc_HTTPClientHandlesUppercaseScheme(t *testing.T) {
 	ss := compileFnDocStylesheet(t)
 
 	out, err := ss.Transform(source).
-		SetParameter("url", stringSeq(upper)).
+		SetParameter("url", xpath3.SingleString(upper)).
 		HTTPClient(srv.Client()).
 		Serialize(t.Context())
 	require.NoError(t, err)
