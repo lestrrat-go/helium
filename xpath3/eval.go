@@ -21,7 +21,12 @@ const maxNodeSetLength = ixpath.DefaultMaxNodeSetLength
 // realistic XPath. Lower it when accepting untrusted expressions to fail
 // fast on adversarial input that tries to consume the goroutine stack.
 //
-// Mutating this value affects only evaluations started after the change.
+// Each [Evaluator.Evaluate] call snapshots this value once at the start
+// of evaluation and reads from the snapshot during recursion, so an
+// in-flight evaluation never observes a mid-flight mutation and there is
+// no data race between an evaluating goroutine and a goroutine that
+// updates the default. Concurrent mutation by multiple writers still
+// requires external synchronization.
 // 0 disables the limit (NOT recommended for untrusted input).
 var DefaultMaxRecursionDepth = ixpath.DefaultMaxRecursionDepth
 
@@ -36,6 +41,7 @@ type evalContext struct {
 	functions            map[string]Function
 	fnsNS                map[QualifiedName]Function
 	depth                int
+	maxRecursionDepth    int  // snapshot of DefaultMaxRecursionDepth at newEvalCtx
 	opCount              *int // shared via pointer across copies; safe because eval is single-goroutine
 	opLimit              int
 	docOrder             *ixpath.DocOrderCache
@@ -258,7 +264,7 @@ type exprEvaluator func(context.Context, *evalContext, Expr) (Sequence, error)
 
 func evalWith(evalFn exprEvaluator, ctx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
 	ec.depth++
-	if limit := DefaultMaxRecursionDepth; limit > 0 && ec.depth > limit {
+	if ec.maxRecursionDepth > 0 && ec.depth > ec.maxRecursionDepth {
 		return nil, ErrRecursionLimit
 	}
 	defer func() { ec.depth-- }()
