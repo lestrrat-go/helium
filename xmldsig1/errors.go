@@ -30,6 +30,11 @@ var (
 	// ErrReferenceNotFound is returned when a Reference URI cannot be resolved.
 	ErrReferenceNotFound = errors.New("xmldsig1: reference URI not resolved")
 
+	// ErrDuplicateReferenceID is returned when a Reference URI resolves to more
+	// than one element with the same Id/ID/xml:id value. Such documents are
+	// ambiguous and a known vector for XML Signature Wrapping (XSW) attacks.
+	ErrDuplicateReferenceID = errors.New("xmldsig1: duplicate reference ID")
+
 	// ErrInvalidKeyInfo is returned when KeyInfo content cannot be parsed.
 	ErrInvalidKeyInfo = errors.New("xmldsig1: invalid KeyInfo")
 

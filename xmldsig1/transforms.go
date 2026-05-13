@@ -130,35 +130,44 @@ func collectSubtreeNodes(n helium.Node) []helium.Node {
 // resolveReference resolves a Reference URI to the target node(s).
 // For URI="" (enveloped), returns the document element.
 // For URI="#id", returns the element with that ID.
+//
+// To defend against XML Signature Wrapping (XSW), a document is rejected if
+// the referenced ID resolves to more than one element — including the case
+// where a typed xml:id and a plain Id/ID attribute disagree.
 func resolveReference(doc *helium.Document, uri string) (*helium.Element, error) {
 	if uri == "" {
 		return doc.DocumentElement(), nil
 	}
 	if strings.HasPrefix(uri, "#") {
 		id := uri[1:]
-		// Try the standard GetElementByID first (DTD-declared + xml:id).
-		elem := doc.GetElementByID(id)
-		if elem != nil {
-			return elem, nil
+		typed := doc.GetElementByID(id)
+		attrMatch, attrDup := findElementByIDAttr(doc, id)
+		if attrDup {
+			return nil, fmt.Errorf("%w: %s", ErrDuplicateReferenceID, id)
 		}
-		// Fallback: search for common Id/ID attributes used by XMLDSig/SAML.
-		elem = findElementByIDAttr(doc, id)
-		if elem != nil {
-			return elem, nil
+		if typed != nil && attrMatch != nil && typed != attrMatch {
+			return nil, fmt.Errorf("%w: %s", ErrDuplicateReferenceID, id)
+		}
+		if typed != nil {
+			return typed, nil
+		}
+		if attrMatch != nil {
+			return attrMatch, nil
 		}
 		return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
 	}
 	return nil, fmt.Errorf("%w: external references not supported: %s", ErrReferenceNotFound, uri)
 }
 
-// findElementByIDAttr walks the document tree looking for an element with
-// an "Id" or "ID" attribute matching the given value. This handles the common
-// case where documents use Id attributes without DTD declarations (e.g., SAML).
-func findElementByIDAttr(doc *helium.Document, id string) *helium.Element {
-	var found *helium.Element
+// findElementByIDAttr walks the document tree looking for elements with an
+// "Id" or "ID" attribute matching the given value. Returns the single match
+// if exactly one element matches; duplicate is set if more than one matches.
+// This handles documents that use Id attributes without DTD declarations
+// (e.g., SAML).
+func findElementByIDAttr(doc *helium.Document, id string) (match *helium.Element, duplicate bool) {
 	var walk func(helium.Node)
 	walk = func(n helium.Node) {
-		if found != nil {
+		if duplicate {
 			return
 		}
 		elem, ok := helium.AsNode[*helium.Element](n)
@@ -168,8 +177,12 @@ func findElementByIDAttr(doc *helium.Document, id string) *helium.Element {
 		for _, attr := range elem.Attributes() {
 			name := attr.Name()
 			if (name == "Id" || name == "ID") && attr.Value() == id {
-				found = elem
-				return
+				if match != nil && match != elem {
+					duplicate = true
+					return
+				}
+				match = elem
+				break
 			}
 		}
 		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
@@ -177,5 +190,5 @@ func findElementByIDAttr(doc *helium.Document, id string) *helium.Element {
 		}
 	}
 	walk(doc.DocumentElement())
-	return found
+	return match, duplicate
 }

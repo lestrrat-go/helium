@@ -301,3 +301,37 @@ func TestSignVerifyWithFragmentReference(t *testing.T) {
 	err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
+
+// XSW defense: a document with two elements sharing the ID referenced by the
+// Signature is ambiguous. The verifier picks one and the consuming application
+// may pick the other, enabling XML Signature Wrapping. Reject duplicates.
+func TestVerify_RejectsDuplicateID(t *testing.T) {
+	xml := `<root><data Id="signed-id">legitimate</data></root>`
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, xml)
+
+	ref := xmldsig1.ReferenceConfig{
+		URI:             "#signed-id",
+		DigestAlgorithm: xmldsig1.DigestSHA256,
+		Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+	}
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(ref)
+
+	sigElem, err := signer.SignDetached(t.Context(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+	require.NoError(t, verifier.Verify(t.Context(), doc), "sanity: unmodified doc verifies")
+
+	evil := doc.CreateElement("data")
+	require.NoError(t, evil.SetLiteralAttribute("Id", "signed-id"))
+	require.NoError(t, evil.AddChild(doc.CreateText([]byte("malicious"))))
+	require.NoError(t, doc.DocumentElement().AddChild(evil))
+
+	err = verifier.Verify(t.Context(), doc)
+	require.Error(t, err, "verifier must reject documents with duplicate signed-scope IDs")
+	require.ErrorIs(t, err, xmldsig1.ErrDuplicateReferenceID)
+}
