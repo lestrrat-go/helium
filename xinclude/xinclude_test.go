@@ -3,6 +3,7 @@ package xinclude_test
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,19 +113,20 @@ func TestXIncludeNewFSResolver(t *testing.T) {
 		t.Parallel()
 
 		// xi:include href="../escape.xml" resolves to "../escape.xml" after
-		// cleaning — which fstest.MapFS (fs.ValidPath enforced) rejects.
+		// cleaning. os.DirFS enforces fs.ValidPath and returns fs.ErrInvalid
+		// for names that start with "..", proving path-traversal containment.
+		// (Note: fstest.MapFS also rejects via fs.ValidPath but surfaces
+		// fs.ErrNotExist, so we use os.DirFS to assert the specific reason.)
 		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 			<xi:include href="../escape.xml"/>
 		</root>`)
 
-		fsys := fstest.MapFS{
-			"main.xml": &fstest.MapFile{Data: []byte(`<root/>`)},
-		}
+		fsys := os.DirFS(t.TempDir())
 		_, err := xinclude.NewProcessor().
 			Resolver(xinclude.NewFSResolver(fsys)).
 			NoXIncludeMarkers().NoBaseFixup().
 			Process(t.Context(), doc)
-		require.Error(t, err, "expected Process to fail when resolver path escapes FS root")
+		require.ErrorIs(t, err, fs.ErrInvalid, "expected fs.ValidPath rejection when href escapes FS root")
 	})
 }
 
