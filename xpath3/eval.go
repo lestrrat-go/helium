@@ -27,7 +27,7 @@ const maxNodeSetLength = ixpath.DefaultMaxNodeSetLength
 // no data race between an evaluating goroutine and a goroutine that
 // updates the default. Concurrent mutation by multiple writers still
 // requires external synchronization.
-// 0 disables the limit (NOT recommended for untrusted input).
+// Any value <= 0 disables the limit (NOT recommended for untrusted input).
 var DefaultMaxRecursionDepth = ixpath.DefaultMaxRecursionDepth
 
 // evalContext holds the evaluation state for an XPath 3.1 expression.
