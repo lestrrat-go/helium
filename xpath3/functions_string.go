@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -1063,6 +1064,19 @@ type xpathRegexCacheKey struct {
 
 var compiledXPathRegexCache sync.Map
 
+// DefaultRegexMatchTimeout bounds how long the backtracking regex engine
+// will spend on a single match before returning a timeout error. Patterns
+// using features outside RE2 (backreferences, character-class subtraction,
+// large quantifiers) are compiled with [regexp2], a backtracking engine
+// that is vulnerable to catastrophic-backtracking ReDoS on adversary-
+// supplied inputs. The default of 1 second is a defense-in-depth ceiling
+// for those patterns; pure RE2-compatible patterns are unaffected.
+//
+// Set to 0 to disable the timeout entirely. Mutating this value affects
+// only subsequently-compiled regexes; already-cached compilations keep
+// the timeout in effect at the time they were compiled.
+var DefaultRegexMatchTimeout = 1 * time.Second
+
 func (r *compiledXPathRegex) MatchString(s string) (bool, error) {
 	if r.backtrack != nil {
 		return r.backtrack.MatchString(s)
@@ -1285,6 +1299,9 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 		re, err := regexp2.Compile(pattern, re2Opts)
 		if err != nil {
 			return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
+		}
+		if t := DefaultRegexMatchTimeout; t > 0 {
+			re.MatchTimeout = t
 		}
 		compiled := &compiledXPathRegex{
 			backtrack:    re,
