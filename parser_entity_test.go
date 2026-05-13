@@ -115,6 +115,8 @@ func TestEntityAmplification(t *testing.T) {
 		require.Error(t, err, "absolute ceiling must trip even with RelaxLimits")
 		require.Contains(t, err.Error(), "maximum entity expansion size",
 			"error must explain the ceiling, got: %v", err)
+		require.Regexp(t, `\(\d+ > \d+\)`, err.Error(),
+			"error must include observed and configured sizes for diagnosis, got: %v", err)
 	})
 }
 

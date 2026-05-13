@@ -684,7 +684,12 @@ func (ctx *parserCtx) entityCheck(ent sax.Entity, size int) error {
 	// is asserting that legitimate large entities are OK, not that
 	// unbounded billion-laughs expansion is OK.
 	if ctx.sizeentcopy > entityHardCeiling {
-		return errors.New("maximum entity expansion size exceeded")
+		// The "maximum entity expansion size" prefix matches the historical
+		// error text; substring callers (tests) keep matching. The
+		// (current, limit) suffix surfaces the actual numbers so a
+		// production diagnosis doesn't require code spelunking.
+		return fmt.Errorf("maximum entity expansion size exceeded (%d > %d)",
+			ctx.sizeentcopy, entityHardCeiling)
 	}
 
 	if ctx.maxAmpl == 0 {
