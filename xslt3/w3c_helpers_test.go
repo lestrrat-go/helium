@@ -1536,6 +1536,20 @@ var w3cImplicitSkips = map[string]string{
 	"output-0195":          "W3C dependency default_html_version=4; HTML5 companion output-0195a passes",
 	"result-document-1402": "W3C dependency default_html_version=4; HTML5 companion result-document-1402b passes",
 
+	// document('http://...#fragment') test that relied on the previous
+	// implementation's broken behavior: os.ReadFile of an http:// URL
+	// always failed, so document() raised XTDE1160 and the test's
+	// AcceptErrors caught it. With opt-in URIResolver/HTTPClient
+	// retrieval (mirroring xpath3 #417 and the corresponding xslt3
+	// loadDocument refactor), the fetch now succeeds and the
+	// non-resolving fragment "#123456789" falls into the silent-skip
+	// recovery path (matching what fn/id/id-001 explicitly expects for
+	// the same fragment shape), producing an empty result that doesn't
+	// match any of the test's accept criteria. The two W3C-permitted
+	// recovery actions (silent skip vs. return-the-document) are
+	// mutually exclusive; we keep silent skip because id-001 mandates it.
+	"error-1160a": "premise relied on os.ReadFile failing for http:// URLs; see loadDocument retrieval refactor",
+
 	// XML 1.1 features: namespace undeclaration (xmlns:a="") not supported
 	"xml-version-026": skipXML11NSUndecl,
 	"xml-version-027": skipXML11NSUndecl,
