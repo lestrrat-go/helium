@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -10,7 +11,12 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
-// processIncludesAndImports handles xs:include and xs:import elements.
+// errImportDepthExceeded signals that xs:import recursion reached the
+// configured limit. processIncludes propagates this error rather than
+// treating it as a warning the way it treats ordinary I/O failures.
+var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
+
+// processIncludes handles xs:include and xs:import elements.
 func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) error {
 	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
@@ -47,6 +53,11 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 			}
 
 			if err := c.loadImport(ctx, loc, ns); err != nil {
+				// Depth-exceeded is a security limit, not an I/O hiccup;
+				// surface it as a fatal compilation error.
+				if errors.Is(err, errImportDepthExceeded) {
+					return err
+				}
 				// Import failure — report warning if we have a filename.
 				if c.filename != "" {
 					displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
@@ -364,6 +375,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 
 // loadImport loads an imported schema and merges its declarations.
 func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
+	// Bound the import recursion. Each sub-compiler inherits this limit
+	// and tracks its own depth so namespace-cycling chains (A → B → C → A …)
+	// cannot exhaust memory / stack even when every link uses a distinct
+	// namespace URI.
+	if c.importDepth+1 > c.maxImportDepth {
+		return fmt.Errorf("%w (limit=%d, location=%q)", errImportDepthExceeded, c.maxImportDepth, location)
+	}
+
 	path := location
 	if c.baseDir != "" {
 		path = filepath.Join(c.baseDir, location)
@@ -413,6 +432,8 @@ func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
 		attrRefs:          make(map[*AttrUse]QName),
 		filename:          impFilename,
 		importedNS:        make(map[string]string),
+		importDepth:       c.importDepth + 1,
+		maxImportDepth:    c.maxImportDepth,
 	}
 
 	// Sub-compiler collects errors into its own collector so we can
@@ -439,7 +460,13 @@ func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
 
 	// Process includes/imports in the imported schema (but skip back-references).
 	if err := impC.processIncludes(ctx, impRoot); err != nil {
-		// Non-fatal for imported schemas.
+		// Depth-exceeded errors propagate so a hostile import cycle
+		// is reported to the caller rather than being silently truncated.
+		if errors.Is(err, errImportDepthExceeded) {
+			return err
+		}
+		// Other errors in nested processing are non-fatal — the import
+		// loader treats failure to load referenced schemas as warnings.
 		_ = err
 	}
 

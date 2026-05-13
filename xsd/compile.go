@@ -43,7 +43,24 @@ type compiler struct {
 	includeFile  string // currently-included file path (for duplicate element errors)
 	// importedNS tracks which namespaces have been imported and their schema locations.
 	importedNS map[string]string // namespace → schema location
+	// importDepth and maxImportDepth bound xs:import recursion. Each sub-compiler
+	// created by loadImport inherits maxImportDepth and stores its own
+	// importDepth = parent.importDepth + 1. A sub-compiler whose depth would
+	// exceed the limit is rejected. This blocks namespace-cycling import
+	// chains (A → B → C → A …) where each schema declares a distinct namespace
+	// so the per-compiler importedNS map does not detect the cycle.
+	importDepth    int
+	maxImportDepth int
 }
+
+// defaultMaxImportDepth bounds xs:import recursion depth (not a flat
+// import count), so a modest value is enough to terminate adversarial
+// namespace-cycling chains while leaving generous headroom for real
+// schema hierarchies, which rarely nest more than a few levels deep.
+// The limit is not currently exposed as a Compiler option; matches the
+// hardcoded defensive caps used by relaxng (include limit), catalog
+// (resolution depth), and xpath/xslt (recursion depth).
+const defaultMaxImportDepth = 40
 
 // elemRefSource tracks source location for error reporting.
 type elemRefSource struct {
@@ -98,6 +115,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		itemTypeRefs:      make(map[*TypeDef]QName),
 		attrRefs:          make(map[*AttrUse]QName),
 		importedNS:        make(map[string]string),
+		maxImportDepth:    defaultMaxImportDepth,
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
