@@ -86,6 +86,46 @@ func TestXIncludeNewFSResolver(t *testing.T) {
 		t.Parallel()
 		require.NotNil(t, xinclude.NewFSResolver(nil))
 	})
+
+	t.Run("path is filepath.Clean'd before fs.Open", func(t *testing.T) {
+		t.Parallel()
+
+		// xi:include href="sub/../target.xml" resolves to "target.xml"
+		// after cleaning. Without cleaning, fstest.MapFS would reject
+		// the un-canonicalized name with fs.ErrInvalid.
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="sub/../target.xml"/>
+		</root>`)
+
+		fsys := fstest.MapFS{
+			"target.xml": &fstest.MapFile{Data: []byte(`<ok/>`)},
+		}
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(fsys)).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("escaping href is rejected by os.DirFS-style FS", func(t *testing.T) {
+		t.Parallel()
+
+		// xi:include href="../escape.xml" resolves to "../escape.xml" after
+		// cleaning — which fstest.MapFS (fs.ValidPath enforced) rejects.
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="../escape.xml"/>
+		</root>`)
+
+		fsys := fstest.MapFS{
+			"main.xml": &fstest.MapFile{Data: []byte(`<root/>`)},
+		}
+		_, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(fsys)).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.Error(t, err, "expected Process to fail when resolver path escapes FS root")
+	})
 }
 
 func TestXIncludeBasicXML(t *testing.T) {
