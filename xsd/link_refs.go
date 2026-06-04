@@ -165,8 +165,34 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 	}
 
-	// Merge content models for extension types.
+	// Institute topological ordering of types to ensure child components are processed before they are consumed
+	extensionTypes := make([]*TypeDef, 0, len(c.typeRefs))
 	for td := range c.typeRefs {
+		if td.Derivation != DerivationExtension || td.BaseType == nil {
+			continue
+		}
+		extensionTypes = append(extensionTypes, td)
+	}
+	typeDepth := make(map[*TypeDef]int, len(extensionTypes))
+	var depth func(td *TypeDef) int
+	depth = func(td *TypeDef) int {
+		if td == nil {
+			return 0
+		}
+		if d, ok := typeDepth[td]; ok {
+			return d
+		}
+		typeDepth[td] = 0 // cycle guard; XSD forbids cyclic extension but defend anyway
+		d := 1 + depth(td.BaseType)
+		typeDepth[td] = d
+		return d
+	}
+	sort.Slice(extensionTypes, func(i, j int) bool {
+		return depth(extensionTypes[i]) < depth(extensionTypes[j])
+	})
+
+	// Merge content models for extension types.
+	for _, td := range extensionTypes {
 		if td.Derivation != DerivationExtension || td.BaseType == nil {
 			continue
 		}
