@@ -165,7 +165,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 	}
 
-	// Institute topological ordering of types to ensure child components are processed before they are consumed
+	// Topologically order extension types so each base type is merged before
+	// the types that derive from it (the merge reads the base's finalized
+	// content model and attributes).
 	extensionTypes := make([]*TypeDef, 0, len(c.typeRefs))
 	for td := range c.typeRefs {
 		if td.Derivation != DerivationExtension || td.BaseType == nil {
