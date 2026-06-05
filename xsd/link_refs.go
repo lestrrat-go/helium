@@ -165,11 +165,54 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 	}
 
-	// Merge content models for extension types.
+	// Topologically order extension types so each base type is merged before
+	// the types that derive from it (the merge reads the base's finalized
+	// content model and attributes).
+	extensionTypes := make([]*TypeDef, 0, len(c.typeRefs))
 	for td := range c.typeRefs {
 		if td.Derivation != DerivationExtension || td.BaseType == nil {
 			continue
 		}
+		extensionTypes = append(extensionTypes, td)
+	}
+	typeDepth := make(map[*TypeDef]int, len(extensionTypes))
+	var depth func(td *TypeDef) int
+	depth = func(td *TypeDef) int {
+		if td == nil {
+			return 0
+		}
+		if d, ok := typeDepth[td]; ok {
+			return d
+		}
+		typeDepth[td] = 0 // cycle guard; XSD forbids cyclic extension but defend anyway
+		d := 1 + depth(td.BaseType)
+		typeDepth[td] = d
+		return d
+	}
+	// Stable sort with source-line then QName tie-breaks so error messages
+	// emitted during the merge (e.g. cos-ct-extends-1-1, duplicate attribute)
+	// are deterministic among equal-depth types, matching the restriction loop
+	// below. Line alone is insufficient — multiple types can share a line (e.g.
+	// minified schemas), so fall back to QName before the randomized map order.
+	sort.SliceStable(extensionTypes, func(i, j int) bool {
+		ti, tj := extensionTypes[i], extensionTypes[j]
+		di, dj := depth(ti), depth(tj)
+		if di != dj {
+			return di < dj
+		}
+		li, lj := c.typeDefSources[ti].line, c.typeDefSources[tj].line
+		if li != lj {
+			return li < lj
+		}
+		if ti.Name.NS != tj.Name.NS {
+			return ti.Name.NS < tj.Name.NS
+		}
+		return ti.Name.Local < tj.Name.Local
+	})
+
+	// Merge content models for extension types. extensionTypes is already
+	// filtered to extension types with a base, so no per-item guard is needed.
+	for _, td := range extensionTypes {
 		if td.ContentType == ContentTypeSimple {
 			// simpleContent extension — inherit attributes and wildcard from base.
 			if td.BaseType.Attributes != nil {
