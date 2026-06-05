@@ -187,15 +187,25 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		typeDepth[td] = d
 		return d
 	}
-	// Stable sort with a source-line tie-break so error messages emitted during
-	// the merge (e.g. cos-ct-extends-1-1, duplicate attribute) are deterministic
-	// among equal-depth types, matching the restriction loop below.
+	// Stable sort with source-line then QName tie-breaks so error messages
+	// emitted during the merge (e.g. cos-ct-extends-1-1, duplicate attribute)
+	// are deterministic among equal-depth types, matching the restriction loop
+	// below. Line alone is insufficient — multiple types can share a line (e.g.
+	// minified schemas), so fall back to QName before the randomized map order.
 	sort.SliceStable(extensionTypes, func(i, j int) bool {
-		di, dj := depth(extensionTypes[i]), depth(extensionTypes[j])
+		ti, tj := extensionTypes[i], extensionTypes[j]
+		di, dj := depth(ti), depth(tj)
 		if di != dj {
 			return di < dj
 		}
-		return c.typeDefSources[extensionTypes[i]].line < c.typeDefSources[extensionTypes[j]].line
+		li, lj := c.typeDefSources[ti].line, c.typeDefSources[tj].line
+		if li != lj {
+			return li < lj
+		}
+		if ti.Name.NS != tj.Name.NS {
+			return ti.Name.NS < tj.Name.NS
+		}
+		return ti.Name.Local < tj.Name.Local
 	})
 
 	// Merge content models for extension types. extensionTypes is already
