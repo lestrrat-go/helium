@@ -37,7 +37,7 @@ func TestExtensionChainDeterministic(t *testing.T) {
 
 	const docXML = `<?xml version="1.0"?><Doc><Required>x</Required></Doc>`
 
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		schemaDOM, err := helium.NewParser().Parse(t.Context(), []byte(schemaXSD))
 		require.NoError(t, err, "iter %d: parse schema", i)
 		schema, err := xsd.NewCompiler().Compile(t.Context(), schemaDOM)
