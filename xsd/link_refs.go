@@ -187,15 +187,20 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		typeDepth[td] = d
 		return d
 	}
-	sort.Slice(extensionTypes, func(i, j int) bool {
-		return depth(extensionTypes[i]) < depth(extensionTypes[j])
+	// Stable sort with a source-line tie-break so error messages emitted during
+	// the merge (e.g. cos-ct-extends-1-1, duplicate attribute) are deterministic
+	// among equal-depth types, matching the restriction loop below.
+	sort.SliceStable(extensionTypes, func(i, j int) bool {
+		di, dj := depth(extensionTypes[i]), depth(extensionTypes[j])
+		if di != dj {
+			return di < dj
+		}
+		return c.typeDefSources[extensionTypes[i]].line < c.typeDefSources[extensionTypes[j]].line
 	})
 
-	// Merge content models for extension types.
+	// Merge content models for extension types. extensionTypes is already
+	// filtered to extension types with a base, so no per-item guard is needed.
 	for _, td := range extensionTypes {
-		if td.Derivation != DerivationExtension || td.BaseType == nil {
-			continue
-		}
 		if td.ContentType == ContentTypeSimple {
 			// simpleContent extension — inherit attributes and wildcard from base.
 			if td.BaseType.Attributes != nil {
