@@ -457,9 +457,20 @@ func (vc *validationContext) tryMatchSequence(ctx context.Context, mg *ModelGrou
 }
 
 func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) {
+	// Prefer a branch that consumes at least one child, mirroring matchChoice.
+	// An earlier optional branch can match zero-length, but a later branch may
+	// be the one that actually consumes the current child; returning the
+	// zero-length match first would leave that child stranded.
 	for _, p := range mg.Particles {
 		consumed, err := vc.tryMatchParticle(ctx, p, children, pos)
-		if err == nil {
+		if err == nil && consumed > 0 {
+			return consumed, nil
+		}
+	}
+	// Fall back to a zero-length (optional) branch.
+	for _, p := range mg.Particles {
+		consumed, err := vc.tryMatchParticle(ctx, p, children, pos)
+		if err == nil && consumed == 0 {
 			return consumed, nil
 		}
 	}
