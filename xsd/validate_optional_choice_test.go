@@ -47,6 +47,11 @@ func TestOptionalElementBeforeChoice(t *testing.T) {
 		{"omit Lead, pick second branch", `<root><Q>x</Q></root>`, true},
 		{"include Lead, pick second branch", `<root><Lead>l</Lead><Q>x</Q></root>`, true},
 		{"omit Lead, empty choice", `<root/>`, true},
+		// The choice permits a single branch, so a second branch element must
+		// still be rejected — the consuming-branch preference must not cause
+		// the lookahead to over-consume past the choice.
+		{"omit Lead, both choice branches", `<root><P>x</P><Q>x</Q></root>`, false},
+		{"omit Lead, unexpected element", `<root><X>x</X></root>`, false},
 	}
 
 	for _, tc := range cases {
