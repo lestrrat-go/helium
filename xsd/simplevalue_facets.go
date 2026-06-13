@@ -236,11 +236,11 @@ func countFractionDigits(value string) int {
 	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
 		s = s[1:]
 	}
-	dotIdx := strings.Index(s, ".")
-	if dotIdx < 0 {
+	_, frac, found := strings.Cut(s, ".")
+	if !found {
 		return 0
 	}
-	return len(strings.TrimRight(s[dotIdx+1:], "0"))
+	return len(strings.TrimRight(frac, "0"))
 }
 
 // facetLength returns the effective length of a value for facet checking.
