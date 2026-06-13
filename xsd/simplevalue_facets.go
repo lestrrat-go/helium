@@ -227,19 +227,20 @@ func countTotalDigits(value string) int {
 	return total
 }
 
-// countFractionDigits counts the number of digits after the decimal point.
-// If there is no decimal point, returns 0.
-// Trailing zeros are significant: "1.20" → 2, "1.0" → 1.
+// countFractionDigits counts the number of significant digits after the
+// decimal point. The fractionDigits facet constrains the value, not the
+// lexical form, so trailing zeros are not significant: "1.20" → 1, "2.00" → 0,
+// "1.0" → 0. If there is no decimal point, returns 0.
 func countFractionDigits(value string) int {
 	s := value
 	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
 		s = s[1:]
 	}
-	dotIdx := strings.Index(s, ".")
-	if dotIdx < 0 {
+	_, frac, found := strings.Cut(s, ".")
+	if !found {
 		return 0
 	}
-	return len(s) - dotIdx - 1
+	return len(strings.TrimRight(frac, "0"))
 }
 
 // facetLength returns the effective length of a value for facet checking.
