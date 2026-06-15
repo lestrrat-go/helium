@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"math"
 	"math/big"
 	"strconv"
@@ -48,6 +49,125 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		}
 		return cmp, true
 	}
+}
+
+// CanonicalKey maps a lexical value to a value-space canonical string for the
+// given builtin type, so lexically-distinct but value-equal inputs (e.g. "5"
+// and "+5" for xs:integer) produce the same key. It returns (key, true) when a
+// canonical form is defined; otherwise (collapsed-whitespace value, false) for
+// string-family types and anything unrecognized or unparsable.
+func CanonicalKey(s, builtinLocal string) (string, bool) {
+	switch builtinLocal {
+	case "boolean":
+		trimmed := strings.TrimSpace(s)
+		if trimmed == "true" || trimmed == "1" {
+			return "1", true
+		}
+		if trimmed == "false" || trimmed == "0" {
+			return "0", true
+		}
+		return trimmed, false
+	case "float":
+		return canonicalFloatKey(s, 32) // xs:float is 32-bit IEEE-754
+	case "double":
+		return canonicalFloatKey(s, 64)
+	case "dateTime", "date", "time", "gYear", "gYearMonth", "gMonth", "gDay", "gMonthDay":
+		return canonicalDateTimeKey(strings.TrimSpace(s), builtinLocal)
+	case "decimal", "integer",
+		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
+		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
+		"positiveInteger":
+		trimmed := strings.TrimSpace(s)
+		r, ok := new(big.Rat).SetString(trimmed)
+		if !ok {
+			return trimmed, false
+		}
+		return r.RatString(), true
+	case "string":
+		// whiteSpace=preserve: the value space is the exact lexical string, so
+		// leading/trailing/internal whitespace is significant. Do not alter it.
+		return s, false
+	case "normalizedString":
+		// whiteSpace=replace: tab/newline/carriage-return become spaces.
+		return whitespaceReplace(s), false
+	case "NMTOKENS", "IDREFS", "ENTITIES":
+		// List types: collapse internal whitespace so token sequences that
+		// differ only in separator whitespace are value-equal.
+		return strings.Join(strings.Fields(s), " "), false
+	default:
+		// Remaining string-derived types (token, NMTOKEN, Name, NCName, ID,
+		// IDREF, ENTITY, language, anyURI, …) have whiteSpace=collapse.
+		return strings.Join(strings.Fields(s), " "), false
+	}
+}
+
+// canonicalFloatKey canonicalizes an xs:float/xs:double value at the given IEEE
+// precision (bitSize 32 for xs:float, 64 for xs:double). Using the correct
+// precision ensures values that are equal in xs:float's 32-bit value space (but
+// distinct as 64-bit doubles) map to the same key, and vice versa.
+func canonicalFloatKey(s string, bitSize int) (string, bool) {
+	trimmed := strings.TrimSpace(s)
+	f, ok := parseXSDFloat(trimmed)
+	if !ok {
+		return trimmed, false
+	}
+	if math.IsNaN(f) {
+		return "NaN", true
+	}
+	if math.IsInf(f, 1) {
+		return "INF", true
+	}
+	if math.IsInf(f, -1) {
+		return "-INF", true
+	}
+	if bitSize == 32 {
+		f = float64(float32(f)) // round to xs:float precision
+	}
+	if f == 0 {
+		f = 0 // normalize -0 to +0; they are equal in the value space
+	}
+	return strconv.FormatFloat(f, 'g', -1, bitSize), true
+}
+
+// whitespaceReplace applies the XSD whiteSpace="replace" normalization: each
+// tab, newline, and carriage return becomes a single space.
+func whitespaceReplace(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
+	var dt xsdDateTime
+	var ok bool
+	switch builtinLocal {
+	case "dateTime":
+		dt, ok = parseXSDDateTime(s)
+	case "date":
+		dt, ok = parseXSDDate(s)
+	case "time":
+		dt, ok = parseXSDTime(s)
+	case "gYear":
+		dt, ok = parseXSDGYear(s)
+	case "gYearMonth":
+		dt, ok = parseXSDGYearMonth(s)
+	case "gMonth":
+		dt, ok = parseXSDGMonth(s)
+	case "gDay":
+		dt, ok = parseXSDGDay(s)
+	case "gMonthDay":
+		dt, ok = parseXSDGMonthDay(s)
+	}
+	if !ok {
+		return s, false
+	}
+	if dt.hasTZ {
+		dt = dt.normalizeToUTC()
+	}
+	return fmt.Sprintf("%d|%d|%d|%d|%d|%g|%t", dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, dt.hasTZ), true
 }
 
 // CompareDecimal compares two decimal string values using math/big.Rat.
