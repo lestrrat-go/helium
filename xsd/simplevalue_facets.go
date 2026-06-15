@@ -225,11 +225,29 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 		}
 	}
 
-	// Pattern.
-	if fs.Pattern != nil {
-		re, err := regexp.Compile("^(?:" + *fs.Pattern + ")$")
-		if err == nil && !re.MatchString(value) {
-			msg := fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the pattern '%s'.", value, *fs.Pattern)
+	// Pattern: multiple <xs:pattern> facets in the same restriction step are
+	// ORed — the value is valid if it matches any of them.
+	if len(fs.Patterns) > 0 {
+		matched := false
+		anyValid := false
+		for _, p := range fs.Patterns {
+			re, err := regexp.Compile("^(?:" + p + ")$")
+			if err != nil {
+				continue
+			}
+			anyValid = true
+			if re.MatchString(value) {
+				matched = true
+				break
+			}
+		}
+		if anyValid && !matched {
+			var msg string
+			if len(fs.Patterns) == 1 {
+				msg = fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the pattern '%s'.", value, fs.Patterns[0])
+			} else {
+				msg = fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the patterns '%s'.", value, strings.Join(fs.Patterns, "', '"))
+			}
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("pattern")
 		}

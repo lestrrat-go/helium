@@ -535,7 +535,8 @@ func (c *compiler) parseFacets(_ context.Context, restriction *helium.Element) *
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			fs.Pattern = &val
+			// Multiple <xs:pattern> in the same restriction step are ORed.
+			fs.Patterns = append(fs.Patterns, val)
 		}
 	}
 

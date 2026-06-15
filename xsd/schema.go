@@ -222,8 +222,12 @@ type FacetSet struct {
 	Length         *int
 	MinLength      *int
 	MaxLength      *int
-	Pattern        *string
-	WhiteSpace     *string
+	// Patterns holds the <xs:pattern> facets from a single restriction step.
+	// Per XSD, patterns in the same step are ORed (a value is valid if it
+	// matches any of them); patterns from different derivation steps are ANDed,
+	// which is handled by validating each step's FacetSet along the type chain.
+	Patterns   []string
+	WhiteSpace *string
 }
 
 // AttrUse represents an attribute use in a complex type definition.
