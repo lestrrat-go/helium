@@ -445,36 +445,94 @@ func (vc *validationContext) tryMatchModelGroup(ctx context.Context, mg *ModelGr
 }
 
 func (vc *validationContext) tryMatchSequence(ctx context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) {
-	cur := pos
-	for _, p := range mg.Particles {
-		consumed, err := vc.tryMatchParticle(ctx, p, children, cur)
-		if err != nil {
-			return 0, err
+	minReps := mg.MinOccurs
+	maxReps := mg.MaxOccurs
+
+	scanOnce := func(p int) (int, error) {
+		cur := p
+		for _, particle := range mg.Particles {
+			consumed, err := vc.tryMatchParticle(ctx, particle, children, cur)
+			if err != nil {
+				return 0, err
+			}
+			cur += consumed
 		}
+		return cur - p, nil
+	}
+
+	cur := pos
+	reps := 0
+	for maxReps == Unbounded || reps < maxReps {
+		consumed, err := scanOnce(cur)
+		if err != nil {
+			break
+		}
+		reps++
 		cur += consumed
+		if consumed == 0 {
+			// Zero-length iteration: further iterations would also be
+			// zero-length, so count remaining required reps at once.
+			if reps < minReps {
+				reps = minReps
+			}
+			break
+		}
+	}
+
+	if reps < minReps {
+		return 0, fmt.Errorf("insufficient sequence repetitions")
 	}
 	return cur - pos, nil
 }
 
 func (vc *validationContext) tryMatchChoice(ctx context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) {
-	// Prefer a branch that consumes at least one child, mirroring matchChoice.
-	// An earlier optional branch can match zero-length, but a later branch may
-	// be the one that actually consumes the current child; returning the
-	// zero-length match first would leave that child stranded.
-	for _, p := range mg.Particles {
-		consumed, err := vc.tryMatchParticle(ctx, p, children, pos)
-		if err == nil && consumed > 0 {
-			return consumed, nil
+	minReps := mg.MinOccurs
+	maxReps := mg.MaxOccurs
+
+	scanOnce := func(p int) (int, bool) {
+		// Prefer a branch that consumes at least one child, mirroring
+		// matchChoice. An earlier optional branch can match zero-length, but a
+		// later branch may be the one that actually consumes the current child;
+		// returning the zero-length match first would leave that child stranded.
+		for _, particle := range mg.Particles {
+			consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+			if err == nil && consumed > 0 {
+				return consumed, true
+			}
+		}
+		// Fall back to a zero-length (optional) branch.
+		for _, particle := range mg.Particles {
+			consumed, err := vc.tryMatchParticle(ctx, particle, children, p)
+			if err == nil && consumed == 0 {
+				return consumed, true
+			}
+		}
+		return 0, false
+	}
+
+	cur := pos
+	reps := 0
+	for maxReps == Unbounded || reps < maxReps {
+		consumed, ok := scanOnce(cur)
+		if !ok {
+			break
+		}
+		reps++
+		cur += consumed
+		if consumed == 0 {
+			// Zero-length iteration: further iterations would also be
+			// zero-length, so count remaining required reps at once.
+			if reps < minReps {
+				reps = minReps
+			}
+			break
 		}
 	}
-	// Fall back to a zero-length (optional) branch.
-	for _, p := range mg.Particles {
-		consumed, err := vc.tryMatchParticle(ctx, p, children, pos)
-		if err == nil && consumed == 0 {
-			return consumed, nil
-		}
+
+	if reps < minReps {
+		return 0, fmt.Errorf("insufficient choice repetitions")
 	}
-	return 0, fmt.Errorf("no choice matched")
+	return cur - pos, nil
 }
 
 func (vc *validationContext) tryMatchAll(_ context.Context, mg *ModelGroup, children []childElem, pos int) (int, error) {
