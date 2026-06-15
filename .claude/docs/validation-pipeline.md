@@ -40,10 +40,18 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
      - Simple: no child elements, validate text vs type facets
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
 
-QName/NOTATION simple-value validation compares enumeration facets in value
-space, not raw prefix text. Instance lexical QNames are resolved against the
-instance node's in-scope namespaces; facet lexical QNames are resolved against
-the schema facet's in-scope namespaces.
+Enumeration facets are compared in value space, not raw lexical text. A value is
+a member if it lexically equals a member OR value-compares equal to one (e.g.
+decimal `5.0`≡`5`, boolean `1`≡`true`, float `1.50`≡`1.5`, equal dateTimes in
+different timezones). For float/double, NaN equals NaN for enumeration (but
+remains incomparable for min/max ordering). QName/NOTATION enumeration resolves
+both instance and facet lexical QNames against their respective in-scope
+namespaces. Value-space comparison is restricted to an allowlist of numeric,
+boolean, date/time, and binary builtins (`enumValueSpaceTypes`); hexBinary and
+base64Binary compare by decoded octets (so `"0A"`≡`"0a"`). String-family and
+anyURI types stay lexical-only (their value space equals their whitespace-
+processed lexical space), so a numeric-looking string enum `"5"` does not accept
+`"5.0"`.
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):
@@ -93,7 +101,7 @@ Pattern-matching engine with backtracking:
    - **List**: split text, validate items
 3. Element validation: match name, validate attrs, build child list (skip non-content: EntityRef/PI/Comment), validate content, check all attrs+content consumed
 
-### Backtracking Strategy (`backtrackGroupFlexible`)
+### Backtracking Strategy (`backtrackGroupFlexible` / `backtrackGroupNaive`)
 
 When mandatory group child fails:
 1. Check if element was consumed (structural vs content error)
@@ -102,17 +110,26 @@ When mandatory group child fails:
    - Re-validate remaining children at each count
    - Keep highest successful count (maximizes consumption — libxml2 semantics)
 
+Two parallel implementations share this strategy. `validateGroupContent` +
+`backtrackGroupFlexible` runs inside element bodies (threads attrs/attrUsed and
+emits content-failure diagnostics). `validateGroup` + `backtrackGroupNaive` runs
+the bare-`<group>` start path (and any group reached via `validatePattern`),
+operating only on the node sequence with no attribute/element-content context.
+
 ### Token-Level Backtracking (`<list>` / attribute values)
 
 `matchAttrContent` (attribute values) and `matchListContent` (`<list>` content)
 match whitespace-separated tokens. `matchAttrTokensCounts` returns every
 possible token-consumption count for a pattern in greedy-preferred (descending)
-order; `groupCounts` composes children sequentially across those options and
+order; `groupCounts` composes children sequentially across those options
+(memoized by child index + token offset to avoid exponential blow-up) and
 `repeatCounts` enumerates repetition counts. A group succeeds when some
 combination consumes exactly all tokens, so a greedy `oneOrMore`/`zeroOrMore`
 can yield tokens back to a later mandatory member, and a zero-token `choice`
 branch (e.g. `empty`) does not shadow a consuming branch. `matchAttrTokens`
-is a thin greedy-max wrapper over `matchAttrTokensCounts`.
+is a thin greedy-max wrapper over `matchAttrTokensCounts`. `validateList` (the
+naive `validatePattern` path) delegates to `matchListContent`, so every `<list>`
+path shares these semantics.
 
 ### Error Suppression
 

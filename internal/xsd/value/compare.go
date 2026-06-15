@@ -1,6 +1,9 @@
 package value
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/hex"
 	"math"
 	"math/big"
 	"strconv"
@@ -12,6 +15,8 @@ import (
 // is undefined (NaN, incomparable durations, parse failures).
 func Compare(a, b, builtinLocal string) (int, bool) {
 	switch builtinLocal {
+	case "boolean":
+		return compareBoolean(a, b)
 	case "float", "double":
 		return compareFloat(a, b)
 	case "dateTime":
@@ -32,6 +37,10 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		return compareGMonthDay(a, b)
 	case "duration":
 		return compareDuration(a, b)
+	case "hexBinary":
+		return compareHexBinary(a, b)
+	case "base64Binary":
+		return compareBase64Binary(a, b)
 	default:
 		cmp := CompareDecimal(a, b)
 		if cmp == -2 {
@@ -52,13 +61,96 @@ func CompareDecimal(a, b string) int {
 	return ra.Cmp(rb)
 }
 
+// parseXSDBoolean canonicalizes an xs:boolean lexical form. "true"/"1" map to
+// true and "false"/"0" map to false. Any other input is not a valid boolean.
+func parseXSDBoolean(s string) (bool, bool) {
+	switch s {
+	case "true", "1":
+		return true, true
+	case "false", "0":
+		return false, true
+	}
+	return false, false
+}
+
+// compareBoolean compares two xs:boolean values in value space. xs:boolean has
+// no order relation in XSD, so callers should rely only on equality (cmp == 0).
+// For a total, deterministic result this orders false < true; equal values
+// return 0.
+func compareBoolean(a, b string) (int, bool) {
+	ba, ok1 := parseXSDBoolean(a)
+	bb, ok2 := parseXSDBoolean(b)
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	if ba == bb {
+		return 0, true
+	}
+	if !ba {
+		return -1, true
+	}
+	return 1, true
+}
+
+// compareHexBinary compares two xs:hexBinary values in value space (the decoded
+// octet sequence), so lexically distinct forms that decode to the same bytes are
+// equal (e.g. "0A" == "0a"). XSD does not order hexBinary, but a deterministic,
+// antisymmetric total order (bytes.Compare of the decoded octets) is returned so
+// the result is a well-behaved comparator; enumeration only relies on cmp == 0.
+// Returns ok=false if either operand is not valid hexBinary.
+func compareHexBinary(a, b string) (int, bool) {
+	da, err1 := hex.DecodeString(a)
+	db, err2 := hex.DecodeString(b)
+	if err1 != nil || err2 != nil {
+		return 0, false
+	}
+	return bytes.Compare(da, db), true
+}
+
+// compareBase64Binary compares two xs:base64Binary values in value space (the
+// decoded octet sequence), ignoring the whitespace permitted in the lexical
+// form. As with hexBinary, a deterministic bytes.Compare total order is returned
+// rather than a bare equality flag. Returns ok=false if either operand is not
+// valid base64Binary.
+func compareBase64Binary(a, b string) (int, bool) {
+	da, ok1 := decodeBase64Binary(a)
+	db, ok2 := decodeBase64Binary(b)
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	return bytes.Compare(da, db), true
+}
+
+func decodeBase64Binary(s string) ([]byte, bool) {
+	stripped := strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\n' || r == '\r' || r == '\t' {
+			return -1
+		}
+		return r
+	}, s)
+	if decoded, err := base64.StdEncoding.DecodeString(stripped); err == nil {
+		return decoded, true
+	}
+	// validateBase64Binary is regex-only, so it admits unpadded (and partially
+	// padded) forms that StdEncoding rejects. Fall back to RawStdEncoding after
+	// dropping any partial padding, so a value-space comparison still succeeds
+	// for a value the lexical validator accepted (e.g. "TQ" == "TQ==").
+	if decoded, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(stripped, "=")); err == nil {
+		return decoded, true
+	}
+	return nil, false
+}
+
 func parseXSDFloat(s string) (float64, bool) {
 	switch s {
 	case "INF", "+INF":
 		return math.Inf(1), true
 	case "-INF":
 		return math.Inf(-1), true
-	case "NaN":
+	// The float lexical validator (floatRegex) accepts an optional leading sign
+	// on NaN, so accept the signed forms here too for consistency. The sign is
+	// meaningless for NaN.
+	case "NaN", "+NaN", "-NaN":
 		return math.NaN(), true
 	}
 	f, err := strconv.ParseFloat(s, 64)
@@ -66,6 +158,13 @@ func parseXSDFloat(s string) (float64, bool) {
 		return 0, false
 	}
 	return f, true
+}
+
+// IsFloatNaN reports whether s is a valid xs:float/xs:double lexical form that
+// denotes NaN (including the sign-prefixed forms the lexical validator accepts).
+func IsFloatNaN(s string) bool {
+	f, ok := parseXSDFloat(s)
+	return ok && math.IsNaN(f)
 }
 
 func compareFloat(a, b string) (int, bool) {
@@ -480,13 +579,81 @@ func compareDateTimeFields(a, b xsdDateTime) int {
 
 func compareDateTimeParsed(a, b xsdDateTime) (int, bool) {
 	if a.hasTZ != b.hasTZ {
-		return 0, false // indeterminate
+		return compareDateTimeMixedTZ(a, b)
 	}
 	if a.hasTZ {
 		a = a.normalizeToUTC()
 		b = b.normalizeToUTC()
 	}
 	return compareDateTimeFields(a, b), true
+}
+
+// compareDateTimeMixedTZ compares two date/time values when exactly one carries
+// a timezone, applying the XSD 1.0 order relation (3.2.7.4). A non-timezoned
+// value denotes the instant interval [v-14:00, v+14:00]; if that whole interval
+// lies on one side of the timezoned operand the result is determinate. Only an
+// overlapping interval is indeterminate.
+func compareDateTimeMixedTZ(a, b xsdDateTime) (int, bool) {
+	// The determinate rule normalizes a synthetic ±14:00 offset across day
+	// boundaries, which requires a full calendar date (year, month, day). The
+	// partial gregorian types leave some of those components zero — gYear
+	// (month=0, day=0), gYearMonth (day=0), gMonth (year=0, day=0), gDay (year=0,
+	// month=0), and gMonthDay (year=0). Applying the offset to a zero field makes
+	// normalizeToUTC borrow into a neighbouring period and yield a determinately
+	// wrong result (e.g. gYear "2020" rolling back to 2019), so those types stay
+	// indeterminate, as they were before this rule existed. (xs:time is not in
+	// this set: compareTime assigns a reference date before comparing, so it has
+	// a full calendar date and flows through the determinate path correctly. The
+	// only loss is a literal year-0000 dateTime, an XSD 1.1 edge case, which
+	// falls back to indeterminate rather than wrong.)
+	if a.year == 0 || b.year == 0 || a.month < 1 || b.month < 1 || a.day < 1 || b.day < 1 {
+		return 0, false
+	}
+
+	// Orient so that `tz` is the timezoned operand and `plain` has no timezone.
+	tz, plain := a, b
+	swapped := false
+	if !a.hasTZ {
+		tz, plain = b, a
+		swapped = true
+	}
+
+	tz = tz.normalizeToUTC()
+
+	// Interpret the non-timezoned operand under its two extreme timezones.
+	// +14:00 yields its earliest instant (largest subtraction from UTC),
+	// -14:00 yields its latest instant. We compare plain against tz, so we
+	// build the UTC-normalized plain value at each extreme.
+	low := plain
+	low.hasTZ = true
+	low.tzMin = 14 * 60
+	low = low.normalizeToUTC()
+
+	high := plain
+	high.hasTZ = true
+	high.tzMin = -14 * 60
+	high = high.normalizeToUTC()
+
+	cmpLow := compareDateTimeFields(low, tz)
+	cmpHigh := compareDateTimeFields(high, tz)
+
+	// Both extremes on the same side → determinate result for `plain` vs `tz`.
+	// orient converts that into the result for the original `a` vs `b` order:
+	// when the operands were not swapped, `a` is `tz` and `b` is `plain`, so
+	// the sign must be inverted.
+	orient := func(cmp int) int {
+		if swapped {
+			return cmp
+		}
+		return -cmp
+	}
+	if cmpLow > 0 && cmpHigh > 0 {
+		return orient(1), true
+	}
+	if cmpLow < 0 && cmpHigh < 0 {
+		return orient(-1), true
+	}
+	return 0, false
 }
 
 func compareDateTime(a, b string) (int, bool) {

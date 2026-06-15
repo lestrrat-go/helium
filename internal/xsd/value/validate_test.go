@@ -16,9 +16,15 @@ const (
 	test1foo     = "1foo"
 	testUnderBar = "_bar"
 	testDT0      = "2023-01-15T10:30:00"
+	refDateTimeZ = "2020-01-01T12:00:00Z"
 	testT0       = "10:30:00"
 	testAB       = "a:b"
 	testFoo      = "foo"
+
+	typeGYear     = "gYear"
+	typeGMonth    = "gMonth"
+	typeGDay      = "gDay"
+	typeGMonthDay = "gMonthDay"
 )
 
 func TestBuiltinTypeValidation(t *testing.T) {
@@ -53,7 +59,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", testAbc},
 		},
 		{
-			typeName: "gYear",
+			typeName: typeGYear,
 			valid:    []string{"2023", "-0001", "2023Z", "2023+09:00", "10000"},
 			invalid:  []string{"", "23", testAbc, "2023-01"},
 		},
@@ -63,17 +69,17 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			invalid:  []string{"", "2023", "2023-1", testAbc},
 		},
 		{
-			typeName: "gMonth",
+			typeName: typeGMonth,
 			valid:    []string{"--01", "--12", "--06Z", "--06+09:00"},
 			invalid:  []string{"", "-01", "01", testAbc},
 		},
 		{
-			typeName: "gMonthDay",
+			typeName: typeGMonthDay,
 			valid:    []string{"--01-15", "--12-31", "--06-01Z", "--06-01+09:00"},
 			invalid:  []string{"", "--0115", "-01-15", testAbc},
 		},
 		{
-			typeName: "gDay",
+			typeName: typeGDay,
 			valid:    []string{"---01", "---31", "---15Z", "---15+09:00"},
 			invalid:  []string{"", "--01", "01", testAbc},
 		},
@@ -233,6 +239,26 @@ func TestCompareValues(t *testing.T) {
 		{"integer", "100", "100", 0, true},
 		{"integer", "-5", "5", -1, true},
 
+		// boolean — "true"/"1" and "false"/"0" are value-equal; invalid lexicals
+		// are indeterminate.
+		{lexicon.TypeBoolean, "true", "1", 0, true},
+		{lexicon.TypeBoolean, "false", "0", 0, true},
+		{lexicon.TypeBoolean, "true", "false", 1, true},
+		{lexicon.TypeBoolean, "false", "true", -1, true},
+		{lexicon.TypeBoolean, "maybe", "true", 0, false},
+
+		// hexBinary — compared by decoded octets (bytes.Compare order), so case
+		// is not significant and 0x0A < 0x0B.
+		{"hexBinary", "0A", "0a", 0, true},
+		{"hexBinary", "DEADbeef", "deadBEEF", 0, true},
+		{"hexBinary", "0A", "0B", -1, true},
+		{"hexBinary", "0G", "0A", 0, false}, // invalid hex -> indeterminate
+
+		// base64Binary — compared by decoded octets, whitespace insignificant.
+		{"base64Binary", "YWJj", "YW Jj", 0, true},
+		{"base64Binary", "YWJj", "YWJk", -1, true}, // "abc" < "abd"
+		{"base64Binary", "@@@@", "YWJj", 0, false}, // invalid -> indeterminate
+
 		// float
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, "2.0", -1, true},
 		{lexicon.TypeFloat, "2.0", lexicon.XSLTVersion10, 1, true},
@@ -255,7 +281,16 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDateTime, testDT0, testDT0, 0, true},
 		{lexicon.TypeDateTime, testDT0, "2023-01-16T10:30:00", -1, true},
 		{lexicon.TypeDateTime, "2023-01-15T10:30:00Z", "2023-01-15T11:30:00+01:00", 0, true},
-		{lexicon.TypeDateTime, "2023-01-15T10:30:00Z", testDT0, 0, false}, // mixed TZ
+		{lexicon.TypeDateTime, "2023-01-15T10:30:00Z", testDT0, 0, false}, // mixed TZ, overlapping interval
+		// Mixed TZ but determinate under the XSD 14-hour rule: the non-timezoned
+		// operand's [v-14:00, v+14:00] interval lies entirely on one side.
+		{lexicon.TypeDateTime, "2019-12-30T00:00:00", refDateTimeZ, -1, true}, // latest instant 2019-12-30T14:00Z < bound
+		{lexicon.TypeDateTime, refDateTimeZ, "2019-12-30T00:00:00", 1, true},  // mirror of above
+		{lexicon.TypeDateTime, "2020-01-10T00:00:00", refDateTimeZ, 1, true},  // earliest instant 2020-01-09T10:00Z > bound
+		{lexicon.TypeDateTime, refDateTimeZ, "2020-01-10T00:00:00", -1, true}, // mirror of above
+		// Genuinely indeterminate: ±14:00 interval straddles the bound.
+		{lexicon.TypeDateTime, "2020-01-01T00:00:00", refDateTimeZ, 0, false},
+		{lexicon.TypeDateTime, refDateTimeZ, "2020-01-01T00:00:00", 0, false},
 
 		// date
 		{"date", "2023-01-15", "2023-01-16", -1, true},
@@ -270,28 +305,45 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeTime, "10:30:00Z", "11:30:00+01:00", 0, true},
 
 		// gYear
-		{"gYear", "2023", "2024", -1, true},
-		{"gYear", "2023", "2023", 0, true},
-		{"gYear", "-0001", "2023", -1, true},
+		{typeGYear, "2023", "2024", -1, true},
+		{typeGYear, "2023", "2023", 0, true},
+		{typeGYear, "-0001", "2023", -1, true},
 
 		// gYearMonth
 		{"gYearMonth", "2023-01", "2023-02", -1, true},
 		{"gYearMonth", "2023-06", "2023-06", 0, true},
 
 		// gMonth
-		{"gMonth", "--01", "--02", -1, true},
-		{"gMonth", "--12", "--12", 0, true},
-		{"gMonth", "--12", "--01", 1, true},
+		{typeGMonth, "--01", "--02", -1, true},
+		{typeGMonth, "--12", "--12", 0, true},
+		{typeGMonth, "--12", "--01", 1, true},
 
 		// gDay
-		{"gDay", "---01", "---02", -1, true},
-		{"gDay", "---15", "---15", 0, true},
-		{"gDay", "---31", "---01", 1, true},
+		{typeGDay, "---01", "---02", -1, true},
+		{typeGDay, "---15", "---15", 0, true},
+		{typeGDay, "---31", "---01", 1, true},
 
 		// gMonthDay
-		{"gMonthDay", "--01-15", "--01-16", -1, true},
-		{"gMonthDay", "--06-01", "--06-01", 0, true},
-		{"gMonthDay", "--12-31", "--01-01", 1, true},
+		{typeGMonthDay, "--01-15", "--01-16", -1, true},
+		{typeGMonthDay, "--06-01", "--06-01", 0, true},
+		{typeGMonthDay, "--12-31", "--01-01", 1, true},
+
+		// Mixed-timezone partial gregorian types: the determinate ±14:00 rule
+		// needs a full calendar date, so these stay indeterminate rather than
+		// producing a wrong determinate result from normalizing a zero
+		// year/month/day field.
+		{typeGYear, "2020", "2020Z", 0, false},
+		{"gYearMonth", "2020-06", "2020-06Z", 0, false},
+		{typeGMonth, "--06", "--06Z", 0, false},
+		{typeGDay, "---15", "---15Z", 0, false},
+		{typeGMonthDay, "--06-15", "--06-15Z", 0, false},
+
+		// Mixed-timezone date and time DO get the determinate ±14:00 rule: date
+		// has a full calendar date, and compareTime assigns a reference date.
+		{lexicon.TypeDate, "2019-12-01", "2020-01-01Z", -1, true}, // interval entirely below bound
+		{lexicon.TypeDate, "2020-01-01", "2020-01-01Z", 0, false}, // ±14:00 straddles -> indeterminate
+		{lexicon.TypeTime, "00:00:00", "20:00:00Z", -1, true},     // determinately earlier
+		{lexicon.TypeTime, "12:00:00", "12:00:00Z", 0, false},     // ±14:00 straddles -> indeterminate
 
 		// duration
 		{lexicon.TypeDuration, testP1Y, "P2Y", -1, true},

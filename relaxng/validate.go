@@ -1322,12 +1322,127 @@ func sortDescending(counts []int) {
 }
 
 func (v *validator) validateGroup(pat *pattern, state *validState) int {
-	for _, child := range pat.children {
+	children := pat.children
+	if len(children) == 0 {
+		return 0
+	}
+
+	// Record state at each child boundary so a later mandatory member that
+	// fails can ask a previous flexible member (zeroOrMore/oneOrMore/optional)
+	// to yield items back. This mirrors validateGroupContent's backtracking,
+	// minus the attribute/element-content bookkeeping that path threads.
+	bounds := make([]groupBound, 1, len(children)+1)
+	bounds[0] = saveGroupBound(state, nil, len(v.pendingErrors), v.valid)
+
+	for gi, child := range children {
 		if ret := v.validatePattern(child, state); ret != 0 {
+			if gi > 0 && v.backtrackGroupNaive(children, gi, state, bounds) {
+				bounds = append(bounds, saveGroupBound(state, nil, len(v.pendingErrors), v.valid))
+				continue
+			}
 			return -1
 		}
+		bounds = append(bounds, saveGroupBound(state, nil, len(v.pendingErrors), v.valid))
 	}
 	return 0
+}
+
+// backtrackGroupNaive fixes a naive-group failure at failIdx by reducing the
+// consumption of a previous flexible child (zeroOrMore/oneOrMore/optional). It
+// tries each flexible child from nearest to furthest, and for each tries
+// iteration counts from the minimum upward, preferring the highest count that
+// lets the remaining children match (maximizing content consumption). It is the
+// validatePattern-based counterpart to backtrackGroupFlexible.
+//
+// Two scope notes:
+//   - The naive group path runs only for the top-level document sequence (a
+//     single root element); multi-node sequences are element content, handled by
+//     validateGroupContent. So `bounds[failIdx]` is always the freshly-appended
+//     boundary and there is no multi-node cascade across separate backtrack calls
+//     that could observe a stale intermediate `bounds` entry.
+//   - Recovery reduces exactly one flexible child and greedily re-validates the
+//     rest; it does not cascade yields across several competing flexible members.
+//     A group with two or more flexible members that must each yield (e.g.
+//     group(zeroOrMore(x), zeroOrMore(x), x)) is therefore not fully recovered.
+//     This is a deliberate, pre-existing limitation shared with the element-
+//     content path (backtrackGroupFlexible), not specific to this function.
+func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
+	state *validState, bounds []groupBound) bool {
+	for j := failIdx - 1; j >= 0; j-- {
+		child := children[j]
+		isZeroFlex := child.kind == patternZeroOrMore || child.kind == patternOptional
+		isOneMore := child.kind == patternOneOrMore
+		if !isZeroFlex && !isOneMore {
+			continue
+		}
+		// Skip flexible children that consumed nothing — nothing to yield back.
+		if seqEqual(bounds[j].state.seq, bounds[j+1].state.seq) {
+			continue
+		}
+
+		minIter := 0
+		if isOneMore {
+			minIter = 1
+		}
+
+		content := wrapChildren(child.children)
+
+		var bestState *validState
+		var bestErrLen int
+		var bestValid bool
+
+		for iter := minIter; ; iter++ {
+			bounds[j].restore(state, nil, v)
+
+			iterOK := true
+			for range iter {
+				savedSt := state.clone()
+				v.suppressDepth++
+				ret := v.validatePattern(content, state)
+				v.suppressDepth--
+				if ret != 0 || seqEqual(state.seq, savedSt.seq) {
+					iterOK = false
+					break
+				}
+			}
+			if !iterOK {
+				break
+			}
+
+			// Stop once we reach the greedy consumption level — that is the
+			// state that already failed.
+			if seqEqual(state.seq, bounds[j+1].state.seq) {
+				break
+			}
+
+			retryLen := len(v.pendingErrors)
+			retryValid := v.valid
+			allOK := true
+			for k := j + 1; k <= failIdx; k++ {
+				if v.validatePattern(children[k], state) != 0 {
+					allOK = false
+					break
+				}
+			}
+			if allOK {
+				bestState = state.clone()
+				bestErrLen = len(v.pendingErrors)
+				bestValid = v.valid
+			}
+			v.pendingErrors = v.pendingErrors[:retryLen]
+			v.valid = retryValid
+		}
+
+		if bestState != nil {
+			*state = *bestState
+			v.pendingErrors = v.pendingErrors[:bestErrLen]
+			v.valid = bestValid
+			return true
+		}
+
+		bounds[j].restore(state, nil, v)
+	}
+	return false
 }
 
 func (v *validator) validateChoice(pat *pattern, state *validState) int {
@@ -1336,22 +1451,34 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 	savedValid := v.valid
 
 	v.suppressDepth++
+	// Prefer a branch that makes progress (consumes input) over a zero-length
+	// match, so an early <empty/>/optional branch can't shadow a later
+	// consuming branch (mirrors the hardened validateContentPat choice case).
+	noProgressMatch := false
 	for _, child := range pat.children {
 		saved := state.clone()
-		if ret := v.validatePattern(child, saved); ret == 0 {
+		if ret := v.validatePattern(child, saved); ret != 0 {
+			continue
+		}
+		if !seqEqual(saved.seq, state.seq) {
+			// Branch made progress — use it.
 			v.suppressDepth--
-			// Restore error state (successful branch discards errors from prior branches)
 			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
 			*state = *saved
 			return 0
 		}
+		// Succeeded but consumed nothing — remember and keep trying.
+		noProgressMatch = true
 	}
 	v.suppressDepth--
 
-	// All branches failed — restore error state (no branch errors emitted)
+	// Restore error state (no branch errors emitted).
 	v.pendingErrors = v.pendingErrors[:savedLen]
 	v.valid = savedValid
+	if noProgressMatch {
+		return 0
+	}
 	return -1
 }
 

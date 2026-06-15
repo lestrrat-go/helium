@@ -52,6 +52,51 @@ func checkMaxExclusive(v, bound, builtinLocal string) bool {
 	return cmp < 0
 }
 
+// enumValueSpaceTypes is the set of builtin base types for which value.Compare
+// implements correct value-space equality, so the enumeration facet may accept a
+// member that is value-equal but lexically distinct. It deliberately excludes
+// string-family and anyURI types: value.Compare falls back to decimal comparison
+// for any unrecognized builtin, which would wrongly treat numeric-looking
+// lexicals as equal (e.g. xs:string enumeration "5" accepting "5.0"). Those
+// types stay lexical-only, which is correct because their value space equals
+// their (whitespace-processed) lexical space.
+var enumValueSpaceTypes = map[string]struct{}{
+	// Numeric (decimal-derived).
+	"decimal": {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
+	"long": {}, "int": {}, "short": {}, "byte": {},
+	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
+	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
+	// Floating point.
+	"float": {}, "double": {},
+	// Boolean.
+	"boolean": {},
+	// Date/time/duration.
+	"dateTime": {}, "date": {}, "time": {}, "duration": {},
+	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
+	// Binary (compared by decoded octets, not lexical text).
+	"hexBinary": {}, "base64Binary": {},
+}
+
+// enumerationValueEqual reports whether v is value-equal to a member ev for the
+// purpose of the enumeration facet. It only performs value-space comparison for
+// types in enumValueSpaceTypes (numeric, boolean, date/time, and binary); for
+// all others (string-family, anyURI, and the empty/untyped case) enumeration
+// stays lexical-only and this returns false. For float/double, XSD treats NaN as
+// equal to NaN for enumeration (unlike ordering, where NaN is incomparable),
+// handled explicitly here.
+func enumerationValueEqual(v, ev, builtinLocal string) bool {
+	if _, ok := enumValueSpaceTypes[builtinLocal]; !ok {
+		return false
+	}
+	if builtinLocal == "float" || builtinLocal == "double" {
+		if value.IsFloatNaN(v) && value.IsFloatNaN(ev) {
+			return true
+		}
+	}
+	cmp, ok := value.Compare(v, ev, builtinLocal)
+	return ok && cmp == 0
+}
+
 func checkFacets(ctx context.Context, value string, valueNS map[string]string, fs *FacetSet, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
 	var anyErr error
 
@@ -74,7 +119,20 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 				}
 			}
 		} else {
+			// Enumeration is defined on the value space. A lexical match is
+			// always sufficient; additionally, for value-space-comparable types
+			// (see enumValueSpaceTypes) a lexically distinct value that is
+			// value-equal to a member must also be accepted. String-family and
+			// other non-comparable types stay lexical-only.
 			found = slices.Contains(fs.Enumeration, value)
+			if !found {
+				for _, ev := range fs.Enumeration {
+					if enumerationValueEqual(value, ev, builtinLocal) {
+						found = true
+						break
+					}
+				}
+			}
 		}
 		if !found {
 			set := "'" + strings.Join(fs.Enumeration, "', '") + "'"
@@ -227,19 +285,20 @@ func countTotalDigits(value string) int {
 	return total
 }
 
-// countFractionDigits counts the number of digits after the decimal point.
-// If there is no decimal point, returns 0.
-// Trailing zeros are significant: "1.20" → 2, "1.0" → 1.
+// countFractionDigits counts the number of significant digits after the
+// decimal point. The fractionDigits facet constrains the value, not the
+// lexical form, so trailing zeros are not significant: "1.20" → 1, "2.00" → 0,
+// "1.0" → 0. If there is no decimal point, returns 0.
 func countFractionDigits(value string) int {
 	s := value
 	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
 		s = s[1:]
 	}
-	dotIdx := strings.Index(s, ".")
-	if dotIdx < 0 {
+	_, frac, found := strings.Cut(s, ".")
+	if !found {
 		return 0
 	}
-	return len(s) - dotIdx - 1
+	return len(strings.TrimRight(frac, "0"))
 }
 
 // facetLength returns the effective length of a value for facet checking.
