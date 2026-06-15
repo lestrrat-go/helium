@@ -1052,10 +1052,8 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		// consumption options so a greedy repetition or a zero-token choice
 		// branch cannot strand a later mandatory member.
 		tokens := strings.Fields(text)
-		for _, n := range v.groupCounts(pat.children, tokens) {
-			if n == len(tokens) {
-				return 0
-			}
+		if slices.Contains(v.groupCounts(pat.children, tokens), len(tokens)) {
+			return 0
 		}
 		return -1
 	case patternEmpty:
@@ -1093,10 +1091,8 @@ func (v *validator) matchListContent(pat *pattern, text string, elem *helium.Ele
 	// Backtrack across each member's consumption options so a greedy
 	// repetition or a zero-token choice branch cannot strand a later
 	// mandatory member.
-	for _, n := range v.groupCounts(pat.children, tokens) {
-		if n == len(tokens) {
-			return 0
-		}
+	if slices.Contains(v.groupCounts(pat.children, tokens), len(tokens)) {
+		return 0
 	}
 
 	// No combination consumed the whole list. Report a best-effort error by
