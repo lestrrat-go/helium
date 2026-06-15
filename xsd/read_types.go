@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"regexp"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -535,7 +536,15 @@ func (c *compiler) parseFacets(_ context.Context, restriction *helium.Element) *
 			if fs == nil {
 				fs = &FacetSet{}
 			}
-			fs.Pattern = &val
+			// Multiple <xs:pattern> in the same restriction step are ORed.
+			// Compile once here; a nil entry (compile failure) is skipped
+			// during validation, preserving the previous lenient behavior.
+			fs.Patterns = append(fs.Patterns, val)
+			re, err := regexp.Compile("^(?:" + val + ")$")
+			if err != nil {
+				re = nil
+			}
+			fs.compiledPatterns = append(fs.compiledPatterns, re)
 		}
 	}
 
