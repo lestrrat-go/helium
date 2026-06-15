@@ -116,6 +116,21 @@ emits content-failure diagnostics). `validateGroup` + `backtrackGroupNaive` runs
 the bare-`<group>` start path (and any group reached via `validatePattern`),
 operating only on the node sequence with no attribute/element-content context.
 
+### Token-Level Backtracking (`<list>` / attribute values)
+
+`matchAttrContent` (attribute values) and `matchListContent` (`<list>` content)
+match whitespace-separated tokens. `matchAttrTokensCounts` returns every
+possible token-consumption count for a pattern in greedy-preferred (descending)
+order; `groupCounts` composes children sequentially across those options
+(memoized by child index + token offset to avoid exponential blow-up) and
+`repeatCounts` enumerates repetition counts. A group succeeds when some
+combination consumes exactly all tokens, so a greedy `oneOrMore`/`zeroOrMore`
+can yield tokens back to a later mandatory member, and a zero-token `choice`
+branch (e.g. `empty`) does not shadow a consuming branch. `matchAttrTokens`
+is a thin greedy-max wrapper over `matchAttrTokensCounts`. `validateList` (the
+naive `validatePattern` path) delegates to `matchListContent`, so every `<list>`
+path shares these semantics.
+
 ### Error Suppression
 
 - `suppressDepth` counter incremented during choice branch exploration
