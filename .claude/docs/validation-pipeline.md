@@ -52,6 +52,11 @@ the schema facet's in-scope namespaces.
   3. Check unique/key: all key-sequences must be unique
   4. Check keyref: all key-sequences must exist in referenced constraint table
   - XPath uses namespace context from schema, not instance
+  - Key comparison is value-space aware (XSD 3.11.4): each field value is
+    canonicalized via its declared simple type (`resolveFieldBuiltinLocal` →
+    `value.CanonicalKey`) before map-key use, so `5`/`+5`/`05` collide for
+    xs:integer. Raw values are retained for error display; fields whose type
+    cannot be resolved fall back to raw-string comparison.
 
 ### Key Data Model
 

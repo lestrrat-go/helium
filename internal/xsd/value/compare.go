@@ -1,6 +1,7 @@
 package value
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"strconv"
@@ -39,6 +40,85 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		}
 		return cmp, true
 	}
+}
+
+// CanonicalKey maps a lexical value to a value-space canonical string for the
+// given builtin type, so lexically-distinct but value-equal inputs (e.g. "5"
+// and "+5" for xs:integer) produce the same key. It returns (key, true) when a
+// canonical form is defined; otherwise (collapsed-whitespace value, false) for
+// string-family types and anything unrecognized or unparsable.
+func CanonicalKey(s, builtinLocal string) (string, bool) {
+	trimmed := strings.TrimSpace(s)
+	switch builtinLocal {
+	case "boolean":
+		if trimmed == "true" || trimmed == "1" {
+			return "1", true
+		}
+		if trimmed == "false" || trimmed == "0" {
+			return "0", true
+		}
+		return trimmed, false
+	case "float", "double":
+		f, ok := parseXSDFloat(trimmed)
+		if !ok {
+			return trimmed, false
+		}
+		if math.IsNaN(f) {
+			return "NaN", true
+		}
+		if math.IsInf(f, 1) {
+			return "INF", true
+		}
+		if math.IsInf(f, -1) {
+			return "-INF", true
+		}
+		return strconv.FormatFloat(f, 'g', -1, 64), true
+	case "dateTime", "date", "time", "gYear", "gYearMonth", "gMonth", "gDay", "gMonthDay":
+		return canonicalDateTimeKey(trimmed, builtinLocal)
+	case "decimal", "integer",
+		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
+		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
+		"positiveInteger":
+		r, ok := new(big.Rat).SetString(trimmed)
+		if !ok {
+			return trimmed, false
+		}
+		return r.RatString(), true
+	default:
+		// String-family and unrecognized types compare by their lexical
+		// (whitespace-collapsed) value.
+		return trimmed, false
+	}
+}
+
+func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
+	var dt xsdDateTime
+	var ok bool
+	switch builtinLocal {
+	case "dateTime":
+		dt, ok = parseXSDDateTime(s)
+	case "date":
+		dt, ok = parseXSDDate(s)
+	case "time":
+		dt, ok = parseXSDTime(s)
+	case "gYear":
+		dt, ok = parseXSDGYear(s)
+	case "gYearMonth":
+		dt, ok = parseXSDGYearMonth(s)
+	case "gMonth":
+		dt, ok = parseXSDGMonth(s)
+	case "gDay":
+		dt, ok = parseXSDGDay(s)
+	case "gMonthDay":
+		dt, ok = parseXSDGMonthDay(s)
+	}
+	if !ok {
+		return s, false
+	}
+	if dt.hasTZ {
+		dt = dt.normalizeToUTC()
+	}
+	return fmt.Sprintf("%d|%d|%d|%d|%d|%g|%t", dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, dt.hasTZ), true
 }
 
 // CompareDecimal compares two decimal string values using math/big.Rat.

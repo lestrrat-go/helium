@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -17,7 +18,8 @@ type idcTable struct {
 
 // idcEntry holds a single key-sequence value and the node that produced it.
 type idcEntry struct {
-	values []string        // one value per field
+	values []string        // raw field values (for human-readable error display)
+	canon  []string        // value-space canonical field values (for key comparison)
 	node   helium.Node     // the node selected by the selector
 	elem   *helium.Element // the element (for line number reporting)
 }
@@ -37,7 +39,7 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
 		ev := xpath1.NewEvaluator().AdditionalNamespaces(idc.Namespaces)
-		table, err := evaluateIDC(ctx, ev, elem, idc)
+		table, err := evaluateIDC(ctx, ev, elem, edecl, idc, vc.schema)
 		if err != nil {
 			continue
 		}
@@ -81,7 +83,7 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 }
 
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
-func evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element, idc *IDConstraint) (*idcTable, error) {
+func evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element, edecl *ElementDecl, idc *IDConstraint, schema *Schema) (*idcTable, error) {
 	// Evaluate selector XPath using pre-compiled expression when available.
 	var selectorResult *xpath1.Result
 	var err error
@@ -131,12 +133,14 @@ func evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element,
 			}
 
 			var value string
+			var fieldNode helium.Node
 			switch fieldResult.Type {
 			case xpath1.NodeSetResult:
 				if len(fieldResult.NodeSet) == 0 {
 					allPresent = false
 				} else {
-					value = nodeStringValue(fieldResult.NodeSet[0])
+					fieldNode = fieldResult.NodeSet[0]
+					value = nodeStringValue(fieldNode)
 				}
 			case xpath1.StringResult:
 				value = fieldResult.String
@@ -144,6 +148,13 @@ func evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element,
 				value = fmt.Sprintf("%v", fieldResult.Number)
 			}
 			entry.values = append(entry.values, value)
+
+			// Canonicalize to the value space using the field's declared
+			// simple type, so lexically-distinct but value-equal keys (e.g.
+			// "5" and "+5" for xs:integer) compare equal. Falls back to the
+			// raw value when the type cannot be resolved.
+			builtinLocal := resolveFieldBuiltinLocal(fieldNode, elem, edecl, schema)
+			entry.canon = append(entry.canon, canonicalKey(value, builtinLocal))
 		}
 
 		if allPresent {
@@ -168,12 +179,12 @@ func nodeStringValue(n helium.Node) string {
 
 // checkUniqueness checks that all key-sequences in the table are unique.
 func (vc *validationContext) checkUniqueness(ctx context.Context, table *idcTable, idc *IDConstraint) error {
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	var lastErr error
 
 	for _, entry := range table.keys {
-		key := formatKeySequence(entry.values)
-		if seen[key] {
+		key := formatKeySequence(entry.canon)
+		if _, dup := seen[key]; dup {
 			elemName := entryDisplayName(entry)
 			idcName := idcDisplayName(idc, vc.schema)
 			msg := fmt.Sprintf("Duplicate key-sequence %s in unique identity-constraint '%s'.",
@@ -183,7 +194,7 @@ func (vc *validationContext) checkUniqueness(ctx context.Context, table *idcTabl
 			}
 			lastErr = fmt.Errorf("duplicate key-sequence")
 		}
-		seen[key] = true
+		seen[key] = struct{}{}
 	}
 
 	return lastErr
@@ -191,16 +202,16 @@ func (vc *validationContext) checkUniqueness(ctx context.Context, table *idcTabl
 
 // checkKeyRef checks that every key-sequence in the keyref table has a match in the referenced table.
 func (vc *validationContext) checkKeyRef(ctx context.Context, keyrefTable, refTable *idcTable, idc *IDConstraint) error {
-	// Build set of referenced key-sequences.
-	refKeys := make(map[string]bool, len(refTable.keys))
+	// Build set of referenced key-sequences (value-space canonical).
+	refKeys := make(map[string]struct{}, len(refTable.keys))
 	for _, entry := range refTable.keys {
-		refKeys[formatKeySequence(entry.values)] = true
+		refKeys[formatKeySequence(entry.canon)] = struct{}{}
 	}
 
 	var lastErr error
 	for _, entry := range keyrefTable.keys {
-		key := formatKeySequence(entry.values)
-		if !refKeys[key] {
+		key := formatKeySequence(entry.canon)
+		if _, ok := refKeys[key]; !ok {
 			elemName := entryDisplayName(entry)
 			idcName := idcDisplayName(idc, vc.schema)
 			msg := fmt.Sprintf("No match found for key-sequence %s of keyref '%s'.",
@@ -213,6 +224,175 @@ func (vc *validationContext) checkKeyRef(ctx context.Context, keyrefTable, refTa
 	}
 
 	return lastErr
+}
+
+// canonicalKey maps a raw field value to a value-space canonical key for the
+// given builtin type. An empty builtinLocal (unresolved type) falls back to the
+// raw value, preserving the previous lexical-only behavior for that field.
+func canonicalKey(raw, builtinLocal string) string {
+	if builtinLocal == "" {
+		return raw
+	}
+	key, _ := value.CanonicalKey(raw, builtinLocal)
+	return key
+}
+
+// resolveFieldBuiltinLocal resolves the builtin XSD base local name of the
+// simple type declared for an IDC field node. host/hostDecl are the element the
+// constraint is declared on, used to descend the schema content model down to
+// the field node. Returns "" when the type cannot be determined, in which case
+// the caller falls back to raw-string comparison for that field.
+func resolveFieldBuiltinLocal(n helium.Node, host *helium.Element, hostDecl *ElementDecl, schema *Schema) string {
+	switch v := n.(type) {
+	case *helium.Element:
+		td := resolveElemType(v, host, hostDecl, schema)
+		if td == nil {
+			return ""
+		}
+		return builtinBaseLocal(td)
+	case *helium.Attribute:
+		return resolveAttrBuiltinLocal(v, host, hostDecl, schema)
+	default:
+		return ""
+	}
+}
+
+// resolveAttrBuiltinLocal resolves the builtin base local of an attribute's
+// declared type, preferring the owning element's complex-type attribute uses
+// and falling back to a matching global attribute declaration.
+func resolveAttrBuiltinLocal(attr *helium.Attribute, host *helium.Element, hostDecl *ElementDecl, schema *Schema) string {
+	aqn := QName{Local: attr.LocalName(), NS: attr.URI()}
+
+	if owner, ok := attr.Parent().(*helium.Element); ok {
+		if td := resolveElemType(owner, host, hostDecl, schema); td != nil {
+			if at := attrUseType(td, aqn, schema); at != nil {
+				return builtinBaseLocal(at)
+			}
+		}
+	}
+
+	if ga, ok := schema.globalAttrs[aqn]; ok {
+		if td, ok := schema.types[ga.TypeName]; ok {
+			return builtinBaseLocal(td)
+		}
+	}
+	return ""
+}
+
+// resolveElemType resolves the schema type of an instance element by descending
+// the host element's content model along the element's ancestor chain. The
+// element must be a descendant of host (true for IDC selector/field results).
+// Falls back to a global element declaration lookup.
+func resolveElemType(target, host *helium.Element, hostDecl *ElementDecl, schema *Schema) *TypeDef {
+	if target == host {
+		if hostDecl != nil {
+			return hostDecl.Type
+		}
+		return nil
+	}
+
+	// Build the ancestor chain from host's child down to target.
+	var chain []*helium.Element
+	for cur := target; cur != nil && cur != host; {
+		chain = append(chain, cur)
+		parent, ok := cur.Parent().(*helium.Element)
+		if !ok {
+			break
+		}
+		cur = parent
+	}
+
+	td := hostType(host, hostDecl, schema)
+	// Descend from host's type through each level (outermost ancestor last in chain).
+	for i := len(chain) - 1; i >= 0; i-- {
+		if td == nil {
+			break
+		}
+		qn := QName{Local: chain[i].LocalName(), NS: chain[i].URI()}
+		decl := childElemDecl(td, qn, schema)
+		if decl == nil {
+			return resolveElemTypeFallback(target, schema)
+		}
+		td = decl.Type
+	}
+	if td != nil {
+		return td
+	}
+	return resolveElemTypeFallback(target, schema)
+}
+
+func resolveElemTypeFallback(target *helium.Element, schema *Schema) *TypeDef {
+	decl := lookupElemDecl(target, schema)
+	if decl == nil {
+		return nil
+	}
+	return decl.Type
+}
+
+// hostType returns the type of the host element, preferring its declaration.
+func hostType(host *helium.Element, hostDecl *ElementDecl, schema *Schema) *TypeDef {
+	if hostDecl != nil && hostDecl.Type != nil {
+		return hostDecl.Type
+	}
+	decl := lookupElemDecl(host, schema)
+	if decl == nil {
+		return nil
+	}
+	return decl.Type
+}
+
+// childElemDecl finds a child element declaration matching qn within a type's
+// content model (walking the base-type chain), resolving substitution-group
+// members through global declarations as a fallback.
+func childElemDecl(td *TypeDef, qn QName, schema *Schema) *ElementDecl {
+	for cur := td; cur != nil; cur = cur.BaseType {
+		if decl := findElemDeclInGroup(cur.ContentModel, qn); decl != nil {
+			return decl
+		}
+	}
+	if decl, ok := schema.LookupElement(qn.Local, qn.NS); ok {
+		return decl
+	}
+	return nil
+}
+
+// findElemDeclInGroup searches a model group recursively for an element
+// declaration matching qn.
+func findElemDeclInGroup(mg *ModelGroup, qn QName) *ElementDecl {
+	if mg == nil {
+		return nil
+	}
+	for _, p := range mg.Particles {
+		switch term := p.Term.(type) {
+		case *ElementDecl:
+			if term.Name == qn {
+				return term
+			}
+		case *ModelGroup:
+			if decl := findElemDeclInGroup(term, qn); decl != nil {
+				return decl
+			}
+		}
+	}
+	return nil
+}
+
+// attrUseType walks a complex type's base chain to find the declared type of an
+// attribute use matching the given QName.
+func attrUseType(td *TypeDef, aqn QName, schema *Schema) *TypeDef {
+	for cur := td; cur != nil; cur = cur.BaseType {
+		for _, au := range cur.Attributes {
+			if au.Name != aqn {
+				continue
+			}
+			at, ok := schema.types[au.TypeName]
+			if !ok {
+				return nil
+			}
+			return at
+		}
+	}
+	return nil
 }
 
 // formatKeySequence creates a unique string key from a sequence of values (for map lookups).
