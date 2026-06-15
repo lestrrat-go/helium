@@ -22,13 +22,17 @@ func (e *regexError) Error() string { return e.Message }
 
 // translateXPathRegex translates an XPath/XML Schema regex pattern into a
 // Go-compatible regexp pattern. Handles:
-//   - \p{IsBlockName} → Unicode block character range
-//   - \P{IsBlockName} → negated Unicode block range
+//   - \p{IsBlockName} / \P{IsBlockName} → (negated) Unicode block character range
 //   - \p{Category} → Go-compatible \p{Category} (pass-through)
 //   - \i / \I → XML NameStartChar / negated
 //   - \c / \C → XML NameChar / negated
-//   - Character class subtraction [a-z-[aeiou]] → expanded
-//   - Rejects Perl-specific constructs (\b, \B, etc.) not in XPath
+//   - \d \D \w \W \s \S → XSD-semantics equivalents
+//   - '.' → [^\n\r] (or [\s\S] when dotAll)
+//
+// It does NOT expand character class subtraction ([a-z-[aeiou]]); that is passed
+// through and relies on Go's (different) interpretation. It also does NOT reject
+// Perl-specific constructs or validate back-references — call RejectPerlSpecific
+// and Validate separately for those checks.
 func translateXPathRegex(pattern string, dotAll, ignoreCase bool) (string, error) {
 	isDotAll := dotAll
 	var b strings.Builder
