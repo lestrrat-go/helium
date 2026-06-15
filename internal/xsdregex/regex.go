@@ -6,7 +6,19 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/dlclark/regexp2"
 )
+
+// DefaultMatchTimeout bounds how long the regexp2 backtracking engine spends on
+// a single pattern-facet match before giving up. Patterns that use constructs
+// RE2 cannot handle (character-class subtraction, large quantifiers) compile to
+// regexp2, which is vulnerable to catastrophic backtracking on adversarial
+// inputs; this is a defense-in-depth ceiling for those matches. RE2-compiled
+// patterns are linear-time and unaffected. Set to 0 to disable; mutating it
+// affects only subsequently-compiled patterns.
+var DefaultMatchTimeout = 5 * time.Second
 
 // errCodeFORX0002 mirrors the XPath FORX0002 ("invalid regular expression")
 // error code. This package is layering-neutral (no xpath3 dependency); callers
@@ -1142,6 +1154,77 @@ func rejectPerlSpecific(pattern string) error {
 // Translate converts an XPath/XML Schema regex pattern into a Go RE2 pattern.
 func Translate(pattern string, dotAll, ignoreCase bool) (string, error) {
 	return translateXPathRegex(pattern, dotAll, ignoreCase)
+}
+
+// Regexp is a compiled XML Schema pattern-facet regular expression. It matches
+// the whole input value (the pattern is anchored at both ends) against either
+// Go's RE2 engine or, for constructs RE2 lacks, the regexp2 backtracking engine.
+type Regexp struct {
+	std       *regexp.Regexp
+	backtrack *regexp2.Regexp
+}
+
+// MatchString reports whether the whole string s is matched by the pattern.
+func (r *Regexp) MatchString(s string) bool {
+	if r.backtrack != nil {
+		// regexp2 is a backtracking engine; the only error it returns is a
+		// match-timeout (see DefaultMatchTimeout). A timed-out match cannot be
+		// proven to satisfy the pattern, so report it as a non-match rather than
+		// letting a catastrophic-backtracking input hang the caller.
+		ok, _ := r.backtrack.MatchString(s)
+		return ok
+	}
+	return r.std.MatchString(s)
+}
+
+// Compile translates and compiles an XML Schema pattern-facet regular
+// expression, anchoring it so it matches the entire value. Patterns that use
+// XML Schema character-class subtraction ([a-z-[aeiou]]) or quantifier bounds
+// beyond RE2's limit are compiled with the regexp2 backtracking engine, which
+// supports those constructs natively; all other patterns use Go's RE2 engine.
+// It returns an error for patterns that are not valid XML Schema regular
+// expressions, so callers can report a schema error rather than silently
+// ignoring the facet.
+func Compile(pattern string) (*Regexp, error) {
+	// Enforce the XSD/XPath regex grammar up front, independent of which engine
+	// compiles the pattern. RE2 happens to reject some non-XSD constructs (e.g.
+	// \1 back-references) but accepts others (e.g. \b word boundaries), and the
+	// regexp2 backtracking engine accepts both — so without these checks an
+	// invalid pattern routed to regexp2 (back-reference + character-class
+	// subtraction) would be silently accepted. XSD regex has no back-references.
+	if err := rejectPerlSpecific(pattern); err != nil {
+		return nil, err
+	}
+	if err := validateXPathRegex(pattern, false); err != nil {
+		return nil, err
+	}
+
+	translated, err := translateXPathRegex(pattern, false, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// RE2 implements neither character-class subtraction nor unbounded
+	// quantifiers; route those to the backtracking engine instead of letting
+	// RE2 misinterpret (subtraction) or reject (large bounds) them.
+	if hasXPathCharClassSubtraction(pattern) || hasLargeXPathQuantifier(pattern) {
+		re, err := regexp2.Compile(`\A(?:`+translated+`)\z`, regexp2.RE2)
+		if err != nil {
+			return nil, &regexError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
+		}
+		// Bound backtracking so an adversarial pattern/value cannot hang the
+		// process (catastrophic backtracking). 0 disables the timeout.
+		if t := DefaultMatchTimeout; t > 0 {
+			re.MatchTimeout = t
+		}
+		return &Regexp{backtrack: re}, nil
+	}
+
+	re, err := regexp.Compile(`\A(?:` + translated + `)\z`)
+	if err != nil {
+		return nil, &regexError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
+	}
+	return &Regexp{std: re}, nil
 }
 
 // Validate rejects patterns Go's regexp accepts but the XPath/XSD regex spec forbids.

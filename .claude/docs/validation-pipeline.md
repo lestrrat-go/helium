@@ -54,14 +54,18 @@ processed lexical space), so a numeric-looking string enum `"5"` does not accept
 `"5.0"`.
 
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
-compiled once into `FacetSet.compiledPatterns` at schema compile time. Patterns in
-the same step are ORed (value valid if it matches any); patterns from different
-derivation steps are ANDed, enforced by `validateFacets` walking the base-type
-chain and validating each step's `FacetSet` independently. Each pattern is
-translated from XSD regex to Go's RE2 via `internal/xsdregex` (the same translator
-`xpath3` uses for `fn:matches`) before compiling, so XSD-only constructs (`\i`,
-`\c`, `\p{Is...}` blocks) are enforced rather than silently skipped. A pattern that
-still cannot be translated/compiled is stored as nil and skipped (lenient).
+compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema
+compile time via `xsdregex.Compile`. Patterns in the same step are ORed (value
+valid if it matches any); patterns from different derivation steps are ANDed,
+enforced by `validateFacets` walking the base-type chain and validating each
+step's `FacetSet` independently. `xsdregex.Compile` translates XSD regex to Go's
+RE2 (the same translator `xpath3` uses for `fn:matches`), so XSD-only constructs
+(`\i`, `\c`, `\p{Is...}` blocks) are enforced rather than silently skipped;
+patterns using XML Schema character-class subtraction (`[a-z-[aeiou]]`) or
+quantifier bounds beyond RE2's limit are compiled with the regexp2 backtracking
+engine, which RE2 cannot. A pattern that is not a valid XSD regular expression is
+reported as a schema parser error (`The value '…' is not a valid regular
+expression.`); its `compiledPatterns` entry stays nil and is skipped at validation.
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):
