@@ -255,7 +255,16 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDateTime, testDT0, testDT0, 0, true},
 		{lexicon.TypeDateTime, testDT0, "2023-01-16T10:30:00", -1, true},
 		{lexicon.TypeDateTime, "2023-01-15T10:30:00Z", "2023-01-15T11:30:00+01:00", 0, true},
-		{lexicon.TypeDateTime, "2023-01-15T10:30:00Z", testDT0, 0, false}, // mixed TZ
+		{lexicon.TypeDateTime, "2023-01-15T10:30:00Z", testDT0, 0, false}, // mixed TZ, overlapping interval
+		// Mixed TZ but determinate under the XSD 14-hour rule: the non-timezoned
+		// operand's [v-14:00, v+14:00] interval lies entirely on one side.
+		{lexicon.TypeDateTime, "2019-12-30T00:00:00", "2020-01-01T12:00:00Z", -1, true}, // latest instant 2019-12-30T14:00Z < bound
+		{lexicon.TypeDateTime, "2020-01-01T12:00:00Z", "2019-12-30T00:00:00", 1, true},  // mirror of above
+		{lexicon.TypeDateTime, "2020-01-10T00:00:00", "2020-01-01T12:00:00Z", 1, true},  // earliest instant 2020-01-09T10:00Z > bound
+		{lexicon.TypeDateTime, "2020-01-01T12:00:00Z", "2020-01-10T00:00:00", -1, true}, // mirror of above
+		// Genuinely indeterminate: ±14:00 interval straddles the bound.
+		{lexicon.TypeDateTime, "2020-01-01T00:00:00", "2020-01-01T12:00:00Z", 0, false},
+		{lexicon.TypeDateTime, "2020-01-01T12:00:00Z", "2020-01-01T00:00:00", 0, false},
 
 		// date
 		{"date", "2023-01-15", "2023-01-16", -1, true},
