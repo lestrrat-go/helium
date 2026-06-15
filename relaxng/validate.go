@@ -1068,7 +1068,7 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		}
 		content := wrapChildren(pat.children)
 		return v.matchAttrContent(content, text, elem)
-	case patternRef:
+	case patternRef, patternParentRef:
 		def, ok := v.grammar.defines[pat.name]
 		if !ok {
 			return -1
@@ -1207,7 +1207,7 @@ func (v *validator) matchAttrTokensCounts(pat *pattern, tokens []string) []int {
 		return []int{0}
 	case patternEmpty:
 		return []int{0}
-	case patternRef:
+	case patternRef, patternParentRef:
 		def, ok := v.grammar.defines[pat.name]
 		if !ok {
 			return nil

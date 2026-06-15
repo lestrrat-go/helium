@@ -76,3 +76,26 @@ func TestListGroupChoiceUnderOptional(t *testing.T) {
 	require.NoError(t, validateWith(t, choiceSchema, `<a>P Q P</a>`), "choice list should validate")
 	require.Error(t, validateWith(t, choiceSchema, `<a>P Z</a>`), "non-member token must be rejected")
 }
+
+// TestListParentRef covers a <parentRef> used inside a <list> (token-level
+// matching). validatePattern treats parentRef like ref, so the token matchers
+// must resolve it too; otherwise the list wrongly fails to match.
+func TestListParentRef(t *testing.T) {
+	t.Parallel()
+
+	schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <define name="item"><value>X</value></define>
+  <start>
+    <element name="a">
+      <grammar>
+        <start>
+          <list><oneOrMore><parentRef name="item"/></oneOrMore></list>
+        </start>
+      </grammar>
+    </element>
+  </start>
+</grammar>`
+
+	require.NoError(t, validateWith(t, schema, `<a>X X X</a>`), "parentRef in list should validate")
+	require.Error(t, validateWith(t, schema, `<a>X Y</a>`), "non-member token must be rejected")
+}
