@@ -497,13 +497,15 @@ func compareDateTimeParsed(a, b xsdDateTime) (int, bool) {
 func compareDateTimeMixedTZ(a, b xsdDateTime) (int, bool) {
 	// The determinate rule normalizes a synthetic ±14:00 offset across day
 	// boundaries, which requires a full calendar date (year, month, day). The
-	// partial date/time types leave some of those components zero — gYear,
-	// gYearMonth (day=0), gMonth/gDay (year=0, and one of month/day=0), time
-	// (all zero), and gMonthDay (year=0). Applying the offset to a zero field
-	// makes normalizeToUTC borrow into a neighbouring period and yield a
-	// determinately wrong result (e.g. gYear "2020" rolling back to 2019), so
-	// those types stay indeterminate, as they were before this rule existed.
-	// (The only loss is a literal year-0000 dateTime, an XSD 1.1 edge case, which
+	// partial gregorian types leave some of those components zero — gYear
+	// (month=0, day=0), gYearMonth (day=0), gMonth (year=0, day=0), gDay (year=0,
+	// month=0), and gMonthDay (year=0). Applying the offset to a zero field makes
+	// normalizeToUTC borrow into a neighbouring period and yield a determinately
+	// wrong result (e.g. gYear "2020" rolling back to 2019), so those types stay
+	// indeterminate, as they were before this rule existed. (xs:time is not in
+	// this set: compareTime assigns a reference date before comparing, so it has
+	// a full calendar date and flows through the determinate path correctly. The
+	// only loss is a literal year-0000 dateTime, an XSD 1.1 edge case, which
 	// falls back to indeterminate rather than wrong.)
 	if a.year == 0 || b.year == 0 || a.month < 1 || b.month < 1 || a.day < 1 || b.day < 1 {
 		return 0, false

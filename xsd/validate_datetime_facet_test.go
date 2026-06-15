@@ -9,8 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDateTimeTimezoneFacetBounds covers min/maxInclusive facet checks where the
-// facet value and the instance value differ in whether they carry a timezone.
+// TestDateTimeTimezoneFacetBounds covers min/max Inclusive and Exclusive facet
+// checks where the facet value and the instance value differ in whether they
+// carry a timezone.
 //
 // Per the XSD order relation (XSD 1.0 3.2.7.4), a non-timezoned value spans the
 // instant interval [v-14:00, v+14:00]. When that whole interval lies below or
@@ -82,6 +83,22 @@ func TestDateTimeTimezoneFacetBounds(t *testing.T) {
 			facet:    "maxInclusive",
 			bound:    "2020-01-01T12:00:00",
 			instance: "2020-01-03T03:00:00Z", // determinately above the bound's latest instant
+			valid:    false,
+		},
+		// Exclusive facets use the same comparison; a determinately out-of-range
+		// no-TZ instance must still be rejected.
+		{
+			name:     "minExclusive determinate below rejects",
+			facet:    "minExclusive",
+			bound:    "2020-06-01T12:00:00Z",
+			instance: "2020-05-30T00:00:00", // latest instant 2020-05-30T14:00Z still below bound
+			valid:    false,
+		},
+		{
+			name:     "maxExclusive determinate above rejects",
+			facet:    "maxExclusive",
+			bound:    "2020-06-01T12:00:00Z",
+			instance: "2020-06-10T00:00:00", // earliest instant 2020-06-09T10:00Z still above bound
 			valid:    false,
 		},
 	}
