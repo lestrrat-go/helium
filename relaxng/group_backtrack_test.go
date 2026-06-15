@@ -87,3 +87,45 @@ func TestNaiveGroupBacktrackingInvalid(t *testing.T) {
 	err = relaxng.NewValidator(grammar).Validate(t.Context(), doc)
 	require.Error(t, err, "document with no mandatory trailing element must be rejected")
 }
+
+// TestNaiveGroupBacktrackingFlexKinds covers the optional and oneOrMore branches
+// of backtrackGroupNaive (the originally-added test only exercised zeroOrMore).
+// The naive group path matches the single top-level document element, so each
+// flexible member competes for that one element.
+func TestNaiveGroupBacktrackingFlexKinds(t *testing.T) {
+	t.Parallel()
+
+	mk := func(members string) string {
+		return `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start><group>` +
+			members + `</group></start></grammar>`
+	}
+	root := `<element name="root"><empty/></element>`
+
+	cases := []struct {
+		name   string
+		schema string
+		valid  bool
+	}{
+		// optional greedily takes the root, the mandatory member then fails, and
+		// backtracking yields the optional to zero so the mandatory matches.
+		{"optional yields for mandatory", mk(`<optional>` + root + `</optional>` + root), true},
+		// oneOrMore takes the only root (it cannot go below one), leaving nothing
+		// for the mandatory member: correctly rejected.
+		{"oneOrMore cannot yield below one", mk(`<oneOrMore>` + root + `</oneOrMore>` + root), false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			grammar := compileGrammar(t, tc.schema)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+			require.NoError(t, err)
+			verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
+			if tc.valid {
+				require.NoError(t, verr)
+				return
+			}
+			require.Error(t, verr)
+		})
+	}
+}

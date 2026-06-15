@@ -1265,6 +1265,19 @@ func (v *validator) validateGroup(pat *pattern, state *validState) int {
 // iteration counts from the minimum upward, preferring the highest count that
 // lets the remaining children match (maximizing content consumption). It is the
 // validatePattern-based counterpart to backtrackGroupFlexible.
+//
+// Two scope notes:
+//   - The naive group path runs only for the top-level document sequence (a
+//     single root element); multi-node sequences are element content, handled by
+//     validateGroupContent. So `bounds[failIdx]` is always the freshly-appended
+//     boundary and there is no multi-node cascade across separate backtrack calls
+//     that could observe a stale intermediate `bounds` entry.
+//   - Recovery reduces exactly one flexible child and greedily re-validates the
+//     rest; it does not cascade yields across several competing flexible members.
+//     A group with two or more flexible members that must each yield (e.g.
+//     group(zeroOrMore(x), zeroOrMore(x), x)) is therefore not fully recovered.
+//     This is a deliberate, pre-existing limitation shared with the element-
+//     content path (backtrackGroupFlexible), not specific to this function.
 func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 	state *validState, bounds []groupBound) bool {
 	for j := failIdx - 1; j >= 0; j-- {
