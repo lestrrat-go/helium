@@ -1,9 +1,9 @@
 package xsd
 
 import (
-	"regexp"
 	"slices"
 
+	"github.com/lestrrat-go/helium/internal/xsdregex"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -231,7 +231,7 @@ type FacetSet struct {
 	// compiledPatterns holds the regexes for Patterns, compiled once at schema
 	// compile time and index-aligned with Patterns. A nil entry means the
 	// pattern failed to compile and is skipped during validation.
-	compiledPatterns []*regexp.Regexp
+	compiledPatterns []*xsdregex.Regexp
 	WhiteSpace       *string
 }
 

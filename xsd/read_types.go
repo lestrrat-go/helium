@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"regexp"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -452,7 +451,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 }
 
 // parseFacets extracts facet constraints from an xs:restriction element.
-func (c *compiler) parseFacets(_ context.Context, restriction *helium.Element) *FacetSet {
+func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element) *FacetSet {
 	var fs *FacetSet
 
 	for child := range helium.Children(restriction) {
@@ -538,15 +537,19 @@ func (c *compiler) parseFacets(_ context.Context, restriction *helium.Element) *
 				fs = &FacetSet{}
 			}
 			// Multiple <xs:pattern> in the same restriction step are ORed.
-			// Compile once here; a nil entry (compile failure) is skipped
-			// during validation, preserving the previous lenient behavior.
-			// XSD regex supports constructs Go's RE2 lacks (\i, \c, \p{Is...}
-			// blocks); translate first so they are enforced rather than
-			// silently skipped. An untranslatable pattern stays nil (lenient).
+			// Compile once here, index-aligned with Patterns. XSD regex
+			// supports constructs Go's RE2 lacks: \i, \c, \p{Is...} blocks
+			// (translated to RE2) and character-class subtraction / large
+			// quantifiers (compiled with the regexp2 backtracking engine).
+			// A pattern that is not a valid XSD regex is a schema error rather
+			// than silently ignored; its compiledPatterns entry stays nil.
 			fs.Patterns = append(fs.Patterns, val)
-			var re *regexp.Regexp
-			if translated, terr := xsdregex.Translate(val, false, false); terr == nil {
-				re, _ = regexp.Compile("^(?:" + translated + ")$")
+			re, rerr := xsdregex.Compile(val)
+			if rerr != nil {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, ce.Line(),
+					ce.LocalName(), "pattern",
+					fmt.Sprintf("The value '%s' is not a valid regular expression.", val)), helium.ErrorLevelFatal))
+				c.errorCount++
 			}
 			fs.compiledPatterns = append(fs.compiledPatterns, re)
 		}
