@@ -94,34 +94,31 @@ func compareBoolean(a, b string) (int, bool) {
 
 // compareHexBinary compares two xs:hexBinary values in value space (the decoded
 // octet sequence), so lexically distinct forms that decode to the same bytes are
-// equal (e.g. "0A" == "0a"). hexBinary has no order relation; only equality is
-// meaningful. Returns ok=false if either operand is not valid hexBinary.
+// equal (e.g. "0A" == "0a"). XSD does not order hexBinary, but a deterministic,
+// antisymmetric total order (bytes.Compare of the decoded octets) is returned so
+// the result is a well-behaved comparator; enumeration only relies on cmp == 0.
+// Returns ok=false if either operand is not valid hexBinary.
 func compareHexBinary(a, b string) (int, bool) {
 	da, err1 := hex.DecodeString(a)
 	db, err2 := hex.DecodeString(b)
 	if err1 != nil || err2 != nil {
 		return 0, false
 	}
-	if bytes.Equal(da, db) {
-		return 0, true
-	}
-	return 1, true
+	return bytes.Compare(da, db), true
 }
 
 // compareBase64Binary compares two xs:base64Binary values in value space (the
 // decoded octet sequence), ignoring the whitespace permitted in the lexical
-// form. base64Binary has no order relation; only equality is meaningful. Returns
-// ok=false if either operand is not valid base64Binary.
+// form. As with hexBinary, a deterministic bytes.Compare total order is returned
+// rather than a bare equality flag. Returns ok=false if either operand is not
+// valid base64Binary.
 func compareBase64Binary(a, b string) (int, bool) {
 	da, ok1 := decodeBase64Binary(a)
 	db, ok2 := decodeBase64Binary(b)
 	if !ok1 || !ok2 {
 		return 0, false
 	}
-	if bytes.Equal(da, db) {
-		return 0, true
-	}
-	return 1, true
+	return bytes.Compare(da, db), true
 }
 
 func decodeBase64Binary(s string) ([]byte, bool) {

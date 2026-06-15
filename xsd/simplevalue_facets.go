@@ -79,10 +79,11 @@ var enumValueSpaceTypes = map[string]struct{}{
 
 // enumerationValueEqual reports whether v is value-equal to a member ev for the
 // purpose of the enumeration facet. It only performs value-space comparison for
-// types in enumValueSpaceTypes; for all others (string-family, binary, anyURI,
-// and the empty/untyped case) enumeration stays lexical-only and this returns
-// false. For float/double, XSD treats NaN as equal to NaN for enumeration
-// (unlike ordering, where NaN is incomparable), handled explicitly here.
+// types in enumValueSpaceTypes (numeric, boolean, date/time, and binary); for
+// all others (string-family, anyURI, and the empty/untyped case) enumeration
+// stays lexical-only and this returns false. For float/double, XSD treats NaN as
+// equal to NaN for enumeration (unlike ordering, where NaN is incomparable),
+// handled explicitly here.
 func enumerationValueEqual(v, ev, builtinLocal string) bool {
 	if _, ok := enumValueSpaceTypes[builtinLocal]; !ok {
 		return false
