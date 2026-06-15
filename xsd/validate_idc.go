@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -304,11 +305,11 @@ func resolveElemType(target, host *helium.Element, hostDecl *ElementDecl, schema
 
 	td := hostType(host, hostDecl, schema)
 	// Descend from host's type through each level (outermost ancestor last in chain).
-	for i := len(chain) - 1; i >= 0; i-- {
+	for _, node := range slices.Backward(chain) {
 		if td == nil {
 			break
 		}
-		qn := QName{Local: chain[i].LocalName(), NS: chain[i].URI()}
+		qn := QName{Local: node.LocalName(), NS: node.URI()}
 		decl := childElemDecl(td, qn, schema)
 		if decl == nil {
 			return resolveElemTypeFallback(target, schema)
