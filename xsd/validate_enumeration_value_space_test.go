@@ -1,12 +1,15 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
+
+const xsDecimalType = "xs:decimal"
 
 // TestEnumerationValueSpace verifies that the enumeration facet is compared in
 // value space, not raw lexical space. A value that is lexically distinct from
@@ -23,11 +26,11 @@ func TestEnumerationValueSpace(t *testing.T) {
 
 	cases := []testCase{
 		// decimal — lexical variants that are value-equal to "5".
-		{name: "decimal trailing zero", baseType: "xs:decimal", enum: []string{"5"}, instance: "5.0"},
-		{name: "decimal more trailing zeros", baseType: "xs:decimal", enum: []string{"5"}, instance: "5.00"},
-		{name: "decimal leading zero", baseType: "xs:decimal", enum: []string{"5"}, instance: "05"},
-		{name: "decimal plus sign", baseType: "xs:decimal", enum: []string{"5"}, instance: "+5"},
-		{name: "decimal non-member", baseType: "xs:decimal", enum: []string{"5"}, instance: "6", wantReject: true},
+		{name: "decimal trailing zero", baseType: xsDecimalType, enum: []string{"5"}, instance: "5.0"},
+		{name: "decimal more trailing zeros", baseType: xsDecimalType, enum: []string{"5"}, instance: "5.00"},
+		{name: "decimal leading zero", baseType: xsDecimalType, enum: []string{"5"}, instance: "05"},
+		{name: "decimal plus sign", baseType: xsDecimalType, enum: []string{"5"}, instance: "+5"},
+		{name: "decimal non-member", baseType: xsDecimalType, enum: []string{"5"}, instance: "6", wantReject: true},
 
 		// boolean — "true"/"1" and "false"/"0" are value-equal pairs.
 		{name: "boolean true vs 1", baseType: "xs:boolean", enum: []string{"true"}, instance: "1"},
@@ -61,10 +64,11 @@ func TestEnumerationValueSpace(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var enumXML string
+			var enumBuilder strings.Builder
 			for _, e := range tc.enum {
-				enumXML += `      <xs:enumeration value="` + e + `"/>` + "\n"
+				enumBuilder.WriteString(`      <xs:enumeration value="` + e + `"/>` + "\n")
 			}
+			enumXML := enumBuilder.String()
 
 			schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
