@@ -46,8 +46,10 @@ decimal `5.0`≡`5`, boolean `1`≡`true`, float `1.50`≡`1.5`, equal dateTimes
 different timezones). For float/double, NaN equals NaN for enumeration (but
 remains incomparable for min/max ordering). QName/NOTATION enumeration resolves
 both instance and facet lexical QNames against their respective in-scope
-namespaces. String-family types where `value.Compare` cannot compare fall back
-to the lexical-equality test.
+namespaces. Value-space comparison is restricted to an allowlist of numeric,
+boolean, and date/time builtins (`enumValueSpaceTypes`); string-family, binary,
+and anyURI types are lexical-only, so a numeric-looking string enum `"5"` does
+not accept `"5.0"`.
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):

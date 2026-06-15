@@ -233,6 +233,14 @@ func TestCompareValues(t *testing.T) {
 		{"integer", "100", "100", 0, true},
 		{"integer", "-5", "5", -1, true},
 
+		// boolean — "true"/"1" and "false"/"0" are value-equal; invalid lexicals
+		// are indeterminate.
+		{lexicon.TypeBoolean, "true", "1", 0, true},
+		{lexicon.TypeBoolean, "false", "0", 0, true},
+		{lexicon.TypeBoolean, "true", "false", 1, true},
+		{lexicon.TypeBoolean, "false", "true", -1, true},
+		{lexicon.TypeBoolean, "maybe", "true", 0, false},
+
 		// float
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, "2.0", -1, true},
 		{lexicon.TypeFloat, "2.0", lexicon.XSLTVersion10, 1, true},

@@ -58,6 +58,17 @@ func TestEnumerationValueSpace(t *testing.T) {
 		// string — lexical members must still be matched lexically.
 		{name: "string member", baseType: "xs:string", enum: []string{"alpha", "beta"}, instance: "beta"},
 		{name: "string non-member", baseType: "xs:string", enum: []string{"alpha"}, instance: "gamma", wantReject: true},
+
+		// string-family types must stay lexical-only: a numeric-looking instance
+		// must NOT be accepted via numeric value-space comparison against a
+		// numeric-looking member ("5" must not accept "5.0").
+		{name: "string numeric lexical not value-equal", baseType: "xs:string",
+			enum: []string{"5"}, instance: "5.0", wantReject: true},
+		{name: "token numeric lexical not value-equal", baseType: "xs:token",
+			enum: []string{"10"}, instance: "1e1", wantReject: true},
+		{name: "anyURI numeric lexical not value-equal", baseType: "xs:anyURI",
+			enum: []string{"5"}, instance: "5.00", wantReject: true},
+		{name: "string numeric member exact", baseType: "xs:string", enum: []string{"5"}, instance: "5"},
 	}
 
 	for _, tc := range cases {
