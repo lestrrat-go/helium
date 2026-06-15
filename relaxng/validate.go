@@ -1048,20 +1048,16 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		}
 		return 0
 	case patternGroup:
-		// Sequential match on tokens
+		// Sequential match on tokens, backtracking across each member's
+		// consumption options so a greedy repetition or a zero-token choice
+		// branch cannot strand a later mandatory member.
 		tokens := strings.Fields(text)
-		offset := 0
-		for _, child := range pat.children {
-			n, ok := v.matchAttrTokens(child, tokens[offset:])
-			if !ok {
-				return -1
+		for _, n := range v.groupCounts(pat.children, tokens) {
+			if n == len(tokens) {
+				return 0
 			}
-			offset += n
 		}
-		if offset != len(tokens) {
-			return -1
-		}
-		return 0
+		return -1
 	case patternEmpty:
 		if strings.TrimSpace(text) == "" {
 			return 0
@@ -1094,26 +1090,34 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 // matchListContent validates a string against a list pattern.
 func (v *validator) matchListContent(pat *pattern, text string, elem *helium.Element) int {
 	tokens := strings.Fields(text)
-	offset := 0
-	for _, child := range pat.children {
-		n, ok := v.matchAttrTokens(child, tokens[offset:])
-		if !ok {
-			if elem != nil {
+	// Backtrack across each member's consumption options so a greedy
+	// repetition or a zero-token choice branch cannot strand a later
+	// mandatory member.
+	for _, n := range v.groupCounts(pat.children, tokens) {
+		if n == len(tokens) {
+			return 0
+		}
+	}
+
+	// No combination consumed the whole list. Report a best-effort error by
+	// replaying members greedily to find where matching first stalls.
+	if elem != nil {
+		offset := 0
+		for _, child := range pat.children {
+			n, ok := v.matchAttrTokens(child, tokens[offset:])
+			if !ok {
 				if typeName := listDataTypeName(child); typeName != "" {
 					v.addError(elem, fmt.Sprintf("failed to validate type %s", typeName))
 				}
+				return -1
 			}
-			return -1
+			offset += n
 		}
-		offset += n
-	}
-	if offset != len(tokens) {
-		if elem != nil {
+		if offset < len(tokens) {
 			v.addError(elem, fmt.Sprintf("Extra data in list: %s", tokens[offset]))
 		}
-		return -1
 	}
-	return 0
+	return -1
 }
 
 // listDataTypeName extracts the data type name from a pattern for list error reporting.
@@ -1136,101 +1140,157 @@ func listDataTypeName(pat *pattern) string {
 	return ""
 }
 
-// matchAttrTokens matches tokens against a pattern, returning how many tokens were consumed.
+// matchAttrTokens matches tokens against a pattern, returning how many tokens
+// were consumed. It prefers the greedy (largest) match; callers needing the
+// full set of consumption options use matchAttrTokensCounts.
 func (v *validator) matchAttrTokens(pat *pattern, tokens []string) (int, bool) {
-	if pat == nil {
+	counts := v.matchAttrTokensCounts(pat, tokens)
+	if len(counts) == 0 {
 		return 0, false
+	}
+	return counts[0], true
+}
+
+// matchAttrTokensCounts returns every token-consumption count that pat can
+// match against the leading tokens, in greedy-preferred (descending) order
+// with duplicates removed. An empty slice means the pattern cannot match.
+//
+// Returning the full set (rather than a single count) lets the group matcher
+// backtrack: a greedy oneOrMore/zeroOrMore that over-consumes can yield tokens
+// back when a later mandatory member fails, and a choice with a zero-token
+// branch (e.g. empty) does not shadow a consuming branch.
+func (v *validator) matchAttrTokensCounts(pat *pattern, tokens []string) []int {
+	if pat == nil {
+		return nil
 	}
 	switch pat.kind {
 	case patternData:
 		if len(tokens) == 0 {
-			return 0, false
+			return nil
 		}
 		if v.matchData(pat, tokens[0]) == 0 {
-			return 1, true
+			return []int{1}
 		}
-		return 0, false
+		return nil
 	case patternValue:
 		if len(tokens) == 0 {
-			return 0, false
+			return nil
 		}
 		if v.matchValue(pat, tokens[0]) == 0 {
-			return 1, true
+			return []int{1}
 		}
-		return 0, false
+		return nil
 	case patternChoice:
+		seen := map[int]struct{}{}
+		var counts []int
 		for _, child := range pat.children {
-			n, ok := v.matchAttrTokens(child, tokens)
-			if ok {
-				return n, true
+			for _, n := range v.matchAttrTokensCounts(child, tokens) {
+				if _, ok := seen[n]; ok {
+					continue
+				}
+				seen[n] = struct{}{}
+				counts = append(counts, n)
 			}
 		}
-		return 0, false
+		sortDescending(counts)
+		return counts
 	case patternOneOrMore:
 		content := wrapChildren(pat.children)
-		total := 0
-		// Must match at least once
-		n, ok := v.matchAttrTokens(content, tokens[total:])
-		if !ok {
-			return 0, false
-		}
-		total += n
-		// Then zero or more
-		for total < len(tokens) {
-			n, ok = v.matchAttrTokens(content, tokens[total:])
-			if !ok {
-				break
-			}
-			if n == 0 {
-				break
-			}
-			total += n
-		}
-		return total, true
+		return v.repeatCounts(content, tokens, 1)
 	case patternZeroOrMore:
 		content := wrapChildren(pat.children)
-		total := 0
-		for total < len(tokens) {
-			n, ok := v.matchAttrTokens(content, tokens[total:])
-			if !ok || n == 0 {
-				break
-			}
-			total += n
-		}
-		return total, true
+		return v.repeatCounts(content, tokens, 0)
 	case patternGroup:
-		total := 0
-		for _, child := range pat.children {
-			n, ok := v.matchAttrTokens(child, tokens[total:])
-			if !ok {
-				return 0, false
-			}
-			total += n
-		}
-		return total, true
+		return v.groupCounts(pat.children, tokens)
 	case patternText:
-		// Text in a list: consume one token
+		// Text in a list: consume one token (or none when empty).
 		if len(tokens) > 0 {
-			return 1, true
+			return []int{1}
 		}
-		return 0, true
+		return []int{0}
 	case patternEmpty:
-		return 0, true
+		return []int{0}
 	case patternRef:
 		def, ok := v.grammar.defines[pat.name]
 		if !ok {
-			return 0, false
+			return nil
 		}
-		return v.matchAttrTokens(def, tokens)
+		return v.matchAttrTokensCounts(def, tokens)
 	case patternOptional:
 		content := wrapChildren(pat.children)
-		n, ok := v.matchAttrTokens(content, tokens)
-		if ok && n > 0 {
-			return n, true
+		seen := map[int]struct{}{0: {}}
+		counts := []int{}
+		for _, n := range v.matchAttrTokensCounts(content, tokens) {
+			if n == 0 {
+				continue
+			}
+			if _, ok := seen[n]; ok {
+				continue
+			}
+			seen[n] = struct{}{}
+			counts = append(counts, n)
 		}
-		return 0, true
+		counts = append(counts, 0)
+		sortDescending(counts)
+		return counts
 	}
-	return 0, false
+	return nil
+}
+
+// groupCounts returns every total consumption count for matching children
+// sequentially against tokens, backtracking across each member's options.
+func (v *validator) groupCounts(children []*pattern, tokens []string) []int {
+	if len(children) == 0 {
+		return []int{0}
+	}
+	head := children[0]
+	rest := children[1:]
+	seen := map[int]struct{}{}
+	var counts []int
+	for _, n := range v.matchAttrTokensCounts(head, tokens) {
+		for _, m := range v.groupCounts(rest, tokens[n:]) {
+			total := n + m
+			if _, ok := seen[total]; ok {
+				continue
+			}
+			seen[total] = struct{}{}
+			counts = append(counts, total)
+		}
+	}
+	sortDescending(counts)
+	return counts
+}
+
+// repeatCounts returns every consumption count for matching content repeatedly
+// (at least minReps times) against tokens.
+func (v *validator) repeatCounts(content *pattern, tokens []string, minReps int) []int {
+	seen := map[int]struct{}{}
+	var counts []int
+	var recurse func(offset, reps int)
+	recurse = func(offset, reps int) {
+		if reps >= minReps {
+			if _, ok := seen[offset]; !ok {
+				seen[offset] = struct{}{}
+				counts = append(counts, offset)
+			}
+		}
+		for _, n := range v.matchAttrTokensCounts(content, tokens[offset:]) {
+			if n == 0 {
+				// Zero-width repetition cannot make progress; stop to avoid
+				// looping forever.
+				continue
+			}
+			recurse(offset+n, reps+1)
+		}
+	}
+	recurse(0, 0)
+	sortDescending(counts)
+	return counts
+}
+
+// sortDescending sorts counts in place, largest first (greedy-preferred).
+func sortDescending(counts []int) {
+	slices.SortFunc(counts, func(a, b int) int { return b - a })
 }
 
 func (v *validator) validateGroup(pat *pattern, state *validState) int {

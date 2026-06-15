@@ -102,6 +102,18 @@ When mandatory group child fails:
    - Re-validate remaining children at each count
    - Keep highest successful count (maximizes consumption — libxml2 semantics)
 
+### Token-Level Backtracking (`<list>` / attribute values)
+
+`matchAttrContent` (attribute values) and `matchListContent` (`<list>` content)
+match whitespace-separated tokens. `matchAttrTokensCounts` returns every
+possible token-consumption count for a pattern in greedy-preferred (descending)
+order; `groupCounts` composes children sequentially across those options and
+`repeatCounts` enumerates repetition counts. A group succeeds when some
+combination consumes exactly all tokens, so a greedy `oneOrMore`/`zeroOrMore`
+can yield tokens back to a later mandatory member, and a zero-token `choice`
+branch (e.g. `empty`) does not shadow a consuming branch. `matchAttrTokens`
+is a thin greedy-max wrapper over `matchAttrTokensCounts`.
+
 ### Error Suppression
 
 - `suppressDepth` counter incremented during choice branch exploration
