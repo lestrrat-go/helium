@@ -233,6 +233,26 @@ func TestCompareValues(t *testing.T) {
 		{"integer", "100", "100", 0, true},
 		{"integer", "-5", "5", -1, true},
 
+		// boolean — "true"/"1" and "false"/"0" are value-equal; invalid lexicals
+		// are indeterminate.
+		{lexicon.TypeBoolean, "true", "1", 0, true},
+		{lexicon.TypeBoolean, "false", "0", 0, true},
+		{lexicon.TypeBoolean, "true", "false", 1, true},
+		{lexicon.TypeBoolean, "false", "true", -1, true},
+		{lexicon.TypeBoolean, "maybe", "true", 0, false},
+
+		// hexBinary — compared by decoded octets (bytes.Compare order), so case
+		// is not significant and 0x0A < 0x0B.
+		{"hexBinary", "0A", "0a", 0, true},
+		{"hexBinary", "DEADbeef", "deadBEEF", 0, true},
+		{"hexBinary", "0A", "0B", -1, true},
+		{"hexBinary", "0G", "0A", 0, false}, // invalid hex -> indeterminate
+
+		// base64Binary — compared by decoded octets, whitespace insignificant.
+		{"base64Binary", "YWJj", "YW Jj", 0, true},
+		{"base64Binary", "YWJj", "YWJk", -1, true}, // "abc" < "abd"
+		{"base64Binary", "@@@@", "YWJj", 0, false}, // invalid -> indeterminate
+
 		// float
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, "2.0", -1, true},
 		{lexicon.TypeFloat, "2.0", lexicon.XSLTVersion10, 1, true},
