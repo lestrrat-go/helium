@@ -3,7 +3,6 @@ package xsd
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -226,13 +225,14 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 	}
 
 	// Pattern: multiple <xs:pattern> facets in the same restriction step are
-	// ORed — the value is valid if it matches any of them.
+	// ORed — the value is valid if it matches any of them. Regexes are compiled
+	// once at schema compile time (FacetSet.compiledPatterns); a nil entry means
+	// that pattern failed to compile and is skipped.
 	if len(fs.Patterns) > 0 {
 		matched := false
 		anyValid := false
-		for _, p := range fs.Patterns {
-			re, err := regexp.Compile("^(?:" + p + ")$")
-			if err != nil {
+		for _, re := range fs.compiledPatterns {
+			if re == nil {
 				continue
 			}
 			anyValid = true

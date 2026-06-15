@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"regexp"
 	"slices"
 
 	"github.com/lestrrat-go/helium/xpath1"
@@ -226,8 +227,12 @@ type FacetSet struct {
 	// Per XSD, patterns in the same step are ORed (a value is valid if it
 	// matches any of them); patterns from different derivation steps are ANDed,
 	// which is handled by validating each step's FacetSet along the type chain.
-	Patterns   []string
-	WhiteSpace *string
+	Patterns []string
+	// compiledPatterns holds the regexes for Patterns, compiled once at schema
+	// compile time and index-aligned with Patterns. A nil entry means the
+	// pattern failed to compile and is skipped during validation.
+	compiledPatterns []*regexp.Regexp
+	WhiteSpace       *string
 }
 
 // AttrUse represents an attribute use in a complex type definition.
