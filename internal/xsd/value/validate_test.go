@@ -303,6 +303,16 @@ func TestCompareValues(t *testing.T) {
 		{"gMonthDay", "--06-01", "--06-01", 0, true},
 		{"gMonthDay", "--12-31", "--01-01", 1, true},
 
+		// Mixed-timezone partial types: the determinate ±14:00 rule needs a full
+		// calendar date, so these stay indeterminate rather than producing a
+		// wrong determinate result from normalizing a zero year/month/day field.
+		{"gYear", "2020", "2020Z", 0, false},
+		{"gYearMonth", "2020-06", "2020-06Z", 0, false},
+		{"gMonth", "--06", "--06Z", 0, false},
+		{"gDay", "---15", "---15Z", 0, false},
+		{"gMonthDay", "--06-15", "--06-15Z", 0, false},
+		{lexicon.TypeTime, "12:00:00", "12:00:00Z", 0, false},
+
 		// duration
 		{lexicon.TypeDuration, testP1Y, "P2Y", -1, true},
 		{lexicon.TypeDuration, testP1Y, testP1Y, 0, true},
