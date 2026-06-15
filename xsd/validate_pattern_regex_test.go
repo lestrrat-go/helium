@@ -98,3 +98,36 @@ func TestPatternFacetInvalidRegexp(t *testing.T) {
 	require.True(t, strings.Contains(errs, "not a valid regular expression"),
 		"expected invalid-regexp diagnostic, got: %s", errs)
 }
+
+// TestPatternFacetRejectsNonXSDConstructs checks that constructs outside the XSD
+// regex grammar are rejected even when the pattern would otherwise compile under
+// the regexp2 backtracking engine. XSD has no back-references, and \b is a
+// Perl-specific escape; both must be schema errors rather than silently accepted.
+func TestPatternFacetRejectsNonXSDConstructs(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		pattern string
+	}{
+		// Back-reference combined with character-class subtraction would route to
+		// regexp2 (which supports back-references) and be silently accepted.
+		{"backref with subtraction", `([a-z-[aeiou]])\1`},
+		// \b word boundary compiles under RE2 but is not valid XSD regex.
+		{"perl word boundary", `\bword\b`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="t"/>
+  <xs:simpleType name="t">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="` + tc.pattern + `"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`
+
+			_, errs := compileWithErrors(t, schema)
+			require.NotEmpty(t, errs, "non-XSD regex construct should be a schema error")
+		})
+	}
+}

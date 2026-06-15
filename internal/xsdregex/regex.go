@@ -1174,6 +1174,19 @@ func (r *Regexp) MatchString(s string) bool {
 // expressions, so callers can report a schema error rather than silently
 // ignoring the facet.
 func Compile(pattern string) (*Regexp, error) {
+	// Enforce the XSD/XPath regex grammar up front, independent of which engine
+	// compiles the pattern. RE2 happens to reject some non-XSD constructs (e.g.
+	// \1 back-references) but accepts others (e.g. \b word boundaries), and the
+	// regexp2 backtracking engine accepts both — so without these checks an
+	// invalid pattern routed to regexp2 (back-reference + character-class
+	// subtraction) would be silently accepted. XSD regex has no back-references.
+	if err := rejectPerlSpecific(pattern); err != nil {
+		return nil, err
+	}
+	if err := validateXPathRegex(pattern, false); err != nil {
+		return nil, err
+	}
+
 	translated, err := translateXPathRegex(pattern, false, false)
 	if err != nil {
 		return nil, err
