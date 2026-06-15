@@ -57,9 +57,9 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 // canonical form is defined; otherwise (collapsed-whitespace value, false) for
 // string-family types and anything unrecognized or unparsable.
 func CanonicalKey(s, builtinLocal string) (string, bool) {
-	trimmed := strings.TrimSpace(s)
 	switch builtinLocal {
 	case "boolean":
+		trimmed := strings.TrimSpace(s)
 		if trimmed == "true" || trimmed == "1" {
 			return "1", true
 		}
@@ -67,37 +67,74 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 			return "0", true
 		}
 		return trimmed, false
-	case "float", "double":
-		f, ok := parseXSDFloat(trimmed)
-		if !ok {
-			return trimmed, false
-		}
-		if math.IsNaN(f) {
-			return "NaN", true
-		}
-		if math.IsInf(f, 1) {
-			return "INF", true
-		}
-		if math.IsInf(f, -1) {
-			return "-INF", true
-		}
-		return strconv.FormatFloat(f, 'g', -1, 64), true
+	case "float":
+		return canonicalFloatKey(s, 32) // xs:float is 32-bit IEEE-754
+	case "double":
+		return canonicalFloatKey(s, 64)
 	case "dateTime", "date", "time", "gYear", "gYearMonth", "gMonth", "gDay", "gMonthDay":
-		return canonicalDateTimeKey(trimmed, builtinLocal)
+		return canonicalDateTimeKey(strings.TrimSpace(s), builtinLocal)
 	case "decimal", "integer",
 		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
 		"positiveInteger":
+		trimmed := strings.TrimSpace(s)
 		r, ok := new(big.Rat).SetString(trimmed)
 		if !ok {
 			return trimmed, false
 		}
 		return r.RatString(), true
+	case "string":
+		// whiteSpace=preserve: the value space is the exact lexical string, so
+		// leading/trailing/internal whitespace is significant. Do not alter it.
+		return s, false
+	case "normalizedString":
+		// whiteSpace=replace: tab/newline/carriage-return become spaces.
+		return whitespaceReplace(s), false
+	case "NMTOKENS", "IDREFS", "ENTITIES":
+		// List types: collapse internal whitespace so token sequences that
+		// differ only in separator whitespace are value-equal.
+		return strings.Join(strings.Fields(s), " "), false
 	default:
-		// String-family and unrecognized types compare by their lexical
-		// (whitespace-collapsed) value.
+		// Remaining string-derived types (token, NMTOKEN, Name, NCName, ID,
+		// IDREF, ENTITY, language, anyURI, …) have whiteSpace=collapse.
+		return strings.Join(strings.Fields(s), " "), false
+	}
+}
+
+// canonicalFloatKey canonicalizes an xs:float/xs:double value at the given IEEE
+// precision (bitSize 32 for xs:float, 64 for xs:double). Using the correct
+// precision ensures values that are equal in xs:float's 32-bit value space (but
+// distinct as 64-bit doubles) map to the same key, and vice versa.
+func canonicalFloatKey(s string, bitSize int) (string, bool) {
+	trimmed := strings.TrimSpace(s)
+	f, ok := parseXSDFloat(trimmed)
+	if !ok {
 		return trimmed, false
 	}
+	if math.IsNaN(f) {
+		return "NaN", true
+	}
+	if math.IsInf(f, 1) {
+		return "INF", true
+	}
+	if math.IsInf(f, -1) {
+		return "-INF", true
+	}
+	if bitSize == 32 {
+		f = float64(float32(f)) // round to xs:float precision
+	}
+	return strconv.FormatFloat(f, 'g', -1, bitSize), true
+}
+
+// whitespaceReplace applies the XSD whiteSpace="replace" normalization: each
+// tab, newline, and carriage return becomes a single space.
+func whitespaceReplace(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
