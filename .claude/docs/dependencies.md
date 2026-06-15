@@ -9,9 +9,9 @@ shim           → helium, stream, enum, internal/encoding
 xinclude       → helium, xpointer
                   → xpath1 (via xpointer)
                   → internal/encoding
-xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence
+xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex
 xslt3          → helium, xpath3, xsd, html, internal/lexicon, internal/sequence, internal/xpathstream, xslt3/internal/elements
-xsd            → helium, xpath1, internal/lexicon, internal/xsd/value
+xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, internal/xsdregex
 relaxng        → helium
 schematron     → helium, xpath1
 xpointer       → helium, xpath1
@@ -32,12 +32,13 @@ internal/heliumtest → (none)
 internal/sequence → (none)
 internal/strcursor → (none)
 internal/unparsedtext → (none)
+internal/xsdregex → (none)
 internal/xpathstream → xpath3
 test           → helium
 ```
 
 ## Leaf packages (no helium deps)
-sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/catalog, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/unparsedtext, internal/xsd/value
+sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/catalog, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/unparsedtext, internal/xsd/value, internal/xsdregex
 
 ## Core layer
 helium (root) → sax, enum, internal/*

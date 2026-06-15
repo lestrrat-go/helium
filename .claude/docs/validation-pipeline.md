@@ -53,10 +53,15 @@ anyURI types stay lexical-only (their value space equals their whitespace-
 processed lexical space), so a numeric-looking string enum `"5"` does not accept
 `"5.0"`.
 
-Pattern facets are stored per restriction step as `FacetSet.Patterns []string`.
-Patterns in the same step are ORed (value valid if it matches any); patterns from
-different derivation steps are ANDed, enforced by `validateFacets` walking the
-base-type chain and validating each step's `FacetSet` independently.
+Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
+compiled once into `FacetSet.compiledPatterns` at schema compile time. Patterns in
+the same step are ORed (value valid if it matches any); patterns from different
+derivation steps are ANDed, enforced by `validateFacets` walking the base-type
+chain and validating each step's `FacetSet` independently. Each pattern is
+translated from XSD regex to Go's RE2 via `internal/xsdregex` (the same translator
+`xpath3` uses for `fn:matches`) before compiling, so XSD-only constructs (`\i`,
+`\c`, `\p{Is...}` blocks) are enforced rather than silently skipped. A pattern that
+still cannot be translated/compiled is stored as nil and skipped (lenient).
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):

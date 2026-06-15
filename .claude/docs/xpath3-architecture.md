@@ -95,7 +95,7 @@ func NodePrefix(n helium.Node) string
 | `context.go` | Context configuration (evalConfig) |
 | `variables.go` | Variable binding management |
 | `collation.go` | Collation support |
-| `regex.go` | XPath regex→Go regex translation |
+| `regex.go` | Adapter to `internal/xsdregex` (XPath regex→Go regex translation); wraps errors as FORX0002. Shared with `xsd` so pattern facets use the same translator |
 | `regex_public.go` | Public regex API |
 | `static_check.go` | Static expression checks |
 | `streamability.go` | Internal streamability precomputation (unexported); query helpers moved to `internal/xpathstream` |

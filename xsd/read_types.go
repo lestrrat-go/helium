@@ -9,6 +9,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xsdregex"
 )
 
 func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Element) error {
@@ -539,10 +540,13 @@ func (c *compiler) parseFacets(_ context.Context, restriction *helium.Element) *
 			// Multiple <xs:pattern> in the same restriction step are ORed.
 			// Compile once here; a nil entry (compile failure) is skipped
 			// during validation, preserving the previous lenient behavior.
+			// XSD regex supports constructs Go's RE2 lacks (\i, \c, \p{Is...}
+			// blocks); translate first so they are enforced rather than
+			// silently skipped. An untranslatable pattern stays nil (lenient).
 			fs.Patterns = append(fs.Patterns, val)
-			re, err := regexp.Compile("^(?:" + val + ")$")
-			if err != nil {
-				re = nil
+			var re *regexp.Regexp
+			if translated, terr := xsdregex.Translate(val, false, false); terr == nil {
+				re, _ = regexp.Compile("^(?:" + translated + ")$")
 			}
 			fs.compiledPatterns = append(fs.compiledPatterns, re)
 		}
