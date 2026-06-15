@@ -17,6 +17,24 @@ func TestPartialApplicationPlaceholderVM(t *testing.T) {
 	require.Equal(t, "abc", value)
 }
 
+func TestPartialApplicationMapArrayVM(t *testing.T) {
+	t.Run("map placeholder", func(t *testing.T) {
+		result, err := evaluate(t.Context(), nil, `let $m := map{"a":1,"b":2} return $m(?)("b")`)
+		require.NoError(t, err)
+		value, ok := result.IsNumber()
+		require.True(t, ok)
+		require.Equal(t, 2.0, value)
+	})
+
+	t.Run("array placeholder", func(t *testing.T) {
+		result, err := evaluate(t.Context(), nil, `let $a := array{10,20,30} return $a(?)(2)`)
+		require.NoError(t, err)
+		value, ok := result.IsNumber()
+		require.True(t, ok)
+		require.Equal(t, 20.0, value)
+	})
+}
+
 func TestGeneralComparisonAgainstLargeRangeVM(t *testing.T) {
 	result, err := evaluate(t.Context(), nil, `1000000000000000020001 = 1000000000000000000000 to 1000000000000010000003`)
 	require.NoError(t, err)

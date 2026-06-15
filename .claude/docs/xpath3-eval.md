@@ -126,7 +126,9 @@ Check instance-of → error `XPDY0050` if not.
 Resolve by name/arity in builtins or user registry → evaluate args → call.
 
 ### DynamicFunctionCall
-Evaluate func expr → must be FunctionItem → check arity → invoke.
+Evaluate func expr → callee is adapted via `asFunctionItem` (FunctionItem, or
+MapItem/ArrayItem as arity-1 lookup functions) → check arity → invoke. Map/array
+lookup shares `mapLookup`/`arrayLookup` with both the direct-call and partial paths.
 
 ### InlineFunctionExpr
 Capture current variable scope snapshot → return FunctionItem with closure.
@@ -139,6 +141,9 @@ FunctionCall with PlaceholderExpr in args:
 1. Evaluate non-placeholder args
 2. Create FunctionItem closing over fixed-position args
 3. New arity = placeholder count
+
+Dynamic partial application (`$m(?)`, `$a(?)`) accepts any function item; maps and
+arrays are adapted via `asFunctionItem`, so `$m(?)("k")` and `$a(?)(2)` work.
 
 ### MapConstructorExpr
 Evaluate key/value pairs → keys must atomize to AtomicValue → build MapItem.
