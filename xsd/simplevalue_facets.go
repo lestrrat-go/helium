@@ -52,6 +52,20 @@ func checkMaxExclusive(v, bound, builtinLocal string) bool {
 	return cmp < 0
 }
 
+// enumerationValueEqual reports whether v is value-equal to a member ev for the
+// purpose of the enumeration facet. For float/double, XSD treats NaN as equal to
+// NaN for enumeration (unlike ordering, where NaN is incomparable), so that case
+// is handled explicitly before delegating to value.Compare.
+func enumerationValueEqual(v, ev, builtinLocal string) bool {
+	if builtinLocal == "float" || builtinLocal == "double" {
+		if v == "NaN" && ev == "NaN" {
+			return true
+		}
+	}
+	cmp, ok := value.Compare(v, ev, builtinLocal)
+	return ok && cmp == 0
+}
+
 func checkFacets(ctx context.Context, value string, valueNS map[string]string, fs *FacetSet, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
 	var anyErr error
 
@@ -74,7 +88,19 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 				}
 			}
 		} else {
+			// Enumeration is defined on the value space. A lexical match is
+			// sufficient (and is the only correct test for string-family types
+			// where value.Compare cannot compare), but lexically distinct values
+			// that are value-equal to a member must also be accepted.
 			found = slices.Contains(fs.Enumeration, value)
+			if !found {
+				for _, ev := range fs.Enumeration {
+					if enumerationValueEqual(value, ev, builtinLocal) {
+						found = true
+						break
+					}
+				}
+			}
 		}
 		if !found {
 			set := "'" + strings.Join(fs.Enumeration, "', '") + "'"

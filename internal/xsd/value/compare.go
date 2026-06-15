@@ -12,6 +12,8 @@ import (
 // is undefined (NaN, incomparable durations, parse failures).
 func Compare(a, b, builtinLocal string) (int, bool) {
 	switch builtinLocal {
+	case "boolean":
+		return compareBoolean(a, b)
 	case "float", "double":
 		return compareFloat(a, b)
 	case "dateTime":
@@ -50,6 +52,36 @@ func CompareDecimal(a, b string) int {
 		return -2
 	}
 	return ra.Cmp(rb)
+}
+
+// parseXSDBoolean canonicalizes an xs:boolean lexical form. "true"/"1" map to
+// true and "false"/"0" map to false. Any other input is not a valid boolean.
+func parseXSDBoolean(s string) (bool, bool) {
+	switch s {
+	case "true", "1":
+		return true, true
+	case "false", "0":
+		return false, true
+	}
+	return false, false
+}
+
+// compareBoolean compares two xs:boolean values in value space. Booleans have
+// no ordering, so only equality is meaningful: equal values return 0, distinct
+// values return a nonzero result whose sign is arbitrary but stable.
+func compareBoolean(a, b string) (int, bool) {
+	ba, ok1 := parseXSDBoolean(a)
+	bb, ok2 := parseXSDBoolean(b)
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	if ba == bb {
+		return 0, true
+	}
+	if !ba {
+		return -1, true
+	}
+	return 1, true
 }
 
 func parseXSDFloat(s string) (float64, bool) {

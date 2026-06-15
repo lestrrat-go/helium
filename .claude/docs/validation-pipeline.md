@@ -40,10 +40,14 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
      - Simple: no child elements, validate text vs type facets
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
 
-QName/NOTATION simple-value validation compares enumeration facets in value
-space, not raw prefix text. Instance lexical QNames are resolved against the
-instance node's in-scope namespaces; facet lexical QNames are resolved against
-the schema facet's in-scope namespaces.
+Enumeration facets are compared in value space, not raw lexical text. A value is
+a member if it lexically equals a member OR value-compares equal to one (e.g.
+decimal `5.0`≡`5`, boolean `1`≡`true`, float `1.50`≡`1.5`, equal dateTimes in
+different timezones). For float/double, NaN equals NaN for enumeration (but
+remains incomparable for min/max ordering). QName/NOTATION enumeration resolves
+both instance and facet lexical QNames against their respective in-scope
+namespaces. String-family types where `value.Compare` cannot compare fall back
+to the lexical-equality test.
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):
