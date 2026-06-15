@@ -43,9 +43,23 @@ func TestEnumerationValueSpace(t *testing.T) {
 		{name: "double exponent form", baseType: "xs:double", enum: []string{"1.5"}, instance: "1.5E0"},
 		{name: "double non-member", baseType: "xs:double", enum: []string{"1.5"}, instance: "2.5", wantReject: true},
 
-		// float NaN — per XSD, NaN equals NaN for enumeration purposes.
+		// float NaN — per XSD, NaN equals NaN for enumeration purposes; signed
+		// lexical forms (accepted by the float validator) must match too.
 		{name: "float NaN matches NaN", baseType: "xs:float", enum: []string{"NaN"}, instance: "NaN"},
 		{name: "double NaN matches NaN", baseType: "xs:double", enum: []string{"NaN"}, instance: "NaN"},
+		{name: "float signed NaN matches NaN", baseType: "xs:float", enum: []string{"NaN"}, instance: "+NaN"},
+		{name: "double signed NaN matches NaN", baseType: "xs:double", enum: []string{"NaN"}, instance: "-NaN"},
+
+		// hexBinary — value space is the decoded octets, so case differences are
+		// not significant ("0A" == "0a"); a different byte must be rejected.
+		{name: "hexBinary case-insensitive", baseType: "xs:hexBinary", enum: []string{"0A"}, instance: "0a"},
+		{name: "hexBinary mixed case member", baseType: "xs:hexBinary", enum: []string{"deadBEEF"}, instance: "DEADbeef"},
+		{name: "hexBinary non-member", baseType: "xs:hexBinary", enum: []string{"0A"}, instance: "0b", wantReject: true},
+
+		// base64Binary — value space is the decoded octets; whitespace in the
+		// lexical form is not significant.
+		{name: "base64Binary whitespace insignificant", baseType: "xs:base64Binary", enum: []string{"YWJj"}, instance: "YW Jj"},
+		{name: "base64Binary non-member", baseType: "xs:base64Binary", enum: []string{"YWJj"}, instance: "YWJk", wantReject: true},
 
 		// dateTime — same instant written with a different timezone form.
 		{name: "dateTime equal across timezone", baseType: "xs:dateTime",

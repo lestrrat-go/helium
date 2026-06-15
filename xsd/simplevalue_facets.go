@@ -55,10 +55,11 @@ func checkMaxExclusive(v, bound, builtinLocal string) bool {
 // enumValueSpaceTypes is the set of builtin base types for which value.Compare
 // implements correct value-space equality, so the enumeration facet may accept a
 // member that is value-equal but lexically distinct. It deliberately excludes
-// string-family, binary, and anyURI types: value.Compare falls back to decimal
-// comparison for any unrecognized builtin, which would wrongly treat numeric-
-// looking lexicals as equal (e.g. xs:string enumeration "5" accepting "5.0").
-// Those types stay lexical-only.
+// string-family and anyURI types: value.Compare falls back to decimal comparison
+// for any unrecognized builtin, which would wrongly treat numeric-looking
+// lexicals as equal (e.g. xs:string enumeration "5" accepting "5.0"). Those
+// types stay lexical-only, which is correct because their value space equals
+// their (whitespace-processed) lexical space.
 var enumValueSpaceTypes = map[string]struct{}{
 	// Numeric (decimal-derived).
 	"decimal": {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
@@ -72,6 +73,8 @@ var enumValueSpaceTypes = map[string]struct{}{
 	// Date/time/duration.
 	"dateTime": {}, "date": {}, "time": {}, "duration": {},
 	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
+	// Binary (compared by decoded octets, not lexical text).
+	"hexBinary": {}, "base64Binary": {},
 }
 
 // enumerationValueEqual reports whether v is value-equal to a member ev for the
@@ -85,7 +88,7 @@ func enumerationValueEqual(v, ev, builtinLocal string) bool {
 		return false
 	}
 	if builtinLocal == "float" || builtinLocal == "double" {
-		if v == "NaN" && ev == "NaN" {
+		if value.IsFloatNaN(v) && value.IsFloatNaN(ev) {
 			return true
 		}
 	}

@@ -1,6 +1,9 @@
 package value
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/hex"
 	"math"
 	"math/big"
 	"strconv"
@@ -34,6 +37,10 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		return compareGMonthDay(a, b)
 	case "duration":
 		return compareDuration(a, b)
+	case "hexBinary":
+		return compareHexBinary(a, b)
+	case "base64Binary":
+		return compareBase64Binary(a, b)
 	default:
 		cmp := CompareDecimal(a, b)
 		if cmp == -2 {
@@ -66,9 +73,10 @@ func parseXSDBoolean(s string) (bool, bool) {
 	return false, false
 }
 
-// compareBoolean compares two xs:boolean values in value space. Booleans have
-// no ordering, so only equality is meaningful: equal values return 0, distinct
-// values return a nonzero result whose sign is arbitrary but stable.
+// compareBoolean compares two xs:boolean values in value space. xs:boolean has
+// no order relation in XSD, so callers should rely only on equality (cmp == 0).
+// For a total, deterministic result this orders false < true; equal values
+// return 0.
 func compareBoolean(a, b string) (int, bool) {
 	ba, ok1 := parseXSDBoolean(a)
 	bb, ok2 := parseXSDBoolean(b)
@@ -84,13 +92,62 @@ func compareBoolean(a, b string) (int, bool) {
 	return 1, true
 }
 
+// compareHexBinary compares two xs:hexBinary values in value space (the decoded
+// octet sequence), so lexically distinct forms that decode to the same bytes are
+// equal (e.g. "0A" == "0a"). hexBinary has no order relation; only equality is
+// meaningful. Returns ok=false if either operand is not valid hexBinary.
+func compareHexBinary(a, b string) (int, bool) {
+	da, err1 := hex.DecodeString(a)
+	db, err2 := hex.DecodeString(b)
+	if err1 != nil || err2 != nil {
+		return 0, false
+	}
+	if bytes.Equal(da, db) {
+		return 0, true
+	}
+	return 1, true
+}
+
+// compareBase64Binary compares two xs:base64Binary values in value space (the
+// decoded octet sequence), ignoring the whitespace permitted in the lexical
+// form. base64Binary has no order relation; only equality is meaningful. Returns
+// ok=false if either operand is not valid base64Binary.
+func compareBase64Binary(a, b string) (int, bool) {
+	da, ok1 := decodeBase64Binary(a)
+	db, ok2 := decodeBase64Binary(b)
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	if bytes.Equal(da, db) {
+		return 0, true
+	}
+	return 1, true
+}
+
+func decodeBase64Binary(s string) ([]byte, bool) {
+	stripped := strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\n' || r == '\r' || r == '\t' {
+			return -1
+		}
+		return r
+	}, s)
+	decoded, err := base64.StdEncoding.DecodeString(stripped)
+	if err != nil {
+		return nil, false
+	}
+	return decoded, true
+}
+
 func parseXSDFloat(s string) (float64, bool) {
 	switch s {
 	case "INF", "+INF":
 		return math.Inf(1), true
 	case "-INF":
 		return math.Inf(-1), true
-	case "NaN":
+	// The float lexical validator (floatRegex) accepts an optional leading sign
+	// on NaN, so accept the signed forms here too for consistency. The sign is
+	// meaningless for NaN.
+	case "NaN", "+NaN", "-NaN":
 		return math.NaN(), true
 	}
 	f, err := strconv.ParseFloat(s, 64)
@@ -98,6 +155,13 @@ func parseXSDFloat(s string) (float64, bool) {
 		return 0, false
 	}
 	return f, true
+}
+
+// IsFloatNaN reports whether s is a valid xs:float/xs:double lexical form that
+// denotes NaN (including the sign-prefixed forms the lexical validator accepts).
+func IsFloatNaN(s string) bool {
+	f, ok := parseXSDFloat(s)
+	return ok && math.IsNaN(f)
 }
 
 func compareFloat(a, b string) (int, bool) {

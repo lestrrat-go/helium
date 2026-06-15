@@ -241,6 +241,17 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeBoolean, "false", "true", -1, true},
 		{lexicon.TypeBoolean, "maybe", "true", 0, false},
 
+		// hexBinary — compared by decoded octets, so case is not significant.
+		{"hexBinary", "0A", "0a", 0, true},
+		{"hexBinary", "DEADbeef", "deadBEEF", 0, true},
+		{"hexBinary", "0A", "0B", 1, true},
+		{"hexBinary", "0G", "0A", 0, false}, // invalid hex -> indeterminate
+
+		// base64Binary — compared by decoded octets, whitespace insignificant.
+		{"base64Binary", "YWJj", "YW Jj", 0, true},
+		{"base64Binary", "YWJj", "YWJk", 1, true},
+		{"base64Binary", "@@@@", "YWJj", 0, false}, // invalid -> indeterminate
+
 		// float
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, "2.0", -1, true},
 		{lexicon.TypeFloat, "2.0", lexicon.XSLTVersion10, 1, true},
