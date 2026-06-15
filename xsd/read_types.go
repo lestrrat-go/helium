@@ -548,7 +548,7 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			if rerr != nil {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, ce.Line(),
 					ce.LocalName(), "pattern",
-					fmt.Sprintf("The value '%s' is not a valid regular expression.", val)), helium.ErrorLevelFatal))
+					fmt.Sprintf("The value '%s' is not a valid regular expression: %s.", val, rerr)), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 			fs.compiledPatterns = append(fs.compiledPatterns, re)
