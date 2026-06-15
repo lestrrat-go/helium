@@ -1,7 +1,6 @@
 package xsd_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -95,8 +94,7 @@ func TestPatternFacetInvalidRegexp(t *testing.T) {
 
 	_, errs := compileWithErrors(t, schema)
 	require.NotEmpty(t, errs, "invalid pattern regexp should be a schema error")
-	require.True(t, strings.Contains(errs, "not a valid regular expression"),
-		"expected invalid-regexp diagnostic, got: %s", errs)
+	require.Contains(t, errs, "not a valid regular expression")
 }
 
 // TestPatternFacetRejectsNonXSDConstructs checks that constructs outside the XSD
