@@ -93,7 +93,7 @@ Pattern-matching engine with backtracking:
    - **List**: split text, validate items
 3. Element validation: match name, validate attrs, build child list (skip non-content: EntityRef/PI/Comment), validate content, check all attrs+content consumed
 
-### Backtracking Strategy (`backtrackGroupFlexible`)
+### Backtracking Strategy (`backtrackGroupFlexible` / `backtrackGroupNaive`)
 
 When mandatory group child fails:
 1. Check if element was consumed (structural vs content error)
@@ -101,6 +101,12 @@ When mandatory group child fails:
    - Try iteration counts from minimum upward to greedy count
    - Re-validate remaining children at each count
    - Keep highest successful count (maximizes consumption — libxml2 semantics)
+
+Two parallel implementations share this strategy. `validateGroupContent` +
+`backtrackGroupFlexible` runs inside element bodies (threads attrs/attrUsed and
+emits content-failure diagnostics). `validateGroup` + `backtrackGroupNaive` runs
+the bare-`<group>` start path (and any group reached via `validatePattern`),
+operating only on the node sequence with no attribute/element-content context.
 
 ### Error Suppression
 
