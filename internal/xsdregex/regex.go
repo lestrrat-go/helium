@@ -1073,6 +1073,10 @@ func quantifierExceedsRE2Limit(content string) bool {
 	return false
 }
 
+// quantifierContentRe matches the content of a valid quantifier brace:
+// digits [ "," [ digits ] ]. Compiled once and reused across scans.
+var quantifierContentRe = regexp.MustCompile(`^\d+(,\d*)?$`)
+
 // isValidQuantifierBrace checks whether '{' at position i is part of a
 // valid quantifier {n}, {n,}, or {n,m}. The '{' must be preceded by a
 // quantifiable atom (not at the start) and its content must match the
@@ -1102,9 +1106,7 @@ func isValidQuantifierBrace(runes []rune, i int) bool {
 	}
 
 	content := string(runes[i+1 : end])
-	// Must match: digits [ "," [ digits ] ]
-	quantRe := regexp.MustCompile(`^\d+(,\d*)?$`)
-	return quantRe.MatchString(content)
+	return quantifierContentRe.MatchString(content)
 }
 
 // rejectPerlSpecific checks for Perl-specific regex constructs not allowed in XPath.
