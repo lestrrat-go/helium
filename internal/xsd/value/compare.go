@@ -579,13 +579,81 @@ func compareDateTimeFields(a, b xsdDateTime) int {
 
 func compareDateTimeParsed(a, b xsdDateTime) (int, bool) {
 	if a.hasTZ != b.hasTZ {
-		return 0, false // indeterminate
+		return compareDateTimeMixedTZ(a, b)
 	}
 	if a.hasTZ {
 		a = a.normalizeToUTC()
 		b = b.normalizeToUTC()
 	}
 	return compareDateTimeFields(a, b), true
+}
+
+// compareDateTimeMixedTZ compares two date/time values when exactly one carries
+// a timezone, applying the XSD 1.0 order relation (3.2.7.4). A non-timezoned
+// value denotes the instant interval [v-14:00, v+14:00]; if that whole interval
+// lies on one side of the timezoned operand the result is determinate. Only an
+// overlapping interval is indeterminate.
+func compareDateTimeMixedTZ(a, b xsdDateTime) (int, bool) {
+	// The determinate rule normalizes a synthetic ±14:00 offset across day
+	// boundaries, which requires a full calendar date (year, month, day). The
+	// partial gregorian types leave some of those components zero — gYear
+	// (month=0, day=0), gYearMonth (day=0), gMonth (year=0, day=0), gDay (year=0,
+	// month=0), and gMonthDay (year=0). Applying the offset to a zero field makes
+	// normalizeToUTC borrow into a neighbouring period and yield a determinately
+	// wrong result (e.g. gYear "2020" rolling back to 2019), so those types stay
+	// indeterminate, as they were before this rule existed. (xs:time is not in
+	// this set: compareTime assigns a reference date before comparing, so it has
+	// a full calendar date and flows through the determinate path correctly. The
+	// only loss is a literal year-0000 dateTime, an XSD 1.1 edge case, which
+	// falls back to indeterminate rather than wrong.)
+	if a.year == 0 || b.year == 0 || a.month < 1 || b.month < 1 || a.day < 1 || b.day < 1 {
+		return 0, false
+	}
+
+	// Orient so that `tz` is the timezoned operand and `plain` has no timezone.
+	tz, plain := a, b
+	swapped := false
+	if !a.hasTZ {
+		tz, plain = b, a
+		swapped = true
+	}
+
+	tz = tz.normalizeToUTC()
+
+	// Interpret the non-timezoned operand under its two extreme timezones.
+	// +14:00 yields its earliest instant (largest subtraction from UTC),
+	// -14:00 yields its latest instant. We compare plain against tz, so we
+	// build the UTC-normalized plain value at each extreme.
+	low := plain
+	low.hasTZ = true
+	low.tzMin = 14 * 60
+	low = low.normalizeToUTC()
+
+	high := plain
+	high.hasTZ = true
+	high.tzMin = -14 * 60
+	high = high.normalizeToUTC()
+
+	cmpLow := compareDateTimeFields(low, tz)
+	cmpHigh := compareDateTimeFields(high, tz)
+
+	// Both extremes on the same side → determinate result for `plain` vs `tz`.
+	// orient converts that into the result for the original `a` vs `b` order:
+	// when the operands were not swapped, `a` is `tz` and `b` is `plain`, so
+	// the sign must be inverted.
+	orient := func(cmp int) int {
+		if swapped {
+			return cmp
+		}
+		return -cmp
+	}
+	if cmpLow > 0 && cmpHigh > 0 {
+		return orient(1), true
+	}
+	if cmpLow < 0 && cmpHigh < 0 {
+		return orient(-1), true
+	}
+	return 0, false
 }
 
 func compareDateTime(a, b string) (int, bool) {
