@@ -1468,76 +1468,15 @@ func (v *validator) validateValue(pat *pattern, state *validState) int {
 }
 
 func (v *validator) validateList(pat *pattern, state *validState) int {
+	// Delegate to the shared token matcher so every <list> path — element
+	// content and this validatePattern path (lists nested under
+	// optional/oneOrMore/choice, or at grammar.start) — uses the same
+	// backtracking semantics. The previous hand-rolled matcher here only
+	// handled data/value/(zero|one)OrMore-of-data and silently ignored
+	// group/choice/optional/nested children. Pass a nil element: the naive
+	// path has no element context for per-token error reporting.
 	text := v.collectText(state)
-	tokens := strings.Fields(text)
-
-	if len(pat.children) == 0 {
-		if len(tokens) == 0 {
-			return 0
-		}
-		return -1
-	}
-
-	for _, child := range pat.children {
-		switch child.kind {
-		case patternData:
-			if len(tokens) == 0 {
-				return -1
-			}
-			if v.matchData(child, tokens[0]) != 0 {
-				return -1
-			}
-			tokens = tokens[1:]
-		case patternValue:
-			if len(tokens) == 0 {
-				return -1
-			}
-			if v.matchValue(child, tokens[0]) != 0 {
-				return -1
-			}
-			tokens = tokens[1:]
-		case patternOneOrMore:
-			if len(tokens) == 0 {
-				return -1
-			}
-			for len(tokens) > 0 {
-				matched := false
-				for _, cc := range child.children {
-					if cc.kind == patternData {
-						if v.matchData(cc, tokens[0]) == 0 {
-							tokens = tokens[1:]
-							matched = true
-							break
-						}
-					}
-				}
-				if !matched {
-					break
-				}
-			}
-		case patternZeroOrMore:
-			for len(tokens) > 0 {
-				matched := false
-				for _, cc := range child.children {
-					if cc.kind == patternData {
-						if v.matchData(cc, tokens[0]) == 0 {
-							tokens = tokens[1:]
-							matched = true
-							break
-						}
-					}
-				}
-				if !matched {
-					break
-				}
-			}
-		}
-	}
-
-	if len(tokens) > 0 {
-		return -1
-	}
-	return 0
+	return v.matchListContent(pat, text, nil)
 }
 
 // collectText consumes text nodes from the state and returns their content.

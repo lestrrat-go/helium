@@ -53,3 +53,26 @@ func TestTokenMatcherNoExponentialBlowup(t *testing.T) {
 	instance := `<a>1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20</a>`
 	require.NoError(t, validateWith(t, b.String(), instance))
 }
+
+// TestListGroupChoiceUnderOptional covers <list>s whose children are group/choice
+// nested under optional in element content. All such lists share the
+// matchListContent token matcher (validateList now delegates to it too), so they
+// must validate with full backtracking semantics rather than being mishandled.
+func TestListGroupChoiceUnderOptional(t *testing.T) {
+	t.Parallel()
+
+	groupSchema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <optional>
+    <list><group><value>X</value><value>Y</value></group></list>
+  </optional>
+</element>`
+	require.NoError(t, validateWith(t, groupSchema, `<a>X Y</a>`), "group list should validate")
+	require.NoError(t, validateWith(t, groupSchema, `<a></a>`), "absent optional list should validate")
+	require.Error(t, validateWith(t, groupSchema, `<a>X</a>`), "incomplete group must be rejected")
+
+	choiceSchema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <list><oneOrMore><choice><value>P</value><value>Q</value></choice></oneOrMore></list>
+</element>`
+	require.NoError(t, validateWith(t, choiceSchema, `<a>P Q P</a>`), "choice list should validate")
+	require.Error(t, validateWith(t, choiceSchema, `<a>P Z</a>`), "non-member token must be rejected")
+}
