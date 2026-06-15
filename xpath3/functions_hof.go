@@ -295,58 +295,11 @@ func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 	if seqLen(seq) != 1 {
 		return FunctionItem{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected single function item"}
 	}
-	switch v := seq.Get(0).(type) {
-	case FunctionItem:
-		return v, nil
-	case MapItem:
-		// Maps are functions: map($key) → value
-		return FunctionItem{
-			Arity: 1,
-			Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
-				if len(args) != 1 || seqLen(args[0]) != 1 {
-					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map lookup requires exactly one argument"}
-				}
-				key, err := AtomizeItem(args[0].Get(0))
-				if err != nil {
-					return nil, err
-				}
-				val, ok := v.Get(key)
-				if !ok {
-					return validNilSequence, nil
-				}
-				return val, nil
-			},
-		}, nil
-	case ArrayItem:
-		// Arrays are functions: array($index) → member
-		return FunctionItem{
-			Arity: 1,
-			Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
-				if len(args) != 1 || seqLen(args[0]) != 1 {
-					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires exactly one argument"}
-				}
-				key, err := AtomizeItem(args[0].Get(0))
-				if err != nil {
-					return nil, err
-				}
-				if key.TypeName == TypeUntypedAtomic {
-					key, err = CastAtomic(key, TypeInteger)
-					if err != nil {
-						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
-					}
-				}
-				if !isIntegerDerived(key.TypeName) {
-					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
-				}
-				iv, ok := key.Int64Val()
-				if !ok {
-					return nil, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
-				}
-				idx := int(iv)
-				return v.Get(idx)
-			},
-		}, nil
-	default:
+	// asFunctionItem is the single source of truth for adapting maps and arrays
+	// (arity-1 lookup functions) into FunctionItem; see eval_funcall.go.
+	fi, ok := asFunctionItem(seq.Get(0))
+	if !ok {
 		return FunctionItem{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected function item, got %T", seq.Get(0))}
 	}
+	return fi, nil
 }

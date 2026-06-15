@@ -69,7 +69,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 	}
 
 	if hasPlaceholders {
-		fi, ok := funcSeq.Get(0).(FunctionItem)
+		fi, ok := asFunctionItem(funcSeq.Get(0))
 		if !ok {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "partial application requires function item"}
 		}
@@ -114,44 +114,76 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *eval
 		return v.Invoke(withDynamicCall(ec.fnContext(ctx)), args)
 	case MapItem:
 		// Maps are functions: $map($key) → value
-		if len(args) != 1 || seqLen(args[0]) != 1 {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map lookup requires exactly one argument"}
-		}
-		key, err := AtomizeItem(args[0].Get(0))
-		if err != nil {
-			return nil, err
-		}
-		val, ok := v.Get(key)
-		if !ok {
-			return validNilSequence, nil
-		}
-		return val, nil
+		return mapLookup(v, args)
 	case ArrayItem:
 		// Arrays are functions: $array($index) → member
-		if len(args) != 1 || seqLen(args[0]) != 1 {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires exactly one argument"}
-		}
-		key, err := AtomizeItem(args[0].Get(0))
-		if err != nil {
-			return nil, err
-		}
-		if key.TypeName == TypeUntypedAtomic {
-			key, err = CastAtomic(key, TypeInteger)
-			if err != nil {
-				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
-			}
-		}
-		if !isIntegerDerived(key.TypeName) {
-			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
-		}
-		idx, err := checkedArrayIndex(key)
-		if err != nil {
-			return nil, err
-		}
-		return v.Get(idx)
+		return arrayLookup(v, args)
 	default:
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("dynamic function call requires function item, got %T", funcSeq.Get(0))}
 	}
+}
+
+// asFunctionItem adapts a callee item into a FunctionItem. In XPath 3.1 maps and
+// arrays are function items of arity 1 (the lookup function), so they support
+// both dynamic invocation and partial function application (e.g. $m(?), $a(?)).
+func asFunctionItem(item Item) (FunctionItem, bool) {
+	switch v := item.(type) {
+	case FunctionItem:
+		return v, true
+	case MapItem:
+		return FunctionItem{
+			Arity:  1,
+			Invoke: func(_ context.Context, args []Sequence) (Sequence, error) { return mapLookup(v, args) },
+		}, true
+	case ArrayItem:
+		return FunctionItem{
+			Arity:  1,
+			Invoke: func(_ context.Context, args []Sequence) (Sequence, error) { return arrayLookup(v, args) },
+		}, true
+	default:
+		return FunctionItem{}, false
+	}
+}
+
+// mapLookup implements the map-as-function call $map($key) → value.
+func mapLookup(m MapItem, args []Sequence) (Sequence, error) {
+	if len(args) != 1 || seqLen(args[0]) != 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map lookup requires exactly one argument"}
+	}
+	key, err := AtomizeItem(args[0].Get(0))
+	if err != nil {
+		return nil, err
+	}
+	val, ok := m.Get(key)
+	if !ok {
+		return validNilSequence, nil
+	}
+	return val, nil
+}
+
+// arrayLookup implements the array-as-function call $array($index) → member.
+func arrayLookup(a ArrayItem, args []Sequence) (Sequence, error) {
+	if len(args) != 1 || seqLen(args[0]) != 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires exactly one argument"}
+	}
+	key, err := AtomizeItem(args[0].Get(0))
+	if err != nil {
+		return nil, err
+	}
+	if key.TypeName == TypeUntypedAtomic {
+		key, err = CastAtomic(key, TypeInteger)
+		if err != nil {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
+		}
+	}
+	if !isIntegerDerived(key.TypeName) {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array lookup requires xs:integer index"}
+	}
+	idx, err := checkedArrayIndex(key)
+	if err != nil {
+		return nil, err
+	}
+	return a.Get(idx)
 }
 
 func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionRef) (Sequence, error) {
