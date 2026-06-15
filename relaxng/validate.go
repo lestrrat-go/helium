@@ -1248,22 +1248,34 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 	savedValid := v.valid
 
 	v.suppressDepth++
+	// Prefer a branch that makes progress (consumes input) over a zero-length
+	// match, so an early <empty/>/optional branch can't shadow a later
+	// consuming branch (mirrors the hardened validateContentPat choice case).
+	noProgressMatch := false
 	for _, child := range pat.children {
 		saved := state.clone()
-		if ret := v.validatePattern(child, saved); ret == 0 {
+		if ret := v.validatePattern(child, saved); ret != 0 {
+			continue
+		}
+		if !seqEqual(saved.seq, state.seq) {
+			// Branch made progress — use it.
 			v.suppressDepth--
-			// Restore error state (successful branch discards errors from prior branches)
 			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
 			*state = *saved
 			return 0
 		}
+		// Succeeded but consumed nothing — remember and keep trying.
+		noProgressMatch = true
 	}
 	v.suppressDepth--
 
-	// All branches failed — restore error state (no branch errors emitted)
+	// Restore error state (no branch errors emitted).
 	v.pendingErrors = v.pendingErrors[:savedLen]
 	v.valid = savedValid
+	if noProgressMatch {
+		return 0
+	}
 	return -1
 }
 
