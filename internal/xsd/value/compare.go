@@ -128,11 +128,17 @@ func decodeBase64Binary(s string) ([]byte, bool) {
 		}
 		return r
 	}, s)
-	decoded, err := base64.StdEncoding.DecodeString(stripped)
-	if err != nil {
-		return nil, false
+	if decoded, err := base64.StdEncoding.DecodeString(stripped); err == nil {
+		return decoded, true
 	}
-	return decoded, true
+	// validateBase64Binary is regex-only, so it admits unpadded (and partially
+	// padded) forms that StdEncoding rejects. Fall back to RawStdEncoding after
+	// dropping any partial padding, so a value-space comparison still succeeds
+	// for a value the lexical validator accepted (e.g. "TQ" == "TQ==").
+	if decoded, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(stripped, "=")); err == nil {
+		return decoded, true
+	}
+	return nil, false
 }
 
 func parseXSDFloat(s string) (float64, bool) {
