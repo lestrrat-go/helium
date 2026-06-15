@@ -1,6 +1,7 @@
 package relaxng
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"regexp"
@@ -1048,20 +1049,14 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		}
 		return 0
 	case patternGroup:
-		// Sequential match on tokens
+		// Sequential match on tokens, backtracking across each member's
+		// consumption options so a greedy repetition or a zero-token choice
+		// branch cannot strand a later mandatory member.
 		tokens := strings.Fields(text)
-		offset := 0
-		for _, child := range pat.children {
-			n, ok := v.matchAttrTokens(child, tokens[offset:])
-			if !ok {
-				return -1
-			}
-			offset += n
+		if slices.Contains(v.groupCounts(pat.children, tokens), len(tokens)) {
+			return 0
 		}
-		if offset != len(tokens) {
-			return -1
-		}
-		return 0
+		return -1
 	case patternEmpty:
 		if strings.TrimSpace(text) == "" {
 			return 0
@@ -1073,7 +1068,7 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		}
 		content := wrapChildren(pat.children)
 		return v.matchAttrContent(content, text, elem)
-	case patternRef:
+	case patternRef, patternParentRef:
 		def, ok := v.grammar.defines[pat.name]
 		if !ok {
 			return -1
@@ -1094,26 +1089,32 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 // matchListContent validates a string against a list pattern.
 func (v *validator) matchListContent(pat *pattern, text string, elem *helium.Element) int {
 	tokens := strings.Fields(text)
-	offset := 0
-	for _, child := range pat.children {
-		n, ok := v.matchAttrTokens(child, tokens[offset:])
-		if !ok {
-			if elem != nil {
+	// Backtrack across each member's consumption options so a greedy
+	// repetition or a zero-token choice branch cannot strand a later
+	// mandatory member.
+	if slices.Contains(v.groupCounts(pat.children, tokens), len(tokens)) {
+		return 0
+	}
+
+	// No combination consumed the whole list. Report a best-effort error by
+	// replaying members greedily to find where matching first stalls.
+	if elem != nil {
+		offset := 0
+		for _, child := range pat.children {
+			n, ok := v.matchAttrTokens(child, tokens[offset:])
+			if !ok {
 				if typeName := listDataTypeName(child); typeName != "" {
 					v.addError(elem, fmt.Sprintf("failed to validate type %s", typeName))
 				}
+				return -1
 			}
-			return -1
+			offset += n
 		}
-		offset += n
-	}
-	if offset != len(tokens) {
-		if elem != nil {
+		if offset < len(tokens) {
 			v.addError(elem, fmt.Sprintf("Extra data in list: %s", tokens[offset]))
 		}
-		return -1
 	}
-	return 0
+	return -1
 }
 
 // listDataTypeName extracts the data type name from a pattern for list error reporting.
@@ -1136,110 +1137,312 @@ func listDataTypeName(pat *pattern) string {
 	return ""
 }
 
-// matchAttrTokens matches tokens against a pattern, returning how many tokens were consumed.
+// matchAttrTokens matches tokens against a pattern, returning how many tokens
+// were consumed. It prefers the greedy (largest) match; callers needing the
+// full set of consumption options use matchAttrTokensCounts.
 func (v *validator) matchAttrTokens(pat *pattern, tokens []string) (int, bool) {
-	if pat == nil {
+	counts := v.matchAttrTokensCounts(pat, tokens)
+	if len(counts) == 0 {
 		return 0, false
+	}
+	return counts[0], true
+}
+
+// matchAttrTokensCounts returns every token-consumption count that pat can
+// match against the leading tokens, in greedy-preferred (descending) order
+// with duplicates removed. An empty slice means the pattern cannot match.
+//
+// Returning the full set (rather than a single count) lets the group matcher
+// backtrack: a greedy oneOrMore/zeroOrMore that over-consumes can yield tokens
+// back when a later mandatory member fails, and a choice with a zero-token
+// branch (e.g. empty) does not shadow a consuming branch.
+func (v *validator) matchAttrTokensCounts(pat *pattern, tokens []string) []int {
+	if pat == nil {
+		return nil
 	}
 	switch pat.kind {
 	case patternData:
 		if len(tokens) == 0 {
-			return 0, false
+			return nil
 		}
 		if v.matchData(pat, tokens[0]) == 0 {
-			return 1, true
+			return []int{1}
 		}
-		return 0, false
+		return nil
 	case patternValue:
 		if len(tokens) == 0 {
-			return 0, false
+			return nil
 		}
 		if v.matchValue(pat, tokens[0]) == 0 {
-			return 1, true
+			return []int{1}
 		}
-		return 0, false
+		return nil
 	case patternChoice:
+		seen := map[int]struct{}{}
+		var counts []int
 		for _, child := range pat.children {
-			n, ok := v.matchAttrTokens(child, tokens)
-			if ok {
-				return n, true
+			for _, n := range v.matchAttrTokensCounts(child, tokens) {
+				if _, ok := seen[n]; ok {
+					continue
+				}
+				seen[n] = struct{}{}
+				counts = append(counts, n)
 			}
 		}
-		return 0, false
+		sortDescending(counts)
+		return counts
 	case patternOneOrMore:
 		content := wrapChildren(pat.children)
-		total := 0
-		// Must match at least once
-		n, ok := v.matchAttrTokens(content, tokens[total:])
-		if !ok {
-			return 0, false
-		}
-		total += n
-		// Then zero or more
-		for total < len(tokens) {
-			n, ok = v.matchAttrTokens(content, tokens[total:])
-			if !ok {
-				break
-			}
-			if n == 0 {
-				break
-			}
-			total += n
-		}
-		return total, true
+		return v.repeatCounts(content, tokens, 1)
 	case patternZeroOrMore:
 		content := wrapChildren(pat.children)
-		total := 0
-		for total < len(tokens) {
-			n, ok := v.matchAttrTokens(content, tokens[total:])
-			if !ok || n == 0 {
-				break
-			}
-			total += n
-		}
-		return total, true
+		return v.repeatCounts(content, tokens, 0)
 	case patternGroup:
-		total := 0
-		for _, child := range pat.children {
-			n, ok := v.matchAttrTokens(child, tokens[total:])
-			if !ok {
-				return 0, false
-			}
-			total += n
-		}
-		return total, true
+		return v.groupCounts(pat.children, tokens)
 	case patternText:
-		// Text in a list: consume one token
+		// Text in a list: consume one token (or none when empty).
 		if len(tokens) > 0 {
-			return 1, true
+			return []int{1}
 		}
-		return 0, true
+		return []int{0}
 	case patternEmpty:
-		return 0, true
-	case patternRef:
+		return []int{0}
+	case patternRef, patternParentRef:
 		def, ok := v.grammar.defines[pat.name]
 		if !ok {
-			return 0, false
+			return nil
 		}
-		return v.matchAttrTokens(def, tokens)
+		return v.matchAttrTokensCounts(def, tokens)
 	case patternOptional:
 		content := wrapChildren(pat.children)
-		n, ok := v.matchAttrTokens(content, tokens)
-		if ok && n > 0 {
-			return n, true
+		seen := map[int]struct{}{0: {}}
+		counts := []int{}
+		for _, n := range v.matchAttrTokensCounts(content, tokens) {
+			if n == 0 {
+				continue
+			}
+			if _, ok := seen[n]; ok {
+				continue
+			}
+			seen[n] = struct{}{}
+			counts = append(counts, n)
 		}
-		return 0, true
+		counts = append(counts, 0)
+		sortDescending(counts)
+		return counts
 	}
-	return 0, false
+	return nil
+}
+
+// groupCounts returns every total consumption count for matching children
+// sequentially against tokens, backtracking across each member's options.
+//
+// The set of counts children[ci:] can consume starting at tokens[off:] depends
+// only on (ci, off), not on how that offset was reached, so it is memoized.
+// Without this, the sibling enumeration is exponential — e.g. a group of N
+// optionals over the tokens explores 2^N paths even though it has only N+1
+// distinct totals.
+func (v *validator) groupCounts(children []*pattern, tokens []string) []int {
+	memo := map[[2]int][]int{}
+	var rec func(ci, off int) []int
+	rec = func(ci, off int) []int {
+		if ci >= len(children) {
+			return []int{0}
+		}
+		key := [2]int{ci, off}
+		if cached, ok := memo[key]; ok {
+			return cached
+		}
+		seen := map[int]struct{}{}
+		var counts []int
+		for _, n := range v.matchAttrTokensCounts(children[ci], tokens[off:]) {
+			for _, m := range rec(ci+1, off+n) {
+				total := n + m
+				if _, ok := seen[total]; ok {
+					continue
+				}
+				seen[total] = struct{}{}
+				counts = append(counts, total)
+			}
+		}
+		sortDescending(counts)
+		memo[key] = counts
+		return counts
+	}
+	return rec(0, 0)
+}
+
+// repeatCounts returns every consumption count for matching content repeatedly
+// (at least minReps times) against tokens.
+func (v *validator) repeatCounts(content *pattern, tokens []string, minReps int) []int {
+	seen := map[int]struct{}{}     // offsets already recorded as results
+	explored := map[int]struct{}{} // offsets whose deeper recursion is done
+	var counts []int
+	var recurse func(offset, reps int)
+	recurse = func(offset, reps int) {
+		if reps >= minReps {
+			if _, ok := seen[offset]; !ok {
+				seen[offset] = struct{}{}
+				counts = append(counts, offset)
+			}
+		}
+		// The offsets reachable from here don't depend on reps, so explore each
+		// offset only once. Without this, overlapping repetition paths make the
+		// enumeration exponential.
+		if _, done := explored[offset]; done {
+			return
+		}
+		explored[offset] = struct{}{}
+		for _, n := range v.matchAttrTokensCounts(content, tokens[offset:]) {
+			if n == 0 {
+				// A zero-width match cannot make progress, so we must not
+				// recurse (it would loop forever). But it is still a valid
+				// iteration: if taking it once satisfies minReps, record the
+				// current offset. This lets oneOrMore match nullable content
+				// (optional/empty/text), matching node-level validateOneOrMore.
+				if reps+1 >= minReps {
+					if _, ok := seen[offset]; !ok {
+						seen[offset] = struct{}{}
+						counts = append(counts, offset)
+					}
+				}
+				continue
+			}
+			recurse(offset+n, reps+1)
+		}
+	}
+	recurse(0, 0)
+	sortDescending(counts)
+	return counts
+}
+
+// sortDescending sorts counts in place, largest first (greedy-preferred).
+func sortDescending(counts []int) {
+	slices.SortFunc(counts, func(a, b int) int { return cmp.Compare(b, a) })
 }
 
 func (v *validator) validateGroup(pat *pattern, state *validState) int {
-	for _, child := range pat.children {
+	children := pat.children
+	if len(children) == 0 {
+		return 0
+	}
+
+	// Record state at each child boundary so a later mandatory member that
+	// fails can ask a previous flexible member (zeroOrMore/oneOrMore/optional)
+	// to yield items back. This mirrors validateGroupContent's backtracking,
+	// minus the attribute/element-content bookkeeping that path threads.
+	bounds := make([]groupBound, 1, len(children)+1)
+	bounds[0] = saveGroupBound(state, nil, len(v.pendingErrors), v.valid)
+
+	for gi, child := range children {
 		if ret := v.validatePattern(child, state); ret != 0 {
+			if gi > 0 && v.backtrackGroupNaive(children, gi, state, bounds) {
+				bounds = append(bounds, saveGroupBound(state, nil, len(v.pendingErrors), v.valid))
+				continue
+			}
 			return -1
 		}
+		bounds = append(bounds, saveGroupBound(state, nil, len(v.pendingErrors), v.valid))
 	}
 	return 0
+}
+
+// backtrackGroupNaive fixes a naive-group failure at failIdx by reducing the
+// consumption of a previous flexible child (zeroOrMore/oneOrMore/optional). It
+// tries each flexible child from nearest to furthest, and for each tries
+// iteration counts from the minimum upward, preferring the highest count that
+// lets the remaining children match (maximizing content consumption). It is the
+// validatePattern-based counterpart to backtrackGroupFlexible.
+//
+// Two scope notes:
+//   - The naive group path runs only for the top-level document sequence (a
+//     single root element); multi-node sequences are element content, handled by
+//     validateGroupContent. So `bounds[failIdx]` is always the freshly-appended
+//     boundary and there is no multi-node cascade across separate backtrack calls
+//     that could observe a stale intermediate `bounds` entry.
+//   - Recovery reduces exactly one flexible child and greedily re-validates the
+//     rest; it does not cascade yields across several competing flexible members.
+//     A group with two or more flexible members that must each yield (e.g.
+//     group(zeroOrMore(x), zeroOrMore(x), x)) is therefore not fully recovered.
+//     This is a deliberate, pre-existing limitation shared with the element-
+//     content path (backtrackGroupFlexible), not specific to this function.
+func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
+	state *validState, bounds []groupBound) bool {
+	for j := failIdx - 1; j >= 0; j-- {
+		child := children[j]
+		isZeroFlex := child.kind == patternZeroOrMore || child.kind == patternOptional
+		isOneMore := child.kind == patternOneOrMore
+		if !isZeroFlex && !isOneMore {
+			continue
+		}
+		// Skip flexible children that consumed nothing — nothing to yield back.
+		if seqEqual(bounds[j].state.seq, bounds[j+1].state.seq) {
+			continue
+		}
+
+		minIter := 0
+		if isOneMore {
+			minIter = 1
+		}
+
+		content := wrapChildren(child.children)
+
+		var bestState *validState
+		var bestErrLen int
+		var bestValid bool
+
+		for iter := minIter; ; iter++ {
+			bounds[j].restore(state, nil, v)
+
+			iterOK := true
+			for range iter {
+				savedSt := state.clone()
+				v.suppressDepth++
+				ret := v.validatePattern(content, state)
+				v.suppressDepth--
+				if ret != 0 || seqEqual(state.seq, savedSt.seq) {
+					iterOK = false
+					break
+				}
+			}
+			if !iterOK {
+				break
+			}
+
+			// Stop once we reach the greedy consumption level — that is the
+			// state that already failed.
+			if seqEqual(state.seq, bounds[j+1].state.seq) {
+				break
+			}
+
+			retryLen := len(v.pendingErrors)
+			retryValid := v.valid
+			allOK := true
+			for k := j + 1; k <= failIdx; k++ {
+				if v.validatePattern(children[k], state) != 0 {
+					allOK = false
+					break
+				}
+			}
+			if allOK {
+				bestState = state.clone()
+				bestErrLen = len(v.pendingErrors)
+				bestValid = v.valid
+			}
+			v.pendingErrors = v.pendingErrors[:retryLen]
+			v.valid = retryValid
+		}
+
+		if bestState != nil {
+			*state = *bestState
+			v.pendingErrors = v.pendingErrors[:bestErrLen]
+			v.valid = bestValid
+			return true
+		}
+
+		bounds[j].restore(state, nil, v)
+	}
+	return false
 }
 
 func (v *validator) validateChoice(pat *pattern, state *validState) int {
@@ -1248,22 +1451,34 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 	savedValid := v.valid
 
 	v.suppressDepth++
+	// Prefer a branch that makes progress (consumes input) over a zero-length
+	// match, so an early <empty/>/optional branch can't shadow a later
+	// consuming branch (mirrors the hardened validateContentPat choice case).
+	noProgressMatch := false
 	for _, child := range pat.children {
 		saved := state.clone()
-		if ret := v.validatePattern(child, saved); ret == 0 {
+		if ret := v.validatePattern(child, saved); ret != 0 {
+			continue
+		}
+		if !seqEqual(saved.seq, state.seq) {
+			// Branch made progress — use it.
 			v.suppressDepth--
-			// Restore error state (successful branch discards errors from prior branches)
 			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
 			*state = *saved
 			return 0
 		}
+		// Succeeded but consumed nothing — remember and keep trying.
+		noProgressMatch = true
 	}
 	v.suppressDepth--
 
-	// All branches failed — restore error state (no branch errors emitted)
+	// Restore error state (no branch errors emitted).
 	v.pendingErrors = v.pendingErrors[:savedLen]
 	v.valid = savedValid
+	if noProgressMatch {
+		return 0
+	}
 	return -1
 }
 
@@ -1380,76 +1595,15 @@ func (v *validator) validateValue(pat *pattern, state *validState) int {
 }
 
 func (v *validator) validateList(pat *pattern, state *validState) int {
+	// Delegate to the shared token matcher so every <list> path — element
+	// content and this validatePattern path (lists nested under
+	// optional/oneOrMore/choice, or at grammar.start) — uses the same
+	// backtracking semantics. The previous hand-rolled matcher here only
+	// handled data/value/(zero|one)OrMore-of-data and silently ignored
+	// group/choice/optional/nested children. Pass a nil element: the naive
+	// path has no element context for per-token error reporting.
 	text := v.collectText(state)
-	tokens := strings.Fields(text)
-
-	if len(pat.children) == 0 {
-		if len(tokens) == 0 {
-			return 0
-		}
-		return -1
-	}
-
-	for _, child := range pat.children {
-		switch child.kind {
-		case patternData:
-			if len(tokens) == 0 {
-				return -1
-			}
-			if v.matchData(child, tokens[0]) != 0 {
-				return -1
-			}
-			tokens = tokens[1:]
-		case patternValue:
-			if len(tokens) == 0 {
-				return -1
-			}
-			if v.matchValue(child, tokens[0]) != 0 {
-				return -1
-			}
-			tokens = tokens[1:]
-		case patternOneOrMore:
-			if len(tokens) == 0 {
-				return -1
-			}
-			for len(tokens) > 0 {
-				matched := false
-				for _, cc := range child.children {
-					if cc.kind == patternData {
-						if v.matchData(cc, tokens[0]) == 0 {
-							tokens = tokens[1:]
-							matched = true
-							break
-						}
-					}
-				}
-				if !matched {
-					break
-				}
-			}
-		case patternZeroOrMore:
-			for len(tokens) > 0 {
-				matched := false
-				for _, cc := range child.children {
-					if cc.kind == patternData {
-						if v.matchData(cc, tokens[0]) == 0 {
-							tokens = tokens[1:]
-							matched = true
-							break
-						}
-					}
-				}
-				if !matched {
-					break
-				}
-			}
-		}
-	}
-
-	if len(tokens) > 0 {
-		return -1
-	}
-	return 0
+	return v.matchListContent(pat, text, nil)
 }
 
 // collectText consumes text nodes from the state and returns their content.
