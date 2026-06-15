@@ -292,15 +292,27 @@ func resolveElemType(target, host *helium.Element, hostDecl *ElementDecl, schema
 		return nil
 	}
 
-	// Build the ancestor chain from host's child down to target.
+	// Build the ancestor chain from host's child down to target, tracking
+	// whether the walk actually reaches host. If it doesn't (target is not in
+	// host's subtree as far as the element ancestry shows), descending host's
+	// content model would match unrelated names and yield a wrong type, so fall
+	// back to the global element declaration instead.
 	var chain []*helium.Element
-	for cur := target; cur != nil && cur != host; {
+	reached := false
+	for cur := target; cur != nil; {
+		if cur == host {
+			reached = true
+			break
+		}
 		chain = append(chain, cur)
 		parent, ok := cur.Parent().(*helium.Element)
 		if !ok {
 			break
 		}
 		cur = parent
+	}
+	if !reached {
+		return resolveElemTypeFallback(target, schema)
 	}
 
 	td := hostType(host, hostDecl, schema)

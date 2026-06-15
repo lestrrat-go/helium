@@ -31,4 +31,9 @@ func TestCanonicalKey(t *testing.T) {
 	// (2^24 boundary) and must collide, while as xs:double they stay distinct.
 	require.Equal(t, key("16777216", "float"), key("16777217", "float"), "values equal in float32 must collide for xs:float")
 	require.NotEqual(t, key("16777216", "double"), key("16777217", "double"), "distinct doubles must not collide for xs:double")
+
+	// Signed zero: -0 and 0 are value-equal, so they must produce the same key.
+	require.Equal(t, key("0", "double"), key("-0", "double"), "-0 and 0 must collide for xs:double")
+	require.Equal(t, key("0", "float"), key("-0", "float"), "-0 and 0 must collide for xs:float")
+	require.Equal(t, key("0.0", "double"), key("-0.0", "double"), "-0.0 and 0.0 must collide")
 }

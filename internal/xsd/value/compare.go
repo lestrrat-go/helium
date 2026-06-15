@@ -123,6 +123,9 @@ func canonicalFloatKey(s string, bitSize int) (string, bool) {
 	if bitSize == 32 {
 		f = float64(float32(f)) // round to xs:float precision
 	}
+	if f == 0 {
+		f = 0 // normalize -0 to +0; they are equal in the value space
+	}
 	return strconv.FormatFloat(f, 'g', -1, bitSize), true
 }
 
