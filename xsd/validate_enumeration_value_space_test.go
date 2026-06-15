@@ -9,7 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const xsDecimalType = "xs:decimal"
+const (
+	xsDecimalType = "xs:decimal"
+	nanLexical    = "NaN"
+)
 
 // TestEnumerationValueSpace verifies that the enumeration facet is compared in
 // value space, not raw lexical space. A value that is lexically distinct from
@@ -45,10 +48,10 @@ func TestEnumerationValueSpace(t *testing.T) {
 
 		// float NaN — per XSD, NaN equals NaN for enumeration purposes; signed
 		// lexical forms (accepted by the float validator) must match too.
-		{name: "float NaN matches NaN", baseType: "xs:float", enum: []string{"NaN"}, instance: "NaN"},
-		{name: "double NaN matches NaN", baseType: "xs:double", enum: []string{"NaN"}, instance: "NaN"},
-		{name: "float signed NaN matches NaN", baseType: "xs:float", enum: []string{"NaN"}, instance: "+NaN"},
-		{name: "double signed NaN matches NaN", baseType: "xs:double", enum: []string{"NaN"}, instance: "-NaN"},
+		{name: "float NaN matches NaN", baseType: "xs:float", enum: []string{nanLexical}, instance: nanLexical},
+		{name: "double NaN matches NaN", baseType: "xs:double", enum: []string{nanLexical}, instance: nanLexical},
+		{name: "float signed NaN matches NaN", baseType: "xs:float", enum: []string{nanLexical}, instance: "+NaN"},
+		{name: "double signed NaN matches NaN", baseType: "xs:double", enum: []string{nanLexical}, instance: "-NaN"},
 
 		// hexBinary — value space is the decoded octets, so case differences are
 		// not significant ("0A" == "0a"); a different byte must be rejected.
