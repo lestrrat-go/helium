@@ -1,6 +1,7 @@
 package relaxng
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"regexp"
@@ -1235,32 +1236,47 @@ func (v *validator) matchAttrTokensCounts(pat *pattern, tokens []string) []int {
 
 // groupCounts returns every total consumption count for matching children
 // sequentially against tokens, backtracking across each member's options.
+//
+// The set of counts children[ci:] can consume starting at tokens[off:] depends
+// only on (ci, off), not on how that offset was reached, so it is memoized.
+// Without this, the sibling enumeration is exponential — e.g. a group of N
+// optionals over the tokens explores 2^N paths even though it has only N+1
+// distinct totals.
 func (v *validator) groupCounts(children []*pattern, tokens []string) []int {
-	if len(children) == 0 {
-		return []int{0}
-	}
-	head := children[0]
-	rest := children[1:]
-	seen := map[int]struct{}{}
-	var counts []int
-	for _, n := range v.matchAttrTokensCounts(head, tokens) {
-		for _, m := range v.groupCounts(rest, tokens[n:]) {
-			total := n + m
-			if _, ok := seen[total]; ok {
-				continue
-			}
-			seen[total] = struct{}{}
-			counts = append(counts, total)
+	memo := map[[2]int][]int{}
+	var rec func(ci, off int) []int
+	rec = func(ci, off int) []int {
+		if ci >= len(children) {
+			return []int{0}
 		}
+		key := [2]int{ci, off}
+		if cached, ok := memo[key]; ok {
+			return cached
+		}
+		seen := map[int]struct{}{}
+		var counts []int
+		for _, n := range v.matchAttrTokensCounts(children[ci], tokens[off:]) {
+			for _, m := range rec(ci+1, off+n) {
+				total := n + m
+				if _, ok := seen[total]; ok {
+					continue
+				}
+				seen[total] = struct{}{}
+				counts = append(counts, total)
+			}
+		}
+		sortDescending(counts)
+		memo[key] = counts
+		return counts
 	}
-	sortDescending(counts)
-	return counts
+	return rec(0, 0)
 }
 
 // repeatCounts returns every consumption count for matching content repeatedly
 // (at least minReps times) against tokens.
 func (v *validator) repeatCounts(content *pattern, tokens []string, minReps int) []int {
-	seen := map[int]struct{}{}
+	seen := map[int]struct{}{}     // offsets already recorded as results
+	explored := map[int]struct{}{} // offsets whose deeper recursion is done
 	var counts []int
 	var recurse func(offset, reps int)
 	recurse = func(offset, reps int) {
@@ -1270,10 +1286,26 @@ func (v *validator) repeatCounts(content *pattern, tokens []string, minReps int)
 				counts = append(counts, offset)
 			}
 		}
+		// The offsets reachable from here don't depend on reps, so explore each
+		// offset only once. Without this, overlapping repetition paths make the
+		// enumeration exponential.
+		if _, done := explored[offset]; done {
+			return
+		}
+		explored[offset] = struct{}{}
 		for _, n := range v.matchAttrTokensCounts(content, tokens[offset:]) {
 			if n == 0 {
-				// Zero-width repetition cannot make progress; stop to avoid
-				// looping forever.
+				// A zero-width match cannot make progress, so we must not
+				// recurse (it would loop forever). But it is still a valid
+				// iteration: if taking it once satisfies minReps, record the
+				// current offset. This lets oneOrMore match nullable content
+				// (optional/empty/text), matching node-level validateOneOrMore.
+				if reps+1 >= minReps {
+					if _, ok := seen[offset]; !ok {
+						seen[offset] = struct{}{}
+						counts = append(counts, offset)
+					}
+				}
 				continue
 			}
 			recurse(offset+n, reps+1)
@@ -1286,7 +1318,7 @@ func (v *validator) repeatCounts(content *pattern, tokens []string, minReps int)
 
 // sortDescending sorts counts in place, largest first (greedy-preferred).
 func sortDescending(counts []int) {
-	slices.SortFunc(counts, func(a, b int) int { return b - a })
+	slices.SortFunc(counts, func(a, b int) int { return cmp.Compare(b, a) })
 }
 
 func (v *validator) validateGroup(pat *pattern, state *validState) int {
