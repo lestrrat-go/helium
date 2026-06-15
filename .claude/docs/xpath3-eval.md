@@ -126,9 +126,10 @@ Check instance-of → error `XPDY0050` if not.
 Resolve by name/arity in builtins or user registry → evaluate args → call.
 
 ### DynamicFunctionCall
-Evaluate func expr → callee is adapted via `asFunctionItem` (FunctionItem, or
-MapItem/ArrayItem as arity-1 lookup functions) → check arity → invoke. Map/array
-lookup shares `mapLookup`/`arrayLookup` with both the direct-call and partial paths.
+Evaluate func expr → switch on the callee item: FunctionItem checks arity and
+invokes directly; MapItem/ArrayItem are arity-1 lookup functions resolved via
+`mapLookup`/`arrayLookup`. The placeholder/partial path instead adapts the callee
+through `asFunctionItem`, which shares the same `mapLookup`/`arrayLookup` helpers.
 
 ### InlineFunctionExpr
 Capture current variable scope snapshot → return FunctionItem with closure.
