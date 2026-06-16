@@ -306,7 +306,7 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 			return
 		}
 		if val > unicode.MaxRune {
-			err = errors.New("hex CharRef out of range")
+			err = errors.New("CharRef out of range")
 			width = 0
 			return
 		}
