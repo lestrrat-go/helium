@@ -98,7 +98,12 @@ func TestCompile_BaseDirContainsAllResolvedHrefs(t *testing.T) {
 	assertNoOutsideOpen := func(t *testing.T, rec *recordingFS) {
 		t.Helper()
 		for _, p := range rec.openedPaths() {
-			require.False(t, strings.Contains(filepath.Clean(p), outsideDir),
+			rel, err := filepath.Rel(outsideDir, filepath.Clean(p))
+			// p is within outsideDir when Rel succeeds and the result
+			// doesn't climb out via "..". A leading ".." (or rel == "..")
+			// means p sits above/outside outsideDir, which is fine.
+			inside := err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+			require.False(t, inside,
 				"outside path must never reach Open; got %q", p)
 		}
 	}
