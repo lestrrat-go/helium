@@ -458,6 +458,76 @@ func fetchViaResolver(r xpath3.URIResolver, uri string) ([]byte, error) {
 	return io.ReadAll(rc)
 }
 
+// retrieveDocumentPrefix opens the resource through the configured
+// URIResolver / HTTPClient and reads at most n leading bytes before
+// closing. It exists so availability/format probes (e.g. fn:stream-available)
+// can avoid a full io.ReadAll of large or remote documents. The
+// default-deny posture matches retrieveDocumentBytes: with no resolver /
+// HTTPClient configured, retrieval is refused.
+func (ec *execContext) retrieveDocumentPrefix(ctx context.Context, resolvedURI string, n int) ([]byte, error) {
+	var isHTTP bool
+	if u, err := url.Parse(resolvedURI); err == nil {
+		isHTTP = u.Scheme == lexicon.SchemeHTTP || u.Scheme == lexicon.SchemeHTTPS
+	}
+	var resolver xpath3.URIResolver
+	var httpClient *http.Client
+	if ec.transformConfig != nil {
+		resolver = ec.transformConfig.uriResolver
+		httpClient = ec.transformConfig.httpClient
+	}
+
+	if isHTTP {
+		if httpClient != nil {
+			return fetchHTTPPrefix(ctx, httpClient, resolvedURI, n)
+		}
+		if resolver != nil {
+			return fetchPrefixViaResolver(resolver, resolvedURI, n)
+		}
+		return nil, fmt.Errorf("no HTTPClient or URIResolver configured for %q", resolvedURI)
+	}
+
+	if resolver != nil {
+		return fetchPrefixViaResolver(resolver, resolvedURI, n)
+	}
+	return nil, fmt.Errorf("no URIResolver configured for %q", resolvedURI)
+}
+
+// readPrefix reads at most n bytes from r. A short read (io.EOF before n
+// bytes) is not an error — it just means the resource is smaller than n.
+func readPrefix(r io.Reader, n int) ([]byte, error) {
+	buf := make([]byte, n)
+	read, err := io.ReadFull(r, buf)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return nil, err
+	}
+	return buf[:read], nil
+}
+
+func fetchPrefixViaResolver(r xpath3.URIResolver, uri string, n int) ([]byte, error) {
+	rc, err := r.ResolveURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+	return readPrefix(rc, n)
+}
+
+func fetchHTTPPrefix(ctx context.Context, client *http.Client, uri string, n int) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP %d for %q", resp.StatusCode, uri)
+	}
+	return readPrefix(resp.Body, n)
+}
+
 func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {

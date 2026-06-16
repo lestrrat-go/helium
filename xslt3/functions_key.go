@@ -290,25 +290,29 @@ func (ec *execContext) fnStreamAvailable(ctx context.Context, args []xpath3.Sequ
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return nil, err
 	}
 	uri, err := xpath3.AtomicToString(av)
-	if err != nil || uri == "" {
+	if err != nil {
+		return nil, err
+	}
+	if uri == "" {
 		return xpath3.SingleBoolean(false), nil
 	}
 	// Retrieve through the configured URIResolver / HTTPClient rather than
-	// stat-ing the host filesystem directly. With no resolver installed this
-	// fails the default-deny check and we report the resource as unavailable.
+	// stat-ing the host filesystem directly. We only need the leading bytes
+	// to decide whether the resource is XML, so read a bounded prefix instead
+	// of the whole document. With no resolver installed this fails the
+	// default-deny check; an unavailable resource is reported as not
+	// streamable (false) rather than surfaced as an error.
 	resolved := ec.resolveDocumentURI(uri, ec.baseDir())
-	data, err := ec.retrieveDocumentBytes(ctx, resolved)
+	prefix, err := ec.retrieveDocumentPrefix(ctx, resolved, 256)
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		// fn:stream-available reports availability, not retrieval failure:
+		// a resource we cannot fetch is simply not streamable.
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr
 	}
 	// Only XML resources can be streamed. Quick check on the leading bytes.
-	prefix := data
-	if len(prefix) > 256 {
-		prefix = prefix[:256]
-	}
 	content := strings.TrimSpace(string(prefix))
 	isXML := strings.HasPrefix(content, "<?xml") || strings.HasPrefix(content, "<")
 	return xpath3.SingleBoolean(isXML), nil
