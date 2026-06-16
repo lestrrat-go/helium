@@ -300,7 +300,9 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		// "--->" with the closing delimiter), else the output is not well-formed.
 		content := string(n.Content())
 		if strings.Contains(content, "--") || strings.HasSuffix(content, "-") {
-			d.err = errors.New("helium: comment content must not contain \"--\" or end with \"-\"")
+			// check() keeps the first sticky error, so an earlier I/O failure is
+			// not clobbered by this validation error.
+			d.check(errors.New("helium: comment content must not contain \"--\" or end with \"-\""))
 			return d.err
 		}
 		d.writeString(out, "<!--")
@@ -312,7 +314,9 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		if pi, ok := AsNode[*ProcessingInstruction](n); ok {
 			// PI data must not contain "?>", which would terminate the PI early.
 			if strings.Contains(pi.data, "?>") {
-				d.err = errors.New("helium: PI content must not contain \"?>\"")
+				// check() keeps the first sticky error, so an earlier I/O failure
+				// is not clobbered by this validation error.
+				d.check(errors.New("helium: PI content must not contain \"?>\""))
 				return d.err
 			}
 			d.writeString(out, "<?")

@@ -571,3 +571,66 @@ func TestWriteRejectsMalformedCommentPI(t *testing.T) {
 	sb.Reset()
 	require.NoError(t, helium.Write(&sb, doc.CreatePI("php", "echo 1")))
 }
+
+// failOnSubstringWriter fails the first Write whose accumulated tail+payload
+// contains trigger, and accepts everything else. It is used to make a specific
+// serialization step fail while earlier steps succeed.
+type failOnSubstringWriter struct {
+	trigger string
+	tail    string
+}
+
+func (w *failOnSubstringWriter) Write(p []byte) (int, error) {
+	window := w.tail + string(p)
+	if strings.Contains(window, w.trigger) {
+		return 0, errShortWrite
+	}
+	if keep := len(w.trigger) - 1; keep > 0 {
+		if len(window) > keep {
+			w.tail = window[len(window)-keep:]
+		} else {
+			w.tail = window
+		}
+	}
+	return len(p), nil
+}
+
+// TestWriteValidationPreservesStickyIOError ensures that when an earlier
+// io.Writer failure has already set the sticky error, a subsequent malformed
+// comment/PI sibling does not clobber it: WriteTo must surface the original I/O
+// error, not the validation error.
+func TestWriteValidationPreservesStickyIOError(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		sibling func(*helium.Document) helium.Node
+	}{
+		{
+			name:    "comment",
+			sibling: func(d *helium.Document) helium.Node { return d.CreateComment([]byte("a--b")) },
+		},
+		{
+			name:    "pi",
+			sibling: func(d *helium.Document) helium.Node { return d.CreatePI("t", "a?>b") },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := helium.NewDefaultDocument()
+			root := doc.CreateElement("r")
+			require.NoError(t, doc.SetDocumentElement(root))
+			// A malformed top-level sibling serialized after the root element.
+			// The newline separator written between top-level nodes is forced
+			// to fail, setting the sticky I/O error before the malformed
+			// sibling's validation runs. (Unlike a failed element write, the
+			// separator failure does not short-circuit the child loop, so the
+			// sibling is still reached.)
+			require.NoError(t, doc.AddChild(tc.sibling(doc)))
+
+			err := helium.NewWriter().XMLDeclaration(false).WriteTo(&failOnSubstringWriter{trigger: "\n"}, doc)
+			require.ErrorIs(t, err, errShortWrite,
+				"original I/O error must win over the sibling validation error")
+		})
+	}
+}
