@@ -1103,8 +1103,21 @@ func (p *parser) parseRCDATAContent(tagName string) {
 				_ = p.emitCharacters([]byte(text))
 			}
 			if !p.cur.Done() && p.cur.Peek() == '<' {
-				// Check if this is the end tag — if not, emit '<' as text
-				if p.cur.PeekAt(1) != '/' || !p.hasPrefixFold(endTag) {
+				// Only stop on a *valid* end tag: matched prefix followed by a
+				// valid terminator char. A matched-prefix-but-invalid tag such
+				// as "</titlex" must NOT be treated as the end tag; otherwise
+				// the '<' would be neither emitted nor advanced and the
+				// for-loop would spin forever. Mirror the RAWTEXT validEnd
+				// check, and always advance past '<' when it is not a valid end
+				// tag so the cursor is guaranteed to progress.
+				validEnd := false
+				if p.cur.PeekAt(1) == '/' && p.hasPrefixFold(endTag) {
+					switch p.cur.PeekAt(len(endTag)) {
+					case 0, '>', ' ', '\t', '\n', '\r':
+						validEnd = true
+					}
+				}
+				if !validEnd {
 					_ = p.emitCharacters([]byte("<"))
 					_ = p.cur.Advance(1)
 				}
