@@ -63,8 +63,31 @@ func TestVerifyReferenceRejectsUnsupportedTransformWithEnveloped(t *testing.T) {
 	require.Same(t, sigElem, root.FirstChild(), "signature element must be restored after rejection")
 }
 
-// Sanity: errors.Is wiring is correct (defensive, mirrors caller expectations).
+// TestUnsupportedTransformErrorWrapping asserts that an unsupported-transform
+// error stays matchable via errors.Is(ErrUnsupportedTransform) even after it is
+// wrapped in the caller-facing VerificationError type, so callers can reliably
+// distinguish this failure mode.
 func TestUnsupportedTransformErrorWrapping(t *testing.T) {
-	err := errors.New("wrapped")
-	require.False(t, errors.Is(err, ErrUnsupportedTransform))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><data>hi</data></root>`))
+	require.NoError(t, err)
+
+	ref := parsedReference{
+		uri:             "",
+		digestAlgorithm: DigestSHA256,
+		transforms: []parsedTransform{
+			{algorithm: TransformXPath},
+		},
+	}
+
+	_, refErr := verifyReference(doc, nil, ref)
+	require.Error(t, refErr)
+
+	// Wrap in the actual type callers receive and confirm errors.Is still
+	// reaches ErrUnsupportedTransform through it.
+	wrapped := &VerificationError{Reference: 0, URI: "", Err: refErr}
+	require.ErrorIs(t, wrapped, ErrUnsupportedTransform)
+	require.ErrorAs(t, error(wrapped), new(*VerificationError))
+
+	// Negative control: an unrelated error must not match.
+	require.False(t, errors.Is(errors.New("unrelated"), ErrUnsupportedTransform))
 }

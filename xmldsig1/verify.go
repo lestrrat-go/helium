@@ -3,6 +3,7 @@ package xmldsig1
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -121,12 +122,17 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		default:
 			// Reattach the Signature element we detached above before
 			// bailing out, so a rejected reference does not leave the
-			// document structurally modified. A restore failure here cannot
-			// mask the rejection, so its error is intentionally discarded.
+			// document structurally modified. The rejection is the primary
+			// error, but if restore itself fails the document is left mutated,
+			// so surface that failure too (joined) rather than dropping it
+			// silently. errors.Is(ErrUnsupportedTransform) still holds.
+			rejectErr := fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
 			if hasEnveloped {
-				_ = anchor.restore(sigElem)
+				if rerr := anchor.restore(sigElem); rerr != nil {
+					rejectErr = errors.Join(rejectErr, fmt.Errorf("failed to restore detached Signature element: %w", rerr))
+				}
 			}
-			return nil, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
+			return nil, rejectErr
 		}
 	}
 
