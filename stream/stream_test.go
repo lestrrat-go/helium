@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/stream"
 	"github.com/stretchr/testify/require"
 )
@@ -326,6 +327,80 @@ func TestPIXmlCaseForbidden(t *testing.T) {
 	err := w.StartPI("XML")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot be 'xml'")
+}
+
+func TestCommentWellFormednessRejected(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "double-dash", content: "a--b"},
+		{name: "trailing-dash", content: "a-"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.Error(t, w.WriteComment(tc.content))
+		})
+	}
+}
+
+func TestCommentValidStillSucceeds(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.WriteComment(" ok "))
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><!-- ok --></root>`, buf.String())
+}
+
+func TestPIWellFormednessRejected(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		target  string
+		content string
+	}{
+		{name: "content-end-delim", target: "t", content: "a?>b"},
+		{name: "target-starts-digit", target: "123bad", content: "x"},
+		{name: "target-has-space", target: "a b", content: "x"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.Error(t, w.WritePI(tc.target, tc.content))
+		})
+	}
+}
+
+func TestPIValidStillSucceeds(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.WritePI("php", "echo 1"))
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><?php echo 1?></root>`, buf.String())
+}
+
+func TestCommentPIRoundTripsThroughParser(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.WritePI("php", "echo 1"))
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.WriteComment(" a comment "))
+	require.NoError(t, w.WriteString("text"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndDocument())
+
+	_, err := helium.NewParser().Parse(t.Context(), buf.Bytes())
+	require.NoError(t, err)
 }
 
 func TestCDATA(t *testing.T) {
