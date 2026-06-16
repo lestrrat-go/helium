@@ -2,6 +2,7 @@ package xslt3_test
 
 import (
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,12 +18,21 @@ func innerXSL(name string) string {
 	return filepath.Join(heliumtest.CallerDir(0), "testdata", "fn-transform", name)
 }
 
+// fnTransformFileResolver is an explicit opt-in compile-time URIResolver that
+// reads stylesheet modules from the local filesystem. fn:transform stylesheet
+// loading is opt-in (no implicit os.ReadFile), so these tests supply one.
+type fnTransformFileResolver struct{}
+
+func (fnTransformFileResolver) Resolve(uri string) (io.ReadCloser, error) {
+	return os.Open(uri)
+}
+
 func compileFnTransformOuter(t *testing.T, xsltSrc string) *xslt3.Stylesheet {
 	t.Helper()
 	ctx := t.Context()
 	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
 	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
+	ss, err := xslt3.NewCompiler().URIResolver(fnTransformFileResolver{}).Compile(ctx, doc)
 	require.NoError(t, err)
 	return ss
 }

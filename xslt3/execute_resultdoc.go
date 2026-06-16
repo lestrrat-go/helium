@@ -349,7 +349,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if pdErr == nil && pdHref != "" {
 				outDef := &OutputDef{}
 				baseURI := ec.effectiveStaticBaseURI()
-				if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref); loadErr == nil {
+				if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref, ec.retrieveDocumentBytes); loadErr == nil {
 					if ec.paramDocOutputDefs == nil {
 						ec.paramDocOutputDefs = make(map[*resultDocumentInst]*OutputDef)
 					}

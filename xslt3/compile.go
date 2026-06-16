@@ -950,9 +950,12 @@ func (c *compiler) resolveXMLBaseEvaluator(_ context.Context, eval xpath3.Evalua
 // fresh transform context.
 func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	// Create a temporary execContext with the compiler's base URI so that
-	// relative stylesheet-location paths resolve correctly.
+	// relative stylesheet-location paths resolve correctly. The compile-time
+	// URIResolver is propagated so fn:transform stylesheet-location loading is
+	// permitted at compile time exactly when the compiler opts in (it is
+	// default-deny without a resolver).
 	ec := &execContext{
-		stylesheet:          &Stylesheet{baseURI: c.baseURI},
+		stylesheet:          &Stylesheet{baseURI: c.baseURI, uriResolver: c.resolver},
 		resultDoc:           helium.NewDefaultDocument(),
 		globalVars:          make(map[string]xpath3.Sequence),
 		outputStack:         []*outputFrame{{doc: helium.NewDefaultDocument(), current: helium.NewDefaultDocument()}},
