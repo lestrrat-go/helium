@@ -329,6 +329,28 @@ func TestPIXmlCaseForbidden(t *testing.T) {
 	require.Contains(t, err.Error(), "cannot be 'xml'")
 }
 
+func TestPIInvalidUTF8TargetRejected(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	// An invalid UTF-8 byte decodes to U+FFFD, which is a valid NCName char,
+	// so the target must be rejected on the encoding check, not accepted.
+	err := w.StartPI(string([]byte{0xff}))
+	require.Error(t, err)
+	require.Empty(t, buf.String(), "no PI bytes must be emitted for an invalid target")
+}
+
+func TestPINormalTargetAccepted(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.StartPI("target"))
+	require.NoError(t, w.EndPI())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><?target?></root>`, buf.String())
+}
+
 func TestCommentWellFormednessRejected(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

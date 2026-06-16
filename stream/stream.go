@@ -6,6 +6,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -18,6 +19,13 @@ var errNilOutputWriter = errors.New("stream: output writer is nil")
 // optionally containing colons.
 func isValidPITarget(target string) bool {
 	if target == "" {
+		return false
+	}
+	// Ranging over an invalid byte yields utf8.RuneError (U+FFFD), which is
+	// itself a valid NCName character, so the loop below would accept invalid
+	// UTF-8 and emit raw bytes. Reject invalid encodings up front; a genuinely
+	// encoded U+FFFD is valid UTF-8 and still passes.
+	if !utf8.ValidString(target) {
 		return false
 	}
 	for i, r := range target {
