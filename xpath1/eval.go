@@ -632,7 +632,11 @@ func evalVariableExpr(ec *evalContext, e VariableExpr) (*Result, error) {
 	}
 	switch val := v.(type) {
 	case []helium.Node:
-		return &Result{Type: NodeSetResult, NodeSet: val}, nil
+		nodes, err := ixpath.DeduplicateNodes(val, ec.docOrder, maxNodeSetLength)
+		if err != nil {
+			return nil, err
+		}
+		return &Result{Type: NodeSetResult, NodeSet: nodes}, nil
 	case string:
 		return &Result{Type: StringResult, String: val}, nil
 	case float64:

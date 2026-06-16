@@ -468,6 +468,27 @@ func TestEvalVariable(t *testing.T) {
 	require.Equal(t, 42.0, r.Number)
 }
 
+func TestEvalNodeSetVariableDocumentOrder(t *testing.T) {
+	doc := parseXML(t, `<root><a>AAA</a><b>BBB</b></root>`)
+	nodes, err := xpath1.Find(t.Context(), doc, "/root/*")
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+	a, b := nodes[0], nodes[1]
+	require.Equal(t, "a", a.Name())
+	require.Equal(t, "b", b.Name())
+
+	// Bind $v in reversed (non-document) order. string($v) must return the
+	// value of the first node in document order ("AAA"), not the slice's
+	// first element ("BBB").
+	expr, err := xpath1.Compile("string($v)")
+	require.NoError(t, err)
+	r, err := xpath1.NewEvaluator().Variables(map[string]any{
+		"v": []helium.Node{b, a},
+	}).Evaluate(t.Context(), expr, doc)
+	require.NoError(t, err)
+	require.Equal(t, "AAA", r.String)
+}
+
 // --- Complex expressions ---
 
 func TestEvalBookstoreExample(t *testing.T) {
