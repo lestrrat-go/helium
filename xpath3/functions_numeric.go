@@ -40,13 +40,31 @@ func promoteToNumeric(item Item) (AtomicValue, error) {
 	return a, nil
 }
 
-func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
+// promoteSeqToNumeric coerces an xs:numeric? argument. Empty sequences yield
+// (_, false, nil); a single item is promoted via promoteToNumeric; multi-item
+// sequences are rejected with XPTY0004.
+func promoteSeqToNumeric(seq Sequence) (AtomicValue, bool, error) {
+	switch seqLen(seq) {
+	case 0:
+		return AtomicValue{}, false, nil
+	case 1:
+		a, err := promoteToNumeric(seq.Get(0))
+		if err != nil {
+			return AtomicValue{}, false, err
+		}
+		return a, true, nil
+	default:
+		return AtomicValue{}, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected single numeric value, got sequence of length > 1"}
 	}
-	a, err := promoteToNumeric(args[0].Get(0))
+}
+
+func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
+	a, ok, err := promoteSeqToNumeric(args[0])
 	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return validNilSequence, nil
 	}
 	if isIntegerDerived(a.TypeName) {
 		if v, ok := a.Value.(int64); ok {
@@ -66,12 +84,12 @@ func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	a, err := promoteToNumeric(args[0].Get(0))
+	a, ok, err := promoteSeqToNumeric(args[0])
 	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return validNilSequence, nil
 	}
 	if isIntegerDerived(a.TypeName) {
 		if v, ok := a.Value.(int64); ok {
@@ -90,12 +108,12 @@ func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	a, err := promoteToNumeric(args[0].Get(0))
+	a, ok, err := promoteSeqToNumeric(args[0])
 	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return validNilSequence, nil
 	}
 	if isIntegerDerived(a.TypeName) {
 		if v, ok := a.Value.(int64); ok {
@@ -114,12 +132,12 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	a, err := promoteToNumeric(args[0].Get(0))
+	a, ok, err := promoteSeqToNumeric(args[0])
 	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return validNilSequence, nil
 	}
 	precision := 0
 	if len(args) > 1 && seqLen(args[1]) > 0 {
@@ -164,12 +182,12 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	a, err := promoteToNumeric(args[0].Get(0))
+	a, ok, err := promoteSeqToNumeric(args[0])
 	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return validNilSequence, nil
 	}
 	precision := 0
 	if len(args) > 1 && seqLen(args[1]) > 0 {

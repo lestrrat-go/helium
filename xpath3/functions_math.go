@@ -26,15 +26,30 @@ func fnMathPi(_ context.Context, _ []Sequence) (Sequence, error) {
 	return SingleDouble(math.Pi), nil
 }
 
-func mathUnary(args []Sequence, fn func(float64) float64) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
+// coerceMathArg coerces an xs:double? math argument. Empty sequences yield
+// (0, false, nil) so the caller can return an empty result; otherwise the
+// argument is required to be a single numeric/untypedAtomic item, rejecting
+// multi-item and non-numeric values with XPTY0004.
+func coerceMathArg(seq Sequence) (float64, bool, error) {
+	if seqLen(seq) == 0 {
+		return 0, false, nil
 	}
-	a, err := AtomizeItem(args[0].Get(0))
+	f, err := coerceArgToDoubleRequired(seq)
+	if err != nil {
+		return 0, false, err
+	}
+	return f, true, nil
+}
+
+func mathUnary(args []Sequence, fn func(float64) float64) (Sequence, error) {
+	a, ok, err := coerceMathArg(args[0])
 	if err != nil {
 		return nil, err
 	}
-	return SingleDouble(fn(a.ToFloat64())), nil
+	if !ok {
+		return validNilSequence, nil
+	}
+	return SingleDouble(fn(a)), nil
 }
 
 func fnMathExp(_ context.Context, args []Sequence) (Sequence, error) {
@@ -54,18 +69,20 @@ func fnMathLog10(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMathPow(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
+	// math:pow($x as xs:double?, $y as xs:numeric): empty $x yields empty,
+	// regardless of $y. $y is a required single numeric value.
+	a, aOK, err := coerceMathArg(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if !aOK {
 		return validNilSequence, nil
 	}
-	a, err := AtomizeItem(args[0].Get(0))
+	b, err := coerceArgToDoubleRequired(args[1])
 	if err != nil {
 		return nil, err
 	}
-	b, err := AtomizeItem(args[1].Get(0))
-	if err != nil {
-		return nil, err
-	}
-	return SingleDouble(math.Pow(a.ToFloat64(), b.ToFloat64())), nil
+	return SingleDouble(math.Pow(a, b)), nil
 }
 
 func fnMathSqrt(_ context.Context, args []Sequence) (Sequence, error) {
@@ -97,16 +114,15 @@ func fnMathAtan(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMathAtan2(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
-		return validNilSequence, nil
-	}
-	a, err := AtomizeItem(args[0].Get(0))
+	// math:atan2($y as xs:double, $x as xs:double): both required, exactly one
+	// numeric value each.
+	a, err := coerceArgToDoubleRequired(args[0])
 	if err != nil {
 		return nil, err
 	}
-	b, err := AtomizeItem(args[1].Get(0))
+	b, err := coerceArgToDoubleRequired(args[1])
 	if err != nil {
 		return nil, err
 	}
-	return SingleDouble(math.Atan2(a.ToFloat64(), b.ToFloat64())), nil
+	return SingleDouble(math.Atan2(a, b)), nil
 }

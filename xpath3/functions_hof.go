@@ -259,6 +259,17 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 		if len(callArgs) != arity {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
 		}
+		// Enforce the recorded parameter types, mirroring the named
+		// function-reference path in eval_funcall.go.
+		if paramTypes != nil {
+			for i, arg := range callArgs {
+				if i < len(paramTypes) {
+					if _, ok := coerceToSequenceType(arg, paramTypes[i], nil); !ok {
+						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", qv.Local, i+1, paramTypes[i])}
+					}
+				}
+			}
+		}
 		return fn.Call(capturedCtx, callArgs)
 	}
 	return fi, true

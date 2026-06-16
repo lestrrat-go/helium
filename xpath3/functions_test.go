@@ -479,6 +479,72 @@ func TestFnCodepointsToStringRange(t *testing.T) {
 	})
 }
 
+// --- argument cardinality/type validation in math/map/json/hof builtins ---
+
+func TestBuiltinArgValidation(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErrCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err, "compile %q", expr)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: code}, "expected error code %s for %q", code, expr)
+	}
+
+	t.Run("type errors", func(t *testing.T) {
+		cases := []string{
+			`math:sin("abc")`,
+			`math:sin((1,2))`,
+			`math:pow(2,"x")`,
+			`math:atan2(1,(2,3))`,
+			`map:put(map{},(1,2),"v")`,
+			`map:entry((1,2),"v")`,
+			`parse-json("{}","bad")`,
+			`parse-json("{}",(map{},map{}))`,
+			`abs((1,2))`,
+			`function-lookup(QName("http://www.w3.org/2005/xpath-functions/math","sin"),1)(("a","b"))`,
+		}
+		for _, expr := range cases {
+			t.Run(expr, func(t *testing.T) {
+				evalErrCode(t, expr, "XPTY0004")
+			})
+		}
+	})
+
+	t.Run("valid controls still work", func(t *testing.T) {
+		t.Run("math:sin(0)", func(t *testing.T) {
+			seq := evalExpr(t, doc, `math:sin(0)`)
+			require.Equal(t, 1, seq.Len())
+			require.InDelta(t, 0.0, seq.Get(0).(xpath3.AtomicValue).DoubleVal(), 0.0001)
+		})
+		t.Run("math:pow(2,3)", func(t *testing.T) {
+			seq := evalExpr(t, doc, `math:pow(2,3)`)
+			require.Equal(t, 1, seq.Len())
+			require.InDelta(t, 8.0, seq.Get(0).(xpath3.AtomicValue).DoubleVal(), 0.0001)
+		})
+		t.Run("map:put singleton key", func(t *testing.T) {
+			seq := evalExpr(t, doc, `map:size(map:put(map{},1,"v"))`)
+			require.Equal(t, 1, seq.Len())
+			require.Equal(t, int64(1), seq.Get(0).(xpath3.AtomicValue).IntegerVal())
+		})
+		t.Run("parse-json no options", func(t *testing.T) {
+			seq := evalExpr(t, doc, `parse-json("{}")`)
+			require.Equal(t, 1, seq.Len())
+		})
+		t.Run("parse-json empty-map options", func(t *testing.T) {
+			seq := evalExpr(t, doc, `parse-json("{}", map{})`)
+			require.Equal(t, 1, seq.Len())
+		})
+		t.Run("abs(-3)", func(t *testing.T) {
+			seq := evalExpr(t, doc, `abs(-3)`)
+			require.Equal(t, 1, seq.Len())
+			require.Equal(t, int64(3), seq.Get(0).(xpath3.AtomicValue).IntegerVal())
+		})
+	})
+}
+
 // --- Error function ---
 
 func TestFnError(t *testing.T) {
