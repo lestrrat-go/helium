@@ -183,6 +183,75 @@ func TestNilContextRangeExpr(t *testing.T) {
 	require.Equal(t, 10, result.Sequence().Len())
 }
 
+func TestRangeOperator(t *testing.T) {
+	t.Parallel()
+
+	t.Run("result", func(t *testing.T) {
+		t.Parallel()
+		cases := []struct {
+			expr string
+			want []int64
+		}{
+			{`1 to 3`, []int64{1, 2, 3}},
+			{`() to 3`, nil},
+			{`1 to ()`, nil},
+		}
+		for _, tc := range cases {
+			t.Run(tc.expr, func(t *testing.T) {
+				t.Parallel()
+				result, err := evaluate(t.Context(), nil, tc.expr)
+				require.NoError(t, err)
+				seq := result.Sequence()
+				if len(tc.want) == 0 {
+					// An empty sequence surfaces as a nil Sequence.
+					require.Nil(t, seq)
+					return
+				}
+				require.Equal(t, len(tc.want), seq.Len())
+				for i, want := range tc.want {
+					av, ok := seq.Get(i).(xpath3.AtomicValue)
+					require.True(t, ok)
+					require.Equal(t, want, av.IntegerVal())
+				}
+			})
+		}
+	})
+
+	t.Run("cardinality XPTY0004", func(t *testing.T) {
+		t.Parallel()
+		for _, expr := range []string{`(1, 2) to 3`, `1 to (2, 3)`} {
+			t.Run(expr, func(t *testing.T) {
+				t.Parallel()
+				_, err := evaluate(t.Context(), nil, expr)
+				require.Error(t, err)
+				var xpErr *xpath3.XPathError
+				require.ErrorAs(t, err, &xpErr)
+				require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+			})
+		}
+	})
+
+	t.Run("overflow", func(t *testing.T) {
+		t.Parallel()
+		// Spans whose size exceeds int64 must hit the node-set limit, not
+		// wrap (which previously returned empty or panicked with a negative
+		// length).
+		for _, expr := range []string{
+			`-9223372036854775808 to 9223372036854775807`,
+			`-9223372036854775803 to 9223372036854775807`,
+		} {
+			t.Run(expr, func(t *testing.T) {
+				t.Parallel()
+				var err error
+				require.NotPanics(t, func() {
+					_, err = evaluate(t.Context(), nil, expr)
+				})
+				require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+			})
+		}
+	})
+}
+
 func TestNilContextWithContextItem(t *testing.T) {
 	t.Parallel()
 	// Evaluating "." with a context item (atomic value) and nil node must succeed.
