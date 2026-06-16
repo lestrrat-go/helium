@@ -324,6 +324,15 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 	result := make(ItemSlice, len(atoms))
 	i := 0
 	for _, av := range atoms {
+		// xs:anyAtomicType is the generalized atomic supertype: once a node has
+		// been atomized (to xs:untypedAtomic), any atomic value already matches.
+		// It is abstract, so it has no concrete cast — accept the atom as-is
+		// rather than attempting an (impossible) cast to it.
+		if targetType == TypeAnyAtomicType {
+			result[i] = av
+			i++
+			continue
+		}
 		// Numeric promotion
 		switch targetType {
 		case TypeDouble:

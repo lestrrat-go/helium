@@ -114,3 +114,67 @@ func TestTypedUserFunctionObservesCoercedArg(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, xpath3.TypeDouble, s)
 }
+
+// Finding 4: a TypedFunction declaring xs:anyAtomicType must accept a NODE
+// argument. Per the function-conversion rules the node is atomized (a node
+// atomizes to xs:untypedAtomic), and xs:untypedAtomic is a subtype of
+// xs:anyAtomicType, so the call must succeed and observe the atomized value
+// rather than failing the static signature check with XPTY0004.
+func TestTypedUserFunctionAnyAtomicAcceptsNode(t *testing.T) {
+	t.Parallel()
+
+	anyAtomic := stType("anyAtomicType", xpath3.OccurrenceExactlyOne)
+
+	newLib := func(observed *string) *xpath3.FunctionLibrary {
+		lib := xpath3.NewFunctionLibrary()
+		lib.Set("takes-any", typedUserFunc{
+			userFunc: userFunc{
+				min: 1, max: 1,
+				call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+					av, err := xpath3.AtomizeItem(args[0].Get(0))
+					if err != nil {
+						return nil, err
+					}
+					*observed = av.TypeName
+					return xpath3.SingleString(av.TypeName), nil
+				},
+			},
+			params: []xpath3.SequenceType{anyAtomic},
+		})
+		return lib
+	}
+
+	t.Run("node argument atomizes to xs:untypedAtomic", func(t *testing.T) {
+		doc := mustParseXML(t, `<root>hello</root>`)
+
+		compiled, err := xpath3.NewCompiler().Compile(`takes-any(/root)`)
+		require.NoError(t, err)
+
+		var observed string
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Functions(newLib(&observed)).
+			Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+
+		require.Equal(t, xpath3.TypeUntypedAtomic, observed)
+		s, ok := result.IsString()
+		require.True(t, ok)
+		require.Equal(t, xpath3.TypeUntypedAtomic, s)
+	})
+
+	t.Run("atomic argument retains its type", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`takes-any(42)`)
+		require.NoError(t, err)
+
+		var observed string
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Functions(newLib(&observed)).
+			Evaluate(t.Context(), compiled, nil)
+		require.NoError(t, err)
+
+		require.Equal(t, xpath3.TypeInteger, observed)
+		s, ok := result.IsString()
+		require.True(t, ok)
+		require.Equal(t, xpath3.TypeInteger, s)
+	})
+}
