@@ -38,7 +38,7 @@ func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isChar(r) {
+		if !ok || !isCharWidth(r, w) {
 			break
 		}
 		buf.WriteRune(r)

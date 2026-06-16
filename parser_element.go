@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -568,8 +567,8 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	defer releaseBuffer(b)
 
 	for {
-		c := cur.PeekRune()
-		if (qch != 0x0 && c == rune(qch)) || !isChar(c) || c == '<' {
+		c, cw, cok := decodeRuneAt(cur, 0)
+		if !cok || (qch != 0x0 && c == rune(qch)) || !isCharWidth(c, cw) || c == '<' {
 			break
 		}
 		switch c {
@@ -645,7 +644,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 		default:
 			inSpace = false
 			b.WriteRune(c)
-			w := max(utf8.RuneLen(c), 1)
+			w := max(cw, 1)
 			if err := cur.Advance(w); err != nil {
 				return "", 0, err
 			}

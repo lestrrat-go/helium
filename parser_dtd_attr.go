@@ -575,7 +575,7 @@ func (pctx *parserCtx) parseSystemLiteral(ctx context.Context, qch byte) (string
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isChar(r) {
+		if !ok || !isCharWidth(r, w) {
 			break
 		}
 		buf.WriteRune(r)
@@ -612,7 +612,7 @@ func (pctx *parserCtx) parsePubidLiteral(ctx context.Context, qch byte) (string,
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isChar(r) {
+		if !ok || !isCharWidth(r, w) {
 			break
 		}
 		buf.WriteRune(r)
