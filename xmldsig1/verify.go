@@ -3,6 +3,7 @@ package xmldsig1
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -105,7 +106,10 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		helium.UnlinkNode(sigElem)
 	}
 
-	// Find the c14n method.
+	// Find the c14n method. Fail closed: any transform whose URI we cannot
+	// apply must be rejected before digesting, otherwise a Reference could
+	// declare an unsupported transform (XPath, Base64, custom URI) and still
+	// verify against the untransformed canonical bytes.
 	c14nMethod := ExcC14N10
 	var prefixes []string
 	for _, t := range ref.transforms {
@@ -113,6 +117,22 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
 			c14nMethod = t.algorithm
 			prefixes = t.prefixes
+		case TransformEnvelopedSignature:
+			// Handled in the separate enveloped-signature pass above; no-op here.
+		default:
+			// Reattach the Signature element we detached above before
+			// bailing out, so a rejected reference does not leave the
+			// document structurally modified. The rejection is the primary
+			// error, but if restore itself fails the document is left mutated,
+			// so surface that failure too (joined) rather than dropping it
+			// silently. errors.Is(ErrUnsupportedTransform) still holds.
+			rejectErr := fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
+			if hasEnveloped {
+				if rerr := anchor.restore(sigElem); rerr != nil {
+					rejectErr = errors.Join(rejectErr, fmt.Errorf("failed to restore detached Signature element: %w", rerr))
+				}
+			}
+			return nil, rejectErr
 		}
 	}
 

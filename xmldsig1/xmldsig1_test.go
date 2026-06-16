@@ -275,6 +275,29 @@ func TestSignerImmutability(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestVerifyAcceptsEnvelopedExcC14N guards against the unsupported-transform
+// rejection over-rejecting: a normal enveloped + exclusive-c14n signature must
+// still verify (both transform URIs must pass the new default-arm guard).
+func TestVerifyAcceptsEnvelopedExcC14N(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
+		})
+
+	err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
+	require.NoError(t, err)
+
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+	_, err = verifier.Verify(t.Context(), doc)
+	require.NoError(t, err)
+}
+
 func TestSignVerifyWithFragmentReference(t *testing.T) {
 	xml := `<root><data Id="mydata">Hello</data></root>`
 	key := generateRSAKey(t)
