@@ -161,10 +161,13 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 	for c.buflen-c.bufpos < minBytes {
 		n, err := c.in.Read(c.buf[c.buflen:])
 		c.buflen += n
-		if n == 0 && err != nil {
+		if err != nil {
 			// Remember a genuine decode/transcoding error (anything other than
 			// a clean EOF) so the parser can distinguish malformed input from a
-			// normal end-of-stream. Done() treats both as "no more data".
+			// normal end-of-stream. Done() treats both as "no more data". The
+			// error must be recorded even when this Read also returned data
+			// (n > 0), because a small input may deliver its decoded bytes and
+			// the decode error together in a single Read.
 			if err != io.EOF && c.readErr == nil {
 				c.readErr = err
 			}

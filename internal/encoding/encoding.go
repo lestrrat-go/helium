@@ -38,11 +38,11 @@ func Load(name string) enc.Encoding {
 	case "usascii", "ascii", "ansix341968", "csascii":
 		return unicode.UTF8
 	case "utf16le", "unicodefeff":
-		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM))
+		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM), 2)
 	case "utf16be", "unicodefffe":
-		return withStrictDecode(unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM))
+		return withStrictDecode(unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM), 2)
 	case "utf16", "unicode", "csunicode":
-		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.UseBOM))
+		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.UseBOM), 2)
 	case "eucjp", "xeucjp", "cseucpkdfmtjapanese":
 		return japanese.EUCJP
 	case "shiftjis", "cp932", "sjis", "ms932", "mskanji", "windows31j", "xsjis", "csshiftjis":
@@ -128,17 +128,17 @@ func Load(name string) enc.Encoding {
 	case "ibm1141", "ibm01141", "cp1141", "ccsid01141":
 		return codePage1141
 	case "ucs4be", "utf32be", "iso10646ucs4":
-		return withStrictDecode(utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM))
+		return withStrictDecode(utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM), 4)
 	case "ucs4le", "utf32le":
-		return withStrictDecode(utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM))
+		return withStrictDecode(utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM), 4)
 	case "ucs4", "utf32":
-		return withStrictDecode(utf32.UTF32(utf32.BigEndian, utf32.UseBOM))
+		return withStrictDecode(utf32.UTF32(utf32.BigEndian, utf32.UseBOM), 4)
 	case "ucs42143":
-		return withStrictDecode(&ucs4SwapEncoding{swap: swap2143})
+		return withStrictDecode(&ucs4SwapEncoding{swap: swap2143}, 4)
 	case "ucs43412":
-		return withStrictDecode(&ucs4SwapEncoding{swap: swap3412})
+		return withStrictDecode(&ucs4SwapEncoding{swap: swap3412}, 4)
 	case "ucs2", "iso10646ucs2":
-		return withStrictDecode(unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM))
+		return withStrictDecode(unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM), 2)
 	}
 	return nil
 }
