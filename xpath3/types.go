@@ -542,14 +542,16 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		}
 		// Exact numeric types must normalize with exact arithmetic, never float64:
 		// ToFloat64 overflows values > MaxFloat64 to +Inf, collapsing distinct keys.
-		if isIntegerDerived(key.TypeName) {
+		// Also consult BaseType so a user-defined schema type derived from
+		// xs:integer/xs:decimal is normalized exactly rather than via float64.
+		if isIntegerDerived(key.TypeName) || isIntegerDerived(key.BaseType) {
 			bi := key.BigInt()
 			if bi.IsInt64() {
 				return mapKey{typeName: familyNumeric, value: bi.Int64()}
 			}
 			return mapKey{typeName: familyNumeric, value: new(big.Rat).SetInt(bi).RatString()}
 		}
-		if key.TypeName == TypeDecimal {
+		if key.TypeName == TypeDecimal || key.BaseType == TypeDecimal {
 			r := key.BigRat()
 			if r.IsInt() && r.Num().IsInt64() {
 				return mapKey{typeName: familyNumeric, value: r.Num().Int64()}
