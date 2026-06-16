@@ -131,47 +131,155 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleAtomic(makeFloatResult(a.TypeName, math.Floor(f))), nil
 }
 
-// maxRoundPrecision bounds the rounding scale used by fn:round and
-// fn:round-half-to-even. The $precision argument is an xs:integer and may be
-// arbitrarily large (e.g. 2^63, stored as a *big.Int). Two problems must be
-// avoided: int(IntegerVal()) wraps out-of-int64 values (turning a huge positive
-// precision into a huge negative one), and computing 10^|precision| via
-// big.Int.Exp for an astronomically large scale exhausts CPU/memory. Per XPath
-// F&O 3.1 a precision far larger than the value's significant digits leaves it
-// unchanged, and a precision far more negative rounds it to 0; no representable
-// number has anywhere near this many significant digits, so clamping preserves
-// semantics while bounding the scale computation.
-const maxRoundPrecision = 4096
+// roundDecision is the scale-aware outcome of resolving a $precision argument
+// against an operand's own base-10 scale. See resolveRoundScale.
+type roundDecision int
+
+const (
+	// roundCompute: the precision is within range of the operand's scale, so
+	// the result must be computed with the (bounded) scale exponent.
+	roundCompute roundDecision = iota
+	// roundUnchanged: the precision is finer than the operand's fractional
+	// scale; the result equals the operand unchanged. No Exp needed.
+	roundUnchanged
+	// roundTrivialZero: the precision is coarser than the operand's magnitude
+	// by more than one decade, so every digit rounds away. The result is 0
+	// (the boundary/tie case s == magnitude is handled by roundCompute, since
+	// its scale exponent is bounded by the operand's own digit count). No Exp
+	// needed.
+	roundTrivialZero
+)
 
 // roundPrecisionArg extracts the rounding precision from the second argument,
-// casting to xs:integer and clamping to ±maxRoundPrecision so an out-of-int64
-// value neither wraps nor blows up the scale computation.
-func roundPrecisionArg(arg Sequence) (int, error) {
+// casting to xs:integer. The precision is returned as a *big.Int (XPath
+// integers are arbitrary precision); callers pair it with the operand's scale
+// via resolveRoundScale so an astronomically large 10^|precision| is never
+// materialised for cases whose result is determined trivially. (A *big.Int
+// avoids the wrap that int(IntegerVal()) would introduce for out-of-int64
+// values.)
+func roundPrecisionArg(arg Sequence) (*big.Int, error) {
 	pa, err := AtomizeItem(arg.Get(0))
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	pa, err = CastAtomic(pa, TypeInteger)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	if v, ok := pa.Int64Val(); ok {
-		if v > maxRoundPrecision {
-			return maxRoundPrecision, nil
+	return new(big.Int).Set(pa.BigInt()), nil
+}
+
+// resolveRoundScale decides, scale-aware, how to round an operand to the given
+// $precision. intDigits is the number of base-10 digits in the operand's
+// integer part (>= 1; use 1 for |operand| < 1). fracDigits is the number of
+// fractional decimal digits the operand actually has (0 for integers). The
+// returned scale is the bounded magnitude of 10 to raise (always >= 0) and is
+// only meaningful when the decision is roundCompute.
+//
+// For coarse (negative) precision the scale is s = -precision: when s exceeds
+// the operand's integer magnitude by more than one decade no tie is possible
+// and the result is 0; otherwise s <= intDigits so 10^s is bounded by the
+// operand. For fine (positive) precision the scale is p = precision: when p is
+// at least the operand's fractional-digit count the operand is already
+// representable and is returned unchanged; otherwise 10^p is bounded by the
+// operand's fractional scale.
+func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roundDecision) {
+	if precision.Sign() < 0 {
+		// scale = -precision, as a non-negative big.Int
+		s := new(big.Int).Neg(precision)
+		// If -precision > intDigits, the scale is at least a full decade above
+		// the operand's magnitude, so |operand| < 10^s / 2 and it rounds to 0.
+		if s.Cmp(big.NewInt(int64(intDigits))) > 0 {
+			return 0, roundTrivialZero
 		}
-		if v < -maxRoundPrecision {
-			return -maxRoundPrecision, nil
+		// Here s <= intDigits, which fits in int and bounds 10^s.
+		return int(s.Int64()), roundCompute
+	}
+	// Non-negative precision. If it is at least the operand's fractional-digit
+	// count the operand is unchanged; this also covers all integers (fracDigits
+	// == 0) and any precision >= the operand's scale.
+	if precision.Cmp(big.NewInt(int64(fracDigits))) >= 0 {
+		return 0, roundUnchanged
+	}
+	// Here precision < fracDigits, which fits in int and bounds 10^precision.
+	return int(precision.Int64()), roundCompute
+}
+
+// intDigitCount returns the number of base-10 digits in |n|, with 0 counted as
+// a single digit. Used as the integer-magnitude input to resolveRoundScale.
+func intDigitCount(n *big.Int) int {
+	if n.Sign() == 0 {
+		return 1
+	}
+	return len(new(big.Int).Abs(n).Text(10))
+}
+
+// ratIntDigitCount returns the number of base-10 digits in the integer part of
+// |r| (>= 1).
+func ratIntDigitCount(r *big.Rat) int {
+	return intDigitCount(ratFloorInt(new(big.Rat).Abs(r)))
+}
+
+// ratFracDigitNonTerminating is returned by ratFracDigitCount for a rational
+// whose decimal expansion does not terminate (e.g. 1/3, common when an
+// xs:decimal is produced by integer division). It is large enough that no
+// practical fine precision will be treated as "finer than the operand's
+// scale", so such values always fall through to roundCompute — yet small
+// enough that resolveRoundScale never feeds it to Exp (positive precision is
+// always bounded by the caller's actual precision argument, not this value).
+const ratFracDigitNonTerminating = 1 << 30
+
+// ratFracDigitCount returns the number of fractional decimal digits of r in its
+// terminating decimal expansion: when r's reduced denominator is 2^a * 5^b this
+// is max(a, b). For a non-terminating rational (a denominator with other prime
+// factors, which an xs:decimal division result can be) it returns
+// ratFracDigitNonTerminating so any finite precision triggers real rounding.
+func ratFracDigitCount(r *big.Rat) int {
+	d := new(big.Int).Set(r.Denom())
+	two := big.NewInt(2)
+	five := big.NewInt(5)
+	a := 0
+	for d.Cmp(big.NewInt(1)) != 0 {
+		q, rem := new(big.Int).QuoRem(d, two, new(big.Int))
+		if rem.Sign() != 0 {
+			break
 		}
-		return int(v), nil
+		d = q
+		a++
 	}
-	// Out of int64 range: sign decides whether we clamp high or low.
-	if pa.BigInt().Sign() < 0 {
-		return -maxRoundPrecision, nil
+	b := 0
+	for d.Cmp(big.NewInt(1)) != 0 {
+		q, rem := new(big.Int).QuoRem(d, five, new(big.Int))
+		if rem.Sign() != 0 {
+			break
+		}
+		d = q
+		b++
 	}
-	return maxRoundPrecision, nil
+	if d.Cmp(big.NewInt(1)) != 0 {
+		// Residual factor other than 2 or 5: the decimal expansion repeats.
+		return ratFracDigitNonTerminating
+	}
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
+	return roundImpl(args, false)
+}
+
+func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
+	return roundImpl(args, true)
+}
+
+// roundImpl is the shared core of fn:round (halfToEven == false, half towards
+// +infinity) and fn:round-half-to-even (halfToEven == true). The $precision
+// argument is resolved scale-aware against each operand so an astronomically
+// large 10^|precision| is never materialised: cases whose result is determined
+// trivially (rounds to 0, or operand unchanged) short-circuit before any Exp.
+func roundImpl(args []Sequence, halfToEven bool) (Sequence, error) {
 	a, ok, err := promoteSeqToNumeric(args[0])
 	if err != nil {
 		return nil, err
@@ -179,83 +287,98 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 	if !ok {
 		return validNilSequence, nil
 	}
-	precision := 0
+	precision := big.NewInt(0)
 	if len(args) > 1 && seqLen(args[1]) > 0 {
 		precision, err = roundPrecisionArg(args[1])
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	if isIntegerDerived(a.TypeName) {
-		if precision >= 0 {
+		scale, decision := resolveRoundScale(precision, intDigitCount(a.BigInt()), 0)
+		if decision == roundUnchanged {
 			if v, ok := a.Value.(int64); ok {
 				return SingleInteger(v), nil
 			}
 			return SingleIntegerBig(new(big.Int).Set(a.BigInt())), nil
 		}
-		return SingleIntegerBig(roundIntegerHalfUp(a.BigInt(), -precision)), nil
-	}
-	if a.TypeName == TypeDecimal {
-		if precision == 0 {
-			return SingleDecimal(ratRound(a.BigRat())), nil
+		if decision == roundTrivialZero {
+			return SingleInteger(0), nil
 		}
-		return SingleDecimal(ratRoundPrecision(a.BigRat(), precision)), nil
+		if halfToEven {
+			return SingleIntegerBig(roundIntegerHalfToEven(a.BigInt(), scale)), nil
+		}
+		return SingleIntegerBig(roundIntegerHalfUp(a.BigInt(), scale)), nil
 	}
+
+	if a.TypeName == TypeDecimal {
+		r := a.BigRat()
+		scale, decision := resolveRoundScale(precision, ratIntDigitCount(r), ratFracDigitCount(r))
+		if decision == roundUnchanged {
+			return SingleDecimal(new(big.Rat).Set(r)), nil
+		}
+		if decision == roundTrivialZero {
+			return SingleDecimal(new(big.Rat)), nil
+		}
+		p := scale
+		if precision.Sign() < 0 {
+			p = -scale
+		}
+		if halfToEven {
+			return SingleDecimal(icu.RatRoundHalfToEven(r, p)), nil
+		}
+		if p == 0 {
+			return SingleDecimal(ratRound(r)), nil
+		}
+		return SingleDecimal(ratRoundPrecision(r, p)), nil
+	}
+
 	n := a.ToFloat64()
 	if math.IsNaN(n) || math.IsInf(n, 0) || n == 0 {
 		return SingleAtomic(a), nil
 	}
-	if precision > 308 {
+	// A float64 has at most ~309 integer digits and ~324 fractional digits, so
+	// these bounds make resolveRoundScale short-circuit every extreme precision
+	// without ever computing a huge scale.
+	intDigits := floatIntDigitCount(n)
+	scale, decision := resolveRoundScale(precision, intDigits, 324)
+	if decision == roundUnchanged {
 		return SingleAtomic(a), nil
 	}
-	// Use big.Float to preserve the exact IEEE 754 value during scaling
-	r := roundHalfUpFloat(n, precision)
+	if decision == roundTrivialZero {
+		r := 0.0
+		if math.Signbit(n) {
+			r = math.Copysign(0, -1)
+		}
+		return SingleAtomic(makeFloatResult(a.TypeName, r)), nil
+	}
+	p := scale
+	if precision.Sign() < 0 {
+		p = -scale
+	}
+	if halfToEven {
+		result := roundHalfToEvenFloat(n, p)
+		return SingleAtomic(makeFloatResult(a.TypeName, result)), nil
+	}
+	r := roundHalfUpFloat(n, p)
 	if r == 0 && math.Signbit(n) {
 		r = math.Copysign(0, -1)
 	}
 	return SingleAtomic(makeFloatResult(a.TypeName, r)), nil
 }
 
-func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
-	a, ok, err := promoteSeqToNumeric(args[0])
-	if err != nil {
-		return nil, err
+// floatIntDigitCount returns the number of base-10 digits in the integer part
+// of |n| (>= 1), used as the magnitude input to resolveRoundScale. It derives
+// the magnitude from the exact value via big.Float to avoid the off-by-one that
+// math.Log10 exhibits near powers of ten.
+func floatIntDigitCount(n float64) int {
+	m := math.Abs(n)
+	if m < 1 {
+		return 1
 	}
-	if !ok {
-		return validNilSequence, nil
-	}
-	precision := 0
-	if len(args) > 1 && seqLen(args[1]) > 0 {
-		precision, err = roundPrecisionArg(args[1])
-		if err != nil {
-			return nil, err
-		}
-	}
-	if isIntegerDerived(a.TypeName) {
-		if precision >= 0 {
-			if v, ok := a.Value.(int64); ok {
-				return SingleInteger(v), nil
-			}
-			return SingleIntegerBig(new(big.Int).Set(a.BigInt())), nil
-		}
-		// Negative precision: round to 10^(-precision)
-		return SingleIntegerBig(roundIntegerHalfToEven(a.BigInt(), -precision)), nil
-	}
-	if a.TypeName == TypeDecimal {
-		return SingleDecimal(icu.RatRoundHalfToEven(a.BigRat(), precision)), nil
-	}
-	n := a.ToFloat64()
-	if math.IsNaN(n) || math.IsInf(n, 0) || n == 0 {
-		return SingleAtomic(a), nil
-	}
-	// Clamp precision for float64: beyond ~15 significant digits, no rounding effect
-	if precision > 308 {
-		return SingleAtomic(a), nil
-	}
-	// Use big.Float to preserve the exact double value during scaling,
-	// avoiding precision loss that can flip the rounding direction.
-	result := roundHalfToEvenFloat(n, precision)
-	return SingleAtomic(makeFloatResult(a.TypeName, result)), nil
+	intPart, _ := new(big.Float).SetPrec(256).SetFloat64(m).Int(nil)
+	return intDigitCount(intPart)
 }
 
 // roundHalfToEvenFloat rounds a float64 to the given precision using

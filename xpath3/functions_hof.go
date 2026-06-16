@@ -242,6 +242,15 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 	if sig := lookupFunctionSignature(qv.URI, qv.Local, arity); sig != nil {
 		paramTypes = sig.ParamTypes
 		returnType = sig.ReturnType
+	} else if tf, ok := fn.(TypedFunction); ok {
+		// User-defined typed functions expose their signature directly;
+		// mirror evalNamedFunctionRef so function-lookup enforces the same
+		// argument-type checks as the named-reference path (f#1).
+		paramTypes = tf.FuncParamTypes()
+		returnType = tf.FuncReturnType()
+	} else if tfa, ok := fn.(TypedFunctionByArity); ok {
+		paramTypes = tfa.FuncParamTypesForArity(arity)
+		returnType = tfa.FuncReturnTypeForArity(arity)
 	}
 
 	fi := FunctionItem{
