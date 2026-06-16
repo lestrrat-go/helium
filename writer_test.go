@@ -552,3 +552,133 @@ func TestDumpQuotingViaPublicAPI(t *testing.T) {
 		})
 	}
 }
+func TestWriteRejectsMalformedCommentPI(t *testing.T) {
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+
+	var sb strings.Builder
+	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("a--b"))),
+		"comment containing -- must be rejected")
+	sb.Reset()
+	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("a-"))),
+		"comment ending in - must be rejected")
+	sb.Reset()
+	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("-"))),
+		"single-dash comment must be rejected")
+	sb.Reset()
+	require.Error(t, helium.Write(&sb, doc.CreatePI("t", "a?>b")),
+		"PI content containing ?> must be rejected")
+
+	// Valid comment/PI still serialize.
+	sb.Reset()
+	require.NoError(t, helium.Write(&sb, doc.CreateComment([]byte(" ok "))))
+	sb.Reset()
+	require.NoError(t, helium.Write(&sb, doc.CreateComment([]byte(""))),
+		"empty comment must serialize without an out-of-range panic")
+	sb.Reset()
+	require.NoError(t, helium.Write(&sb, doc.CreatePI("php", "echo 1")))
+}
+
+// TestWriteRejectsMalformedPITarget ensures that an invalid PI target — in
+// particular one that injects markup — is rejected before being emitted, so
+// the serialized output never contains the injection.
+func TestWriteRejectsMalformedPITarget(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		target string
+	}{
+		{name: "injection", target: "x?><evil/><?x"},
+		{name: "empty", target: ""},
+		{name: "starts-digit", target: "1bad"},
+		{name: "has-space", target: "a b"},
+		{name: "reserved-xml", target: "xml"},
+		{name: "invalid-utf8", target: "\xff\xfe"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := helium.NewDefaultDocument()
+			root := doc.CreateElement("r")
+			require.NoError(t, doc.SetDocumentElement(root))
+			require.NoError(t, root.AddChild(doc.CreatePI(tc.target, "")))
+
+			var sb strings.Builder
+			err := helium.Write(&sb, doc)
+			require.Error(t, err, "invalid PI target must be rejected")
+			require.NotContains(t, sb.String(), "<evil/>",
+				"injection must not be emitted")
+		})
+	}
+
+	// A valid target still serializes.
+	doc := helium.NewDefaultDocument()
+	root := doc.CreateElement("r")
+	require.NoError(t, doc.SetDocumentElement(root))
+	require.NoError(t, root.AddChild(doc.CreatePI("php", "echo 1")))
+	var sb strings.Builder
+	require.NoError(t, helium.Write(&sb, doc))
+	require.Contains(t, sb.String(), "<?php echo 1?>")
+}
+
+// failOnSubstringWriter fails the first Write whose accumulated tail+payload
+// contains trigger, and accepts everything else. It is used to make a specific
+// serialization step fail while earlier steps succeed.
+type failOnSubstringWriter struct {
+	trigger string
+	tail    string
+}
+
+func (w *failOnSubstringWriter) Write(p []byte) (int, error) {
+	window := w.tail + string(p)
+	if strings.Contains(window, w.trigger) {
+		return 0, errShortWrite
+	}
+	if keep := len(w.trigger) - 1; keep > 0 {
+		if len(window) > keep {
+			w.tail = window[len(window)-keep:]
+		} else {
+			w.tail = window
+		}
+	}
+	return len(p), nil
+}
+
+// TestWriteValidationPreservesStickyIOError ensures that when an earlier
+// io.Writer failure has already set the sticky error, a subsequent malformed
+// comment/PI sibling does not clobber it: WriteTo must surface the original I/O
+// error, not the validation error.
+func TestWriteValidationPreservesStickyIOError(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		sibling func(*helium.Document) helium.Node
+	}{
+		{
+			name:    "comment",
+			sibling: func(d *helium.Document) helium.Node { return d.CreateComment([]byte("a--b")) },
+		},
+		{
+			name:    "pi",
+			sibling: func(d *helium.Document) helium.Node { return d.CreatePI("t", "a?>b") },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := helium.NewDefaultDocument()
+			root := doc.CreateElement("r")
+			require.NoError(t, doc.SetDocumentElement(root))
+			// A malformed top-level sibling serialized after the root element.
+			// The newline separator written between top-level nodes is forced
+			// to fail, setting the sticky I/O error before the malformed
+			// sibling's validation runs. (Unlike a failed element write, the
+			// separator failure does not short-circuit the child loop, so the
+			// sibling is still reached.)
+			require.NoError(t, doc.AddChild(tc.sibling(doc)))
+
+			err := helium.NewWriter().XMLDeclaration(false).WriteTo(&failOnSubstringWriter{trigger: "\n"}, doc)
+			require.ErrorIs(t, err, errShortWrite,
+				"original I/O error must win over the sibling validation error")
+		})
+	}
+}

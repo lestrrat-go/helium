@@ -8,9 +8,19 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 var errNilOutputWriter = errors.New("stream: output writer is nil")
+
+// isValidPITarget reports whether target is a valid XML processing
+// instruction target. A PI target is an XML Name, which is an NCName
+// optionally containing colons. The reserved "xml" target is rejected by
+// StartPI separately (with a dedicated error) before this is reached, so the
+// shared predicate's "xml" rejection is harmless here.
+func isValidPITarget(target string) bool {
+	return xmlchar.IsValidPITarget(target)
+}
 
 // writerState tracks what context the writer is currently in.
 type writerState int
@@ -58,18 +68,20 @@ type nsScope struct {
 //
 // (libxml2: xmlTextWriter)
 type Writer struct {
-	out        io.Writer
-	indent     string // indent string per level; empty = no indentation
-	quoteChar  byte   // attribute quote character ('"' or '\'')
-	singleByte [1]byte
-	state      writerState
-	elemStack  []elementEntry
-	nsStack    []nsScope
-	stateStack []writerState // for comment/PI/CDATA nesting
-	err        error         // sticky error
-	depth      int           // current element nesting depth (for indentation)
-	hasOutput  bool          // true after first output has been written
-	wroteNL    bool          // true after EndComment/EndPI wrote trailing \n (suppresses writeIndent's \n)
+	out         io.Writer
+	indent      string // indent string per level; empty = no indentation
+	quoteChar   byte   // attribute quote character ('"' or '\'')
+	singleByte  [1]byte
+	state       writerState
+	elemStack   []elementEntry
+	nsStack     []nsScope
+	stateStack  []writerState // for comment/PI/CDATA nesting
+	err         error         // sticky error
+	depth       int           // current element nesting depth (for indentation)
+	hasOutput   bool          // true after first output has been written
+	wroteNL     bool          // true after EndComment/EndPI wrote trailing \n (suppresses writeIndent's \n)
+	commentDash bool          // true if the current comment body ends with '-' (would form '--->' on close)
+	piQuestion  bool          // true if the current PI body ends with '?' (would form '?>' across writes)
 }
 
 // NewWriter creates a Writer that writes to w. Configure the Writer
@@ -694,9 +706,27 @@ func (w *Writer) WriteString(content string) error {
 	case stateAttribute:
 		w.writeAttrEscaped(content)
 	case stateComment:
+		if w.commentDash && strings.HasPrefix(content, "-") {
+			return errors.New("stream: comment content must not contain '--'")
+		}
+		if strings.Contains(content, "--") {
+			return errors.New("stream: comment content must not contain '--'")
+		}
 		w.writeStr(content)
+		if content != "" {
+			w.commentDash = strings.HasSuffix(content, "-")
+		}
 	case statePI, statePIText:
+		if w.piQuestion && strings.HasPrefix(content, ">") {
+			return errors.New("stream: processing instruction content must not contain '?>'")
+		}
+		if strings.Contains(content, "?>") {
+			return errors.New("stream: processing instruction content must not contain '?>'")
+		}
 		w.writeStr(content)
+		if content != "" {
+			w.piQuestion = strings.HasSuffix(content, "?")
+		}
 		w.state = statePIText
 	case stateCDATA:
 		w.writeStr(content)
@@ -754,6 +784,7 @@ func (w *Writer) StartComment() error {
 		w.elemStack[len(w.elemStack)-1].hasChild = true
 	}
 	w.writeStr("<!--")
+	w.commentDash = false
 	w.stateStack = append(w.stateStack, w.state)
 	w.state = stateComment
 	return w.err
@@ -766,6 +797,9 @@ func (w *Writer) EndComment() error {
 	}
 	if w.state != stateComment {
 		return errors.New("stream: EndComment called outside comment")
+	}
+	if w.commentDash {
+		return errors.New("stream: comment content must not end with '-'")
 	}
 	w.writeStr("-->")
 	if w.indent != "" {
@@ -783,6 +817,16 @@ func (w *Writer) EndComment() error {
 
 // WriteComment is a convenience for StartComment + WriteString + EndComment.
 func (w *Writer) WriteComment(content string) error {
+	// A prior sticky I/O error must win over the new content validation below.
+	if w.err != nil {
+		return w.err
+	}
+	if strings.Contains(content, "--") {
+		return errors.New("stream: comment content must not contain '--'")
+	}
+	if strings.HasSuffix(content, "-") {
+		return errors.New("stream: comment content must not end with '-'")
+	}
 	if err := w.StartComment(); err != nil {
 		return err
 	}
@@ -802,6 +846,14 @@ func (w *Writer) StartPI(target string) error {
 	if w.err != nil {
 		return w.err
 	}
+	// Validate the target before touching any writer state or output, so a bad
+	// target never closes an open start tag or otherwise mutates the writer.
+	if strings.EqualFold(target, "xml") {
+		return errors.New("stream: PI target cannot be 'xml'")
+	}
+	if !isValidPITarget(target) {
+		return fmt.Errorf("stream: invalid PI target %q", target)
+	}
 	switch w.state {
 	case stateNone, stateDocument, stateText:
 		// ok
@@ -810,15 +862,13 @@ func (w *Writer) StartPI(target string) error {
 	default:
 		return errors.New("stream: StartPI called in invalid state")
 	}
-	if strings.EqualFold(target, "xml") {
-		return errors.New("stream: PI target cannot be 'xml'")
-	}
 	if len(w.elemStack) > 0 {
 		w.elemStack[len(w.elemStack)-1].empty = false
 		w.elemStack[len(w.elemStack)-1].hasChild = true
 	}
 	w.writeStr("<?")
 	w.writeStr(target)
+	w.piQuestion = false
 	w.stateStack = append(w.stateStack, w.state)
 	w.state = statePI
 	return w.err
@@ -848,6 +898,13 @@ func (w *Writer) EndPI() error {
 
 // WritePI is a convenience for StartPI + WriteString + EndPI.
 func (w *Writer) WritePI(target, content string) error {
+	// A prior sticky I/O error must win over the new content validation below.
+	if w.err != nil {
+		return w.err
+	}
+	if strings.Contains(content, "?>") {
+		return errors.New("stream: processing instruction content must not contain '?>'")
+	}
 	if err := w.StartPI(target); err != nil {
 		return err
 	}

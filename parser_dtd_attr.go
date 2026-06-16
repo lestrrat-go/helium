@@ -575,7 +575,7 @@ func (pctx *parserCtx) parseSystemLiteral(ctx context.Context, qch byte) (string
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isChar(r) {
+		if !ok || !isCharWidth(r, w) {
 			break
 		}
 		buf.WriteRune(r)
@@ -603,20 +603,14 @@ func (pctx *parserCtx) parsePubidLiteral(ctx context.Context, qch byte) (string,
 		if b == 0 || b == qch {
 			break
 		}
-		if b < 0x80 {
-			if !isChar(rune(b)) {
-				break
-			}
-			buf.WriteByte(b)
-			off++
-			continue
-		}
-		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isChar(r) {
+		// PubidChar is restricted to a subset of ASCII, so any byte >= 0x80
+		// (the lead byte of a multi-byte sequence, including a real U+FFFD)
+		// is not a valid pubid character.
+		if !isPubidChar(rune(b)) {
 			break
 		}
-		buf.WriteRune(r)
-		off += w
+		buf.WriteByte(b)
+		off++
 	}
 	if off > 0 {
 		if err := cur.Advance(off); err != nil {
@@ -624,6 +618,26 @@ func (pctx *parserCtx) parsePubidLiteral(ctx context.Context, qch byte) (string,
 		}
 	}
 	return buf.String(), nil
+}
+
+// isPubidChar reports whether r is a member of the XML PubidChar production:
+//
+//	PubidChar ::= #x20 | #xD | #xA | [a-zA-Z0-9] | [-'()+,./:=?;!*#@$_%]
+func isPubidChar(r rune) bool {
+	if r >= 'a' && r <= 'z' {
+		return true
+	}
+	if r >= 'A' && r <= 'Z' {
+		return true
+	}
+	if r >= '0' && r <= '9' {
+		return true
+	}
+	switch r {
+	case ' ', '\r', '\n', '-', '\'', '(', ')', '+', ',', '.', '/', ':', '=', '?', ';', '!', '*', '#', '@', '$', '_', '%':
+		return true
+	}
+	return false
 }
 
 func (pctx *parserCtx) parseExternalID(ctx context.Context) (string, string, error) {

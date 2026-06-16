@@ -1,11 +1,14 @@
 package helium
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"strings"
 
 	henc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -295,6 +298,18 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		}
 		return nil
 	case CommentNode:
+		// A comment must not contain "--" or end with "-" (that would form
+		// "--->" with the closing delimiter), else the output is not well-formed.
+		// Validate the byte slice directly: a string() copy here would double the
+		// peak memory for a large (attacker-controlled) comment before the same
+		// bytes are written below.
+		content := n.Content()
+		if bytes.Contains(content, []byte("--")) || (len(content) > 0 && content[len(content)-1] == '-') {
+			// check() keeps the first sticky error, so an earlier I/O failure is
+			// not clobbered by this validation error.
+			d.check(errors.New("helium: comment content must not contain \"--\" or end with \"-\""))
+			return d.err
+		}
 		d.writeString(out, "<!--")
 		d.writeBytes(out, n.Content())
 		d.writeString(out, "-->")
@@ -302,6 +317,22 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	case ProcessingInstructionNode:
 		// Mirrors xmlsave.c XML_PI_NODE handling.
 		if pi, ok := AsNode[*ProcessingInstruction](n); ok {
+			// The PI target must be a valid XML Name (and not the reserved
+			// "xml"); otherwise an invalid/crafted target injects raw markup
+			// into the output (it is emitted verbatim below).
+			if !xmlchar.IsValidPITarget(pi.target) {
+				// check() keeps the first sticky error, so an earlier I/O failure
+				// is not clobbered by this validation error.
+				d.check(errors.New("helium: invalid PI target"))
+				return d.err
+			}
+			// PI data must not contain "?>", which would terminate the PI early.
+			if strings.Contains(pi.data, "?>") {
+				// check() keeps the first sticky error, so an earlier I/O failure
+				// is not clobbered by this validation error.
+				d.check(errors.New("helium: PI content must not contain \"?>\""))
+				return d.err
+			}
 			d.writeString(out, "<?")
 			d.writeString(out, pi.target)
 			if pi.data != "" {

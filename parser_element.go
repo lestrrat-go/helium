@@ -11,6 +11,7 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/strcursor"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
@@ -569,7 +570,22 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 
 	for {
 		c := cur.PeekRune()
-		if (qch != 0x0 && c == rune(qch)) || !isChar(c) || c == '<' {
+		if (qch != 0x0 && c == rune(qch)) || c == '<' {
+			break
+		}
+		// Width-aware char validation: a real U+FFFD is encoded as valid
+		// 3-byte UTF-8 and is a legal XML Char, whereas invalid/incomplete
+		// UTF-8 decodes to RuneError with width 1. isChar rejects every
+		// RuneError, so decode with width here to tell the two apart and
+		// keep the slow path consistent with the fast path.
+		dr, dw, ok := decodeRuneAt(cur, 0)
+		if !ok {
+			break
+		}
+		if dr == utf8.RuneError && dw == 1 {
+			break
+		}
+		if !xmlchar.IsChar(dr) {
 			break
 		}
 		switch c {
@@ -644,9 +660,11 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 			}
 		default:
 			inSpace = false
-			b.WriteRune(c)
-			w := max(utf8.RuneLen(c), 1)
-			if err := cur.Advance(w); err != nil {
+			// Write the raw decoded bytes (dw wide) so a real U+FFFD round-trips
+			// intact; WriteRune(c) would re-encode RuneError and utf8.RuneLen(c)
+			// would be -1, advancing too few bytes.
+			b.WriteString(cur.PeekString(dw))
+			if err := cur.Advance(dw); err != nil {
 				return "", 0, err
 			}
 		}

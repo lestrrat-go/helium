@@ -10,6 +10,8 @@ import (
 	"io"
 	"unicode/utf8"
 	"unsafe"
+
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // Cursor is the byte-oriented interface for reading XML input.
@@ -451,11 +453,16 @@ func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) int {
 	for nRunes < count {
 		e := ring[(head+nRunes)&mask]
 		r := e.val
-		if r == '<' || r == '&' || r == utf8.RuneError {
+		// A real U+FFFD is stored as RuneError with width 3 (valid XML char);
+		// only width<=1 means genuinely-invalid UTF-8.
+		if r == '<' || r == '&' || (r == utf8.RuneError && e.width <= 1) {
 			break
 		}
 		u := uint32(r)
 		if u < 0x20 && u != 0x9 && u != 0xa && u != 0xd {
+			break
+		}
+		if r >= 0x80 && !xmlchar.IsChar(r) {
 			break
 		}
 		if r == ']' && nRunes+2 < count {

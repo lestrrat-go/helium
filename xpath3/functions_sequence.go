@@ -57,22 +57,25 @@ func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	target := args[0]
-	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:insert-before: position argument is an empty sequence"}
-	}
-	a, err := AtomizeItem(args[1].Get(0))
+	// $position is xs:integer: reject empty/multi-item/non-integer (XPTY0004).
+	posVal, err := coerceArgToInteger(args[1])
 	if err != nil {
 		return nil, err
 	}
-	pos := int(a.ToFloat64())
 	inserts := args[2]
-
-	if pos < 1 {
-		pos = 1
-	}
 	tItems := seqMaterialize(target)
-	if pos > len(tItems)+1 {
+
+	// Clamp on the int64 value so an oversized position cannot wrap when
+	// converted to int (e.g. on 32-bit platforms): a position past the end
+	// must insert at the end, a position before the start at position 1.
+	var pos int
+	switch {
+	case posVal < 1:
+		pos = 1
+	case posVal > int64(len(tItems)+1):
 		pos = len(tItems) + 1
+	default:
+		pos = int(posVal)
 	}
 
 	iItems := seqMaterialize(inserts)
@@ -89,12 +92,13 @@ func fnRemove(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	pos := int(posVal)
-
 	tItems := seqMaterialize(target)
-	if pos < 1 || pos > len(tItems) {
+	// Range-check on int64 before converting so an out-of-int position cannot
+	// wrap into a valid index (e.g. on 32-bit platforms).
+	if posVal < 1 || posVal > int64(len(tItems)) {
 		return target, nil
 	}
+	pos := int(posVal)
 
 	result := make(ItemSlice, 0, len(tItems)-1)
 	result = append(result, tItems[:pos-1]...)
@@ -116,6 +120,9 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position is required"}
+	}
+	if seqLen(args[1]) > 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be a single value"}
 	}
 	a, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
@@ -139,6 +146,9 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	var lengthF float64
 	if hasLength {
+		if seqLen(args[2]) > 1 {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be a single value"}
+		}
 		la, err := AtomizeItem(args[2].Get(0))
 		if err != nil {
 			return nil, err

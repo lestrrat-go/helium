@@ -49,6 +49,9 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 			continue
 		}
 		if b < 0x80 {
+			if !isChar(rune(b)) {
+				return "", ErrInvalidChar
+			}
 			buf.WriteByte(b)
 			off++
 			continue
@@ -56,6 +59,9 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 		r, w, ok := decodeRuneAt(cur, off)
 		if !ok {
 			break
+		}
+		if !isCharWidth(r, w) {
+			return "", ErrInvalidChar
 		}
 		buf.WriteRune(r)
 		off += w
@@ -164,7 +170,7 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isChar(r) {
+		if !ok || !isCharWidth(r, w) {
 			break
 		}
 		buf.WriteRune(r)
@@ -228,6 +234,18 @@ func isChar(r rune) bool {
 
 	c := uint32(r)
 	return isXMLCharValue(c)
+}
+
+// isCharWidth is the width-aware counterpart of isChar. A utf8.RuneError with
+// width 1 denotes genuinely invalid UTF-8 and must be rejected, but a real
+// U+FFFD decodes as utf8.RuneError with width 3 and is a valid XML Char. The
+// fast UTF-8 scanners make the same distinction (see
+// internal/strcursor/utf8cursor.go).
+func isCharWidth(r rune, w int) bool {
+	if r == utf8.RuneError && w == 1 {
+		return false
+	}
+	return isXMLCharValue(uint32(r))
 }
 
 func isXMLCharValue(c uint32) bool {
@@ -313,14 +331,14 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 
 	off := 0
 	q, qw, qok := decodeRuneAt(cur, off)
-	if !qok || !isChar(q) {
+	if !qok || !isCharWidth(q, qw) {
 		return pctx.error(ctx, ErrInvalidChar)
 	}
 	buf.WriteRune(q)
 	off += qw
 
 	r, rw, rok := decodeRuneAt(cur, off)
-	if !rok || !isChar(r) {
+	if !rok || !isCharWidth(r, rw) {
 		return pctx.error(ctx, ErrInvalidChar)
 	}
 	buf.WriteRune(r)
@@ -331,7 +349,7 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 		if !ok {
 			return pctx.error(ctx, ErrInvalidComment)
 		}
-		if !isChar(c) {
+		if !isCharWidth(c, w) {
 			return pctx.error(ctx, ErrInvalidChar)
 		}
 		if q == '-' && r == '-' && c == '>' {

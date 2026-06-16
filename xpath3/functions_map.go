@@ -135,10 +135,7 @@ func fnMapPut(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:put requires key"}
-	}
-	ka, err := AtomizeItem(args[1].Get(0))
+	ka, err := extractSingleAtomicArg(args[1], "map:put key")
 	if err != nil {
 		return nil, err
 	}
@@ -146,10 +143,7 @@ func fnMapPut(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMapEntry(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:entry requires key"}
-	}
-	ka, err := AtomizeItem(args[0].Get(0))
+	ka, err := extractSingleAtomicArg(args[0], "map:entry key")
 	if err != nil {
 		return nil, err
 	}
@@ -196,10 +190,7 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMapFind(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[1]) == 0 {
-		return ItemSlice{NewArray(nil)}, nil
-	}
-	ka, err := AtomizeItem(args[1].Get(0))
+	ka, err := extractSingleAtomicArg(args[1], "map:find key")
 	if err != nil {
 		return nil, err
 	}

@@ -203,6 +203,12 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	if !cur.Done() {
 		return pctx.error(ctx, ErrDocumentEnd)
 	}
+	// A clean Done() may mask a transcoding/decode error (e.g. an unpaired
+	// UTF-16 surrogate the decoder replaced with U+FFFD). Surface it as a fatal
+	// error rather than accepting truncated/malformed encoded input.
+	if err := pctx.cursorDecodeErr(); err != nil {
+		return pctx.error(ctx, err)
+	}
 	pctx.instate = psEOF
 
 	// All done

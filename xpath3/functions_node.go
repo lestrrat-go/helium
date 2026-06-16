@@ -950,6 +950,12 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	// An empty argument resolves to the base URI verbatim, which may itself
+	// carry a fragment identifier. Re-check the resolved URI so doc("") with a
+	// fragmented base URI is rejected the same as a fragmented argument.
+	if strings.Contains(resolved, "#") {
+		return nil, &XPathError{Code: errCodeFODC0005, Message: "fn:doc: URI must not contain a fragment identifier"}
+	}
 	if ec := getFnContext(ctx); ec != nil {
 		if doc, ok := ec.docCache[resolved]; ok {
 			return doc, nil

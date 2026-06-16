@@ -273,7 +273,10 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	if tn.Prefix == "xs" || tn.Prefix == "xsd" {
 		return "xs:" + tn.Name
 	}
-	// Resolve via namespace context
+	// Resolve via namespace context. ec may be nil when a function item's
+	// coercion runs without a captured eval context; in that case the custom
+	// prefix cannot be resolved, so fall through to the unresolved-type form
+	// (Prefix:Name) which fails coercion with XPTY0004 rather than panicking.
 	if ec != nil && ec.namespaces != nil {
 		if uri, ok := ec.namespaces[tn.Prefix]; ok {
 			if uri == lexicon.NamespaceXSD {

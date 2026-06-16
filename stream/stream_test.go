@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/stream"
 	"github.com/stretchr/testify/require"
 )
@@ -326,6 +327,195 @@ func TestPIXmlCaseForbidden(t *testing.T) {
 	err := w.StartPI("XML")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot be 'xml'")
+}
+
+func TestPIInvalidUTF8TargetRejected(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	// An invalid UTF-8 byte decodes to U+FFFD, which is a valid NCName char,
+	// so the target must be rejected on the encoding check, not accepted.
+	err := w.StartPI(string([]byte{0xff}))
+	require.Error(t, err)
+	require.Empty(t, buf.String(), "no PI bytes must be emitted for an invalid target")
+}
+
+func TestPINormalTargetAccepted(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.StartPI("target"))
+	require.NoError(t, w.EndPI())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><?target?></root>`, buf.String())
+}
+
+func TestPIColonTargetRejected(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{"a:b", ":", "a:", ":a"} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			err := w.StartPI(target)
+			require.Error(t, err)
+			require.Empty(t, buf.String(), "no PI bytes must be emitted for a colon target")
+		})
+	}
+}
+
+func TestPIReplacementCharTargetAccepted(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	// A genuinely encoded U+FFFD is valid UTF-8 and a valid NCName char.
+	require.NoError(t, w.StartPI("�"))
+	require.NoError(t, w.EndPI())
+	require.Equal(t, "<?�?>", buf.String())
+}
+
+func TestPIBadTargetInOpenStartTagDoesNotMutate(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("r"))
+	// StartElement writes "<r" and leaves the tag open (state stateName) so it
+	// can still self-close. A rejected PI must NOT call closeTagIfOpen (which
+	// would emit ">" and force "<r></r>"); the element must remain self-closeable.
+	require.Equal(t, "<r", buf.String())
+	err := w.StartPI("1bad")
+	require.Error(t, err)
+	require.Equal(t, "<r", buf.String(), "the open start tag must not be flushed by a rejected PI")
+	require.NoError(t, w.EndElement())
+	require.Equal(t, "<r/>", buf.String())
+}
+
+func TestCommentWellFormednessRejected(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "double-dash", content: "a--b"},
+		{name: "trailing-dash", content: "a-"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.Error(t, w.WriteComment(tc.content))
+		})
+	}
+}
+
+func TestCommentDashSplitAcrossWrites(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartComment())
+	require.NoError(t, w.WriteString("a-"))
+	require.Error(t, w.WriteString("-b"))
+}
+
+func TestCommentTrailingDashSplitAtEnd(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartComment())
+	require.NoError(t, w.WriteString("a-"))
+	require.Error(t, w.EndComment())
+}
+
+func TestCommentDashChunksNoFalsePositive(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.StartComment())
+	require.NoError(t, w.WriteString("a-"))
+	require.NoError(t, w.WriteString("b"))
+	require.NoError(t, w.EndComment())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><!--a-b--></root>`, buf.String())
+}
+
+func TestCommentValidStillSucceeds(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.WriteComment(" ok "))
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><!-- ok --></root>`, buf.String())
+}
+
+func TestPIWellFormednessRejected(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		target  string
+		content string
+	}{
+		{name: "content-end-delim", target: "t", content: "a?>b"},
+		{name: "target-starts-digit", target: "123bad", content: "x"},
+		{name: "target-has-space", target: "a b", content: "x"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.Error(t, w.WritePI(tc.target, tc.content))
+		})
+	}
+}
+
+func TestPIDelimSplitAcrossWrites(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartPI("t"))
+	require.NoError(t, w.WriteString(" a?"))
+	require.Error(t, w.WriteString(">b"))
+}
+
+func TestPIQuestionChunksNoFalsePositive(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.StartPI("t"))
+	require.NoError(t, w.WriteString(" a?"))
+	require.NoError(t, w.WriteString("x"))
+	require.NoError(t, w.EndPI())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><?t a?x?></root>`, buf.String())
+}
+
+func TestPIValidStillSucceeds(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.WritePI("php", "echo 1"))
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><?php echo 1?></root>`, buf.String())
+}
+
+func TestCommentPIRoundTripsThroughParser(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.WritePI("php", "echo 1"))
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.WriteComment(" a comment "))
+	require.NoError(t, w.WriteString("text"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndDocument())
+
+	_, err := helium.NewParser().Parse(t.Context(), buf.Bytes())
+	require.NoError(t, err)
 }
 
 func TestCDATA(t *testing.T) {
@@ -837,6 +1027,31 @@ func TestStickyError(t *testing.T) {
 	require.Error(t, w.Flush())
 	err := w.StartElement("root")
 	require.Error(t, err)
+}
+
+func TestStickyErrorPreservedInConvenienceHelpers(t *testing.T) {
+	t.Parallel()
+	// With an underlying writer that fails immediately, the sticky I/O error
+	// must win over the new content/target validation error in the one-shot
+	// convenience helpers.
+	t.Run("WriteComment", func(t *testing.T) {
+		t.Parallel()
+		fw := &failWriter{failAfter: 0}
+		w := stream.NewWriter(fw)
+		require.Error(t, w.StartElement("root"))
+		err := w.WriteComment("a--b")
+		require.Error(t, err)
+		require.Equal(t, "write failed", err.Error())
+	})
+	t.Run("WritePI", func(t *testing.T) {
+		t.Parallel()
+		fw := &failWriter{failAfter: 0}
+		w := stream.NewWriter(fw)
+		require.Error(t, w.StartElement("root"))
+		err := w.WritePI("t", "a?>b")
+		require.Error(t, err)
+		require.Equal(t, "write failed", err.Error())
+	})
 }
 
 func TestFlush(t *testing.T) {

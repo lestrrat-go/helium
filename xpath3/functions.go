@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"os"
 	"strings"
@@ -355,7 +356,16 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 	case int64:
 		return v, nil
 	case *big.Int:
-		return v.Int64(), nil
+		// Int64() silently wraps a value outside int64 range. Clamp to the
+		// signed-64 extremes so callers treat it as out of range rather than a
+		// wrapped (valid-looking) position.
+		if v.IsInt64() {
+			return v.Int64(), nil
+		}
+		if v.Sign() < 0 {
+			return math.MinInt64, nil
+		}
+		return math.MaxInt64, nil
 	default:
 		return 0, fmt.Errorf("xpath3: internal error: expected integer value for %s, got %T", a.TypeName, a.Value)
 	}
@@ -418,18 +428,6 @@ func coerceToInteger(a AtomicValue) (AtomicValue, error) {
 		return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
 	}
 	return a, nil
-}
-
-// seqToDouble atomizes the first item to a float64.
-func seqToDouble(seq Sequence) float64 {
-	if seqLen(seq) == 0 {
-		return 0
-	}
-	a, err := AtomizeItem(seq.Get(0))
-	if err != nil {
-		return 0
-	}
-	return a.ToFloat64()
 }
 
 func init() {
