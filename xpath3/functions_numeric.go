@@ -730,8 +730,16 @@ func ratRoundPrecisionHalfToEven(r *big.Rat, precision int) *big.Rat {
 		rounded := icu.RatRoundHalfToEvenInt(shifted)
 		return new(big.Rat).SetFrac(rounded, new(big.Int).Set(scale))
 	}
-	// Negative precision: round to 10^(-precision).
-	return new(big.Rat).SetInt(roundIntegerHalfToEven(ratFloorInt(r), -precision))
+	// Negative precision: round to 10^(-precision). Operate on the rational
+	// directly (divide, round-half-to-even, multiply back) rather than flooring
+	// to an integer first — flooring would discard the fractional part that can
+	// break a tie at the rounding boundary (e.g. ...896.5...123 must round up,
+	// not be treated as an exact half that lands on the even digit).
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-precision)), nil)
+	scaleRat := new(big.Rat).SetInt(scale)
+	divided := new(big.Rat).Quo(r, scaleRat)
+	rounded := icu.RatRoundHalfToEvenInt(divided)
+	return new(big.Rat).Mul(new(big.Rat).SetInt(rounded), scaleRat)
 }
 
 // ratFloorInt returns floor of a rational as big.Int.
