@@ -143,10 +143,22 @@ func itemToCodepoint(item Item) (int, error) {
 	// Fast path: extract int64 directly from *big.Int (avoids big.Float allocation)
 	if isIntegerDerived(a.TypeName) {
 		if n, ok := a.Value.(*big.Int); ok {
+			// A value beyond int64 range cannot be a valid XML codepoint;
+			// Int64() would silently wrap mod 2^64, so reject it here.
+			if !n.IsInt64() {
+				return 0, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [%s]", n.String())}
+			}
 			return int(n.Int64()), nil
 		}
 	}
-	return int(a.ToFloat64()), nil
+	// Non-integer fallback: a fractional value is not a valid codepoint.
+	// Reject it as a type error, but keep accepting integer-valued floats
+	// (e.g. 65.0) so arithmetic-derived integer values still work.
+	f := a.ToFloat64()
+	if f != math.Trunc(f) {
+		return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("codepoints-to-string: non-integer codepoint %v", f)}
+	}
+	return int(f), nil
 }
 
 // isValidXMLCodepoint returns true if the codepoint is a valid XML character.

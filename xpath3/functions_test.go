@@ -410,6 +410,57 @@ func TestFnURI(t *testing.T) {
 	})
 }
 
+// --- codepoints-to-string range checks ---
+
+func TestFnCodepointsToStringRange(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErr := func(t *testing.T, expr string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+	}
+
+	t.Run("non-integer is a type error", func(t *testing.T) {
+		evalErr(t, `codepoints-to-string(65.9)`)
+	})
+
+	t.Run("value beyond int64 is FOCH0001", func(t *testing.T) {
+		// 2^64 + 65 wraps to 65 ("A") via big.Int.Int64(); must error instead.
+		evalErr(t, `codepoints-to-string(18446744073709551681)`)
+	})
+
+	t.Run("integer codepoint still works", func(t *testing.T) {
+		seq := evalExpr(t, doc, `codepoints-to-string(65)`)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, "A", av.StringVal())
+	})
+
+	t.Run("integer-valued float still works", func(t *testing.T) {
+		seq := evalExpr(t, doc, `codepoints-to-string(65.0)`)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, "A", av.StringVal())
+	})
+
+	t.Run("sequence of integers still works", func(t *testing.T) {
+		seq := evalExpr(t, doc, `codepoints-to-string((72, 73))`)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, "HI", av.StringVal())
+	})
+
+	t.Run("round-trip via string-to-codepoints", func(t *testing.T) {
+		seq := evalExpr(t, doc, `codepoints-to-string(string-to-codepoints("hi"))`)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, "hi", av.StringVal())
+	})
+}
+
 // --- Error function ---
 
 func TestFnError(t *testing.T) {
