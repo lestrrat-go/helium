@@ -78,6 +78,6 @@ func TestParseAttrWhitespaceNormalization(t *testing.T) {
 		require.NoError(t, err)
 		attrs := doc.DocumentElement().Attributes()
 		require.Len(t, attrs, 1)
-		require.Equal(t, "x y", string(attrs[0].Value()), "whitespace %q must normalize to space", ws)
+		require.Equal(t, "x y", attrs[0].Value(), "whitespace %q must normalize to space", ws)
 	}
 }

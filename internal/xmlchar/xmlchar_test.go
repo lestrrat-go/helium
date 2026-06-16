@@ -62,7 +62,7 @@ func TestIsChar(t *testing.T) {
 		{0x110000, false}, // beyond Unicode range
 	}
 	for _, tt := range tests {
-		t.Run(string(rune(tt.r)), func(t *testing.T) {
+		t.Run(string(tt.r), func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tt.want, xmlchar.IsChar(tt.r), "IsChar(%#x)", tt.r)
 		})
