@@ -67,8 +67,8 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		name = n.Name()
 	}
 
-	_, _ = io.WriteString(out, "<")
-	_, _ = io.WriteString(out, name)
+	d.writeString(out, "<")
+	d.writeString(out, name)
 
 	nslist := e.Namespaces()
 	if len(nslist) > 0 {
@@ -85,7 +85,7 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		}
 	}
 	if localName == "html" && e.ns == nil && !hasDefaultNs {
-		_, _ = io.WriteString(out, ` xmlns="http://www.w3.org/1999/xhtml"`)
+		d.writeString(out, ` xmlns="http://www.w3.org/1999/xhtml"`)
 	}
 
 	d.dumpXHTMLAttrList(out, e)
@@ -103,36 +103,36 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 
 	if e.FirstChild() == nil {
 		if (e.ns == nil || e.ns.Prefix() == "") && xhtmlVoidElements[localName] && !addMeta {
-			_, _ = io.WriteString(out, " />")
+			d.writeString(out, " />")
 		} else {
 			if addMeta {
-				_, _ = io.WriteString(out, ">")
+				d.writeString(out, ">")
 				if d.format {
-					_, _ = io.WriteString(out, "\n")
+					d.writeString(out, "\n")
 					d.indent++
 					d.writeIndent(out)
 				}
 				d.writeMetaContentType(out)
 				if d.format {
-					_, _ = io.WriteString(out, "\n")
+					d.writeString(out, "\n")
 					d.indent--
 					d.writeIndent(out)
 				}
 			} else {
-				_, _ = io.WriteString(out, ">")
+				d.writeString(out, ">")
 			}
-			_, _ = io.WriteString(out, "</")
-			_, _ = io.WriteString(out, name)
-			_, _ = io.WriteString(out, ">")
+			d.writeString(out, "</")
+			d.writeString(out, name)
+			d.writeString(out, ">")
 		}
-		return nil
+		return d.err
 	}
 
-	_, _ = io.WriteString(out, ">")
+	d.writeString(out, ">")
 
 	textOnly := d.format && hasOnlyTextChildren(e)
 	if d.format && !textOnly {
-		_, _ = io.WriteString(out, "\n")
+		d.writeString(out, "\n")
 		d.indent++
 	}
 
@@ -142,7 +142,7 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		}
 		d.writeMetaContentType(out)
 		if d.format && !textOnly {
-			_, _ = io.WriteString(out, "\n")
+			d.writeString(out, "\n")
 		}
 	}
 
@@ -160,7 +160,7 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 			}
 		}
 		if d.format && !textOnly {
-			_, _ = io.WriteString(out, "\n")
+			d.writeString(out, "\n")
 		}
 	}
 
@@ -169,10 +169,10 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		d.writeIndent(out)
 	}
 
-	_, _ = io.WriteString(out, "</")
-	_, _ = io.WriteString(out, name)
-	_, _ = io.WriteString(out, ">")
-	return nil
+	d.writeString(out, "</")
+	d.writeString(out, name)
+	d.writeString(out, ">")
+	return d.err
 }
 
 func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
@@ -193,23 +193,23 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
 			xmlLangAttr = attr
 		}
 
-		_, _ = io.WriteString(out, " ")
-		_, _ = io.WriteString(out, attrName)
-		_, _ = io.WriteString(out, `="`)
+		d.writeString(out, " ")
+		d.writeString(out, attrName)
+		d.writeString(out, `="`)
 
 		attrValue := attr.Value()
 		if attrValue == "" && htmlBooleanAttrs[attrName] {
-			_, _ = io.WriteString(out, attrName)
+			d.writeString(out, attrName)
 		} else {
 			for achld := range Children(attr) {
 				if achld.Type() == TextNode {
-					_ = escapeAttrValue(out, achld.Content(), d.escapeNonASCII)
+					d.check(escapeAttrValue(out, achld.Content(), d.escapeNonASCII))
 				} else {
-					_ = d.writeNode(out, achld)
+					d.check(d.writeNode(out, achld))
 				}
 			}
 		}
-		_, _ = io.WriteString(out, `"`)
+		d.writeString(out, `"`)
 
 		next, ok := AsNode[*Attribute](attr.NextSibling())
 		if !ok {
@@ -219,19 +219,19 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
 	}
 
 	if nameAttr != nil && idAttr == nil && xhtmlNameIDElements[localName] {
-		_, _ = io.WriteString(out, ` id="`)
-		_ = escapeAttrValue(out, nameAttr.Content(), d.escapeNonASCII)
-		_, _ = io.WriteString(out, `"`)
+		d.writeString(out, ` id="`)
+		d.check(escapeAttrValue(out, nameAttr.Content(), d.escapeNonASCII))
+		d.writeString(out, `"`)
 	}
 
 	if langAttr != nil && xmlLangAttr == nil {
-		_, _ = io.WriteString(out, ` xml:lang="`)
-		_ = escapeAttrValue(out, langAttr.Content(), d.escapeNonASCII)
-		_, _ = io.WriteString(out, `"`)
+		d.writeString(out, ` xml:lang="`)
+		d.check(escapeAttrValue(out, langAttr.Content(), d.escapeNonASCII))
+		d.writeString(out, `"`)
 	} else if xmlLangAttr != nil && langAttr == nil {
-		_, _ = io.WriteString(out, ` lang="`)
-		_ = escapeAttrValue(out, xmlLangAttr.Content(), d.escapeNonASCII)
-		_, _ = io.WriteString(out, `"`)
+		d.writeString(out, ` lang="`)
+		d.check(escapeAttrValue(out, xmlLangAttr.Content(), d.escapeNonASCII))
+		d.writeString(out, `"`)
 	}
 }
 
@@ -265,7 +265,7 @@ func (d *writeSession) writeMetaContentType(out io.Writer) {
 	if enc == "" {
 		enc = "UTF-8"
 	}
-	_, _ = io.WriteString(out, `<meta http-equiv="Content-Type" content="text/html; charset=`)
-	_, _ = io.WriteString(out, enc)
-	_, _ = io.WriteString(out, `" />`)
+	d.writeString(out, `<meta http-equiv="Content-Type" content="text/html; charset=`)
+	d.writeString(out, enc)
+	d.writeString(out, `" />`)
 }

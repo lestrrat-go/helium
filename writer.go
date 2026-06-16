@@ -52,6 +52,47 @@ type writeSession struct {
 	isXHTML        bool
 	encoding       string // document encoding, used for XHTML meta injection
 	indent         int    // current indent depth (used when format is true)
+	err            error  // sticky write error; once set, further writes are skipped
+}
+
+// writeString writes str to out, recording the first error encountered into
+// s.err. Once s.err is set, subsequent writes are skipped so the sticky error
+// is preserved and propagated by the terminal serialization methods.
+func (s *writeSession) writeString(out io.Writer, str string) {
+	if s.err != nil {
+		return
+	}
+	n, err := io.WriteString(out, str)
+	if err != nil {
+		s.err = err
+		return
+	}
+	if n != len(str) {
+		s.err = io.ErrShortWrite
+	}
+}
+
+// writeBytes writes b to out, recording the first error encountered into s.err.
+func (s *writeSession) writeBytes(out io.Writer, b []byte) {
+	if s.err != nil {
+		return
+	}
+	n, err := out.Write(b)
+	if err != nil {
+		s.err = err
+		return
+	}
+	if n != len(b) {
+		s.err = io.ErrShortWrite
+	}
+}
+
+// check records err into the sticky s.err (keeping the first one) so callers
+// that obtain an error from a leaf helper can funnel it through the session.
+func (s *writeSession) check(err error) {
+	if s.err == nil && err != nil {
+		s.err = err
+	}
 }
 
 // NewWriter creates a new Writer with default settings.
@@ -118,7 +159,7 @@ func (s *writeSession) writeIndent(out io.Writer) {
 	}
 	str := s.indentStr()
 	for range s.indent {
-		_, _ = io.WriteString(out, str)
+		s.writeString(out, str)
 	}
 }
 
@@ -196,9 +237,9 @@ func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 				return err
 			}
 		}
-		_, _ = io.WriteString(out, "\n")
+		s.writeString(out, "\n")
 	}
-	return nil
+	return s.err
 }
 
 func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
@@ -211,25 +252,25 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 	if !ok {
 		return nil
 	}
-	_, _ = io.WriteString(out, `<?xml version="`)
+	d.writeString(out, `<?xml version="`)
 	version := doc.Version()
 	if version == "" {
 		version = "1.0"
 	}
-	_, _ = io.WriteString(out, version+`"`)
+	d.writeString(out, version+`"`)
 
 	if encoding := doc.encoding; encoding != "" {
-		_, _ = io.WriteString(out, ` encoding="`+encoding+`"`)
+		d.writeString(out, ` encoding="`+encoding+`"`)
 	}
 
 	switch doc.Standalone() {
 	case StandaloneExplicitNo:
-		_, _ = io.WriteString(out, ` standalone="`+lexicon.ValueNo+`"`)
+		d.writeString(out, ` standalone="`+lexicon.ValueNo+`"`)
 	case StandaloneExplicitYes:
-		_, _ = io.WriteString(out, ` standalone="`+lexicon.ValueYes+`"`)
+		d.writeString(out, ` standalone="`+lexicon.ValueYes+`"`)
 	}
-	_, _ = io.WriteString(out, "?>\n")
-	return nil
+	d.writeString(out, "?>\n")
+	return d.err
 }
 
 // writeNode is the internal implementation for node serialization.
@@ -254,27 +295,27 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		}
 		return nil
 	case CommentNode:
-		_, _ = io.WriteString(out, "<!--")
-		_, _ = out.Write(n.Content())
-		_, _ = io.WriteString(out, "-->")
-		return nil
+		d.writeString(out, "<!--")
+		d.writeBytes(out, n.Content())
+		d.writeString(out, "-->")
+		return d.err
 	case ProcessingInstructionNode:
 		// Mirrors xmlsave.c XML_PI_NODE handling.
 		if pi, ok := AsNode[*ProcessingInstruction](n); ok {
-			_, _ = io.WriteString(out, "<?")
-			_, _ = io.WriteString(out, pi.target)
+			d.writeString(out, "<?")
+			d.writeString(out, pi.target)
 			if pi.data != "" {
-				_, _ = io.WriteString(out, " ")
-				_, _ = io.WriteString(out, pi.data)
+				d.writeString(out, " ")
+				d.writeString(out, pi.data)
 			}
-			_, _ = io.WriteString(out, "?>")
+			d.writeString(out, "?>")
 		}
-		return nil
+		return d.err
 	case EntityRefNode:
-		_, _ = io.WriteString(out, "&")
-		_, _ = io.WriteString(out, n.Name())
-		_, _ = io.WriteString(out, ";")
-		return nil
+		d.writeString(out, "&")
+		d.writeString(out, n.Name())
+		d.writeString(out, ";")
+		return d.err
 	case TextNode:
 		c := n.Content()
 		if n.Name() == xmlTextNoEnc {
@@ -296,25 +337,25 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		// Splits content on "]]>" sequences so the output is well-formed.
 		c := n.Content()
 		if len(c) == 0 {
-			_, _ = io.WriteString(out, "<![CDATA[]]>")
+			d.writeString(out, "<![CDATA[]]>")
 		} else {
 			start := 0
 			for i := 0; i+2 < len(c); i++ {
 				if c[i] == ']' && c[i+1] == ']' && c[i+2] == '>' {
 					end := i + 2
-					_, _ = io.WriteString(out, "<![CDATA[")
-					_, _ = out.Write(c[start:end])
-					_, _ = io.WriteString(out, "]]>")
+					d.writeString(out, "<![CDATA[")
+					d.writeBytes(out, c[start:end])
+					d.writeString(out, "]]>")
 					start = end
 				}
 			}
 			if start < len(c) {
-				_, _ = io.WriteString(out, "<![CDATA[")
-				_, _ = out.Write(c[start:])
-				_, _ = io.WriteString(out, "]]>")
+				d.writeString(out, "<![CDATA[")
+				d.writeBytes(out, c[start:])
+				d.writeString(out, "]]>")
 			}
 		}
-		return nil
+		return d.err
 	case ElementDeclNode:
 		if edecl, ok := AsNode[*ElementDecl](n); ok {
 			if err = d.dumpElementDecl(out, edecl); err != nil {
@@ -364,8 +405,12 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		name = n.Name()
 	}
 
-	_, _ = io.WriteString(out, "<")
-	_, _ = io.WriteString(out, name)
+	d.writeString(out, "<")
+	d.writeString(out, name)
+
+	if d.err != nil {
+		return d.err
+	}
 
 	if len(nslist) > 0 {
 		if err := d.dumpNsList(out, nslist); err != nil {
@@ -376,7 +421,10 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
 			g := pdebug.IPrintf("START WriteNode(fallthrough->attribute(%s))", attr.Name())
-			_, _ = io.WriteString(out, " "+attr.Name()+`="`)
+			d.writeString(out, " "+attr.Name()+`="`)
+			if d.err != nil {
+				return d.err
+			}
 			count := 0
 			for achld := range Children(attr) {
 				count++
@@ -390,7 +438,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 					}
 				}
 			}
-			_, _ = io.WriteString(out, `"`)
+			d.writeString(out, `"`)
 			g.IRelease("END DUmpNode(fallthrough->attribute(%s))", attr.Name())
 			a := attr.NextSibling()
 			if a == nil {
@@ -403,22 +451,22 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 
 		if child := e.FirstChild(); child == nil {
 			if d.noEmpty {
-				_, _ = io.WriteString(out, "></")
-				_, _ = io.WriteString(out, name)
-				_, _ = io.WriteString(out, ">")
+				d.writeString(out, "></")
+				d.writeString(out, name)
+				d.writeString(out, ">")
 			} else {
-				_, _ = io.WriteString(out, "/>")
+				d.writeString(out, "/>")
 			}
-			return nil
+			return d.err
 		}
 	}
 
-	_, _ = io.WriteString(out, ">")
+	d.writeString(out, ">")
 
 	if child := n.FirstChild(); child != nil {
 		textOnly := d.format && hasOnlyTextChildren(n)
 		if d.format && !textOnly {
-			_, _ = io.WriteString(out, "\n")
+			d.writeString(out, "\n")
 			d.indent++
 		}
 		for ; child != nil; child = child.NextSibling() {
@@ -429,7 +477,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				return err
 			}
 			if d.format && !textOnly {
-				_, _ = io.WriteString(out, "\n")
+				d.writeString(out, "\n")
 			}
 		}
 		if d.format && !textOnly {
@@ -438,9 +486,9 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		}
 	}
 
-	_, _ = io.WriteString(out, "</")
-	_, _ = io.WriteString(out, name)
-	_, _ = io.WriteString(out, ">")
+	d.writeString(out, "</")
+	d.writeString(out, name)
+	d.writeString(out, ">")
 
-	return nil
+	return d.err
 }
