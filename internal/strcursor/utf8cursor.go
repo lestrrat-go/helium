@@ -508,7 +508,7 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 	} else {
 		_ = c.fillBuffer(utf8.UTFMax)
 		r, w := utf8.DecodeRune(c.buf[c.bufpos:c.buflen])
-		if r == utf8.RuneError || !xmlchar.IsNCNameStartChar(r) {
+		if (r == utf8.RuneError && w == 1) || !xmlchar.IsNCNameStartChar(r) {
 			return nil, 0
 		}
 		off += w
@@ -539,7 +539,7 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 		} else {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 			r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-			if r == utf8.RuneError || !xmlchar.IsNCNameChar(r) {
+			if (r == utf8.RuneError && w == 1) || !xmlchar.IsNCNameChar(r) {
 				break
 			}
 			off += w

@@ -149,3 +149,12 @@ func TestIsNCNameChar(t *testing.T) {
 		})
 	}
 }
+
+func TestIsValidNCNameWidthAware(t *testing.T) {
+	t.Parallel()
+	require.True(t, xmlchar.IsValidNCName("a�b"), "valid U+FFFD must be accepted")
+	require.True(t, xmlchar.IsValidNCName("�"), "U+FFFD is a valid NCNameStartChar")
+	require.False(t, xmlchar.IsValidNCName(string([]byte{0xff})), "invalid UTF-8 must be rejected")
+	require.True(t, xmlchar.IsValidNCName("abc"))
+	require.False(t, xmlchar.IsValidNCName("1abc"))
+}

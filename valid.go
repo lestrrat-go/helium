@@ -96,12 +96,12 @@ func isValidName(s string) bool {
 		return false
 	}
 	r, size := utf8.DecodeRuneInString(s)
-	if r == utf8.RuneError || !isValidNameStartChar(r) {
+	if (r == utf8.RuneError && size == 1) || !isValidNameStartChar(r) {
 		return false
 	}
 	for i := size; i < len(s); {
 		r, size = utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError || !isValidNameChar(r) {
+		if (r == utf8.RuneError && size == 1) || !isValidNameChar(r) {
 			return false
 		}
 		i += size
@@ -117,7 +117,7 @@ func isValidNmtoken(s string) bool {
 	}
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError || !isValidNameChar(r) {
+		if (r == utf8.RuneError && size == 1) || !isValidNameChar(r) {
 			return false
 		}
 		i += size
