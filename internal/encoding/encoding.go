@@ -38,11 +38,14 @@ func Load(name string) enc.Encoding {
 	case "usascii", "ascii", "ansix341968", "csascii":
 		return unicode.UTF8
 	case "utf16le", "unicodefeff":
-		return unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM)
+		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM), 2, orderLE2, false)
 	case "utf16be", "unicodefffe":
-		return unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM)
+		return withStrictDecode(unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM), 2, orderBE2, false)
 	case "utf16", "unicode", "csunicode":
-		return unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)
+		// UseBOM with LittleEndian default: x/text's decoder falls back to the
+		// configured default (LE) when no BOM is present, so the validator's
+		// no-BOM order must be LE to match.
+		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.UseBOM), 2, orderLE2, true)
 	case "eucjp", "xeucjp", "cseucpkdfmtjapanese":
 		return japanese.EUCJP
 	case "shiftjis", "cp932", "sjis", "ms932", "mskanji", "windows31j", "xsjis", "csshiftjis":
@@ -128,17 +131,20 @@ func Load(name string) enc.Encoding {
 	case "ibm1141", "ibm01141", "cp1141", "ccsid01141":
 		return codePage1141
 	case "ucs4be", "utf32be", "iso10646ucs4":
-		return utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM)
+		return withStrictDecode(utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM), 4, orderBE4, false)
 	case "ucs4le", "utf32le":
-		return utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM)
+		return withStrictDecode(utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM), 4, orderLE4, false)
 	case "ucs4", "utf32":
-		return utf32.UTF32(utf32.BigEndian, utf32.UseBOM)
+		// UseBOM with BigEndian default: x/text's decoder falls back to the
+		// configured default (BE) when no BOM is present, so the validator's
+		// no-BOM order must be BE to match.
+		return withStrictDecode(utf32.UTF32(utf32.BigEndian, utf32.UseBOM), 4, orderBE4, true)
 	case "ucs42143":
-		return &ucs4SwapEncoding{swap: swap2143}
+		return withStrictDecode(&ucs4SwapEncoding{swap: swap2143}, 4, order2143, false)
 	case "ucs43412":
-		return &ucs4SwapEncoding{swap: swap3412}
+		return withStrictDecode(&ucs4SwapEncoding{swap: swap3412}, 4, order3412, false)
 	case "ucs2", "iso10646ucs2":
-		return unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM)
+		return withStrictDecode(unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM), 2, orderBE2, false)
 	}
 	return nil
 }
