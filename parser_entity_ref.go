@@ -547,6 +547,12 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 				err = errors.New("invalid hex CharRef")
 				return
 			}
+			// Stop accumulating once the value is out of range so an
+			// oversized reference cannot wrap int32 into a valid-looking rune.
+			if val > unicode.MaxRune {
+				err = ErrInvalidChar
+				return
+			}
 			if err := cur.Advance(1); err != nil {
 				return utf8.RuneError, err
 			}
@@ -563,6 +569,12 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 				val = val*10 + int32(c-'0')
 			} else {
 				err = errors.New("invalid decimal CharRef")
+				return
+			}
+			// Stop accumulating once the value is out of range so an
+			// oversized reference cannot wrap int32 into a valid-looking rune.
+			if val > unicode.MaxRune {
+				err = ErrInvalidChar
 				return
 			}
 			if err := cur.Advance(1); err != nil {
