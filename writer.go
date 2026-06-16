@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"errors"
 	"io"
 	"strings"
 
@@ -295,6 +296,13 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		}
 		return nil
 	case CommentNode:
+		// A comment must not contain "--" or end with "-" (that would form
+		// "--->" with the closing delimiter), else the output is not well-formed.
+		content := string(n.Content())
+		if strings.Contains(content, "--") || strings.HasSuffix(content, "-") {
+			d.err = errors.New("helium: comment content must not contain \"--\" or end with \"-\"")
+			return d.err
+		}
 		d.writeString(out, "<!--")
 		d.writeBytes(out, n.Content())
 		d.writeString(out, "-->")
@@ -302,6 +310,11 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	case ProcessingInstructionNode:
 		// Mirrors xmlsave.c XML_PI_NODE handling.
 		if pi, ok := AsNode[*ProcessingInstruction](n); ok {
+			// PI data must not contain "?>", which would terminate the PI early.
+			if strings.Contains(pi.data, "?>") {
+				d.err = errors.New("helium: PI content must not contain \"?>\"")
+				return d.err
+			}
 			d.writeString(out, "<?")
 			d.writeString(out, pi.target)
 			if pi.data != "" {

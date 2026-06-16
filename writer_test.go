@@ -552,3 +552,22 @@ func TestDumpQuotingViaPublicAPI(t *testing.T) {
 		})
 	}
 }
+func TestWriteRejectsMalformedCommentPI(t *testing.T) {
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+
+	var sb strings.Builder
+	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("a--b"))),
+		"comment containing -- must be rejected")
+	sb.Reset()
+	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("a-"))),
+		"comment ending in - must be rejected")
+	sb.Reset()
+	require.Error(t, helium.Write(&sb, doc.CreatePI("t", "a?>b")),
+		"PI content containing ?> must be rejected")
+
+	// Valid comment/PI still serialize.
+	sb.Reset()
+	require.NoError(t, helium.Write(&sb, doc.CreateComment([]byte(" ok "))))
+	sb.Reset()
+	require.NoError(t, helium.Write(&sb, doc.CreatePI("php", "echo 1")))
+}
