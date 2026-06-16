@@ -175,6 +175,90 @@ func (w *namespaceFailWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// errShortWrite is returned by failAfterNWriter once its byte budget runs out.
+var errShortWrite = errors.New("short write")
+
+// failAfterNWriter accepts up to limit bytes and then fails every subsequent
+// write, simulating an io.Writer that breaks mid-stream.
+type failAfterNWriter struct {
+	limit   int
+	written int
+}
+
+func (w *failAfterNWriter) Write(p []byte) (int, error) {
+	if w.written >= w.limit {
+		return 0, errShortWrite
+	}
+	remaining := w.limit - w.written
+	if len(p) <= remaining {
+		w.written += len(p)
+		return len(p), nil
+	}
+	w.written = w.limit
+	return remaining, errShortWrite
+}
+
+// docWithEverything builds a document that exercises the XML declaration, a
+// DTD (with ENTITY/ELEMENT/ATTLIST/NOTATION decls), comments, PIs, an entity
+// reference, CDATA, and nested elements with attributes.
+const docWithEverything = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+<!ELEMENT root (child*)>
+<!ATTLIST root id CDATA #IMPLIED>
+<!ENTITY greeting "hello">
+<!NOTATION gif SYSTEM "image/gif">
+]>
+<!--a top level comment-->
+<?app instruction?>
+<root id="r1"><child>&greeting; world</child><child><![CDATA[<raw> & data]]></child></root>`
+
+func TestWritePropagatesWriteError(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(docWithEverything))
+	require.NoError(t, err)
+
+	// Determine the full serialized length so we can fail at every prefix.
+	full, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.NotEmpty(t, full)
+
+	// Failing immediately must surface a non-nil error (previously nil).
+	require.ErrorIs(t, helium.Write(&failAfterNWriter{limit: 0}, doc), errShortWrite,
+		"serialization must report the writer error")
+
+	// Failing at any intermediate offset must also surface a non-nil error.
+	for limit := 1; limit < len(full); limit += 7 {
+		err := helium.Write(&failAfterNWriter{limit: limit}, doc)
+		require.Errorf(t, err, "write that fails after %d bytes must return an error", limit)
+	}
+}
+
+func TestWriteOutputUnchanged(t *testing.T) {
+	t.Parallel()
+
+	// The success path must remain byte-for-byte identical after routing all
+	// writes through the sticky-error session helpers.
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(docWithEverything))
+	require.NoError(t, err)
+
+	str, err := helium.WriteString(doc)
+	require.NoError(t, err)
+
+	expected := `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+<!ELEMENT root (child)*>
+<!ATTLIST root id CDATA #IMPLIED>
+<!ENTITY greeting "hello">
+<!NOTATION gif SYSTEM "image/gif" >
+]>
+<!--a top level comment-->
+<?app instruction?>
+<root id="r1"><child>&greeting; world</child><child><![CDATA[<raw> & data]]></child></root>
+`
+	require.Equal(t, expected, str)
+}
+
 func TestFormatOutput(t *testing.T) {
 	t.Parallel()
 
