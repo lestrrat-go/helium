@@ -1,6 +1,15 @@
 // Package xmlchar provides XML 1.0 NCName character classification functions.
 package xmlchar
 
+// IsChar reports whether r is a valid XML 1.0 §2.2 Char.
+// Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+func IsChar(r rune) bool {
+	if r < 0x100 {
+		return r == 0x9 || r == 0xA || r == 0xD || r >= 0x20
+	}
+	return (r >= 0x100 && r <= 0xD7FF) || (r >= 0xE000 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0x10FFFF)
+}
+
 // IsNCNameStartChar checks the XML 1.0 NCName start character production.
 // NCNameStartChar ::= [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6]
 //

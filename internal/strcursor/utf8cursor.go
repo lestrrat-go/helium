@@ -725,7 +725,7 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 		if r == utf8.RuneError || w == 0 {
 			break
 		}
-		if r < 0x20 {
+		if !xmlchar.IsChar(r) {
 			break
 		}
 		dst = append(dst, data[off:off+w]...)
@@ -791,7 +791,7 @@ func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
 		if r == utf8.RuneError || w == 0 {
 			break
 		}
-		if r < 0x20 {
+		if !xmlchar.IsChar(r) {
 			break
 		}
 		dst.Write(c.buf[c.bufpos+off : c.bufpos+off+w])

@@ -38,6 +38,37 @@ func TestIsValidNCName(t *testing.T) {
 	}
 }
 
+func TestIsChar(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		r    rune
+		want bool
+	}{
+		{0x8, false},      // backspace, control
+		{0x9, true},       // tab
+		{0xA, true},       // LF
+		{0xD, true},       // CR
+		{0x1F, false},     // unit separator, control
+		{0x20, true},      // space
+		{0xD7FF, true},    // last before surrogate range
+		{0xD800, false},   // surrogate
+		{0xDFFF, false},   // surrogate
+		{0xE000, true},    // first after surrogate range
+		{0xFFFD, true},    // replacement char (valid Char)
+		{0xFFFE, false},   // non-character
+		{0xFFFF, false},   // non-character
+		{0x10000, true},   // first supplementary
+		{0x10FFFF, true},  // last valid code point
+		{0x110000, false}, // beyond Unicode range
+	}
+	for _, tt := range tests {
+		t.Run(string(rune(tt.r)), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, xmlchar.IsChar(tt.r), "IsChar(%#x)", tt.r)
+		})
+	}
+}
+
 func TestIsNCNameStartChar(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
