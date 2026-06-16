@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"context"
+	"iter"
 	"math/big"
 	"runtime"
 	"testing"
@@ -34,10 +35,10 @@ type typedUserFunc struct {
 func (f typedUserFunc) FuncParamTypes() []xpath3.SequenceType { return f.params }
 func (f typedUserFunc) FuncReturnType() *xpath3.SequenceType  { return f.ret }
 
-func stType(name string, occ xpath3.Occurrence) xpath3.SequenceType {
+func stType(name string) xpath3.SequenceType {
 	return xpath3.SequenceType{
 		ItemTest:   xpath3.AtomicOrUnionType{Prefix: "xs", Name: name},
-		Occurrence: occ,
+		Occurrence: xpath3.OccurrenceExactlyOne,
 	}
 }
 
@@ -85,7 +86,7 @@ func TestUserOverrideSkipsBuiltinSignature(t *testing.T) {
 func TestTypedUserFunctionObservesCoercedArg(t *testing.T) {
 	t.Parallel()
 
-	dbl := stType("double", xpath3.OccurrenceExactlyOne)
+	dbl := stType("double")
 	var observed string
 	lib := xpath3.NewFunctionLibrary()
 	lib.Set("takes-double", typedUserFunc{
@@ -126,7 +127,7 @@ func TestTypedUserFunctionObservesCoercedArg(t *testing.T) {
 func TestTypedUserFunctionAnyAtomicAcceptsNode(t *testing.T) {
 	t.Parallel()
 
-	anyAtomic := stType("anyAtomicType", xpath3.OccurrenceExactlyOne)
+	anyAtomic := stType("anyAtomicType")
 
 	newLib := func(observed *string) *xpath3.FunctionLibrary {
 		lib := xpath3.NewFunctionLibrary()
@@ -437,4 +438,219 @@ func TestSignatureGateRejectsLongSequencePromptly(t *testing.T) {
 	require.Less(t, elapsed, 200*time.Millisecond, "should reject without atomizing whole range")
 	allocKB := (m2.TotalAlloc - m1.TotalAlloc) / 1024
 	require.Less(t, allocKB, uint64(50*1024), "should not allocate the whole atomized sequence")
+}
+
+// countingSequence is a lazy Sequence that records how far it was actually
+// iterated. It lets a test prove that a function whose parameter is item()* /
+// item()+ does NOT force the whole sequence through the signature gate.
+type countingSequence struct {
+	n        int
+	maxIndex *int // highest index materialized (-1 if never)
+}
+
+func (c countingSequence) note(i int) xpath3.Item {
+	if i > *c.maxIndex {
+		*c.maxIndex = i
+	}
+	return xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(i + 1)}
+}
+
+func (c countingSequence) Len() int              { return c.n }
+func (c countingSequence) Get(i int) xpath3.Item { return c.note(i) }
+func (c countingSequence) Materialize() []xpath3.Item {
+	out := make([]xpath3.Item, c.n)
+	for i := range out {
+		out[i] = c.note(i)
+	}
+	return out
+}
+func (c countingSequence) Items() iter.Seq[xpath3.Item] {
+	return func(yield func(xpath3.Item) bool) {
+		for i := range c.n {
+			if !yield(c.note(i)) {
+				return
+			}
+		}
+	}
+}
+
+// Finding 1 (round 7): the signature gate must NOT iterate a lazy sequence when
+// the parameter item type is item() — count()/exists() (item()* param) read only
+// Len(), so the gate must stay lazy and never touch a single element. The lazy
+// sequence is produced by a registered function so it reaches the gate without
+// being materialized by variable cloning.
+func TestSignatureGateKeepsItemStarLazy(t *testing.T) {
+	t.Parallel()
+
+	for _, fn := range []string{"count", "exists"} {
+		t.Run(fn, func(t *testing.T) {
+			maxIdx := -1
+			lib := xpath3.NewFunctionLibrary()
+			lib.Set("make-lazy", userFunc{
+				min: 0, max: 0,
+				call: func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+					return countingSequence{n: 1000, maxIndex: &maxIdx}, nil
+				},
+			})
+			_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				Functions(lib).
+				Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(fn+"(make-lazy())"), nil)
+			require.NoError(t, err)
+			require.Equal(t, -1, maxIdx, "item()* gate must not iterate the lazy sequence")
+		})
+	}
+}
+
+// Finding 1 (round 7): count(1 to N) / exists(1 to N) over a huge lazy range must
+// return promptly without materializing the range — the item()* gate must not
+// force iteration.
+func TestSignatureGateLargeRangeIsLazy(t *testing.T) {
+	t.Parallel()
+
+	for expr, check := range map[string]func(*xpath3.Result){
+		`count(1 to 9000000)`: func(r *xpath3.Result) {
+			n, ok := r.IsNumber()
+			require.True(t, ok)
+			require.Equal(t, float64(9000000), n)
+		},
+		`exists(1 to 9000000)`: func(r *xpath3.Result) {
+			b, ok := r.IsBoolean()
+			require.True(t, ok)
+			require.True(t, b)
+		},
+	} {
+		var m1, m2 runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&m1)
+		start := time.Now()
+		result, err := evaluate(t.Context(), nil, expr)
+		elapsed := time.Since(start)
+		runtime.ReadMemStats(&m2)
+
+		require.NoError(t, err, expr)
+		check(result)
+		require.Less(t, elapsed, 200*time.Millisecond, "%s must stay lazy", expr)
+		allocKB := (m2.TotalAlloc - m1.TotalAlloc) / 1024
+		require.Less(t, allocKB, uint64(50*1024), "%s must not materialize the range", expr)
+	}
+}
+
+// Finding 1 (round 7): the item()+ gate must still reject an EMPTY sequence
+// (cardinality), and item()* must still accept it — without iterating.
+func TestSignatureGateItemPlusCardinality(t *testing.T) {
+	t.Parallel()
+
+	// fn:head has signature item()* — empty input is fine.
+	result, err := evaluate(t.Context(), nil, `count(head(()))`)
+	require.NoError(t, err)
+	n, ok := result.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(0), n)
+}
+
+// typedDoubleLib registers a TypedFunction "takes-double" (xs:double param) that
+// records the observed atomized type of its argument.
+func typedDoubleLib(observed *string) *xpath3.FunctionLibrary {
+	dbl := stType("double")
+	lib := xpath3.NewFunctionLibrary()
+	lib.Set("takes-double", typedUserFunc{
+		userFunc: userFunc{
+			min: 1, max: 1,
+			call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+				av, err := xpath3.AtomizeItem(args[0].Get(0))
+				if err != nil {
+					return nil, err
+				}
+				*observed = av.TypeName
+				return xpath3.SingleString(av.TypeName), nil
+			},
+		},
+		params: []xpath3.SequenceType{dbl},
+	})
+	return lib
+}
+
+// Finding 2 (round 7): partial application of a TypedFunction (xs:double param)
+// must enforce the signature on the placeholder-supplied argument — an xs:integer
+// must be promoted to xs:double, exactly as a direct call would.
+func TestPartialApplicationCoercesTypedParam(t *testing.T) {
+	t.Parallel()
+
+	var observed string
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(typedDoubleLib(&observed)).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`takes-double(?)(1)`), nil)
+	require.NoError(t, err)
+
+	require.Equal(t, xpath3.TypeDouble, observed, "placeholder arg must be coerced to xs:double")
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, xpath3.TypeDouble, s)
+}
+
+// Finding 2 (round 7): a non-coercible placeholder value supplied to a typed
+// partial application raises XPTY0004, just like a direct call.
+func TestPartialApplicationRejectsNonCoercible(t *testing.T) {
+	t.Parallel()
+
+	var observed string
+	_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(typedDoubleLib(&observed)).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`takes-double(?)(current-date())`), nil)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+}
+
+// Finding 2 (round 7): typed atomization errors (FORG0001) propagate unchanged
+// through partial application — an invalid xs:untypedAtomic→double cast must
+// surface FORG0001, not XPTY0004.
+func TestPartialApplicationPropagatesTypedError(t *testing.T) {
+	t.Parallel()
+
+	var observed string
+	_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(typedDoubleLib(&observed)).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`takes-double(?)(xs:untypedAtomic("abc"))`), nil)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "FORG0001", xpErr.Code)
+}
+
+// Finding 2 (round 7): a fixed (curried) argument must also be coerced — when the
+// double parameter is curried with an xs:integer literal, the body still observes
+// xs:double.
+func TestPartialApplicationCoercesFixedArg(t *testing.T) {
+	t.Parallel()
+
+	dbl := stType("double")
+	str := stType("string")
+	var observed string
+	lib := xpath3.NewFunctionLibrary()
+	lib.Set("takes-double-str", typedUserFunc{
+		userFunc: userFunc{
+			min: 2, max: 2,
+			call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+				av, err := xpath3.AtomizeItem(args[0].Get(0))
+				if err != nil {
+					return nil, err
+				}
+				observed = av.TypeName
+				return xpath3.SingleString(av.TypeName), nil
+			},
+		},
+		params: []xpath3.SequenceType{dbl, str},
+	})
+
+	// Curry the first (double) arg with an integer; the placeholder fills the string.
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(lib).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`takes-double-str(1, ?)("x")`), nil)
+	require.NoError(t, err)
+	require.Equal(t, xpath3.TypeDouble, observed, "curried integer must be coerced to xs:double")
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, xpath3.TypeDouble, s)
 }

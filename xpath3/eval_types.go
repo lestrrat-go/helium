@@ -318,6 +318,35 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 // errors take precedence over cardinality rejection, matching the spec ordering
 // (atomization happens before the occurrence check).
 func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequence, error) {
+	// Fast path: an item() item type matches any item, so per-item coercion is a
+	// no-op. Only the cardinality (occurrence) constraint can reject. Check it
+	// using seqLen — which is O(1) for every Sequence implementation (slice and
+	// lazy Range alike) — instead of iterating the sequence through
+	// matchesSequenceType. This preserves laziness for hot functions like
+	// fn:count / fn:exists (item()* / item()+ parameters) so a large lazy range
+	// (1 to N) is never materialized just to satisfy the signature gate.
+	if !st.Void {
+		if _, anyItem := st.ItemTest.(AnyItemTest); anyItem {
+			n := seqLen(seq)
+			switch st.Occurrence {
+			case OccurrenceExactlyOne:
+				if n != 1 {
+					return seq, errCoerceMismatch
+				}
+			case OccurrenceZeroOrOne:
+				if n > 1 {
+					return seq, errCoerceMismatch
+				}
+			case OccurrenceOneOrMore:
+				if n == 0 {
+					return seq, errCoerceMismatch
+				}
+			case OccurrenceZeroOrMore:
+				// any length ok
+			}
+			return seq, nil
+		}
+	}
 	if matchesSequenceType(seq, st, ec) {
 		return seq, nil
 	}
