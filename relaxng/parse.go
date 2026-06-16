@@ -381,21 +381,68 @@ func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href str
 	// path so the containment comparison below is meaningful. A non-file
 	// URI scheme (http, etc.) is not a local path, so there is nothing to
 	// contain and it is returned untouched.
+	//
+	// Scheme detection must anchor at the start of the string: a substring
+	// match on "://" would misclassify local paths such as
+	// "/tmp/x://../etc/passwd" as remote URIs and skip the containment
+	// check entirely.
 	checkPath := resolved
-	if strings.HasPrefix(checkPath, "file://") {
+	switch scheme := uriScheme(checkPath); {
+	case scheme == "file":
 		if u, err := url.Parse(checkPath); err == nil {
+			// Decode percent-escapes (e.g. "%2e%2e") so encoded traversal
+			// cannot slip past the containment comparison below.
 			checkPath = u.Path
+			if u.Host != "" {
+				checkPath = u.Host + u.Path
+			}
 		}
-	} else if strings.Contains(checkPath, "://") {
+	case scheme != "":
+		// A genuine non-file URI scheme (http, https, ...) is not a local
+		// path; there is nothing to contain.
 		return resolved, nil
 	}
 
-	if rel, err := filepath.Rel(c.baseDir, filepath.Clean(checkPath)); err == nil {
-		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("href %q escapes base directory", href)
-		}
+	// filepath.Rel fails when one path is absolute and the other relative
+	// (e.g. a relative baseDir against an absolute href). That mismatch is
+	// itself a containment failure: an absolute href can never be proven to
+	// live inside a relative baseDir, so reject rather than silently skip.
+	rel, err := filepath.Rel(c.baseDir, filepath.Clean(checkPath))
+	if err != nil {
+		return "", fmt.Errorf("href %q escapes base directory", href)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("href %q escapes base directory", href)
 	}
 	return resolved, nil
+}
+
+// uriScheme returns the URI scheme of s if s begins with a "<scheme>://"
+// prefix where <scheme> is a valid RFC 3986 scheme (ALPHA *( ALPHA / DIGIT
+// / "+" / "-" / "." )). It returns "" when s carries no leading scheme, so
+// local filesystem paths — even ones that happen to contain "://" later in
+// the string — are not mistaken for URIs.
+func uriScheme(s string) string {
+	i := strings.Index(s, "://")
+	if i <= 0 {
+		return ""
+	}
+	scheme := s[:i]
+	for j := range len(scheme) {
+		ch := scheme[j]
+		switch {
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z':
+			// always valid
+		case j == 0:
+			// first char must be a letter
+			return ""
+		case ch >= '0' && ch <= '9', ch == '+', ch == '-', ch == '.':
+			// valid in non-leading position
+		default:
+			return ""
+		}
+	}
+	return strings.ToLower(scheme)
 }
 
 // parseInclude parses an <include> element.
