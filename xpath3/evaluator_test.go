@@ -140,3 +140,23 @@ func TestEvaluator(t *testing.T) {
 		require.InDelta(t, 3.0, n, 0.001)
 	})
 }
+
+func TestDocEmptyArgFragmentBaseURI(t *testing.T) {
+	// doc("") resolves to the base URI verbatim. When that base URI carries a
+	// fragment identifier the call must raise FODC0005, the same as a fragment
+	// in an explicit argument.
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	expr, err := xpath3.NewCompiler().Compile(`doc("")`)
+	require.NoError(t, err)
+
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		BaseURI("file:///tmp/doc.xml#frag").
+		Evaluate(t.Context(), expr, doc)
+	require.Error(t, err)
+
+	var xerr *xpath3.XPathError
+	require.ErrorAs(t, err, &xerr)
+	require.Equal(t, "FODC0005", xerr.Code)
+}
