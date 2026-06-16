@@ -759,3 +759,69 @@ func TestFnRoundExtremePrecision(t *testing.T) {
 		})
 	}
 }
+
+// TestFnRoundDecimalHugePrecision verifies that the decimal half-to-even path
+// computes huge-but-representable coarse precisions exactly, rather than being
+// silently clamped to zero by a coarse downstream guard. The operand magnitude
+// bounds the scale, so the result must be the exact large value and return
+// promptly (no hang).
+func TestFnRoundDecimalHugePrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	// 6 followed by 4999 zeros, written as an xs:decimal (trailing ".0") so the
+	// decimal/icu path is exercised. At precision -5000 the magnitude boundary
+	// makes the value round up to 1 followed by 5000 zeros.
+	bigDecimal := "6" + strings.Repeat("0", 4999) + ".0"
+	bigRounded := "1" + strings.Repeat("0", 5000)
+
+	tests := []struct {
+		name   string
+		expr   string
+		expect string
+	}{
+		// Half-to-even decimal path, coarse precision past the clamp threshold.
+		{"halfeven decimal boundary up", `round-half-to-even(` + bigDecimal + `, -5000)`, bigRounded},
+		// Half-up decimal path with the same magnitude/precision.
+		{"halfup decimal boundary up", `round(` + bigDecimal + `, -5000)`, bigRounded},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			done := make(chan xpath3.Sequence, 1)
+			go func() {
+				done <- evalExpr(t, doc, tc.expr)
+			}()
+			var seq xpath3.Sequence
+			select {
+			case seq = <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatalf("round(%q) did not return promptly", tc.expr)
+			}
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			s, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, s)
+		})
+	}
+}
+
+// TestFnRoundPrecisionCardinality verifies that the second ($precision) argument
+// of fn:round / fn:round-half-to-even is a required singleton: a multi-item
+// sequence must raise XPTY0004 rather than silently using its first item.
+func TestFnRoundPrecisionCardinality(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	exprs := []string{
+		`round(1, (1, 2))`,
+		`round-half-to-even(1, (1, 2))`,
+	}
+	for _, expr := range exprs {
+		t.Run(expr, func(t *testing.T) {
+			compiled, err := xpath3.NewCompiler().Compile(expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+			require.Error(t, err, "expected error for %q", expr)
+			require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+		})
+	}
+}

@@ -158,7 +158,10 @@ const (
 // avoids the wrap that int(IntegerVal()) would introduce for out-of-int64
 // values.)
 func roundPrecisionArg(arg Sequence) (*big.Int, error) {
-	pa, err := AtomizeItem(arg.Get(0))
+	// $precision is a required singleton xs:integer: a multi-item sequence is a
+	// type error (XPTY0004). The empty case never reaches here — callers only
+	// invoke this when the argument has at least one item.
+	pa, err := extractSingleAtomicArg(arg, "round")
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +329,7 @@ func roundImpl(args []Sequence, halfToEven bool) (Sequence, error) {
 			p = -scale
 		}
 		if halfToEven {
-			return SingleDecimal(icu.RatRoundHalfToEven(r, p)), nil
+			return SingleDecimal(ratRoundPrecisionHalfToEven(r, p)), nil
 		}
 		if p == 0 {
 			return SingleDecimal(ratRound(r)), nil
@@ -712,6 +715,23 @@ func ratRoundPrecision(r *big.Rat, precision int) *big.Rat {
 	// Negative precision: round to 10^(-precision)
 	result := roundIntegerHalfUp(ratFloorInt(r), -precision)
 	return new(big.Rat).SetInt(result)
+}
+
+// ratRoundPrecisionHalfToEven rounds a *big.Rat to the given precision (number
+// of decimal places) using half-to-even rounding. Unlike the icu helper it
+// applies no coarse magnitude clamp: callers pass a precision whose scale has
+// already been bounded by the operand's own digit count (via resolveRoundScale),
+// so 10^|precision| is bounded by the operand and never astronomically large.
+func ratRoundPrecisionHalfToEven(r *big.Rat, precision int) *big.Rat {
+	if precision >= 0 {
+		scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(precision)), nil)
+		scaleRat := new(big.Rat).SetInt(scale)
+		shifted := new(big.Rat).Mul(r, scaleRat)
+		rounded := icu.RatRoundHalfToEvenInt(shifted)
+		return new(big.Rat).SetFrac(rounded, new(big.Int).Set(scale))
+	}
+	// Negative precision: round to 10^(-precision).
+	return new(big.Rat).SetInt(roundIntegerHalfToEven(ratFloorInt(r), -precision))
 }
 
 // ratFloorInt returns floor of a rational as big.Int.
