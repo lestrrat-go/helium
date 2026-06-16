@@ -18,7 +18,7 @@ import (
 func TestRegexMatchTimeout_BoundsCatastrophicBacktracking(t *testing.T) {
 	// regexp2's fastclock has ~100ms granularity, so a 150ms budget
 	// realizes as ~150-300ms wall time. The elapsed bound is well below
-	// the 1s default DefaultRegexMatchTimeout — a passing assertion
+	// the 5s default DefaultRegexMatchTimeout — a passing assertion
 	// here proves the lowered budget actually took effect.
 	const matchBudget = 150 * time.Millisecond
 	const elapsedBound = 750 * time.Millisecond
