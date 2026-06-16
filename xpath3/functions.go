@@ -399,18 +399,6 @@ func coerceToInteger(a AtomicValue) (AtomicValue, error) {
 	return a, nil
 }
 
-// seqToDouble atomizes the first item to a float64.
-func seqToDouble(seq Sequence) float64 {
-	if seqLen(seq) == 0 {
-		return 0
-	}
-	a, err := AtomizeItem(seq.Get(0))
-	if err != nil {
-		return 0
-	}
-	return a.ToFloat64()
-}
-
 func init() {
 	registerFn("boolean", 1, 1, fnBoolean)
 	registerFn("not", 1, 1, fnNot)

@@ -910,10 +910,14 @@ func (a ArrayItem) get0(index int) (Sequence, error) {
 
 // SubArray returns a new array from start to end (1-based, inclusive).
 func (a ArrayItem) SubArray(start, length int) (ArrayItem, error) {
-	if start < 1 || length < 0 || start+length-1 > len(a.members) {
+	size := len(a.members)
+	// Bounds are checked without forming start+length, which can overflow for
+	// huge positions and bypass the guard, leading to a make([]Sequence, length)
+	// panic. With start>=1 established first, size-start+1 cannot overflow.
+	if start < 1 || start > size+1 || length < 0 || length > size-start+1 {
 		return ArrayItem{}, &XPathError{
 			Code:    errCodeFOAY0001,
-			Message: fmt.Sprintf("array subarray(%d, %d) out of bounds (size %d)", start, length, len(a.members)),
+			Message: fmt.Sprintf("array subarray(%d, %d) out of bounds (size %d)", start, length, size),
 		}
 	}
 	newMembers := make([]Sequence, length)
