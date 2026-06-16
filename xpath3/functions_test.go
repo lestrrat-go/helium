@@ -614,3 +614,54 @@ func TestFnImplicitTimezoneReturnsDuration(t *testing.T) {
 	require.Len(t, atomics, 1)
 	require.Equal(t, xpath3.TypeDayTimeDuration, atomics[0].TypeName)
 }
+
+// TestFnSequenceIntegerCardinalityArgs verifies fn:remove/fn:insert-before/
+// fn:subsequence enforce integer/cardinality rules on their position args
+// instead of wrapping (big.Int) or silently ignoring extra/invalid items.
+func TestFnSequenceIntegerCardinalityArgs(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErrCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: code}, "expected %s for %q", code, expr)
+	}
+	evalStrings := func(t *testing.T, expr string) []string {
+		t.Helper()
+		seq := evalExpr(t, doc, expr)
+		out := make([]string, seq.Len())
+		for i := range seq.Len() {
+			out[i] = seq.Get(i).(xpath3.AtomicValue).StringVal()
+		}
+		return out
+	}
+
+	t.Run("XPTY0004", func(t *testing.T) {
+		for _, expr := range []string{
+			`insert-before(("a"), "not-a-position", "b")`,
+			`insert-before(("a"), 2.9, "b")`,
+			`insert-before(("a"), (1, 2), "b")`,
+			`subsequence(("a","b","c"), (2, 3))`,
+			`subsequence(("a","b","c"), 2, (1, 2))`,
+		} {
+			t.Run(expr, func(t *testing.T) { evalErrCode(t, expr, "XPTY0004") })
+		}
+	})
+
+	t.Run("oversized integer leaves fn:remove unchanged", func(t *testing.T) {
+		require.Equal(t, []string{"a", "b"}, evalStrings(t, `remove(("a","b"), 18446744073709551617)`))
+		require.Equal(t, []string{"a", "b"}, evalStrings(t, `remove(("a","b"), -18446744073709551617)`))
+	})
+
+	t.Run("valid still works", func(t *testing.T) {
+		require.Equal(t, []string{"b"}, evalStrings(t, `remove(("a","b"), 1)`))
+		require.Equal(t, []string{"x", "a", "b"}, evalStrings(t, `insert-before(("a","b"), 1, "x")`))
+		require.Equal(t, []string{"a", "b", "x"}, evalStrings(t, `insert-before(("a","b"), 99, "x")`))
+		require.Equal(t, []string{"b", "c"}, evalStrings(t, `subsequence(("a","b","c"), 2)`))
+		require.Equal(t, []string{"b"}, evalStrings(t, `subsequence(("a","b","c"), 2, 1)`))
+		require.Equal(t, []string{"c"}, evalStrings(t, `subsequence(("a","b","c"), 2.6)`))
+	})
+}
