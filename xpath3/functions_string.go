@@ -108,7 +108,7 @@ func fnCodepointsToString(ctx context.Context, args []Sequence) (Sequence, error
 			return nil, err
 		}
 		if !isValid(cp) {
-			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
+			return nil, &XPathError{Code: lexicon.ErrFOCH0001, Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
 		}
 		return SingleString(string(rune(cp))), nil
 	}
@@ -120,7 +120,7 @@ func fnCodepointsToString(ctx context.Context, args []Sequence) (Sequence, error
 			return nil, err
 		}
 		if !isValid(cp) {
-			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
+			return nil, &XPathError{Code: lexicon.ErrFOCH0001, Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
 		}
 		b.WriteRune(rune(cp))
 	}
@@ -146,17 +146,49 @@ func itemToCodepoint(item Item) (int, error) {
 			// A value beyond int64 range cannot be a valid XML codepoint;
 			// Int64() would silently wrap mod 2^64, so reject it here.
 			if !n.IsInt64() {
-				return 0, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [%s]", n.String())}
+				return 0, &XPathError{Code: lexicon.ErrFOCH0001, Message: fmt.Sprintf("invalid XML character [%s]", n.String())}
 			}
-			return int(n.Int64()), nil
+			v := n.Int64()
+			// Validate the codepoint range BEFORE the int conversion: on 32-bit
+			// platforms int(v) for an out-of-range v wraps/truncates, which would
+			// let a spurious value pass the later isValid check.
+			if v < 0 || v > utf8.MaxRune {
+				return 0, &XPathError{Code: lexicon.ErrFOCH0001, Message: fmt.Sprintf("invalid XML character [%d]", v)}
+			}
+			return int(v), nil
 		}
+	}
+	// xs:decimal is stored as *big.Rat. Check integrality exactly here rather
+	// than via float64: a high-precision fractional decimal such as
+	// 65.000000000000000000000000001 rounds to an integer float64 and would
+	// otherwise slip past the fractional check below.
+	if r, ok := a.Value.(*big.Rat); ok {
+		if !r.IsInt() {
+			return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("codepoints-to-string: non-integer codepoint %s", r.RatString())}
+		}
+		n := r.Num()
+		if !n.IsInt64() {
+			return 0, &XPathError{Code: lexicon.ErrFOCH0001, Message: fmt.Sprintf("invalid XML character [%s]", n.String())}
+		}
+		v := n.Int64()
+		if v < 0 || v > utf8.MaxRune {
+			return 0, &XPathError{Code: lexicon.ErrFOCH0001, Message: fmt.Sprintf("invalid XML character [%d]", v)}
+		}
+		return int(v), nil
 	}
 	// Non-integer fallback: a fractional value is not a valid codepoint.
 	// Reject it as a type error, but keep accepting integer-valued floats
 	// (e.g. 65.0) so arithmetic-derived integer values still work.
 	f := a.ToFloat64()
-	if f != math.Trunc(f) {
+	if math.IsNaN(f) || math.IsInf(f, 0) || f != math.Trunc(f) {
 		return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("codepoints-to-string: non-integer codepoint %v", f)}
+	}
+	// Validate the codepoint range BEFORE the int conversion: converting an
+	// out-of-range float64 to int is implementation-defined in Go (it can wrap
+	// or overflow, especially on 32-bit platforms), which would let a spurious
+	// value slip past the later isValid check.
+	if f < 0 || f > utf8.MaxRune {
+		return 0, &XPathError{Code: lexicon.ErrFOCH0001, Message: fmt.Sprintf("invalid XML character [%v]", f)}
 	}
 	return int(f), nil
 }
