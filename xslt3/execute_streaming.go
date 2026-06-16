@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"os"
 	"slices"
 	"strings"
 
@@ -39,7 +38,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 	cacheKey := ec.docCacheKey(resolvedURI)
 	doc, ok := ec.docCache[cacheKey]
 	if !ok {
-		data, err := os.ReadFile(resolvedURI)
+		data, err := ec.retrieveDocumentBytes(ctx, resolvedURI)
 		if err != nil {
 			return dynamicError(errCodeFODC0002, "xsl:source-document cannot load %q: %v", uri, err)
 		}
@@ -1282,7 +1281,7 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 		return doc, nil
 	}
 
-	data, readErr := os.ReadFile(resolvedURI)
+	data, readErr := ec.retrieveDocumentBytes(ctx, resolvedURI)
 	if readErr != nil {
 		return nil, dynamicError(errCodeFODC0002, "xsl:merge cannot load %q: %v", uri, readErr)
 	}

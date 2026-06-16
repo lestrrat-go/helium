@@ -418,6 +418,13 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 // retrieval is opt-in. Callers grant access by setting
 // [Invocation.URIResolver] and/or [Invocation.HTTPClient]. Mirrors the
 // secure-by-default fn:doc retrieval landed in #417 for xpath3.
+//
+// All runtime resource loading routes through here: fn:doc/document(),
+// xsl:source-document, xsl:merge, fn:stream-available, and the runtime
+// output-format parameter document. Compile-time stylesheet loading
+// (xsl:import/include, output-format parameter docs, fn:transform
+// stylesheet-location) is likewise opt-in via [Compiler.URIResolver];
+// there is no implicit filesystem access anywhere in xslt3.
 func (ec *execContext) retrieveDocumentBytes(ctx context.Context, resolvedURI string) ([]byte, error) {
 	// URI schemes are case-insensitive per RFC 3986; url.Parse lowercases
 	// .Scheme so the equality compares are scheme-correct regardless of

@@ -2,8 +2,8 @@ package xslt3
 
 import (
 	"context"
+	"io"
 	"maps"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -480,20 +480,34 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 // and applies its settings to the given OutputDef. Parameters explicitly set on
 // the xsl:output element take precedence; the parameter document provides defaults.
 func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef, baseURI, href string) error {
-	return loadParameterDocumentFromFile(ctx, outDef, baseURI, href)
+	// Compile-time loading is opt-in: a URIResolver must be configured via
+	// Compiler.URIResolver. There is no implicit filesystem access.
+	loadBytes := func(uri string) ([]byte, error) {
+		if c.resolver == nil {
+			return nil, staticError(errCodeXTSE0090, "cannot read parameter-document %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", href)
+		}
+		rc, resolveErr := c.resolver.Resolve(uri)
+		if resolveErr != nil {
+			return nil, staticError(errCodeXTSE0090, "cannot read parameter-document %q: %v", href, resolveErr)
+		}
+		defer func() { _ = rc.Close() }()
+		return io.ReadAll(rc)
+	}
+	return loadParameterDocumentFromFile(ctx, outDef, baseURI, href, loadBytes)
 }
 
 // loadParameterDocumentFromFile loads a serialization parameter document and
 // applies its settings to the given OutputDef. This standalone version can be
-// called at both compile-time and runtime.
-func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseURI, href string) error {
+// called at both compile-time and runtime; the loadBytes callback performs the
+// actual retrieval so each caller supplies its own (opt-in) loader.
+func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseURI, href string, loadBytes func(string) ([]byte, error)) error {
 	uri := href
 	if baseURI != "" && !strings.Contains(href, "://") && !filepath.IsAbs(href) {
 		baseDir := filepath.Dir(baseURI)
 		uri = filepath.Join(baseDir, href)
 	}
 
-	data, err := os.ReadFile(uri)
+	data, err := loadBytes(uri)
 	if err != nil {
 		return staticError(errCodeXTSE0090, "cannot read parameter-document %q: %v", href, err)
 	}

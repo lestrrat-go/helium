@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -143,24 +142,18 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 		return nil, err
 	}
 
-	var data []byte
-	var err error
+	if c.resolver == nil {
+		return nil, fmt.Errorf("cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
+	}
 
-	if c.resolver != nil {
-		rc, resolveErr := c.resolver.Resolve(uri)
-		if resolveErr != nil {
-			return nil, fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
-		}
-		defer func() { _ = rc.Close() }()
-		data, err = io.ReadAll(rc)
-		if err != nil {
-			return nil, fmt.Errorf("cannot read %q: %w", uri, err)
-		}
-	} else {
-		data, err = os.ReadFile(uri)
-		if err != nil {
-			return nil, fmt.Errorf("cannot load %q: %w", uri, err)
-		}
+	rc, resolveErr := c.resolver.Resolve(uri)
+	if resolveErr != nil {
+		return nil, fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read %q: %w", uri, err)
 	}
 
 	doc, err := parseStylesheetDocument(ctx, data, uri)
@@ -460,25 +453,18 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 	defer delete(c.importStack, importKey)
 
 	// Load the document
-	var data []byte
-	var err error
+	if c.resolver == nil {
+		return fmt.Errorf("cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
+	}
 
-	if c.resolver != nil {
-		rc, resolveErr := c.resolver.Resolve(uri)
-		if resolveErr != nil {
-			return fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
-		}
-		defer func() { _ = rc.Close() }()
-		data, err = io.ReadAll(rc)
-		if err != nil {
-			return fmt.Errorf("cannot read %q: %w", uri, err)
-		}
-	} else {
-		// Try direct file loading
-		data, err = os.ReadFile(uri)
-		if err != nil {
-			return fmt.Errorf("cannot load %q: %w", uri, err)
-		}
+	rc, resolveErr := c.resolver.Resolve(uri)
+	if resolveErr != nil {
+		return fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return fmt.Errorf("cannot read %q: %w", uri, err)
 	}
 
 	doc, err := parseStylesheetDocument(ctx, data, uri)

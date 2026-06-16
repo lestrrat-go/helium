@@ -147,11 +147,29 @@ var (
 	// must NOT do this; supply a tightly scoped resolver instead.
 	w3cTestFileResolver = &unparsedtext.FileURIResolver{BaseDir: string(filepath.Separator)}
 
+	// w3cTestCompileResolver is the explicit opt-in compile-time URIResolver
+	// (xslt3.URIResolver, method Resolve) used by the harness for xsl:import,
+	// xsl:include, and output-format parameter documents. Compile-time
+	// filesystem loading is opt-in just like runtime retrieval; production
+	// callers must supply their own tightly scoped resolver instead.
+	w3cTestCompileResolver = w3cCompileFileResolver{w3cTestFileResolver}
+
 	// w3cTestHTTPClient is used for the handful of W3C tests that fetch
 	// real http(s) URLs (e.g. www.w3.org). A bounded Timeout keeps the
 	// suite from hanging when the remote host is slow or unreachable.
 	w3cTestHTTPClient = &http.Client{Timeout: 30 * time.Second}
 )
+
+// w3cCompileFileResolver adapts an xpath3.URIResolver (method ResolveURI) to
+// the xslt3.URIResolver interface (method Resolve) so the harness can supply
+// a compile-time resolver to Compiler.URIResolver.
+type w3cCompileFileResolver struct {
+	r xpath3.URIResolver
+}
+
+func (a w3cCompileFileResolver) Resolve(uri string) (io.ReadCloser, error) {
+	return a.r.ResolveURI(uri)
+}
 
 // w3cPackageDep describes a secondary package dependency for a W3C test.
 type w3cPackageDep struct {
@@ -1014,13 +1032,13 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		// Extract embedded stylesheet from source document
 		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
 		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath)
+		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver)
 		ss, err = compiler.Compile(t.Context(), ssDoc)
 	} else if len(tc.PackageDeps) > 0 || len(tc.Params) > 0 || len(tc.ImportSchemaPaths) > 0 {
 		// When package deps, external params, or import schemas exist, compile without caching.
 		ssPath := w3cResolvePath(tc.StylesheetPath)
 		absPath, _ := filepath.Abs(ssPath)
-		compiler := xslt3.NewCompiler().BaseURI(absPath)
+		compiler := xslt3.NewCompiler().BaseURI(absPath).URIResolver(w3cTestCompileResolver)
 		if len(tc.PackageDeps) > 0 {
 			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps, versionResolution: tc.VersionResolution})
 		}
@@ -1068,7 +1086,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		// standalone stylesheet. Extract and compile the embedded one.
 		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
 		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath)
+		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver)
 		ss, err = compiler.Compile(t.Context(), ssDoc)
 	} else {
 		ssPath := w3cResolvePath(tc.StylesheetPath)
@@ -2564,7 +2582,7 @@ func w3cCompileCached(ctx context.Context, path string) (*xslt3.Stylesheet, erro
 	if err != nil {
 		return nil, err
 	}
-	ss, err := xslt3.NewCompiler().BaseURI(absPath).Compile(ctx, doc)
+	ss, err := xslt3.NewCompiler().BaseURI(absPath).URIResolver(w3cTestCompileResolver).Compile(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -441,28 +440,18 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		}
 		var data []byte
 		baseURI := loc
-		if ec.stylesheet.uriResolver != nil {
-			rc, resolveErr := ec.stylesheet.uriResolver.Resolve(loc)
-			if resolveErr != nil {
-				return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve stylesheet %q: %v", stylesheetLoc, resolveErr)
-			}
-			var readErr error
-			data, readErr = io.ReadAll(rc)
-			_ = rc.Close()
-			if readErr != nil {
-				return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
-			}
-		} else {
-			absPath, absErr := filepath.Abs(loc)
-			if absErr != nil {
-				absPath = loc
-			}
-			baseURI = absPath
-			var readErr error
-			data, readErr = os.ReadFile(loc)
-			if readErr != nil {
-				return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
-			}
+		if ec.stylesheet.uriResolver == nil {
+			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: no URIResolver configured (filesystem access is opt-in)", stylesheetLoc)
+		}
+		rc, resolveErr := ec.stylesheet.uriResolver.Resolve(loc)
+		if resolveErr != nil {
+			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve stylesheet %q: %v", stylesheetLoc, resolveErr)
+		}
+		var readErr error
+		data, readErr = io.ReadAll(rc)
+		_ = rc.Close()
+		if readErr != nil {
+			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
 		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI)
 		if parseErr != nil {
