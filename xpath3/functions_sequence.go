@@ -62,15 +62,20 @@ func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	pos := int(posVal)
 	inserts := args[2]
-
-	if pos < 1 {
-		pos = 1
-	}
 	tItems := seqMaterialize(target)
-	if pos > len(tItems)+1 {
+
+	// Clamp on the int64 value so an oversized position cannot wrap when
+	// converted to int (e.g. on 32-bit platforms): a position past the end
+	// must insert at the end, a position before the start at position 1.
+	var pos int
+	switch {
+	case posVal < 1:
+		pos = 1
+	case posVal > int64(len(tItems)+1):
 		pos = len(tItems) + 1
+	default:
+		pos = int(posVal)
 	}
 
 	iItems := seqMaterialize(inserts)
