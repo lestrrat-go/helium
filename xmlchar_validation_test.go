@@ -102,4 +102,18 @@ func TestXMLCharValidationOtherSlowPaths(t *testing.T) {
 		_, err := helium.NewParser().Parse(t.Context(), []byte(doc))
 		require.NoError(t, err)
 	})
+
+	t.Run("PUBLIC pubid literal with U+FFFD is rejected", func(t *testing.T) {
+		// U+FFFD is a valid XML Char but not a PubidChar, so a pubid
+		// literal containing it must be rejected.
+		doc := "<!DOCTYPE root PUBLIC \"\uFFFD\" \"sys\"><root/>"
+		_, err := helium.NewParser().Parse(t.Context(), []byte(doc))
+		require.Error(t, err)
+	})
+
+	t.Run("PUBLIC pubid literal with valid PubidChars is accepted", func(t *testing.T) {
+		doc := "<!DOCTYPE root PUBLIC \"-//W3C//DTD//EN\" \"sys\"><root/>"
+		_, err := helium.NewParser().Parse(t.Context(), []byte(doc))
+		require.NoError(t, err)
+	})
 }
