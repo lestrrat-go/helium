@@ -370,3 +370,45 @@ func TestFnTransformInheritsRuntimeResolver(t *testing.T) {
 		"inner fn:unparsed-text should resolve via outer Invocation's URIResolver")
 	require.Contains(t, calledWith, dataURI)
 }
+
+// TestFnTransformInitialMatchSelectionResultDocument is a regression test for a
+// panic ("assignment to entry in nil map") that occurred when fn:transform was
+// called with a non-empty initial-match-selection and the invoked stylesheet
+// wrote a secondary xsl:result-document. The selection path
+// (executeTransformWithSelection) failed to initialize resultDocItems and
+// resultDocOutputDefs, so execResultDocument panicked when assigning into them.
+func TestFnTransformInitialMatchSelectionResultDocument(t *testing.T) {
+	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner-loc"/>
+  <xsl:template match="/">
+    <xsl:variable name="sel" as="element()*">
+      <item>alpha</item>
+    </xsl:variable>
+    <xsl:variable name="result" select="transform(map{
+      'stylesheet-location': $inner-loc,
+      'initial-match-selection': $sel,
+      'base-output-uri': 'http://example.com/output.xml',
+      'delivery-format': 'serialized'
+    })"/>
+    <result>
+      <xsl:for-each select="map:keys($result)">
+        <entry key="{.}"><xsl:value-of select="$result(.)"/></entry>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
+	out, err := ss.Transform(src).
+		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-resultdoc.xsl"))).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	// Principal output is present (XML-escaped inside the <entry> wrapper).
+	require.Contains(t, out, "&lt;principal&gt;alpha&lt;/principal&gt;")
+	// The secondary xsl:result-document appears in the result map keyed by href.
+	require.Contains(t, out, `key="secondary.xml"`)
+	require.Contains(t, out, "&lt;secondary&gt;alpha&lt;/secondary&gt;")
+}

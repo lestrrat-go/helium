@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -753,7 +754,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 func executeTransformWithSelection(ctx context.Context, source *helium.Document, ss *Stylesheet, cfg *transformConfig, selection xpath3.Sequence, rawCapture bool) (*helium.Document, xpath3.Sequence, error) {
 	resultDoc := helium.NewDefaultDocument()
 
-	outFrame := &outputFrame{doc: resultDoc, current: resultDoc, captureItems: rawCapture}
+	outFrame := &outputFrame{doc: resultDoc, current: resultDoc, itemSeparator: ss.defaultItemSeparator(), captureItems: rawCapture}
 	ec := &execContext{
 		stylesheet:          ss,
 		sourceDoc:           source,
@@ -769,7 +770,10 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 		docCache:            make(map[string]*helium.Document),
 		functionResultCache: make(map[string]xpath3.Sequence),
 		accumulatorState:    make(map[string]xpath3.Sequence),
+		currentTime:         time.Now().UTC(),
 		resultDocuments:     make(map[string]*helium.Document),
+		resultDocItems:      make(map[string]xpath3.Sequence),
+		resultDocOutputDefs: make(map[string]*OutputDef),
 		usedResultURIs:      make(map[string]struct{}),
 		defaultValidation:   ss.defaultValidation,
 		docOrderCache:       xpath3.NewDocOrderCache(),
