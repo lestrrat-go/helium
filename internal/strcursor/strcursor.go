@@ -453,7 +453,9 @@ func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) int {
 	for nRunes < count {
 		e := ring[(head+nRunes)&mask]
 		r := e.val
-		if r == '<' || r == '&' || r == utf8.RuneError {
+		// A real U+FFFD is stored as RuneError with width 3 (valid XML char);
+		// only width<=1 means genuinely-invalid UTF-8.
+		if r == '<' || r == '&' || (r == utf8.RuneError && e.width <= 1) {
 			break
 		}
 		u := uint32(r)

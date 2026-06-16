@@ -34,10 +34,11 @@ func TestParseRejectsNonXMLChars(t *testing.T) {
 		name string
 		r    rune
 	}{
-		{"U+009F", 0x009F},   // C1 control, but a valid XML Char
-		{"U+E000", 0xE000},   // first after surrogate range
+		{"U+009F", 0x009F},     // C1 control, but a valid XML Char
+		{"U+E000", 0xE000},     // first after surrogate range
+		{"U+FFFD", 0xFFFD},     // replacement char — valid XML Char, decodes as RuneError
 		{"U+10FFFF", 0x10FFFF}, // last valid code point
-		{"U+1FFFE", 0x1FFFE},  // non-character per Unicode, but valid XML Char
+		{"U+1FFFE", 0x1FFFE},   // non-character per Unicode, but valid XML Char
 	}
 	for _, tt := range valid {
 		t.Run("valid/"+tt.name, func(t *testing.T) {
@@ -65,4 +66,18 @@ func TestParseRejectsNonXMLCharsInAttr(t *testing.T) {
 	p := helium.NewParser()
 	_, err := p.Parse(t.Context(), []byte(`<r a="`+string(rune(0x4E2D))+`"/>`))
 	require.NoError(t, err)
+}
+
+// TestParseAttrWhitespaceNormalization checks the attribute-value fast path
+// normalizes a literal tab to a space (XML 1.0 §3.3.3), matching newline/CR.
+func TestParseAttrWhitespaceNormalization(t *testing.T) {
+	t.Parallel()
+
+	for _, ws := range []string{"\t", "\n", "\r"} {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r a="x`+ws+`y"/>`))
+		require.NoError(t, err)
+		attrs := doc.DocumentElement().Attributes()
+		require.Len(t, attrs, 1)
+		require.Equal(t, "x y", string(attrs[0].Value()), "whitespace %q must normalize to space", ws)
+	}
 }

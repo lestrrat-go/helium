@@ -631,16 +631,18 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
 			return "", 0
 		}
 		if b < 0x80 {
-			if b < 0x20 && b != 0x9 {
-				// \r, \n, or other control chars need normalization.
+			if b < 0x20 {
+				// Tab, \r, \n, and other control chars need attribute-value
+				// normalization (whitespace -> space) — defer to the slow path.
 				return "", 0
 			}
 			off++
 		} else {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 			r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-			if w == 0 || r == utf8.RuneError {
+			if w == 0 || (r == utf8.RuneError && w == 1) {
 				// Invalid or incomplete UTF-8 — fall back to slow path.
+				// (A real U+FFFD decodes as RuneError with width 3 and is valid.)
 				return "", 0
 			}
 			if !xmlchar.IsChar(r) {
@@ -727,7 +729,9 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 			dlen = len(data)
 		}
 		r, w := utf8.DecodeRune(data[off:dlen])
-		if r == utf8.RuneError || w == 0 {
+		if w == 0 || (r == utf8.RuneError && w == 1) {
+			// Invalid/incomplete UTF-8. A real U+FFFD decodes as RuneError
+			// with width 3 and is a valid XML char, so let IsChar judge it.
 			break
 		}
 		if !xmlchar.IsChar(r) {
@@ -793,7 +797,9 @@ func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 		}
 		r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-		if r == utf8.RuneError || w == 0 {
+		if w == 0 || (r == utf8.RuneError && w == 1) {
+			// Invalid/incomplete UTF-8. A real U+FFFD decodes as RuneError
+			// with width 3 and is a valid XML char, so let IsChar judge it.
 			break
 		}
 		if !xmlchar.IsChar(r) {
