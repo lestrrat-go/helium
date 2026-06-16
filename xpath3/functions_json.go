@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
 )
 
@@ -78,9 +79,13 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
 	}
+	// options param is map(*)?: at most one item, and it must be a map.
+	if seqLen(args[1]) > 1 {
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: "options argument must be a single map"}
+	}
 	m, ok := args[1].Get(0).(MapItem)
 	if !ok {
-		return opts, nil
+		return opts, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("options argument must be a map, got %T", args[1].Get(0))}
 	}
 
 	// Parse "liberal" option — must be xs:boolean

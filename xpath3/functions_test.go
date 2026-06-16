@@ -1,9 +1,11 @@
 package xpath3_test
 
 import (
+	"context"
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -127,6 +129,60 @@ func TestFnNumeric(t *testing.T) {
 			require.Equal(t, 1, seq.Len())
 			av := seq.Get(0).(xpath3.AtomicValue)
 			require.InDelta(t, tc.expect, av.ToFloat64(), 0.001)
+		})
+	}
+}
+
+// TestFnRoundPrecision exercises fn:round and fn:round-half-to-even at
+// negative, zero, and positive precision over positive and negative operands,
+// including div-derived rationals. fn:round rounds the half toward positive
+// infinity; a regression in the negative-precision path floored the rational to
+// an integer before rounding, pushing values such as -249.9 past the boundary
+// (yielding -300 instead of -200).
+func TestFnRoundPrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		expr   string
+		expect string
+	}{
+		// Negative precision, half-up (toward +∞).
+		{`round(-249.9, -2)`, "-200"},
+		{`round(-250, -2)`, "-200"}, // tie -2.5 → -2 toward +∞
+		{`round(250.1, -2)`, "300"},
+		{`round(-1234.567, -2)`, "-1200"}, // QT3 fn-round-decimal-11
+		{`round(8452, -2)`, "8500"},       // QT3 fn-round2args-2
+		// Zero precision / no precision arg, half-up (toward +∞).
+		{`round(-0.5)`, "0"},
+		{`round(2.5)`, "3"},
+		{`round(2.4)`, "2"},
+		{`round(-2.5, 0)`, "-2"},
+		// Positive precision, half-up.
+		{`round(2.4567, 2)`, "2.46"},
+		{`round(-2.345, 2)`, "-2.34"}, // tie toward +∞
+		// Div-derived rational input (1 div 3 etc.).
+		{`round((-2499 div 10), -2)`, "-200"},
+		{`round((2501 div 10), -2)`, "300"},
+		// Negative precision, half-to-even.
+		{`round-half-to-even(-250, -2)`, "-200"},
+		{`round-half-to-even(-350, -2)`, "-400"}, // tie → even
+		{`round-half-to-even(-249.9, -2)`, "-200"},
+		{`round-half-to-even(150, -2)`, "200"}, // tie → even
+		{`round-half-to-even(250, -2)`, "200"}, // tie → even
+		// Zero / positive precision, half-to-even.
+		{`round-half-to-even(2.5)`, "2"},
+		{`round-half-to-even(3.5)`, "4"},
+		{`round-half-to-even(-2.5)`, "-2"},
+		{`round-half-to-even(3.567, 2)`, "3.57"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.expr, func(t *testing.T) {
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				Evaluate(t.Context(), compiled, doc)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, result.StringValue())
 		})
 	}
 }
@@ -616,6 +672,86 @@ func TestFnCodepointsToStringRange(t *testing.T) {
 	})
 }
 
+// --- argument cardinality/type validation in math/map/json/hof builtins ---
+
+func TestBuiltinArgValidation(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErrCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err, "compile %q", expr)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: code}, "expected error code %s for %q", code, expr)
+	}
+
+	t.Run("type errors", func(t *testing.T) {
+		cases := []string{
+			`math:sin("abc")`,
+			`math:sin((1,2))`,
+			`math:pow(2,"x")`,
+			// An empty $x must not excuse an invalid/empty required $y:
+			// function-conversion validates each argument independently.
+			`math:pow((),"x")`,
+			`math:pow((),())`,
+			`math:atan2(1,(2,3))`,
+			// atan2's $x ($y) is required; an empty other arg is still XPTY0004.
+			`math:atan2((),1)`,
+			`math:atan2(1,())`,
+			`map:put(map{},(1,2),"v")`,
+			`map:entry((1,2),"v")`,
+			`parse-json("{}","bad")`,
+			`parse-json("{}",(map{},map{}))`,
+			`abs((1,2))`,
+			`function-lookup(QName("http://www.w3.org/2005/xpath-functions/math","sin"),1)(("a","b"))`,
+		}
+		for _, expr := range cases {
+			t.Run(expr, func(t *testing.T) {
+				evalErrCode(t, expr, "XPTY0004")
+			})
+		}
+	})
+
+	t.Run("valid controls still work", func(t *testing.T) {
+		t.Run("math:sin(0)", func(t *testing.T) {
+			seq := evalExpr(t, doc, `math:sin(0)`)
+			require.Equal(t, 1, seq.Len())
+			require.InDelta(t, 0.0, seq.Get(0).(xpath3.AtomicValue).DoubleVal(), 0.0001)
+		})
+		t.Run("math:pow(2,3)", func(t *testing.T) {
+			seq := evalExpr(t, doc, `math:pow(2,3)`)
+			require.Equal(t, 1, seq.Len())
+			require.InDelta(t, 8.0, seq.Get(0).(xpath3.AtomicValue).DoubleVal(), 0.0001)
+		})
+		t.Run("math:pow empty x valid y is empty", func(t *testing.T) {
+			// QT3 math-pow-001: math:pow((), 93.7) is the empty sequence
+			// because $y is a valid number. The empty-$x short-circuit only
+			// fires after $y validates.
+			seq := evalExpr(t, doc, `math:pow((), 93.7)`)
+			require.Nil(t, seq)
+		})
+		t.Run("map:put singleton key", func(t *testing.T) {
+			seq := evalExpr(t, doc, `map:size(map:put(map{},1,"v"))`)
+			require.Equal(t, 1, seq.Len())
+			require.Equal(t, int64(1), seq.Get(0).(xpath3.AtomicValue).IntegerVal())
+		})
+		t.Run("parse-json no options", func(t *testing.T) {
+			seq := evalExpr(t, doc, `parse-json("{}")`)
+			require.Equal(t, 1, seq.Len())
+		})
+		t.Run("parse-json empty-map options", func(t *testing.T) {
+			seq := evalExpr(t, doc, `parse-json("{}", map{})`)
+			require.Equal(t, 1, seq.Len())
+		})
+		t.Run("abs(-3)", func(t *testing.T) {
+			seq := evalExpr(t, doc, `abs(-3)`)
+			require.Equal(t, 1, seq.Len())
+			require.Equal(t, int64(3), seq.Get(0).(xpath3.AtomicValue).IntegerVal())
+		})
+	})
+}
+
 // --- Error function ---
 
 func TestFnError(t *testing.T) {
@@ -673,6 +809,486 @@ func TestFnImplicitTimezoneReturnsDuration(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, atomics, 1)
 	require.Equal(t, xpath3.TypeDayTimeDuration, atomics[0].TypeName)
+}
+
+// integerIdentityFn is a custom TypedFunction declaring a single xs:integer
+// parameter. It is used to verify that function-lookup enforces the declared
+// parameter types, mirroring the direct named-reference path (f#1).
+type integerIdentityFn struct{}
+
+func (integerIdentityFn) MinArity() int { return 1 }
+func (integerIdentityFn) MaxArity() int { return 1 }
+
+func (integerIdentityFn) Call(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	return args[0], nil
+}
+
+func (integerIdentityFn) FuncParamTypes() []xpath3.SequenceType {
+	return []xpath3.SequenceType{{
+		ItemTest:   xpath3.AtomicOrUnionType{Prefix: "xs", Name: "integer"},
+		Occurrence: xpath3.OccurrenceExactlyOne,
+	}}
+}
+
+func (integerIdentityFn) FuncReturnType() *xpath3.SequenceType {
+	return &xpath3.SequenceType{
+		ItemTest:   xpath3.AtomicOrUnionType{Prefix: "xs", Name: "integer"},
+		Occurrence: xpath3.OccurrenceExactlyOne,
+	}
+}
+
+// TestFunctionLookupTypedParamValidation verifies that a function item obtained
+// via function-lookup for a user-defined TypedFunction enforces the declared
+// parameter types — the same XPTY0004 check the direct f#1 reference applies.
+func TestFunctionLookupTypedParamValidation(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	lib := xpath3.NewFunctionLibrary()
+	lib.Set("f", integerIdentityFn{})
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(lib)
+
+	t.Run("bad-typed arg raises XPTY0004", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)("bad")`)
+		require.NoError(t, err)
+		_, err = eval.Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
+	})
+
+	t.Run("good-typed arg works", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(42)`)
+		require.NoError(t, err)
+		result, err := eval.Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		seq := result.Sequence()
+		require.Equal(t, 1, seq.Len())
+		require.Equal(t, int64(42), seq.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("named-reference parity", func(t *testing.T) {
+		// The direct f#1 path must reject the same bad arg.
+		compiled, err := xpath3.NewCompiler().Compile(`f#1("bad")`)
+		require.NoError(t, err)
+		_, err = eval.Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
+	})
+
+	t.Run("untypedAtomic arg is coerced before invocation", func(t *testing.T) {
+		// xs:untypedAtomic("7") satisfies the xs:integer parameter via the
+		// function-conversion rules. The coerced value (an xs:integer) must be
+		// what the function body observes — integerIdentityFn returns args[0],
+		// so the result type proves whether coercion was applied.
+		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(xs:untypedAtomic("7"))`)
+		require.NoError(t, err)
+		result, err := eval.Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		seq := result.Sequence()
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, xpath3.TypeInteger, av.TypeName)
+		require.Equal(t, int64(7), av.IntegerVal())
+	})
+
+	t.Run("non-coercible value still raises XPTY0004", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(xs:untypedAtomic("not-an-int"))`)
+		require.NoError(t, err)
+		_, err = eval.Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
+	})
+}
+
+// customPrefixParamFn is a TypedFunction whose single parameter declares an
+// AtomicOrUnionType with a NON-xs/xsd prefix ("app"). Resolving such a type via
+// function-lookup's Invoke closure formerly passed a nil eval context into
+// coerceToSequenceType, which dereferenced ec.namespaces and panicked. The
+// function must instead surface an XPTY0004 type error with no panic.
+type customPrefixParamFn struct{}
+
+func (customPrefixParamFn) MinArity() int { return 1 }
+func (customPrefixParamFn) MaxArity() int { return 1 }
+
+func (customPrefixParamFn) Call(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	return args[0], nil
+}
+
+func (customPrefixParamFn) FuncParamTypes() []xpath3.SequenceType {
+	return []xpath3.SequenceType{{
+		ItemTest:   xpath3.AtomicOrUnionType{Prefix: "app", Name: "id"},
+		Occurrence: xpath3.OccurrenceExactlyOne,
+	}}
+}
+
+func (customPrefixParamFn) FuncReturnType() *xpath3.SequenceType {
+	return &xpath3.SequenceType{
+		ItemTest:   xpath3.AtomicOrUnionType{Prefix: "app", Name: "id"},
+		Occurrence: xpath3.OccurrenceExactlyOne,
+	}
+}
+
+// TestFunctionLookupCustomPrefixParamNoPanic verifies that invoking a function
+// item obtained via function-lookup for a TypedFunction whose parameter type has
+// a non-xs prefix does not panic on a nil eval context, but returns an
+// XPathError (XPTY0004) for the unresolvable custom type.
+func TestFunctionLookupCustomPrefixParamNoPanic(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	lib := xpath3.NewFunctionLibrary()
+	lib.Set("f", customPrefixParamFn{})
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(lib)
+
+	compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(1)`)
+	require.NoError(t, err)
+
+	require.NotPanics(t, func() {
+		_, err = eval.Evaluate(t.Context(), compiled, doc)
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
+}
+
+// TestFnRoundScaleAware verifies that extreme but representable precisions
+// produce the spec-correct result rather than being blindly clamped, and that
+// each case returns promptly (no Exp on an astronomically large exponent). The
+// huge-magnitude cases use integers far beyond float64 range, so results are
+// compared as exact decimal strings.
+func TestFnRoundScaleAware(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	// 5 followed by 4999 zeros — an exact half at precision -5000.
+	bigHalf := "5" + strings.Repeat("0", 4999)
+	// 1 followed by 5000 zeros — the rounded result.
+	bigHalfRounded := "1" + strings.Repeat("0", 5000)
+
+	tests := []struct {
+		name   string
+		expr   string
+		expect string // exact decimal string of the result
+	}{
+		// Huge negative precision AT the magnitude boundary: must round the
+		// half case up, not leave it unchanged (the old fixed clamp returned
+		// the operand untouched).
+		{"int half boundary up", `round(` + bigHalf + `, -5000)`, bigHalfRounded},
+		// Half-to-even: the quotient (0) is already even, so the half rounds
+		// down to 0 — distinct from half-up which rounds the same value up.
+		{"int half boundary even", `round-half-to-even(` + bigHalf + `, -5000)`, "0"},
+		// Huge negative precision PAST the magnitude: rounds to 0.
+		{"int past magnitude", `round(` + bigHalf + `, -6000)`, "0"},
+		// Huge positive precision PAST the operand's (zero) fractional scale:
+		// integer is unchanged.
+		{"int fine unchanged", `round(123, 5000)`, "123"},
+		// Decimal with huge positive precision past its scale: unchanged.
+		{"decimal fine unchanged", `round(1.236, 5000)`, "1.236"},
+		// Decimal with huge negative precision past magnitude: zero.
+		{"decimal past magnitude", `round(1.236, -5000)`, "0"},
+		// Normal cases still correct.
+		{"normal up", `round(2.5, 0)`, "3"},
+		{"normal even", `round-half-to-even(2.5, 0)`, "2"},
+		{"normal neg", `round(12345, -2)`, "12300"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			done := make(chan xpath3.Sequence, 1)
+			go func() {
+				done <- evalExpr(t, doc, tc.expr)
+			}()
+			var seq xpath3.Sequence
+			select {
+			case seq = <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatalf("round(%q) did not return promptly", tc.expr)
+			}
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			s, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, s)
+		})
+	}
+}
+
+// TestFnRoundExtremePrecision guards against the precision argument (an
+// xs:integer that may exceed int64 range) wrapping when converted to int, and
+// against an astronomically large 10^|precision| scale hanging the computation.
+func TestFnRoundExtremePrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		expr   string
+		expect float64
+	}{
+		{`round(1.236, 2)`, 1.24},
+		{`round(123.456, -2)`, 100},
+		{`round(1.23, 9223372036854775808)`, 1.23},
+		{`round-half-to-even(1.23, 9223372036854775808)`, 1.23},
+		{`round(1.23, -9223372036854775809)`, 0},
+		{`round-half-to-even(1.23, -9223372036854775809)`, 0},
+		{`round(125, -9223372036854775809)`, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.expr, func(t *testing.T) {
+			seq := evalExpr(t, doc, tc.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			require.InDelta(t, tc.expect, av.ToFloat64(), 0.001)
+		})
+	}
+}
+
+// TestFnRoundPrecisionArgValidation verifies the function-conversion rules for
+// the required "$precision as xs:integer" parameter of fn:round and
+// fn:round-half-to-even. The precision must be validated even when $arg is the
+// empty sequence (the empty first argument does not excuse an absent or
+// ill-typed precision); only xs:integer (and subtypes) and xs:untypedAtomic
+// (cast to integer) are accepted, everything else raises XPTY0004.
+func TestFnRoundPrecisionArgValidation(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErrCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: code}, "expected error code %s for %q", code, expr)
+	}
+
+	evalOK := func(t *testing.T, expr, want string) {
+		t.Helper()
+		seq := evalExpr(t, doc, expr)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		s, err := xpath3.AtomicToString(av)
+		require.NoError(t, err)
+		require.Equal(t, want, s)
+	}
+
+	t.Run("empty arg does not excuse bad precision", func(t *testing.T) {
+		// An ill-typed precision is a type error even when $arg is ().
+		evalErrCode(t, `round((), "bad")`, "XPTY0004")
+		evalErrCode(t, `round-half-to-even((), "bad")`, "XPTY0004")
+		// An empty precision in the 2-arg form violates exactly-one cardinality.
+		evalErrCode(t, `round((), ())`, "XPTY0004")
+	})
+
+	t.Run("empty precision is a cardinality error", func(t *testing.T) {
+		evalErrCode(t, `round(1, ())`, "XPTY0004")
+		evalErrCode(t, `round-half-to-even(1.5, ())`, "XPTY0004")
+	})
+
+	t.Run("non-integer precision rejected", func(t *testing.T) {
+		// No implicit numeric/boolean truncation to xs:integer.
+		evalErrCode(t, `round(123.45, true())`, "XPTY0004")
+		evalErrCode(t, `round(123.45, 1.9)`, "XPTY0004")
+		evalErrCode(t, `round(123.45, 2.0)`, "XPTY0004")
+		evalErrCode(t, `round(123.45, xs:double(2))`, "XPTY0004")
+		evalErrCode(t, `round(123.45, xs:float(2))`, "XPTY0004")
+		evalErrCode(t, `round(123.45, "2")`, "XPTY0004")
+		evalErrCode(t, `round-half-to-even(123456e-2, "two")`, "XPTY0004")
+	})
+
+	t.Run("integer precision and subtypes accepted", func(t *testing.T) {
+		evalOK(t, `round(123.456, 2)`, "123.46")
+		evalOK(t, `round(123.456, xs:int(2))`, "123.46")
+		evalOK(t, `round(123.456, xs:long(2))`, "123.46")
+		evalOK(t, `round(123.456, xs:short(2))`, "123.46")
+		// xs:untypedAtomic is cast to xs:integer.
+		evalOK(t, `round(123.456, xs:untypedAtomic("2"))`, "123.46")
+	})
+
+	t.Run("empty arg with valid precision is empty", func(t *testing.T) {
+		// A valid precision plus an empty $arg returns () (not an error).
+		evalOK(t, `empty(round((), 3))`, "true")
+		evalOK(t, `empty(round((), 1))`, "true")
+		evalOK(t, `empty(round-half-to-even((), 3))`, "true")
+	})
+}
+
+// TestFnRoundDecimalHugePrecision verifies that the decimal half-to-even path
+// computes huge-but-representable coarse precisions exactly, rather than being
+// silently clamped to zero by a coarse downstream guard. The operand magnitude
+// bounds the scale, so the result must be the exact large value and return
+// promptly (no hang).
+func TestFnRoundDecimalHugePrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	// 6 followed by 4999 zeros, written as an xs:decimal (trailing ".0") so the
+	// decimal/icu path is exercised. At precision -5000 the magnitude boundary
+	// makes the value round up to 1 followed by 5000 zeros.
+	bigDecimal := "6" + strings.Repeat("0", 4999) + ".0"
+	bigRounded := "1" + strings.Repeat("0", 5000)
+
+	tests := []struct {
+		name   string
+		expr   string
+		expect string
+	}{
+		// Half-to-even decimal path, coarse precision past the clamp threshold.
+		{"halfeven decimal boundary up", `round-half-to-even(` + bigDecimal + `, -5000)`, bigRounded},
+		// Half-up decimal path with the same magnitude/precision.
+		{"halfup decimal boundary up", `round(` + bigDecimal + `, -5000)`, bigRounded},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			done := make(chan xpath3.Sequence, 1)
+			go func() {
+				done <- evalExpr(t, doc, tc.expr)
+			}()
+			var seq xpath3.Sequence
+			select {
+			case seq = <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatalf("round(%q) did not return promptly", tc.expr)
+			}
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			s, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, s)
+		})
+	}
+}
+
+// TestFnRoundNonTerminatingHugePrecision guards against a DoS: a non-terminating
+// xs:decimal (e.g. 1 div 3, whose reduced denominator has a prime factor other
+// than 2 or 5) rounded at an astronomically large positive precision must NOT
+// build 10^precision via Exp. Such an operand has an unbounded fractional-digit
+// count, so a precision beyond roundMaxComputeScale (1<<20) is refused with
+// FOAR0002 rather than silently rounding at a lower scale (which would return an
+// observably wrong, lower-precision value). The refusal must be prompt, never a
+// hang or absurd allocation.
+func TestFnRoundNonTerminatingHugePrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []string{
+		// 1 div 3 = 0.333... (non-terminating). A billion fractional digits must
+		// not trigger 10^1000000000; it exceeds the cap, so FOAR0002.
+		`round-half-to-even(1 div 3, 1000000000)`,
+		`round(1 div 3, 1000000000)`,
+		// 2 div 3 = 0.666... rounds up at its last retained digit; still over the
+		// cap, so FOAR0002 (never a billion-digit power).
+		`round-half-to-even(2 div 3, 1000000000)`,
+		// A precision just under the old non-terminating sentinel (1<<30) — well
+		// past the cap, so still refused.
+		`round-half-to-even(1 div 3, 1073741823)`,
+		// One past the cap is the boundary that must error.
+		`round(2 div 3, 1048577)`,
+		// Precision exactly at the ratFracDigitNonTerminating sentinel (1<<30):
+		// the "precision >= fracDigits" test must NOT short-circuit to
+		// roundUnchanged for a non-terminating decimal; it exceeds the cap so it
+		// must raise FOAR0002, not silently return the repeating operand.
+		`round(1 div 3, 1073741824)`,
+		`round-half-to-even(1 div 3, 1073741824)`,
+		// Precision above the sentinel must also refuse, not return unchanged.
+		`round(1 div 3, 2000000000)`,
+	}
+	for _, expr := range tests {
+		t.Run(expr, func(t *testing.T) {
+			compiled, err := xpath3.NewCompiler().Compile(expr)
+			require.NoError(t, err)
+			done := make(chan error, 1)
+			go func() {
+				_, ferr := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+				done <- ferr
+			}()
+			select {
+			case ferr := <-done:
+				require.Error(t, ferr, "expected FOAR0002 for %q", expr)
+				require.ErrorIs(t, ferr, &xpath3.XPathError{Code: "FOAR0002"}, "expected FOAR0002 for %q", expr)
+			case <-time.After(10 * time.Second):
+				t.Fatalf("round(%q) did not return promptly (DoS)", expr)
+			}
+		})
+	}
+}
+
+// TestFnRoundNonTerminatingAtCap verifies that a non-terminating xs:decimal
+// rounded at exactly roundMaxComputeScale (1<<20) fractional digits computes the
+// exact value (rather than erroring or silently clamping). 2/3 to 1<<20 digits is
+// well-defined: every retained digit is 6 and the value rounds up in the last
+// place, so the result is "0." followed by (1<<20 - 1) sixes and a trailing 7.
+func TestFnRoundNonTerminatingAtCap(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	const maxScale = 1 << 20
+	expr := `round(2 div 3, 1048576)`
+	compiled, err := xpath3.NewCompiler().Compile(expr)
+	require.NoError(t, err)
+
+	done := make(chan xpath3.Sequence, 1)
+	go func() {
+		result, ferr := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, ferr)
+		done <- result.Sequence()
+	}()
+	var seq xpath3.Sequence
+	select {
+	case seq = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("round(%q) did not return promptly", expr)
+	}
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
+	s, err := xpath3.AtomicToString(av)
+	require.NoError(t, err)
+	want := "0." + strings.Repeat("6", maxScale-1) + "7"
+	require.Equal(t, want, s)
+}
+
+// TestFnRoundHalfToEvenNegativePrecision verifies negative-precision half-to-even
+// rounding divides the full rational (never floors to an integer first), so a
+// fractional part that breaks a tie is honoured.
+func TestFnRoundHalfToEvenNegativePrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		expr   string
+		expect string
+	}{
+		// 250.1 at -2: 250.1/100 = 2.501 -> rounds to 3 -> 300 (not 200; the .1
+		// breaks the tie upward, so flooring to 250 first would be wrong).
+		{`round-half-to-even(250.1, -2)`, "300"},
+		// -249.9 at -2: -2.499 -> rounds to -2 -> -200 (not -300).
+		{`round-half-to-even(-249.9, -2)`, "-200"},
+		// Exact even-tie cases at -1.
+		{`round-half-to-even(248, -1)`, "250"},
+		{`round-half-to-even(250, -1)`, "250"},
+		{`round-half-to-even(2.5, -1)`, "0"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.expr, func(t *testing.T) {
+			seq := evalExpr(t, doc, tc.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			s, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, s)
+		})
+	}
+}
+
+// TestFnRoundPrecisionCardinality verifies that the second ($precision) argument
+// of fn:round / fn:round-half-to-even is a required singleton: a multi-item
+// sequence must raise XPTY0004 rather than silently using its first item.
+func TestFnRoundPrecisionCardinality(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	exprs := []string{
+		`round(1, (1, 2))`,
+		`round-half-to-even(1, (1, 2))`,
+	}
+	for _, expr := range exprs {
+		t.Run(expr, func(t *testing.T) {
+			compiled, err := xpath3.NewCompiler().Compile(expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+			require.Error(t, err, "expected error for %q", expr)
+			require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
+		})
+	}
 }
 
 // TestFnSequenceIntegerCardinalityArgs verifies fn:remove/fn:insert-before/

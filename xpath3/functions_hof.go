@@ -186,10 +186,13 @@ func fnFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
 	if !ok {
 		return validNilSequence, nil
 	}
-	arity := int(arityVal)
-	if arity < 0 {
+	// Reject negative or out-of-int arities (no such function); checking on
+	// int64 first avoids a wrap to a valid-looking arity on 32-bit platforms.
+	const maxInt = int(^uint(0) >> 1)
+	if arityVal < 0 || arityVal > int64(maxInt) {
 		return validNilSequence, nil
 	}
+	arity := int(arityVal)
 
 	fi, ok := lookupFunctionItem(ctx, nameArg.QNameVal(), arity)
 	if !ok {
@@ -229,9 +232,11 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 	}
 
 	capturedCtx := ctx
+	var capturedEC *evalContext
 	if ec := getFnContext(ctx); ec != nil {
 		capturedECValue := *ec
-		capturedCtx = withFnContext(ctx, &capturedECValue)
+		capturedEC = &capturedECValue
+		capturedCtx = withFnContext(ctx, capturedEC)
 	}
 
 	var paramTypes []SequenceType
@@ -239,6 +244,15 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 	if sig := lookupFunctionSignature(qv.URI, qv.Local, arity); sig != nil {
 		paramTypes = sig.ParamTypes
 		returnType = sig.ReturnType
+	} else if tf, ok := fn.(TypedFunction); ok {
+		// User-defined typed functions expose their signature directly;
+		// mirror evalNamedFunctionRef so function-lookup enforces the same
+		// argument-type checks as the named-reference path (f#1).
+		paramTypes = tf.FuncParamTypes()
+		returnType = tf.FuncReturnType()
+	} else if tfa, ok := fn.(TypedFunctionByArity); ok {
+		paramTypes = tfa.FuncParamTypesForArity(arity)
+		returnType = tfa.FuncReturnTypeForArity(arity)
 	}
 
 	fi := FunctionItem{
@@ -254,10 +268,28 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 			return fn.Call(ctx, callArgs)
 		},
 	}
-	_ = capturedCtx
 	fi.Invoke = func(_ context.Context, callArgs []Sequence) (Sequence, error) {
 		if len(callArgs) != arity {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
+		}
+		// Enforce the recorded parameter types, mirroring the named
+		// function-reference path in eval_funcall.go. Coercion may convert an
+		// argument (e.g. xs:untypedAtomic -> xs:integer); the coerced value must
+		// be what the function observes, so store it back into a copy of the
+		// argument slice rather than discarding it and invoking with the original.
+		if paramTypes != nil {
+			coerced := make([]Sequence, len(callArgs))
+			copy(coerced, callArgs)
+			for i, arg := range callArgs {
+				if i < len(paramTypes) {
+					c, ok := coerceToSequenceType(arg, paramTypes[i], capturedEC)
+					if !ok {
+						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", qv.Local, i+1, paramTypes[i])}
+					}
+					coerced[i] = c
+				}
+			}
+			callArgs = coerced
 		}
 		return fn.Call(capturedCtx, callArgs)
 	}

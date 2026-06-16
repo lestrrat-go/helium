@@ -144,9 +144,12 @@ func init() {
 		stItem(OccurrenceZeroOrMore),
 		stFunc([]SequenceType{stItem(OccurrenceExactlyOne), stItem(OccurrenceZeroOrMore)}, stItem(OccurrenceZeroOrMore)),
 	}, stItem(OccurrenceZeroOrMore))
+	// fn:sort#2 is sort($input as item()*, $collation as xs:string?); the
+	// second argument is the collation URI, not the key function (that is
+	// sort#3's third argument).
 	registerSig("sort", 2, []SequenceType{
 		stItem(OccurrenceZeroOrMore),
-		stFunc([]SequenceType{stItem(OccurrenceExactlyOne)}, stItem(OccurrenceZeroOrMore)),
+		stAtomic(TypeString, OccurrenceZeroOrOne),
 	}, stItem(OccurrenceZeroOrMore))
 }
 
