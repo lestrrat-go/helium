@@ -42,7 +42,10 @@ func Load(name string) enc.Encoding {
 	case "utf16be", "unicodefffe":
 		return withStrictDecode(unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM), 2, orderBE2, false)
 	case "utf16", "unicode", "csunicode":
-		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.UseBOM), 2, byteOrder{}, true)
+		// UseBOM with LittleEndian default: x/text's decoder falls back to the
+		// configured default (LE) when no BOM is present, so the validator's
+		// no-BOM order must be LE to match.
+		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.UseBOM), 2, orderLE2, true)
 	case "eucjp", "xeucjp", "cseucpkdfmtjapanese":
 		return japanese.EUCJP
 	case "shiftjis", "cp932", "sjis", "ms932", "mskanji", "windows31j", "xsjis", "csshiftjis":
@@ -132,7 +135,10 @@ func Load(name string) enc.Encoding {
 	case "ucs4le", "utf32le":
 		return withStrictDecode(utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM), 4, orderLE4, false)
 	case "ucs4", "utf32":
-		return withStrictDecode(utf32.UTF32(utf32.BigEndian, utf32.UseBOM), 4, byteOrder{}, true)
+		// UseBOM with BigEndian default: x/text's decoder falls back to the
+		// configured default (BE) when no BOM is present, so the validator's
+		// no-BOM order must be BE to match.
+		return withStrictDecode(utf32.UTF32(utf32.BigEndian, utf32.UseBOM), 4, orderBE4, true)
 	case "ucs42143":
 		return withStrictDecode(&ucs4SwapEncoding{swap: swap2143}, 4, order2143, false)
 	case "ucs43412":

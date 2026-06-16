@@ -30,11 +30,14 @@ package encoding
 //   - A trailing incomplete unit (leftover bytes that do not fill a full code
 //     unit) is malformed.
 //
-// For BOM-sensitive encodings (UTF-16/UTF-32 with UseBOM) the leading BOM is
-// inspected to fix big- vs little-endian, then skipped from validation. Because
-// the decision is made on the source bytes in the resolved byte order, it is
-// independent of how many U+FFFD the base decoder emitted, and independent of
-// how the decoder chunked its destination buffer (the round-4 ErrShortDst gap).
+// For BOM-sensitive encodings (UTF-16/UTF-32 with UseBOM) the leading unit is
+// inspected: an actual BOM fixes big- vs little-endian and is skipped from
+// validation; absent a BOM the validator uses the encoding's configured default
+// order (the same fallback x/text's UseBOM decoder uses) and validates the first
+// unit as real content. Because the decision is made on the source bytes in the
+// resolved byte order, it is independent of how many U+FFFD the base decoder
+// emitted, and independent of how the decoder chunked its destination buffer
+// (the round-4 ErrShortDst gap).
 
 import (
 	"errors"
@@ -79,9 +82,10 @@ func (o byteOrder) scalar(unit []byte) uint32 {
 // rejects malformed input that the base decoder would otherwise silently
 // replace with U+FFFD. width is the encoding's fixed code-unit width in bytes
 // (2 for UTF-16 / UCS-2, 4 for UTF-32 / UCS-4). order is the resolved byte
-// order for fixed-endianness encodings; for UseBOM encodings it is ignored and
-// useBOM must be true so the order is resolved from the leading BOM. The
-// encoder is left unchanged.
+// order for fixed-endianness encodings; for UseBOM encodings it is the default
+// order used when no BOM is present (matching the wrapped decoder's configured
+// default) and useBOM must be true so a leading BOM, when present, overrides it.
+// The encoder is left unchanged.
 func withStrictDecode(e enc.Encoding, width int, order byteOrder, useBOM bool) enc.Encoding {
 	return &strictEncoding{Encoding: e, width: width, order: order, useBOM: useBOM}
 }
@@ -158,7 +162,10 @@ func (t *strictDecoderTransformer) validate(src []byte, atEOF bool) error {
 	off := 0
 
 	if t.useBOM {
-		// Resolve big- vs little-endian from the leading BOM, then skip it.
+		// Resolve big- vs little-endian from a leading BOM. An actual BOM is
+		// consumed by the decoder and skipped from validation; absent a BOM the
+		// decoder falls back to its configured default order (t.order) and the
+		// first unit is real content, so it must be validated from offset 0.
 		if !t.bomResolved {
 			if len(buf) < t.width {
 				if atEOF {
@@ -172,9 +179,12 @@ func (t *strictDecoderTransformer) validate(src []byte, atEOF bool) error {
 				t.carry = append(t.carry, buf...)
 				return nil
 			}
-			t.resolved = t.resolveBOM(buf[:t.width])
+			resolved, isBOM := t.resolveBOM(buf[:t.width])
+			t.resolved = resolved
 			t.bomResolved = true
-			off = t.width // skip the BOM unit
+			if isBOM {
+				off = t.width // skip the BOM unit
+			}
 		}
 		order = t.resolved
 	}
@@ -207,23 +217,31 @@ func (t *strictDecoderTransformer) validate(src []byte, atEOF bool) error {
 	return nil
 }
 
-// resolveBOM determines the byte order from the leading BOM unit. A little-
-// endian BOM has its low-order byte first; anything else (including a big-
-// endian BOM or a missing BOM) is treated as big-endian, matching x/text's
-// UseBOM default.
-func (t *strictDecoderTransformer) resolveBOM(bom []byte) byteOrder {
+// resolveBOM inspects the leading unit. If it is an actual byte-order mark it
+// returns the order it selects and true (the caller skips it). Otherwise it
+// returns the configured default order (t.order) and false: there is no BOM, so
+// the decoder uses its default endianness and the first unit is real content
+// that must be validated. The default matches x/text's UseBOM fallback, which
+// keeps the encoding's configured endianness when no BOM is present.
+func (t *strictDecoderTransformer) resolveBOM(bom []byte) (byteOrder, bool) {
 	if t.width == 2 {
 		// LE BOM: FF FE. BE BOM: FE FF.
 		if bom[0] == 0xFF && bom[1] == 0xFE {
-			return orderLE2
+			return orderLE2, true
 		}
-		return orderBE2
+		if bom[0] == 0xFE && bom[1] == 0xFF {
+			return orderBE2, true
+		}
+		return t.order, false
 	}
 	// width 4. LE BOM: FF FE 00 00. BE BOM: 00 00 FE FF.
 	if bom[0] == 0xFF && bom[1] == 0xFE && bom[2] == 0x00 && bom[3] == 0x00 {
-		return orderLE4
+		return orderLE4, true
 	}
-	return orderBE4
+	if bom[0] == 0x00 && bom[1] == 0x00 && bom[2] == 0xFE && bom[3] == 0xFF {
+		return orderBE4, true
+	}
+	return t.order, false
 }
 
 type unitStatus int

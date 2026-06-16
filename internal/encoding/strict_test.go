@@ -155,6 +155,53 @@ func TestStrictDecodeUTF16BOM(t *testing.T) {
 		_, err := e.NewDecoder().Bytes([]byte{0xFF, 0xFE, 0x41, 0x00, 0x00, 0xD8, 0x42, 0x00})
 		require.Error(t, err)
 	})
+
+	t.Run("no-BOM first-unit unpaired high surrogate rejected", func(t *testing.T) {
+		t.Parallel()
+
+		// Round-5 finding: no BOM, so x/text's UseBOM decoder falls back to its
+		// configured default endianness (LittleEndian for Load("utf-16")). The
+		// bytes 00 D8 read little-endian are 0xD800, a lone high surrogate the
+		// decoder substitutes with U+FFFD. The wrapper must reject it instead of
+		// treating the first unit as a BOM and skipping it.
+		e := xmlenc.Load("utf-16")
+		require.NotNil(t, e)
+		_, err := e.NewDecoder().Bytes([]byte{0x00, 0xD8})
+		require.Error(t, err)
+	})
+
+	t.Run("no-BOM first-unit lone low surrogate rejected", func(t *testing.T) {
+		t.Parallel()
+
+		// 00 DC little-endian is 0xDC00, a lone low surrogate.
+		e := xmlenc.Load("utf-16")
+		require.NotNil(t, e)
+		_, err := e.NewDecoder().Bytes([]byte{0x00, 0xDC})
+		require.Error(t, err)
+	})
+
+	t.Run("no-BOM first-unit genuine char accepted", func(t *testing.T) {
+		t.Parallel()
+
+		// 41 00 little-endian (the default order) is 0x0041 = "A". No BOM, so the
+		// first unit is real content and must be validated, not skipped.
+		e := xmlenc.Load("utf-16")
+		require.NotNil(t, e)
+		got, err := e.NewDecoder().Bytes([]byte{0x41, 0x00, 0x42, 0x00})
+		require.NoError(t, err)
+		require.Equal(t, "AB", string(got))
+	})
+
+	t.Run("no-BOM first-unit genuine U+FFFD accepted", func(t *testing.T) {
+		t.Parallel()
+
+		// FD FF little-endian is 0xFFFD, a genuine replacement character.
+		e := xmlenc.Load("utf-16")
+		require.NotNil(t, e)
+		got, err := e.NewDecoder().Bytes([]byte{0xFD, 0xFF, 0x42, 0x00})
+		require.NoError(t, err)
+		require.Equal(t, "�B", string(got))
+	})
 }
 
 func TestStrictDecodeUTF32(t *testing.T) {
@@ -233,6 +280,53 @@ func TestStrictDecodeUTF32(t *testing.T) {
 		got, err := e.NewDecoder().Bytes([]byte{0x00, 0x01, 0xF6, 0x00})
 		require.NoError(t, err)
 		require.Equal(t, "\U0001F600", string(got))
+	})
+
+	t.Run("no-BOM first-unit surrogate scalar rejected", func(t *testing.T) {
+		t.Parallel()
+
+		// Round-5 finding: no BOM, so x/text's UseBOM decoder falls back to its
+		// configured default endianness (BigEndian for Load("utf-32")). The bytes
+		// 00 00 D8 00 read big-endian are 0xD800, a surrogate scalar the decoder
+		// substitutes with U+FFFD. The wrapper must reject it, not skip the first
+		// unit as a BOM.
+		e := xmlenc.Load("utf-32")
+		require.NotNil(t, e)
+		_, err := e.NewDecoder().Bytes([]byte{0x00, 0x00, 0xD8, 0x00})
+		require.Error(t, err)
+	})
+
+	t.Run("no-BOM first-unit out-of-range scalar rejected", func(t *testing.T) {
+		t.Parallel()
+
+		// 00 11 00 00 big-endian is 0x00110000, beyond the Unicode range.
+		e := xmlenc.Load("utf-32")
+		require.NotNil(t, e)
+		_, err := e.NewDecoder().Bytes([]byte{0x00, 0x11, 0x00, 0x00})
+		require.Error(t, err)
+	})
+
+	t.Run("no-BOM first-unit genuine char accepted", func(t *testing.T) {
+		t.Parallel()
+
+		// 00 00 00 41 big-endian (the default order) is "A". No BOM, so the first
+		// unit is real content and must be validated, not skipped.
+		e := xmlenc.Load("utf-32")
+		require.NotNil(t, e)
+		got, err := e.NewDecoder().Bytes([]byte{0x00, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00, 0x42})
+		require.NoError(t, err)
+		require.Equal(t, "AB", string(got))
+	})
+
+	t.Run("no-BOM first-unit genuine U+FFFD accepted", func(t *testing.T) {
+		t.Parallel()
+
+		// 00 00 FF FD big-endian is a genuine U+FFFD.
+		e := xmlenc.Load("utf-32")
+		require.NotNil(t, e)
+		got, err := e.NewDecoder().Bytes([]byte{0x00, 0x00, 0xFF, 0xFD, 0x00, 0x00, 0x00, 0x42})
+		require.NoError(t, err)
+		require.Equal(t, "�B", string(got))
 	})
 
 	t.Run("surrogate scalar rejected", func(t *testing.T) {
