@@ -397,6 +397,81 @@ func TestFnArray(t *testing.T) {
 	})
 }
 
+// --- array position-argument integer validation ---
+
+func TestFnArrayIntegerPositions(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErrCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: code}, "expected error code %s for %q", code, expr)
+	}
+
+	// Non-integer or wrong-cardinality position arguments must raise XPTY0004.
+	t.Run("XPTY0004", func(t *testing.T) {
+		for _, expr := range []string{
+			`array:remove([1, 2], 1.5)`,
+			`array:subarray([1, 2, 3], 1.5)`,
+			`array:subarray([1, 2, 3], 2, 1.5)`,
+			`array:subarray([1, 2, 3], ())`,
+			`array:insert-before([1, 2], 1.5, 9)`,
+			`array:insert-before([1, 2], (), 9)`,
+		} {
+			t.Run(expr, func(t *testing.T) {
+				evalErrCode(t, expr, "XPTY0004")
+			})
+		}
+	})
+
+	// Out-of-range integer positions must raise FOAY0001.
+	t.Run("FOAY0001", func(t *testing.T) {
+		for _, expr := range []string{
+			`array:remove([1, 2], 5)`,
+			`array:insert-before([1, 2], 0, 9)`,
+		} {
+			t.Run(expr, func(t *testing.T) {
+				evalErrCode(t, expr, "FOAY0001")
+			})
+		}
+	})
+
+	// Valid invocations must continue to work (no regression).
+	t.Run("valid", func(t *testing.T) {
+		tests := []struct {
+			expr   string
+			expect []int64
+		}{
+			{`array:remove([1, 2], 1)`, []int64{2}},
+			{`array:remove([1, 2, 3], (1, 2))`, []int64{3}},
+			{`array:remove([1, 2, 3], ())`, []int64{1, 2, 3}},
+			{`array:subarray([1, 2, 3], 2)`, []int64{2, 3}},
+			{`array:subarray([1, 2, 3], 2, 1)`, []int64{2}},
+			{`array:insert-before([1, 2], 1, 9)`, []int64{9, 1, 2}},
+			{`array:insert-before([1, 2], 3, 9)`, []int64{1, 2, 9}},
+		}
+		for _, tc := range tests {
+			t.Run(tc.expr, func(t *testing.T) {
+				seq := evalExpr(t, doc, tc.expr)
+				require.Equal(t, 1, seq.Len())
+				arr, ok := seq.Get(0).(xpath3.ArrayItem)
+				require.True(t, ok, "expected array result")
+				require.Equal(t, len(tc.expect), arr.Size())
+				for i, want := range tc.expect {
+					member, err := arr.Get(i + 1)
+					require.NoError(t, err)
+					require.Equal(t, 1, member.Len())
+					av := member.Get(0).(xpath3.AtomicValue)
+					require.Equal(t, want, av.IntegerVal())
+				}
+			})
+		}
+	})
+}
+
 // --- URI functions ---
 
 func TestFnURI(t *testing.T) {

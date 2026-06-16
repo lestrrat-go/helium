@@ -111,10 +111,16 @@ func fnArraySubarray(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	start := int(seqToDouble(args[1]))
+	start, err := extractArrayIndex(args[1])
+	if err != nil {
+		return nil, err
+	}
 	length := a.Size() - start + 1
 	if len(args) > 2 {
-		length = int(seqToDouble(args[2]))
+		length, err = extractArrayIndex(args[2])
+		if err != nil {
+			return nil, err
+		}
 	}
 	sub, err := a.SubArray(start, length)
 	if err != nil {
@@ -136,7 +142,14 @@ func fnArrayRemove(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		pos := int(av.ToFloat64())
+		if !isIntegerDerived(av.TypeName) {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("array:remove position must be xs:integer, got %s", av.TypeName)}
+		}
+		iv, ok := av.Int64Val()
+		if !ok {
+			return nil, &XPathError{Code: errCodeFOAY0001, Message: "array:remove position out of range"}
+		}
+		pos := int(iv)
 		if pos < 1 || pos > size {
 			return nil, &XPathError{Code: errCodeFOAY0001, Message: fmt.Sprintf("array:remove: position %d out of range 1..%d", pos, size)}
 		}
@@ -157,7 +170,10 @@ func fnArrayInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	pos := int(seqToDouble(args[1]))
+	pos, err := extractArrayIndex(args[1])
+	if err != nil {
+		return nil, err
+	}
 	members := a.members0()
 	if pos < 1 || pos > len(members)+1 {
 		return nil, &XPathError{Code: errCodeFOAY0001, Message: "array index out of bounds"}
