@@ -379,12 +379,17 @@ func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequ
 			i++
 			continue
 		}
-		// Numeric promotion
+		// Numeric promotion. The acceptance condition mirrors atomicMatchesTargetType
+		// so the cast that follows always agrees with the gate: any numeric the gate
+		// admits (built-in numerics, integer-derived subtypes, and schema-derived
+		// values whose built-in base/ancestry is numeric) is normalized via
+		// PromoteSchemaType before the cast, so castToDouble/castToFloat operate on a
+		// built-in-typed value instead of failing on an unrecognized schema type.
 		switch targetType {
 		case TypeDouble:
-			if av.TypeName == TypeInteger || av.TypeName == TypeDecimal || av.TypeName == TypeFloat ||
-				isSubtypeOf(av.TypeName, TypeInteger) {
-				promoted, err := castToDouble(av)
+			if atomicMatchesTargetType(av, TypeDouble, ec) || atomicMatchesTargetType(av, TypeFloat, ec) ||
+				atomicMatchesTargetType(av, TypeInteger, ec) || atomicMatchesTargetType(av, TypeDecimal, ec) {
+				promoted, err := castToDouble(PromoteSchemaType(av))
 				if err != nil {
 					return seq, err
 				}
@@ -393,9 +398,8 @@ func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequ
 				continue
 			}
 		case TypeFloat:
-			if av.TypeName == TypeInteger || av.TypeName == TypeDecimal ||
-				isSubtypeOf(av.TypeName, TypeInteger) {
-				promoted, err := castToFloat(av)
+			if atomicMatchesTargetType(av, TypeInteger, ec) || atomicMatchesTargetType(av, TypeDecimal, ec) {
+				promoted, err := castToFloat(PromoteSchemaType(av))
 				if err != nil {
 					return seq, err
 				}

@@ -123,15 +123,30 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 // callers distinguish a genuine atomization failure from a plain cardinality
 // rejection.
 func atomizeStream(seq Sequence, yield func(AtomicValue) (bool, error)) error {
+	_, err := atomizeStreamCont(seq, yield)
+	return err
+}
+
+// atomizeStreamCont is the recursive worker behind atomizeStream. It returns
+// (cont, err): cont is false once yield has requested a stop, so that recursive
+// array-member atomization halts IMMEDIATELY and no further members (or items)
+// are atomized. Propagating the stop is what lets a caller's bounded-work cap
+// (e.g. a singleton-cardinality check) surface its own rejection rather than a
+// later member's atomization error (e.g. FOTY0013 from a map).
+func atomizeStreamCont(seq Sequence, yield func(AtomicValue) (bool, error)) (bool, error) {
 	if seq == nil {
-		return nil
+		return true, nil
 	}
 	for item := range seqItems(seq) {
 		// XPath 3.1: atomizing an array flattens its members
 		if arr, ok := item.(ArrayItem); ok {
 			for _, member := range arr.members0() {
-				if err := atomizeStream(member, yield); err != nil {
-					return err
+				cont, err := atomizeStreamCont(member, yield)
+				if err != nil {
+					return false, err
+				}
+				if !cont {
+					return false, nil
 				}
 			}
 			continue
@@ -153,15 +168,15 @@ func atomizeStream(seq Sequence, yield func(AtomicValue) (bool, error)) error {
 						if strings.HasPrefix(listItem, "Q{") {
 							cast = AtomicValue{TypeName: listItem, Value: tok}
 						} else {
-							return err
+							return false, err
 						}
 					}
 					cont, err := yield(cast)
 					if err != nil {
-						return err
+						return false, err
 					}
 					if !cont {
-						return nil
+						return false, nil
 					}
 				}
 				continue
@@ -169,17 +184,17 @@ func atomizeStream(seq Sequence, yield func(AtomicValue) (bool, error)) error {
 		}
 		av, err := AtomizeItem(item)
 		if err != nil {
-			return err
+			return false, err
 		}
 		cont, err := yield(av)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if !cont {
-			return nil
+			return false, nil
 		}
 	}
-	return nil
+	return true, nil
 }
 
 // builtinListItemType returns the item type for built-in XSD list types.

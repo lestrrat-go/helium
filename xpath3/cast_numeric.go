@@ -35,6 +35,13 @@ func castToDouble(v AtomicValue) (AtomicValue, error) {
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeDouble)
 	default:
+		// Integer-derived subtypes (xs:int, xs:long, xs:positiveInteger, …) store
+		// their value as int64/*big.Int just like xs:integer, so promote through
+		// the integer value space.
+		if isIntegerDerived(v.TypeName) {
+			f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
+			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
+		}
 		if isStringDerived(v.TypeName) {
 			return CastFromString(v.StringVal(), TypeDouble)
 		}

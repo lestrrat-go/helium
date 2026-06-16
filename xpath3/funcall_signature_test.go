@@ -256,6 +256,96 @@ func TestSignatureGateAcceptsSchemaDerivedNumeric(t *testing.T) {
 	}
 }
 
+// Finding 1 (round 5): numeric promotion of an integer-DERIVED subtype to xs:double
+// must succeed. The signature gate admits xs:positiveInteger/xs:int/xs:long/… as a
+// numeric, so the subsequent cast must coerce the whole integer-derived family (not
+// just exact xs:integer) — otherwise a valid promotion is rejected with XPTY0004
+// before the builtin (here fn:substring) runs.
+func TestSignatureGatePromotesIntegerDerivedSubtypes(t *testing.T) {
+	t.Parallel()
+
+	exprs := []string{
+		`substring("abcd", xs:positiveInteger("2"))`,
+		`substring("abcd", xs:int("2"))`,
+		`substring("abcd", xs:long("2"))`,
+		`substring("abcd", xs:short("2"))`,
+		`substring("abcd", xs:byte("2"))`,
+		`substring("abcd", xs:nonNegativeInteger("2"))`,
+	}
+	for _, expr := range exprs {
+		result, err := evaluate(t.Context(), nil, expr)
+		require.NoError(t, err, expr)
+		s, ok := result.IsString()
+		require.True(t, ok, expr)
+		require.Equal(t, "bcd", s, expr)
+	}
+}
+
+// Finding 1 (round 5): a schema-DERIVED integer (BaseType xs:integer) supplied to an
+// xs:double parameter must promote — the gate accepts it via BaseType ancestry and the
+// cast must agree by normalizing through PromoteSchemaType.
+func TestSignatureGatePromotesSchemaDerivedInteger(t *testing.T) {
+	t.Parallel()
+
+	vars := xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		"v": xpath3.ItemSlice{
+			xpath3.AtomicValue{
+				TypeName: "Q{urn:test}myInt",
+				BaseType: xpath3.TypeInteger,
+				Value:    int64(2),
+			},
+		},
+	})
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Variables(vars).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`substring("abcd", $v)`), nil)
+	require.NoError(t, err)
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "bcd", s)
+}
+
+// Finding 1 (round 5): a genuinely non-numeric value supplied where a numeric is
+// required still raises XPTY0004 — broadening the cast must not admit non-numerics.
+func TestSignatureGateRejectsNonNumericForNumericParam(t *testing.T) {
+	t.Parallel()
+	_, err := evaluate(t.Context(), nil, `substring("abcd", current-date())`)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+}
+
+// Finding 2 (round 5): when a singleton (xs:string?) parameter receives an ARRAY whose
+// later members would themselves fail atomization (a map → FOTY0013), the cardinality
+// failure observed at the 2nd atom must win. The stop signal must propagate out of the
+// recursive array-member atomization so the map is never reached.
+func TestSignatureGateArrayCardinalityBeatsLaterAtomError(t *testing.T) {
+	t.Parallel()
+	_, err := evaluate(t.Context(), nil, `upper-case([1, 2, map{}])`)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+}
+
+// Finding 2 (round 5): legitimate array atomization still works fully — a single-member
+// array satisfies a singleton param, and array-accepting functions atomize all members.
+func TestSignatureGateArrayAtomizationStillWorks(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		`upper-case(["a"])`:         "A",
+		`string-join([1,2,3], ",")`: "1,2,3",
+	}
+	for expr, want := range cases {
+		result, err := evaluate(t.Context(), nil, expr)
+		require.NoError(t, err, expr)
+		s, ok := result.IsString()
+		require.True(t, ok, expr)
+		require.Equal(t, want, s, expr)
+	}
+}
+
 // Finding 2: a too-long sequence supplied to a singleton (xs:string?) parameter
 // must be rejected promptly with XPTY0004 — without atomizing the whole range.
 // A 10M-item lazy range would allocate ~1GB if atomized eagerly; the cap keeps
