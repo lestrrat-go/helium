@@ -41,7 +41,7 @@ func TestXMLCharValidation(t *testing.T) {
 		t.Parallel()
 		// U+FFFD (EF BF BD) is a valid XML Char and must survive the slow
 		// comment scan path.
-		data := []byte("<root><!--" + "�" + "--></root>")
+		data := []byte("<root><!--" + "\uFFFD" + "--></root>")
 		_, err := helium.NewParser().Parse(t.Context(), data)
 		require.NoError(t, err)
 	})
@@ -57,7 +57,7 @@ func TestXMLCharValidation(t *testing.T) {
 		t.Parallel()
 		// The entity reference forces the slow attribute-value scan path
 		// (the fast scanner bails on '&'). U+FFFD in that value is valid.
-		data := []byte(`<root a="x&amp;` + "�" + `"></root>`)
+		data := []byte(`<root a="x&amp;` + "\uFFFD" + `"></root>`)
 		_, err := helium.NewParser().Parse(t.Context(), data)
 		require.NoError(t, err)
 	})
@@ -69,14 +69,37 @@ func TestXMLCharValidation(t *testing.T) {
 func TestParseNameUTF8FFFD(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
-		"<�/>",             // element name starting with U+FFFD
-		"<a�/>",            // U+FFFD inside element name
-		"<root �=\"v\"/>",  // attr name starting with U+FFFD
-		"<root x�=\"v\"/>", // U+FFFD inside attr name (ASCII-first fast path)
+		"<\uFFFD/>",             // element name starting with U+FFFD
+		"<a\uFFFD/>",            // U+FFFD inside element name
+		"<root \uFFFD=\"v\"/>",  // attr name starting with U+FFFD
+		"<root x\uFFFD=\"v\"/>", // U+FFFD inside attr name (ASCII-first fast path)
 	} {
 		_, err := helium.NewParser().Parse(t.Context(), []byte(in))
 		require.NoError(t, err, "valid U+FFFD in name must parse: %q", in)
 	}
 	_, err := helium.NewParser().Parse(t.Context(), []byte{'<', 0xFF, '/', '>'})
 	require.Error(t, err, "invalid UTF-8 lead byte in a name must be rejected")
+}
+
+// TestXMLCharValidationOtherSlowPaths exercises the width-aware U+FFFD handling
+// in the PI and DTD entity-value scan paths.
+func TestXMLCharValidationOtherSlowPaths(t *testing.T) {
+	t.Parallel()
+
+	t.Run("PI content with U+FFFD is accepted", func(t *testing.T) {
+		_, err := helium.NewParser().Parse(t.Context(), []byte("<root><?pi a\uFFFDb?></root>"))
+		require.NoError(t, err)
+	})
+
+	t.Run("PI content with U+0001 is rejected", func(t *testing.T) {
+		_, err := helium.NewParser().Parse(t.Context(), []byte("<root><?pi a\x01b?></root>"))
+		require.Error(t, err)
+	})
+
+	t.Run("entity declaration value with U+FFFD is accepted", func(t *testing.T) {
+		// The entity-declaration value scanner must accept the valid U+FFFD.
+		doc := "<!DOCTYPE root [<!ENTITY e \"a\uFFFDb\">]><root/>"
+		_, err := helium.NewParser().Parse(t.Context(), []byte(doc))
+		require.NoError(t, err)
+	})
 }
