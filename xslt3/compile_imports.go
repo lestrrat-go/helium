@@ -143,7 +143,7 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 	}
 
 	if c.resolver == nil {
-		return nil, fmt.Errorf("cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
+		return nil, staticError(errCodeXTSE0165, "cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
 	}
 
 	rc, resolveErr := c.resolver.Resolve(uri)
@@ -454,7 +454,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 
 	// Load the document
 	if c.resolver == nil {
-		return fmt.Errorf("cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
+		return staticError(errCodeXTSE0165, "cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
 	}
 
 	rc, resolveErr := c.resolver.Resolve(uri)
