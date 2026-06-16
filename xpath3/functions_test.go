@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -353,6 +354,65 @@ func TestFnMap(t *testing.T) {
 		require.Equal(t, 1, seq.Len())
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(2), av.IntegerVal())
+	})
+
+	// Regression: two distinct xs:integer keys whose magnitude exceeds
+	// MaxFloat64 (~1.8e308) must not collide. Before the fix, both were
+	// normalized through ToFloat64 -> +Inf and shared one bucket, producing
+	// a false XQDY0137 duplicate-key error / wrong map size.
+	t.Run("huge integer keys do not collide", func(t *testing.T) {
+		k1 := "1" + strings.Repeat("0", 400) // > MaxFloat64
+		k2 := "2" + strings.Repeat("0", 400) // distinct, also > MaxFloat64
+		expr := `map:size(map { ` + k1 + `: "a", ` + k2 + `: "b" })`
+		seq := evalExpr(t, doc, expr)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, int64(2), av.IntegerVal())
+	})
+
+	t.Run("huge integer key lookup", func(t *testing.T) {
+		k1 := "1" + strings.Repeat("0", 400)
+		k2 := "2" + strings.Repeat("0", 400)
+		expr := `map:get(map { ` + k1 + `: "a", ` + k2 + `: "b" }, ` + k2 + `)`
+		seq := evalExpr(t, doc, expr)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, "b", av.StringVal())
+	})
+
+	// Guard: normal small integer keys are unaffected.
+	t.Run("small integer keys", func(t *testing.T) {
+		seq := evalExpr(t, doc, `map:size(map { 1: "a", 2: "b" })`)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, int64(2), av.IntegerVal())
+
+		got := evalExpr(t, doc, `map:get(map { 1: "a", 2: "b" }, 2)`)
+		require.Equal(t, 1, got.Len())
+		require.Equal(t, "b", got.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
+	// Guard: integer and decimal keys that compare equal (1 and 1.0) are the
+	// same key per XPath "same key" rules, so the map constructor must reject
+	// them as a duplicate (XQDY0137). This confirms the fix preserves
+	// cross-type numeric key equality for in-range values.
+	t.Run("integer and decimal equal keys are duplicate", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`map { 1: "a", 1.0: "b" }`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XQDY0137")
+	})
+
+	// Guard: a huge integer key and the equal huge decimal key are still the
+	// same key (both > MaxFloat64), and must be rejected as a duplicate.
+	t.Run("huge integer and decimal equal keys are duplicate", func(t *testing.T) {
+		big := "1" + strings.Repeat("0", 400)
+		compiled, err := xpath3.NewCompiler().Compile(`map { ` + big + `: "a", ` + big + `.0: "b" }`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XQDY0137")
 	})
 }
 
