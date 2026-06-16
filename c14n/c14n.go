@@ -23,6 +23,7 @@ type canonicalizerCfg struct {
 	mode              Mode
 	withComments      bool
 	nodeSet           []helium.Node
+	nodeSetSet        bool // true once NodeSet was explicitly configured (even if empty)
 	inclusivePrefixes []string
 	baseURI           string
 }
@@ -59,6 +60,7 @@ func (c Canonicalizer) Comments() Canonicalizer {
 func (c Canonicalizer) NodeSet(nodes []helium.Node) Canonicalizer {
 	c = c.clone()
 	c.cfg.nodeSet = append([]helium.Node(nil), nodes...)
+	c.cfg.nodeSetSet = true
 	return c
 }
 
@@ -94,7 +96,7 @@ func (c Canonicalizer) Canonicalize(doc *helium.Document, out io.Writer) error {
 	}
 	can.withComments = cfg.withComments
 	can.baseURI = cfg.baseURI
-	if len(cfg.nodeSet) > 0 {
+	if cfg.nodeSetSet {
 		can.nodeSet = make(map[helium.Node]struct{}, len(cfg.nodeSet))
 		for _, n := range cfg.nodeSet {
 			can.nodeSet[n] = struct{}{}
