@@ -277,36 +277,59 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 	width += 2
 	s = s[2:]
 
+	if len(s) == 0 {
+		err = errors.New("malformed CharRef")
+		width = 0
+		return
+	}
+
 	var accumulator func(int32, rune) (int32, error)
 	if s[0] == 'x' {
 		s = s[1:]
 		width++
 		accumulator = accumulateHexCharRef
+		if len(s) == 0 {
+			err = errors.New("malformed CharRef")
+			width = 0
+			return
+		}
 	} else {
 		accumulator = accumulateDecimalCharRef
 	}
 
-	for c := s[0]; c != ';'; c = s[0] {
+	digits := 0
+	for len(s) > 0 && s[0] != ';' {
+		c := s[0]
 		val, err = accumulator(val, rune(c))
 		if err != nil {
 			width = 0
 			return
 		}
 		if val > unicode.MaxRune {
-			err = errors.New("hex CharRef out of range")
+			err = errors.New("CharRef out of range")
 			width = 0
 			return
 		}
 
+		digits++
 		s = s[1:]
 		width++
 	}
 
-	if s[0] == ';' {
-		s = s[1:]
-		_ = s
-		width++
+	if digits == 0 {
+		err = errors.New("malformed CharRef")
+		width = 0
+		return
 	}
+
+	if len(s) == 0 || s[0] != ';' {
+		err = errors.New("malformed CharRef")
+		width = 0
+		return
+	}
+	s = s[1:]
+	_ = s
+	width++
 
 	r = val
 	if !isXMLCharValue(uint32(val)) {
@@ -525,6 +548,12 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 				err = errors.New("invalid hex CharRef")
 				return
 			}
+			// Stop accumulating once the value is out of range so an
+			// oversized reference cannot wrap int32 into a valid-looking rune.
+			if val > unicode.MaxRune {
+				err = ErrInvalidChar
+				return
+			}
 			if err := cur.Advance(1); err != nil {
 				return utf8.RuneError, err
 			}
@@ -541,6 +570,12 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 				val = val*10 + int32(c-'0')
 			} else {
 				err = errors.New("invalid decimal CharRef")
+				return
+			}
+			// Stop accumulating once the value is out of range so an
+			// oversized reference cannot wrap int32 into a valid-looking rune.
+			if val > unicode.MaxRune {
+				err = ErrInvalidChar
 				return
 			}
 			if err := cur.Advance(1); err != nil {

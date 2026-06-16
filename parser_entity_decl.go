@@ -217,12 +217,13 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		if c := cur.Peek(); c == '"' || c == '\'' {
 			literal, value, err = pctx.parseEntityValue(ctx)
 			hasOrig = true
-			if err == nil {
-				switch err := pctx.fireSAXCallback(ctx, cbEntityDecl, name, value); err {
-				case nil, sax.ErrHandlerUnspecified:
-				default:
-					return pctx.error(ctx, err)
-				}
+			if err != nil {
+				return pctx.error(ctx, err)
+			}
+			switch err := pctx.fireSAXCallback(ctx, cbEntityDecl, name, value); err {
+			case nil, sax.ErrHandlerUnspecified:
+			default:
+				return pctx.error(ctx, err)
 			}
 		} else {
 			literal, uri, err = pctx.parseExternalID(ctx)
@@ -251,13 +252,14 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		if c := cur.Peek(); c == '"' || c == '\'' {
 			literal, value, err = pctx.parseEntityValue(ctx)
 			hasOrig = true
-			if err == nil {
-				if s := pctx.sax; s != nil {
-					switch err := s.EntityDecl(ctx, name, enum.InternalGeneralEntity, "", "", value); err {
-					case nil, sax.ErrHandlerUnspecified:
-					default:
-						return pctx.error(ctx, err)
-					}
+			if err != nil {
+				return pctx.error(ctx, err)
+			}
+			if s := pctx.sax; s != nil {
+				switch err := s.EntityDecl(ctx, name, enum.InternalGeneralEntity, "", "", value); err {
+				case nil, sax.ErrHandlerUnspecified:
+				default:
+					return pctx.error(ctx, err)
 				}
 			}
 		} else {
