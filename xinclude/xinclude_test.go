@@ -993,6 +993,45 @@ func TestXIncludeParseNoEntWithXPointer(t *testing.T) {
 	require.True(t, found, "included <item> element not found")
 }
 
+// TestXIncludeXPointerNoXXE verifies that an external SYSTEM entity declared
+// inside an XPointer-included document (parsed with entity substitution) cannot
+// read host files behind a strict resolver's back. The resolver here is a
+// custom (non-FS) resolver that only serves canned content, so the inner parser
+// must not fall back to the host filesystem for the SYSTEM entity.
+func TestXIncludeXPointerNoXXE(t *testing.T) {
+	t.Parallel()
+
+	secret := filepath.Join(t.TempDir(), "secret.txt")
+	const marker = "TOP-SECRET-XXE-MARKER"
+	require.NoError(t, os.WriteFile(secret, []byte(marker), 0o600))
+
+	resolver := &stringResolver{
+		files: map[string]string{
+			"entities.xml": `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "` + secret + `">
+]>
+<root><item>&xxe;</item></root>`,
+		},
+	}
+
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="entities.xml" xpointer="xpointer(/root/item)"/>
+	</root>`)
+
+	// Processing may succeed (entity unresolved) or fail; either is acceptable.
+	// What must never happen is the secret file's contents leaking into output.
+	_, _ = xinclude.NewProcessor().
+		Resolver(resolver).
+		NoXIncludeMarkers().
+		NoBaseFixup().
+		Process(t.Context(), doc)
+
+	got, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.NotContains(t, got, marker, "external SYSTEM entity leaked host file via XPointer include")
+}
+
 // countingResolver wraps a stringResolver and counts Resolve calls per URI.
 type countingResolver struct {
 	inner *stringResolver

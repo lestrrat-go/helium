@@ -606,6 +606,20 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, substituteEntiti
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
 	parser := helium.NewParser().LoadExternalDTD(true).BaseURI(uri)
+	// Thread the resolver's filesystem into the inner parser so external
+	// entities and external DTDs declared inside the included document
+	// resolve through the SAME sandbox as XInclude itself, not the parser's
+	// default permissive filesystem. Otherwise an attacker-supplied included
+	// document could expand a SYSTEM entity (e.g. "/etc/passwd") off the host
+	// filesystem, bypassing a strict Resolver (XXE). For the default
+	// permissive resolver this is identical to the previous behavior; a custom
+	// (non-FS) resolver gets a deny-all FS so inner SYSTEM references cannot
+	// reach the host.
+	if fr, ok := p.resolver.(*fsResolver); ok {
+		parser = parser.FS(fr.fsys)
+	} else {
+		parser = parser.FS(denyAllFS{})
+	}
 	if substituteEntities {
 		parser = parser.SubstituteEntities(true)
 	}
@@ -1203,6 +1217,14 @@ func (p *processor) computeFixupBases(inc *helium.Element, sourceURI string) (st
 type fsResolver struct {
 	fsys fs.FS
 }
+
+// denyAllFS is an fs.FS that refuses every open. It is threaded into the inner
+// parser used for included documents when the XInclude resolver is a custom
+// (non-fsResolver) implementation, so external entities/DTDs in the included
+// document cannot reach the host filesystem behind the resolver's back.
+type denyAllFS struct{}
+
+func (denyAllFS) Open(string) (fs.File, error) { return nil, fs.ErrNotExist }
 
 func (r *fsResolver) Resolve(href, base string) (io.ReadCloser, error) {
 	// Upstream URI resolution (e.g. resolveURI) may produce OS-specific
