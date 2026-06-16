@@ -218,6 +218,21 @@ func TestResultIsNodeSet(t *testing.T) {
 	require.Len(t, nodes, 3)
 }
 
+// TestUnprefixedNameTestMatchesNoNamespaceOnly verifies that an unprefixed
+// name test, with no namespace context configured, matches only nodes in no
+// namespace (XPath 3.1 §3.3.2.1), not nodes in an arbitrary namespace.
+func TestUnprefixedNameTestMatchesNoNamespaceOnly(t *testing.T) {
+	t.Parallel()
+	const src = `<root><item xmlns="http://ex">A</item><item xmlns="">B</item></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	nodes, err := find(t.Context(), doc, `//item`)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	require.Equal(t, "B", string(nodes[0].Content()))
+}
+
 func TestPrefixedFunctionMissingDoesNotFallBackToFnNamespace(t *testing.T) {
 	t.Parallel()
 	doc := parseTestDoc(t)

@@ -304,7 +304,9 @@ func matchNameTestByLocalAndPrefix(test NameTest, n helium.Node, ec *evalContext
 		return matchPrefix(test.Prefix, n, ec)
 	}
 
-	return true
+	// XPath 1.0 has no default element namespace: an unprefixed name test
+	// matches only nodes with no namespace URI.
+	return ixpath.NodeNamespaceURI(n) == ""
 }
 
 func matchPrefix(prefix string, n helium.Node, ec *evalContext) bool {

@@ -685,11 +685,13 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 		// matches only attributes with no namespace URI.
 		return ixpath.NodeNamespaceURI(n) == ""
 	}
+	// Per XPath 3.1 §3.3.2.1: when no default element namespace is bound,
+	// an unprefixed name test matches only no-namespace elements.
+	defaultNS := ""
 	if ec.namespaces != nil {
-		return ixpath.NodeNamespaceURI(n) == ec.namespaces[""]
+		defaultNS = ec.namespaces[""]
 	}
-	// No namespace context at all: permissive match (any namespace).
-	return true
+	return ixpath.NodeNamespaceURI(n) == defaultNS
 }
 
 func matchPrefix(prefix string, n helium.Node, ec *evalContext) bool {

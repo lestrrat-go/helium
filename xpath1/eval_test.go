@@ -69,6 +69,17 @@ func TestEvalDoubleSlash(t *testing.T) {
 	require.Len(t, r.NodeSet, 2)
 }
 
+// TestEvalUnprefixedNameTestMatchesNoNamespaceOnly verifies that an unprefixed
+// name test matches only no-namespace nodes. XPath 1.0 has no default element
+// namespace, so a node in a namespace must not match an unprefixed test.
+func TestEvalUnprefixedNameTestMatchesNoNamespaceOnly(t *testing.T) {
+	doc := parseXML(t, `<root><item xmlns="http://ex">A</item><item xmlns="">B</item></root>`)
+	r, err := xpath1.Evaluate(t.Context(), doc, "//item")
+	require.NoError(t, err)
+	require.Len(t, r.NodeSet, 1)
+	require.Equal(t, "B", string(r.NodeSet[0].Content()))
+}
+
 func TestEvalDot(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	root := docElement(doc)
