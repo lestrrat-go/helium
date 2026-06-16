@@ -1032,6 +1032,56 @@ func TestXIncludeXPointerNoXXE(t *testing.T) {
 	require.NotContains(t, got, marker, "external SYSTEM entity leaked host file via XPointer include")
 }
 
+// fsWrapResolver wraps an FS-backed Resolver (e.g. NewFSResolver) for
+// logging/metrics-style decoration while forwarding the optional FS()
+// capability so XInclude still recognizes it as FS-backed.
+type fsWrapResolver struct {
+	inner xinclude.Resolver
+	fsys  fs.FS
+}
+
+func (r *fsWrapResolver) Resolve(href, base string) (io.ReadCloser, error) {
+	return r.inner.Resolve(href, base)
+}
+
+func (r *fsWrapResolver) FS() fs.FS { return r.fsys }
+
+// TestXIncludeWrappedFSResolverInSandbox verifies that a resolver which wraps
+// NewFSResolver but re-exposes FS() is still recognized as FS-backed: an
+// external entity declared inside the included document loads through the SAME
+// sandbox FS (not denied), so legitimate in-sandbox references keep working.
+func TestXIncludeWrappedFSResolverInSandbox(t *testing.T) {
+	t.Parallel()
+
+	const extContent = "FROM-SANDBOX-ENTITY"
+	fsys := fstest.MapFS{
+		"included.xml": &fstest.MapFile{Data: []byte(`<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ENTITY ext SYSTEM "ext.txt">
+]>
+<root><item>&ext;</item></root>`)},
+		"ext.txt": &fstest.MapFile{Data: []byte(extContent)},
+	}
+
+	resolver := &fsWrapResolver{inner: xinclude.NewFSResolver(fsys), fsys: fsys}
+
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="included.xml" xpointer="xpointer(/root/item)"/>
+	</root>`)
+
+	_, err := xinclude.NewProcessor().
+		Resolver(resolver).
+		NoXIncludeMarkers().
+		NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err)
+
+	got, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, got, extContent,
+		"wrapped FS-backed resolver should still load in-sandbox external entity")
+}
+
 // countingResolver wraps a stringResolver and counts Resolve calls per URI.
 type countingResolver struct {
 	inner *stringResolver

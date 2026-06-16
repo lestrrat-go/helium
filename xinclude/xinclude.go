@@ -615,8 +615,18 @@ func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, s
 	// permissive resolver this is identical to the previous behavior; a custom
 	// (non-FS) resolver gets a deny-all FS so inner SYSTEM references cannot
 	// reach the host.
-	if fr, ok := p.resolver.(*fsResolver); ok {
-		parser = parser.FS(fr.fsys)
+	//
+	// Detection uses the fsBacked capability interface rather than a concrete
+	// *fsResolver assertion so callers can wrap NewFSResolver (e.g. for
+	// logging/metrics) without silently losing the in-sandbox loader. The FS
+	// is wrapped with normalizingFS because the parser builds the names it
+	// hands to Open via filepath.Join/BuildURI — OS-native separators on
+	// Windows and possibly absolute — whereas an fs.FS expects slash-separated,
+	// path.Clean'd names. Without normalization a sandbox that accepts
+	// XInclude hrefs would spuriously reject the document's own external
+	// entities/DTDs.
+	if fr, ok := p.resolver.(fsBacked); ok {
+		parser = parser.FS(normalizingFS{fsys: fr.FS()})
 	} else {
 		parser = parser.FS(denyAllFS{})
 	}
@@ -1216,6 +1226,38 @@ func (p *processor) computeFixupBases(inc *helium.Element, sourceURI string) (st
 // via [NewFSResolver].
 type fsResolver struct {
 	fsys fs.FS
+}
+
+// fsBacked is an optional capability interface that a [Resolver] may
+// implement to expose the [fs.FS] it reads from. When a resolver is
+// fsBacked, XInclude threads that same FS into the inner parser so external
+// entities and DTDs declared inside an included document load through the
+// SAME sandbox (rather than the host filesystem behind the resolver's back).
+// Resolvers that wrap [NewFSResolver] (e.g. for logging or metrics) should
+// also implement this so the in-sandbox loader is preserved through the wrap.
+type fsBacked interface {
+	FS() fs.FS
+}
+
+// FS implements [fsBacked], exposing the underlying filesystem so XInclude
+// can reuse it for the inner parser's external entity/DTD resolution.
+func (r *fsResolver) FS() fs.FS { return r.fsys }
+
+// normalizingFS adapts an [fs.FS] so it tolerates the OS-native, possibly
+// absolute names the helium parser builds via [filepath.Join]/BuildURI for
+// external entities and DTDs. It converts separators to forward slashes and
+// canonicalizes with [path.Clean] before delegating to the wrapped FS, so a
+// sandbox (os.DirFS, fstest.MapFS, os.OpenRoot) that already accepts XInclude
+// hrefs sees the document's own external references in the same shape. A
+// remaining ".." prefix still surfaces to the wrapped FS, preserving
+// path-traversal containment.
+type normalizingFS struct {
+	fsys fs.FS
+}
+
+// Open implements [fs.FS].
+func (n normalizingFS) Open(name string) (fs.File, error) {
+	return n.fsys.Open(path.Clean(filepath.ToSlash(name))) //nolint:wrapcheck // passthrough; underlying FS errors propagate verbatim
 }
 
 // denyAllFS is an fs.FS that refuses every open. It is threaded into the inner
