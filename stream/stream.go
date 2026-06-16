@@ -6,7 +6,6 @@ import (
 	"io"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -16,30 +15,11 @@ var errNilOutputWriter = errors.New("stream: output writer is nil")
 
 // isValidPITarget reports whether target is a valid XML processing
 // instruction target. A PI target is an XML Name, which is an NCName
-// optionally containing colons.
+// optionally containing colons. The reserved "xml" target is rejected by
+// StartPI separately (with a dedicated error) before this is reached, so the
+// shared predicate's "xml" rejection is harmless here.
 func isValidPITarget(target string) bool {
-	if target == "" {
-		return false
-	}
-	// Ranging over an invalid byte yields utf8.RuneError (U+FFFD), which is
-	// itself a valid NCName character, so the loop below would accept invalid
-	// UTF-8 and emit raw bytes. Reject invalid encodings up front; a genuinely
-	// encoded U+FFFD is valid UTF-8 and still passes.
-	if !utf8.ValidString(target) {
-		return false
-	}
-	for i, r := range target {
-		if r == ':' {
-			continue
-		}
-		if i == 0 && !xmlchar.IsNCNameStartChar(r) {
-			return false
-		}
-		if i > 0 && !xmlchar.IsNCNameChar(r) {
-			return false
-		}
-	}
-	return true
+	return xmlchar.IsValidPITarget(target)
 }
 
 // writerState tracks what context the writer is currently in.
@@ -837,6 +817,10 @@ func (w *Writer) EndComment() error {
 
 // WriteComment is a convenience for StartComment + WriteString + EndComment.
 func (w *Writer) WriteComment(content string) error {
+	// A prior sticky I/O error must win over the new content validation below.
+	if w.err != nil {
+		return w.err
+	}
 	if strings.Contains(content, "--") {
 		return errors.New("stream: comment content must not contain '--'")
 	}
@@ -912,6 +896,10 @@ func (w *Writer) EndPI() error {
 
 // WritePI is a convenience for StartPI + WriteString + EndPI.
 func (w *Writer) WritePI(target, content string) error {
+	// A prior sticky I/O error must win over the new content validation below.
+	if w.err != nil {
+		return w.err
+	}
 	if strings.Contains(content, "?>") {
 		return errors.New("stream: processing instruction content must not contain '?>'")
 	}

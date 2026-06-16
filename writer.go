@@ -7,6 +7,7 @@ import (
 
 	henc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -312,6 +313,15 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	case ProcessingInstructionNode:
 		// Mirrors xmlsave.c XML_PI_NODE handling.
 		if pi, ok := AsNode[*ProcessingInstruction](n); ok {
+			// The PI target must be a valid XML Name (and not the reserved
+			// "xml"); otherwise an invalid/crafted target injects raw markup
+			// into the output (it is emitted verbatim below).
+			if !xmlchar.IsValidPITarget(pi.target) {
+				// check() keeps the first sticky error, so an earlier I/O failure
+				// is not clobbered by this validation error.
+				d.check(errors.New("helium: invalid PI target"))
+				return d.err
+			}
 			// PI data must not contain "?>", which would terminate the PI early.
 			if strings.Contains(pi.data, "?>") {
 				// check() keeps the first sticky error, so an earlier I/O failure

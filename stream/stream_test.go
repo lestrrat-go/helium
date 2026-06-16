@@ -989,6 +989,31 @@ func TestStickyError(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestStickyErrorPreservedInConvenienceHelpers(t *testing.T) {
+	t.Parallel()
+	// With an underlying writer that fails immediately, the sticky I/O error
+	// must win over the new content/target validation error in the one-shot
+	// convenience helpers.
+	t.Run("WriteComment", func(t *testing.T) {
+		t.Parallel()
+		fw := &failWriter{failAfter: 0}
+		w := stream.NewWriter(fw)
+		require.Error(t, w.StartElement("root"))
+		err := w.WriteComment("a--b")
+		require.Error(t, err)
+		require.Equal(t, "write failed", err.Error())
+	})
+	t.Run("WritePI", func(t *testing.T) {
+		t.Parallel()
+		fw := &failWriter{failAfter: 0}
+		w := stream.NewWriter(fw)
+		require.Error(t, w.StartElement("root"))
+		err := w.WritePI("t", "a?>b")
+		require.Error(t, err)
+		require.Equal(t, "write failed", err.Error())
+	})
+}
+
 func TestFlush(t *testing.T) {
 	t.Parallel()
 	fb := &flushableBuffer{}

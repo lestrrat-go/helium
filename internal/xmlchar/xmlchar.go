@@ -1,6 +1,11 @@
 // Package xmlchar provides XML 1.0 NCName character classification functions.
 package xmlchar
 
+import (
+	"strings"
+	"unicode/utf8"
+)
+
 // IsNCNameStartChar checks the XML 1.0 NCName start character production.
 // NCNameStartChar ::= [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6]
 //
@@ -25,6 +30,37 @@ func IsNCNameChar(r rune) bool {
 	return IsNCNameStartChar(r) ||
 		(r >= '0' && r <= '9') || r == '-' || r == '.' ||
 		r == 0xB7 || (r >= 0x0300 && r <= 0x036F) || (r >= 0x203F && r <= 0x2040)
+}
+
+// IsValidPITarget reports whether target is a valid XML processing
+// instruction target. A PI target is an XML Name (an NCName optionally
+// containing colons) and must not be the reserved name "xml" (any case).
+func IsValidPITarget(target string) bool {
+	if target == "" {
+		return false
+	}
+	if strings.EqualFold(target, "xml") {
+		return false
+	}
+	// Ranging over an invalid byte yields utf8.RuneError (U+FFFD), which is
+	// itself a valid NCName character, so the loop below would accept invalid
+	// UTF-8 and emit raw bytes. Reject invalid encodings up front; a genuinely
+	// encoded U+FFFD is valid UTF-8 and still passes.
+	if !utf8.ValidString(target) {
+		return false
+	}
+	for i, r := range target {
+		if r == ':' {
+			continue
+		}
+		if i == 0 && !IsNCNameStartChar(r) {
+			return false
+		}
+		if i > 0 && !IsNCNameChar(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // IsValidNCName checks whether s is a valid XML NCName (non-colonized name).

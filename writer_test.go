@@ -572,6 +572,48 @@ func TestWriteRejectsMalformedCommentPI(t *testing.T) {
 	require.NoError(t, helium.Write(&sb, doc.CreatePI("php", "echo 1")))
 }
 
+// TestWriteRejectsMalformedPITarget ensures that an invalid PI target — in
+// particular one that injects markup — is rejected before being emitted, so
+// the serialized output never contains the injection.
+func TestWriteRejectsMalformedPITarget(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		target string
+	}{
+		{name: "injection", target: "x?><evil/><?x"},
+		{name: "empty", target: ""},
+		{name: "starts-digit", target: "1bad"},
+		{name: "has-space", target: "a b"},
+		{name: "reserved-xml", target: "xml"},
+		{name: "invalid-utf8", target: "\xff\xfe"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := helium.NewDefaultDocument()
+			root := doc.CreateElement("r")
+			require.NoError(t, doc.SetDocumentElement(root))
+			require.NoError(t, root.AddChild(doc.CreatePI(tc.target, "")))
+
+			var sb strings.Builder
+			err := helium.Write(&sb, doc)
+			require.Error(t, err, "invalid PI target must be rejected")
+			require.NotContains(t, sb.String(), "<evil/>",
+				"injection must not be emitted")
+		})
+	}
+
+	// A valid target still serializes.
+	doc := helium.NewDefaultDocument()
+	root := doc.CreateElement("r")
+	require.NoError(t, doc.SetDocumentElement(root))
+	require.NoError(t, root.AddChild(doc.CreatePI("php", "echo 1")))
+	var sb strings.Builder
+	require.NoError(t, helium.Write(&sb, doc))
+	require.Contains(t, sb.String(), "<?php echo 1?>")
+}
+
 // failOnSubstringWriter fails the first Write whose accumulated tail+payload
 // contains trigger, and accepts everything else. It is used to make a specific
 // serialization step fail while earlier steps succeed.
