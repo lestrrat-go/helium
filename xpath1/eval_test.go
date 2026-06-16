@@ -240,6 +240,12 @@ func TestEvalNodeSetBooleanComparison(t *testing.T) {
 		{`false() = /root/a`, false},
 		{`true() = /root/a`, true},
 		{`false() = /root/nonexistent`, true},
+		// relational operators: boolean(node-set) compared numerically (true=1)
+		{`/root/a > false()`, true},          // 1 > 0
+		{`/root/a < true()`, false},          // 1 < 1
+		{`/root/a >= true()`, true},          // 1 >= 1
+		{`/root/nonexistent < true()`, true}, // 0 < 1
+		{`false() < /root/a`, true},          // mirrored: 0 < 1
 		// GUARD: number/string node-set comparisons keep existential semantics
 		{`/root/a = ''`, true},
 		{`/root/a = 'x'`, false},
