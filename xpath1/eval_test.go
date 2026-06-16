@@ -489,6 +489,23 @@ func TestEvalNodeSetVariableDocumentOrder(t *testing.T) {
 	require.Equal(t, "AAA", r.String)
 }
 
+func TestEvalNodeSetVariableTypedNil(t *testing.T) {
+	doc := parseXML(t, `<root><a/></root>`)
+	a := docElement(doc)
+	require.NotNil(t, a)
+
+	// A typed-nil concrete node pointer is non-nil at the interface level,
+	// so a naive `n != nil` filter lets it through and DeduplicateNodes
+	// panics dereferencing it. It must be filtered out instead.
+	expr, err := xpath1.Compile("count($v)")
+	require.NoError(t, err)
+	r, err := xpath1.NewEvaluator().Variables(map[string]any{
+		"v": []helium.Node{a, (*helium.Element)(nil)},
+	}).Evaluate(t.Context(), expr, doc)
+	require.NoError(t, err)
+	require.Equal(t, 1.0, r.Number)
+}
+
 // --- Complex expressions ---
 
 func TestEvalBookstoreExample(t *testing.T) {
