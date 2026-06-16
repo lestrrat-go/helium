@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -28,13 +29,50 @@ func evalFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		return partialApply(ctx, ec, e, args)
 	}
 
-	// Resolve function
-	fn, err := resolveFunction(ctx, ec, e.Prefix, e.Name, len(args))
+	// Resolve function, keeping the resolved identity so signature enforcement
+	// keys off the resolved URI/local name (handles Q{uri}local) and only applies
+	// the built-in signature when the resolved function is the actual built-in.
+	r, err := resolveFunctionInfo(ctx, ec, e.Prefix, e.Name, len(args))
 	if err != nil {
 		return nil, err
 	}
 
-	return fn.Call(ec.fnContext(ctx), args)
+	// Enforce declared parameter signatures, mirroring the function-item /
+	// named-function-reference path. Coerced values are stored back into args so
+	// typed functions observe the converted values (e.g. xs:integer→xs:double).
+	paramTypes := lookupParamTypes(r, len(args))
+	if paramTypes != nil {
+		for i, arg := range args {
+			if i < len(paramTypes) {
+				coerced, err := coerceFuncallArg(arg, paramTypes[i], r.name, i, ec)
+				if err != nil {
+					return nil, err
+				}
+				args[i] = coerced
+			}
+		}
+	}
+
+	return r.fn.Call(ec.fnContext(ctx), args)
+}
+
+// lookupParamTypes returns the declared parameter types for a resolved function.
+// The built-in signature registry is consulted only when the resolved function is
+// the built-in; user/registered functions use their own TypedFunction metadata.
+// It returns nil when no signature is available (no enforcement).
+func lookupParamTypes(r resolvedFunction, arity int) []SequenceType {
+	if r.isBuiltin {
+		if sig := lookupFunctionSignature(r.uri, r.name, arity); sig != nil {
+			return sig.ParamTypes
+		}
+	}
+	if tf, ok := r.fn.(TypedFunction); ok {
+		return tf.FuncParamTypes()
+	}
+	if tfa, ok := r.fn.(TypedFunctionByArity); ok {
+		return tfa.FuncParamTypesForArity(arity)
+	}
+	return nil
 }
 
 func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e DynamicFunctionCall) (Sequence, error) {
@@ -337,16 +375,36 @@ func partialApply(ctx context.Context, ec *evalContext, e FunctionCall, fixedArg
 		}
 	}
 
-	fn, err := resolveFunction(ctx, ec, e.Prefix, e.Name, len(e.Args))
+	// Resolve the target function keeping its identity, so signature enforcement
+	// keys off the resolved URI/local name and consults TypedFunction metadata —
+	// mirroring evalFunctionCall. This closes the partial-application bypass where
+	// a registered TypedFunction's parameter types went unenforced.
+	r, err := resolveFunctionInfo(ctx, ec, e.Prefix, e.Name, len(e.Args))
 	if err != nil {
 		return nil, err
 	}
+	paramTypes := lookupParamTypes(r, len(e.Args))
 
-	// Look up type signature for type checking placeholder arguments
-	ns, _ := resolvePrefix(ec, e.Prefix)
-	var paramTypes []SequenceType
-	if sig := lookupFunctionSignature(ns, e.Name, len(e.Args)); sig != nil {
-		paramTypes = sig.ParamTypes
+	// Coerce the fixed (curried) arguments now, before the placeholders are
+	// supplied: they are known at partial-application time, so the function body
+	// must observe the converted values (e.g. xs:integer→xs:double) just like a
+	// direct call.
+	coercedFixed := make([]Sequence, len(fixedArgs))
+	copy(coercedFixed, fixedArgs)
+	if paramTypes != nil {
+		for i, argExpr := range e.Args {
+			if _, ok := argExpr.(PlaceholderExpr); ok {
+				continue // placeholder slot: coerced at invocation time
+			}
+			if i >= len(paramTypes) {
+				continue
+			}
+			coerced, err := coerceFuncallArg(fixedArgs[i], paramTypes[i], r.name, i, ec)
+			if err != nil {
+				return nil, err
+			}
+			coercedFixed[i] = coerced
+		}
 	}
 
 	// Per XPath 3.1, partial applications are anonymous functions
@@ -360,24 +418,46 @@ func partialApply(ctx context.Context, ec *evalContext, e FunctionCall, fixedArg
 				}
 			}
 			fullArgs := make([]Sequence, len(e.Args))
-			copy(fullArgs, fixedArgs)
+			copy(fullArgs, coercedFixed)
 			for pi, idx := range placeholderIndices {
 				fullArgs[idx] = partialArgs[pi]
 			}
-			// Type-check placeholder arguments against declared parameter types
+			// Coerce the placeholder-supplied arguments against the declared
+			// parameter types and store the converted values back, mirroring
+			// evalFunctionCall so typed functions observe promoted values and
+			// typed errors (FOTY0013/FORG0001) propagate unchanged.
 			if paramTypes != nil {
-				for pi, idx := range placeholderIndices {
-					if idx < len(paramTypes) {
-						if _, ok := coerceToSequenceType(partialArgs[pi], paramTypes[idx], nil); !ok {
-							return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, idx+1, paramTypes[idx])}
-						}
+				for _, idx := range placeholderIndices {
+					if idx >= len(paramTypes) {
+						continue
 					}
+					coerced, err := coerceFuncallArg(fullArgs[idx], paramTypes[idx], r.name, idx, ec)
+					if err != nil {
+						return nil, err
+					}
+					fullArgs[idx] = coerced
 				}
 			}
-			return fn.Call(ctx, fullArgs)
+			return r.fn.Call(ctx, fullArgs)
 		},
 	}
 	return ItemSlice{fi}, nil
+}
+
+// coerceFuncallArg coerces one argument against its declared parameter type,
+// translating the result into the funcall-enforcement error contract: a typed
+// atomization/cast error (FOTY0013, FORG0001, …) surfaces unchanged so try/catch
+// can dispatch on it; a plain type/cardinality mismatch becomes XPTY0004. This is
+// the shared helper for evalFunctionCall's direct path and partialApply.
+func coerceFuncallArg(arg Sequence, st SequenceType, fnName string, idx int, ec *evalContext) (Sequence, error) {
+	coerced, err := coerceToSequenceTypeE(arg, st, ec)
+	if err != nil {
+		if !errors.Is(err, errCoerceMismatch) {
+			return nil, err
+		}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", fnName, idx+1, st)}
+	}
+	return coerced, nil
 }
 
 func evalMapConstructorExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e MapConstructorExpr) (Sequence, error) {

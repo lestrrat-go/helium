@@ -40,6 +40,16 @@ Typed helper coercions for `xs:string?` + `xs:integer` enforce cardinality.
 Sequences with length `> 1` → `XPTY0004`; helpers do not truncate to first item.
 Signature-sensitive string/regex/URI builtin call sites + `||` string coercion also enforce single-item cardinality and propagate atomization/type errors.
 
+`evalFunctionCall` (the static call path) enforces the declared parameter
+signature for every resolved function before invoking it: it looks up
+`paramTypes` via the `function_signatures.go` registry (then
+`TypedFunction`/`TypedFunctionByArity`) the same way `evalNamedFunctionRef`
+does, and runs `coerceToSequenceType(arg, paramTypes[i], ec)` per argument,
+raising `XPTY0004` on mismatch. Functions with no registered signature
+(`paramTypes == nil`) are not type-checked. `coerceToSequenceType` atomizes via
+`AtomizeSequence` (so list-typed nodes/arrays expand correctly) and falls back
+to `ec.schemaDeclarations.IsSubtypeOf` for user-defined schema types.
+
 ## Functions by File
 
 ### `functions_node.go`

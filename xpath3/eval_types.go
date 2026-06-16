@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -288,6 +289,13 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	return tn.Prefix + ":" + tn.Name
 }
 
+// errCoerceMismatch is a sentinel returned by coerceToSequenceTypeE for a plain
+// type or cardinality mismatch — one with no more-specific typed error. Callers
+// map it to XPTY0004. A more-specific typed error (FOTY0013 from atomizing a
+// function/map item, FORG0001 from an invalid cast, …) is returned directly so
+// it can be surfaced to try/catch instead of being collapsed into XPTY0004.
+var errCoerceMismatch = errors.New("xpath3: sequence type mismatch")
+
 // CoerceToSequenceType applies XPath 3.1 function coercion rules (§3.1.5.2):
 // atomization, numeric promotion (integer→float/double, float→double),
 // URI-to-string promotion, and function coercion.  Returns the coerced
@@ -296,16 +304,60 @@ func CoerceToSequenceType(seq Sequence, st SequenceType) (Sequence, bool) {
 	return coerceToSequenceType(seq, st, nil)
 }
 
-// coerceToSequenceType is the internal version with an evalContext.
+// coerceToSequenceType is the boolean-returning wrapper retained for callers that
+// only need success/failure. It discards the specific error code; callers that
+// must surface FOTY0013/FORG0001 should use coerceToSequenceTypeE.
 func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Sequence, bool) {
+	out, err := coerceToSequenceTypeE(seq, st, ec)
+	if err != nil {
+		return seq, false
+	}
+	return out, true
+}
+
+// coerceToSequenceTypeE is the error-propagating coercion. On a plain type or
+// cardinality mismatch it returns errCoerceMismatch; on a typed atomization/cast
+// failure it returns that underlying error (FOTY0013, FORG0001, …). Atomization
+// errors take precedence over cardinality rejection, matching the spec ordering
+// (atomization happens before the occurrence check).
+func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequence, error) {
+	// Fast path: an item() item type matches any item, so per-item coercion is a
+	// no-op. Only the cardinality (occurrence) constraint can reject. Check it
+	// using seqLen — which is O(1) for every Sequence implementation (slice and
+	// lazy Range alike) — instead of iterating the sequence through
+	// matchesSequenceType. This preserves laziness for hot functions like
+	// fn:count / fn:exists (item()* / item()+ parameters) so a large lazy range
+	// (1 to N) is never materialized just to satisfy the signature gate.
+	if !st.Void {
+		if _, anyItem := st.ItemTest.(AnyItemTest); anyItem {
+			n := seqLen(seq)
+			switch st.Occurrence {
+			case OccurrenceExactlyOne:
+				if n != 1 {
+					return seq, errCoerceMismatch
+				}
+			case OccurrenceZeroOrOne:
+				if n > 1 {
+					return seq, errCoerceMismatch
+				}
+			case OccurrenceOneOrMore:
+				if n == 0 {
+					return seq, errCoerceMismatch
+				}
+			case OccurrenceZeroOrMore:
+				// any length ok
+			}
+			return seq, nil
+		}
+	}
 	if matchesSequenceType(seq, st, ec) {
-		return seq, true
+		return seq, nil
 	}
 	if seqLen(seq) == 1 {
 		if fnTest, ok := st.ItemTest.(FunctionTest); ok {
 			adapted, ok := coerceFunctionItem(seq.Get(0), fnTest, ec)
 			if ok {
-				return ItemSlice{adapted}, true
+				return ItemSlice{adapted}, nil
 			}
 		}
 	}
@@ -315,47 +367,89 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 	case AtomicOrUnionType:
 		targetType = resolveAtomicTypeName(AtomicTypeName(t), ec)
 	default:
-		return seq, false
+		return seq, errCoerceMismatch
 	}
-	result := make(ItemSlice, seqLen(seq))
-	i := 0
-	for item := range seqItems(seq) {
-		av, ok := item.(AtomicValue)
-		if !ok {
-			// Try atomization
-			atomized, err := AtomizeItem(item)
-			if err != nil {
-				return seq, false
-			}
-			av = atomized
+	// For a singleton/optional target occurrence the result may hold at most one
+	// item, so cap atomization: stop as soon as a second atom appears rather than
+	// materializing the whole (possibly huge) sequence before rejecting on
+	// cardinality. A typed atomization error encountered before the cap still
+	// propagates (atomization precedes the occurrence check).
+	maxAtoms := 0
+	switch st.Occurrence {
+	case OccurrenceExactlyOne, OccurrenceZeroOrOne:
+		maxAtoms = 1
+	}
+	// Atomize the sequence. atomizeStream correctly flattens arrays and
+	// expands list-typed nodes (e.g. xs:list of xs:decimal) into multiple
+	// atomic values — a per-item AtomizeItem would collapse those incorrectly.
+	var atoms []AtomicValue
+	tooMany := false
+	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+		atoms = append(atoms, av)
+		if maxAtoms > 0 && len(atoms) > maxAtoms {
+			tooMany = true
+			return false, nil
 		}
-		// Numeric promotion
+		return true, nil
+	})
+	if err != nil {
+		return seq, err
+	}
+	if tooMany {
+		// More atoms than the occurrence indicator permits: cardinality mismatch.
+		return seq, errCoerceMismatch
+	}
+	result := make(ItemSlice, len(atoms))
+	i := 0
+	for _, av := range atoms {
+		// xs:anyAtomicType is the generalized atomic supertype: once a node has
+		// been atomized (to xs:untypedAtomic), any atomic value already matches.
+		// It is abstract, so it has no concrete cast — accept the atom as-is
+		// rather than attempting an (impossible) cast to it.
+		if targetType == TypeAnyAtomicType {
+			result[i] = av
+			i++
+			continue
+		}
+		// Numeric promotion. The acceptance condition mirrors atomicMatchesTargetType
+		// so the cast that follows always agrees with the gate: any numeric the gate
+		// admits (built-in numerics, integer-derived subtypes, and schema-derived
+		// values whose built-in base/ancestry is numeric) is normalized via
+		// PromoteSchemaType before the cast, so castToDouble/castToFloat operate on a
+		// built-in-typed value instead of failing on an unrecognized schema type.
 		switch targetType {
 		case TypeDouble:
-			if av.TypeName == TypeInteger || av.TypeName == TypeDecimal || av.TypeName == TypeFloat ||
-				isSubtypeOf(av.TypeName, TypeInteger) {
-				promoted, err := castToDouble(av)
+			if atomicMatchesTargetType(av, TypeDouble, ec) || atomicMatchesTargetType(av, TypeFloat, ec) ||
+				atomicMatchesTargetType(av, TypeInteger, ec) || atomicMatchesTargetType(av, TypeDecimal, ec) {
+				promoted, err := castToDouble(PromoteSchemaType(av))
 				if err != nil {
-					return seq, false
+					return seq, err
 				}
 				result[i] = promoted
 				i++
 				continue
 			}
 		case TypeFloat:
-			if av.TypeName == TypeInteger || av.TypeName == TypeDecimal ||
-				isSubtypeOf(av.TypeName, TypeInteger) {
-				promoted, err := castToFloat(av)
+			if atomicMatchesTargetType(av, TypeInteger, ec) || atomicMatchesTargetType(av, TypeDecimal, ec) {
+				promoted, err := castToFloat(PromoteSchemaType(av))
 				if err != nil {
-					return seq, false
+					return seq, err
 				}
 				result[i] = promoted
 				i++
 				continue
 			}
 		case TypeString:
-			if av.TypeName == TypeAnyURI {
-				result[i] = AtomicValue{TypeName: TypeString, Value: av.Value}
+			// xs:anyURI (and its subtypes) promote to xs:string per the
+			// function-conversion rules. Match via atomicMatchesTargetType so a
+			// schema-DERIVED anyURI (carrying BaseType xs:anyURI, or whose
+			// ancestry the schema knows) is admitted, not only the exact
+			// xs:anyURI type. PromoteSchemaType normalizes the schema-derived
+			// value to a built-in-typed anyURI so its string value is read the
+			// same way the builtins read it.
+			if atomicMatchesTargetType(av, TypeAnyURI, ec) {
+				promoted := PromoteSchemaType(av)
+				result[i] = AtomicValue{TypeName: TypeString, Value: promoted.Value}
 				i++
 				continue
 			}
@@ -369,35 +463,39 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 			}
 			cast, err := CastAtomic(av, castTarget)
 			if err != nil {
-				return seq, false
+				return seq, err
 			}
 			result[i] = cast
 			i++
 			continue
 		}
-		if isSubtypeOf(av.TypeName, targetType) {
+		// Accept when the value matches the target by built-in subtype hierarchy,
+		// its built-in BaseType (schema-derived values the builtins promote via
+		// PromoteSchemaType), or schema-declaration ancestry (incl. the xs:numeric
+		// union). atomicMatchesTargetType is the shared gate matchesItemType uses.
+		if atomicMatchesTargetType(av, targetType, ec) {
 			result[i] = av
 			i++
 			continue
 		}
-		return seq, false
+		return seq, errCoerceMismatch
 	}
 	// Verify occurrence constraint on the coerced result
 	switch st.Occurrence {
 	case OccurrenceExactlyOne:
 		if len(result) != 1 {
-			return seq, false
+			return seq, errCoerceMismatch
 		}
 	case OccurrenceOneOrMore:
 		if len(result) == 0 {
-			return seq, false
+			return seq, errCoerceMismatch
 		}
 	case OccurrenceZeroOrOne:
 		if len(result) > 1 {
-			return seq, false
+			return seq, errCoerceMismatch
 		}
 	}
-	return result, true
+	return result, nil
 }
 
 func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, bool) {
@@ -405,7 +503,9 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 		return nil, false
 	}
 
-	actual, ok := item.(FunctionItem)
+	// Maps and arrays are function items of arity 1 per XPath 3.1, so they
+	// participate in function coercion just like an inline/named function.
+	actual, ok := asFunctionItem(item)
 	if !ok {
 		return nil, false
 	}
@@ -497,6 +597,43 @@ func CheckFunctionParamCompat(fi FunctionItem, st SequenceType) bool {
 		}
 	}
 	return true
+}
+
+// atomicMatchesTargetType reports whether an atomic value satisfies an
+// AtomicOrUnionType item test whose resolved name is targetType. Beyond the
+// built-in subtype hierarchy and schema-declaration ancestry, it honors the
+// value's own BaseType: a schema-derived value whose built-in BaseType is a
+// subtype of (or promotes to) the target must match, because the numeric (and
+// other) builtins accept it via PromoteSchemaType. Without this the static
+// signature gate would reject, e.g., abs($v) for $v of a custom type derived
+// from xs:decimal even though fnAbs promotes and handles it.
+func atomicMatchesTargetType(av AtomicValue, targetType string, ec *evalContext) bool {
+	if targetType == TypeAnyAtomicType {
+		return true
+	}
+	if isSubtypeOf(av.TypeName, targetType) {
+		return true
+	}
+	// Schema-derived value carrying a built-in BaseType: match using the base
+	// type, mirroring PromoteSchemaType (which the builtins use). Only built-in
+	// base types are trusted here so acceptance is not broadened for unrelated
+	// user types.
+	if av.BaseType != "" && IsKnownXSDType(av.BaseType) && isSubtypeOf(av.BaseType, targetType) {
+		return true
+	}
+	// Fall back to schema declarations for user-defined types whose ancestry is
+	// only known to the compiled schema.
+	if ec != nil && ec.schemaDeclarations != nil {
+		// xs:numeric is a synthetic union the schema layer does not model, so
+		// resolve it against its member built-in types.
+		if targetType == TypeNumeric {
+			return ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeDecimal) ||
+				ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeFloat) ||
+				ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeDouble)
+		}
+		return ec.schemaDeclarations.IsSubtypeOf(av.TypeName, targetType)
+	}
+	return false
 }
 
 func matchesSequenceType(seq Sequence, st SequenceType, ec *evalContext) bool {
@@ -690,17 +827,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			return false
 		}
 		targetType := resolveAtomicTypeName(AtomicTypeName(t), ec)
-		if targetType == TypeAnyAtomicType {
-			return true
-		}
-		if isSubtypeOf(av.TypeName, targetType) {
-			return true
-		}
-		// Fall back to schema declarations for user-defined types.
-		if ec != nil && ec.schemaDeclarations != nil {
-			return ec.schemaDeclarations.IsSubtypeOf(av.TypeName, targetType)
-		}
-		return false
+		return atomicMatchesTargetType(av, targetType, ec)
 	case FunctionTest:
 		// Maps and arrays are functions per XPath 3.1
 		if t.AnyFunction {
