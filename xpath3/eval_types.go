@@ -425,28 +425,14 @@ func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequ
 			i++
 			continue
 		}
-		if isSubtypeOf(av.TypeName, targetType) {
+		// Accept when the value matches the target by built-in subtype hierarchy,
+		// its built-in BaseType (schema-derived values the builtins promote via
+		// PromoteSchemaType), or schema-declaration ancestry (incl. the xs:numeric
+		// union). atomicMatchesTargetType is the shared gate matchesItemType uses.
+		if atomicMatchesTargetType(av, targetType, ec) {
 			result[i] = av
 			i++
 			continue
-		}
-		// Fall back to schema declarations for user-defined types derived by
-		// restriction from the target (e.g. a schema type derived from xs:decimal
-		// matching xs:numeric).
-		if ec != nil && ec.schemaDeclarations != nil {
-			if targetType == TypeNumeric {
-				if ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeDecimal) ||
-					ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeFloat) ||
-					ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeDouble) {
-					result[i] = av
-					i++
-					continue
-				}
-			} else if ec.schemaDeclarations.IsSubtypeOf(av.TypeName, targetType) {
-				result[i] = av
-				i++
-				continue
-			}
 		}
 		return seq, errCoerceMismatch
 	}
@@ -567,6 +553,43 @@ func CheckFunctionParamCompat(fi FunctionItem, st SequenceType) bool {
 		}
 	}
 	return true
+}
+
+// atomicMatchesTargetType reports whether an atomic value satisfies an
+// AtomicOrUnionType item test whose resolved name is targetType. Beyond the
+// built-in subtype hierarchy and schema-declaration ancestry, it honors the
+// value's own BaseType: a schema-derived value whose built-in BaseType is a
+// subtype of (or promotes to) the target must match, because the numeric (and
+// other) builtins accept it via PromoteSchemaType. Without this the static
+// signature gate would reject, e.g., abs($v) for $v of a custom type derived
+// from xs:decimal even though fnAbs promotes and handles it.
+func atomicMatchesTargetType(av AtomicValue, targetType string, ec *evalContext) bool {
+	if targetType == TypeAnyAtomicType {
+		return true
+	}
+	if isSubtypeOf(av.TypeName, targetType) {
+		return true
+	}
+	// Schema-derived value carrying a built-in BaseType: match using the base
+	// type, mirroring PromoteSchemaType (which the builtins use). Only built-in
+	// base types are trusted here so acceptance is not broadened for unrelated
+	// user types.
+	if av.BaseType != "" && IsKnownXSDType(av.BaseType) && isSubtypeOf(av.BaseType, targetType) {
+		return true
+	}
+	// Fall back to schema declarations for user-defined types whose ancestry is
+	// only known to the compiled schema.
+	if ec != nil && ec.schemaDeclarations != nil {
+		// xs:numeric is a synthetic union the schema layer does not model, so
+		// resolve it against its member built-in types.
+		if targetType == TypeNumeric {
+			return ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeDecimal) ||
+				ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeFloat) ||
+				ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeDouble)
+		}
+		return ec.schemaDeclarations.IsSubtypeOf(av.TypeName, targetType)
+	}
+	return false
 }
 
 func matchesSequenceType(seq Sequence, st SequenceType, ec *evalContext) bool {
@@ -760,17 +783,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			return false
 		}
 		targetType := resolveAtomicTypeName(AtomicTypeName(t), ec)
-		if targetType == TypeAnyAtomicType {
-			return true
-		}
-		if isSubtypeOf(av.TypeName, targetType) {
-			return true
-		}
-		// Fall back to schema declarations for user-defined types.
-		if ec != nil && ec.schemaDeclarations != nil {
-			return ec.schemaDeclarations.IsSubtypeOf(av.TypeName, targetType)
-		}
-		return false
+		return atomicMatchesTargetType(av, targetType, ec)
 	case FunctionTest:
 		// Maps and arrays are functions per XPath 3.1
 		if t.AnyFunction {

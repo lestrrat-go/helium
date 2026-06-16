@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"context"
+	"math/big"
 	"runtime"
 	"testing"
 	"time"
@@ -217,6 +218,41 @@ func TestSignatureGatePlainMismatchIsXPTY0004(t *testing.T) {
 		var xpErr *xpath3.XPathError
 		require.ErrorAs(t, err, &xpErr, expr)
 		require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code, expr)
+	}
+}
+
+// Finding (round 4): the static signature gate must accept a schema-DERIVED
+// numeric atomic value whose BaseType is a built-in numeric type, since the
+// numeric builtins promote it via PromoteSchemaType. A value of a custom type
+// derived from xs:decimal IS numeric and abs/round must accept it — the gate
+// must not raise XPTY0004 before the builtin can promote it.
+func TestSignatureGateAcceptsSchemaDerivedNumeric(t *testing.T) {
+	t.Parallel()
+
+	vars := xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		"v": xpath3.ItemSlice{
+			xpath3.AtomicValue{
+				TypeName: "Q{urn:test}myDecimal",
+				BaseType: xpath3.TypeDecimal,
+				Value:    big.NewRat(-3, 1),
+			},
+		},
+	})
+
+	cases := map[string]float64{
+		`abs($v)`:   3,  // |-3| = 3
+		`round($v)`: -3, // round(-3) = -3 (the gate must let the value through)
+		`$v + 1`:    -2, // arithmetic also accepts the schema-derived decimal
+	}
+	for expr, want := range cases {
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Variables(vars).
+			Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(expr), nil)
+		require.NoError(t, err, expr)
+
+		n, ok := result.IsNumber()
+		require.True(t, ok, expr)
+		require.Equal(t, want, n, expr)
 	}
 }
 
