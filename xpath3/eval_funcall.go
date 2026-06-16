@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -43,8 +44,14 @@ func evalFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	if paramTypes != nil {
 		for i, arg := range args {
 			if i < len(paramTypes) {
-				coerced, ok := coerceToSequenceType(arg, paramTypes[i], ec)
-				if !ok {
+				coerced, err := coerceToSequenceTypeE(arg, paramTypes[i], ec)
+				if err != nil {
+					// A typed atomization/cast error (FOTY0013, FORG0001, …)
+					// must surface unchanged so try/catch can dispatch on it.
+					// Only a plain type/cardinality mismatch becomes XPTY0004.
+					if !errors.Is(err, errCoerceMismatch) {
+						return nil, err
+					}
 					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", r.name, i+1, paramTypes[i])}
 				}
 				args[i] = coerced

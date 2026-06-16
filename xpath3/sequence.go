@@ -105,15 +105,34 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 		return nil, nil
 	}
 	result := make([]AtomicValue, 0, seq.Len())
+	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+		result = append(result, av)
+		return true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// atomizeStream atomizes a sequence per XPath 3.1 Section 2.6.2, invoking yield
+// for each produced atomic value. If yield returns false, streaming stops early
+// without error (used to bound work when a caller caps the number of atoms it
+// will accept). A typed atomization error (e.g. FOTY0013 for function/map items,
+// FORG0001 for an invalid list-member cast) propagates to the caller; this lets
+// callers distinguish a genuine atomization failure from a plain cardinality
+// rejection.
+func atomizeStream(seq Sequence, yield func(AtomicValue) (bool, error)) error {
+	if seq == nil {
+		return nil
+	}
 	for item := range seqItems(seq) {
 		// XPath 3.1: atomizing an array flattens its members
 		if arr, ok := item.(ArrayItem); ok {
 			for _, member := range arr.members0() {
-				atoms, err := AtomizeSequence(member)
-				if err != nil {
-					return nil, err
+				if err := atomizeStream(member, yield); err != nil {
+					return err
 				}
-				result = append(result, atoms...)
 			}
 			continue
 		}
@@ -134,21 +153,33 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 						if strings.HasPrefix(listItem, "Q{") {
 							cast = AtomicValue{TypeName: listItem, Value: tok}
 						} else {
-							return nil, err
+							return err
 						}
 					}
-					result = append(result, cast)
+					cont, err := yield(cast)
+					if err != nil {
+						return err
+					}
+					if !cont {
+						return nil
+					}
 				}
 				continue
 			}
 		}
 		av, err := AtomizeItem(item)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		result = append(result, av)
+		cont, err := yield(av)
+		if err != nil {
+			return err
+		}
+		if !cont {
+			return nil
+		}
 	}
-	return result, nil
+	return nil
 }
 
 // builtinListItemType returns the item type for built-in XSD list types.

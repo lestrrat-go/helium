@@ -2,7 +2,9 @@ package xpath3_test
 
 import (
 	"context"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -177,4 +179,70 @@ func TestTypedUserFunctionAnyAtomicAcceptsNode(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, xpath3.TypeInteger, s)
 	})
+}
+
+// Finding 1: the signature gate must propagate a typed atomization error rather
+// than collapsing it into XPTY0004. Atomizing a map/function item where an
+// atomic is required raises FOTY0013, which try/catch dispatches on.
+func TestSignatureGatePropagatesFOTY0013(t *testing.T) {
+	t.Parallel()
+	_, err := evaluate(t.Context(), nil, `upper-case(map{})`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "FOTY0013", xpErr.Code)
+}
+
+// Finding 1: an invalid xs:untypedAtomic→numeric cast inside the signature gate
+// raises FORG0001 (invalid cast), not XPTY0004.
+func TestSignatureGatePropagatesFORG0001(t *testing.T) {
+	t.Parallel()
+	_, err := evaluate(t.Context(), nil, `abs(xs:untypedAtomic("abc"))`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "FORG0001", xpErr.Code)
+}
+
+// Finding 1: a plain type/cardinality mismatch (no typed atomization/cast error)
+// must still yield XPTY0004.
+func TestSignatureGatePlainMismatchIsXPTY0004(t *testing.T) {
+	t.Parallel()
+	for _, expr := range []string{`upper-case((1, 2))`, `abs((1, 2))`, `upper-case(current-date())`} {
+		_, err := evaluate(t.Context(), nil, expr)
+		require.Error(t, err, expr)
+
+		var xpErr *xpath3.XPathError
+		require.ErrorAs(t, err, &xpErr, expr)
+		require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code, expr)
+	}
+}
+
+// Finding 2: a too-long sequence supplied to a singleton (xs:string?) parameter
+// must be rejected promptly with XPTY0004 — without atomizing the whole range.
+// A 10M-item lazy range would allocate ~1GB if atomized eagerly; the cap keeps
+// allocation and time tiny.
+func TestSignatureGateRejectsLongSequencePromptly(t *testing.T) {
+	t.Parallel()
+
+	var m1, m2 runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&m1)
+	start := time.Now()
+	_, err := evaluate(t.Context(), nil, `upper-case(1 to 10000000)`)
+	elapsed := time.Since(start)
+	runtime.ReadMemStats(&m2)
+
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+
+	// Eager atomization of 10M items took ~800ms / ~1GB before the fix; the
+	// incremental cap keeps both small. Generous bounds avoid CI flakiness.
+	require.Less(t, elapsed, 200*time.Millisecond, "should reject without atomizing whole range")
+	allocKB := (m2.TotalAlloc - m1.TotalAlloc) / 1024
+	require.Less(t, allocKB, uint64(50*1024), "should not allocate the whole atomized sequence")
 }

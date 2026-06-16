@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -285,6 +286,13 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	return tn.Prefix + ":" + tn.Name
 }
 
+// errCoerceMismatch is a sentinel returned by coerceToSequenceTypeE for a plain
+// type or cardinality mismatch — one with no more-specific typed error. Callers
+// map it to XPTY0004. A more-specific typed error (FOTY0013 from atomizing a
+// function/map item, FORG0001 from an invalid cast, …) is returned directly so
+// it can be surfaced to try/catch instead of being collapsed into XPTY0004.
+var errCoerceMismatch = errors.New("xpath3: sequence type mismatch")
+
 // CoerceToSequenceType applies XPath 3.1 function coercion rules (§3.1.5.2):
 // atomization, numeric promotion (integer→float/double, float→double),
 // URI-to-string promotion, and function coercion.  Returns the coerced
@@ -293,16 +301,31 @@ func CoerceToSequenceType(seq Sequence, st SequenceType) (Sequence, bool) {
 	return coerceToSequenceType(seq, st, nil)
 }
 
-// coerceToSequenceType is the internal version with an evalContext.
+// coerceToSequenceType is the boolean-returning wrapper retained for callers that
+// only need success/failure. It discards the specific error code; callers that
+// must surface FOTY0013/FORG0001 should use coerceToSequenceTypeE.
 func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Sequence, bool) {
+	out, err := coerceToSequenceTypeE(seq, st, ec)
+	if err != nil {
+		return seq, false
+	}
+	return out, true
+}
+
+// coerceToSequenceTypeE is the error-propagating coercion. On a plain type or
+// cardinality mismatch it returns errCoerceMismatch; on a typed atomization/cast
+// failure it returns that underlying error (FOTY0013, FORG0001, …). Atomization
+// errors take precedence over cardinality rejection, matching the spec ordering
+// (atomization happens before the occurrence check).
+func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequence, error) {
 	if matchesSequenceType(seq, st, ec) {
-		return seq, true
+		return seq, nil
 	}
 	if seqLen(seq) == 1 {
 		if fnTest, ok := st.ItemTest.(FunctionTest); ok {
 			adapted, ok := coerceFunctionItem(seq.Get(0), fnTest, ec)
 			if ok {
-				return ItemSlice{adapted}, true
+				return ItemSlice{adapted}, nil
 			}
 		}
 	}
@@ -312,14 +335,37 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 	case AtomicOrUnionType:
 		targetType = resolveAtomicTypeName(AtomicTypeName(t), ec)
 	default:
-		return seq, false
+		return seq, errCoerceMismatch
 	}
-	// Atomize the sequence. AtomizeSequence correctly flattens arrays and
+	// For a singleton/optional target occurrence the result may hold at most one
+	// item, so cap atomization: stop as soon as a second atom appears rather than
+	// materializing the whole (possibly huge) sequence before rejecting on
+	// cardinality. A typed atomization error encountered before the cap still
+	// propagates (atomization precedes the occurrence check).
+	maxAtoms := 0
+	switch st.Occurrence {
+	case OccurrenceExactlyOne, OccurrenceZeroOrOne:
+		maxAtoms = 1
+	}
+	// Atomize the sequence. atomizeStream correctly flattens arrays and
 	// expands list-typed nodes (e.g. xs:list of xs:decimal) into multiple
 	// atomic values — a per-item AtomizeItem would collapse those incorrectly.
-	atoms, err := AtomizeSequence(seq)
+	var atoms []AtomicValue
+	tooMany := false
+	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+		atoms = append(atoms, av)
+		if maxAtoms > 0 && len(atoms) > maxAtoms {
+			tooMany = true
+			return false, nil
+		}
+		return true, nil
+	})
 	if err != nil {
-		return seq, false
+		return seq, err
+	}
+	if tooMany {
+		// More atoms than the occurrence indicator permits: cardinality mismatch.
+		return seq, errCoerceMismatch
 	}
 	result := make(ItemSlice, len(atoms))
 	i := 0
@@ -340,7 +386,7 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 				isSubtypeOf(av.TypeName, TypeInteger) {
 				promoted, err := castToDouble(av)
 				if err != nil {
-					return seq, false
+					return seq, err
 				}
 				result[i] = promoted
 				i++
@@ -351,7 +397,7 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 				isSubtypeOf(av.TypeName, TypeInteger) {
 				promoted, err := castToFloat(av)
 				if err != nil {
-					return seq, false
+					return seq, err
 				}
 				result[i] = promoted
 				i++
@@ -373,7 +419,7 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 			}
 			cast, err := CastAtomic(av, castTarget)
 			if err != nil {
-				return seq, false
+				return seq, err
 			}
 			result[i] = cast
 			i++
@@ -402,24 +448,24 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 				continue
 			}
 		}
-		return seq, false
+		return seq, errCoerceMismatch
 	}
 	// Verify occurrence constraint on the coerced result
 	switch st.Occurrence {
 	case OccurrenceExactlyOne:
 		if len(result) != 1 {
-			return seq, false
+			return seq, errCoerceMismatch
 		}
 	case OccurrenceOneOrMore:
 		if len(result) == 0 {
-			return seq, false
+			return seq, errCoerceMismatch
 		}
 	case OccurrenceZeroOrOne:
 		if len(result) > 1 {
-			return seq, false
+			return seq, errCoerceMismatch
 		}
 	}
-	return result, true
+	return result, nil
 }
 
 func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, bool) {
