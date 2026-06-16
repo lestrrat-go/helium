@@ -93,6 +93,7 @@ type Writer struct {
 	hasOutput   bool          // true after first output has been written
 	wroteNL     bool          // true after EndComment/EndPI wrote trailing \n (suppresses writeIndent's \n)
 	commentDash bool          // true if the current comment body ends with '-' (would form '--->' on close)
+	piQuestion  bool          // true if the current PI body ends with '?' (would form '?>' across writes)
 }
 
 // NewWriter creates a Writer that writes to w. Configure the Writer
@@ -717,6 +718,9 @@ func (w *Writer) WriteString(content string) error {
 	case stateAttribute:
 		w.writeAttrEscaped(content)
 	case stateComment:
+		if w.commentDash && strings.HasPrefix(content, "-") {
+			return errors.New("stream: comment content must not contain '--'")
+		}
 		if strings.Contains(content, "--") {
 			return errors.New("stream: comment content must not contain '--'")
 		}
@@ -725,10 +729,16 @@ func (w *Writer) WriteString(content string) error {
 			w.commentDash = strings.HasSuffix(content, "-")
 		}
 	case statePI, statePIText:
+		if w.piQuestion && strings.HasPrefix(content, ">") {
+			return errors.New("stream: processing instruction content must not contain '?>'")
+		}
 		if strings.Contains(content, "?>") {
 			return errors.New("stream: processing instruction content must not contain '?>'")
 		}
 		w.writeStr(content)
+		if content != "" {
+			w.piQuestion = strings.HasSuffix(content, "?")
+		}
 		w.state = statePIText
 	case stateCDATA:
 		w.writeStr(content)
@@ -864,6 +874,7 @@ func (w *Writer) StartPI(target string) error {
 	}
 	w.writeStr("<?")
 	w.writeStr(target)
+	w.piQuestion = false
 	w.stateStack = append(w.stateStack, w.state)
 	w.state = statePI
 	return w.err

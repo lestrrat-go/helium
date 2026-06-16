@@ -347,6 +347,37 @@ func TestCommentWellFormednessRejected(t *testing.T) {
 	}
 }
 
+func TestCommentDashSplitAcrossWrites(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartComment())
+	require.NoError(t, w.WriteString("a-"))
+	require.Error(t, w.WriteString("-b"))
+}
+
+func TestCommentTrailingDashSplitAtEnd(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartComment())
+	require.NoError(t, w.WriteString("a-"))
+	require.Error(t, w.EndComment())
+}
+
+func TestCommentDashChunksNoFalsePositive(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.StartComment())
+	require.NoError(t, w.WriteString("a-"))
+	require.NoError(t, w.WriteString("b"))
+	require.NoError(t, w.EndComment())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><!--a-b--></root>`, buf.String())
+}
+
 func TestCommentValidStillSucceeds(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
@@ -375,6 +406,28 @@ func TestPIWellFormednessRejected(t *testing.T) {
 			require.Error(t, w.WritePI(tc.target, tc.content))
 		})
 	}
+}
+
+func TestPIDelimSplitAcrossWrites(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartPI("t"))
+	require.NoError(t, w.WriteString(" a?"))
+	require.Error(t, w.WriteString(">b"))
+}
+
+func TestPIQuestionChunksNoFalsePositive(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.StartPI("t"))
+	require.NoError(t, w.WriteString(" a?"))
+	require.NoError(t, w.WriteString("x"))
+	require.NoError(t, w.EndPI())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root><?t a?x?></root>`, buf.String())
 }
 
 func TestPIValidStillSucceeds(t *testing.T) {
