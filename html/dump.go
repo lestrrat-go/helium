@@ -119,32 +119,42 @@ type htmlDumper struct {
 	nsAvailable map[string]string
 }
 
-// check records err as the sticky error if no error has been recorded yet,
-// and reports whether the dumper is still in a writable (error-free) state.
-func (d *htmlDumper) check(err error) bool {
+// check records err as the sticky error if no error has been recorded yet.
+func (d *htmlDumper) check(err error) {
 	if d.err == nil && err != nil {
 		d.err = err
 	}
-	return d.err == nil
 }
 
 // writeString writes s to out, recording the first failure as the sticky
-// error. It is a no-op once an error has been recorded.
+// error. It is a no-op once an error has been recorded. A short write
+// reported with a nil error by a non-conformant io.Writer is promoted to
+// io.ErrShortWrite, mirroring latin1EncodingWriter, so silent truncation
+// is never reported as success.
 func (d *htmlDumper) writeString(out io.Writer, s string) {
 	if d.err != nil {
 		return
 	}
-	_, err := io.WriteString(out, s)
+	n, err := io.WriteString(out, s)
+	if err == nil && n < len(s) {
+		err = io.ErrShortWrite
+	}
 	d.check(err)
 }
 
 // writeBytes writes b to out, recording the first failure as the sticky
-// error. It is a no-op once an error has been recorded.
+// error. It is a no-op once an error has been recorded. A short write
+// reported with a nil error by a non-conformant io.Writer is promoted to
+// io.ErrShortWrite, mirroring latin1EncodingWriter, so silent truncation
+// is never reported as success.
 func (d *htmlDumper) writeBytes(out io.Writer, b []byte) {
 	if d.err != nil {
 		return
 	}
-	_, err := out.Write(b)
+	n, err := out.Write(b)
+	if err == nil && n < len(b) {
+		err = io.ErrShortWrite
+	}
 	d.check(err)
 }
 
