@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"os"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -285,32 +284,36 @@ func documentNodeFromNode(n helium.Node) *helium.Document {
 // available system properties in the XSLT namespace.
 // fnStreamAvailable implements fn:stream-available — returns true when the
 // URI identifies a resource that can be streamed.
-func (ec *execContext) fnStreamAvailable(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) fnStreamAvailable(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	if len(args) == 0 || (args[0] == nil || sequence.Len(args[0]) == 0) {
 		return xpath3.SingleBoolean(false), nil
 	}
 	av, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
-		return xpath3.SingleBoolean(false), nil
+		return nil, err
 	}
 	uri, err := xpath3.AtomicToString(av)
-	if err != nil || uri == "" {
-		return xpath3.SingleBoolean(false), nil
-	}
-	resolved := ec.resolveDocumentURI(uri, ec.baseDir())
-	info, statErr := os.Stat(resolved)
-	if statErr != nil || info.IsDir() {
-		return xpath3.SingleBoolean(false), nil
-	}
-	// Only XML files can be streamed. Quick check: try parsing the first few bytes.
-	f, err := os.Open(resolved)
 	if err != nil {
+		return nil, err
+	}
+	if uri == "" {
 		return xpath3.SingleBoolean(false), nil
 	}
-	defer func() { _ = f.Close() }()
-	buf := make([]byte, 256)
-	n, _ := f.Read(buf)
-	content := strings.TrimSpace(string(buf[:n]))
+	// Retrieve through the configured URIResolver / HTTPClient rather than
+	// stat-ing the host filesystem directly. We only need the leading bytes
+	// to decide whether the resource is XML, so read a bounded prefix instead
+	// of the whole document. With no resolver installed this fails the
+	// default-deny check; an unavailable resource is reported as not
+	// streamable (false) rather than surfaced as an error.
+	resolved := ec.resolveDocumentURI(uri, ec.baseDir())
+	prefix, err := ec.retrieveDocumentPrefix(ctx, resolved, 256)
+	if err != nil {
+		// fn:stream-available reports availability, not retrieval failure:
+		// a resource we cannot fetch is simply not streamable.
+		return xpath3.SingleBoolean(false), nil //nolint:nilerr
+	}
+	// Only XML resources can be streamed. Quick check on the leading bytes.
+	content := strings.TrimSpace(string(prefix))
 	isXML := strings.HasPrefix(content, "<?xml") || strings.HasPrefix(content, "<")
 	return xpath3.SingleBoolean(isXML), nil
 }
