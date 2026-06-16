@@ -432,6 +432,8 @@ func TestFnArrayIntegerPositions(t *testing.T) {
 		for _, expr := range []string{
 			`array:remove([1, 2], 5)`,
 			`array:insert-before([1, 2], 0, 9)`,
+			// Huge start+length must not overflow into a make() panic.
+			`array:subarray([1], 6917529027641081856, 6917529027641081856)`,
 		} {
 			t.Run(expr, func(t *testing.T) {
 				evalErrCode(t, expr, "FOAY0001")
