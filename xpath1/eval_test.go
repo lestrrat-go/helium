@@ -224,6 +224,42 @@ func TestEvalNumericComparison(t *testing.T) {
 	require.True(t, r.Bool)
 }
 
+func TestEvalNodeSetBooleanComparison(t *testing.T) {
+	doc := parseXML(t, `<root><a/></root>`)
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		// node-set vs boolean: collapse the whole node-set to a boolean
+		{`/root/a = false()`, false},
+		{`/root/a = true()`, true},
+		{`/root/a != false()`, true},
+		{`/root/nonexistent = false()`, true},
+		{`/root/nonexistent = true()`, false},
+		// mirrored (boolean on the left)
+		{`false() = /root/a`, false},
+		{`true() = /root/a`, true},
+		{`false() = /root/nonexistent`, true},
+		// relational operators: boolean(node-set) compared numerically (true=1)
+		{`/root/a > false()`, true},          // 1 > 0
+		{`/root/a < true()`, false},          // 1 < 1
+		{`/root/a >= true()`, true},          // 1 >= 1
+		{`/root/nonexistent < true()`, true}, // 0 < 1
+		{`false() < /root/a`, true},          // mirrored: 0 < 1
+		// GUARD: number/string node-set comparisons keep existential semantics
+		{`/root/a = ''`, true},
+		{`/root/a = 'x'`, false},
+		{`/root/a = 0`, false},
+	} {
+		t.Run(tc.expr, func(t *testing.T) {
+			r, err := xpath1.Evaluate(t.Context(), doc, tc.expr)
+			require.NoError(t, err)
+			require.Equal(t, xpath1.BooleanResult, r.Type)
+			require.Equal(t, tc.want, r.Bool)
+		})
+	}
+}
+
 // --- Arithmetic ---
 
 func TestEvalArithmetic(t *testing.T) {
@@ -466,6 +502,44 @@ func TestEvalVariable(t *testing.T) {
 	}).Evaluate(t.Context(), expr, doc)
 	require.NoError(t, err)
 	require.Equal(t, 42.0, r.Number)
+}
+
+func TestEvalNodeSetVariableDocumentOrder(t *testing.T) {
+	doc := parseXML(t, `<root><a>AAA</a><b>BBB</b></root>`)
+	nodes, err := xpath1.Find(t.Context(), doc, "/root/*")
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+	a, b := nodes[0], nodes[1]
+	require.Equal(t, "a", a.Name())
+	require.Equal(t, "b", b.Name())
+
+	// Bind $v in reversed (non-document) order. string($v) must return the
+	// value of the first node in document order ("AAA"), not the slice's
+	// first element ("BBB").
+	expr, err := xpath1.Compile("string($v)")
+	require.NoError(t, err)
+	r, err := xpath1.NewEvaluator().Variables(map[string]any{
+		"v": []helium.Node{b, a},
+	}).Evaluate(t.Context(), expr, doc)
+	require.NoError(t, err)
+	require.Equal(t, "AAA", r.String)
+}
+
+func TestEvalNodeSetVariableTypedNil(t *testing.T) {
+	doc := parseXML(t, `<root><a/></root>`)
+	a := docElement(doc)
+	require.NotNil(t, a)
+
+	// A typed-nil concrete node pointer is non-nil at the interface level,
+	// so a naive `n != nil` filter lets it through and DeduplicateNodes
+	// panics dereferencing it. It must be filtered out instead.
+	expr, err := xpath1.Compile("count($v)")
+	require.NoError(t, err)
+	r, err := xpath1.NewEvaluator().Variables(map[string]any{
+		"v": []helium.Node{a, (*helium.Element)(nil)},
+	}).Evaluate(t.Context(), expr, doc)
+	require.NoError(t, err)
+	require.Equal(t, 1.0, r.Number)
 }
 
 // --- Complex expressions ---
