@@ -43,8 +43,15 @@ func (t *ucs4SwapTransformer) Transform(dst, src []byte, atEOF bool) (nDst, nSrc
 		nDst += 4
 		nSrc += 4
 	}
-	if nSrc < len(src) && !atEOF {
+	if nSrc < len(src) {
+		// Leftover bytes that don't fill a 4-byte unit. Before EOF this is just
+		// an incomplete unit awaiting more input; at EOF it is malformed input.
+		// The downstream UTF-32 decoder never sees these trailing bytes (they
+		// are not forwarded), so this transformer must reject them itself.
 		err = transform.ErrShortSrc
+		if atEOF {
+			err = ErrInvalidEncodedChar
+		}
 	}
 	return
 }

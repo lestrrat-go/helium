@@ -79,6 +79,16 @@ func extractArrayIndex(seq Sequence) (int, error) {
 	if !ok {
 		return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
 	}
+	// On 64-bit platforms int(iv) is exact; on 32-bit, clamp out-of-int values
+	// to the int extremes so the caller's 1..size bounds check still rejects
+	// them (as out of range) rather than wrapping into a valid-looking index.
+	const maxInt = int(^uint(0) >> 1)
+	if iv > int64(maxInt) {
+		return maxInt, nil
+	}
+	if iv < int64(-maxInt-1) {
+		return -maxInt - 1, nil
+	}
 	return int(iv), nil
 }
 
@@ -111,10 +121,16 @@ func fnArraySubarray(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	start := int(seqToDouble(args[1]))
+	start, err := extractArrayIndex(args[1])
+	if err != nil {
+		return nil, err
+	}
 	length := a.Size() - start + 1
 	if len(args) > 2 {
-		length = int(seqToDouble(args[2]))
+		length, err = extractArrayIndex(args[2])
+		if err != nil {
+			return nil, err
+		}
 	}
 	sub, err := a.SubArray(start, length)
 	if err != nil {
@@ -136,11 +152,19 @@ func fnArrayRemove(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		pos := int(av.ToFloat64())
-		if pos < 1 || pos > size {
-			return nil, &XPathError{Code: errCodeFOAY0001, Message: fmt.Sprintf("array:remove: position %d out of range 1..%d", pos, size)}
+		if !isIntegerDerived(av.TypeName) {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("array:remove position must be xs:integer, got %s", av.TypeName)}
 		}
-		positions[pos] = struct{}{}
+		iv, ok := av.Int64Val()
+		if !ok {
+			return nil, &XPathError{Code: errCodeFOAY0001, Message: "array:remove position out of range"}
+		}
+		// Range-check on int64 before converting so an out-of-int value cannot
+		// wrap into a valid-looking position (e.g. on 32-bit platforms).
+		if iv < 1 || iv > int64(size) {
+			return nil, &XPathError{Code: errCodeFOAY0001, Message: fmt.Sprintf("array:remove: position %d out of range 1..%d", iv, size)}
+		}
+		positions[int(iv)] = struct{}{}
 	}
 	members := a.members0()
 	var result []Sequence
@@ -157,7 +181,10 @@ func fnArrayInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	pos := int(seqToDouble(args[1]))
+	pos, err := extractArrayIndex(args[1])
+	if err != nil {
+		return nil, err
+	}
 	members := a.members0()
 	if pos < 1 || pos > len(members)+1 {
 		return nil, &XPathError{Code: errCodeFOAY0001, Message: "array index out of bounds"}

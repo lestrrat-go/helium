@@ -105,6 +105,15 @@ Special cases:
 
 `switchEncoding()`: pop ByteCursor, create encoder, push RuneCursor.
 
+**Strict decode of fixed-width Unicode encodings**: `internal/encoding` wraps the
+UTF-16/UTF-32/UCS-2/UCS-4 decoders (`withStrictDecode`, `strict.go`) so that
+malformed input the base decoder would silently replace with U+FFFD (e.g. an
+unpaired surrogate or trailing odd byte) becomes a fatal `ErrInvalidEncodedChar`,
+while a genuinely-encoded U+FFFD still decodes. The decoder reader's error is
+remembered by `UTF8Cursor` as a sticky `Err()` (a clean `Done()` would otherwise
+mask it as EOF); `parseDocument` surfaces it via `cursorDecodeErr()` at the
+document-end gate.
+
 ## File Responsibilities
 
 - `parserctx.go` owns the parser context, input/cursor stack, SAX callback dispatch, location/error reporting, and other shared parser state.
