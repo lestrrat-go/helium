@@ -422,9 +422,14 @@ func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href str
 // / "+" / "-" / "." )). It returns "" when s carries no leading scheme, so
 // local filesystem paths — even ones that happen to contain "://" later in
 // the string — are not mistaken for URIs.
+//
+// Single-character schemes are rejected (treated as non-URI): on Windows a
+// path like "C://..." would otherwise be read as scheme "c" and skip the
+// baseDir containment check, even though it is an absolute local path. No
+// real URI scheme used for href resolution is a single letter.
 func uriScheme(s string) string {
 	i := strings.Index(s, "://")
-	if i <= 0 {
+	if i < 2 {
 		return ""
 	}
 	scheme := s[:i]

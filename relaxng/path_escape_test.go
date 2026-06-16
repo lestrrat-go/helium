@@ -3,6 +3,7 @@ package relaxng_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -117,6 +118,12 @@ func TestCompile_RejectsAbsoluteHrefWithRelativeBaseDir(t *testing.T) {
 // containment check.
 func TestCompile_RejectsSchemeLikeLocalPathEscape(t *testing.T) {
 	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		// The directory name contains ":" which is invalid on Windows
+		// filesystems; the behavior under test is OS-independent.
+		t.Skip("path component with ':' is not a valid Windows filename")
+	}
 
 	root := t.TempDir()
 	outsideDir := filepath.Join(root, "x://outside")
