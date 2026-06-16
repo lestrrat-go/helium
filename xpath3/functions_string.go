@@ -1127,18 +1127,81 @@ var compiledXPathRegexCache sync.Map
 // the timeout in effect at the time they were compiled.
 var DefaultRegexMatchTimeout = 5 * time.Second
 
+// isRegexMatchTimeout reports whether err is regexp2's wall-clock match-timeout
+// error. regexp2 returns an unexported, untyped fmt error for timeouts, so the
+// only stable discriminator is its message text.
+func isRegexMatchTimeout(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "match timeout")
+}
+
+// withSpuriousTimeoutRetry runs fn, retrying when it reports a regexp2 match
+// timeout that cannot be genuine.
+//
+// regexp2 enforces MatchTimeout via a shared "fastclock" background goroutine
+// that stamps the current time into an atomic every ~100ms. On a heavily
+// loaded host that goroutine can be starved for seconds and then jump the
+// clock forward in a single step; a match that has barely started then sees
+// its deadline already crossed and fails with a "match timeout" almost
+// immediately. (This is the residual race left after regexp2 v1.12.0's fix,
+// which only refreshes the stale clock when its updater is not running.)
+//
+// A genuine timeout only fires after roughly `budget` of wall-clock time has
+// elapsed, whereas a spurious one fires well before that. So when fn reports a
+// timeout but less than half the budget (budget/2) has actually elapsed, the
+// result is treated as bogus and we retry — by then the clock goroutine is
+// live and the match completes normally. Timeouts that fire at or beyond
+// budget/2 (genuine ReDoS) are propagated unchanged, preserving the
+// DoS-protection contract.
+func withSpuriousTimeoutRetry[T any](budget time.Duration, fn func() (T, error)) (T, error) {
+	const maxAttempts = 3
+	var v T
+	var err error
+	for range maxAttempts {
+		start := time.Now()
+		v, err = fn()
+		if !isRegexMatchTimeout(err) {
+			return v, err
+		}
+		// A real timeout burns ~budget of wall time before firing; treat
+		// anything well short of that as a spurious fastclock jump and retry.
+		if budget <= 0 || time.Since(start) >= budget/2 {
+			return v, err
+		}
+	}
+	return v, err
+}
+
 func (r *compiledXPathRegex) MatchString(s string) (bool, error) {
 	if r.backtrack != nil {
-		return r.backtrack.MatchString(s)
+		return withSpuriousTimeoutRetry(r.backtrack.MatchTimeout, func() (bool, error) {
+			return r.backtrack.MatchString(s)
+		})
 	}
 	return r.std.MatchString(s), nil
 }
 
 func (r *compiledXPathRegex) ReplaceAllString(s, replacement string) (string, error) {
 	if r.backtrack != nil {
-		return r.backtrack.Replace(s, replacement, -1, -1)
+		return withSpuriousTimeoutRetry(r.backtrack.MatchTimeout, func() (string, error) {
+			return r.backtrack.Replace(s, replacement, -1, -1)
+		})
 	}
 	return r.std.ReplaceAllString(s, replacement), nil
+}
+
+// findStringMatch and findNextMatch wrap regexp2's match iteration with the
+// same spurious-timeout retry applied to MatchString, so multi-match callers
+// (Split, FindAllStringSubmatchIndex) are equally resilient to fastclock jumps.
+func (r *compiledXPathRegex) findStringMatch(s string) (*regexp2.Match, error) {
+	return withSpuriousTimeoutRetry(r.backtrack.MatchTimeout, func() (*regexp2.Match, error) {
+		return r.backtrack.FindStringMatch(s)
+	})
+}
+
+func (r *compiledXPathRegex) findNextMatch(m *regexp2.Match) (*regexp2.Match, error) {
+	return withSpuriousTimeoutRetry(r.backtrack.MatchTimeout, func() (*regexp2.Match, error) {
+		return r.backtrack.FindNextMatch(m)
+	})
 }
 
 func (r *compiledXPathRegex) Split(s string, n int) ([]string, error) {
@@ -1150,7 +1213,10 @@ func (r *compiledXPathRegex) Split(s string, n int) ([]string, error) {
 	var parts []string
 	last := 0
 	count := 0
-	match, err := r.backtrack.FindStringMatch(s)
+	match, err := r.findStringMatch(s)
+	if err != nil {
+		return nil, err
+	}
 	for match != nil {
 		if n > 0 && count >= n-1 {
 			break
@@ -1160,13 +1226,10 @@ func (r *compiledXPathRegex) Split(s string, n int) ([]string, error) {
 		parts = append(parts, s[last:start])
 		last = end
 		count++
-		match, err = r.backtrack.FindNextMatch(match)
+		match, err = r.findNextMatch(match)
 		if err != nil {
 			return nil, err
 		}
-	}
-	if err != nil {
-		return nil, err
 	}
 	parts = append(parts, s[last:])
 	return parts, nil
@@ -1179,7 +1242,10 @@ func (r *compiledXPathRegex) FindAllStringSubmatchIndex(s string, n int) ([][]in
 
 	offsets := runeByteOffsets(s)
 	var result [][]int
-	match, err := r.backtrack.FindStringMatch(s)
+	match, err := r.findStringMatch(s)
+	if err != nil {
+		return nil, err
+	}
 	for match != nil {
 		groups := match.Groups()
 		entry := make([]int, 0, len(groups)*2)
@@ -1196,12 +1262,12 @@ func (r *compiledXPathRegex) FindAllStringSubmatchIndex(s string, n int) ([][]in
 		if n > 0 && len(result) >= n {
 			break
 		}
-		match, err = r.backtrack.FindNextMatch(match)
+		match, err = r.findNextMatch(match)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return result, err
+	return result, nil
 }
 
 func (r *compiledXPathRegex) NumSubexp() int {
