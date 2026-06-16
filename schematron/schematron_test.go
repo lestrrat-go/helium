@@ -781,6 +781,36 @@ func TestUnionContextIntegration(t *testing.T) {
 	require.NotContains(t, got, "other")
 }
 
+func TestAttributeContext(t *testing.T) {
+	t.Parallel()
+	// A rule whose context selects an attribute (context="@id" becomes
+	// //@id) must run its asserts against each attribute node. The assert
+	// fails for short id values. Before the fix, attribute context nodes
+	// were silently skipped and the document validated.
+	schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="@id">
+				<assert test="string-length(.) &gt; 3">id too short</assert>
+			</rule>
+		</pattern>
+	</schema>`)
+	require.Equal(t, "", errs)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root id="a"><child id="b"/></root>`))
+	require.NoError(t, err)
+
+	collected, err := validateAndCollect(t, schema, doc)
+	require.ErrorIs(t, err, schematron.ErrValidationFailed)
+	require.NotEmpty(t, collected)
+
+	var paths []string
+	for _, ve := range collected {
+		paths = append(paths, ve.Path)
+	}
+	require.Contains(t, paths, "/root/@id")
+	require.Contains(t, paths, "/root/child/@id")
+}
+
 func TestZeroCompilerFluent(t *testing.T) {
 	t.Parallel()
 	var c schematron.Compiler

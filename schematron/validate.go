@@ -33,7 +33,10 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			}
 
 			for _, node := range result.NodeSet {
-				if node.Type() != helium.ElementNode {
+				// A rule context may resolve to element or attribute
+				// nodes (e.g. context="@id" becomes //@id). Other node
+				// types are not valid rule contexts.
+				if node.Type() != helium.ElementNode && node.Type() != helium.AttributeNode {
 					continue
 				}
 
@@ -245,6 +248,18 @@ func xpathResultToValue(r *xpath1.Result) any {
 func getNodePath(n helium.Node) string {
 	if n == nil {
 		return ""
+	}
+
+	// Attribute leaves are not part of the element ancestry walk below
+	// (which only collects element nodes). Compute the owning element's
+	// path and append /@<name>, matching libxml2's xmlGetNodePath
+	// (e.g. /root/@id).
+	if n.Type() == helium.AttributeNode {
+		parent := getNodePath(n.Parent())
+		if parent == "/" {
+			parent = ""
+		}
+		return parent + "/@" + n.Name()
 	}
 
 	var parts []string
