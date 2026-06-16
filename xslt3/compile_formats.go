@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 	"io"
 	"maps"
 	"path/filepath"
@@ -509,6 +510,12 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 
 	data, err := loadBytes(uri)
 	if err != nil {
+		// The compile-time loader already returns an *XSLTError (XTSE0090);
+		// return it as-is rather than wrapping it in a second XTSE0090.
+		var xe *XSLTError
+		if errors.As(err, &xe) {
+			return err
+		}
 		return staticError(errCodeXTSE0090, "cannot read parameter-document %q: %v", href, err)
 	}
 	doc, err := helium.NewParser().Parse(ctx, data)

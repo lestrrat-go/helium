@@ -21,7 +21,9 @@ func (osOpenResolver) Resolve(uri string) (io.ReadCloser, error) {
 }
 
 // fileMapResolver is an xslt3.URIResolver (method Resolve) that serves
-// content from an in-memory map keyed by URI.
+// content from an in-memory map keyed by URI. Lookup falls back to matching by
+// base name so the test does not depend on how xsl:import/include resolves the
+// href (it uses filepath.Join, whose separators are OS-dependent).
 type fileMapResolver struct {
 	files map[string]string
 }
@@ -29,9 +31,27 @@ type fileMapResolver struct {
 func (r fileMapResolver) Resolve(uri string) (io.ReadCloser, error) {
 	content, ok := r.files[uri]
 	if !ok {
+		want := baseName(uri)
+		for k, v := range r.files {
+			if baseName(k) == want {
+				content, ok = v, true
+				break
+			}
+		}
+	}
+	if !ok {
 		return nil, &resolverNotFoundError{uri: uri}
 	}
 	return io.NopCloser(strings.NewReader(content)), nil
+}
+
+// baseName returns the final path segment, treating both '/' and '\' as
+// separators so the comparison is OS-independent.
+func baseName(s string) string {
+	if i := strings.LastIndexAny(s, `/\`); i >= 0 {
+		return s[i+1:]
+	}
+	return s
 }
 
 type resolverNotFoundError struct {
