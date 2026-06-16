@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -347,25 +348,54 @@ func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 // Mirrors xsd's validateSchemaPath; defense-in-depth alongside whatever
 // path constraints the configured fs.FS enforces.
 func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href string) (string, error) {
-	if filepath.IsAbs(href) {
-		return href, nil
-	}
-	if doc := elem.OwnerDocument(); doc != nil {
-		base := helium.NodeGetBase(doc, elem)
-		if base != "" {
-			return helium.BuildURI(href, base), nil
-		}
-	}
-	if c.baseDir != "" {
-		joined := filepath.Join(c.baseDir, href)
-		if rel, err := filepath.Rel(c.baseDir, joined); err == nil {
-			if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return "", fmt.Errorf("href %q escapes base directory", href)
+	// Resolve the href to a concrete path first, then enforce baseDir
+	// containment once for every locally-resolved path. Resolving and
+	// checking in a single place prevents the absolute-href and xml:base
+	// branches from bypassing the containment guard.
+	var resolved string
+	switch {
+	case filepath.IsAbs(href):
+		resolved = href
+	default:
+		if doc := elem.OwnerDocument(); doc != nil {
+			if base := helium.NodeGetBase(doc, elem); base != "" {
+				resolved = helium.BuildURI(href, base)
 			}
 		}
-		return joined, nil
+		if resolved == "" && c.baseDir != "" {
+			resolved = filepath.Join(c.baseDir, href)
+		}
+		if resolved == "" {
+			resolved = href
+		}
 	}
-	return href, nil
+
+	if c.baseDir == "" {
+		// No base directory configured: nothing to contain. Preserve the
+		// historically permissive behavior.
+		return resolved, nil
+	}
+
+	// BuildURI may hand back a file:// URI (e.g. when an ancestor xml:base
+	// or the document URL carries that scheme). Reduce it to a filesystem
+	// path so the containment comparison below is meaningful. A non-file
+	// URI scheme (http, etc.) is not a local path, so there is nothing to
+	// contain and it is returned untouched.
+	checkPath := resolved
+	if strings.HasPrefix(checkPath, "file://") {
+		if u, err := url.Parse(checkPath); err == nil {
+			checkPath = u.Path
+		}
+	} else if strings.Contains(checkPath, "://") {
+		return resolved, nil
+	}
+
+	if rel, err := filepath.Rel(c.baseDir, filepath.Clean(checkPath)); err == nil {
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("href %q escapes base directory", href)
+		}
+	}
+	return resolved, nil
 }
 
 // parseInclude parses an <include> element.
