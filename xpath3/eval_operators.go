@@ -153,7 +153,7 @@ func evalRangeExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 		return validNilSequence, nil
 	}
 	if seqLen(startSeq) > 1 || seqLen(endSeq) > 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "to operator operands must be a single xs:integer"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "to operator operands must each be xs:integer? (at most one item)"}
 	}
 	sa, err := AtomizeItem(startSeq.Get(0))
 	if err != nil {
