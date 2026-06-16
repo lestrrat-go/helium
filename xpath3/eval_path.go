@@ -457,7 +457,7 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			return false
 		}
 		if test.Name != "" && test.Name != "*" {
-			if !matchElementOrAttributeName(test.Name, n, ec) {
+			if !matchElementOrAttributeName(test.Name, n, ec, false) {
 				return false
 			}
 		}
@@ -479,7 +479,7 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			return false
 		}
 		if test.Name != "" && test.Name != "*" {
-			if !matchElementOrAttributeName(test.Name, n, ec) {
+			if !matchElementOrAttributeName(test.Name, n, ec, true) {
 				return false
 			}
 		}
@@ -608,7 +608,9 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 // matchElementOrAttributeName matches an element/attribute name from an
 // ElementTest or AttributeTest against a node. Handles URIQualifiedNames
 // (Q{uri}local), prefixed names (prefix:local), and plain local names.
-func matchElementOrAttributeName(name string, n helium.Node, ec *evalContext) bool {
+// isAttr selects the namespace rule for an unprefixed name: attributes match
+// only no-namespace nodes, elements match the default element namespace.
+func matchElementOrAttributeName(name string, n helium.Node, ec *evalContext, isAttr bool) bool {
 	if strings.HasPrefix(name, "Q{") {
 		if idx := strings.Index(name, "}"); idx >= 0 {
 			uri := name[2:idx]
@@ -623,7 +625,15 @@ func matchElementOrAttributeName(name string, n helium.Node, ec *evalContext) bo
 	if prefix != "" {
 		return matchPrefix(prefix, n, ec)
 	}
-	return true
+	// Unprefixed name: same namespace rule as a NameTest (XPath 3.1 §3.3.2.1).
+	if isAttr {
+		return ixpath.NodeNamespaceURI(n) == ""
+	}
+	defaultNS := ""
+	if ec != nil && ec.namespaces != nil {
+		defaultNS = ec.namespaces[""]
+	}
+	return ixpath.NodeNamespaceURI(n) == defaultNS
 }
 
 func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext) bool {
@@ -685,11 +695,13 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 		// matches only attributes with no namespace URI.
 		return ixpath.NodeNamespaceURI(n) == ""
 	}
+	// Per XPath 3.1 §3.3.2.1: when no default element namespace is bound,
+	// an unprefixed name test matches only no-namespace elements.
+	defaultNS := ""
 	if ec.namespaces != nil {
-		return ixpath.NodeNamespaceURI(n) == ec.namespaces[""]
+		defaultNS = ec.namespaces[""]
 	}
-	// No namespace context at all: permissive match (any namespace).
-	return true
+	return ixpath.NodeNamespaceURI(n) == defaultNS
 }
 
 func matchPrefix(prefix string, n helium.Node, ec *evalContext) bool {
