@@ -411,6 +411,65 @@ func TestFnMap(t *testing.T) {
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(2), av.IntegerVal())
 	})
+
+	// Regression: two distinct xs:integer keys whose magnitude exceeds
+	// MaxFloat64 (~1.8e308) must not collide. Before the fix, both were
+	// normalized through ToFloat64 -> +Inf and shared one bucket, producing
+	// a false XQDY0137 duplicate-key error / wrong map size.
+	t.Run("huge integer keys do not collide", func(t *testing.T) {
+		k1 := "1" + strings.Repeat("0", 400) // > MaxFloat64
+		k2 := "2" + strings.Repeat("0", 400) // distinct, also > MaxFloat64
+		expr := `map:size(map { ` + k1 + `: "a", ` + k2 + `: "b" })`
+		seq := evalExpr(t, doc, expr)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, int64(2), av.IntegerVal())
+	})
+
+	t.Run("huge integer key lookup", func(t *testing.T) {
+		k1 := "1" + strings.Repeat("0", 400)
+		k2 := "2" + strings.Repeat("0", 400)
+		expr := `map:get(map { ` + k1 + `: "a", ` + k2 + `: "b" }, ` + k2 + `)`
+		seq := evalExpr(t, doc, expr)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, "b", av.StringVal())
+	})
+
+	// Guard: normal small integer keys are unaffected.
+	t.Run("small integer keys", func(t *testing.T) {
+		seq := evalExpr(t, doc, `map:size(map { 1: "a", 2: "b" })`)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, int64(2), av.IntegerVal())
+
+		got := evalExpr(t, doc, `map:get(map { 1: "a", 2: "b" }, 2)`)
+		require.Equal(t, 1, got.Len())
+		require.Equal(t, "b", got.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
+	// Guard: integer and decimal keys that compare equal (1 and 1.0) are the
+	// same key per XPath "same key" rules, so the map constructor must reject
+	// them as a duplicate (XQDY0137). This confirms the fix preserves
+	// cross-type numeric key equality for in-range values.
+	t.Run("integer and decimal equal keys are duplicate", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`map { 1: "a", 1.0: "b" }`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XQDY0137")
+	})
+
+	// Guard: a huge integer key and the equal huge decimal key are still the
+	// same key (both > MaxFloat64), and must be rejected as a duplicate.
+	t.Run("huge integer and decimal equal keys are duplicate", func(t *testing.T) {
+		big := "1" + strings.Repeat("0", 400)
+		compiled, err := xpath3.NewCompiler().Compile(`map { ` + big + `: "a", ` + big + `.0: "b" }`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XQDY0137")
+	})
 }
 
 // --- Array functions ---
@@ -451,6 +510,83 @@ func TestFnArray(t *testing.T) {
 		require.Equal(t, 1, seq.Len())
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 3.0, av.ToFloat64(), 0.001)
+	})
+}
+
+// --- array position-argument integer validation ---
+
+func TestFnArrayIntegerPositions(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErrCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: code}, "expected error code %s for %q", code, expr)
+	}
+
+	// Non-integer or wrong-cardinality position arguments must raise XPTY0004.
+	t.Run("XPTY0004", func(t *testing.T) {
+		for _, expr := range []string{
+			`array:remove([1, 2], 1.5)`,
+			`array:subarray([1, 2, 3], 1.5)`,
+			`array:subarray([1, 2, 3], 2, 1.5)`,
+			`array:subarray([1, 2, 3], ())`,
+			`array:insert-before([1, 2], 1.5, 9)`,
+			`array:insert-before([1, 2], (), 9)`,
+		} {
+			t.Run(expr, func(t *testing.T) {
+				evalErrCode(t, expr, "XPTY0004")
+			})
+		}
+	})
+
+	// Out-of-range integer positions must raise FOAY0001.
+	t.Run("FOAY0001", func(t *testing.T) {
+		for _, expr := range []string{
+			`array:remove([1, 2], 5)`,
+			`array:insert-before([1, 2], 0, 9)`,
+			// Huge start+length must not overflow into a make() panic.
+			`array:subarray([1], 6917529027641081856, 6917529027641081856)`,
+		} {
+			t.Run(expr, func(t *testing.T) {
+				evalErrCode(t, expr, "FOAY0001")
+			})
+		}
+	})
+
+	// Valid invocations must continue to work (no regression).
+	t.Run("valid", func(t *testing.T) {
+		tests := []struct {
+			expr   string
+			expect []int64
+		}{
+			{`array:remove([1, 2], 1)`, []int64{2}},
+			{`array:remove([1, 2, 3], (1, 2))`, []int64{3}},
+			{`array:remove([1, 2, 3], ())`, []int64{1, 2, 3}},
+			{`array:subarray([1, 2, 3], 2)`, []int64{2, 3}},
+			{`array:subarray([1, 2, 3], 2, 1)`, []int64{2}},
+			{`array:insert-before([1, 2], 1, 9)`, []int64{9, 1, 2}},
+			{`array:insert-before([1, 2], 3, 9)`, []int64{1, 2, 9}},
+		}
+		for _, tc := range tests {
+			t.Run(tc.expr, func(t *testing.T) {
+				seq := evalExpr(t, doc, tc.expr)
+				require.Equal(t, 1, seq.Len())
+				arr, ok := seq.Get(0).(xpath3.ArrayItem)
+				require.True(t, ok, "expected array result")
+				require.Equal(t, len(tc.expect), arr.Size())
+				for i, want := range tc.expect {
+					member, err := arr.Get(i + 1)
+					require.NoError(t, err)
+					require.Equal(t, 1, member.Len())
+					av := member.Get(0).(xpath3.AtomicValue)
+					require.Equal(t, want, av.IntegerVal())
+				}
+			})
+		}
 	})
 }
 
@@ -1153,4 +1289,55 @@ func TestFnRoundPrecisionCardinality(t *testing.T) {
 			require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
 		})
 	}
+}
+
+// TestFnSequenceIntegerCardinalityArgs verifies fn:remove/fn:insert-before/
+// fn:subsequence enforce integer/cardinality rules on their position args
+// instead of wrapping (big.Int) or silently ignoring extra/invalid items.
+func TestFnSequenceIntegerCardinalityArgs(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErrCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: code}, "expected %s for %q", code, expr)
+	}
+	evalStrings := func(t *testing.T, expr string) []string {
+		t.Helper()
+		seq := evalExpr(t, doc, expr)
+		out := make([]string, seq.Len())
+		for i := range seq.Len() {
+			out[i] = seq.Get(i).(xpath3.AtomicValue).StringVal()
+		}
+		return out
+	}
+
+	t.Run("XPTY0004", func(t *testing.T) {
+		for _, expr := range []string{
+			`insert-before(("a"), "not-a-position", "b")`,
+			`insert-before(("a"), 2.9, "b")`,
+			`insert-before(("a"), (1, 2), "b")`,
+			`subsequence(("a","b","c"), (2, 3))`,
+			`subsequence(("a","b","c"), 2, (1, 2))`,
+		} {
+			t.Run(expr, func(t *testing.T) { evalErrCode(t, expr, "XPTY0004") })
+		}
+	})
+
+	t.Run("oversized integer leaves fn:remove unchanged", func(t *testing.T) {
+		require.Equal(t, []string{"a", "b"}, evalStrings(t, `remove(("a","b"), 18446744073709551617)`))
+		require.Equal(t, []string{"a", "b"}, evalStrings(t, `remove(("a","b"), -18446744073709551617)`))
+	})
+
+	t.Run("valid still works", func(t *testing.T) {
+		require.Equal(t, []string{"b"}, evalStrings(t, `remove(("a","b"), 1)`))
+		require.Equal(t, []string{"x", "a", "b"}, evalStrings(t, `insert-before(("a","b"), 1, "x")`))
+		require.Equal(t, []string{"a", "b", "x"}, evalStrings(t, `insert-before(("a","b"), 99, "x")`))
+		require.Equal(t, []string{"b", "c"}, evalStrings(t, `subsequence(("a","b","c"), 2)`))
+		require.Equal(t, []string{"b"}, evalStrings(t, `subsequence(("a","b","c"), 2, 1)`))
+		require.Equal(t, []string{"c"}, evalStrings(t, `subsequence(("a","b","c"), 2.6)`))
+	})
 }

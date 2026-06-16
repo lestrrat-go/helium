@@ -540,6 +540,24 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		if v, ok := key.Value.(int64); ok {
 			return mapKey{typeName: familyNumeric, value: v}
 		}
+		// Exact numeric types must normalize with exact arithmetic, never float64:
+		// ToFloat64 overflows values > MaxFloat64 to +Inf, collapsing distinct keys.
+		// Also consult BaseType so a user-defined schema type derived from
+		// xs:integer/xs:decimal is normalized exactly rather than via float64.
+		if isIntegerDerived(key.TypeName) || isIntegerDerived(key.BaseType) {
+			bi := key.BigInt()
+			if bi.IsInt64() {
+				return mapKey{typeName: familyNumeric, value: bi.Int64()}
+			}
+			return mapKey{typeName: familyNumeric, value: new(big.Rat).SetInt(bi).RatString()}
+		}
+		if key.TypeName == TypeDecimal || key.BaseType == TypeDecimal {
+			r := key.BigRat()
+			if r.IsInt() && r.Num().IsInt64() {
+				return mapKey{typeName: familyNumeric, value: r.Num().Int64()}
+			}
+			return mapKey{typeName: familyNumeric, value: new(big.Rat).Set(r).RatString()}
+		}
 		f := key.ToFloat64()
 		if math.IsNaN(f) {
 			return mapKey{typeName: familyNumeric, value: "NaN"}
@@ -550,31 +568,13 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		if math.IsInf(f, -1) {
 			return mapKey{typeName: familyNumeric, value: "-Inf"}
 		}
-		// For non-int64 numerics: check if the value is an exact integer
-		// that fits in int64, so it matches the int64 fast path above.
-		switch key.TypeName {
-		case TypeInteger:
-			bi := key.BigInt()
-			if bi.IsInt64() {
-				return mapKey{typeName: familyNumeric, value: bi.Int64()}
-			}
-			return mapKey{typeName: familyNumeric, value: new(big.Rat).SetInt(bi).RatString()}
-		case TypeDecimal:
-			r := key.BigRat()
-			if r.IsInt() {
-				num := r.Num()
-				if num.IsInt64() {
-					return mapKey{typeName: familyNumeric, value: num.Int64()}
-				}
-			}
-			return mapKey{typeName: familyNumeric, value: new(big.Rat).Set(r).RatString()}
-		default: // float, double
-			// Check if float is an exact integer in int64 range
-			if f == math.Trunc(f) && !math.IsInf(f, 0) && f >= math.MinInt64 && f <= math.MaxInt64 {
-				return mapKey{typeName: familyNumeric, value: int64(f)}
-			}
-			return mapKey{typeName: familyNumeric, value: new(big.Rat).SetFloat64(f).RatString()}
+		// Remaining numerics are xs:float / xs:double (and user-defined types whose
+		// underlying value is a float). Check if the float is an exact integer in
+		// int64 range so it matches the int64 fast path above.
+		if f == math.Trunc(f) && !math.IsInf(f, 0) && f >= math.MinInt64 && f <= math.MaxInt64 {
+			return mapKey{typeName: familyNumeric, value: int64(f)}
 		}
+		return mapKey{typeName: familyNumeric, value: new(big.Rat).SetFloat64(f).RatString()}
 	}
 
 	// Normalize duration types: xs:duration, xs:yearMonthDuration, xs:dayTimeDuration
@@ -910,10 +910,14 @@ func (a ArrayItem) get0(index int) (Sequence, error) {
 
 // SubArray returns a new array from start to end (1-based, inclusive).
 func (a ArrayItem) SubArray(start, length int) (ArrayItem, error) {
-	if start < 1 || length < 0 || start+length-1 > len(a.members) {
+	size := len(a.members)
+	// Bounds are checked without forming start+length, which can overflow for
+	// huge positions and bypass the guard, leading to a make([]Sequence, length)
+	// panic. With start>=1 established first, size-start+1 cannot overflow.
+	if start < 1 || start > size+1 || length < 0 || length > size-start+1 {
 		return ArrayItem{}, &XPathError{
 			Code:    errCodeFOAY0001,
-			Message: fmt.Sprintf("array subarray(%d, %d) out of bounds (size %d)", start, length, len(a.members)),
+			Message: fmt.Sprintf("array subarray(%d, %d) out of bounds (size %d)", start, length, size),
 		}
 	}
 	newMembers := make([]Sequence, length)

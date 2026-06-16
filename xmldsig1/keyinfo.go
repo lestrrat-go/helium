@@ -256,7 +256,12 @@ func parseRSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		case "Modulus":
 			kv.Modulus = new(big.Int).SetBytes(decoded)
 		case "Exponent":
-			kv.Exponent = int(new(big.Int).SetBytes(decoded).Int64())
+			exp := new(big.Int).SetBytes(decoded)
+			const maxInt = int(^uint(0) >> 1)
+			if exp.Sign() <= 0 || !exp.IsInt64() || exp.Int64() > int64(maxInt) {
+				return fmt.Errorf("%w: RSAKeyValue Exponent out of range", ErrInvalidKeyInfo)
+			}
+			kv.Exponent = int(exp.Int64())
 		}
 	}
 	data.RSAKeyValue = kv

@@ -38,7 +38,7 @@ func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isChar(r) {
+		if !ok || !isCharWidth(r, w) {
 			break
 		}
 		buf.WriteRune(r)
@@ -448,6 +448,13 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	if err := newctx.parseContent(innerCtx); err != nil {
 		return nil, err
 	}
+	// A clean parseContent may mask a transcoding/decode error (e.g. an unpaired
+	// UTF-16 surrogate the decoder replaced with U+FFFD) in this context's own
+	// byte stream. Surface it as fatal rather than inserting U+FFFD, matching the
+	// document-level gate in parseDocument.
+	if err := newctx.cursorDecodeErr(); err != nil {
+		return nil, newctx.error(innerCtx, err)
+	}
 
 	if child := newctx.doc.FirstChild(); child != nil {
 		if grandchild := child.FirstChild(); grandchild != nil {
@@ -537,6 +544,13 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContent(innerCtx); err != nil {
 		return nil, err
+	}
+	// A clean parseContent may mask a transcoding/decode error (e.g. an unpaired
+	// UTF-16 surrogate the decoder replaced with U+FFFD) in this context's own
+	// byte stream. Surface it as fatal rather than inserting U+FFFD, matching the
+	// document-level gate in parseDocument.
+	if err := newctx.cursorDecodeErr(); err != nil {
+		return nil, newctx.error(innerCtx, err)
 	}
 
 	if child := newctx.doc.FirstChild(); child != nil {

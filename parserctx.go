@@ -373,6 +373,19 @@ func (ctx *parserCtx) getCursor() strcursor.Cursor {
 	return nil
 }
 
+// cursorDecodeErr returns a sticky transcoding/decode error from the active
+// cursor, if any. Such an error (e.g. an unpaired UTF-16 surrogate that the
+// decoder replaced with U+FFFD) is otherwise indistinguishable from a clean
+// EOF via Done(), so callers must consult this explicitly to reject malformed
+// encoded input.
+func (ctx *parserCtx) cursorDecodeErr() error {
+	u8, ok := ctx.getCursor().(*strcursor.UTF8Cursor)
+	if !ok {
+		return nil
+	}
+	return u8.Err()
+}
+
 func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for type generality
 	ctx.cachedCursor = nil // invalidate cache
 	return ctx.inputTab.Pop()

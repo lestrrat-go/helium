@@ -152,6 +152,9 @@ func evalRangeExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	if seqLen(startSeq) == 0 || seqLen(endSeq) == 0 {
 		return validNilSequence, nil
 	}
+	if seqLen(startSeq) > 1 || seqLen(endSeq) > 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "to operator operands must each be xs:integer? (at most one item)"}
+	}
 	sa, err := AtomizeItem(startSeq.Get(0))
 	if err != nil {
 		return nil, err
@@ -177,8 +180,12 @@ func evalRangeExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 		if sv > ev {
 			return validNilSequence, nil
 		}
-		count := ev - sv + 1
-		if count > int64(ec.maxNodes) {
+		// Compute the span with big.Int: ev-sv+1 can overflow int64 even when
+		// both bounds fit (e.g. minInt64 .. maxInt64), which would wrap the
+		// count and bypass the limit check or build a negative-length range.
+		span := new(big.Int).Sub(big.NewInt(ev), big.NewInt(sv))
+		span.Add(span, big.NewInt(1))
+		if !span.IsInt64() || span.Int64() > int64(ec.maxNodes) {
 			return nil, ErrNodeSetLimit
 		}
 		return NewRangeSequence(sv, ev), nil

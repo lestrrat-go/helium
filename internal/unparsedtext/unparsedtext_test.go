@@ -594,3 +594,22 @@ func TestLoadTextHTTP(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "hello from http", text)
 }
+
+func TestResolveURIFragmentBaseURI(t *testing.T) {
+	t.Run("empty href with fragmented base URI is rejected", func(t *testing.T) {
+		cfg := &unparsedtext.Config{BaseURI: "file:///tmp/data.txt#frag"}
+		_, err := unparsedtext.ResolveURI(t.Context(), cfg, "")
+		require.Error(t, err)
+		var ue *unparsedtext.Error
+		require.ErrorAs(t, err, &ue)
+		require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
+		require.Contains(t, ue.Message, "fragment")
+	})
+
+	t.Run("empty href with plain base URI still resolves", func(t *testing.T) {
+		cfg := &unparsedtext.Config{BaseURI: "file:///tmp/data.txt"}
+		resolved, err := unparsedtext.ResolveURI(t.Context(), cfg, "")
+		require.NoError(t, err)
+		require.Equal(t, "file:///tmp/data.txt", resolved)
+	})
+}

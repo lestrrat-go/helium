@@ -113,12 +113,13 @@ func scanASCIINameChars(data []byte) int {
 // It works directly on a byte buffer, decoding UTF-8 on the fly.
 // ASCII bytes (< 0x80) are handled without utf8.DecodeRune overhead.
 type UTF8Cursor struct {
-	buf    []byte
-	buflen int
-	bufpos int
-	column int
-	in     io.Reader
-	lineno int
+	buf     []byte
+	buflen  int
+	bufpos  int
+	column  int
+	in      io.Reader
+	lineno  int
+	readErr error // sticky non-EOF read error (e.g. a transcoding/decode error)
 }
 
 // NewUTF8Cursor creates a UTF8Cursor wrapping an existing io.Reader.
@@ -160,7 +161,16 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 	for c.buflen-c.bufpos < minBytes {
 		n, err := c.in.Read(c.buf[c.buflen:])
 		c.buflen += n
-		if n == 0 && err != nil {
+		if err != nil {
+			// Remember a genuine decode/transcoding error (anything other than
+			// a clean EOF) so the parser can distinguish malformed input from a
+			// normal end-of-stream. Done() treats both as "no more data". The
+			// error must be recorded even when this Read also returned data
+			// (n > 0), because a small input may deliver its decoded bytes and
+			// the decode error together in a single Read.
+			if err != io.EOF && c.readErr == nil {
+				c.readErr = err
+			}
 			if c.buflen-c.bufpos >= minBytes {
 				return nil
 			}
@@ -168,6 +178,13 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 		}
 	}
 	return nil
+}
+
+// Err returns a sticky non-EOF read error encountered while filling the buffer,
+// such as a transcoding/decode error from an underlying encoding decoder. It
+// returns nil if the stream ended cleanly.
+func (c *UTF8Cursor) Err() error {
+	return c.readErr
 }
 
 func (c *UTF8Cursor) Done() bool {
@@ -491,7 +508,7 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 	} else {
 		_ = c.fillBuffer(utf8.UTFMax)
 		r, w := utf8.DecodeRune(c.buf[c.bufpos:c.buflen])
-		if r == utf8.RuneError || !xmlchar.IsNCNameStartChar(r) {
+		if (r == utf8.RuneError && w == 1) || !xmlchar.IsNCNameStartChar(r) {
 			return nil, 0
 		}
 		off += w
@@ -522,7 +539,7 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 		} else {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 			r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-			if r == utf8.RuneError || !xmlchar.IsNCNameChar(r) {
+			if (r == utf8.RuneError && w == 1) || !xmlchar.IsNCNameChar(r) {
 				break
 			}
 			off += w
@@ -631,16 +648,23 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
 			return "", 0
 		}
 		if b < 0x80 {
-			if b < 0x20 && b != 0x9 {
-				// \r, \n, or other control chars need normalization.
+			if b < 0x20 {
+				// Tab, \r, \n, and other control chars need attribute-value
+				// normalization (whitespace -> space) — defer to the slow path.
 				return "", 0
 			}
 			off++
 		} else {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 			r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-			if w == 0 || r == utf8.RuneError {
+			if w == 0 || (r == utf8.RuneError && w == 1) {
 				// Invalid or incomplete UTF-8 — fall back to slow path.
+				// (A real U+FFFD decodes as RuneError with width 3 and is valid.)
+				return "", 0
+			}
+			if !xmlchar.IsChar(r) {
+				// XML-forbidden char — fall back to the slow path, which
+				// reports the invalid character.
 				return "", 0
 			}
 			off += w
@@ -722,10 +746,12 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 			dlen = len(data)
 		}
 		r, w := utf8.DecodeRune(data[off:dlen])
-		if r == utf8.RuneError || w == 0 {
+		if w == 0 || (r == utf8.RuneError && w == 1) {
+			// Invalid/incomplete UTF-8. A real U+FFFD decodes as RuneError
+			// with width 3 and is a valid XML char, so let IsChar judge it.
 			break
 		}
-		if r < 0x20 {
+		if !xmlchar.IsChar(r) {
 			break
 		}
 		dst = append(dst, data[off:off+w]...)
@@ -788,10 +814,12 @@ func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 		}
 		r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-		if r == utf8.RuneError || w == 0 {
+		if w == 0 || (r == utf8.RuneError && w == 1) {
+			// Invalid/incomplete UTF-8. A real U+FFFD decodes as RuneError
+			// with width 3 and is a valid XML char, so let IsChar judge it.
 			break
 		}
-		if r < 0x20 {
+		if !xmlchar.IsChar(r) {
 			break
 		}
 		dst.Write(c.buf[c.bufpos+off : c.bufpos+off+w])
