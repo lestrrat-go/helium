@@ -632,7 +632,15 @@ func evalVariableExpr(ec *evalContext, e VariableExpr) (*Result, error) {
 	}
 	switch val := v.(type) {
 	case []helium.Node:
-		nodes, err := ixpath.DeduplicateNodes(val, ec.docOrder, maxNodeSetLength)
+		// Caller-provided slices may contain nil entries; drop them so
+		// DeduplicateNodes (which dereferences each node) cannot panic.
+		clean := make([]helium.Node, 0, len(val))
+		for _, n := range val {
+			if n != nil {
+				clean = append(clean, n)
+			}
+		}
+		nodes, err := ixpath.DeduplicateNodes(clean, ec.docOrder, maxNodeSetLength)
 		if err != nil {
 			return nil, err
 		}
