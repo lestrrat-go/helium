@@ -643,6 +643,11 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
 				// Invalid or incomplete UTF-8 — fall back to slow path.
 				return "", 0
 			}
+			if !xmlchar.IsChar(r) {
+				// XML-forbidden char — fall back to the slow path, which
+				// reports the invalid character.
+				return "", 0
+			}
 			off += w
 		}
 	}

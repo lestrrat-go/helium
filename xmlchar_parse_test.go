@@ -49,3 +49,20 @@ func TestParseRejectsNonXMLChars(t *testing.T) {
 		})
 	}
 }
+
+// TestParseRejectsNonXMLCharsInAttr covers the attribute-value fast path, which
+// must reject XML-forbidden chars just like text content.
+func TestParseRejectsNonXMLCharsInAttr(t *testing.T) {
+	t.Parallel()
+
+	for _, r := range []rune{0xFFFE, 0xFFFF} {
+		input := `<r a="` + string(r) + `"/>`
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "forbidden char U+%04X in attribute value must fail", r)
+	}
+	// A valid multibyte char in an attribute must still parse.
+	p := helium.NewParser()
+	_, err := p.Parse(t.Context(), []byte(`<r a="`+string(rune(0x4E2D))+`"/>`))
+	require.NoError(t, err)
+}
