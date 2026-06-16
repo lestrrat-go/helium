@@ -114,6 +114,11 @@ func ResolveURI(_ context.Context, cfg *Config, href string) (string, error) {
 
 	if href == "" {
 		if cfg != nil && cfg.BaseURI != "" {
+			// An empty href resolves to the base URI verbatim; the base URI
+			// must not carry a fragment identifier either.
+			if strings.Contains(cfg.BaseURI, "#") {
+				return "", &Error{Code: ErrCodeRetrieval, Message: "base URI must not contain a fragment identifier"}
+			}
 			return cfg.BaseURI, nil
 		}
 		return "", &Error{Code: ErrCodeRetrieval, Message: "empty href and no base URI available"}
