@@ -408,8 +408,16 @@ func coerceToSequenceTypeE(seq Sequence, st SequenceType, ec *evalContext) (Sequ
 				continue
 			}
 		case TypeString:
-			if av.TypeName == TypeAnyURI {
-				result[i] = AtomicValue{TypeName: TypeString, Value: av.Value}
+			// xs:anyURI (and its subtypes) promote to xs:string per the
+			// function-conversion rules. Match via atomicMatchesTargetType so a
+			// schema-DERIVED anyURI (carrying BaseType xs:anyURI, or whose
+			// ancestry the schema knows) is admitted, not only the exact
+			// xs:anyURI type. PromoteSchemaType normalizes the schema-derived
+			// value to a built-in-typed anyURI so its string value is read the
+			// same way the builtins read it.
+			if atomicMatchesTargetType(av, TypeAnyURI, ec) {
+				promoted := PromoteSchemaType(av)
+				result[i] = AtomicValue{TypeName: TypeString, Value: promoted.Value}
 				i++
 				continue
 			}

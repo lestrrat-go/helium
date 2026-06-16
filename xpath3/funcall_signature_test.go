@@ -346,6 +346,72 @@ func TestSignatureGateArrayAtomizationStillWorks(t *testing.T) {
 	}
 }
 
+// Finding (round 6): xs:anyURI promotes to xs:string per the function-conversion
+// rules, and so do its SUBTYPES. A schema-DERIVED anyURI (BaseType xs:anyURI)
+// supplied to fn:upper-case (xs:string? param) must be admitted by the static
+// signature gate, promoted to xs:string, and upper-cased — not rejected with
+// XPTY0004 before the builtin runs.
+func TestSignatureGatePromotesSchemaDerivedAnyURI(t *testing.T) {
+	t.Parallel()
+
+	vars := xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		"u": xpath3.ItemSlice{
+			xpath3.AtomicValue{
+				TypeName: "Q{urn:test}myURI",
+				BaseType: xpath3.TypeAnyURI,
+				Value:    "abc",
+			},
+		},
+	})
+
+	cases := map[string]string{
+		`upper-case($u)`:    "ABC",
+		`string-length($u)`: "3",
+		`concat($u, "x")`:   "abcx",
+	}
+	for expr, want := range cases {
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Variables(vars).
+			Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(expr), nil)
+		require.NoError(t, err, expr)
+
+		switch expr {
+		case `string-length($u)`:
+			n, ok := result.IsNumber()
+			require.True(t, ok, expr)
+			require.Equal(t, float64(3), n, expr)
+		default:
+			s, ok := result.IsString()
+			require.True(t, ok, expr)
+			require.Equal(t, want, s, expr)
+		}
+	}
+}
+
+// Finding (round 6): a plain (built-in) xs:anyURI supplied to an xs:string? param
+// must continue to promote to xs:string and be accepted — the exact-type path
+// previously handled this, and the subtype-aware gate must not regress it.
+func TestSignatureGatePromotesPlainAnyURI(t *testing.T) {
+	t.Parallel()
+	result, err := evaluate(t.Context(), nil, `upper-case(xs:anyURI("abc"))`)
+	require.NoError(t, err)
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "ABC", s)
+}
+
+// Finding (round 6): a genuinely non-anyURI, non-string value supplied to an
+// xs:string param still raises XPTY0004 — widening anyURI acceptance must not
+// admit unrelated types.
+func TestSignatureGateRejectsNonStringForStringParam(t *testing.T) {
+	t.Parallel()
+	_, err := evaluate(t.Context(), nil, `upper-case(current-date())`)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+}
+
 // Finding 2: a too-long sequence supplied to a singleton (xs:string?) parameter
 // must be rejected promptly with XPTY0004 — without atomizing the whole range.
 // A 10M-item lazy range would allocate ~1GB if atomized eagerly; the cap keeps
