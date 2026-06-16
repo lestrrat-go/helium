@@ -1,6 +1,7 @@
 package xmlchar_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -62,7 +63,7 @@ func TestIsChar(t *testing.T) {
 		{0x110000, false}, // beyond Unicode range
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.r), func(t *testing.T) {
+		t.Run(fmt.Sprintf("U+%04X", tt.r), func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tt.want, xmlchar.IsChar(tt.r), "IsChar(%#x)", tt.r)
 		})
@@ -87,7 +88,7 @@ func TestIsNCNameStartChar(t *testing.T) {
 		{' ', false},
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.r), func(t *testing.T) {
+		t.Run(fmt.Sprintf("U+%04X", tt.r), func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tt.want, xmlchar.IsNCNameStartChar(tt.r))
 		})
@@ -112,7 +113,7 @@ func TestIsNCNameChar(t *testing.T) {
 		{' ', false},
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.r), func(t *testing.T) {
+		t.Run(fmt.Sprintf("U+%04X", tt.r), func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tt.want, xmlchar.IsNCNameChar(tt.r))
 		})
