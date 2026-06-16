@@ -556,7 +556,7 @@ func TestFnSequenceIntegerCardinalityArgs(t *testing.T) {
 		t.Helper()
 		seq := evalExpr(t, doc, expr)
 		out := make([]string, seq.Len())
-		for i := 0; i < seq.Len(); i++ {
+		for i := range seq.Len() {
 			out[i] = seq.Get(i).(xpath3.AtomicValue).StringVal()
 		}
 		return out
