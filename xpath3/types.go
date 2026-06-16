@@ -540,6 +540,22 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		if v, ok := key.Value.(int64); ok {
 			return mapKey{typeName: familyNumeric, value: v}
 		}
+		// Exact numeric types must normalize with exact arithmetic, never float64:
+		// ToFloat64 overflows values > MaxFloat64 to +Inf, collapsing distinct keys.
+		if isIntegerDerived(key.TypeName) {
+			bi := key.BigInt()
+			if bi.IsInt64() {
+				return mapKey{typeName: familyNumeric, value: bi.Int64()}
+			}
+			return mapKey{typeName: familyNumeric, value: new(big.Rat).SetInt(bi).RatString()}
+		}
+		if key.TypeName == TypeDecimal {
+			r := key.BigRat()
+			if r.IsInt() && r.Num().IsInt64() {
+				return mapKey{typeName: familyNumeric, value: r.Num().Int64()}
+			}
+			return mapKey{typeName: familyNumeric, value: new(big.Rat).Set(r).RatString()}
+		}
 		f := key.ToFloat64()
 		if math.IsNaN(f) {
 			return mapKey{typeName: familyNumeric, value: "NaN"}
@@ -550,31 +566,13 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		if math.IsInf(f, -1) {
 			return mapKey{typeName: familyNumeric, value: "-Inf"}
 		}
-		// For non-int64 numerics: check if the value is an exact integer
-		// that fits in int64, so it matches the int64 fast path above.
-		switch key.TypeName {
-		case TypeInteger:
-			bi := key.BigInt()
-			if bi.IsInt64() {
-				return mapKey{typeName: familyNumeric, value: bi.Int64()}
-			}
-			return mapKey{typeName: familyNumeric, value: new(big.Rat).SetInt(bi).RatString()}
-		case TypeDecimal:
-			r := key.BigRat()
-			if r.IsInt() {
-				num := r.Num()
-				if num.IsInt64() {
-					return mapKey{typeName: familyNumeric, value: num.Int64()}
-				}
-			}
-			return mapKey{typeName: familyNumeric, value: new(big.Rat).Set(r).RatString()}
-		default: // float, double
-			// Check if float is an exact integer in int64 range
-			if f == math.Trunc(f) && !math.IsInf(f, 0) && f >= math.MinInt64 && f <= math.MaxInt64 {
-				return mapKey{typeName: familyNumeric, value: int64(f)}
-			}
-			return mapKey{typeName: familyNumeric, value: new(big.Rat).SetFloat64(f).RatString()}
+		// Remaining numerics are xs:float / xs:double (and user-defined types whose
+		// underlying value is a float). Check if the float is an exact integer in
+		// int64 range so it matches the int64 fast path above.
+		if f == math.Trunc(f) && !math.IsInf(f, 0) && f >= math.MinInt64 && f <= math.MaxInt64 {
+			return mapKey{typeName: familyNumeric, value: int64(f)}
 		}
+		return mapKey{typeName: familyNumeric, value: new(big.Rat).SetFloat64(f).RatString()}
 	}
 
 	// Normalize duration types: xs:duration, xs:yearMonthDuration, xs:dayTimeDuration
