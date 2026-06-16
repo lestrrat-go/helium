@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"os"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -285,7 +284,7 @@ func documentNodeFromNode(n helium.Node) *helium.Document {
 // available system properties in the XSLT namespace.
 // fnStreamAvailable implements fn:stream-available — returns true when the
 // URI identifies a resource that can be streamed.
-func (ec *execContext) fnStreamAvailable(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) fnStreamAvailable(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	if len(args) == 0 || (args[0] == nil || sequence.Len(args[0]) == 0) {
 		return xpath3.SingleBoolean(false), nil
 	}
@@ -297,20 +296,20 @@ func (ec *execContext) fnStreamAvailable(_ context.Context, args []xpath3.Sequen
 	if err != nil || uri == "" {
 		return xpath3.SingleBoolean(false), nil
 	}
+	// Retrieve through the configured URIResolver / HTTPClient rather than
+	// stat-ing the host filesystem directly. With no resolver installed this
+	// fails the default-deny check and we report the resource as unavailable.
 	resolved := ec.resolveDocumentURI(uri, ec.baseDir())
-	info, statErr := os.Stat(resolved)
-	if statErr != nil || info.IsDir() {
-		return xpath3.SingleBoolean(false), nil
-	}
-	// Only XML files can be streamed. Quick check: try parsing the first few bytes.
-	f, err := os.Open(resolved)
+	data, err := ec.retrieveDocumentBytes(ctx, resolved)
 	if err != nil {
 		return xpath3.SingleBoolean(false), nil
 	}
-	defer func() { _ = f.Close() }()
-	buf := make([]byte, 256)
-	n, _ := f.Read(buf)
-	content := strings.TrimSpace(string(buf[:n]))
+	// Only XML resources can be streamed. Quick check on the leading bytes.
+	prefix := data
+	if len(prefix) > 256 {
+		prefix = prefix[:256]
+	}
+	content := strings.TrimSpace(string(prefix))
 	isXML := strings.HasPrefix(content, "<?xml") || strings.HasPrefix(content, "<")
 	return xpath3.SingleBoolean(isXML), nil
 }
