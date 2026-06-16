@@ -69,18 +69,20 @@ func fnMathLog10(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMathPow(_ context.Context, args []Sequence) (Sequence, error) {
-	// math:pow($x as xs:double?, $y as xs:numeric): empty $x yields empty,
-	// regardless of $y. $y is a required single numeric value.
+	// math:pow($x as xs:double?, $y as xs:numeric): empty $x yields empty, but
+	// only once $y has been validated. $y is a required single numeric value,
+	// so a malformed or empty $y must raise XPTY0004 even when $x is empty —
+	// function-conversion validates each argument independently of the others.
+	b, err := coerceArgToDoubleRequired(args[1])
+	if err != nil {
+		return nil, err
+	}
 	a, aOK, err := coerceMathArg(args[0])
 	if err != nil {
 		return nil, err
 	}
 	if !aOK {
 		return validNilSequence, nil
-	}
-	b, err := coerceArgToDoubleRequired(args[1])
-	if err != nil {
-		return nil, err
 	}
 	return SingleDouble(math.Pow(a, b)), nil
 }

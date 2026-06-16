@@ -555,7 +555,14 @@ func TestBuiltinArgValidation(t *testing.T) {
 			`math:sin("abc")`,
 			`math:sin((1,2))`,
 			`math:pow(2,"x")`,
+			// An empty $x must not excuse an invalid/empty required $y:
+			// function-conversion validates each argument independently.
+			`math:pow((),"x")`,
+			`math:pow((),())`,
 			`math:atan2(1,(2,3))`,
+			// atan2's $x ($y) is required; an empty other arg is still XPTY0004.
+			`math:atan2((),1)`,
+			`math:atan2(1,())`,
 			`map:put(map{},(1,2),"v")`,
 			`map:entry((1,2),"v")`,
 			`parse-json("{}","bad")`,
@@ -580,6 +587,13 @@ func TestBuiltinArgValidation(t *testing.T) {
 			seq := evalExpr(t, doc, `math:pow(2,3)`)
 			require.Equal(t, 1, seq.Len())
 			require.InDelta(t, 8.0, seq.Get(0).(xpath3.AtomicValue).DoubleVal(), 0.0001)
+		})
+		t.Run("math:pow empty x valid y is empty", func(t *testing.T) {
+			// QT3 math-pow-001: math:pow((), 93.7) is the empty sequence
+			// because $y is a valid number. The empty-$x short-circuit only
+			// fires after $y validates.
+			seq := evalExpr(t, doc, `math:pow((), 93.7)`)
+			require.Nil(t, seq)
 		})
 		t.Run("map:put singleton key", func(t *testing.T) {
 			seq := evalExpr(t, doc, `map:size(map:put(map{},1,"v"))`)
