@@ -273,7 +273,7 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 		return "xs:" + tn.Name
 	}
 	// Resolve via namespace context
-	if ec.namespaces != nil {
+	if ec != nil && ec.namespaces != nil {
 		if uri, ok := ec.namespaces[tn.Prefix]; ok {
 			if uri == lexicon.NamespaceXSD {
 				return "xs:" + tn.Name
@@ -314,18 +314,16 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 	default:
 		return seq, false
 	}
-	result := make(ItemSlice, seqLen(seq))
+	// Atomize the sequence. AtomizeSequence correctly flattens arrays and
+	// expands list-typed nodes (e.g. xs:list of xs:decimal) into multiple
+	// atomic values — a per-item AtomizeItem would collapse those incorrectly.
+	atoms, err := AtomizeSequence(seq)
+	if err != nil {
+		return seq, false
+	}
+	result := make(ItemSlice, len(atoms))
 	i := 0
-	for item := range seqItems(seq) {
-		av, ok := item.(AtomicValue)
-		if !ok {
-			// Try atomization
-			atomized, err := AtomizeItem(item)
-			if err != nil {
-				return seq, false
-			}
-			av = atomized
-		}
+	for _, av := range atoms {
 		// Numeric promotion
 		switch targetType {
 		case TypeDouble:
@@ -377,6 +375,24 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 			i++
 			continue
 		}
+		// Fall back to schema declarations for user-defined types derived by
+		// restriction from the target (e.g. a schema type derived from xs:decimal
+		// matching xs:numeric).
+		if ec != nil && ec.schemaDeclarations != nil {
+			if targetType == TypeNumeric {
+				if ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeDecimal) ||
+					ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeFloat) ||
+					ec.schemaDeclarations.IsSubtypeOf(av.TypeName, TypeDouble) {
+					result[i] = av
+					i++
+					continue
+				}
+			} else if ec.schemaDeclarations.IsSubtypeOf(av.TypeName, targetType) {
+				result[i] = av
+				i++
+				continue
+			}
+		}
 		return seq, false
 	}
 	// Verify occurrence constraint on the coerced result
@@ -402,7 +418,9 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 		return nil, false
 	}
 
-	actual, ok := item.(FunctionItem)
+	// Maps and arrays are function items of arity 1 per XPath 3.1, so they
+	// participate in function coercion just like an inline/named function.
+	actual, ok := asFunctionItem(item)
 	if !ok {
 		return nil, false
 	}

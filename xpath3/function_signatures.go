@@ -146,7 +146,7 @@ func init() {
 	}, stItem(OccurrenceZeroOrMore))
 	registerSig("sort", 2, []SequenceType{
 		stItem(OccurrenceZeroOrMore),
-		stFunc([]SequenceType{stItem(OccurrenceExactlyOne)}, stItem(OccurrenceZeroOrMore)),
+		stAtomic(TypeString, OccurrenceZeroOrOne),
 	}, stItem(OccurrenceZeroOrMore))
 }
 

@@ -537,3 +537,97 @@ func TestFnImplicitTimezoneReturnsDuration(t *testing.T) {
 	require.Len(t, atomics, 1)
 	require.Equal(t, xpath3.TypeDayTimeDuration, atomics[0].TypeName)
 }
+
+// TestBuiltinSignatureEnforcement verifies that static built-in function calls
+// enforce their declared parameter signatures, raising XPTY0004 when an argument
+// has the wrong cardinality or type, while spec-valid calls still succeed.
+func TestBuiltinSignatureEnforcement(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	t.Run("cardinality violations raise XPTY0004", func(t *testing.T) {
+		// Each of these passes a sequence of length > 1 where the signature
+		// requires xs:string? / xs:numeric? (zero-or-one).
+		exprs := []string{
+			`abs((1, 2))`,
+			`upper-case(("a", "b"))`,
+			`lower-case(("a", "b"))`,
+			`string-length(("a", "b"))`,
+			`normalize-space(("a", "b"))`,
+			`ceiling((1, 2))`,
+			`floor((1, 2))`,
+		}
+		for _, expr := range exprs {
+			t.Run(expr, func(t *testing.T) {
+				compiled, err := xpath3.NewCompiler().Compile(expr)
+				require.NoError(t, err)
+				_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+					Evaluate(t.Context(), compiled, doc)
+				require.Error(t, err)
+				var xpErr *xpath3.XPathError
+				require.ErrorAs(t, err, &xpErr)
+				require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+			})
+		}
+	})
+
+	t.Run("type violations raise XPTY0004", func(t *testing.T) {
+		// matches() arg 1 is xs:string?; a QName is not coercible to xs:string.
+		compiled, err := xpath3.NewCompiler().Compile(`matches(current-dateTime(), "x")`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xpErr *xpath3.XPathError
+		require.ErrorAs(t, err, &xpErr)
+		require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+	})
+
+	t.Run("valid controls still pass", func(t *testing.T) {
+		tests := []struct {
+			expr   string
+			expect string
+		}{
+			// Wrap numeric results in string() so the lexical form is asserted
+			// uniformly via StringVal.
+			{`string(abs(-3))`, "3"},
+			{`upper-case("a")`, "A"},
+			{`lower-case("A")`, "a"},
+			{`string(string-length("abc"))`, "3"},
+			{`string(ceiling(1.2))`, "2"},
+			{`string(floor(1.8))`, "1"},
+			{`normalize-space("  a  b ")`, "a b"},
+			// fn:upper-case(()) returns the zero-length string (not empty seq).
+			{`upper-case(())`, ""},
+		}
+		for _, tc := range tests {
+			t.Run(tc.expr, func(t *testing.T) {
+				seq := evalExpr(t, doc, tc.expr)
+				require.Equal(t, 1, seq.Len())
+				av := seq.Get(0).(xpath3.AtomicValue)
+				require.Equal(t, tc.expect, av.StringVal())
+			})
+		}
+	})
+
+	t.Run("empty argument satisfies optional cardinality", func(t *testing.T) {
+		// abs(()) returns the empty sequence; the call must not error.
+		seq := evalExpr(t, doc, `abs(())`)
+		if seq != nil {
+			require.Equal(t, 0, seq.Len())
+		}
+	})
+
+	t.Run("maps and arrays coerce to function predicate", func(t *testing.T) {
+		// fn:filter's predicate is function(item()) as xs:boolean; maps and
+		// arrays are arity-1 function items and must coerce successfully.
+		for _, expr := range []string{
+			`filter((4, 5, 6), map{4: true(), 5: false(), 6: true()})`,
+			`filter((4, 5, 6), [1, 2, 3, true(), false(), true()])`,
+		} {
+			t.Run(expr, func(t *testing.T) {
+				seq := evalExpr(t, doc, expr)
+				require.Equal(t, 2, seq.Len())
+			})
+		}
+	})
+}

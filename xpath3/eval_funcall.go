@@ -34,7 +34,39 @@ func evalFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		return nil, err
 	}
 
+	// Enforce declared parameter signatures for static built-in calls, mirroring
+	// the function-item / named-function-reference path. Obtain the registered
+	// parameter types the same way evalNamedFunctionRef does (built-in registry
+	// signature, then TypedFunction/TypedFunctionByArity interfaces).
+	ns, _ := resolvePrefix(ec, e.Prefix)
+	paramTypes := lookupParamTypes(fn, ns, e.Name, len(args))
+	if paramTypes != nil {
+		for i, arg := range args {
+			if i < len(paramTypes) {
+				if _, ok := coerceToSequenceType(arg, paramTypes[i], ec); !ok {
+					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, i+1, paramTypes[i])}
+				}
+			}
+		}
+	}
+
 	return fn.Call(ec.fnContext(ctx), args)
+}
+
+// lookupParamTypes returns the declared parameter types for a function, using the
+// built-in signature registry first and then the TypedFunction/TypedFunctionByArity
+// interfaces. It returns nil when no signature is available (no enforcement).
+func lookupParamTypes(fn Function, ns, name string, arity int) []SequenceType {
+	if sig := lookupFunctionSignature(ns, name, arity); sig != nil {
+		return sig.ParamTypes
+	}
+	if tf, ok := fn.(TypedFunction); ok {
+		return tf.FuncParamTypes()
+	}
+	if tfa, ok := fn.(TypedFunctionByArity); ok {
+		return tfa.FuncParamTypesForArity(arity)
+	}
+	return nil
 }
 
 func evalDynamicFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e DynamicFunctionCall) (Sequence, error) {
