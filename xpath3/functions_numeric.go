@@ -189,14 +189,16 @@ func roundPrecisionArg(arg Sequence) (*big.Int, error) {
 // operand's fractional scale.
 //
 // The one exception is a non-terminating rational, whose fracDigits is the large
-// ratFracDigitNonTerminating sentinel: it never compares as "fully representable"
-// so a finite precision always rounds, but that precision (e.g. 1e9) could still
-// be enormous. Such an operand has no terminating decimal expansion, so its value
-// is well-defined at any requested fractional precision; honour the request up to
-// roundMaxComputeScale (so 10^p stays bounded), and beyond that cap raise an error
-// rather than silently rounding at a lower scale than asked. Silently clamping
-// would return an observably wrong (lower-precision) value; erroring keeps the
-// computation DoS-safe without ever lying about the result.
+// ratFracDigitNonTerminating sentinel. It must never be treated as "fully
+// representable" — that is handled BEFORE the positive-precision unchanged test,
+// so a precision at or above the sentinel (e.g. 1<<30) cannot short-circuit to
+// roundUnchanged and bypass the cap. Such an operand has no terminating decimal
+// expansion, so its value is well-defined at any requested fractional precision;
+// honour the request up to roundMaxComputeScale (so 10^p stays bounded), and
+// beyond that cap raise an error rather than silently rounding at a lower scale
+// than asked. Silently clamping would return an observably wrong (lower-precision)
+// value; erroring keeps the computation DoS-safe without ever lying about the
+// result.
 func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roundDecision, error) {
 	if precision.Sign() < 0 {
 		// scale = -precision, as a non-negative big.Int
@@ -209,27 +211,35 @@ func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roun
 		// Here s <= intDigits, which fits in int and bounds 10^s.
 		return int(s.Int64()), roundCompute, nil
 	}
-	// Non-negative precision. If it is at least the operand's fractional-digit
+	// Non-negative precision. A non-terminating rational has no terminating
+	// decimal expansion, so fracDigits is the ratFracDigitNonTerminating
+	// sentinel rather than a true scale: it must NEVER be treated as "fully
+	// representable" (which would short-circuit to roundUnchanged and return the
+	// repeating operand). Handle it first — honour the request up to
+	// roundMaxComputeScale so 10^p stays bounded, and beyond that refuse with
+	// FOAR0002 rather than silently returning a lower-precision value. This must
+	// precede the precision >= fracDigits test below, because a precision at or
+	// above the sentinel (e.g. 1<<30) would otherwise wrongly select
+	// roundUnchanged and bypass the cap entirely.
+	if fracDigits == ratFracDigitNonTerminating {
+		if precision.Cmp(big.NewInt(roundMaxComputeScale)) > 0 {
+			return 0, roundCompute, &XPathError{
+				Code: errCodeFOAR0002,
+				Message: fmt.Sprintf(
+					"round precision %s exceeds the maximum of %d fractional digits for a non-terminating decimal",
+					precision.String(), roundMaxComputeScale),
+			}
+		}
+		return int(precision.Int64()), roundCompute, nil
+	}
+	// Terminating decimal. If precision is at least the operand's fractional-digit
 	// count the operand is unchanged; this also covers all integers (fracDigits
 	// == 0) and any precision >= the operand's scale.
 	if precision.Cmp(big.NewInt(int64(fracDigits))) >= 0 {
 		return 0, roundUnchanged, nil
 	}
-	// Here precision < fracDigits. For a terminating decimal fracDigits is the
-	// operand's true scale, so 10^precision is bounded by the operand's own size
-	// (the accepted invariant). For a non-terminating rational fracDigits is the
-	// ratFracDigitNonTerminating sentinel and precision may be astronomically
-	// large with no operand bounding it. Honour it up to roundMaxComputeScale so
-	// 10^p stays bounded; beyond that, refuse with FOAR0002 rather than silently
-	// returning a lower-precision value than requested.
-	if fracDigits == ratFracDigitNonTerminating && precision.Cmp(big.NewInt(roundMaxComputeScale)) > 0 {
-		return 0, roundCompute, &XPathError{
-			Code: errCodeFOAR0002,
-			Message: fmt.Sprintf(
-				"round precision %s exceeds the maximum of %d fractional digits for a non-terminating decimal",
-				precision.String(), roundMaxComputeScale),
-		}
-	}
+	// Here precision < fracDigits, and fracDigits is the operand's true scale, so
+	// 10^precision is bounded by the operand's own size (the accepted invariant).
 	return int(precision.Int64()), roundCompute, nil
 }
 

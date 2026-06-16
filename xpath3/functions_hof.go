@@ -272,15 +272,23 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
 		}
 		// Enforce the recorded parameter types, mirroring the named
-		// function-reference path in eval_funcall.go.
+		// function-reference path in eval_funcall.go. Coercion may convert an
+		// argument (e.g. xs:untypedAtomic -> xs:integer); the coerced value must
+		// be what the function observes, so store it back into a copy of the
+		// argument slice rather than discarding it and invoking with the original.
 		if paramTypes != nil {
+			coerced := make([]Sequence, len(callArgs))
+			copy(coerced, callArgs)
 			for i, arg := range callArgs {
 				if i < len(paramTypes) {
-					if _, ok := coerceToSequenceType(arg, paramTypes[i], nil); !ok {
+					c, ok := coerceToSequenceType(arg, paramTypes[i], nil)
+					if !ok {
 						return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", qv.Local, i+1, paramTypes[i])}
 					}
+					coerced[i] = c
 				}
 			}
+			callArgs = coerced
 		}
 		return fn.Call(capturedCtx, callArgs)
 	}

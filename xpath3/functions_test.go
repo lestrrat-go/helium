@@ -670,6 +670,30 @@ func TestFunctionLookupTypedParamValidation(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
 	})
+
+	t.Run("untypedAtomic arg is coerced before invocation", func(t *testing.T) {
+		// xs:untypedAtomic("7") satisfies the xs:integer parameter via the
+		// function-conversion rules. The coerced value (an xs:integer) must be
+		// what the function body observes — integerIdentityFn returns args[0],
+		// so the result type proves whether coercion was applied.
+		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(xs:untypedAtomic("7"))`)
+		require.NoError(t, err)
+		result, err := eval.Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		seq := result.Sequence()
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, xpath3.TypeInteger, av.TypeName)
+		require.Equal(t, int64(7), av.IntegerVal())
+	})
+
+	t.Run("non-coercible value still raises XPTY0004", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(xs:untypedAtomic("not-an-int"))`)
+		require.NoError(t, err)
+		_, err = eval.Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+	})
 }
 
 // TestFnRoundScaleAware verifies that extreme but representable precisions
@@ -898,6 +922,14 @@ func TestFnRoundNonTerminatingHugePrecision(t *testing.T) {
 		`round-half-to-even(1 div 3, 1073741823)`,
 		// One past the cap is the boundary that must error.
 		`round(2 div 3, 1048577)`,
+		// Precision exactly at the ratFracDigitNonTerminating sentinel (1<<30):
+		// the "precision >= fracDigits" test must NOT short-circuit to
+		// roundUnchanged for a non-terminating decimal; it exceeds the cap so it
+		// must raise FOAR0002, not silently return the repeating operand.
+		`round(1 div 3, 1073741824)`,
+		`round-half-to-even(1 div 3, 1073741824)`,
+		// Precision above the sentinel must also refuse, not return unchanged.
+		`round(1 div 3, 2000000000)`,
 	}
 	for _, expr := range tests {
 		t.Run(expr, func(t *testing.T) {
