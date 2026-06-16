@@ -92,12 +92,13 @@ func fnRemove(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	pos := int(posVal)
-
 	tItems := seqMaterialize(target)
-	if pos < 1 || pos > len(tItems) {
+	// Range-check on int64 before converting so an out-of-int position cannot
+	// wrap into a valid index (e.g. on 32-bit platforms).
+	if posVal < 1 || posVal > int64(len(tItems)) {
 		return target, nil
 	}
+	pos := int(posVal)
 
 	result := make(ItemSlice, 0, len(tItems)-1)
 	result = append(result, tItems[:pos-1]...)
