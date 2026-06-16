@@ -805,6 +805,85 @@ func TestFnRoundDecimalHugePrecision(t *testing.T) {
 	}
 }
 
+// TestFnRoundNonTerminatingHugePrecision guards against a DoS: a non-terminating
+// xs:decimal (e.g. 1 div 3, whose reduced denominator has a prime factor other
+// than 2 or 5) rounded at an astronomically large positive precision must NOT
+// build 10^precision via Exp. Such an operand has an unbounded fractional-digit
+// count, so the precision argument can never be "finer than the operand's scale";
+// the compute scale must still be bounded so the call returns promptly.
+func TestFnRoundNonTerminatingHugePrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		// 1 div 3 = 0.333... (non-terminating). A billion fractional digits must
+		// not trigger 10^1000000000.
+		{"halfeven 1div3 huge", `round-half-to-even(1 div 3, 1000000000)`},
+		{"halfup 1div3 huge", `round(1 div 3, 1000000000)`},
+		// 2 div 3 = 0.666... rounds up at its last retained digit; still must not
+		// build a billion-digit power.
+		{"halfeven 2div3 huge", `round-half-to-even(2 div 3, 1000000000)`},
+		// A precision just under the non-terminating sentinel (1<<30) — the exact
+		// boundary that previously slipped past the short-circuit.
+		{"halfeven 1div3 near-sentinel", `round-half-to-even(1 div 3, 1073741823)`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			done := make(chan xpath3.Sequence, 1)
+			go func() {
+				done <- evalExpr(t, doc, tc.expr)
+			}()
+			select {
+			case seq := <-done:
+				require.Equal(t, 1, seq.Len())
+				av := seq.Get(0).(xpath3.AtomicValue)
+				// The result must be a finite decimal near the operand value
+				// (0.333... or 0.666...), not a hang or absurd allocation.
+				f := av.ToFloat64()
+				require.False(t, math.IsNaN(f) || math.IsInf(f, 0))
+				require.GreaterOrEqual(t, f, 0.0)
+				require.Less(t, f, 1.0)
+			case <-time.After(10 * time.Second):
+				t.Fatalf("round(%q) did not return promptly (DoS)", tc.expr)
+			}
+		})
+	}
+}
+
+// TestFnRoundHalfToEvenNegativePrecision verifies negative-precision half-to-even
+// rounding divides the full rational (never floors to an integer first), so a
+// fractional part that breaks a tie is honoured.
+func TestFnRoundHalfToEvenNegativePrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		expr   string
+		expect string
+	}{
+		// 250.1 at -2: 250.1/100 = 2.501 -> rounds to 3 -> 300 (not 200; the .1
+		// breaks the tie upward, so flooring to 250 first would be wrong).
+		{`round-half-to-even(250.1, -2)`, "300"},
+		// -249.9 at -2: -2.499 -> rounds to -2 -> -200 (not -300).
+		{`round-half-to-even(-249.9, -2)`, "-200"},
+		// Exact even-tie cases at -1.
+		{`round-half-to-even(248, -1)`, "250"},
+		{`round-half-to-even(250, -1)`, "250"},
+		{`round-half-to-even(2.5, -1)`, "0"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.expr, func(t *testing.T) {
+			seq := evalExpr(t, doc, tc.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			s, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, s)
+		})
+	}
+}
+
 // TestFnRoundPrecisionCardinality verifies that the second ($precision) argument
 // of fn:round / fn:round-half-to-even is a required singleton: a multi-item
 // sequence must raise XPTY0004 rather than silently using its first item.

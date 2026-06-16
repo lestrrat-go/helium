@@ -186,6 +186,14 @@ func roundPrecisionArg(arg Sequence) (*big.Int, error) {
 // at least the operand's fractional-digit count the operand is already
 // representable and is returned unchanged; otherwise 10^p is bounded by the
 // operand's fractional scale.
+//
+// The one exception is a non-terminating rational, whose fracDigits is the large
+// ratFracDigitNonTerminating sentinel: it never compares as "fully representable"
+// so a finite precision always rounds, but that precision (e.g. 1e9) could still
+// be enormous. To keep 10^p bounded regardless of input, the positive compute
+// scale is capped at roundMaxComputeScale; beyond that cap the operand's value
+// past the cap'th fractional digit is representationally irrelevant, so rounding
+// at the cap yields the same value while keeping Exp cheap (DoS-safe).
 func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roundDecision) {
 	if precision.Sign() < 0 {
 		// scale = -precision, as a non-negative big.Int
@@ -204,9 +212,27 @@ func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roun
 	if precision.Cmp(big.NewInt(int64(fracDigits))) >= 0 {
 		return 0, roundUnchanged
 	}
-	// Here precision < fracDigits, which fits in int and bounds 10^precision.
+	// Here precision < fracDigits. For a terminating decimal fracDigits is the
+	// operand's true scale, so 10^precision is bounded by the operand's own size
+	// (the accepted invariant). For a non-terminating rational fracDigits is the
+	// ratFracDigitNonTerminating sentinel and precision may be astronomically
+	// large with no operand bounding it; cap it so 10^p can never trigger a huge
+	// allocation. Only the sentinel case is capped, so a terminating decimal with
+	// a genuinely large scale is still rounded at its requested precision.
+	if fracDigits == ratFracDigitNonTerminating && precision.Cmp(big.NewInt(roundMaxComputeScale)) > 0 {
+		return roundMaxComputeScale, roundCompute
+	}
 	return int(precision.Int64()), roundCompute
 }
+
+// roundMaxComputeScale caps the positive (fine) compute scale handed to Exp so a
+// non-terminating decimal operand (whose fractional-digit count is the
+// ratFracDigitNonTerminating sentinel) cannot drive an astronomically large
+// 10^precision. It comfortably exceeds the fractional precision of any value
+// that can arise from terminating xs:decimal or float operands (a float64 has at
+// most ~324 fractional digits), so it never alters a representable result; it
+// only bounds the otherwise-unbounded non-terminating case.
+const roundMaxComputeScale = 4096
 
 // intDigitCount returns the number of base-10 digits in |n|, with 0 counted as
 // a single digit. Used as the integer-magnitude input to resolveRoundScale.
@@ -226,10 +252,11 @@ func ratIntDigitCount(r *big.Rat) int {
 // ratFracDigitNonTerminating is returned by ratFracDigitCount for a rational
 // whose decimal expansion does not terminate (e.g. 1/3, common when an
 // xs:decimal is produced by integer division). It is large enough that no
-// practical fine precision will be treated as "finer than the operand's
-// scale", so such values always fall through to roundCompute — yet small
-// enough that resolveRoundScale never feeds it to Exp (positive precision is
-// always bounded by the caller's actual precision argument, not this value).
+// practical fine precision will be treated as "finer than the operand's scale",
+// so such values always fall through to roundCompute. Because the operand itself
+// no longer bounds the scale in this case, resolveRoundScale caps the positive
+// compute scale at roundMaxComputeScale so the precision argument can never feed
+// an astronomically large exponent to Exp.
 const ratFracDigitNonTerminating = 1 << 30
 
 // ratFracDigitCount returns the number of fractional decimal digits of r in its
