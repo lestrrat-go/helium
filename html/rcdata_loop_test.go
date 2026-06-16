@@ -1,7 +1,6 @@
 package html_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -20,18 +19,23 @@ func TestRCDATAInvalidEndTagNoHang(t *testing.T) {
 	}
 
 	for _, input := range inputs {
-		input := input
 		t.Run(input, func(t *testing.T) {
+			ctx := t.Context()
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
 				// We don't care about the result, only that it returns.
-				_, _ = html.NewParser().Parse(context.Background(), []byte(input))
+				_, _ = html.NewParser().Parse(ctx, []byte(input))
 			}()
+
+			// Stoppable timer so the watchdog doesn't linger after the
+			// parse returns in the common (fast) case.
+			watchdog := time.NewTimer(3 * time.Second)
+			defer watchdog.Stop()
 
 			select {
 			case <-done:
-			case <-time.After(3 * time.Second):
+			case <-watchdog.C:
 				t.Fatal("parse hang detected (rcdata invalid end tag infinite loop)")
 			}
 		})
