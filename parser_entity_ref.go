@@ -277,16 +277,28 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 	width += 2
 	s = s[2:]
 
+	if len(s) == 0 {
+		err = errors.New("malformed CharRef")
+		return
+	}
+
 	var accumulator func(int32, rune) (int32, error)
 	if s[0] == 'x' {
 		s = s[1:]
 		width++
 		accumulator = accumulateHexCharRef
+		if len(s) == 0 {
+			err = errors.New("malformed CharRef")
+			width = 0
+			return
+		}
 	} else {
 		accumulator = accumulateDecimalCharRef
 	}
 
-	for c := s[0]; c != ';'; c = s[0] {
+	digits := 0
+	for len(s) > 0 && s[0] != ';' {
+		c := s[0]
 		val, err = accumulator(val, rune(c))
 		if err != nil {
 			width = 0
@@ -298,15 +310,25 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 			return
 		}
 
+		digits++
 		s = s[1:]
 		width++
 	}
 
-	if s[0] == ';' {
-		s = s[1:]
-		_ = s
-		width++
+	if digits == 0 {
+		err = errors.New("malformed CharRef")
+		width = 0
+		return
 	}
+
+	if len(s) == 0 || s[0] != ';' {
+		err = errors.New("malformed CharRef")
+		width = 0
+		return
+	}
+	s = s[1:]
+	_ = s
+	width++
 
 	r = val
 	if !isXMLCharValue(uint32(val)) {
