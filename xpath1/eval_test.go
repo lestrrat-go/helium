@@ -80,6 +80,25 @@ func TestEvalUnprefixedNameTestMatchesNoNamespaceOnly(t *testing.T) {
 	require.Equal(t, "B", string(r.NodeSet[0].Content()))
 }
 
+// An undeclared prefix must not match a node merely because the document uses
+// the same lexical prefix; prefixes resolve from the evaluation namespace
+// context. With a binding supplied, the match succeeds.
+func TestEvalUndeclaredPrefixDoesNotMatchLexically(t *testing.T) {
+	doc := parseXML(t, `<root xmlns:p="urn:x"><p:foo/></root>`)
+
+	r, err := xpath1.Evaluate(t.Context(), doc, "//p:foo")
+	require.NoError(t, err)
+	require.Empty(t, r.NodeSet, "unbound prefix must not match by lexical prefix")
+
+	expr, err := xpath1.Compile("//p:foo")
+	require.NoError(t, err)
+	r2, err := xpath1.NewEvaluator().
+		Namespaces(map[string]string{"p": "urn:x"}).
+		Evaluate(t.Context(), expr, doc)
+	require.NoError(t, err)
+	require.Len(t, r2.NodeSet, 1, "bound prefix must match")
+}
+
 func TestEvalDot(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	root := docElement(doc)

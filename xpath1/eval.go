@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/internal/xpath1/number"
 )
@@ -316,7 +317,14 @@ func matchPrefix(prefix string, n helium.Node, ec *evalContext) bool {
 			return ixpath.NodeNamespaceURI(n) == uri
 		}
 	}
-	return ixpath.NodePrefix(n) == prefix
+	// The xml prefix is always bound per the XML Namespaces spec.
+	if prefix == lexicon.PrefixXML {
+		return ixpath.NodeNamespaceURI(n) == lexicon.NamespaceXML
+	}
+	// Per XPath 1.0, prefix resolution comes from the evaluation namespace
+	// context, not the document's lexical prefixes. An unbound prefix cannot
+	// match a node merely because it happens to share the lexical prefix.
+	return false
 }
 
 func matchTypeTest(test TypeTest, n helium.Node) bool {
