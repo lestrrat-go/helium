@@ -1102,16 +1102,17 @@ func isRegexMatchTimeout(err error) bool {
 // which only refreshes the stale clock when its updater is not running.)
 //
 // A genuine timeout only fires after roughly `budget` of wall-clock time has
-// elapsed, whereas a spurious one fires near-instantly. So when fn reports a
-// timeout but far less than the budget has actually elapsed, the result is
-// bogus and we retry — by then the clock goroutine is live and the match
-// completes normally. Genuine ReDoS timeouts (elapsed on the order of budget)
-// are propagated unchanged, preserving the DoS-protection contract.
+// elapsed, whereas a spurious one fires well before that. So when fn reports a
+// timeout but less than half the budget (budget/2) has actually elapsed, the
+// result is treated as bogus and we retry — by then the clock goroutine is
+// live and the match completes normally. Timeouts that fire at or beyond
+// budget/2 (genuine ReDoS) are propagated unchanged, preserving the
+// DoS-protection contract.
 func withSpuriousTimeoutRetry[T any](budget time.Duration, fn func() (T, error)) (T, error) {
 	const maxAttempts = 3
 	var v T
 	var err error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for range maxAttempts {
 		start := time.Now()
 		v, err = fn()
 		if !isRegexMatchTimeout(err) {
