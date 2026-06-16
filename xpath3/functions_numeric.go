@@ -150,22 +150,23 @@ const (
 	roundTrivialZero
 )
 
-// roundPrecisionArg extracts the rounding precision from the second argument,
-// casting to xs:integer. The precision is returned as a *big.Int (XPath
-// integers are arbitrary precision); callers pair it with the operand's scale
-// via resolveRoundScale so an astronomically large 10^|precision| is never
-// materialised for cases whose result is determined trivially. (A *big.Int
-// avoids the wrap that int(IntegerVal()) would introduce for out-of-int64
-// values.)
+// roundPrecisionArg extracts the rounding precision from the second argument
+// under the XPath 3.1 function-conversion rules for a required
+// "$precision as xs:integer" parameter: the argument must be exactly one item;
+// xs:integer (and its subtypes) is accepted as-is, xs:untypedAtomic is cast to
+// xs:integer, and every other type (xs:boolean, xs:decimal, xs:float, xs:double,
+// xs:string, ...) is rejected with XPTY0004 — there is no implicit numeric
+// truncation. An empty sequence violates the exactly-one cardinality and is a
+// type error too. The precision is returned as a *big.Int (XPath integers are
+// arbitrary precision); callers pair it with the operand's scale via
+// resolveRoundScale so an astronomically large 10^|precision| is never
+// materialised for cases whose result is determined trivially.
 func roundPrecisionArg(arg Sequence) (*big.Int, error) {
-	// $precision is a required singleton xs:integer: a multi-item sequence is a
-	// type error (XPTY0004). The empty case never reaches here — callers only
-	// invoke this when the argument has at least one item.
 	pa, err := extractSingleAtomicArg(arg, "round")
 	if err != nil {
 		return nil, err
 	}
-	pa, err = CastAtomic(pa, TypeInteger)
+	pa, err = coerceToInteger(pa)
 	if err != nil {
 		return nil, err
 	}
@@ -190,49 +191,59 @@ func roundPrecisionArg(arg Sequence) (*big.Int, error) {
 // The one exception is a non-terminating rational, whose fracDigits is the large
 // ratFracDigitNonTerminating sentinel: it never compares as "fully representable"
 // so a finite precision always rounds, but that precision (e.g. 1e9) could still
-// be enormous. To keep 10^p bounded regardless of input, the positive compute
-// scale is capped at roundMaxComputeScale; beyond that cap the operand's value
-// past the cap'th fractional digit is representationally irrelevant, so rounding
-// at the cap yields the same value while keeping Exp cheap (DoS-safe).
-func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roundDecision) {
+// be enormous. Such an operand has no terminating decimal expansion, so its value
+// is well-defined at any requested fractional precision; honour the request up to
+// roundMaxComputeScale (so 10^p stays bounded), and beyond that cap raise an error
+// rather than silently rounding at a lower scale than asked. Silently clamping
+// would return an observably wrong (lower-precision) value; erroring keeps the
+// computation DoS-safe without ever lying about the result.
+func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roundDecision, error) {
 	if precision.Sign() < 0 {
 		// scale = -precision, as a non-negative big.Int
 		s := new(big.Int).Neg(precision)
 		// If -precision > intDigits, the scale is at least a full decade above
 		// the operand's magnitude, so |operand| < 10^s / 2 and it rounds to 0.
 		if s.Cmp(big.NewInt(int64(intDigits))) > 0 {
-			return 0, roundTrivialZero
+			return 0, roundTrivialZero, nil
 		}
 		// Here s <= intDigits, which fits in int and bounds 10^s.
-		return int(s.Int64()), roundCompute
+		return int(s.Int64()), roundCompute, nil
 	}
 	// Non-negative precision. If it is at least the operand's fractional-digit
 	// count the operand is unchanged; this also covers all integers (fracDigits
 	// == 0) and any precision >= the operand's scale.
 	if precision.Cmp(big.NewInt(int64(fracDigits))) >= 0 {
-		return 0, roundUnchanged
+		return 0, roundUnchanged, nil
 	}
 	// Here precision < fracDigits. For a terminating decimal fracDigits is the
 	// operand's true scale, so 10^precision is bounded by the operand's own size
 	// (the accepted invariant). For a non-terminating rational fracDigits is the
 	// ratFracDigitNonTerminating sentinel and precision may be astronomically
-	// large with no operand bounding it; cap it so 10^p can never trigger a huge
-	// allocation. Only the sentinel case is capped, so a terminating decimal with
-	// a genuinely large scale is still rounded at its requested precision.
+	// large with no operand bounding it. Honour it up to roundMaxComputeScale so
+	// 10^p stays bounded; beyond that, refuse with FOAR0002 rather than silently
+	// returning a lower-precision value than requested.
 	if fracDigits == ratFracDigitNonTerminating && precision.Cmp(big.NewInt(roundMaxComputeScale)) > 0 {
-		return roundMaxComputeScale, roundCompute
+		return 0, roundCompute, &XPathError{
+			Code: errCodeFOAR0002,
+			Message: fmt.Sprintf(
+				"round precision %s exceeds the maximum of %d fractional digits for a non-terminating decimal",
+				precision.String(), roundMaxComputeScale),
+		}
 	}
-	return int(precision.Int64()), roundCompute
+	return int(precision.Int64()), roundCompute, nil
 }
 
-// roundMaxComputeScale caps the positive (fine) compute scale handed to Exp so a
-// non-terminating decimal operand (whose fractional-digit count is the
-// ratFracDigitNonTerminating sentinel) cannot drive an astronomically large
-// 10^precision. It comfortably exceeds the fractional precision of any value
-// that can arise from terminating xs:decimal or float operands (a float64 has at
-// most ~324 fractional digits), so it never alters a representable result; it
-// only bounds the otherwise-unbounded non-terminating case.
-const roundMaxComputeScale = 4096
+// roundMaxComputeScale bounds the positive (fine) compute scale handed to Exp for
+// a non-terminating decimal operand (whose fractional-digit count is the
+// ratFracDigitNonTerminating sentinel). A precision up to this is computed
+// exactly; a larger precision raises FOAR0002 rather than silently rounding at a
+// lower scale. It comfortably exceeds the fractional precision of any value that
+// can arise from terminating xs:decimal or float operands (a float64 has at most
+// ~324 fractional digits), so it never alters a representable result; it only
+// bounds the otherwise-unbounded non-terminating case. 10^(1<<20) is a ~315 KB
+// big.Int — cheap for Exp — while a precision past a million fractional digits on
+// a repeating decimal is far outside any legitimate use.
+const roundMaxComputeScale = 1 << 20
 
 // intDigitCount returns the number of base-10 digits in |n|, with 0 counted as
 // a single digit. Used as the integer-magnitude input to resolveRoundScale.
@@ -310,6 +321,20 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 // large 10^|precision| is never materialised: cases whose result is determined
 // trivially (rounds to 0, or operand unchanged) short-circuit before any Exp.
 func roundImpl(args []Sequence, halfToEven bool) (Sequence, error) {
+	// When the 2-arg form is used, $precision is a required "exactly one
+	// xs:integer" parameter and must be validated whether or not $arg is empty:
+	// the empty first argument does not excuse an absent or ill-typed precision.
+	// round((), "bad") and round(1, ()) both raise XPTY0004; round((), 3) and
+	// round((), 1) are () only because the precision itself is valid.
+	precision := big.NewInt(0)
+	if len(args) > 1 {
+		p, err := roundPrecisionArg(args[1])
+		if err != nil {
+			return nil, err
+		}
+		precision = p
+	}
+
 	a, ok, err := promoteSeqToNumeric(args[0])
 	if err != nil {
 		return nil, err
@@ -317,16 +342,12 @@ func roundImpl(args []Sequence, halfToEven bool) (Sequence, error) {
 	if !ok {
 		return validNilSequence, nil
 	}
-	precision := big.NewInt(0)
-	if len(args) > 1 && seqLen(args[1]) > 0 {
-		precision, err = roundPrecisionArg(args[1])
+
+	if isIntegerDerived(a.TypeName) {
+		scale, decision, err := resolveRoundScale(precision, intDigitCount(a.BigInt()), 0)
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	if isIntegerDerived(a.TypeName) {
-		scale, decision := resolveRoundScale(precision, intDigitCount(a.BigInt()), 0)
 		if decision == roundUnchanged {
 			if v, ok := a.Value.(int64); ok {
 				return SingleInteger(v), nil
@@ -344,7 +365,10 @@ func roundImpl(args []Sequence, halfToEven bool) (Sequence, error) {
 
 	if a.TypeName == TypeDecimal {
 		r := a.BigRat()
-		scale, decision := resolveRoundScale(precision, ratIntDigitCount(r), ratFracDigitCount(r))
+		scale, decision, err := resolveRoundScale(precision, ratIntDigitCount(r), ratFracDigitCount(r))
+		if err != nil {
+			return nil, err
+		}
 		if decision == roundUnchanged {
 			return SingleDecimal(new(big.Rat).Set(r)), nil
 		}
@@ -372,7 +396,10 @@ func roundImpl(args []Sequence, halfToEven bool) (Sequence, error) {
 	// these bounds make resolveRoundScale short-circuit every extreme precision
 	// without ever computing a huge scale.
 	intDigits := floatIntDigitCount(n)
-	scale, decision := resolveRoundScale(precision, intDigits, 324)
+	scale, decision, err := resolveRoundScale(precision, intDigits, 324)
+	if err != nil {
+		return nil, err
+	}
 	if decision == roundUnchanged {
 		return SingleAtomic(a), nil
 	}

@@ -760,6 +760,75 @@ func TestFnRoundExtremePrecision(t *testing.T) {
 	}
 }
 
+// TestFnRoundPrecisionArgValidation verifies the function-conversion rules for
+// the required "$precision as xs:integer" parameter of fn:round and
+// fn:round-half-to-even. The precision must be validated even when $arg is the
+// empty sequence (the empty first argument does not excuse an absent or
+// ill-typed precision); only xs:integer (and subtypes) and xs:untypedAtomic
+// (cast to integer) are accepted, everything else raises XPTY0004.
+func TestFnRoundPrecisionArgValidation(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErrCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: code}, "expected error code %s for %q", code, expr)
+	}
+
+	evalOK := func(t *testing.T, expr, want string) {
+		t.Helper()
+		seq := evalExpr(t, doc, expr)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		s, err := xpath3.AtomicToString(av)
+		require.NoError(t, err)
+		require.Equal(t, want, s)
+	}
+
+	t.Run("empty arg does not excuse bad precision", func(t *testing.T) {
+		// An ill-typed precision is a type error even when $arg is ().
+		evalErrCode(t, `round((), "bad")`, "XPTY0004")
+		evalErrCode(t, `round-half-to-even((), "bad")`, "XPTY0004")
+		// An empty precision in the 2-arg form violates exactly-one cardinality.
+		evalErrCode(t, `round((), ())`, "XPTY0004")
+	})
+
+	t.Run("empty precision is a cardinality error", func(t *testing.T) {
+		evalErrCode(t, `round(1, ())`, "XPTY0004")
+		evalErrCode(t, `round-half-to-even(1.5, ())`, "XPTY0004")
+	})
+
+	t.Run("non-integer precision rejected", func(t *testing.T) {
+		// No implicit numeric/boolean truncation to xs:integer.
+		evalErrCode(t, `round(123.45, true())`, "XPTY0004")
+		evalErrCode(t, `round(123.45, 1.9)`, "XPTY0004")
+		evalErrCode(t, `round(123.45, 2.0)`, "XPTY0004")
+		evalErrCode(t, `round(123.45, xs:double(2))`, "XPTY0004")
+		evalErrCode(t, `round(123.45, xs:float(2))`, "XPTY0004")
+		evalErrCode(t, `round(123.45, "2")`, "XPTY0004")
+		evalErrCode(t, `round-half-to-even(123456e-2, "two")`, "XPTY0004")
+	})
+
+	t.Run("integer precision and subtypes accepted", func(t *testing.T) {
+		evalOK(t, `round(123.456, 2)`, "123.46")
+		evalOK(t, `round(123.456, xs:int(2))`, "123.46")
+		evalOK(t, `round(123.456, xs:long(2))`, "123.46")
+		evalOK(t, `round(123.456, xs:short(2))`, "123.46")
+		// xs:untypedAtomic is cast to xs:integer.
+		evalOK(t, `round(123.456, xs:untypedAtomic("2"))`, "123.46")
+	})
+
+	t.Run("empty arg with valid precision is empty", func(t *testing.T) {
+		// A valid precision plus an empty $arg returns () (not an error).
+		evalOK(t, `empty(round((), 3))`, "true")
+		evalOK(t, `empty(round((), 1))`, "true")
+		evalOK(t, `empty(round-half-to-even((), 3))`, "true")
+	})
+}
+
 // TestFnRoundDecimalHugePrecision verifies that the decimal half-to-even path
 // computes huge-but-representable coarse precisions exactly, rather than being
 // silently clamped to zero by a coarse downstream guard. The operand magnitude
@@ -809,47 +878,78 @@ func TestFnRoundDecimalHugePrecision(t *testing.T) {
 // xs:decimal (e.g. 1 div 3, whose reduced denominator has a prime factor other
 // than 2 or 5) rounded at an astronomically large positive precision must NOT
 // build 10^precision via Exp. Such an operand has an unbounded fractional-digit
-// count, so the precision argument can never be "finer than the operand's scale";
-// the compute scale must still be bounded so the call returns promptly.
+// count, so a precision beyond roundMaxComputeScale (1<<20) is refused with
+// FOAR0002 rather than silently rounding at a lower scale (which would return an
+// observably wrong, lower-precision value). The refusal must be prompt, never a
+// hang or absurd allocation.
 func TestFnRoundNonTerminatingHugePrecision(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
-	tests := []struct {
-		name string
-		expr string
-	}{
+	tests := []string{
 		// 1 div 3 = 0.333... (non-terminating). A billion fractional digits must
-		// not trigger 10^1000000000.
-		{"halfeven 1div3 huge", `round-half-to-even(1 div 3, 1000000000)`},
-		{"halfup 1div3 huge", `round(1 div 3, 1000000000)`},
-		// 2 div 3 = 0.666... rounds up at its last retained digit; still must not
-		// build a billion-digit power.
-		{"halfeven 2div3 huge", `round-half-to-even(2 div 3, 1000000000)`},
-		// A precision just under the non-terminating sentinel (1<<30) — the exact
-		// boundary that previously slipped past the short-circuit.
-		{"halfeven 1div3 near-sentinel", `round-half-to-even(1 div 3, 1073741823)`},
+		// not trigger 10^1000000000; it exceeds the cap, so FOAR0002.
+		`round-half-to-even(1 div 3, 1000000000)`,
+		`round(1 div 3, 1000000000)`,
+		// 2 div 3 = 0.666... rounds up at its last retained digit; still over the
+		// cap, so FOAR0002 (never a billion-digit power).
+		`round-half-to-even(2 div 3, 1000000000)`,
+		// A precision just under the old non-terminating sentinel (1<<30) — well
+		// past the cap, so still refused.
+		`round-half-to-even(1 div 3, 1073741823)`,
+		// One past the cap is the boundary that must error.
+		`round(2 div 3, 1048577)`,
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			done := make(chan xpath3.Sequence, 1)
+	for _, expr := range tests {
+		t.Run(expr, func(t *testing.T) {
+			compiled, err := xpath3.NewCompiler().Compile(expr)
+			require.NoError(t, err)
+			done := make(chan error, 1)
 			go func() {
-				done <- evalExpr(t, doc, tc.expr)
+				_, ferr := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+				done <- ferr
 			}()
 			select {
-			case seq := <-done:
-				require.Equal(t, 1, seq.Len())
-				av := seq.Get(0).(xpath3.AtomicValue)
-				// The result must be a finite decimal near the operand value
-				// (0.333... or 0.666...), not a hang or absurd allocation.
-				f := av.ToFloat64()
-				require.False(t, math.IsNaN(f) || math.IsInf(f, 0))
-				require.GreaterOrEqual(t, f, 0.0)
-				require.Less(t, f, 1.0)
+			case ferr := <-done:
+				require.Error(t, ferr, "expected FOAR0002 for %q", expr)
+				require.ErrorIs(t, ferr, &xpath3.XPathError{Code: "FOAR0002"}, "expected FOAR0002 for %q", expr)
 			case <-time.After(10 * time.Second):
-				t.Fatalf("round(%q) did not return promptly (DoS)", tc.expr)
+				t.Fatalf("round(%q) did not return promptly (DoS)", expr)
 			}
 		})
 	}
+}
+
+// TestFnRoundNonTerminatingAtCap verifies that a non-terminating xs:decimal
+// rounded at exactly roundMaxComputeScale (1<<20) fractional digits computes the
+// exact value (rather than erroring or silently clamping). 2/3 to 1<<20 digits is
+// well-defined: every retained digit is 6 and the value rounds up in the last
+// place, so the result is "0." followed by (1<<20 - 1) sixes and a trailing 7.
+func TestFnRoundNonTerminatingAtCap(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	const maxScale = 1 << 20
+	expr := `round(2 div 3, 1048576)`
+	compiled, err := xpath3.NewCompiler().Compile(expr)
+	require.NoError(t, err)
+
+	done := make(chan xpath3.Sequence, 1)
+	go func() {
+		result, ferr := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, ferr)
+		done <- result.Sequence()
+	}()
+	var seq xpath3.Sequence
+	select {
+	case seq = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("round(%q) did not return promptly", expr)
+	}
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
+	s, err := xpath3.AtomicToString(av)
+	require.NoError(t, err)
+	want := "0." + strings.Repeat("6", maxScale-1) + "7"
+	require.Equal(t, want, s)
 }
 
 // TestFnRoundHalfToEvenNegativePrecision verifies negative-precision half-to-even

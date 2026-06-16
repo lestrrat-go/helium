@@ -136,6 +136,6 @@ func (e *XPathError) Error() string
 func (e *XPathError) Is(target error) bool
 ```
 
-Standard codes: `XPTY0004` (type error), `FOER0000` (general), `FOTY0013` (atomization context), `FOAR0001` (array index OOB), `FOAR0002` (array index type), `FOMX0001` (map duplicate key reject).
+Standard codes: `XPTY0004` (type error), `FOER0000` (general), `FOTY0013` (atomization context), `FOAR0001` (division by zero), `FOAR0002` (numeric overflow/underflow, e.g. round precision past the non-terminating cap), `FOAY0001` (array index out of bounds), `FOMX0001` (map duplicate key reject).
 
 `try-catch` matches `*XPathError` by code. Non-`*XPathError` errors propagate through unchanged.
