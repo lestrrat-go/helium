@@ -846,6 +846,14 @@ func (w *Writer) StartPI(target string) error {
 	if w.err != nil {
 		return w.err
 	}
+	// Validate the target before touching any writer state or output, so a bad
+	// target never closes an open start tag or otherwise mutates the writer.
+	if strings.EqualFold(target, "xml") {
+		return errors.New("stream: PI target cannot be 'xml'")
+	}
+	if !isValidPITarget(target) {
+		return fmt.Errorf("stream: invalid PI target %q", target)
+	}
 	switch w.state {
 	case stateNone, stateDocument, stateText:
 		// ok
@@ -853,12 +861,6 @@ func (w *Writer) StartPI(target string) error {
 		w.closeTagIfOpen()
 	default:
 		return errors.New("stream: StartPI called in invalid state")
-	}
-	if strings.EqualFold(target, "xml") {
-		return errors.New("stream: PI target cannot be 'xml'")
-	}
-	if !isValidPITarget(target) {
-		return fmt.Errorf("stream: invalid PI target %q", target)
 	}
 	if len(w.elemStack) > 0 {
 		w.elemStack[len(w.elemStack)-1].empty = false

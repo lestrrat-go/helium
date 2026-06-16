@@ -33,8 +33,9 @@ func IsNCNameChar(r rune) bool {
 }
 
 // IsValidPITarget reports whether target is a valid XML processing
-// instruction target. A PI target is an XML Name (an NCName optionally
-// containing colons) and must not be the reserved name "xml" (any case).
+// instruction target. A PI target is an NCName (colons are forbidden, matching
+// helium's parser, which rejects colons in PI targets) and must not be the
+// reserved name "xml" (any case).
 func IsValidPITarget(target string) bool {
 	if target == "" {
 		return false
@@ -43,24 +44,13 @@ func IsValidPITarget(target string) bool {
 		return false
 	}
 	// Ranging over an invalid byte yields utf8.RuneError (U+FFFD), which is
-	// itself a valid NCName character, so the loop below would accept invalid
+	// itself a valid NCName character, so IsValidNCName would accept invalid
 	// UTF-8 and emit raw bytes. Reject invalid encodings up front; a genuinely
 	// encoded U+FFFD is valid UTF-8 and still passes.
 	if !utf8.ValidString(target) {
 		return false
 	}
-	for i, r := range target {
-		if r == ':' {
-			continue
-		}
-		if i == 0 && !IsNCNameStartChar(r) {
-			return false
-		}
-		if i > 0 && !IsNCNameChar(r) {
-			return false
-		}
-	}
-	return true
+	return IsValidNCName(target)
 }
 
 // IsValidNCName checks whether s is a valid XML NCName (non-colonized name).

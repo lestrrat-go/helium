@@ -38,6 +38,36 @@ func TestIsValidNCName(t *testing.T) {
 	}
 }
 
+func TestIsValidPITarget(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"target", true},
+		{"xml-stylesheet", true},
+		{"_pi", true},
+		{"café", true},
+		{"�", true}, // genuinely encoded U+FFFD is a valid NCName char
+		{"", false},
+		{"xml", false},                // reserved (any case)
+		{"XML", false},                // reserved (any case)
+		{"Xml", false},                // reserved (any case)
+		{"a:b", false},                // colons forbidden, matching the parser
+		{":", false},                  // colons forbidden
+		{"a:", false},                 // colons forbidden
+		{":a", false},                 // colons forbidden
+		{"1bad", false},               // must start with NCNameStartChar
+		{string([]byte{0xff}), false}, // invalid UTF-8
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, xmlchar.IsValidPITarget(tt.input))
+		})
+	}
+}
+
 func TestIsNCNameStartChar(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

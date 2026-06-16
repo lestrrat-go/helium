@@ -351,6 +351,46 @@ func TestPINormalTargetAccepted(t *testing.T) {
 	require.Equal(t, `<root><?target?></root>`, buf.String())
 }
 
+func TestPIColonTargetRejected(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{"a:b", ":", "a:", ":a"} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			err := w.StartPI(target)
+			require.Error(t, err)
+			require.Empty(t, buf.String(), "no PI bytes must be emitted for a colon target")
+		})
+	}
+}
+
+func TestPIReplacementCharTargetAccepted(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	// A genuinely encoded U+FFFD is valid UTF-8 and a valid NCName char.
+	require.NoError(t, w.StartPI("�"))
+	require.NoError(t, w.EndPI())
+	require.Equal(t, "<?�?>", buf.String())
+}
+
+func TestPIBadTargetInOpenStartTagDoesNotMutate(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("r"))
+	// StartElement writes "<r" and leaves the tag open (state stateName) so it
+	// can still self-close. A rejected PI must NOT call closeTagIfOpen (which
+	// would emit ">" and force "<r></r>"); the element must remain self-closeable.
+	require.Equal(t, "<r", buf.String())
+	err := w.StartPI("1bad")
+	require.Error(t, err)
+	require.Equal(t, "<r", buf.String(), "the open start tag must not be flushed by a rejected PI")
+	require.NoError(t, w.EndElement())
+	require.Equal(t, "<r/>", buf.String())
+}
+
 func TestCommentWellFormednessRejected(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
