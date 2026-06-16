@@ -78,11 +78,9 @@ func (d *htmlDumper) dumpDocument(out io.Writer, doc *helium.Document) error {
 
 	// Output DTD if present, or default DTD for HTML documents
 	if dtd := doc.IntSubset(); dtd != nil {
-		if err := dumpDTD(out, dtd); err != nil {
-			return err
-		}
+		d.dumpDTD(out, dtd)
 	} else if !d.noDefaultDTD && doc.Type() == helium.HTMLDocumentNode {
-		_, _ = io.WriteString(out, defaultHTMLDTD)
+		d.writeString(out, defaultHTMLDTD)
 	}
 
 	// Serialize all children of the document
@@ -95,9 +93,9 @@ func (d *htmlDumper) dumpDocument(out io.Writer, doc *helium.Document) error {
 		}
 	}
 	if d.format {
-		_, _ = io.WriteString(out, "\n")
+		d.writeString(out, "\n")
 	}
-	return nil
+	return d.err
 }
 
 type htmlDumper struct {
@@ -106,6 +104,11 @@ type htmlDumper struct {
 	noDefaultDTD          bool
 	noEscapeURIAttributes bool
 	escapeControlChars    bool
+	// err is a sticky serialization error. Once set, all checked write
+	// helpers become no-ops and terminal methods return it. This mirrors
+	// the writeSession sticky-error pattern in writer.go so that a writer
+	// failing mid-stream surfaces an error instead of silently truncating.
+	err error
 	// nsEmitted tracks namespace prefix→URI bindings that were actually
 	// emitted (serialized) by ancestor elements. Used to suppress
 	// redundant declarations.
@@ -114,6 +117,45 @@ type htmlDumper struct {
 	// elements, including those suppressed on non-root HTML elements.
 	// Used to find URIs for attribute namespace prefixes.
 	nsAvailable map[string]string
+}
+
+// check records err as the sticky error if no error has been recorded yet.
+func (d *htmlDumper) check(err error) {
+	if d.err == nil && err != nil {
+		d.err = err
+	}
+}
+
+// writeString writes s to out, recording the first failure as the sticky
+// error. It is a no-op once an error has been recorded. A short write
+// reported with a nil error by a non-conformant io.Writer is promoted to
+// io.ErrShortWrite, mirroring latin1EncodingWriter, so silent truncation
+// is never reported as success.
+func (d *htmlDumper) writeString(out io.Writer, s string) {
+	if d.err != nil {
+		return
+	}
+	n, err := io.WriteString(out, s)
+	if err == nil && n < len(s) {
+		err = io.ErrShortWrite
+	}
+	d.check(err)
+}
+
+// writeBytes writes b to out, recording the first failure as the sticky
+// error. It is a no-op once an error has been recorded. A short write
+// reported with a nil error by a non-conformant io.Writer is promoted to
+// io.ErrShortWrite, mirroring latin1EncodingWriter, so silent truncation
+// is never reported as success.
+func (d *htmlDumper) writeBytes(out io.Writer, b []byte) {
+	if d.err != nil {
+		return
+	}
+	n, err := out.Write(b)
+	if err == nil && n < len(b) {
+		err = io.ErrShortWrite
+	}
+	d.check(err)
 }
 
 func (d *htmlDumper) dumpNode(out io.Writer, n helium.Node) error {
@@ -129,26 +171,27 @@ func (d *htmlDumper) dumpNode(out io.Writer, n helium.Node) error {
 		if !ok {
 			return nil
 		}
-		return dumpDTD(out, dtd)
+		d.dumpDTD(out, dtd)
+		return d.err
 	case helium.CommentNode:
-		_, _ = io.WriteString(out, "<!--")
-		_, _ = out.Write(n.Content())
-		_, _ = io.WriteString(out, "-->")
-		return nil
+		d.writeString(out, "<!--")
+		d.writeBytes(out, n.Content())
+		d.writeString(out, "-->")
+		return d.err
 	case helium.ProcessingInstructionNode:
-		_, _ = io.WriteString(out, "<?")
-		_, _ = io.WriteString(out, n.Name())
+		d.writeString(out, "<?")
+		d.writeString(out, n.Name())
 		if c := n.Content(); len(c) > 0 {
-			_, _ = io.WriteString(out, " ")
-			_, _ = out.Write(c)
+			d.writeString(out, " ")
+			d.writeBytes(out, c)
 		}
-		_, _ = io.WriteString(out, ">")
-		return nil
+		d.writeString(out, ">")
+		return d.err
 	case helium.EntityRefNode:
-		_, _ = io.WriteString(out, "&")
-		_, _ = io.WriteString(out, n.Name())
-		_, _ = io.WriteString(out, ";")
-		return nil
+		d.writeString(out, "&")
+		d.writeString(out, n.Name())
+		d.writeString(out, ";")
+		return d.err
 	case helium.TextNode:
 		return d.dumpText(out, n)
 	case helium.ElementNode:
@@ -162,29 +205,28 @@ func (d *htmlDumper) dumpNode(out io.Writer, n helium.Node) error {
 }
 
 // dumpDTD outputs <!DOCTYPE name PUBLIC "extID" "sysID">\n
-func dumpDTD(out io.Writer, dtd *helium.DTD) error {
-	_, _ = io.WriteString(out, "<!DOCTYPE ")
-	_, _ = io.WriteString(out, dtd.Name())
+func (d *htmlDumper) dumpDTD(out io.Writer, dtd *helium.DTD) {
+	d.writeString(out, "<!DOCTYPE ")
+	d.writeString(out, dtd.Name())
 
 	extID := dtd.ExternalID()
 	sysID := dtd.SystemID()
 	if extID != "" {
-		_, _ = io.WriteString(out, " PUBLIC \"")
-		_, _ = io.WriteString(out, extID)
-		_, _ = io.WriteString(out, "\"")
+		d.writeString(out, " PUBLIC \"")
+		d.writeString(out, extID)
+		d.writeString(out, "\"")
 		if sysID != "" {
-			_, _ = io.WriteString(out, " \"")
-			_, _ = io.WriteString(out, sysID)
-			_, _ = io.WriteString(out, "\"")
+			d.writeString(out, " \"")
+			d.writeString(out, sysID)
+			d.writeString(out, "\"")
 		}
 	} else if sysID != "" && sysID != "about:legacy-compat" {
-		_, _ = io.WriteString(out, " SYSTEM \"")
-		_, _ = io.WriteString(out, sysID)
-		_, _ = io.WriteString(out, "\"")
+		d.writeString(out, " SYSTEM \"")
+		d.writeString(out, sysID)
+		d.writeString(out, "\"")
 	}
 
-	_, _ = io.WriteString(out, ">\n")
-	return nil
+	d.writeString(out, ">\n")
 }
 
 // dumpText outputs text content, escaping &, <, > unless inside a raw text element.
@@ -194,13 +236,17 @@ func (d *htmlDumper) dumpText(out io.Writer, n helium.Node) error {
 		parentName := strings.ToLower(parent.Name())
 		if desc := lookupElement(parentName); desc != nil && desc.dataMode >= dataRawText {
 			// Raw text element: no escaping
-			_, _ = out.Write(n.Content())
-			return nil
+			d.writeBytes(out, n.Content())
+			return d.err
 		}
 	}
 
 	// Normal text: escape &, <, >
-	return htmlEscapeText(out, n.Content(), d.escapeControlChars)
+	if d.err != nil {
+		return d.err
+	}
+	d.check(htmlEscapeText(out, n.Content(), d.escapeControlChars))
+	return d.err
 }
 
 // htmlEscapeText escapes &, <, > in text content for HTML output.
@@ -321,8 +367,8 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 	}
 
 	// Opening tag
-	_, _ = io.WriteString(out, "<")
-	_, _ = io.WriteString(out, name)
+	d.writeString(out, "<")
+	d.writeString(out, name)
 
 	// Namespace declarations for HTML output with preserveCase (XSLT HTML5).
 	//
@@ -365,17 +411,17 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 
 	// Void element: no closing tag
 	if info != nil && info.empty {
-		_, _ = io.WriteString(out, ">")
+		d.writeString(out, ">")
 		if d.format && shouldNewlineAfterVoid(e, info) {
-			_, _ = io.WriteString(out, "\n")
+			d.writeString(out, "\n")
 		}
-		return nil
+		return d.err
 	}
 
-	_, _ = io.WriteString(out, ">")
+	d.writeString(out, ">")
 
 	if d.format && shouldNewlineAfterOpen(e, info) {
-		_, _ = io.WriteString(out, "\n")
+		d.writeString(out, "\n")
 	}
 
 	// Update namespace scope for children.
@@ -422,19 +468,19 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 	}
 
 	if d.format && shouldNewlineBeforeClose(e, info) {
-		_, _ = io.WriteString(out, "\n")
+		d.writeString(out, "\n")
 	}
 
 	// Closing tag
-	_, _ = io.WriteString(out, "</")
-	_, _ = io.WriteString(out, name)
-	_, _ = io.WriteString(out, ">")
+	d.writeString(out, "</")
+	d.writeString(out, name)
+	d.writeString(out, ">")
 
 	if d.format && shouldNewlineAfterClose(e, info) {
-		_, _ = io.WriteString(out, "\n")
+		d.writeString(out, "\n")
 	}
 
-	return nil
+	return d.err
 }
 
 // htmlBooleanAttrs is the set of HTML attributes that should be minimized
@@ -464,8 +510,8 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 		if d.preserveCase {
 			attrName = attr.Name()
 		}
-		_, _ = io.WriteString(out, " ")
-		_, _ = io.WriteString(out, attrName)
+		d.writeString(out, " ")
+		d.writeString(out, attrName)
 
 		// Boolean attributes: just the name, no ="..."
 		// Matches libxml2: if the attribute has no children (boolean attr
@@ -491,27 +537,27 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 			val = uriEscapeStr(val)
 		}
 
-		_, _ = io.WriteString(out, "=\"")
-		if err := htmlEscapeAttrValue(out, val, isURI, d.preserveCase); err != nil {
-			return err
+		d.writeString(out, "=\"")
+		if d.err == nil {
+			d.check(htmlEscapeAttrValue(out, val, isURI, d.preserveCase))
 		}
-		_, _ = io.WriteString(out, "\"")
+		d.writeString(out, "\"")
 	}
-	return nil
+	return d.err
 }
 
 // writeNSDecl writes a single namespace declaration attribute.
 func (d *htmlDumper) writeNSDecl(out io.Writer, prefix, uri string) {
 	if prefix == "" {
-		_, _ = io.WriteString(out, " xmlns=\"")
-		_, _ = io.WriteString(out, uri)
-		_, _ = io.WriteString(out, "\"")
+		d.writeString(out, " xmlns=\"")
+		d.writeString(out, uri)
+		d.writeString(out, "\"")
 	} else {
-		_, _ = io.WriteString(out, " xmlns:")
-		_, _ = io.WriteString(out, prefix)
-		_, _ = io.WriteString(out, "=\"")
-		_, _ = io.WriteString(out, uri)
-		_, _ = io.WriteString(out, "\"")
+		d.writeString(out, " xmlns:")
+		d.writeString(out, prefix)
+		d.writeString(out, "=\"")
+		d.writeString(out, uri)
+		d.writeString(out, "\"")
 	}
 }
 
