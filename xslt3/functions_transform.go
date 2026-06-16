@@ -449,6 +449,9 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		}
 		var readErr error
 		data, readErr = io.ReadAll(rc)
+		// Close right after reading rather than deferring: the rest of this
+		// function parses, compiles and runs the stylesheet, and we must not
+		// hold the source handle open across that work.
 		_ = rc.Close()
 		if readErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
