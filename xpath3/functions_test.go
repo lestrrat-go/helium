@@ -717,7 +717,7 @@ func TestFunctionLookupTypedParamValidation(t *testing.T) {
 		require.NoError(t, err)
 		_, err = eval.Evaluate(t.Context(), compiled, doc)
 		require.Error(t, err)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
 	})
 
 	t.Run("good-typed arg works", func(t *testing.T) {
@@ -736,7 +736,7 @@ func TestFunctionLookupTypedParamValidation(t *testing.T) {
 		require.NoError(t, err)
 		_, err = eval.Evaluate(t.Context(), compiled, doc)
 		require.Error(t, err)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
 	})
 
 	t.Run("untypedAtomic arg is coerced before invocation", func(t *testing.T) {
@@ -760,8 +760,58 @@ func TestFunctionLookupTypedParamValidation(t *testing.T) {
 		require.NoError(t, err)
 		_, err = eval.Evaluate(t.Context(), compiled, doc)
 		require.Error(t, err)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
 	})
+}
+
+// customPrefixParamFn is a TypedFunction whose single parameter declares an
+// AtomicOrUnionType with a NON-xs/xsd prefix ("app"). Resolving such a type via
+// function-lookup's Invoke closure formerly passed a nil eval context into
+// coerceToSequenceType, which dereferenced ec.namespaces and panicked. The
+// function must instead surface an XPTY0004 type error with no panic.
+type customPrefixParamFn struct{}
+
+func (customPrefixParamFn) MinArity() int { return 1 }
+func (customPrefixParamFn) MaxArity() int { return 1 }
+
+func (customPrefixParamFn) Call(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	return args[0], nil
+}
+
+func (customPrefixParamFn) FuncParamTypes() []xpath3.SequenceType {
+	return []xpath3.SequenceType{{
+		ItemTest:   xpath3.AtomicOrUnionType{Prefix: "app", Name: "id"},
+		Occurrence: xpath3.OccurrenceExactlyOne,
+	}}
+}
+
+func (customPrefixParamFn) FuncReturnType() *xpath3.SequenceType {
+	return &xpath3.SequenceType{
+		ItemTest:   xpath3.AtomicOrUnionType{Prefix: "app", Name: "id"},
+		Occurrence: xpath3.OccurrenceExactlyOne,
+	}
+}
+
+// TestFunctionLookupCustomPrefixParamNoPanic verifies that invoking a function
+// item obtained via function-lookup for a TypedFunction whose parameter type has
+// a non-xs prefix does not panic on a nil eval context, but returns an
+// XPathError (XPTY0004) for the unresolvable custom type.
+func TestFunctionLookupCustomPrefixParamNoPanic(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	lib := xpath3.NewFunctionLibrary()
+	lib.Set("f", customPrefixParamFn{})
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(lib)
+
+	compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(1)`)
+	require.NoError(t, err)
+
+	require.NotPanics(t, func() {
+		_, err = eval.Evaluate(t.Context(), compiled, doc)
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
 }
 
 // TestFnRoundScaleAware verifies that extreme but representable precisions
@@ -1100,7 +1150,7 @@ func TestFnRoundPrecisionCardinality(t *testing.T) {
 			require.NoError(t, err)
 			_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 			require.Error(t, err, "expected error for %q", expr)
-			require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+			require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
 		})
 	}
 }
