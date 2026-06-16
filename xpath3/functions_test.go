@@ -603,3 +603,31 @@ func TestFnImplicitTimezoneReturnsDuration(t *testing.T) {
 	require.Len(t, atomics, 1)
 	require.Equal(t, xpath3.TypeDayTimeDuration, atomics[0].TypeName)
 }
+
+// TestFnRoundExtremePrecision guards against the precision argument (an
+// xs:integer that may exceed int64 range) wrapping when converted to int, and
+// against an astronomically large 10^|precision| scale hanging the computation.
+func TestFnRoundExtremePrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		expr   string
+		expect float64
+	}{
+		{`round(1.236, 2)`, 1.24},
+		{`round(123.456, -2)`, 100},
+		{`round(1.23, 9223372036854775808)`, 1.23},
+		{`round-half-to-even(1.23, 9223372036854775808)`, 1.23},
+		{`round(1.23, -9223372036854775809)`, 0},
+		{`round-half-to-even(1.23, -9223372036854775809)`, 0},
+		{`round(125, -9223372036854775809)`, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.expr, func(t *testing.T) {
+			seq := evalExpr(t, doc, tc.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			require.InDelta(t, tc.expect, av.ToFloat64(), 0.001)
+		})
+	}
+}

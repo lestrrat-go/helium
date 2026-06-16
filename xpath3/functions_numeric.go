@@ -131,6 +131,46 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleAtomic(makeFloatResult(a.TypeName, math.Floor(f))), nil
 }
 
+// maxRoundPrecision bounds the rounding scale used by fn:round and
+// fn:round-half-to-even. The $precision argument is an xs:integer and may be
+// arbitrarily large (e.g. 2^63, stored as a *big.Int). Two problems must be
+// avoided: int(IntegerVal()) wraps out-of-int64 values (turning a huge positive
+// precision into a huge negative one), and computing 10^|precision| via
+// big.Int.Exp for an astronomically large scale exhausts CPU/memory. Per XPath
+// F&O 3.1 a precision far larger than the value's significant digits leaves it
+// unchanged, and a precision far more negative rounds it to 0; no representable
+// number has anywhere near this many significant digits, so clamping preserves
+// semantics while bounding the scale computation.
+const maxRoundPrecision = 4096
+
+// roundPrecisionArg extracts the rounding precision from the second argument,
+// casting to xs:integer and clamping to ±maxRoundPrecision so an out-of-int64
+// value neither wraps nor blows up the scale computation.
+func roundPrecisionArg(arg Sequence) (int, error) {
+	pa, err := AtomizeItem(arg.Get(0))
+	if err != nil {
+		return 0, err
+	}
+	pa, err = CastAtomic(pa, TypeInteger)
+	if err != nil {
+		return 0, err
+	}
+	if v, ok := pa.Int64Val(); ok {
+		if v > maxRoundPrecision {
+			return maxRoundPrecision, nil
+		}
+		if v < -maxRoundPrecision {
+			return -maxRoundPrecision, nil
+		}
+		return int(v), nil
+	}
+	// Out of int64 range: sign decides whether we clamp high or low.
+	if pa.BigInt().Sign() < 0 {
+		return -maxRoundPrecision, nil
+	}
+	return maxRoundPrecision, nil
+}
+
 func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 	a, ok, err := promoteSeqToNumeric(args[0])
 	if err != nil {
@@ -141,15 +181,10 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	precision := 0
 	if len(args) > 1 && seqLen(args[1]) > 0 {
-		pa, err := AtomizeItem(args[1].Get(0))
+		precision, err = roundPrecisionArg(args[1])
 		if err != nil {
 			return nil, err
 		}
-		pa, err = CastAtomic(pa, TypeInteger)
-		if err != nil {
-			return nil, err
-		}
-		precision = int(pa.IntegerVal())
 	}
 	if isIntegerDerived(a.TypeName) {
 		if precision >= 0 {
@@ -191,15 +226,10 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	precision := 0
 	if len(args) > 1 && seqLen(args[1]) > 0 {
-		pa, err := AtomizeItem(args[1].Get(0))
+		precision, err = roundPrecisionArg(args[1])
 		if err != nil {
 			return nil, err
 		}
-		pa, err = CastAtomic(pa, TypeInteger)
-		if err != nil {
-			return nil, err
-		}
-		precision = int(pa.IntegerVal())
 	}
 	if isIntegerDerived(a.TypeName) {
 		if precision >= 0 {
