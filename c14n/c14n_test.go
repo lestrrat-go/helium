@@ -314,6 +314,28 @@ func TestZeroValueCanonicalizerFluent(t *testing.T) {
 	require.Contains(t, string(got), `<!-- comment -->`)
 }
 
+func TestEmptyNodeSetEmitsEmpty(t *testing.T) {
+	t.Parallel()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><child/></root>`))
+	require.NoError(t, err)
+
+	// An explicitly EMPTY node set must produce EMPTY output per the C14N spec.
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).NodeSet([]helium.Node{}).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Len(t, got, 0, "empty node set must emit empty output, got %q", string(got))
+}
+
+func TestNoNodeSetEmitsFullDocument(t *testing.T) {
+	t.Parallel()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><child/></root>`))
+	require.NoError(t, err)
+
+	// Without NodeSet, the whole document is canonicalized.
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `<root><child></child></root>`, string(got))
+}
+
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	t.Parallel()
 	// C14N spec requires failure on relative namespace URIs.
