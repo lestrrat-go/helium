@@ -457,6 +457,18 @@ func compareNodeSet(op TokenType, leftNodes []helium.Node, right *Result) bool {
 		}
 		return false
 	}
+	// Per XPath 1.0 REC 3.4, comparing a node-set with a boolean converts the
+	// whole node-set to a boolean (true iff non-empty), then compares booleans.
+	if right.Type == BooleanResult {
+		nsBool := len(leftNodes) > 0
+		if op == TokenEquals {
+			return nsBool == right.Bool
+		}
+		if op == TokenNotEquals {
+			return nsBool != right.Bool
+		}
+		return compareNumbers(op, boolToNumber(nsBool), boolToNumber(right.Bool))
+	}
 	for _, ln := range leftNodes {
 		if compareWithScalar(op, ixpath.StringValue(ln), right) {
 			return true
@@ -467,6 +479,18 @@ func compareNodeSet(op TokenType, leftNodes []helium.Node, right *Result) bool {
 
 // compareNodeSetRight handles comparisons where only the right operand is a node-set.
 func compareNodeSetRight(op TokenType, left *Result, rightNodes []helium.Node) bool {
+	// Per XPath 1.0 REC 3.4, comparing a boolean with a node-set converts the
+	// whole node-set to a boolean (true iff non-empty), then compares booleans.
+	if left.Type == BooleanResult {
+		nsBool := len(rightNodes) > 0
+		if op == TokenEquals {
+			return left.Bool == nsBool
+		}
+		if op == TokenNotEquals {
+			return left.Bool != nsBool
+		}
+		return compareNumbers(op, boolToNumber(left.Bool), boolToNumber(nsBool))
+	}
 	rev := reverseOp(op)
 	for _, rn := range rightNodes {
 		if compareWithScalar(rev, ixpath.StringValue(rn), left) {
@@ -474,6 +498,14 @@ func compareNodeSetRight(op TokenType, left *Result, rightNodes []helium.Node) b
 		}
 	}
 	return false
+}
+
+// boolToNumber converts a boolean to its XPath number value (true=1, false=0).
+func boolToNumber(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // compareScalars compares two non-node-set results using XPath type coercion rules.

@@ -224,6 +224,42 @@ func TestEvalNumericComparison(t *testing.T) {
 	require.True(t, r.Bool)
 }
 
+func TestEvalNodeSetBooleanComparison(t *testing.T) {
+	doc := parseXML(t, `<root><a/></root>`)
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		// node-set vs boolean: collapse the whole node-set to a boolean
+		{`/root/a = false()`, false},
+		{`/root/a = true()`, true},
+		{`/root/a != false()`, true},
+		{`/root/nonexistent = false()`, true},
+		{`/root/nonexistent = true()`, false},
+		// mirrored (boolean on the left)
+		{`false() = /root/a`, false},
+		{`true() = /root/a`, true},
+		{`false() = /root/nonexistent`, true},
+		// relational operators: boolean(node-set) compared numerically (true=1)
+		{`/root/a > false()`, true},          // 1 > 0
+		{`/root/a < true()`, false},          // 1 < 1
+		{`/root/a >= true()`, true},          // 1 >= 1
+		{`/root/nonexistent < true()`, true}, // 0 < 1
+		{`false() < /root/a`, true},          // mirrored: 0 < 1
+		// GUARD: number/string node-set comparisons keep existential semantics
+		{`/root/a = ''`, true},
+		{`/root/a = 'x'`, false},
+		{`/root/a = 0`, false},
+	} {
+		t.Run(tc.expr, func(t *testing.T) {
+			r, err := xpath1.Evaluate(t.Context(), doc, tc.expr)
+			require.NoError(t, err)
+			require.Equal(t, xpath1.BooleanResult, r.Type)
+			require.Equal(t, tc.want, r.Bool)
+		})
+	}
+}
+
 // --- Arithmetic ---
 
 func TestEvalArithmetic(t *testing.T) {
