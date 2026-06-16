@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -347,25 +348,106 @@ func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 // Mirrors xsd's validateSchemaPath; defense-in-depth alongside whatever
 // path constraints the configured fs.FS enforces.
 func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href string) (string, error) {
-	if filepath.IsAbs(href) {
-		return href, nil
-	}
-	if doc := elem.OwnerDocument(); doc != nil {
-		base := helium.NodeGetBase(doc, elem)
-		if base != "" {
-			return helium.BuildURI(href, base), nil
-		}
-	}
-	if c.baseDir != "" {
-		joined := filepath.Join(c.baseDir, href)
-		if rel, err := filepath.Rel(c.baseDir, joined); err == nil {
-			if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return "", fmt.Errorf("href %q escapes base directory", href)
+	// Resolve the href to a concrete path first, then enforce baseDir
+	// containment once for every locally-resolved path. Resolving and
+	// checking in a single place prevents the absolute-href and xml:base
+	// branches from bypassing the containment guard.
+	var resolved string
+	switch {
+	case filepath.IsAbs(href):
+		resolved = href
+	default:
+		if doc := elem.OwnerDocument(); doc != nil {
+			if base := helium.NodeGetBase(doc, elem); base != "" {
+				resolved = helium.BuildURI(href, base)
 			}
 		}
-		return joined, nil
+		if resolved == "" && c.baseDir != "" {
+			resolved = filepath.Join(c.baseDir, href)
+		}
+		if resolved == "" {
+			resolved = href
+		}
 	}
-	return href, nil
+
+	if c.baseDir == "" {
+		// No base directory configured: nothing to contain. Preserve the
+		// historically permissive behavior.
+		return resolved, nil
+	}
+
+	// BuildURI may hand back a file:// URI (e.g. when an ancestor xml:base
+	// or the document URL carries that scheme). Reduce it to a filesystem
+	// path so the containment comparison below is meaningful. A non-file
+	// URI scheme (http, etc.) is not a local path, so there is nothing to
+	// contain and it is returned untouched.
+	//
+	// Scheme detection must anchor at the start of the string: a substring
+	// match on "://" would misclassify local paths such as
+	// "/tmp/x://../etc/passwd" as remote URIs and skip the containment
+	// check entirely.
+	checkPath := resolved
+	switch scheme := uriScheme(checkPath); {
+	case scheme == "file":
+		if u, err := url.Parse(checkPath); err == nil {
+			// Decode percent-escapes (e.g. "%2e%2e") so encoded traversal
+			// cannot slip past the containment comparison below.
+			checkPath = u.Path
+			if u.Host != "" {
+				checkPath = u.Host + u.Path
+			}
+		}
+	case scheme != "":
+		// A genuine non-file URI scheme (http, https, ...) is not a local
+		// path; there is nothing to contain.
+		return resolved, nil
+	}
+
+	// filepath.Rel fails when one path is absolute and the other relative
+	// (e.g. a relative baseDir against an absolute href). That mismatch is
+	// itself a containment failure: an absolute href can never be proven to
+	// live inside a relative baseDir, so reject rather than silently skip.
+	rel, err := filepath.Rel(c.baseDir, filepath.Clean(checkPath))
+	if err != nil {
+		return "", fmt.Errorf("href %q escapes base directory", href)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("href %q escapes base directory", href)
+	}
+	return resolved, nil
+}
+
+// uriScheme returns the URI scheme of s if s begins with a "<scheme>://"
+// prefix where <scheme> is a valid RFC 3986 scheme (ALPHA *( ALPHA / DIGIT
+// / "+" / "-" / "." )). It returns "" when s carries no leading scheme, so
+// local filesystem paths — even ones that happen to contain "://" later in
+// the string — are not mistaken for URIs.
+//
+// Single-character schemes are rejected (treated as non-URI): on Windows a
+// path like "C://..." would otherwise be read as scheme "c" and skip the
+// baseDir containment check, even though it is an absolute local path. No
+// real URI scheme used for href resolution is a single letter.
+func uriScheme(s string) string {
+	i := strings.Index(s, "://")
+	if i < 2 {
+		return ""
+	}
+	scheme := s[:i]
+	for j := range len(scheme) {
+		ch := scheme[j]
+		switch {
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z':
+			// always valid
+		case j == 0:
+			// first char must be a letter
+			return ""
+		case ch >= '0' && ch <= '9', ch == '+', ch == '-', ch == '.':
+			// valid in non-leading position
+		default:
+			return ""
+		}
+	}
+	return strings.ToLower(scheme)
 }
 
 // parseInclude parses an <include> element.
