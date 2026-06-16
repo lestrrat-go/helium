@@ -113,12 +113,13 @@ func scanASCIINameChars(data []byte) int {
 // It works directly on a byte buffer, decoding UTF-8 on the fly.
 // ASCII bytes (< 0x80) are handled without utf8.DecodeRune overhead.
 type UTF8Cursor struct {
-	buf    []byte
-	buflen int
-	bufpos int
-	column int
-	in     io.Reader
-	lineno int
+	buf     []byte
+	buflen  int
+	bufpos  int
+	column  int
+	in      io.Reader
+	lineno  int
+	readErr error // sticky non-EOF read error (e.g. a transcoding/decode error)
 }
 
 // NewUTF8Cursor creates a UTF8Cursor wrapping an existing io.Reader.
@@ -161,6 +162,12 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 		n, err := c.in.Read(c.buf[c.buflen:])
 		c.buflen += n
 		if n == 0 && err != nil {
+			// Remember a genuine decode/transcoding error (anything other than
+			// a clean EOF) so the parser can distinguish malformed input from a
+			// normal end-of-stream. Done() treats both as "no more data".
+			if err != io.EOF && c.readErr == nil {
+				c.readErr = err
+			}
 			if c.buflen-c.bufpos >= minBytes {
 				return nil
 			}
@@ -168,6 +175,13 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 		}
 	}
 	return nil
+}
+
+// Err returns a sticky non-EOF read error encountered while filling the buffer,
+// such as a transcoding/decode error from an underlying encoding decoder. It
+// returns nil if the stream ended cleanly.
+func (c *UTF8Cursor) Err() error {
+	return c.readErr
 }
 
 func (c *UTF8Cursor) Done() bool {
