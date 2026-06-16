@@ -62,8 +62,13 @@ func (s *writeSession) writeString(out io.Writer, str string) {
 	if s.err != nil {
 		return
 	}
-	if _, err := io.WriteString(out, str); err != nil {
+	n, err := io.WriteString(out, str)
+	if err != nil {
 		s.err = err
+		return
+	}
+	if n != len(str) {
+		s.err = io.ErrShortWrite
 	}
 }
 
@@ -72,8 +77,13 @@ func (s *writeSession) writeBytes(out io.Writer, b []byte) {
 	if s.err != nil {
 		return
 	}
-	if _, err := out.Write(b); err != nil {
+	n, err := out.Write(b)
+	if err != nil {
 		s.err = err
+		return
+	}
+	if n != len(b) {
+		s.err = io.ErrShortWrite
 	}
 }
 
@@ -398,6 +408,10 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	d.writeString(out, "<")
 	d.writeString(out, name)
 
+	if d.err != nil {
+		return d.err
+	}
+
 	if len(nslist) > 0 {
 		if err := d.dumpNsList(out, nslist); err != nil {
 			return err
@@ -408,6 +422,9 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		for attr := e.properties; attr != nil; {
 			g := pdebug.IPrintf("START WriteNode(fallthrough->attribute(%s))", attr.Name())
 			d.writeString(out, " "+attr.Name()+`="`)
+			if d.err != nil {
+				return d.err
+			}
 			count := 0
 			for achld := range Children(attr) {
 				count++

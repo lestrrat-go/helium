@@ -26,11 +26,11 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 	d.writeString(out, "<!DOCTYPE ")
 	d.writeString(out, dtd.Name())
 
-	if dtd.externalID != "" {
+	if d.err == nil && dtd.externalID != "" {
 		pubQ := dtdQuoteChar(dtd.externalID)
 		sysQ := dtdQuoteChar(dtd.systemID)
 		d.writeString(out, fmt.Sprintf(" PUBLIC %c%s%c %c%s%c", pubQ, dtd.externalID, pubQ, sysQ, dtd.systemID, sysQ))
-	} else if dtd.systemID != "" {
+	} else if d.err == nil && dtd.systemID != "" {
 		sysQ := dtdQuoteChar(dtd.systemID)
 		d.writeString(out, fmt.Sprintf(" SYSTEM %c%s%c", sysQ, dtd.systemID, sysQ))
 	}
@@ -174,9 +174,9 @@ func (d *writeSession) dumpEntityContent(out io.Writer, content string) error {
 	if strings.IndexByte(content, '%') == -1 {
 		if err := dumpQuotedString(out, content); err != nil {
 			d.check(err)
-			return err
+			return d.err
 		}
-		return nil
+		return d.err
 	}
 
 	d.writeString(out, `"`)
@@ -186,7 +186,7 @@ func (d *writeSession) dumpEntityContent(out io.Writer, content string) error {
 		c, err := rdr.ReadByte()
 		if err != nil {
 			d.check(err)
-			return err
+			return d.err
 		}
 		switch c {
 		case '"':
@@ -226,7 +226,7 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		if ent.orig != "" {
 			if err := dumpQuotedString(out, ent.orig); err != nil {
 				d.check(err)
-				return err
+				return d.err
 			}
 		} else {
 			if err := d.dumpEntityContent(out, ent.content); err != nil {
@@ -265,7 +265,7 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		if ent.orig != "" {
 			if err := dumpQuotedString(out, ent.orig); err != nil {
 				d.check(err)
-				return err
+				return d.err
 			}
 		} else {
 			if err := d.dumpEntityContent(out, ent.content); err != nil {
