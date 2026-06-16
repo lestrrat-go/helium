@@ -664,7 +664,21 @@ func evalVariableExpr(ec *evalContext, e VariableExpr) (*Result, error) {
 	}
 	switch val := v.(type) {
 	case []helium.Node:
-		return &Result{Type: NodeSetResult, NodeSet: val}, nil
+		// Caller-provided slices may contain nil entries; drop them so
+		// DeduplicateNodes (which dereferences each node) cannot panic.
+		// IsNilNode also catches typed-nil concrete pointers, which are
+		// non-nil at the interface level but still panic on dereference.
+		clean := make([]helium.Node, 0, len(val))
+		for _, n := range val {
+			if !ixpath.IsNilNode(n) {
+				clean = append(clean, n)
+			}
+		}
+		nodes, err := ixpath.DeduplicateNodes(clean, ec.docOrder, maxNodeSetLength)
+		if err != nil {
+			return nil, err
+		}
+		return &Result{Type: NodeSetResult, NodeSet: nodes}, nil
 	case string:
 		return &Result{Type: StringResult, String: val}, nil
 	case float64:
