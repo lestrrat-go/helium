@@ -105,7 +105,10 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		helium.UnlinkNode(sigElem)
 	}
 
-	// Find the c14n method.
+	// Find the c14n method. Fail closed: any transform whose URI we cannot
+	// apply must be rejected before digesting, otherwise a Reference could
+	// declare an unsupported transform (XPath, Base64, custom URI) and still
+	// verify against the untransformed canonical bytes.
 	c14nMethod := ExcC14N10
 	var prefixes []string
 	for _, t := range ref.transforms {
@@ -113,6 +116,17 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
 			c14nMethod = t.algorithm
 			prefixes = t.prefixes
+		case TransformEnvelopedSignature:
+			// Handled in the separate enveloped-signature pass above; no-op here.
+		default:
+			// Reattach the Signature element we detached above before
+			// bailing out, so a rejected reference does not leave the
+			// document structurally modified. A restore failure here cannot
+			// mask the rejection, so its error is intentionally discarded.
+			if hasEnveloped {
+				_ = anchor.restore(sigElem)
+			}
+			return nil, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
 		}
 	}
 
