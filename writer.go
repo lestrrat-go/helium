@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"strings"
@@ -299,8 +300,11 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	case CommentNode:
 		// A comment must not contain "--" or end with "-" (that would form
 		// "--->" with the closing delimiter), else the output is not well-formed.
-		content := string(n.Content())
-		if strings.Contains(content, "--") || strings.HasSuffix(content, "-") {
+		// Validate the byte slice directly: a string() copy here would double the
+		// peak memory for a large (attacker-controlled) comment before the same
+		// bytes are written below.
+		content := n.Content()
+		if bytes.Contains(content, []byte("--")) || (len(content) > 0 && content[len(content)-1] == '-') {
 			// check() keeps the first sticky error, so an earlier I/O failure is
 			// not clobbered by this validation error.
 			d.check(errors.New("helium: comment content must not contain \"--\" or end with \"-\""))

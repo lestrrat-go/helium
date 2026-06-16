@@ -562,12 +562,18 @@ func TestWriteRejectsMalformedCommentPI(t *testing.T) {
 	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("a-"))),
 		"comment ending in - must be rejected")
 	sb.Reset()
+	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("-"))),
+		"single-dash comment must be rejected")
+	sb.Reset()
 	require.Error(t, helium.Write(&sb, doc.CreatePI("t", "a?>b")),
 		"PI content containing ?> must be rejected")
 
 	// Valid comment/PI still serialize.
 	sb.Reset()
 	require.NoError(t, helium.Write(&sb, doc.CreateComment([]byte(" ok "))))
+	sb.Reset()
+	require.NoError(t, helium.Write(&sb, doc.CreateComment([]byte(""))),
+		"empty comment must serialize without an out-of-range panic")
 	sb.Reset()
 	require.NoError(t, helium.Write(&sb, doc.CreatePI("php", "echo 1")))
 }
