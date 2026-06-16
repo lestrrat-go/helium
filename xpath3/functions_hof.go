@@ -186,10 +186,13 @@ func fnFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
 	if !ok {
 		return validNilSequence, nil
 	}
-	arity := int(arityVal)
-	if arity < 0 {
+	// Reject negative or out-of-int arities (no such function); checking on
+	// int64 first avoids a wrap to a valid-looking arity on 32-bit platforms.
+	const maxInt = int(^uint(0) >> 1)
+	if arityVal < 0 || arityVal > int64(maxInt) {
 		return validNilSequence, nil
 	}
+	arity := int(arityVal)
 
 	fi, ok := lookupFunctionItem(ctx, nameArg.QNameVal(), arity)
 	if !ok {
