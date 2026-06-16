@@ -411,7 +411,9 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 	} else {
 		firstRune, firstWidth, _ = decodeRuneAt(cur, 0)
 	}
-	if firstRune == utf8.RuneError {
+	// A real U+FFFD decodes as RuneError with width 3 and is a valid name char;
+	// only width 1 is genuinely-invalid UTF-8.
+	if firstRune == utf8.RuneError && firstWidth == 1 {
 		err = pctx.error(ctx, errInvalidUTF8Name)
 		return
 	}
@@ -438,7 +440,7 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || r == utf8.RuneError {
+		if !ok || (r == utf8.RuneError && w == 1) {
 			err = pctx.error(ctx, errInvalidUTF8Name)
 			return
 		}
@@ -539,6 +541,15 @@ func isNameChar(r rune) bool {
 	return r != utf8.RuneError && (r == ':' || isValidNameChar(r))
 }
 
+// isNameCharW is the width-aware form of isNameChar: a RuneError with width 1 is
+// invalid UTF-8, but a width-3 RuneError is a real U+FFFD (a valid NameChar).
+func isNameCharW(r rune, w int) bool {
+	if r == utf8.RuneError && w == 1 {
+		return false
+	}
+	return r == ':' || isValidNameChar(r)
+}
+
 func (ctx *parserCtx) parseNmtoken() (string, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseNmtoken")
@@ -564,7 +575,7 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isNameChar(r) {
+		if !ok || !isNameCharW(r, w) {
 			break
 		}
 		off += w
@@ -618,7 +629,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 	}
 
 	firstR, firstW, _ := decodeRuneAt(cur, 0)
-	if firstR == utf8.RuneError {
+	if firstR == utf8.RuneError && firstW == 1 {
 		err = pctx.error(ctx, errInvalidUTF8Name)
 		return
 	}
@@ -642,7 +653,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || r == utf8.RuneError {
+		if !ok || (r == utf8.RuneError && w == 1) {
 			err = pctx.error(ctx, errInvalidUTF8Name)
 			return
 		}
