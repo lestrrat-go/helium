@@ -279,6 +279,7 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 
 	if len(s) == 0 {
 		err = errors.New("malformed CharRef")
+		width = 0
 		return
 	}
 

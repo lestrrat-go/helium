@@ -9,8 +9,8 @@ import (
 
 // TestMalformedCharRefNoPanic guards against the index-out-of-range panic in
 // parseStringCharRef when malformed character references appear inside entity
-// declarations. Each malformed input must yield a non-nil error rather than
-// panic.
+// declarations. Each malformed input must yield a structured
+// helium.ErrParseError rather than panic.
 func TestMalformedCharRefNoPanic(t *testing.T) {
 	malformed := []string{
 		`<!DOCTYPE root [<!ENTITY e "&#">]><root>&e;</root>`,
@@ -25,6 +25,8 @@ func TestMalformedCharRefNoPanic(t *testing.T) {
 			require.NotPanics(t, func() {
 				_, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(input))
 				require.Error(t, err, "malformed char ref must return an error")
+				var pe helium.ErrParseError
+				require.ErrorAs(t, err, &pe, "malformed char ref must return a helium.ErrParseError")
 			})
 		})
 	}
@@ -49,6 +51,8 @@ func TestOutOfRangeCharRefRejected(t *testing.T) {
 			require.NotPanics(t, func() {
 				_, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(input))
 				require.Error(t, err, "out-of-range char ref must return an error")
+				var pe helium.ErrParseError
+				require.ErrorAs(t, err, &pe, "out-of-range char ref must return a helium.ErrParseError")
 			})
 		})
 	}
