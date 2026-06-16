@@ -87,6 +87,17 @@ func namespacePrefixFor(uri string) string {
 // Populated in Phase 4 init() calls. Keyed by QualifiedName{URI, Name}.
 var builtinFunctions3 = map[QualifiedName]Function{}
 
+// resolvedFunction carries a resolved function together with the identity used
+// to find it. Signature enforcement keys off the resolved URI/local name (not the
+// raw call syntax) and only consults the built-in signature registry when the
+// resolved function actually is the registered built-in.
+type resolvedFunction struct {
+	fn        Function
+	uri       string // resolved namespace URI
+	name      string // resolved local name (Q{uri}local stripped)
+	isBuiltin bool   // true only when fn came from the built-in registry
+}
+
 // resolveFunction finds a function by prefix, local name, and arity.
 // Resolution order:
 //  1. User-registered functions by local name (ec.functions)
@@ -94,12 +105,22 @@ var builtinFunctions3 = map[QualifiedName]Function{}
 //  3. Built-in functions by QualifiedName (builtinFunctions3)
 //  4. Default fn: namespace (no prefix = fn:)
 func resolveFunction(ctx context.Context, ec *evalContext, prefix, name string, arity int) (Function, error) {
+	r, err := resolveFunctionInfo(ctx, ec, prefix, name, arity)
+	if err != nil {
+		return nil, err
+	}
+	return r.fn, nil
+}
+
+// resolveFunctionInfo is resolveFunction but additionally reports the resolved
+// identity (URI + local name) and whether the result is the built-in function.
+func resolveFunctionInfo(ctx context.Context, ec *evalContext, prefix, name string, arity int) (resolvedFunction, error) {
 	// Handle Q{uri}local URIQualifiedName syntax from the lexer
 	if prefix == "" && strings.HasPrefix(name, "Q{") {
 		if idx := strings.Index(name, "}"); idx >= 0 {
 			uri := name[2:idx]
 			local := name[idx+1:]
-			return resolveFunctionByURI(ctx, ec, uri, local, arity)
+			return resolveFunctionByURIInfo(ctx, ec, uri, local, arity)
 		}
 	}
 
@@ -107,30 +128,30 @@ func resolveFunction(ctx context.Context, ec *evalContext, prefix, name string, 
 	if prefix == "" && ec.functions != nil {
 		if fn, ok := ec.functions[name]; ok {
 			if err := checkArity(fn, name, arity); err != nil {
-				return nil, err
+				return resolvedFunction{}, err
 			}
-			return fn, nil
+			return resolvedFunction{fn: fn, uri: NSFn, name: name}, nil
 		}
 	}
 
 	// Resolve prefix to namespace URI
 	uri, err := resolvePrefix(ec, prefix)
 	if err != nil {
-		return nil, err
+		return resolvedFunction{}, err
 	}
 
-	return resolveFunctionByURI(ctx, ec, uri, name, arity)
+	return resolveFunctionByURIInfo(ctx, ec, uri, name, arity)
 }
 
-func resolveFunctionByURI(ctx context.Context, ec *evalContext, uri, name string, arity int) (Function, error) {
+func resolveFunctionByURIInfo(ctx context.Context, ec *evalContext, uri, name string, arity int) (resolvedFunction, error) {
 	// User functions by qualified name
 	if ec.fnsNS != nil {
 		qn := QualifiedName{URI: uri, Name: name}
 		if fn, ok := ec.fnsNS[qn]; ok {
 			if err := checkArity(fn, name, arity); err != nil {
-				return nil, err
+				return resolvedFunction{}, err
 			}
-			return fn, nil
+			return resolvedFunction{fn: fn, uri: uri, name: name}, nil
 		}
 	}
 
@@ -138,21 +159,21 @@ func resolveFunctionByURI(ctx context.Context, ec *evalContext, uri, name string
 	qn := QualifiedName{URI: uri, Name: name}
 	if fn, ok := builtinFunctions3[qn]; ok {
 		if err := checkArity(fn, name, arity); err != nil {
-			return nil, err
+			return resolvedFunction{}, err
 		}
-		return fn, nil
+		return resolvedFunction{fn: fn, uri: uri, name: name, isBuiltin: true}, nil
 	}
 
 	// Check function resolver (not visible to function-lookup)
 	if ec.functionResolver != nil {
 		if fn, ok, err := ec.functionResolver.ResolveFunction(ctx, uri, name, arity); err != nil {
-			return nil, err
+			return resolvedFunction{}, err
 		} else if ok {
-			return fn, nil
+			return resolvedFunction{fn: fn, uri: uri, name: name}, nil
 		}
 	}
 
-	return nil, fmt.Errorf("%w: %s#%d", ErrUnknownFunction, name, arity)
+	return resolvedFunction{}, fmt.Errorf("%w: %s#%d", ErrUnknownFunction, name, arity)
 }
 
 func resolvePrefix(ec *evalContext, prefix string) (string, error) {

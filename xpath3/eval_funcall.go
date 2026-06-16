@@ -28,42 +28,47 @@ func evalFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		return partialApply(ctx, ec, e, args)
 	}
 
-	// Resolve function
-	fn, err := resolveFunction(ctx, ec, e.Prefix, e.Name, len(args))
+	// Resolve function, keeping the resolved identity so signature enforcement
+	// keys off the resolved URI/local name (handles Q{uri}local) and only applies
+	// the built-in signature when the resolved function is the actual built-in.
+	r, err := resolveFunctionInfo(ctx, ec, e.Prefix, e.Name, len(args))
 	if err != nil {
 		return nil, err
 	}
 
-	// Enforce declared parameter signatures for static built-in calls, mirroring
-	// the function-item / named-function-reference path. Obtain the registered
-	// parameter types the same way evalNamedFunctionRef does (built-in registry
-	// signature, then TypedFunction/TypedFunctionByArity interfaces).
-	ns, _ := resolvePrefix(ec, e.Prefix)
-	paramTypes := lookupParamTypes(fn, ns, e.Name, len(args))
+	// Enforce declared parameter signatures, mirroring the function-item /
+	// named-function-reference path. Coerced values are stored back into args so
+	// typed functions observe the converted values (e.g. xs:integer→xs:double).
+	paramTypes := lookupParamTypes(r, len(args))
 	if paramTypes != nil {
 		for i, arg := range args {
 			if i < len(paramTypes) {
-				if _, ok := coerceToSequenceType(arg, paramTypes[i], ec); !ok {
-					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, i+1, paramTypes[i])}
+				coerced, ok := coerceToSequenceType(arg, paramTypes[i], ec)
+				if !ok {
+					return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", r.name, i+1, paramTypes[i])}
 				}
+				args[i] = coerced
 			}
 		}
 	}
 
-	return fn.Call(ec.fnContext(ctx), args)
+	return r.fn.Call(ec.fnContext(ctx), args)
 }
 
-// lookupParamTypes returns the declared parameter types for a function, using the
-// built-in signature registry first and then the TypedFunction/TypedFunctionByArity
-// interfaces. It returns nil when no signature is available (no enforcement).
-func lookupParamTypes(fn Function, ns, name string, arity int) []SequenceType {
-	if sig := lookupFunctionSignature(ns, name, arity); sig != nil {
-		return sig.ParamTypes
+// lookupParamTypes returns the declared parameter types for a resolved function.
+// The built-in signature registry is consulted only when the resolved function is
+// the built-in; user/registered functions use their own TypedFunction metadata.
+// It returns nil when no signature is available (no enforcement).
+func lookupParamTypes(r resolvedFunction, arity int) []SequenceType {
+	if r.isBuiltin {
+		if sig := lookupFunctionSignature(r.uri, r.name, arity); sig != nil {
+			return sig.ParamTypes
+		}
 	}
-	if tf, ok := fn.(TypedFunction); ok {
+	if tf, ok := r.fn.(TypedFunction); ok {
 		return tf.FuncParamTypes()
 	}
-	if tfa, ok := fn.(TypedFunctionByArity); ok {
+	if tfa, ok := r.fn.(TypedFunctionByArity); ok {
 		return tfa.FuncParamTypesForArity(arity)
 	}
 	return nil
