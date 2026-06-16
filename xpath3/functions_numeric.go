@@ -776,9 +776,16 @@ func ratRoundPrecision(r *big.Rat, precision int) *big.Rat {
 		rounded := ratFloor(new(big.Rat).Add(shifted, half))
 		return new(big.Rat).Quo(rounded, new(big.Rat).SetInt(scale))
 	}
-	// Negative precision: round to 10^(-precision)
-	result := roundIntegerHalfUp(ratFloorInt(r), -precision)
-	return new(big.Rat).SetInt(result)
+	// Negative precision: round to 10^(-precision). Operate on the rational
+	// directly (divide, round-half-towards-+∞, multiply back) rather than
+	// flooring to an integer first — flooring discards the fractional part and
+	// can push the value past the rounding boundary (e.g. -249.9 floors to -250
+	// or even -251, landing on the wrong multiple of 100).
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-precision)), nil)
+	scaleRat := new(big.Rat).SetInt(scale)
+	divided := new(big.Rat).Quo(r, scaleRat)
+	rounded := ratRound(divided)
+	return new(big.Rat).Mul(rounded, scaleRat)
 }
 
 // ratRoundPrecisionHalfToEven rounds a *big.Rat to the given precision (number

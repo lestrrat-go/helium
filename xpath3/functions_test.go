@@ -133,6 +133,60 @@ func TestFnNumeric(t *testing.T) {
 	}
 }
 
+// TestFnRoundPrecision exercises fn:round and fn:round-half-to-even at
+// negative, zero, and positive precision over positive and negative operands,
+// including div-derived rationals. fn:round rounds the half toward positive
+// infinity; a regression in the negative-precision path floored the rational to
+// an integer before rounding, pushing values such as -249.9 past the boundary
+// (yielding -300 instead of -200).
+func TestFnRoundPrecision(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		expr   string
+		expect string
+	}{
+		// Negative precision, half-up (toward +∞).
+		{`round(-249.9, -2)`, "-200"},
+		{`round(-250, -2)`, "-200"}, // tie -2.5 → -2 toward +∞
+		{`round(250.1, -2)`, "300"},
+		{`round(-1234.567, -2)`, "-1200"}, // QT3 fn-round-decimal-11
+		{`round(8452, -2)`, "8500"},       // QT3 fn-round2args-2
+		// Zero precision / no precision arg, half-up (toward +∞).
+		{`round(-0.5)`, "0"},
+		{`round(2.5)`, "3"},
+		{`round(2.4)`, "2"},
+		{`round(-2.5, 0)`, "-2"},
+		// Positive precision, half-up.
+		{`round(2.4567, 2)`, "2.46"},
+		{`round(-2.345, 2)`, "-2.34"}, // tie toward +∞
+		// Div-derived rational input (1 div 3 etc.).
+		{`round((-2499 div 10), -2)`, "-200"},
+		{`round((2501 div 10), -2)`, "300"},
+		// Negative precision, half-to-even.
+		{`round-half-to-even(-250, -2)`, "-200"},
+		{`round-half-to-even(-350, -2)`, "-400"}, // tie → even
+		{`round-half-to-even(-249.9, -2)`, "-200"},
+		{`round-half-to-even(150, -2)`, "200"}, // tie → even
+		{`round-half-to-even(250, -2)`, "200"}, // tie → even
+		// Zero / positive precision, half-to-even.
+		{`round-half-to-even(2.5)`, "2"},
+		{`round-half-to-even(3.5)`, "4"},
+		{`round-half-to-even(-2.5)`, "-2"},
+		{`round-half-to-even(3.567, 2)`, "3.57"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.expr, func(t *testing.T) {
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				Evaluate(t.Context(), compiled, doc)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, result.StringValue())
+		})
+	}
+}
+
 // --- Aggregate functions ---
 
 func TestFnAggregate(t *testing.T) {
