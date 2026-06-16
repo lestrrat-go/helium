@@ -62,3 +62,21 @@ func TestXMLCharValidation(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestParseNameUTF8FFFD checks that U+FFFD (a valid XML NameStartChar/NameChar)
+// is accepted in element and attribute names, while genuinely-invalid UTF-8 in
+// a name is still rejected.
+func TestParseNameUTF8FFFD(t *testing.T) {
+	t.Parallel()
+	for _, in := range []string{
+		"<�/>",             // element name starting with U+FFFD
+		"<a�/>",            // U+FFFD inside element name
+		"<root �=\"v\"/>",  // attr name starting with U+FFFD
+		"<root x�=\"v\"/>", // U+FFFD inside attr name (ASCII-first fast path)
+	} {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		require.NoError(t, err, "valid U+FFFD in name must parse: %q", in)
+	}
+	_, err := helium.NewParser().Parse(t.Context(), []byte{'<', 0xFF, '/', '>'})
+	require.Error(t, err, "invalid UTF-8 lead byte in a name must be rejected")
+}
