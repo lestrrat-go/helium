@@ -1,7 +1,10 @@
 // Package xmlchar provides XML 1.0 NCName character classification functions.
 package xmlchar
 
-import "unicode/utf8"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // IsChar reports whether r is a valid XML 1.0 §2.2 Char.
 // Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
@@ -36,6 +39,27 @@ func IsNCNameChar(r rune) bool {
 	return IsNCNameStartChar(r) ||
 		(r >= '0' && r <= '9') || r == '-' || r == '.' ||
 		r == 0xB7 || (r >= 0x0300 && r <= 0x036F) || (r >= 0x203F && r <= 0x2040)
+}
+
+// IsValidPITarget reports whether target is a valid XML processing
+// instruction target. A PI target is an NCName (colons are forbidden, matching
+// helium's parser, which rejects colons in PI targets) and must not be the
+// reserved name "xml" (any case).
+func IsValidPITarget(target string) bool {
+	if target == "" {
+		return false
+	}
+	if strings.EqualFold(target, "xml") {
+		return false
+	}
+	// Ranging over an invalid byte yields utf8.RuneError (U+FFFD), which is
+	// itself a valid NCName character, so IsValidNCName would accept invalid
+	// UTF-8 and emit raw bytes. Reject invalid encodings up front; a genuinely
+	// encoded U+FFFD is valid UTF-8 and still passes.
+	if !utf8.ValidString(target) {
+		return false
+	}
+	return IsValidNCName(target)
 }
 
 // IsValidNCName checks whether s is a valid XML NCName (non-colonized name).
