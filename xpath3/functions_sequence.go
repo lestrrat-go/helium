@@ -57,14 +57,12 @@ func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	target := args[0]
-	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:insert-before: position argument is an empty sequence"}
-	}
-	a, err := AtomizeItem(args[1].Get(0))
+	// $position is xs:integer: reject empty/multi-item/non-integer (XPTY0004).
+	posVal, err := coerceArgToInteger(args[1])
 	if err != nil {
 		return nil, err
 	}
-	pos := int(a.ToFloat64())
+	pos := int(posVal)
 	inserts := args[2]
 
 	if pos < 1 {
@@ -117,6 +115,9 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position is required"}
 	}
+	if seqLen(args[1]) > 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: starting position must be a single value"}
+	}
 	a, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
 		return nil, err
@@ -139,6 +140,9 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	var lengthF float64
 	if hasLength {
+		if seqLen(args[2]) > 1 {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "subsequence: length must be a single value"}
+		}
 		la, err := AtomizeItem(args[2].Get(0))
 		if err != nil {
 			return nil, err
