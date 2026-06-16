@@ -68,6 +68,48 @@ func TestParseRejectsNonXMLCharsInAttr(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestParseAttrSlowPathXMLChars covers the attribute-value slow path
+// (parseAttributeValueInternal). The slow path is forced by including an
+// entity reference or a tab (which needs whitespace normalization) in the
+// same attribute. A real U+FFFD (valid XML Char, encoded as 3-byte UTF-8)
+// must parse, while XML-forbidden chars must still be rejected.
+func TestParseAttrSlowPathXMLChars(t *testing.T) {
+	t.Parallel()
+
+	// Triggers that force the slow path: an entity ref and a normalizable tab.
+	triggers := []struct {
+		name string
+		// before/after wrap the test char in the attribute value.
+		before string
+		after  string
+	}{
+		{"entity-after", "", "&amp;"},
+		{"entity-before", "&amp;", ""},
+		{"tab-after", "", "\tx"},
+	}
+
+	t.Run("valid-U+FFFD", func(t *testing.T) {
+		t.Parallel()
+		for _, tr := range triggers {
+			t.Run(tr.name, func(t *testing.T) {
+				t.Parallel()
+				input := `<r a="` + tr.before + string(rune(0xFFFD)) + tr.after + `"/>`
+				_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+				require.NoError(t, err, "real U+FFFD on slow path must parse (%s)", tr.name)
+			})
+		}
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		t.Parallel()
+		for _, r := range []rune{0xFFFE, 0xFFFF} {
+			input := `<r a="` + string(r) + `&amp;"/>`
+			_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+			require.Error(t, err, "forbidden char U+%04X on slow path must fail", r)
+		}
+	})
+}
+
 // TestParseAttrWhitespaceNormalization checks the attribute-value fast path
 // normalizes a literal tab to a space (XML 1.0 §3.3.3), matching newline/CR.
 func TestParseAttrWhitespaceNormalization(t *testing.T) {
