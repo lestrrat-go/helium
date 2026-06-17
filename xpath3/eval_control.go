@@ -40,7 +40,10 @@ func evalLookupExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBounded(result, seqMaterialize(r), ec.maxNodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -154,7 +157,10 @@ func evalFLWOR(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e FLW
 		if err != nil {
 			return err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBounded(result, seqMaterialize(r), ec.maxNodes)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 

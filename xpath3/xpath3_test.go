@@ -252,6 +252,63 @@ func TestRangeOperator(t *testing.T) {
 	})
 }
 
+// TestSequenceLimitComposition verifies that compositions which accumulate
+// per-item sub-sequences (simple-map `!`, FLWOR `for ... return`, lookup `?`)
+// enforce the configured sequence/node-set size limit instead of materializing
+// unbounded output. maxNodes is lowered so the test is fast and proves the
+// evaluator stops early rather than after building everything.
+func TestSequenceLimitComposition(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+
+	// The domain (left side / for-clause range) stays within maxNodes; only the
+	// accumulated output overflows it. This proves the accumulation sites are
+	// bounded independently of the range guard (which catches an over-limit
+	// domain first).
+	overLimit := []struct {
+		name string
+		expr string
+	}{
+		{"simple-map", `(1 to 600) ! (1, 2)`},
+		{"flwor-for-return", `for $i in 1 to 600 return (1, 2)`},
+		{"lookup", `(1 to 600) ! map { "a": ., "b": . } ? *`},
+	}
+	for _, tc := range overLimit {
+		t.Run("over/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+		})
+	}
+
+	withinLimit := []struct {
+		name string
+		expr string
+		want int
+	}{
+		{"simple-map", `(1 to 10) ! (1, 2)`, 20},
+		{"flwor-for-return", `for $i in 1 to 10 return (1, 2)`, 20},
+		{"lookup", `(1 to 10) ! map { "a": ., "b": . } ? *`, 20},
+	}
+	for _, tc := range withinLimit {
+		t.Run("within/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			res, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, res.Sequence().Len())
+		})
+	}
+}
+
 func TestNilContextWithContextItem(t *testing.T) {
 	t.Parallel()
 	// Evaluating "." with a context item (atomic value) and nil node must succeed.
