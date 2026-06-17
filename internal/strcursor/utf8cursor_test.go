@@ -128,3 +128,27 @@ func TestRuneCursorReadShortBufferBufferedRune(t *testing.T) {
 	}
 	require.Equal(t, "é", string(got), "rune delivered intact across reads")
 }
+
+func TestRuneCursorReadShortBufferPartialRuneFit(t *testing.T) {
+	cur := NewRuneCursor(strings.NewReader("aé"))
+	// Buffer both runes in the ring.
+	require.Equal(t, 'a', cur.Peek())
+	require.Equal(t, 'é', cur.PeekN(2))
+
+	// A 2-byte buffer fits 'a' (1 byte) but not the following 2-byte 'é'.
+	// Read must emit only 'a' as a short read with no EOF, leaving 'é'
+	// buffered rather than reordering bytes from the underlying reader.
+	buf := make([]byte, 2)
+	n, err := cur.Read(buf)
+	require.NoError(t, err)
+	require.Equal(t, 1, n, "only the 1-byte rune fits")
+	require.Equal(t, "a", string(buf[:n]))
+
+	// The buffered 'é' is delivered intact on the next read.
+	rest := make([]byte, 8)
+	m, err := cur.Read(rest)
+	require.Equal(t, "é", string(rest[:m]))
+	if err != nil {
+		require.Equal(t, io.EOF, err)
+	}
+}

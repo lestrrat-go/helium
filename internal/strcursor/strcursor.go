@@ -580,17 +580,16 @@ func (c *RuneCursor) Read(buf []byte) (int, error) {
 		c.head = (c.head + 1) & mask
 		c.count--
 	}
+	// If a rune is still buffered (either buf is full or the next rune did
+	// not fit), return a valid short read. Pulling from c.in here would
+	// reorder bytes ahead of the still-pending buffered rune.
+	if c.count > 0 || nread >= len(buf) {
+		return nread, nil
+	}
+	// Ring fully drained with room left; top up from the underlying reader.
 	if nread > 0 {
-		if nread >= len(buf) {
-			return nread, nil
-		}
 		n, err := c.in.Read(buf[nread:])
 		return nread + n, err
-	}
-	// A rune is still buffered but did not fit in buf; return a valid short
-	// read rather than pulling from c.in and reordering the buffered rune.
-	if c.count > 0 {
-		return 0, nil
 	}
 	return c.in.Read(buf)
 }
