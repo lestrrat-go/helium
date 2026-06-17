@@ -520,20 +520,19 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 		return nil
 	}
 
-	// Global attribute found — validate value against its type if known.
-	if globalAttr.TypeName.Local != "" {
-		attrTD, ok := vc.schema.types[globalAttr.TypeName]
-		if ok {
-			value := a.Value()
-			trimmed := strings.TrimSpace(value)
-			builtinLocal := builtinBaseLocal(attrTD)
-			if err := validateBuiltinValue(trimmed, builtinLocal); err != nil {
-				ad := attrDisplayName(a)
-				typeName := typeDisplayName(attrTD)
-				msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
-				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
-				return err
-			}
+	// Global attribute found — validate value against its effective type if
+	// known (an inline anonymous simpleType takes precedence over a named type).
+	attrTD, ok := vc.attrUseType(globalAttr)
+	if ok && attrTD.ContentType == ContentTypeSimple {
+		value := a.Value()
+		trimmed := strings.TrimSpace(value)
+		builtinLocal := builtinBaseLocal(attrTD)
+		if err := validateBuiltinValue(trimmed, builtinLocal); err != nil {
+			ad := attrDisplayName(a)
+			typeName := typeDisplayName(attrTD)
+			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
+			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+			return err
 		}
 	}
 

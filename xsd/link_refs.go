@@ -163,6 +163,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if au.TypeName == (QName{}) {
 			au.TypeName = ga.TypeName
 		}
+		if au.Type == nil {
+			au.Type = ga.Type
+		}
 	}
 
 	// Topologically order extension types so each base type is merged before
