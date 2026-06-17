@@ -409,6 +409,21 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	cur := nodes[0]
 	cdn := cur.baseDocNode()
 	ndn := n.baseDocNode()
+
+	// A replacement node may already be linked into the tree (e.g. replacing a
+	// node with its own sibling). Detach every replacement node from its current
+	// position before splicing so it cannot remain in n's neighbor chain and
+	// create a self-loop. Skip n itself: when n is among the replacements it
+	// stays live in place (handled below as replacedIsInserted).
+	for _, nn := range nodes {
+		if nn.baseDocNode() == ndn {
+			continue
+		}
+		UnlinkNode(nn.(MutableNode)) //nolint:forcetypeassert
+	}
+
+	// Capture n's following sibling AFTER detaching replacement nodes so it
+	// always points at a node that survives the splice.
 	afterN := ndn.next
 
 	// Patch first replacement into n's position
