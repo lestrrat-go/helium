@@ -340,6 +340,13 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 			c.errorCount++
 		}
 
+		// default and fixed are mutually exclusive.
+		if hasAttr(elem, attrDefault) && hasAttr(elem, attrFixed) {
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
+				"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+
 		// form not allowed with ref.
 		if getAttr(elem, attrForm) != "" {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",

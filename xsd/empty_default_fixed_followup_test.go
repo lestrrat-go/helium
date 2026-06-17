@@ -34,6 +34,20 @@ func TestDefaultAndFixedBothPresentEmpty(t *testing.T) {
 		_, errs := compileWithErrors(t, schemaXML)
 		require.Contains(t, errs, "'default' and 'fixed' are mutually exclusive")
 	})
+
+	t.Run("referenced attribute default empty + fixed present", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="a" type="xs:string"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute ref="a" default="" fixed="x"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs, "'default' and 'fixed' are mutually exclusive")
+	})
 }
 
 // TestForeignNamespacedFixedNotXSD checks that a foreign-namespaced fixed=""
