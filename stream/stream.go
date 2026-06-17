@@ -346,6 +346,21 @@ func (w *Writer) declareNS(prefix, uri string) {
 	scope.decls = append(scope.decls, nsEntry{prefix: prefix, uri: uri})
 }
 
+// validateNSParts validates the prefix and local name supplied to a
+// namespace-aware method. The local name must be a valid NCName; the prefix,
+// if non-empty, must also be a valid NCName (no colon). This prevents an
+// untrusted prefix or local name from injecting markup into the start tag.
+// kind is "element" or "attribute" and only shapes the error message.
+func validateNSParts(kind, prefix, localName string) error {
+	if prefix != "" && !xmlchar.IsValidNCName(prefix) {
+		return fmt.Errorf("stream: invalid %s prefix %q", kind, prefix)
+	}
+	if !xmlchar.IsValidNCName(localName) {
+		return fmt.Errorf("stream: invalid %s local name %q", kind, localName)
+	}
+	return nil
+}
+
 // qualifiedName returns prefix:localName or just localName if prefix is empty.
 func qualifiedName(prefix, localName string) string {
 	if prefix == "" {
@@ -453,6 +468,13 @@ func (w *Writer) StartElement(name string) error {
 	if w.err != nil {
 		return w.err
 	}
+	// Validate the name before touching any writer state or output, so an
+	// untrusted name cannot inject markup (extra attributes, '>') or produce
+	// malformed XML. Namespaced names (prefix:local) and the xml:/xmlns
+	// idioms are valid QNames and remain accepted.
+	if !xmlchar.IsValidQName(name) {
+		return fmt.Errorf("stream: invalid element name %q", name)
+	}
 	switch w.state {
 	case stateNone, stateDocument, stateText, stateDTD:
 		// ok — stateNone allows fragment writing without StartDocument
@@ -483,6 +505,12 @@ func (w *Writer) StartElement(name string) error {
 // StartElementNS opens a new element with namespace. prefix and
 // namespaceURI may be empty.
 func (w *Writer) StartElementNS(prefix, localName, namespaceURI string) error {
+	if w.err != nil {
+		return w.err
+	}
+	if err := validateNSParts("element", prefix, localName); err != nil {
+		return err
+	}
 	qname := qualifiedName(prefix, localName)
 	if err := w.StartElement(qname); err != nil {
 		return err
@@ -622,6 +650,13 @@ func (w *Writer) StartAttribute(name string) error {
 	if w.err != nil {
 		return w.err
 	}
+	// Validate the name before writing, so an untrusted name cannot inject
+	// markup (extra attributes, '>') into the start tag. The xmlns/xmlns:
+	// declaration idiom and namespaced names are valid QNames and remain
+	// accepted (this is a low-level xmlTextWriter-style API).
+	if !xmlchar.IsValidQName(name) {
+		return fmt.Errorf("stream: invalid attribute name %q", name)
+	}
 	if w.state != stateName {
 		return errors.New("stream: StartAttribute called outside element opening tag")
 	}
@@ -636,6 +671,14 @@ func (w *Writer) StartAttribute(name string) error {
 
 // StartAttributeNS opens a namespace-qualified attribute.
 func (w *Writer) StartAttributeNS(prefix, localName, namespaceURI string) error {
+	if w.err != nil {
+		return w.err
+	}
+	// Validate parts before declareNS mutates the namespace scope, so an
+	// invalid prefix/local name never leaks a declaration or markup.
+	if err := validateNSParts("attribute", prefix, localName); err != nil {
+		return err
+	}
 	if namespaceURI != "" && prefix != "" {
 		w.declareNS(prefix, namespaceURI)
 	}

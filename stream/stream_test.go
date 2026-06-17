@@ -178,6 +178,107 @@ func TestAttribute(t *testing.T) {
 	require.Equal(t, `<root key="value"/>`, buf.String())
 }
 
+func TestStartElementRejectsInvalidName(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		arg  string
+	}{
+		{"injected attribute", `root injected="1"`},
+		{"close bracket", "root>"},
+		{"leading digit", "1root"},
+		{"whitespace", "ro ot"},
+		{"quote", `root"`},
+		{"two colons", "a:b:c"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.Error(t, w.StartElement(tc.arg), "StartElement(%q) must reject invalid name", tc.arg)
+			require.Empty(t, buf.String(), "no markup must be emitted for an invalid name")
+		})
+	}
+}
+
+func TestStartElementAcceptsValidName(t *testing.T) {
+	t.Parallel()
+	cases := []string{"root", "a:b", "xml:lang", "_x", "ns0:elem", "名前"}
+	for _, name := range cases {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.NoError(t, w.StartElement(name))
+			require.NoError(t, w.EndElement())
+			require.Equal(t, "<"+name+"/>", buf.String())
+		})
+	}
+}
+
+func TestStartAttributeRejectsInvalidName(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		arg  string
+	}{
+		{"injected attribute", `key="1" injected`},
+		{"close bracket", "key>"},
+		{"whitespace", "k ey"},
+		{"quote", `key"`},
+		{"leading digit", "1key"},
+		{"two colons", "a:b:c"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.NoError(t, w.StartElement("root"))
+			require.Error(t, w.StartAttribute(tc.arg), "StartAttribute(%q) must reject invalid name", tc.arg)
+		})
+	}
+}
+
+func TestStartAttributeAcceptsValidName(t *testing.T) {
+	t.Parallel()
+	cases := []string{"key", "a:b", "xml:lang", "_x", "名前", "xmlns", "xmlns:foo"}
+	for _, name := range cases {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.NoError(t, w.StartElement("root"))
+			require.NoError(t, w.WriteAttribute(name, "v"))
+			require.NoError(t, w.EndElement())
+			require.Equal(t, `<root `+name+`="v"/>`, buf.String())
+		})
+	}
+}
+
+func TestStartElementNSRejectsInvalidParts(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.Error(t, w.StartElementNS("bad prefix", "local", "urn:x"))
+	require.Empty(t, buf.String())
+
+	buf.Reset()
+	w = stream.NewWriter(&buf)
+	require.Error(t, w.StartElementNS("p", "bad local", "urn:x"))
+	require.Empty(t, buf.String())
+}
+
+func TestStartAttributeNSRejectsInvalidParts(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.Error(t, w.StartAttributeNS("bad prefix", "local", "urn:x"))
+
+	buf.Reset()
+	w = stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	require.Error(t, w.StartAttributeNS("p", "bad local", "urn:x"))
+}
+
 func TestAttributeEscaping(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
