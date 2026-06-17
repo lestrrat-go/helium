@@ -36,8 +36,30 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// and route the schema's nested xs:include/xs:import/xs:redefine loads
 	// through the same compile-time resolver (default-deny) instead of the
 	// xsd compiler's default os.Open.
+	//
+	// Install a fatalErrorCounter ErrorHandler so fatal schema-construction
+	// diagnostics (e.g. an unresolved referenced type, or a nested xs:import
+	// that fails to load) are not discarded. Without it the xsd compiler
+	// installs a recovery placeholder for the unresolved type and reports
+	// success, silently producing an invalid schema. This mirrors the
+	// inline-schema path in compileImportSchema.
+	errCounter := &fatalErrorCounter{}
 	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
-	return xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys).Compile(ctx, doc)
+	schema, err := xsd.NewCompiler().
+		ErrorHandler(errCounter).
+		BaseDir(schemaCompileBaseDir(uri)).
+		FS(fsys).
+		Compile(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+	// XTSE0220: the schema could not be constructed (e.g. an unresolved
+	// referenced type or a nested xs:import miss left a recovery placeholder).
+	if errCounter.count.Load() > 0 {
+		return nil, staticError(errCodeXTSE0220,
+			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
+	}
+	return schema, nil
 }
 
 // loadSchemaBytes loads a nested-schema document referenced by
@@ -104,16 +126,47 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			"xsl:import-schema has both schema-location attribute and inline xs:schema child")
 	}
 
+	// Compute the effective base URI for resolving this import-schema's
+	// schema-location and the nested xs:include/xs:import/xs:redefine loads of
+	// an inline schema, folding in an xml:base attribute on the
+	// xsl:import-schema element (c.baseURI already accounts for xml:base on the
+	// stylesheet root and includes). Without this, a nested import in an inline
+	// schema would resolve against the wrong directory, silently fail to load,
+	// and leave the referenced type unresolved.
+	baseURI := c.baseURI
+	if xmlBase, ok := elem.GetAttributeNS("base", lexicon.NamespaceXML); ok && xmlBase != "" {
+		// Fold xml:base into the effective base using the URI-aware schema
+		// resolver rather than helium.BuildURI. BuildURI filepath.Join's for the
+		// file: scheme, collapsing a canonical "file:///tmp/styles/main.xsl" base
+		// to a bare local path and dropping the scheme/authority; the resolver
+		// preserves file: and other no-authority URI spellings via RFC 3986 so
+		// the downstream schema-location resolution and resolver FS see the same
+		// canonical URI.
+		resolved, err := resolveSchemaURI(xmlBase, c.baseURI)
+		if err != nil {
+			return fmt.Errorf("xsl:import-schema: cannot resolve xml:base %q against base %q: %w", xmlBase, c.baseURI, err)
+		}
+		// An xml:base ending in "/" denotes a directory; preserve that trailing
+		// slash (filepath.Join in the local resolver branch strips it) so the
+		// downstream schemaCompileBaseDir's filepath.Dir keeps the directory
+		// segment instead of treating it as a filename to discard. This matches
+		// the directory semantics helium.BuildURI used to provide.
+		if strings.HasSuffix(xmlBase, "/") && !strings.HasSuffix(resolved, "/") {
+			resolved += "/"
+		}
+		baseURI = resolved
+	}
+
 	if schemaLoc != "" {
 		// File-backed schema. Resolve the schema-location against the
 		// stylesheet base URI using RFC 3986 URI semantics when the base is a
 		// URL (so the authority survives and nested includes can be recovered),
 		// falling back to filepath joins for local filesystem bases.
 		uri := schemaLoc
-		if c.baseURI != "" {
-			resolved, err := resolveSchemaURI(schemaLoc, c.baseURI)
+		if baseURI != "" {
+			resolved, err := resolveSchemaURI(schemaLoc, baseURI)
 			if err != nil {
-				return fmt.Errorf("xsl:import-schema: cannot resolve schema-location %q against base %q: %w", schemaLoc, c.baseURI, err)
+				return fmt.Errorf("xsl:import-schema: cannot resolve schema-location %q against base %q: %w", schemaLoc, baseURI, err)
 			}
 			uri = resolved
 		}
@@ -186,8 +239,8 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			// rooted at the import-schema element's base URI.
 			fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
 			compiler := xsd.NewCompiler().ErrorHandler(errCounter).FS(fsys)
-			if c.baseURI != "" {
-				compiler = compiler.BaseDir(schemaCompileBaseDir(c.baseURI))
+			if baseURI != "" {
+				compiler = compiler.BaseDir(schemaCompileBaseDir(baseURI))
 			}
 			schema, err := compiler.Compile(ctx, inlineDoc)
 			if err != nil {

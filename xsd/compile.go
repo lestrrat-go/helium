@@ -34,6 +34,12 @@ type compiler struct {
 	itemTypeRefs map[*TypeDef]QName
 	// unresolved union member type references
 	unionMemberRefs []unionMemberRef
+	// chameleonEligible records, per ref owner (*ElementDecl or *TypeDef),
+	// whether the lexical ref at the collection site was BOTH unprefixed and
+	// had no in-scope default namespace. Only such refs may fall back to the
+	// no-targetNamespace ({}) chameleon type; a prefixed ref or an unprefixed
+	// ref bound by an xmlns="..." default namespace is qualified and must not.
+	chameleonEligible map[any]struct{}
 	// unresolved attribute references: maps from AttrUse to global attr QName
 	attrRefs map[*AttrUse]QName
 	// source info for attribute uses carrying a default/fixed value, used to
@@ -76,6 +82,10 @@ type elemRefSource struct {
 type unionMemberRef struct {
 	owner *TypeDef
 	name  QName
+	// chameleonEligible is true when the lexical memberTypes QName was
+	// unprefixed with no in-scope default namespace, so it may fall back to
+	// the no-targetNamespace ({}) chameleon type if unresolved.
+	chameleonEligible bool
 }
 
 // attrConstraintSource tracks where an attribute use's default/fixed value
@@ -126,6 +136,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
 		itemTypeRefs:             make(map[*TypeDef]QName),
+		chameleonEligible:        make(map[any]struct{}),
 		attrRefs:                 make(map[*AttrUse]QName),
 		attrUseConstraintSources: make(map[*AttrUse]attrConstraintSource),
 		importedNS:               make(map[string]string),
