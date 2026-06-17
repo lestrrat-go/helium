@@ -35,18 +35,23 @@ func TestFixedValueSpace(t *testing.T) {
 		{name: "decimal value mismatch", typ: "xs:decimal", fixed: "5", instance: "6", wantReject: true},
 
 		// boolean — "true"/"1" are value-equal.
-		{name: "boolean true vs 1", typ: "xs:boolean", fixed: "true", instance: "1"},
-		{name: "boolean value mismatch", typ: "xs:boolean", fixed: "true", instance: "0", wantReject: true},
+		{name: "boolean true vs 1", typ: xsBooleanType, fixed: "true", instance: "1"},
+		{name: "boolean value mismatch", typ: xsBooleanType, fixed: "true", instance: "0", wantReject: true},
+
+		// hexBinary — value space is the decoded octets, so case differences are
+		// not significant ("0A" == "0a"); a different byte must be rejected.
+		{name: "hexBinary case-insensitive", typ: xsHexBinaryType, fixed: "0A", instance: "0a"},
+		{name: "hexBinary value mismatch", typ: xsHexBinaryType, fixed: "0A", instance: "0b", wantReject: true},
 
 		// string (whiteSpace=preserve) — trailing whitespace is significant, so a
 		// fixed value with a trailing space must NOT match an instance without it.
-		{name: "string trailing space significant", typ: "xs:string", fixed: "abc ", instance: "abc", wantReject: true},
-		{name: "string exact match", typ: "xs:string", fixed: "abc", instance: "abc"},
-		{name: "string value mismatch", typ: "xs:string", fixed: "abc", instance: "xyz", wantReject: true},
+		{name: "string trailing space significant", typ: xsStringType, fixed: abcLiteral + " ", instance: abcLiteral, wantReject: true},
+		{name: "string exact match", typ: xsStringType, fixed: abcLiteral, instance: abcLiteral},
+		{name: "string value mismatch", typ: xsStringType, fixed: abcLiteral, instance: "xyz", wantReject: true},
 
 		// token (whiteSpace=collapse) — leading/trailing/internal whitespace is
 		// collapsed, so a padded instance value-matches the fixed value.
-		{name: "token collapses whitespace", typ: "xs:token", fixed: "abc", instance: "abc"},
+		{name: "token collapses whitespace", typ: "xs:token", fixed: abcLiteral, instance: abcLiteral},
 	}
 
 	for _, tc := range cases {
@@ -76,6 +81,110 @@ func TestFixedValueSpace(t *testing.T) {
 			runFixedValueCase(t, schemaXML, instanceXML, tc.wantReject)
 		})
 	}
+}
+
+// TestFixedValueSpaceDerivedWhitespace verifies that a fixed value declared with
+// a simple type whose whiteSpace facet is *derived* on a restriction (not the
+// builtin's default) is compared after applying that derived facet. A
+// builtin-name-only canonicalization would use xs:string's "preserve" and
+// wrongly reject a value-equal-but-whitespace-padded instance.
+func TestFixedValueSpaceDerivedWhitespace(t *testing.T) {
+	// collapsedString restricts xs:string with whiteSpace="collapse", so leading,
+	// trailing, and internal runs of whitespace are collapsed before comparison.
+	const typeDefs = `  <xs:simpleType name="collapsedString">
+    <xs:restriction base="xs:string">
+      <xs:whiteSpace value="collapse"/>
+    </xs:restriction>
+  </xs:simpleType>`
+
+	t.Run("element", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="collapsedString" fixed="a b"/>
+</xs:schema>`
+		// Instance has padded/extra internal whitespace that collapses to "a b".
+		instanceXML := "<root> a   b </root>"
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/mismatch", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="collapsedString" fixed="a b"/>
+</xs:schema>`
+		instanceXML := "<root>a c</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("attribute", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="collapsedString" fixed="a b"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a="  a   b  "/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+}
+
+// TestFixedValueSpaceList verifies that a fixed value of an xs:list type is
+// compared item-by-item in the item type's value space, so lexically distinct
+// but value-equal items (e.g. "01" == "1", "+2" == "2") satisfy the constraint
+// while a value-distinct item is rejected.
+func TestFixedValueSpaceList(t *testing.T) {
+	const typeDefs = `  <xs:simpleType name="intList">
+    <xs:list itemType="xs:integer"/>
+  </xs:simpleType>`
+
+	t.Run("element/value-equal items", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="intList" fixed="1 2"/>
+</xs:schema>`
+		instanceXML := "<root>01 +2</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/item mismatch", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="intList" fixed="1 2"/>
+</xs:schema>`
+		instanceXML := "<root>1 3</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("element/length mismatch", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="intList" fixed="1 2"/>
+</xs:schema>`
+		instanceXML := "<root>1 2 3</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("attribute/value-equal items", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="intList" fixed="1 2"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a="01 +2"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
 }
 
 func runFixedValueCase(t *testing.T, schemaXML, instanceXML string, wantReject bool) {

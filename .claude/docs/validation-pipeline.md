@@ -41,11 +41,19 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
 
 Fixed value constraints (element content and attribute values) are compared in
-the declared simple type's value space via `fixedValueMatches`
-(`value.CanonicalKey` keyed off `builtinBaseLocal`), which applies the type's
-whitespace facet (preserve/replace/collapse). So integer fixed `1` accepts
-instance `+1`/`01`, while an `xs:string` fixed value with significant trailing
-whitespace is not silently trimmed. When the builtin base cannot be resolved it
+the declared simple type's value space via `fixedValueMatches`. Both the fixed
+and instance values are first whitespace-normalized using the type's *effective*
+whiteSpace facet (`resolveWhiteSpace` walks the derivation chain, so a facet
+derived on a restriction — e.g. `xs:string` restricted with
+`whiteSpace="collapse"` — is honoured, not just the builtin default). Then the
+comparison dispatches on variety (`resolveVariety`): list types split into items
+and compare item-by-item in the item type's value space (so `xs:integer` list
+fixed `1 2` accepts `01 +2`); union types accept when any member's value space
+matches; atomic types compare via `value.Compare` for the value-comparable
+builtins in `enumValueSpaceTypes` (numeric, boolean, date/time, and binary — so
+`xs:hexBinary` fixed `0A` accepts `0a` and integer fixed `1` accepts `+1`/`01`),
+falling back to normalized-lexical equality for string-family/anyURI (so a
+numeric-looking `xs:string` fixed `5` does not accept `5.0`). When `td` is nil it
 falls back to raw string equality.
 
 Enumeration facets are compared in value space, not raw lexical text. A value is

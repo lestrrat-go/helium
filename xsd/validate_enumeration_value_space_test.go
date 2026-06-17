@@ -9,11 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	xsDecimalType = "xs:decimal"
-	nanLexical    = "NaN"
-)
-
 // TestEnumerationValueSpace verifies that the enumeration facet is compared in
 // value space, not raw lexical space. A value that is lexically distinct from
 // every enumeration member but value-equal to one of them must be accepted; a
@@ -36,9 +31,9 @@ func TestEnumerationValueSpace(t *testing.T) {
 		{name: "decimal non-member", baseType: xsDecimalType, enum: []string{"5"}, instance: "6", wantReject: true},
 
 		// boolean — "true"/"1" and "false"/"0" are value-equal pairs.
-		{name: "boolean true vs 1", baseType: "xs:boolean", enum: []string{"true"}, instance: "1"},
-		{name: "boolean false vs 0", baseType: "xs:boolean", enum: []string{"false"}, instance: "0"},
-		{name: "boolean non-member", baseType: "xs:boolean", enum: []string{"true"}, instance: "0", wantReject: true},
+		{name: "boolean true vs 1", baseType: xsBooleanType, enum: []string{"true"}, instance: "1"},
+		{name: "boolean false vs 0", baseType: xsBooleanType, enum: []string{"false"}, instance: "0"},
+		{name: "boolean non-member", baseType: xsBooleanType, enum: []string{"true"}, instance: "0", wantReject: true},
 
 		// float / double — trailing zero and exponent forms.
 		{name: "float trailing zero", baseType: "xs:float", enum: []string{"1.5"}, instance: "1.50"},
@@ -55,9 +50,9 @@ func TestEnumerationValueSpace(t *testing.T) {
 
 		// hexBinary — value space is the decoded octets, so case differences are
 		// not significant ("0A" == "0a"); a different byte must be rejected.
-		{name: "hexBinary case-insensitive", baseType: "xs:hexBinary", enum: []string{"0A"}, instance: "0a"},
-		{name: "hexBinary mixed case member", baseType: "xs:hexBinary", enum: []string{"deadBEEF"}, instance: "DEADbeef"},
-		{name: "hexBinary non-member", baseType: "xs:hexBinary", enum: []string{"0A"}, instance: "0b", wantReject: true},
+		{name: "hexBinary case-insensitive", baseType: xsHexBinaryType, enum: []string{"0A"}, instance: "0a"},
+		{name: "hexBinary mixed case member", baseType: xsHexBinaryType, enum: []string{"deadBEEF"}, instance: "DEADbeef"},
+		{name: "hexBinary non-member", baseType: xsHexBinaryType, enum: []string{"0A"}, instance: "0b", wantReject: true},
 
 		// base64Binary — value space is the decoded octets; whitespace in the
 		// lexical form is not significant.
@@ -76,19 +71,19 @@ func TestEnumerationValueSpace(t *testing.T) {
 			enum: []string{"2000-01-01T12:00:00Z"}, instance: "2000-01-01T12:00:01Z", wantReject: true},
 
 		// string — lexical members must still be matched lexically.
-		{name: "string member", baseType: "xs:string", enum: []string{"alpha", "beta"}, instance: "beta"},
-		{name: "string non-member", baseType: "xs:string", enum: []string{"alpha"}, instance: "gamma", wantReject: true},
+		{name: "string member", baseType: xsStringType, enum: []string{"alpha", "beta"}, instance: "beta"},
+		{name: "string non-member", baseType: xsStringType, enum: []string{"alpha"}, instance: "gamma", wantReject: true},
 
 		// string-family types must stay lexical-only: a numeric-looking instance
 		// must NOT be accepted via numeric value-space comparison against a
 		// numeric-looking member ("5" must not accept "5.0").
-		{name: "string numeric lexical not value-equal", baseType: "xs:string",
+		{name: "string numeric lexical not value-equal", baseType: xsStringType,
 			enum: []string{"5"}, instance: "5.0", wantReject: true},
 		{name: "token numeric lexical not value-equal", baseType: "xs:token",
 			enum: []string{"10"}, instance: "1e1", wantReject: true},
 		{name: "anyURI numeric lexical not value-equal", baseType: "xs:anyURI",
 			enum: []string{"5"}, instance: "5.00", wantReject: true},
-		{name: "string numeric member exact", baseType: "xs:string", enum: []string{"5"}, instance: "5"},
+		{name: "string numeric member exact", baseType: xsStringType, enum: []string{"5"}, instance: "5"},
 	}
 
 	for _, tc := range cases {

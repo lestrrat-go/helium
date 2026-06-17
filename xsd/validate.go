@@ -12,23 +12,91 @@ import (
 
 // fixedValueMatches reports whether an instance value satisfies a fixed value
 // constraint whose declared simple type is td. The comparison is performed in
-// the type's value space via value.CanonicalKey, which applies the type's
-// whitespace facet (preserve/replace/collapse) — so a value-equal but
-// lexically-distinct instance (e.g. integer fixed "1" vs instance "+1") is
-// accepted, while a string-type fixed value with significant trailing
-// whitespace is not collapsed away. When the builtin base type cannot be
-// resolved, it falls back to raw string equality.
+// the type's value space (XSD 1.1 §3.16, cvc-au/cvc-elt fixed-value rules):
+//
+//   - Both values are first whitespace-normalized using the type's *effective*
+//     whiteSpace facet, resolved up the derivation chain via resolveWhiteSpace.
+//     This honours a facet derived on a restriction (e.g. xs:string restricted
+//     with whiteSpace="collapse"), which a builtin-name-only canonicalization
+//     would ignore.
+//   - For list types, the normalized values are split into items and compared
+//     item-by-item in the item type's value space.
+//   - For atomic types, the comparison uses the declared builtin's value space:
+//     value-comparable builtins (numeric, boolean, date/time, binary including
+//     hexBinary/base64Binary) compare via value.Compare, so "0A" == "0a" and
+//     "1" == "+1"; non-comparable (string-family/anyURI) types compare their
+//     whitespace-normalized lexical forms, so a numeric-looking string fixed
+//     value "5" does not accept "5.0".
+//
+// When td is nil the comparison falls back to raw string equality.
 func fixedValueMatches(instance, fixed string, td *TypeDef) bool {
-	builtinLocal := ""
-	if td != nil {
-		builtinLocal = builtinBaseLocal(td)
-	}
-	if builtinLocal == "" {
+	if td == nil {
 		return instance == fixed
 	}
-	ik, _ := value.CanonicalKey(instance, builtinLocal)
-	fk, _ := value.CanonicalKey(fixed, builtinLocal)
-	return ik == fk
+
+	ws := resolveWhiteSpace(td)
+	ni := normalizeWhiteSpace(instance, ws)
+	nf := normalizeWhiteSpace(fixed, ws)
+
+	switch resolveVariety(td) {
+	case TypeVarietyList:
+		return fixedListMatches(ni, nf, td)
+	case TypeVarietyUnion:
+		return fixedUnionMatches(ni, nf, td)
+	default:
+		return fixedAtomicMatches(ni, nf, builtinBaseLocal(td))
+	}
+}
+
+// fixedListMatches compares two whitespace-normalized list values item by item
+// in the list's item-type value space.
+func fixedListMatches(instance, fixed string, td *TypeDef) bool {
+	ii := strings.Fields(instance)
+	fi := strings.Fields(fixed)
+	if len(ii) != len(fi) {
+		return false
+	}
+	itemType := resolveItemType(td)
+	itemLocal := ""
+	if itemType != nil {
+		itemLocal = builtinBaseLocal(itemType)
+	}
+	for i := range ii {
+		if !fixedAtomicMatches(ii[i], fi[i], itemLocal) {
+			return false
+		}
+	}
+	return true
+}
+
+// fixedUnionMatches accepts the instance when it is value-equal to the fixed
+// value under any member type's value space. Member values are re-normalized
+// with the member's own whiteSpace facet before comparison.
+func fixedUnionMatches(instance, fixed string, td *TypeDef) bool {
+	for _, member := range resolveUnionMembers(td) {
+		ws := resolveWhiteSpace(member)
+		if fixedValueMatches(normalizeWhiteSpace(instance, ws), normalizeWhiteSpace(fixed, ws), member) {
+			return true
+		}
+	}
+	return false
+}
+
+// fixedAtomicMatches compares two already whitespace-normalized atomic values in
+// the builtin type's value space. Value-comparable builtins use value.Compare
+// (covering numeric, boolean, date/time, and binary value spaces); everything
+// else falls back to exact equality of the normalized lexical forms.
+func fixedAtomicMatches(instance, fixed, builtinLocal string) bool {
+	if _, ok := enumValueSpaceTypes[builtinLocal]; ok {
+		if (builtinLocal == "float" || builtinLocal == "double") &&
+			value.IsFloatNaN(instance) && value.IsFloatNaN(fixed) {
+			return true
+		}
+		if cmp, ok := value.Compare(instance, fixed, builtinLocal); ok {
+			return cmp == 0
+		}
+	}
+	return instance == fixed
 }
 
 type validationContext struct {
