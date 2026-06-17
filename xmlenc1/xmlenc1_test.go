@@ -430,6 +430,68 @@ func TestDecryptRSAOAEP_ParamErrorIsDecryptionFailed(t *testing.T) {
 	require.NotErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
 }
 
+// TestEncryptUnsupportedKeyTransportErrors verifies that an unknown
+// key-transport algorithm URI is rejected on encrypt rather than
+// silently performing RSA-OAEP and serializing a bogus @Algorithm.
+func TestEncryptUnsupportedKeyTransportErrors(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm("urn:bogus").
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+	var unsupp *xmlenc1.UnsupportedAlgorithmError
+	require.ErrorAs(t, err, &unsupp)
+	require.Equal(t, "urn:bogus", unsupp.Algorithm)
+
+	// No EncryptedData (and certainly no bogus URI) should be serialized.
+	xml, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.NotContains(t, xml, "urn:bogus")
+	require.NotContains(t, xml, "EncryptedData")
+}
+
+// TestDecryptUnsupportedKeyTransportErrors verifies that an EncryptedKey
+// advertising an unknown key-transport algorithm URI is rejected on
+// decrypt as a decryption failure, with the typed error preserved.
+func TestDecryptUnsupportedKeyTransportErrors(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	// Produce a valid RSA-OAEP 1.1 EncryptedData, then tamper the
+	// serialized key-transport @Algorithm to an unsupported URI.
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	tampered := strings.Replace(xml, xmlenc1.RSAOAEP11, "urn:bogus", 1)
+	require.NotEqual(t, xml, tampered)
+
+	tdoc := mustParseXML(t, tampered)
+	edNode := findEncryptedData(t, tdoc.DocumentElement())
+	require.NotNil(t, edNode)
+
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	_, err = decryptor.Decrypt(t.Context(), edNode)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+	require.NotErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+	var unsupp *xmlenc1.UnsupportedAlgorithmError
+	require.ErrorAs(t, err, &unsupp)
+	require.Equal(t, "urn:bogus", unsupp.Algorithm)
+}
+
 func findEncryptedData(t *testing.T, n helium.Node) *helium.Element {
 	t.Helper()
 	elem, ok := n.(*helium.Element)

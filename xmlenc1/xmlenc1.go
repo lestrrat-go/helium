@@ -432,6 +432,9 @@ func resolveSessionKey(cfg *decryptConfig, ed *EncryptedData) ([]byte, error) {
 		}
 		return aesKeyUnwrap(cfg.keyEncryptionKey, ek.CipherValue)
 	default:
-		return nil, &UnsupportedAlgorithmError{Algorithm: alg}
+		// Classify under the decrypt path while preserving the typed
+		// error in the chain for errors.As, consistent with the
+		// decryptSessionKey wrapping above.
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Algorithm: alg})
 	}
 }

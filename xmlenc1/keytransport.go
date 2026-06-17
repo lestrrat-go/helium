@@ -57,6 +57,17 @@ func decryptSessionKey(algorithm string, priv *rsa.PrivateKey, ciphertext []byte
 // them with ErrDecryptionFailed, so errors.Is reflects which path the
 // failure occurred on.
 func oaepHashFunc(algorithm, digest, mgf string) (func() hash.Hash, error) {
+	// Whitelist the key-transport algorithm itself. Only the two
+	// supported RSA-OAEP variants may proceed; any other (or empty) URI
+	// is rejected here rather than silently performing RSA-OAEP and
+	// serializing a metadata @Algorithm that lies about (or cannot
+	// describe) the crypto actually performed.
+	switch algorithm {
+	case RSAOAEP, RSAOAEP11:
+	default:
+		return nil, &UnsupportedAlgorithmError{Algorithm: algorithm}
+	}
+
 	// Resolve the digest hash. An empty digest defaults to SHA-1, which
 	// matches the XML Encryption default for RSA-OAEP. An unrecognized
 	// (non-empty) digest URI is rejected rather than downgraded.
@@ -82,7 +93,7 @@ func oaepHashFunc(algorithm, digest, mgf string) (func() hash.Hash, error) {
 			return nil, &UnsupportedAlgorithmError{Algorithm: mgf}
 		}
 		mgfHash = sha1.New
-	default: // RSAOAEP11 and any RSA-OAEP variant carrying an explicit MGF.
+	default: // RSAOAEP11, which carries an explicit MGF.
 		switch mgf {
 		case "", MGFSHA1:
 			mgfHash = sha1.New
