@@ -214,6 +214,97 @@ func TestXHTMLWriteRejectsInjectedNames(t *testing.T) {
 	})
 }
 
+func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("namespace prefix injection", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		// DeclareNamespace does not validate the prefix, so a crafted prefix
+		// would inject raw markup into the start tag on serialization.
+		require.NoError(t, root.DeclareNamespace(`p injected="1`, "urn"))
+
+		_, err := helium.WriteString(doc)
+		require.Error(t, err, "injected namespace prefix must not serialize")
+	})
+
+	t.Run("valid prefix serializes", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.DeclareNamespace("p", "urn:example"))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, `xmlns:p="urn:example"`)
+	})
+
+	t.Run("default namespace serializes", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.DeclareNamespace("", "urn:default"))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, `xmlns="urn:default"`)
+	})
+
+	t.Run("reserved xml prefix serializes", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.DeclareNamespace("xml", lexicon.NamespaceXML))
+
+		_, err := helium.WriteString(doc)
+		require.NoError(t, err, "reserved xml prefix must still serialize")
+	})
+}
+
+func TestXHTMLWriteRejectsInjectedNamespacePrefix(t *testing.T) {
+	t.Parallel()
+
+	newXHTMLDoc := func(t *testing.T) *helium.Document {
+		t.Helper()
+		doc := helium.NewDefaultDocument()
+		_, err := doc.CreateInternalSubset(
+			"html",
+			"-//W3C//DTD XHTML 1.0 Strict//EN",
+			"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
+		)
+		require.NoError(t, err)
+		return doc
+	}
+
+	t.Run("namespace prefix injection", func(t *testing.T) {
+		t.Parallel()
+		doc := newXHTMLDoc(t)
+		root := doc.CreateElement("html")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.DeclareNamespace(`p injected="1`, "urn"))
+
+		_, err := helium.WriteString(doc)
+		require.Error(t, err, "injected XHTML namespace prefix must not serialize")
+	})
+
+	t.Run("valid prefix serializes", func(t *testing.T) {
+		t.Parallel()
+		doc := newXHTMLDoc(t)
+		root := doc.CreateElement("html")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.DeclareNamespace("p", "urn:example"))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, `xmlns:p="urn:example"`)
+	})
+}
+
 // BenchmarkWriteNonASCII serializes a document containing many non-ASCII
 // characters with EscapeNonASCII enabled, exercising the hex char ref path.
 func BenchmarkWriteNonASCII(b *testing.B) {

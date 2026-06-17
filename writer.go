@@ -123,6 +123,22 @@ func (s *writeSession) checkAttributeName(name string) bool {
 	return false
 }
 
+// checkNamespacePrefix validates a namespace declaration prefix about to be
+// emitted as "xmlns:"+prefix. An unvalidated prefix (e.g. from
+// DeclareNamespace) can carry whitespace, quotes, or '>' that inject raw markup
+// into the start tag. The empty prefix (default namespace, xmlns="...") is
+// allowed; any non-empty prefix must be a valid NCName (no colon). On failure
+// it records a sticky error (preserving any earlier one) and returns false.
+// Shared by both the generic and XHTML serialization paths so they cannot
+// diverge.
+func (s *writeSession) checkNamespacePrefix(prefix string) bool {
+	if prefix == "" || xmlchar.IsValidNCName(prefix) {
+		return true
+	}
+	s.check(fmt.Errorf("helium: invalid namespace prefix %q", prefix))
+	return false
+}
+
 // NewWriter creates a new Writer with default settings.
 func NewWriter() Writer {
 	return Writer{}
