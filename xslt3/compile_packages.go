@@ -528,7 +528,12 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 // #default, #unnamed, and the empty string (default mode).
 func resolveTemplateModes(mode string) []string {
 	if mode == modeAll {
-		return []string{""}
+		// A #all template applies to the default mode AND, via the modeAll
+		// fallback key, to every named mode. Local templates register under
+		// both "" and modeAll (see registerTemplateInModes); used-package
+		// templates must follow the same path so they are eligible from
+		// named modes, not only the default mode.
+		return []string{"", modeAll}
 	}
 	fields := strings.Fields(mode)
 	if len(fields) == 0 {
