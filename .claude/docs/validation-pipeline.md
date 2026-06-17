@@ -105,13 +105,25 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     each item in the item type's value space (so `5 6`/`+5 06` collide for
     itemType="xs:integer"), and union fields resolve the **active member** the
     same way `validateUnionValue` does — the first member type (declaration
-    order, descending nested unions) whose lexical space accepts the value — then
-    canonicalize in THAT member's space (`unionActiveMember` →
-    `canonicalAtomicKey`): value-comparable members use `value.CanonicalKey`,
-    lexical-only members (xs:string family, anyURI) use the whitespace-processed
-    lexical value. So memberTypes="xs:string xs:integer" keeps `5` and `+5`
-    distinct (active member xs:string), while "xs:integer xs:string" collapses
-    them. Raw values are retained for error display;
+    order, descending nested unions) the value **fully validates against**
+    (lexical space AND facets AND nested unions, via `typeAcceptsValue` →
+    `validateValue`, not lexical space alone) — then canonicalize in THAT
+    member's space (`unionActiveMember` → `canonicalAtomicKey`): value-comparable
+    members use `value.CanonicalKey`, lexical-only members (xs:string family,
+    anyURI) use the whitespace-processed lexical value. So
+    memberTypes="xs:string xs:integer" keeps `5` and `+5` distinct (active member
+    xs:string), while "xs:integer xs:string" collapses them; and a member whose
+    facets reject the value (e.g. an xs:integer restriction with maxInclusive="0"
+    fed `5`) is skipped so the value falls through to the next member, exactly as
+    the validator does. Variety dispatch in `canonicalValueKey` and the
+    list/union member resolution use the same base-chain helpers the validator
+    uses (`resolveVariety`, `resolveItemType`, `resolveUnionMembers`), so a
+    restriction over an inline list/union (which keeps `Variety==Atomic` on the
+    derived type) is still canonicalized in the correct variety. `canonicalAtomicKey`
+    first whitespace-processes the value per the resolved type's effective
+    whiteSpace facet (`resolveWhiteSpace`), so a restriction of xs:string with
+    whiteSpace="collapse" makes `a b` and `a  b` collide. Raw values are retained
+    for error display;
     fields whose type cannot be resolved fall back to raw-string comparison.
 
 ### Key Data Model

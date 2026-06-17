@@ -284,6 +284,202 @@ func TestIDCFieldUnionActiveMember(t *testing.T) {
 	}
 }
 
+// TestIDCFieldUnionActiveMemberFacets covers active-member selection for a union
+// whose first member's LEXICAL space accepts the value but whose FACETS reject
+// it. smallInt restricts xs:integer with maxInclusive="0", so `5`/`+5` are
+// lexically integers but fail the facet; the value must fall through to the
+// xs:string member (active member xs:string, lexical-only) and stay DISTINCT.
+// The previous lexical-only active-member selection wrongly chose smallInt and
+// collapsed `5`/`+5` to one value, reporting a spurious duplicate.
+func TestIDCFieldUnionActiveMemberFacets(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="smallInt">
+    <xs:restriction base="xs:integer">
+      <xs:maxInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="smallInt xs:string"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="u" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="."/>
+    </xs:key>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// smallInt rejects 5 (maxInclusive=0) so both fall through to xs:string;
+			// lexically distinct, no duplicate.
+			name:     "facet-rejected ints fall through to string and stay distinct",
+			instance: `<root><item>5</item><item>+5</item></root>`,
+			valid:    true,
+		},
+		{
+			// both accepted by smallInt (-1, -01 == -1 in integer value space): collide.
+			name:     "facet-accepted ints collapse in integer value space",
+			instance: `<root><item>-1</item><item>-01</item></root>`,
+			valid:    false,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
+// TestIDCFieldRestrictedListVariety covers a field whose type is a RESTRICTION
+// over an inline xs:list itemType="xs:integer". The derived restriction keeps
+// Variety==Atomic, so dispatching on td.Variety alone would mis-route it to the
+// atomic path and compare list text lexically. Dispatching on resolveVariety(td)
+// routes it to the list path, so `5 6` and `+5 06` collide item-by-item.
+func TestIDCFieldRestrictedListVariety(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="restrictedIntList">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:list itemType="xs:integer"/>
+      </xs:simpleType>
+      <xs:maxLength value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="restrictedIntList" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			name:     "restricted-list integers 5 6 and +5 06 collide",
+			instance: `<root><item>5 6</item><item>+5 06</item></root>`,
+			valid:    false,
+		},
+		{
+			name:     "restricted-list integers 5 6 and 5 7 distinct",
+			instance: `<root><item>5 6</item><item>5 7</item></root>`,
+			valid:    true,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
+// TestIDCFieldWhiteSpaceCollapse covers a field whose type is a RESTRICTION of
+// xs:string with whiteSpace="collapse". The canonical key must apply the
+// resolved whiteSpace facet, so `a b` and `a  b` collapse to the same value and
+// collide. Without facet-aware normalization the two stay lexically distinct.
+func TestIDCFieldWhiteSpaceCollapse(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="collapsed">
+    <xs:restriction base="xs:string">
+      <xs:whiteSpace value="collapse"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="collapsed" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			name:     "collapse makes a b and a  b collide",
+			instance: "<root><item>a b</item><item>a  b</item></root>",
+			valid:    false,
+		},
+		{
+			name:     "collapse keeps a b and a c distinct",
+			instance: "<root><item>a b</item><item>a  c</item></root>",
+			valid:    true,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
 func compileValidator(t *testing.T, src string) xsd.Validator {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
