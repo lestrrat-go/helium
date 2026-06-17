@@ -12,7 +12,7 @@ xinclude       → helium, xpointer
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex
 xslt3          → helium, xpath3, xsd, html, internal/lexicon, internal/sequence, internal/xpathstream, xslt3/internal/elements
 xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, internal/xsdregex
-relaxng        → helium
+relaxng        → helium, internal/lexicon, internal/iofs, internal/xsd/value
 schematron     → helium, xpath1
 xpointer       → helium, xpath1
 c14n           → helium
