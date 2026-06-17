@@ -62,6 +62,9 @@ func ParseSequenceType(s string) (SequenceType, error) {
 	if err != nil {
 		return SequenceType{}, err
 	}
+	if tok := p.lexer.Peek(); tok.Type != TokenEOF {
+		return SequenceType{}, fmt.Errorf("%w: %s after sequence type", ErrUnexpectedToken, tok)
+	}
 	return st, nil
 }
 
