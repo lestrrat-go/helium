@@ -18,8 +18,10 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 	switch builtinLocal {
 	case "boolean":
 		return compareBoolean(a, b)
-	case "float", "double":
-		return compareFloat(a, b)
+	case "float":
+		return compareFloat(a, b, true)
+	case "double":
+		return compareFloat(a, b, false)
 	case "dateTime":
 		return compareDateTime(a, b)
 	case "date":
@@ -348,7 +350,14 @@ func IsFloatNaN(s string) bool {
 	return ok && math.IsNaN(f)
 }
 
-func compareFloat(a, b string) (int, bool) {
+// compareFloat compares two xs:float/xs:double lexical values in their numeric
+// value space. When single is true the operands are xs:float, whose value space
+// is IEEE-754 single precision: both are rounded to float32 first so values that
+// round to the same single-precision number compare equal (e.g. "16777216" ==
+// "16777217"). When single is false they are xs:double and compared as float64.
+// Infinities round-trip identically through float32, so only the finite path
+// changes precision.
+func compareFloat(a, b string, single bool) (int, bool) {
 	fa, ok1 := parseXSDFloat(a)
 	fb, ok2 := parseXSDFloat(b)
 	if !ok1 || !ok2 {
@@ -356,6 +365,10 @@ func compareFloat(a, b string) (int, bool) {
 	}
 	if math.IsNaN(fa) || math.IsNaN(fb) {
 		return 0, false
+	}
+	if single {
+		fa = float64(float32(fa))
+		fb = float64(float32(fb))
 	}
 	if fa < fb {
 		return -1, true

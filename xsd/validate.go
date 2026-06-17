@@ -7,7 +7,285 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
+
+// fixedValueMatches reports whether an instance value satisfies a fixed value
+// constraint whose declared simple type is td. The comparison is performed in
+// the type's value space (XSD 1.1 §3.16, cvc-au/cvc-elt fixed-value rules):
+//
+//   - The comparison branches on the type's variety *before* applying any
+//     whiteSpace facet. A union has no whiteSpace facet of its own, so its raw
+//     values are forwarded to fixedUnionMatches, which resolves each value's
+//     active member (ordered union semantics) and compares in that member's
+//     value space — preserving significant whitespace for an xs:string member
+//     that a "collapse" at the union level would have stripped.
+//   - For atomic and list types, both values are first whitespace-normalized
+//     using the type's *effective* whiteSpace facet, resolved up the derivation
+//     chain via resolveWhiteSpace. This honours a facet derived on a restriction
+//     (e.g. xs:string restricted with whiteSpace="collapse"), which a
+//     builtin-name-only canonicalization would ignore.
+//   - For list types, the normalized values are split into items and compared
+//     item-by-item in the item type's value space.
+//   - For atomic types, the comparison uses the declared builtin's value space:
+//     value-comparable builtins (numeric, boolean, date/time, binary including
+//     hexBinary/base64Binary) compare via value.Compare, so "0A" == "0a" and
+//     "1" == "+1"; QName/NOTATION resolve each lexical QName against its own
+//     in-scope namespaces (instanceNS for the instance, fixedNS for the schema
+//     fixed value) and compare the resolved {namespace URI, local name}, so two
+//     different prefixes bound to the same URI are equal; non-comparable
+//     (string-family/anyURI) types compare their whitespace-normalized lexical
+//     forms, so a numeric-looking string fixed value "5" does not accept "5.0".
+//
+// instanceNS and fixedNS carry the in-scope namespace bindings for the instance
+// value and the schema fixed value respectively; they are only consulted for
+// QName/NOTATION types. When td is nil the comparison falls back to raw string
+// equality.
+func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
+	if td == nil {
+		return instance == fixed
+	}
+
+	// Branch on variety *before* normalizing with the type's own whiteSpace
+	// facet. A union type has no meaningful whiteSpace of its own — each member
+	// applies its own facet — so normalizing here (the union default is
+	// "collapse") would strip significant whitespace before an xs:string member
+	// ever sees it. The union path therefore receives the raw values and lets
+	// each member normalize with its own facet. List and atomic types keep their
+	// type-level normalization.
+	if resolveVariety(td) == TypeVarietyUnion {
+		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS)
+	}
+
+	ws := resolveWhiteSpace(td)
+	ni := normalizeWhiteSpace(instance, ws)
+	nf := normalizeWhiteSpace(fixed, ws)
+
+	if resolveVariety(td) == TypeVarietyList {
+		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS)
+	}
+	return fixedAtomicMatches(ni, nf, builtinBaseLocal(td), instanceNS, fixedNS)
+}
+
+// fixedListMatches compares two whitespace-normalized list values item by item
+// in the list's item-type value space. Each item is dispatched through the
+// variety-aware comparator on the actual item type, so a list whose item type is
+// a union (or itself a list) is compared in the correct value space rather than
+// raw lexical text.
+func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
+	ii := strings.Fields(instance)
+	fi := strings.Fields(fixed)
+	if len(ii) != len(fi) {
+		return false
+	}
+	itemType := resolveItemType(td)
+	for i := range ii {
+		if !fixedValueMatches(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS) {
+			return false
+		}
+	}
+	return true
+}
+
+// fixedUnionMatches compares an instance value against a fixed value whose
+// declared type is a union, using XSD's *ordered* union semantics. Union
+// membership is not "any member that makes the two lexicals compare equal":
+// each lexical value has a single ACTIVE member — the first member type, in
+// declaration order, that the value fully validates against (facets, lists, and
+// nested unions all enforced). The fixed value and the instance value each
+// resolve their own active member (the fixed value uses the schema's in-scope
+// namespaces, the instance the document's). The comparison is then:
+//
+//   - If either value has no valid active member, it is not a valid union value,
+//     so for fixed-comparison purposes it is treated as not-equal.
+//   - If the active member is the same, the two values are compared in *that*
+//     member's value space by recursing through fixedValueMatches with the
+//     member type (which applies the member's own whiteSpace facet). Thus
+//     memberTypes="xs:string xs:integer" with fixed="1" resolves both sides to
+//     the xs:string member (the first member, which accepts any text), so "1"
+//     and "01" compare as strings and do NOT match.
+//   - If the active members DIFFER, the values may still be equal when both
+//     members reduce to the same PRIMITIVE value-space family (XSD 1.1 §2.3:
+//     restrictions do not create new values). e.g. memberTypes="xs:integer
+//     xs:decimal" with fixed="1.0" → active member xs:decimal, instance "1" →
+//     active member xs:integer: both reduce to the decimal value space, and
+//     1.0 == 1, so they MUST compare equal. This includes string-derived members:
+//     fixed "a b" (active in one xs:string restriction) and instance " a   b "
+//     (active in another xs:string restriction with whiteSpace="collapse") both
+//     reduce to the string value space and denote "a b". The shared family is
+//     determined by primitiveValueSpaceFamily; value-comparable families compare
+//     with value.Compare, while the string family compares whitespace-normalized
+//     lexical forms. Cross-family pairs (xs:string vs xs:integer, xs:integer vs
+//     xs:boolean, …) have no shared value space and remain unequal.
+//
+// The active member is resolved with unionActiveMember, which reuses the same
+// per-member validateValue path the normal (non-fixed) validation uses, so the
+// fixed-comparison and ordinary-validation notions of "active member" stay
+// consistent.
+func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
+	members := resolveUnionMembers(td)
+
+	fixedMember := unionActiveMember(ctx, fixed, fixedNS, members)
+	if fixedMember == nil {
+		return false
+	}
+	instanceMember := unionActiveMember(ctx, instance, instanceNS, members)
+	if instanceMember == nil {
+		return false
+	}
+
+	if fixedMember == instanceMember {
+		// Same active member: compare in that member's value space. A union has no
+		// whiteSpace facet of its own, so the raw values are forwarded and the
+		// member normalizes both with its own facet inside fixedValueMatches.
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS)
+	}
+
+	// Different active members. XSD 1.1 §2.3 — restrictions do not create new
+	// values, so two values are equal iff they denote the same value in their
+	// SHARED PRIMITIVE value-space family (the primitive built-in their members
+	// reduce to). This includes string-derived members: a value active in one
+	// xs:string restriction (e.g. whiteSpace="collapse") compares equal to a value
+	// active in another xs:string-family member when both denote the same string.
+	// primitiveValueSpaceFamily reduces each member's builtin to that primitive
+	// family (e.g. all integer types → "decimal", all string-derived types →
+	// "string"). Cross-family pairs (string vs integer, integer vs boolean, …) have
+	// no shared value space and remain unequal. QName/NOTATION are excluded because
+	// their equality is namespace-context dependent, not a raw lexical/value
+	// comparison.
+	fixedLocal := builtinBaseLocal(fixedMember)
+	instanceLocal := builtinBaseLocal(instanceMember)
+	fixedFamily, fComparable, fok := primitiveValueSpaceFamily(fixedLocal)
+	instanceFamily, _, iok := primitiveValueSpaceFamily(instanceLocal)
+	if !fok || !iok || fixedFamily != instanceFamily {
+		return false
+	}
+	// Normalize each operand with ITS active member's effective whiteSpace facet
+	// before comparing, so an instance " 1 " (whose member collapses the spaces)
+	// or " a   b " (whose member collapses to "a b") is reduced to its value-space
+	// form first.
+	ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
+	nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
+	if !fComparable {
+		// String-family: the value space equals the whitespace-processed lexical
+		// space, so compare the normalized lexical forms directly.
+		return ni == nf
+	}
+	cmp, ok := value.Compare(ni, nf, fixedFamily)
+	return ok && cmp == 0
+}
+
+// primitiveValueSpaceFamily maps a builtin's local name to the local name of the
+// PRIMITIVE built-in whose value space it shares, for cross-member fixed-value
+// comparison (XSD 1.1 §2.3: restrictions do not create new values). It returns
+// (family, comparable, true) for every type with a recognized primitive ancestor,
+// where:
+//
+//   - family is a stable key identifying the shared primitive value space. All
+//     xs:decimal-derived integer types collapse to "decimal"; all xs:string-derived
+//     types (string, normalizedString, token, language, Name, NCName, NMTOKEN,
+//     IDREF, ENTITY, …) and anyURI collapse to "string"; every other primitive
+//     (boolean, float, double, each date/time-family type, hexBinary,
+//     base64Binary) is its own family.
+//   - comparable is true when value.Compare implements value-space equality for
+//     that family (the enumValueSpaceTypes allowlist); for the "string" family it
+//     is false, so callers compare whitespace-normalized lexical forms instead
+//     (the string value space equals the whitespace-processed lexical space).
+//
+// QName/NOTATION return ("", false, false): their equality is namespace-context
+// dependent, not a cross-member value/lexical comparison, so they have no shared
+// primitive family for this path.
+func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
+	switch builtinLocal {
+	case "QName", "NOTATION", "":
+		return "", false, false
+	case "decimal", "integer",
+		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
+		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort",
+		"unsignedByte", "positiveInteger":
+		return "decimal", true, true
+	case "string", "normalizedString", "token", "language",
+		"Name", "NCName", "ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES",
+		"NMTOKEN", "NMTOKENS", "anyURI":
+		// String value space equals the whitespace-processed lexical space; not
+		// value-comparable via value.Compare, so the caller compares lexically.
+		return lexicon.TypeString, false, true
+	default:
+		// Remaining comparable primitives (boolean, float, double, date/time
+		// family, binary) are gated on the same allowlist the enumeration path uses.
+		if _, ok := enumValueSpaceTypes[builtinLocal]; !ok {
+			return "", false, false
+		}
+		return builtinLocal, true, true
+	}
+}
+
+// unionActiveMember returns the active BASIC (atomic) member type for a value
+// within a union: the first member (in declaration order) the value fully
+// validates against, descending through nested unions to the basic member that
+// actually accepts the value. It reuses the validateValue path so the validity
+// criteria match the main validation engine exactly (facets, list items, nested
+// unions, and QName/NOTATION namespace resolution). Errors are discarded via a
+// suppressing validation context with a NilErrorHandler. Returns nil when no
+// member accepts the value.
+//
+// Descending into nested unions matters for cross-member value-space comparison:
+// an outer member that is itself a union must contribute its active basic member
+// (e.g. xs:integer), not the union TypeDef, so valueSpaceFamily can reduce it to
+// the comparable family (decimal) and compare it against a sibling decimal
+// member's value.
+func unionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef) *TypeDef {
+	for _, member := range members {
+		vc := &validationContext{
+			errorHandler:  helium.NilErrorHandler{},
+			suppressDepth: 1,
+		}
+		if validateValue(ctx, value, valueNS, member, "", "", 0, vc) != nil {
+			continue
+		}
+		// The member accepts the value. If it is itself a union, recurse to find
+		// the active basic member within it; the validateValue success above
+		// guarantees at least one nested member accepts the value.
+		if resolveVariety(member) == TypeVarietyUnion {
+			if basic := unionActiveMember(ctx, value, valueNS, resolveUnionMembers(member)); basic != nil {
+				return basic
+			}
+		}
+		return member
+	}
+	return nil
+}
+
+// fixedAtomicMatches compares two already whitespace-normalized atomic values in
+// the builtin type's value space. QName/NOTATION resolve each side's prefix
+// against its own in-scope namespaces and compare the resolved {URI, local}.
+// Other value-comparable builtins use value.Compare (covering numeric, boolean,
+// date/time, and binary value spaces); everything else falls back to exact
+// equality of the normalized lexical forms.
+func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedNS map[string]string) bool {
+	if builtinLocal == "QName" || builtinLocal == "NOTATION" {
+		iqn, ierr := resolveLexicalQName(instance, instanceNS)
+		fqn, ferr := resolveLexicalQName(fixed, fixedNS)
+		// A prefix that cannot be resolved makes the QName/NOTATION itself invalid;
+		// the fixed comparison must NOT fall back to raw lexical equality (which
+		// would wrongly accept a fixed "s:name" against an instance "s:name" that
+		// has no binding for s). Reject instead.
+		if ierr != nil || ferr != nil {
+			return false
+		}
+		return iqn == fqn
+	}
+	if _, ok := enumValueSpaceTypes[builtinLocal]; ok {
+		if (builtinLocal == "float" || builtinLocal == "double") &&
+			value.IsFloatNaN(instance) && value.IsFloatNaN(fixed) {
+			return true
+		}
+		if cmp, ok := value.Compare(instance, fixed, builtinLocal); ok {
+			return cmp == 0
+		}
+	}
+	return instance == fixed
+}
 
 type validationContext struct {
 	schema        *Schema
@@ -289,9 +567,21 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	}
 
 	// Fixed value mismatch check (only when element has actual content).
+	// Compare in the *declared* type's value space (applying its whitespace
+	// facet) rather than an unconditional TrimSpace, so value-equal lexical
+	// variants are accepted and significant whitespace stays significant. The
+	// fixed-value constraint is defined by the element declaration's own type,
+	// not by an xsi:type actual type that may derive a different whiteSpace
+	// facet — content is still validated against the actual td below, but the
+	// fixed comparison must use edecl.Type so e.g. a declared xs:string
+	// fixed="abc " keeps its trailing space even when xsi:type collapses.
 	if !isEmpty && edecl != nil && edecl.Fixed != nil {
-		if strings.TrimSpace(value) != strings.TrimSpace(*edecl.Fixed) {
-			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", strings.TrimSpace(value), *edecl.Fixed)
+		fixedType := edecl.Type
+		if fixedType == nil {
+			fixedType = td
+		}
+		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS) {
+			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
 		}
@@ -420,7 +710,11 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
 		present[aqn] = struct{}{}
 		if au, ok := allowed[aqn]; ok {
-			if au.Fixed != nil && a.Value() != *au.Fixed {
+			// Resolve the declared type up front so the fixed-value check can
+			// compare in the type's value space (applying its whitespace
+			// facet) rather than by raw string equality.
+			attrTD, tdOK := vc.attrUseType(au)
+			if au.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS) {
 				ad := attrDisplayName(a)
 				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
 				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -428,7 +722,6 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			}
 			// Validate the attribute value against its declared type
 			// (inline anonymous simpleType takes precedence over a named type).
-			attrTD, tdOK := vc.attrUseType(au)
 			if tdOK && attrTD.ContentType == ContentTypeSimple {
 				if err := attrTD.Validate(ctx, a.Value(), collectNSContext(elem)); err != nil {
 					ad := attrDisplayName(a)
@@ -537,6 +830,17 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// TypeDef.Validate handles facets, lists, and unions, not just the builtin
 	// base lexical space.
 	attrTD, ok := vc.attrUseType(globalAttr)
+
+	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
+	// global fixed attribute must still satisfy its fixed value, in the declared
+	// type's value space (mirroring the non-wildcard attribute path).
+	if globalAttr.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS) {
+		ad := attrDisplayName(a)
+		msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *globalAttr.Fixed)
+		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+		return fmt.Errorf("fixed value constraint")
+	}
+
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
 		if err := attrTD.Validate(ctx, value, collectNSContext(elem)); err != nil {

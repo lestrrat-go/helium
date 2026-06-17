@@ -30,6 +30,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				}
 				if edecl.Fixed == nil {
 					edecl.Fixed = ge.Fixed
+					edecl.FixedNS = ge.FixedNS
 				}
 				// Copy the referenced declaration's substitution-group
 				// affiliation. A no-type substitution-group member leaves
@@ -195,6 +196,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 		if au.Fixed == nil {
 			au.Fixed = ga.Fixed
+			au.FixedNS = ga.FixedNS
 		}
 		if au.TypeName == (QName{}) {
 			au.TypeName = ga.TypeName

@@ -40,6 +40,60 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
      - Simple: no child elements, validate text vs type facets
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
 
+Fixed value constraints (element content and attribute values) are compared in
+the declared simple type's value space via `fixedValueMatches`. Both the fixed
+and instance values are first whitespace-normalized using the type's *effective*
+whiteSpace facet (`resolveWhiteSpace` walks the derivation chain, so a facet
+derived on a restriction — e.g. `xs:string` restricted with
+`whiteSpace="collapse"` — is honoured, not just the builtin default). Then the
+comparison dispatches on variety (`resolveVariety`): list types split into items
+and recurse each item through the variety-aware comparator on the actual item
+type, so an `xs:integer` list fixed `1 2` accepts `01 +2` **and** a list whose
+item type is a union dispatches each item to the union's member value spaces;
+union types accept when any member's value space matches; atomic types compare
+via `value.Compare` for the value-comparable builtins in `enumValueSpaceTypes`
+(numeric, boolean, date/time, and binary — so `xs:hexBinary` fixed `0A` accepts
+`0a` and integer fixed `1` accepts `+1`/`01`), falling back to normalized-lexical
+equality for string-family/anyURI (so a numeric-looking `xs:string` fixed `5`
+does not accept `5.0`). `xs:QName`/`xs:NOTATION` fixed values are resolved in
+namespace context: each lexical QName is resolved against its own in-scope
+namespaces — the instance side via `collectNSContext(elem)`, the schema fixed
+side via the `FixedNS` map captured on the `ElementDecl`/`AttrUse` at read time
+(`collectNSContext` over the declaring schema element) — and the resolved
+`{namespace URI, local name}` pairs are compared, so two different prefixes bound
+to the same URI are equal while a same-prefix different-URI binding is not. An
+unresolved prefix on either side is a *rejection*, not a lexical fallback (a
+QName/NOTATION whose prefix cannot be resolved is itself invalid, so the fixed
+comparison must not pass on raw lexical match). `fixedValueMatches`
+takes the instance and fixed namespace contexts as parameters. When `td` is nil it
+falls back to raw string equality. The element fixed-value comparison uses the
+element *declaration's* type (`edecl.Type`), not an `xsi:type` actual type, so a
+declared `xs:string` (whiteSpace="preserve") fixed `abc ` keeps its trailing space
+even when the instance's `xsi:type` collapses whitespace — element content is still
+validated against the actual type. In `fixedUnionMatches`, when the fixed and
+instance values resolve to *different* active members, they are value-equal iff
+their members reduce to the same *primitive* value-space family
+(`primitiveValueSpaceFamily`, XSD 1.1 §2.3 — restrictions create no new values):
+all integer types → `decimal`; all xs:string-derived types
+(string/normalizedString/token/language/Name/NCName/NMTOKEN/IDREF/ENTITY/…) and
+anyURI → `string`; each remaining comparable primitive (boolean, float, double,
+date/time family, hexBinary, base64Binary) is its own family; QName/NOTATION have
+no shared family (namespace-context dependent). Each operand is first
+whitespace-normalized with *its* active member's effective whiteSpace facet; the
+`decimal`/comparable families then compare via `value.Compare` (so union fixed
+`1.0` accepts both `1` and ` 1 `), while the `string` family compares the
+normalized lexical forms (so fixed `a b` active in one xs:string restriction
+accepts instance ` a   b ` active in another xs:string restriction with
+whiteSpace="collapse", both denoting `a b`). This includes string-derived members
+— it is **not** gated on the `enumValueSpaceTypes` allowlist. `unionActiveMember` returns the active *basic*
+(atomic) member, descending through nested unions to the basic member that
+actually accepts the value, so an outer union `memberTypes="inner xs:decimal"`
+(with `inner` a union `xs:integer xs:boolean`) compares instance `1` (active
+basic member xs:integer) against fixed `1.0` (xs:decimal) in the shared decimal
+value space rather than rejecting. Global attributes matched through an `xs:anyAttribute`
+wildcard (`validateWildcardAttr`, processContents strict/lax) also enforce the
+global attribute's `Fixed`/`FixedNS` via `fixedValueMatches`.
+
 Enumeration facets are compared in value space, not raw lexical text. A value is
 a member if it lexically equals a member OR value-compares equal to one (e.g.
 decimal `5.0`≡`5`, boolean `1`≡`true`, float `1.50`≡`1.5`, equal dateTimes in
