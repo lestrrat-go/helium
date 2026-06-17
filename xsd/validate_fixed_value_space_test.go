@@ -254,9 +254,14 @@ func TestFixedValueSpaceQName(t *testing.T) {
 }
 
 // TestFixedValueSpaceListOfUnion verifies that a fixed value of an xs:list whose
-// itemType is a union dispatches each item through the union's member value
-// spaces, so a value-equal item under any member type (e.g. integer "01" == "1")
-// satisfies the constraint while a value-distinct item is rejected.
+// itemType is a union dispatches each item through the union's *ordered* active
+// member. For memberTypes="xs:integer xs:boolean", a value such as "1" validates
+// against the first member (xs:integer) and so has active member xs:integer; a
+// value such as "true" fails xs:integer and has active member xs:boolean. Each
+// item compares only when the fixed and instance items resolve to the SAME
+// active member, in that member's value space — so a value-equal item under that
+// member (integer "01" == "1") satisfies the constraint, while an item whose
+// instance and fixed values resolve to different members does not.
 func TestFixedValueSpaceListOfUnion(t *testing.T) {
 	const typeDefs = `  <xs:simpleType name="intOrBool">
     <xs:union memberTypes="xs:integer xs:boolean"/>
@@ -265,15 +270,31 @@ func TestFixedValueSpaceListOfUnion(t *testing.T) {
     <xs:list itemType="intOrBool"/>
   </xs:simpleType>`
 
-	t.Run("element/value-equal items", func(t *testing.T) {
+	t.Run("element/value-equal items same active member", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 ` + typeDefs + `
   <xs:element name="root" type="unionList" fixed="1 true"/>
 </xs:schema>`
-		// "01" is integer-equal to "1"; "1" is boolean-equal to "true".
-		instanceXML := "<root>01 1</root>"
+		// Item 1: fixed "1" and instance "01" both have active member xs:integer
+		// (integer-equal). Item 2: fixed "true" and instance "true" both have
+		// active member xs:boolean (string-equal "true").
+		instanceXML := "<root>01 true</root>"
 		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/cross-member item rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="unionList" fixed="1 true"/>
+</xs:schema>`
+		// Item 2: fixed "true" has active member xs:boolean, instance "1" has
+		// active member xs:integer (first member accepts "1"). Different active
+		// members -> the item is not equal even though "1" is boolean-equal to
+		// "true". The whole list fixed-value constraint is rejected.
+		instanceXML := "<root>01 1</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
 	})
 
 	t.Run("element/item mismatch", func(t *testing.T) {
@@ -286,7 +307,21 @@ func TestFixedValueSpaceListOfUnion(t *testing.T) {
 		runFixedValueCase(t, schemaXML, instanceXML, true)
 	})
 
-	t.Run("attribute/value-equal items", func(t *testing.T) {
+	t.Run("attribute/value-equal items same active member", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="unionList" fixed="1 true"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a="01 true"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("attribute/cross-member item rejected", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 ` + typeDefs + `
@@ -297,27 +332,31 @@ func TestFixedValueSpaceListOfUnion(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root a="01 1"/>`
-		runFixedValueCase(t, schemaXML, instanceXML, false)
+		runFixedValueCase(t, schemaXML, instanceXML, true)
 	})
 }
 
-// TestFixedValueSpaceUnion verifies that a fixed value of an xs:union dispatches
-// the raw (un-normalized) instance and fixed values to each member, letting each
-// member apply its *own* whiteSpace facet. A union containing xs:string must
-// preserve significant trailing whitespace under the string member: fixed="abc "
-// must NOT accept instance "abc" even though a sibling xs:integer member would
-// collapse whitespace. A value-equal instance under any member (e.g. the integer
-// member) must still be accepted.
+// TestFixedValueSpaceUnion verifies that a fixed value of an xs:union is compared
+// using XSD's *ordered* active-member semantics, not "any member that makes the
+// lexicals compare equal". Each value's active member is the first member type
+// (in declaration order) it fully validates against; the fixed and instance
+// values compare only when they share the same active member, in that member's
+// value space.
+//
+// For memberTypes="xs:string xs:integer" the first member xs:string accepts any
+// text, so EVERY value's active member is xs:string and the comparison is always
+// string-based: fixed="1" does NOT accept instance "01" (string-distinct) even
+// though a hypothetical integer member would treat them as equal.
 func TestFixedValueSpaceUnion(t *testing.T) {
 	const typeDefs = `  <xs:simpleType name="strOrInt">
     <xs:union memberTypes="xs:string xs:integer"/>
   </xs:simpleType>`
 
-	t.Run("element/string member trailing space significant", func(t *testing.T) {
+	t.Run("element/string active member trailing space significant", func(t *testing.T) {
 		t.Parallel()
-		// fixed has a trailing space; the xs:string member preserves it, so the
-		// instance "abc" (no trailing space) is value-distinct. The xs:integer
-		// member rejects the non-integer text. The constraint must be rejected.
+		// fixed has a trailing space; the active member is xs:string (the first
+		// member), whiteSpace="preserve", so the instance "abc" (no trailing space)
+		// is value-distinct. The constraint must be rejected.
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 ` + typeDefs + `
   <xs:element name="root" type="strOrInt" fixed="` + abcLiteral + ` "/>
@@ -326,18 +365,31 @@ func TestFixedValueSpaceUnion(t *testing.T) {
 		runFixedValueCase(t, schemaXML, instanceXML, true)
 	})
 
-	t.Run("element/integer member value-equal", func(t *testing.T) {
+	t.Run("element/string active member rejects integer-equal lexicals", func(t *testing.T) {
 		t.Parallel()
-		// The xs:integer member treats "01" as value-equal to "1".
+		// Both "1" and "01" have active member xs:string (first member accepts any
+		// text), so they compare as strings and are NOT equal — the earlier
+		// "any member that makes them equal" behavior wrongly accepted this.
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 ` + typeDefs + `
   <xs:element name="root" type="strOrInt" fixed="1"/>
 </xs:schema>`
 		instanceXML := "<root>01</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("element/string active member exact lexical match", func(t *testing.T) {
+		t.Parallel()
+		// Same active member (xs:string) and string-equal values are accepted.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="strOrInt" fixed="1"/>
+</xs:schema>`
+		instanceXML := "<root>1</root>"
 		runFixedValueCase(t, schemaXML, instanceXML, false)
 	})
 
-	t.Run("attribute/string member trailing space significant", func(t *testing.T) {
+	t.Run("attribute/string active member trailing space significant", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 ` + typeDefs + `
@@ -351,7 +403,7 @@ func TestFixedValueSpaceUnion(t *testing.T) {
 		runFixedValueCase(t, schemaXML, instanceXML, true)
 	})
 
-	t.Run("attribute/integer member value-equal", func(t *testing.T) {
+	t.Run("attribute/string active member rejects integer-equal lexicals", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 ` + typeDefs + `
@@ -362,6 +414,60 @@ func TestFixedValueSpaceUnion(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root a="01"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+}
+
+// TestFixedValueSpaceUnionOrdered exercises the ordered active-member rules
+// directly: a same-active-member value-equal pair is accepted, a cross-member
+// pair is rejected, and member declaration ORDER changes the active member (so
+// the same lexicals accept or reject depending on which member comes first).
+func TestFixedValueSpaceUnionOrdered(t *testing.T) {
+	t.Run("integer-first same active member value-equal", func(t *testing.T) {
+		t.Parallel()
+		// memberTypes="xs:integer xs:boolean": "1" and "01" both validate against
+		// xs:integer first, so both have active member xs:integer and compare in
+		// integer value space -> equal.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrBool">
+    <xs:union memberTypes="xs:integer xs:boolean"/>
+  </xs:simpleType>
+  <xs:element name="root" type="intOrBool" fixed="1"/>
+</xs:schema>`
+		instanceXML := "<root>01</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("cross-member rejected", func(t *testing.T) {
+		t.Parallel()
+		// memberTypes="xs:integer xs:boolean": fixed "1" has active member
+		// xs:integer; instance "true" has active member xs:boolean. Different
+		// active members -> not equal.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrBool">
+    <xs:union memberTypes="xs:integer xs:boolean"/>
+  </xs:simpleType>
+  <xs:element name="root" type="intOrBool" fixed="1"/>
+</xs:schema>`
+		instanceXML := "<root>true</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("member order changes active member", func(t *testing.T) {
+		t.Parallel()
+		// memberTypes="xs:boolean xs:integer": "1" validates against xs:boolean
+		// first (boolean accepts "1"), so its active member is xs:boolean — not
+		// xs:integer. fixed "1" and instance "true" both resolve to xs:boolean
+		// (boolean value-equal "1" == "true"), so the constraint is satisfied.
+		// With the reverse order (integer first) this same pair is rejected (see
+		// the cross-member case above) — demonstrating order matters.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="boolOrInt">
+    <xs:union memberTypes="xs:boolean xs:integer"/>
+  </xs:simpleType>
+  <xs:element name="root" type="boolOrInt" fixed="1"/>
+</xs:schema>`
+		instanceXML := "<root>true</root>"
 		runFixedValueCase(t, schemaXML, instanceXML, false)
 	})
 }

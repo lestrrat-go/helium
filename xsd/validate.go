@@ -16,9 +16,10 @@ import (
 //
 //   - The comparison branches on the type's variety *before* applying any
 //     whiteSpace facet. A union has no whiteSpace facet of its own, so its raw
-//     values are forwarded and each member normalizes with its own facet (see
-//     fixedUnionMatches); this preserves significant whitespace for an xs:string
-//     member that a "collapse" at the union level would have stripped.
+//     values are forwarded to fixedUnionMatches, which resolves each value's
+//     active member (ordered union semantics) and compares in that member's
+//     value space — preserving significant whitespace for an xs:string member
+//     that a "collapse" at the union level would have stripped.
 //   - For atomic and list types, both values are first whitespace-normalized
 //     using the type's *effective* whiteSpace facet, resolved up the derivation
 //     chain via resolveWhiteSpace. This honours a facet derived on a restriction
@@ -40,7 +41,7 @@ import (
 // value and the schema fixed value respectively; they are only consulted for
 // QName/NOTATION types. When td is nil the comparison falls back to raw string
 // equality.
-func fixedValueMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
+func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
 	if td == nil {
 		return instance == fixed
 	}
@@ -53,7 +54,7 @@ func fixedValueMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS 
 	// each member normalize with its own facet. List and atomic types keep their
 	// type-level normalization.
 	if resolveVariety(td) == TypeVarietyUnion {
-		return fixedUnionMatches(instance, fixed, td, instanceNS, fixedNS)
+		return fixedUnionMatches(ctx, instance, fixed, td, instanceNS, fixedNS)
 	}
 
 	ws := resolveWhiteSpace(td)
@@ -61,7 +62,7 @@ func fixedValueMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS 
 	nf := normalizeWhiteSpace(fixed, ws)
 
 	if resolveVariety(td) == TypeVarietyList {
-		return fixedListMatches(ni, nf, td, instanceNS, fixedNS)
+		return fixedListMatches(ctx, ni, nf, td, instanceNS, fixedNS)
 	}
 	return fixedAtomicMatches(ni, nf, builtinBaseLocal(td), instanceNS, fixedNS)
 }
@@ -71,7 +72,7 @@ func fixedValueMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS 
 // variety-aware comparator on the actual item type, so a list whose item type is
 // a union (or itself a list) is compared in the correct value space rather than
 // raw lexical text.
-func fixedListMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
+func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
 	ii := strings.Fields(instance)
 	fi := strings.Fields(fixed)
 	if len(ii) != len(fi) {
@@ -79,45 +80,78 @@ func fixedListMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS m
 	}
 	itemType := resolveItemType(td)
 	for i := range ii {
-		if !fixedValueMatches(ii[i], fi[i], itemType, instanceNS, fixedNS) {
+		if !fixedValueMatches(ctx, ii[i], fi[i], itemType, instanceNS, fixedNS) {
 			return false
 		}
 	}
 	return true
 }
 
-// fixedUnionMatches accepts the instance when it is value-equal to the fixed
-// value under any member type's value space. It receives the *raw* (un-
-// normalized) instance and fixed values: a union has no whiteSpace facet of its
-// own to apply, so each member normalizes both values with its *own* whiteSpace
-// facet before comparison. This preserves significant whitespace for an
-// xs:string member (whiteSpace="preserve") while still collapsing for members
-// like xs:integer (whiteSpace="collapse").
-func fixedUnionMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
-	for _, member := range resolveUnionMembers(td) {
-		// A member can only mediate the comparison if *both* the instance and the
-		// fixed value are valid instances of that member type. Without this guard,
-		// the atomic fallback to lexical equality (used when value.Compare can't
-		// parse a value) would let a non-conforming text match through a value-
-		// space member — e.g. "abc" "matching" via an xs:integer member because
-		// the parse fails and the lexical strings happen to be equal. Members that
-		// are themselves a list or union recurse through fixedValueMatches, which
-		// applies their own validity semantics. Atomic members are validity-checked
-		// here against the member's builtin lexical space.
-		ws := resolveWhiteSpace(member)
-		ni := normalizeWhiteSpace(instance, ws)
-		nf := normalizeWhiteSpace(fixed, ws)
-		if resolveVariety(member) == TypeVarietyAtomic {
-			builtin := builtinBaseLocal(member)
-			if value.ValidateBuiltin(ni, builtin) != nil || value.ValidateBuiltin(nf, builtin) != nil {
-				continue
-			}
+// fixedUnionMatches compares an instance value against a fixed value whose
+// declared type is a union, using XSD's *ordered* union semantics. Union
+// membership is not "any member that makes the two lexicals compare equal":
+// each lexical value has a single ACTIVE member — the first member type, in
+// declaration order, that the value fully validates against (facets, lists, and
+// nested unions all enforced). The fixed value and the instance value each
+// resolve their own active member (the fixed value uses the schema's in-scope
+// namespaces, the instance the document's). The comparison is then:
+//
+//   - If either value has no valid active member, it is not a valid union value,
+//     so for fixed-comparison purposes it is treated as not-equal.
+//   - If the two active members differ, the values live in different value
+//     spaces and are not equal — e.g. memberTypes="xs:integer xs:boolean" with
+//     fixed="1" (active member xs:integer) and instance="true" (active member
+//     xs:boolean) is a mismatch even though both are valid union values.
+//   - If the active member is the same, the two values are compared in *that*
+//     member's value space by recursing through fixedValueMatches with the
+//     member type (which applies the member's own whiteSpace facet). Thus
+//     memberTypes="xs:string xs:integer" with fixed="1" resolves both sides to
+//     the xs:string member (the first member, which accepts any text), so "1"
+//     and "01" compare as strings and do NOT match.
+//
+// The active member is resolved with unionActiveMember, which reuses the same
+// per-member validateValue path the normal (non-fixed) validation uses, so the
+// fixed-comparison and ordinary-validation notions of "active member" stay
+// consistent.
+func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
+	members := resolveUnionMembers(td)
+
+	fixedMember := unionActiveMember(ctx, fixed, fixedNS, members)
+	if fixedMember == nil {
+		return false
+	}
+	instanceMember := unionActiveMember(ctx, instance, instanceNS, members)
+	if instanceMember == nil {
+		return false
+	}
+	if fixedMember != instanceMember {
+		return false
+	}
+
+	// Same active member: compare in that member's value space. A union has no
+	// whiteSpace facet of its own, so the raw values are forwarded and the member
+	// normalizes both with its own facet inside fixedValueMatches.
+	return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS)
+}
+
+// unionActiveMember returns the active basic member type for a value within a
+// union: the first member (in declaration order) the value fully validates
+// against. It reuses the validateValue path so the validity criteria match the
+// main validation engine exactly (facets, list items, nested unions, and
+// QName/NOTATION namespace resolution). Errors are discarded via a suppressing
+// validation context with a NilErrorHandler. Returns nil when no member accepts
+// the value.
+func unionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef) *TypeDef {
+	for _, member := range members {
+		vc := &validationContext{
+			errorHandler:  helium.NilErrorHandler{},
+			suppressDepth: 1,
 		}
-		if fixedValueMatches(ni, nf, member, instanceNS, fixedNS) {
-			return true
+		if validateValue(ctx, value, valueNS, member, "", "", 0, vc) == nil {
+			return member
 		}
 	}
-	return false
+	return nil
 }
 
 // fixedAtomicMatches compares two already whitespace-normalized atomic values in
@@ -432,7 +466,7 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// facet) rather than an unconditional TrimSpace, so value-equal lexical
 	// variants are accepted and significant whitespace stays significant.
 	if !isEmpty && edecl != nil && edecl.Fixed != nil {
-		if !fixedValueMatches(value, *edecl.Fixed, td, collectNSContext(elem), edecl.FixedNS) {
+		if !fixedValueMatches(ctx, value, *edecl.Fixed, td, collectNSContext(elem), edecl.FixedNS) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
@@ -566,7 +600,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// compare in the type's value space (applying its whitespace
 			// facet) rather than by raw string equality.
 			attrTD, tdOK := vc.attrUseType(au)
-			if au.Fixed != nil && !fixedValueMatches(a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS) {
+			if au.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS) {
 				ad := attrDisplayName(a)
 				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
 				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
