@@ -56,12 +56,20 @@ func TestIncludeAbsoluteURIHrefPassedThrough(t *testing.T) {
 	cases := []struct {
 		name string
 		decl string // include or import
+		base string // compiler base URI
 		href string
 	}{
-		{"include urn", "include", "urn:shared"},
-		{"import urn", "import", "urn:shared"},
-		{"include file scheme single slash", "include", "file:/modules/child.xsl"},
-		{"import data-ish scheme", "import", "mem:/modules/child.xsl"},
+		{"include urn", "include", "/styles/main.xsl", "urn:shared"},
+		{"import urn", "import", "/styles/main.xsl", "urn:shared"},
+		{"include file scheme single slash", "include", "/styles/main.xsl", "file:/modules/child.xsl"},
+		{"import data scheme", "import", "/styles/main.xsl", "data:application/xslt+xml,child"},
+		{"include http scheme", "include", "/styles/main.xsl", "http://example.com/modules/child.xsl"},
+		// Windows drive-letter paths are filesystem paths, not URIs. With a URI
+		// base they used to fall through to RFC 3986 resolution and be
+		// lowercased / dot-segment-mangled; they must reach the resolver
+		// verbatim. A URI base is what triggers the corruption, so use one here.
+		{"include windows drive forward slash", "include", "mem:/styles/main.xsl", "C:/modules/child.xsl"},
+		{"import windows drive back slash", "import", "mem:/styles/main.xsl", `C:\modules\child.xsl`},
 	}
 
 	for _, tc := range cases {
@@ -79,10 +87,10 @@ func TestIncludeAbsoluteURIHrefPassedThrough(t *testing.T) {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
 			require.NoError(t, err)
 
-			// A non-empty base URI is what triggered the corruption: the
-			// absolute-URI href used to be filepath.Join'ed against it.
+			// A non-empty base is what triggered the corruption: the
+			// absolute href used to be joined/resolved against it.
 			ss, err := xslt3.NewCompiler().
-				BaseURI("/styles/main.xsl").
+				BaseURI(tc.base).
 				URIResolver(resolver).
 				Compile(t.Context(), doc)
 			require.NoError(t, err)

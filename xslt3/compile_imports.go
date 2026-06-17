@@ -69,6 +69,15 @@ func resolveModuleURI(href, baseURI string) (string, error) {
 	if href == "" || baseURI == "" {
 		return href, nil
 	}
+	// A Windows drive-letter href ("C:/..." or "C:\\...") is a filesystem path,
+	// not a URI: its single-letter "scheme" is rejected by xsd.URIScheme, so
+	// without this branch it would fall through to ResolveSchemaURI and be
+	// lowercased / dot-segment-mangled by RFC 3986 resolution against a URI
+	// base. Address its own location verbatim. This must run BEFORE the URI
+	// branch below.
+	if isWindowsDrivePath(href) {
+		return href, nil
+	}
 	// Absolute-URI href, or any href against a URI base: defer to the shared
 	// canonical resolver (RFC 3986 + OmitHost preservation).
 	if xsd.URIScheme(href) != "" || xsd.URIScheme(baseURI) != "" {
@@ -79,6 +88,21 @@ func resolveModuleURI(href, baseURI string) (string, error) {
 		return href, nil
 	}
 	return filepath.Join(filepath.Dir(baseURI), href), nil
+}
+
+// isWindowsDrivePath reports whether s begins with a Windows drive-letter prefix
+// ("C:/" or "C:\\"). Such paths are local filesystem paths, not URI references:
+// their single-letter "scheme" is deliberately not recognized by xsd.URIScheme,
+// so they must be handled as filesystem paths before any URI resolution.
+func isWindowsDrivePath(s string) bool {
+	if len(s) < 3 {
+		return false
+	}
+	c := s[0]
+	if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+		return false
+	}
+	return s[1] == ':' && (s[2] == '/' || s[2] == '\\')
 }
 
 // collectIncludeImports is the first phase of two-phase include processing.
