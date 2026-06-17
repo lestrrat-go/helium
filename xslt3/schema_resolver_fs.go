@@ -62,18 +62,29 @@ func uriScheme(s string) string {
 
 // resolveSchemaURI resolves a schema-location reference against a base URI.
 //
-// An absolute-URI ref (it has a scheme — with or without a "//" authority, e.g.
-// "https://other/x.xsd", "mem:/schemas/s.xsd", "urn:schemas:s", "file:/tmp/s")
-// addresses its own location and is returned UNCHANGED. It must never be
-// filepath.Join'ed onto a local base — doing so would produce a bogus path like
-// "/work/mem:/schemas/s.xsd" and the resolver would be asked for the wrong URI.
+// The function branches on the BASE TYPE first, then handles the ref within each
+// branch. This ordering is deliberate: earlier revisions interleaved filepath
+// and URI checks and repeatedly accumulated precedence bugs (the worst being a
+// root-relative "/schemas/s.xsd" ref against a URI base wrongly returned
+// verbatim instead of being resolved against the base authority). Branching on
+// the base type makes the invariant explicit:
 //
-// When the base is an absolute URL (has a scheme), a relative ref is resolved
-// per RFC 3986 via net/url ResolveReference, so the result preserves the
-// authority and applies "../"/subdir semantics correctly — and crucially is NOT
-// collapsed by filepath. Otherwise (a local filesystem base, or an absolute
-// local path ref), the historical filepath-based join is used so local schema
-// resolution and the default-deny behavior are unchanged.
+//   - An absolute-URI ref (it has its own scheme — with or without a "//"
+//     authority, e.g. "https://other/x.xsd", "mem:/schemas/s.xsd",
+//     "urn:schemas:s", "file:/tmp/s") addresses its own location and is returned
+//     UNCHANGED, regardless of base. It must never be filepath.Join'ed onto a
+//     local base — that would produce a bogus path like "/work/mem:/schemas/s".
+//
+//   - URI base (the base has a scheme): EVERY remaining ref — relative
+//     "part.xsd", subdir "sub/part.xsd", parent "../o/part.xsd", or
+//     root-relative "/schemas/s.xsd" — is resolved per RFC 3986 via net/url
+//     ResolveReference. filepath is NEVER used for a URI base, so the result
+//     preserves scheme+authority and applies dot-segment/root-relative semantics
+//     correctly without filepath collapsing.
+//
+//   - Local filesystem base: the historical filepath behavior is kept. An
+//     absolute local path ref is returned as-is; otherwise it is joined onto the
+//     base directory.
 //
 // Absolute-URI detection matches the xsd package's uriScheme semantics
 // (url.Parse + multi-character scheme), keeping the two layers consistent.
@@ -81,26 +92,31 @@ func resolveSchemaURI(ref, baseURI string) string {
 	if ref == "" || baseURI == "" {
 		return ref
 	}
-	// Absolute-URI ref (any scheme, // or not): pass through verbatim.
+
+	// 1. Absolute-URI ref (any scheme, "//" or not): always used as-is.
 	if uriScheme(ref) != "" {
 		return ref
 	}
+
+	// 2. URI base: resolve every remaining ref form via RFC 3986. Never touch
+	//    filepath here — a root-relative "/schemas/s.xsd" must keep the base's
+	//    scheme+authority and replace the path.
+	if uriScheme(baseURI) != "" {
+		base, baseErr := url.Parse(baseURI)
+		refURL, refErr := url.Parse(ref)
+		if baseErr == nil && refErr == nil {
+			return base.ResolveReference(refURL).String()
+		}
+		// Unparseable URI base/ref: fall back to the local-base join below
+		// rather than silently dropping the ref.
+		return filepath.Join(filepath.Dir(baseURI), ref)
+	}
+
+	// 3. Local filesystem base: keep historical filepath semantics.
 	if filepath.IsAbs(ref) {
 		return ref
 	}
-	if uriScheme(baseURI) == "" {
-		// Local filesystem base: keep the historical filepath join.
-		return filepath.Join(filepath.Dir(baseURI), ref)
-	}
-	base, err := url.Parse(baseURI)
-	if err != nil {
-		return filepath.Join(filepath.Dir(baseURI), ref)
-	}
-	refURL, err := url.Parse(ref)
-	if err != nil {
-		return filepath.Join(filepath.Dir(baseURI), ref)
-	}
-	return base.ResolveReference(refURL).String()
+	return filepath.Join(filepath.Dir(baseURI), ref)
 }
 
 // schemaCompileBaseDir maps a base URI/path to the value passed to

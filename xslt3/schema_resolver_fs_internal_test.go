@@ -24,6 +24,11 @@ func TestResolveSchemaURI(t *testing.T) {
 		{"http sibling", "https://example.com/s/main.xsd", part, "https://example.com/s/part.xsd"},
 		{"http subdir", "https://example.com/s/main.xsd", "sub/part.xsd", "https://example.com/s/sub/part.xsd"},
 		{"http parent", "https://example.com/s/sub/main.xsd", "../part.xsd", "https://example.com/s/part.xsd"},
+		// Root-relative ref against a URI base must keep the base
+		// scheme+authority and replace the path — NOT be returned verbatim as a
+		// local-looking "/schemas/s.xsd".
+		{"http root-relative", "https://example.com/style/main.xsl", "/schemas/s.xsd", "https://example.com/schemas/s.xsd"},
+		{"file root-relative", "file:///tmp/style/main.xsl", "/schemas/s.xsd", "file:///schemas/s.xsd"},
 		{"file sibling", "file:///tmp/s/main.xsd", part, "file:///tmp/s/part.xsd"},
 		{"file parent", "file:///tmp/s/sub/main.xsd", "../part.xsd", "file:///tmp/s/part.xsd"},
 		{"absolute ref unchanged", "file:///tmp/s/main.xsd", "https://other/x.xsd", "https://other/x.xsd"},
