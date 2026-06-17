@@ -850,6 +850,18 @@ func (p *parser) htmlStartCharData() {
 	p.htmlCheckImplied("p")
 }
 
+// normalizeNumericCharRef applies the HTML5 numeric-character-reference fixups
+// relevant to NUL handling. A U+0000 reference is a parse error that maps to the
+// replacement character U+FFFD rather than being dropped. Out-of-range and
+// surrogate code points likewise map to U+FFFD instead of producing an invalid
+// rune.
+func normalizeNumericCharRef(cp int) rune {
+	if cp == 0 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF) {
+		return '�'
+	}
+	return rune(cp)
+}
+
 // parseCharRef handles entity references (&name; or &#num; or &#xhex;).
 // Emits the resolved value as a Characters SAX event (entity splitting behavior).
 func (p *parser) parseCharRef() {
@@ -861,26 +873,33 @@ func (p *parser) parseCharRef() {
 	if p.cur.Peek() == '#' {
 		_ = p.cur.Advance(1) // skip '#'
 		var codepoint int
+		var haveDigits bool
 		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 			_ = p.cur.Advance(1) // skip 'x'
 			hexStr := p.parseWhile(isHexDigit)
 			codepoint64, err := strconv.ParseInt(hexStr, 16, 32)
 			if err == nil {
 				codepoint = int(codepoint64)
+				haveDigits = true
 			}
 		} else {
 			numStr := p.parseWhile(isDigit)
 			codepoint64, err := strconv.ParseInt(numStr, 10, 32)
 			if err == nil {
 				codepoint = int(codepoint64)
+				haveDigits = true
 			}
 		}
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
 		}
-		if codepoint > 0 {
+		// Per HTML5, a U+0000 numeric character reference (&#0; / &#x0;) is a
+		// parse error that maps to U+FFFD rather than being dropped. Only emit
+		// nothing when no digits were present at all (a bare "&#" / "&#x").
+		if haveDigits {
+			cp := normalizeNumericCharRef(codepoint)
 			var buf [4]byte
-			n := utf8.EncodeRune(buf[:], rune(codepoint))
+			n := utf8.EncodeRune(buf[:], cp)
 			_ = p.emitCharacters(buf[:n])
 		}
 		return
@@ -1340,25 +1359,30 @@ func (p *parser) resolveEntityInAttr() string {
 	if p.cur.Peek() == '#' {
 		_ = p.cur.Advance(1)
 		var codepoint int
+		var haveDigits bool
 		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 			_ = p.cur.Advance(1)
 			hexStr := p.parseWhile(isHexDigit)
 			cp, err := strconv.ParseInt(hexStr, 16, 32)
 			if err == nil {
 				codepoint = int(cp)
+				haveDigits = true
 			}
 		} else {
 			numStr := p.parseWhile(isDigit)
 			cp, err := strconv.ParseInt(numStr, 10, 32)
 			if err == nil {
 				codepoint = int(cp)
+				haveDigits = true
 			}
 		}
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
 		}
-		if codepoint > 0 {
-			return string(rune(codepoint))
+		// Per HTML5, &#0; / &#x0; in an attribute value maps to U+FFFD rather
+		// than being dropped. Emit nothing only for a bare "&#" with no digits.
+		if haveDigits {
+			return string(normalizeNumericCharRef(codepoint))
 		}
 		return ""
 	}
