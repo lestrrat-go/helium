@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 var (
@@ -91,9 +93,67 @@ func (enc *Encoder) writeIndent(depth int) error {
 	return nil
 }
 
+// validateNameGrammar checks the XML grammar of a Name about to be serialized.
+// The shim writes Name.Local raw (and, when Name.Space is set, after a
+// generated "prefix:"), so an unvalidated Local would let malformed token names
+// become injected or otherwise invalid XML. This hardens the shim beyond
+// encoding/xml (which writes names raw) and keeps behavior consistent with the
+// helium writer.
+//
+// When Space is set, Local is the local part of a QName and must be a bare
+// NCName: the prefix is generated separately, so a colon in Local would emit a
+// malformed double-prefixed name. When Space is empty, Local is written
+// verbatim and may itself be a prefixed QName (e.g. "foo:bar").
+func validateNameGrammar(kind string, name Name) error {
+	if name.Space != "" {
+		if !xmlchar.IsValidNCName(name.Local) {
+			return fmt.Errorf("xml: invalid %s name %q", kind, name.Local)
+		}
+		return nil
+	}
+	if !xmlchar.IsValidQName(name.Local) {
+		return fmt.Errorf("xml: invalid %s name %q", kind, name.Local)
+	}
+	return nil
+}
+
+// validateElementName validates an element Name. In addition to grammar it
+// rejects the reserved "xmlns" QName prefix: Namespaces-in-XML forbids "xmlns"
+// as an element prefix, so a name like "xmlns:root" (with no Space, so written
+// verbatim) must not be serialized as <xmlns:root>. This mirrors the helium
+// writer. The bare name "xmlns" is a valid element name (<xmlns/> is
+// well-formed) and is allowed.
+func validateElementName(name Name) error {
+	if name.Space == "" && strings.HasPrefix(name.Local, "xmlns:") {
+		return fmt.Errorf("xml: reserved element name %q", name.Local)
+	}
+	return validateNameGrammar("element", name)
+}
+
+// validateAttributeName validates an attribute Name. Only grammar is checked:
+// unlike the helium writer, the shim accepts "xmlns"/"xmlns:foo" attribute
+// names as the encoding/xml way to declare namespaces.
+func validateAttributeName(name Name) error {
+	return validateNameGrammar("attribute", name)
+}
+
 func (enc *Encoder) writeStartElement(se StartElement) error {
 	if se.Name.Local == "" {
 		return fmt.Errorf("xml: start tag with no name")
+	}
+	// Validate the element and all attribute names up front, before any output
+	// is buffered or encoder state is mutated, so a rejected token never leaves
+	// partial markup or a corrupt tag/namespace stack behind.
+	if err := validateElementName(se.Name); err != nil {
+		return err
+	}
+	for _, attr := range se.Attr {
+		if attr.Name.Local == "" {
+			continue
+		}
+		if err := validateAttributeName(attr.Name); err != nil {
+			return err
+		}
 	}
 
 	if enc.indent != "" || enc.prefix != "" {

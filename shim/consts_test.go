@@ -19,4 +19,5 @@ const (
 	testCannotUnmarshalIface = "cannot unmarshal into interface {}"
 	testNs2                  = "ns2"
 	testTag                  = "tag"
+	testRoot                 = "root"
 )
