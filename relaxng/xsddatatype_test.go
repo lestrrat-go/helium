@@ -260,6 +260,27 @@ func TestXSDValueWhitespaceFacet(t *testing.T) {
 		})
 	})
 
+	t.Run("nbsp-not-collapsed", func(t *testing.T) {
+		// The XSD whiteSpace facet collapses ONLY the four ASCII whitespace
+		// characters (#x20, #x9, #xD, #xA). Unicode whitespace such as NBSP
+		// (U+00A0, &#160;) is NOT whitespace, so it must survive normalization and
+		// leave the value lexically invalid / non-matching.
+		t.Run("integer-rejects-nbsp", func(t *testing.T) {
+			grammar := compileXSDDataSchema(t, typeInteger)
+			require.Error(t, validateXSDInstance(t, grammar, "&#160;5"),
+				"NBSP is not XSD whitespace, so \"\\u00A05\" is not a valid integer")
+		})
+		t.Run("token-nbsp-no-match", func(t *testing.T) {
+			// <value type="token">a b</value> (ASCII space) must NOT match an
+			// instance "a&#160;b" (NBSP), because NBSP does not collapse.
+			grammar := compileXSDValueSchema(t, "token", "a b")
+			require.Error(t, validateXSDInstance(t, grammar, "a&#160;b"),
+				"token literal \"a b\" must not match NBSP-separated \"a\\u00A0b\"")
+			require.NoError(t, validateXSDInstance(t, grammar, "a  b"),
+				"token literal \"a b\" must still match ASCII-collapsible \"a  b\"")
+		})
+	})
+
 	t.Run("normalizedString-replace-match", func(t *testing.T) {
 		// normalizedString=replace: a literal with a tab and an instance with a
 		// space both normalize to "a b" and match. But two internal spaces do NOT
