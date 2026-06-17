@@ -631,6 +631,12 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 	a = promoteSchemaForCompare(a)
 	b = promoteSchemaForCompare(b)
 
+	// xs:dateTimeStamp (XSD 1.1) is a subtype of xs:dateTime and compares
+	// identically; normalize it so same-type and mixed comparisons share the
+	// xs:dateTime branch below.
+	a = normalizeDateTimeStamp(a)
+	b = normalizeDateTimeStamp(b)
+
 	// String comparison (includes string-derived types and anyURI)
 	aStr := isStringDerived(a.TypeName) || a.TypeName == TypeAnyURI
 	bStr := isStringDerived(b.TypeName) || b.TypeName == TypeAnyURI
@@ -747,6 +753,17 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 // base type for comparison purposes.
 func promoteSchemaForCompare(a AtomicValue) AtomicValue {
 	return PromoteSchemaType(a)
+}
+
+// normalizeDateTimeStamp rewrites an xs:dateTimeStamp value to xs:dateTime for
+// comparison. xs:dateTimeStamp (XSD 1.1) is a built-in subtype of xs:dateTime
+// with identical value-space ordering, so comparing it as xs:dateTime is correct
+// for both same-type and mixed dateTime/dateTimeStamp comparisons.
+func normalizeDateTimeStamp(a AtomicValue) AtomicValue {
+	if a.TypeName == TypeDateTimeStamp {
+		a.TypeName = TypeDateTime
+	}
+	return a
 }
 
 // compareAtomicCollation compares two atomic values using the given collation
