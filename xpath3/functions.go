@@ -276,54 +276,71 @@ func seqToStringErr(seq Sequence) (string, error) {
 }
 
 // coerceArgToStringRequired applies XPath 3.1 function coercion rules for xs:string params.
-// Like coerceArgToString but rejects empty sequences (for non-optional string parameters).
+// Like coerceArgToString but rejects an empty *atomized* sequence (for non-optional
+// string parameters). Cardinality is checked after atomization, so a value such as
+// an empty array — which atomizes to the empty sequence — is rejected, while
+// ([], "x") (which atomizes to the single string "x") is accepted.
 func coerceArgToStringRequired(seq Sequence) (string, error) {
-	if seqLen(seq) == 0 {
+	s, empty, err := coerceAtomizedString(seq)
+	if err != nil {
+		return "", err
+	}
+	if empty {
 		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:string, got empty sequence"}
 	}
-	return coerceArgToString(seq)
+	return s, nil
 }
 
 // coerceArgToString applies XPath 3.1 function coercion rules for xs:string? params.
 // Accepts: empty sequence → "", xs:string/xs:anyURI → as-is, xs:untypedAtomic → cast.
 // Rejects all other types with XPTY0004.
 func coerceArgToString(seq Sequence) (string, error) {
-	switch seqLen(seq) {
-	case 0:
-		return "", nil
-	case 1:
-	default:
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
+	s, _, err := coerceAtomizedString(seq)
+	return s, err
+}
+
+// coerceAtomizedString performs XPath function conversion to xs:string?: it
+// atomizes the argument FIRST (arrays flatten to their members, list-typed nodes
+// expand to their tokens), THEN checks cardinality. Atomization is streamed and
+// stops as soon as a second item appears, so a too-long sequence is rejected
+// without materializing it. Returns empty=true when the atomized sequence is
+// empty (the caller decides whether that is "" or an error).
+func coerceAtomizedString(seq Sequence) (value string, empty bool, err error) {
+	var first AtomicValue
+	var count int
+	if serr := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+		count++
+		if count == 1 {
+			first = av
+			return true, nil
+		}
+		// A second atomized item: too many for xs:string?. Stop here rather
+		// than atomizing the rest of a potentially huge sequence.
+		return false, nil
+	}); serr != nil {
+		return "", false, serr
 	}
-	// Use AtomizeSequence (not AtomizeItem) to properly expand list types.
-	// For nodes with list type annotations, atomization produces multiple
-	// items which must raise XPTY0004 for xs:string? parameters.
-	atoms, err := AtomizeSequence(seq)
-	if err != nil {
-		return "", err
+	if count == 0 {
+		return "", true, nil
 	}
-	if len(atoms) == 0 {
-		return "", nil
+	if count > 1 {
+		return "", false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
-	if len(atoms) > 1 {
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
-	}
-	a := atoms[0]
-	switch a.TypeName {
+	switch first.TypeName {
 	case TypeString, TypeAnyURI, TypeUntypedAtomic,
 		TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
 		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS:
-		s, ok := a.Value.(string)
+		s, ok := first.Value.(string)
 		if !ok {
-			return "", fmt.Errorf("xpath3: internal error: expected string for %s", a.TypeName)
+			return "", false, fmt.Errorf("xpath3: internal error: expected string for %s", first.TypeName)
 		}
-		return s, nil
+		return s, false, nil
 	default:
 		// User-defined types: check if the underlying value is a string.
-		if s, ok := a.Value.(string); ok {
-			return s, nil
+		if s, ok := first.Value.(string); ok {
+			return s, false, nil
 		}
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected xs:string?, got %s", a.TypeName)}
+		return "", false, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("expected xs:string?, got %s", first.TypeName)}
 	}
 }
 
