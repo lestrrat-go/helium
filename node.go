@@ -450,6 +450,13 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		}
 	}
 
+	// The replaced node is logically removed from the tree. Clear its own
+	// parent/sibling links so a stale handle cannot rewrite the spliced-in
+	// replacement (e.g. via a later UnlinkNode or Replace).
+	ndn.parent = nil
+	ndn.prev = nil
+	ndn.next = nil
+
 	return nil
 }
 
