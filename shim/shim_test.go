@@ -45,7 +45,7 @@ func TestNewDecoderToken(t *testing.T) {
 	require.NoError(t, err, "Token failed")
 	se, ok := tok.(shim.StartElement)
 	require.True(t, ok, "expected first token StartElement, got %T", tok)
-	require.Equal(t, "root", se.Name.Local, "start element mismatch")
+	require.Equal(t, testRoot, se.Name.Local, "start element mismatch")
 }
 
 func TestNewTokenDecoder(t *testing.T) {
@@ -76,10 +76,75 @@ func requireEncodeTokenSequence(t *testing.T, enc interface {
 	Flush() error
 }) {
 	t.Helper()
-	require.NoError(t, enc.EncodeToken(stdxml.StartElement{Name: stdxml.Name{Local: "root"}}), "EncodeToken(start) failed")
+	require.NoError(t, enc.EncodeToken(stdxml.StartElement{Name: stdxml.Name{Local: testRoot}}), "EncodeToken(start) failed")
 	require.NoError(t, enc.EncodeToken(stdxml.CharData([]byte(testHello))), "EncodeToken(chardata) failed")
-	require.NoError(t, enc.EncodeToken(stdxml.EndElement{Name: stdxml.Name{Local: "root"}}), "EncodeToken(end) failed")
+	require.NoError(t, enc.EncodeToken(stdxml.EndElement{Name: stdxml.Name{Local: testRoot}}), "EncodeToken(end) failed")
 	require.NoError(t, enc.Flush(), "Flush failed")
+}
+
+func TestEncodeTokenRejectsInvalidNames(t *testing.T) {
+	invalidNS := "urn:ns"
+	for _, tc := range []struct {
+		name  string
+		token shim.Token
+	}{
+		{
+			name:  "start element local with injected attribute",
+			token: shim.StartElement{Name: shim.Name{Local: `root injected="1"`}},
+		},
+		{
+			name:  "start element local with angle bracket",
+			token: shim.StartElement{Name: shim.Name{Local: "ro>ot"}},
+		},
+		{
+			name:  "start element local starting with digit",
+			token: shim.StartElement{Name: shim.Name{Local: "1root"}},
+		},
+		{
+			name:  "attribute local with injected markup",
+			token: shim.StartElement{Name: shim.Name{Local: testRoot}, Attr: []shim.Attr{{Name: shim.Name{Local: `a="x" b`}, Value: "v"}}},
+		},
+		{
+			name:  "namespaced element local with colon",
+			token: shim.StartElement{Name: shim.Name{Space: invalidNS, Local: "a:b"}},
+		},
+		{
+			name:  "namespaced attribute local with injected markup",
+			token: shim.StartElement{Name: shim.Name{Local: testRoot}, Attr: []shim.Attr{{Name: shim.Name{Space: invalidNS, Local: `a"/><b`}, Value: "v"}}},
+		},
+		{
+			name:  "reserved xmlns element prefix",
+			token: shim.StartElement{Name: shim.Name{Local: "xmlns:root"}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			enc := shim.NewEncoder(&buf)
+			err := enc.EncodeToken(tc.token)
+			require.Error(t, err, "EncodeToken should reject invalid name")
+			// A rejected token must not leave partial markup behind, even
+			// after a subsequent Flush.
+			require.NoError(t, enc.Flush(), "Flush after rejected token")
+			require.Empty(t, buf.String(), "rejected token must not emit partial markup")
+		})
+	}
+}
+
+func TestEncodeTokenAcceptsValidNames(t *testing.T) {
+	var buf bytes.Buffer
+	enc := shim.NewEncoder(&buf)
+
+	require.NoError(t, enc.EncodeToken(shim.StartElement{
+		Name: shim.Name{Space: "urn:ns", Local: testRoot},
+		Attr: []shim.Attr{
+			{Name: shim.Name{Local: "id"}, Value: "1"},
+			{Name: shim.Name{Space: "urn:other", Local: "ref"}, Value: "2"},
+		},
+	}), "valid namespaced start element should encode")
+	require.NoError(t, enc.EncodeToken(shim.CharData([]byte("hi"))), "char data should encode")
+	require.NoError(t, enc.EncodeToken(shim.EndElement{Name: shim.Name{Space: "urn:ns", Local: testRoot}}), "valid end element should encode")
+	require.NoError(t, enc.Flush(), "Flush failed")
+	require.NotEmpty(t, buf.String(), "expected output for valid tokens")
 }
 
 func TestCopyTokenCopiesCharData(t *testing.T) {
