@@ -225,6 +225,8 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 			ec.contextItem = nil
 		} else {
 			ec.contextItem = item
+			ec.contextNode = nil
+			ec.currentNode = nil
 		}
 
 		// Push var scope and set iterate param values.
