@@ -46,6 +46,56 @@ func TestXsiNilNoTypeElement(t *testing.T) {
 	})
 }
 
+// TestXsiNilSubstGroupMemberNoType checks that a no-type substitution-group
+// member (which inherits the head's type at validation) still runs xsi:nil
+// lexical validation and nilled-empty enforcement, honoring the MEMBER's own
+// nillable flag. The member is matched through a ref="head" particle so the
+// non-root particle paths (not the root path) drive validation.
+func TestXsiNilSubstGroupMemberNoType(t *testing.T) {
+	t.Parallel()
+
+	// head has a type; member has NO explicit type and sets nillable="true"
+	// independently of the head. root references head, so member substitutes in.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:string"/>
+  <xs:element name="member" substitutionGroup="head" nillable="true"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	const xsiDecl = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+
+	t.Run("member nil=true empty is accepted", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, compileAndValidate(t, schemaXML,
+			`<root `+xsiDecl+`><member xsi:nil="true"/></root>`, nil))
+	})
+
+	t.Run("member nil=true with content is rejected", func(t *testing.T) {
+		t.Parallel()
+		var out string
+		err := compileAndValidate(t, schemaXML,
+			`<root `+xsiDecl+`><member xsi:nil="true">content</member></root>`, &out)
+		require.Error(t, err)
+		require.Contains(t, out, "nilled")
+	})
+
+	t.Run("member nil=maybe is a lexical error", func(t *testing.T) {
+		t.Parallel()
+		var out string
+		err := compileAndValidate(t, schemaXML,
+			`<root `+xsiDecl+`><member xsi:nil="maybe"/></root>`, &out)
+		require.Error(t, err)
+		require.NotContains(t, out, "nilled")
+		require.Contains(t, out, "not a valid value")
+	})
+}
+
 // TestSchemaNillableLexical checks that the schema-side nillable attribute is
 // parsed as an xs:boolean (after whitespace collapse): nillable="1" means true,
 // and an invalid lexical produces a schema parser error.
