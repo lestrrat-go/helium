@@ -39,6 +39,12 @@ func (r *recordingCompileResolver) seen(uri string) bool {
 	return slices.Contains(r.requests, uri)
 }
 
+const (
+	declInclude   = "include"
+	declImport    = "import"
+	stylesMainXSL = "/styles/main.xsl"
+)
+
 const childModule = `<?xml version="1.0"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
   <xsl:template match="/data">
@@ -59,17 +65,17 @@ func TestIncludeAbsoluteURIHrefPassedThrough(t *testing.T) {
 		base string // compiler base URI
 		href string
 	}{
-		{"include urn", "include", "/styles/main.xsl", "urn:shared"},
-		{"import urn", "import", "/styles/main.xsl", "urn:shared"},
-		{"include file scheme single slash", "include", "/styles/main.xsl", "file:/modules/child.xsl"},
-		{"import data scheme", "import", "/styles/main.xsl", "data:application/xslt+xml,child"},
-		{"include http scheme", "include", "/styles/main.xsl", "http://example.com/modules/child.xsl"},
+		{"include urn", declInclude, stylesMainXSL, "urn:shared"},
+		{"import urn", declImport, stylesMainXSL, "urn:shared"},
+		{"include file scheme single slash", declInclude, stylesMainXSL, "file:/modules/child.xsl"},
+		{"import data scheme", declImport, stylesMainXSL, "data:application/xslt+xml,child"},
+		{"include http scheme", declInclude, stylesMainXSL, "http://example.com/modules/child.xsl"},
 		// Windows drive-letter paths are filesystem paths, not URIs. With a URI
 		// base they used to fall through to RFC 3986 resolution and be
 		// lowercased / dot-segment-mangled; they must reach the resolver
 		// verbatim. A URI base is what triggers the corruption, so use one here.
-		{"include windows drive forward slash", "include", "mem:/styles/main.xsl", "C:/modules/child.xsl"},
-		{"import windows drive back slash", "import", "mem:/styles/main.xsl", `C:\modules\child.xsl`},
+		{"include windows drive forward slash", declInclude, "mem:/styles/main.xsl", "C:/modules/child.xsl"},
+		{"import windows drive back slash", declImport, "mem:/styles/main.xsl", `C:\modules\child.xsl`},
 	}
 
 	for _, tc := range cases {
