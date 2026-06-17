@@ -33,7 +33,10 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		case "schemaLocation":
 			fields := strings.Fields(attr.Value())
 			for i := 1; i < len(fields); i += 2 {
-				resolved := resolveSchemaURI(fields[i], baseURI)
+				resolved, err := resolveSchemaURI(fields[i], baseURI)
+				if err != nil {
+					return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w", fields[i], baseURI, err)
+				}
 				if resolved == "" {
 					continue
 				}
@@ -44,7 +47,11 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 				paths = append(paths, resolved)
 			}
 		case "noNamespaceSchemaLocation":
-			resolved := resolveSchemaURI(strings.TrimSpace(attr.Value()), baseURI)
+			ref := strings.TrimSpace(attr.Value())
+			resolved, err := resolveSchemaURI(ref, baseURI)
+			if err != nil {
+				return nil, fmt.Errorf("resolve source schema-location %q against base %q: %w", ref, baseURI, err)
+			}
 			if resolved == "" {
 				continue
 			}

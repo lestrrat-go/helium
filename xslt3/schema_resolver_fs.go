@@ -51,35 +51,34 @@ func (s schemaResolverFS) Open(name string) (fs.File, error) {
 // The URI cases (absolute-URI ref pass-through, and RFC 3986 resolution against
 // a URI base with OmitHost preservation) are delegated to [xsd.ResolveSchemaURI]
 // — the single canonical helper shared with the xsd nested-include path, so the
-// two layers cannot drift apart again. Only the LOCAL filesystem base case is
-// handled here, because xslt3's base is the full FILE URI/path of the
-// referencing stylesheet or document (not a directory): an absolute local ref
-// is returned as-is, otherwise the ref is joined onto the base's directory.
+// two layers cannot drift apart again. Its error (e.g. an invalid URI reference
+// such as "%zz.xsd") is PROPAGATED: an unresolvable reference is rejected, never
+// silently filepath-collapsed into a corrupted name (which would drop the
+// authority, turning "https://host/%zz.xsd" into "https:/host/%zz.xsd").
 //
-// xsd.ResolveSchemaURI may return an error only for its local-base ".."-escape
-// guard, which is unreachable here: this function never delegates the local
-// case to it. The URI branches never error, so the error is discarded.
-func resolveSchemaURI(ref, baseURI string) string {
+// Only the LOCAL filesystem base case is handled here, because xslt3's base is
+// the full FILE path of the referencing stylesheet or document. An absolute
+// local ref is returned as-is; otherwise the ref is joined onto the base's
+// directory. The base may be a full file path (e.g. "/a/b/style.xsl") or a
+// directory-like path from xml:base processing (e.g. "/a/b"); baseURIDir
+// distinguishes the two so a directory base is not truncated by filepath.Dir.
+func resolveSchemaURI(ref, baseURI string) (string, error) {
 	if ref == "" || baseURI == "" {
-		return ref
+		return ref, nil
 	}
 
 	// Absolute-URI ref, or any ref against a URI base: defer to the shared
-	// canonical resolver (RFC 3986 + OmitHost preservation).
+	// canonical resolver (RFC 3986 + OmitHost preservation). Propagate any
+	// error instead of falling back to a host-dropping filepath join.
 	if xsd.URIScheme(ref) != "" || xsd.URIScheme(baseURI) != "" {
-		resolved, err := xsd.ResolveSchemaURI(ref, baseURI)
-		if err == nil {
-			return resolved
-		}
-		// Unreachable for URI inputs; fall back rather than drop the ref.
-		return filepath.Join(filepath.Dir(baseURI), ref)
+		return xsd.ResolveSchemaURI(ref, baseURI)
 	}
 
 	// Local filesystem base (a FILE path): keep historical filepath semantics.
 	if filepath.IsAbs(ref) {
-		return ref
+		return ref, nil
 	}
-	return filepath.Join(filepath.Dir(baseURI), ref)
+	return filepath.Join(baseURIDir(baseURI), ref), nil
 }
 
 // schemaCompileBaseDir maps a base URI/path to the value passed to

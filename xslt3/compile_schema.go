@@ -111,7 +111,11 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 		// falling back to filepath joins for local filesystem bases.
 		uri := schemaLoc
 		if c.baseURI != "" {
-			uri = resolveSchemaURI(schemaLoc, c.baseURI)
+			resolved, err := resolveSchemaURI(schemaLoc, c.baseURI)
+			if err != nil {
+				return fmt.Errorf("xsl:import-schema: cannot resolve schema-location %q against base %q: %w", schemaLoc, c.baseURI, err)
+			}
+			uri = resolved
 		}
 
 		schema, err := c.compileSchemaFromURI(ctx, uri)

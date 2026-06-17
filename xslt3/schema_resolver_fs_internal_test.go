@@ -8,8 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// part is the relative schema-location filename used across these cases.
-const part = "part.xsd"
+// part and sxsd are relative schema-location filenames used across these cases.
+const (
+	part = "part.xsd"
+	sxsd = "s.xsd"
+)
 
 // TestResolveSchemaURI exercises the URI-aware resolution of a top-level
 // schema-location against a base URI directly, including the "../" dot-segment
@@ -42,14 +45,43 @@ func TestResolveSchemaURI(t *testing.T) {
 		// No-authority single-slash URI base (OmitHost) + relative ref must
 		// preserve the "mem:/..." form, NOT gain an empty "//" authority
 		// ("mem:///...") that would miss an exact resolver keyed on "mem:/...".
-		{"mem single-slash base, relative ref", "mem:/stylesheets/main.xsl", "s.xsd", "mem:/stylesheets/s.xsd"},
-		{"mem runtime doc base, relative ref", "mem:/docs/input.xml", "s.xsd", "mem:/docs/s.xsd"},
+		{"mem single-slash base, relative ref", "mem:/stylesheets/main.xsl", sxsd, "mem:/stylesheets/s.xsd"},
+		{"mem runtime doc base, relative ref", "mem:/docs/input.xml", sxsd, "mem:/docs/s.xsd"},
 		// Regression: canonical empty-authority bases keep their "///".
-		{"file empty-authority base, relative ref", "file:///tmp/style/main.xsl", "s.xsd", "file:///tmp/style/s.xsd"},
+		{"file empty-authority base, relative ref", "file:///tmp/style/main.xsl", sxsd, "file:///tmp/style/s.xsd"},
 		{"https authority base, relative ref", "https://example.com/s/main.xsl", part, "https://example.com/s/part.xsd"},
+		// Local FILE base (last segment has an extension): filepath.Dir drops
+		// the filename, so the ref resolves into the containing directory.
+		{"local file base, relative ref", "/work/main.xsl", sxsd, "/work/s.xsd"},
+		// Local DIRECTORY-like base (extensionless last segment, e.g. from
+		// xml:base): treated as a directory, NOT truncated by filepath.Dir.
+		{"local dir base, relative ref", "/work/schemas", sxsd, "/work/schemas/s.xsd"},
+		{"local dir base trailing slash, relative ref", "/work/schemas/", sxsd, "/work/schemas/s.xsd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, resolveSchemaURI(tc.ref, tc.base))
+			got, err := resolveSchemaURI(tc.ref, tc.base)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestResolveSchemaURIError verifies that an unresolvable URI reference (an
+// invalid RFC 3986 reference such as "%zz.xsd" against an https base) is
+// REJECTED with an error rather than silently filepath-collapsed into a
+// corrupted, authority-dropped name like "https:/example.com/s/%zz.xsd".
+func TestResolveSchemaURIError(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		base string
+		ref  string
+	}{
+		{"invalid ref https base", "https://example.com/s/main.xsl", "%zz.xsd"},
+		{"invalid ref file base", "file:///tmp/s/main.xsd", "%zz.xsd"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := resolveSchemaURI(tc.ref, tc.base)
+			require.Error(t, err)
 		})
 	}
 }
