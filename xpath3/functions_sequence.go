@@ -485,13 +485,16 @@ func deepEqualArray(a, b ArrayItem, opts deepEqualOptions) (bool, error) {
 }
 
 func fnIndexOf(ctx context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "index-of: search value must not be empty sequence"}
-	}
-	search, err := AtomizeItem(args[1].Get(0))
+	// $search is declared xs:anyAtomicType (exactly one item): an empty or
+	// multi-item search value is a type error, not a search for the first item.
+	searchAtoms, err := AtomizeSequence(args[1])
 	if err != nil {
 		return nil, err
 	}
+	if len(searchAtoms) != 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "index-of: search value must be exactly one atomic item"}
+	}
+	search := searchAtoms[0]
 	// Explicit 3rd arg with empty sequence is a type error (xs:string, not xs:string?)
 	if len(args) > 2 && seqLen(args[2]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "collation argument must not be empty"}
