@@ -210,8 +210,7 @@ func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
 		if localName(certElem) != "X509Certificate" {
 			continue
 		}
-		text := textContent(certElem)
-		derBytes, err := base64.StdEncoding.DecodeString(text)
+		derBytes, err := decodeBase64(textContent(certElem))
 		if err != nil {
 			return fmt.Errorf("%w: invalid X509Certificate base64: %v", ErrInvalidKeyInfo, err)
 		}
@@ -247,8 +246,7 @@ func parseRSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		if !ok {
 			continue
 		}
-		text := textContent(e)
-		decoded, err := base64.StdEncoding.DecodeString(text)
+		decoded, err := decodeBase64(textContent(e))
 		if err != nil {
 			return fmt.Errorf("%w: invalid RSAKeyValue base64: %v", ErrInvalidKeyInfo, err)
 		}
@@ -287,8 +285,7 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 				return fmt.Errorf("%w: unsupported EC curve: %s", ErrInvalidKeyInfo, uri)
 			}
 		case "PublicKey":
-			text := textContent(e)
-			decoded, err := base64.StdEncoding.DecodeString(text)
+			decoded, err := decodeBase64(textContent(e))
 			if err != nil {
 				return fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrInvalidKeyInfo, err)
 			}
