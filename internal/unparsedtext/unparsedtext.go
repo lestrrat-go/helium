@@ -27,7 +27,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 
 	iencoding "github.com/lestrrat-go/helium/internal/encoding"
@@ -372,21 +371,14 @@ func decodeBytes(data []byte, encoding string) (string, error) {
 			return "", &Error{Code: ErrCodeEncoding, Message: "invalid UTF-8 data"}
 		}
 		return string(data), nil
-	case "utf16le":
-		decoder := unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM).NewDecoder()
-		decoded, err := io.ReadAll(transform.NewReader(bytes.NewReader(data), decoder))
-		if err != nil {
-			return "", &Error{Code: ErrCodeEncoding, Message: fmt.Sprintf("UTF-16LE decode error: %v", err)}
-		}
-		return string(decoded), nil
-	case "utf16be":
-		decoder := unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM).NewDecoder()
-		decoded, err := io.ReadAll(transform.NewReader(bytes.NewReader(data), decoder))
-		if err != nil {
-			return "", &Error{Code: ErrCodeEncoding, Message: fmt.Sprintf("UTF-16BE decode error: %v", err)}
-		}
-		return string(decoded), nil
 	default:
+		// All non-UTF-8 encodings (including utf-16le/be) go through
+		// iencoding.Load, whose Unicode decoders are strict: malformed source
+		// units (e.g. an unpaired UTF-16 surrogate) produce a decode error
+		// rather than silently substituting U+FFFD. The bare x/text UTF-16
+		// decoders would replace such input, after which ValidateXMLChars
+		// accepts U+FFFD and the malformed resource decodes successfully
+		// instead of failing with FOUT1190.
 		enc := iencoding.Load(encoding)
 		if enc == nil {
 			return "", &Error{Code: ErrCodeEncoding, Message: fmt.Sprintf("unsupported encoding: %s", encoding)}
