@@ -247,7 +247,10 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		}
 		vc.annotateElement(ctx, child.elem, td)
 		if td != nil {
-			if hasXsiNil(child.elem) {
+			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+			if nilErr != nil {
+				contentErr = nilErr
+			} else if nilled {
 				if err := vc.validateNilledElement(ctx, child.elem, actualDecl, td); err != nil {
 					contentErr = err
 				}
@@ -375,7 +378,10 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 		// Annotate child element with its type.
 		vc.annotateElement(ctx, child.elem, td)
 		if td != nil {
-			if hasXsiNil(child.elem) {
+			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+			if nilErr != nil {
+				contentErr = nilErr
+			} else if nilled {
 				if err := vc.validateNilledElement(ctx, child.elem, actualDecl, td); err != nil {
 					contentErr = err
 				}
@@ -623,7 +629,10 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 			// Annotate wildcard-matched element with its type.
 			vc.annotateElement(ctx, child.elem, td)
 			if td != nil {
-				if hasXsiNil(child.elem) {
+				nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+				if nilErr != nil {
+					contentErr = nilErr
+				} else if nilled {
 					if err := vc.validateNilledElement(ctx, child.elem, edecl, td); err != nil {
 						contentErr = err
 					}
