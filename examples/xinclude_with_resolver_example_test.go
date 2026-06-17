@@ -17,9 +17,12 @@ type memoryResolver struct {
 	files map[string]string
 }
 
-// Resolve implements the xinclude.Resolver interface. It receives the
-// href from the xi:include element and the base URI of the including
-// document. It returns an io.ReadCloser with the resolved content.
+// Resolve implements the xinclude.Resolver interface. The processor has
+// already resolved the xi:include href against the including document's
+// effective base URI, so href is the fully-resolved location to open and
+// base is supplied only as informational context — a resolver must open
+// href directly and must not resolve it against base again. It returns an
+// io.ReadCloser with the resolved content.
 func (r *memoryResolver) Resolve(href, base string) (io.ReadCloser, error) {
 	content, ok := r.files[href]
 	if !ok {

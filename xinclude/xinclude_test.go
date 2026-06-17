@@ -148,6 +148,188 @@ func TestXIncludeNewFSResolver(t *testing.T) {
 	})
 }
 
+// TestXIncludeSubdirRelativeBase verifies that an href relative to a base
+// URI that itself lives in a subdirectory is resolved exactly once. The
+// processor resolves the href against the base before handing it to the
+// resolver, so the FS resolver must not join the base directory a second
+// time (which would open dir/dir/inc.xml instead of dir/inc.xml).
+func TestXIncludeSubdirRelativeBase(t *testing.T) {
+	t.Parallel()
+
+	t.Run("single subdirectory include", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="inc.xml"/>
+		</root>`)
+
+		fsys := fstest.MapFS{
+			"dir/inc.xml": &fstest.MapFile{Data: []byte(`<loaded>Sub</loaded>`)},
+		}
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(fsys)).
+			BaseURI("dir/main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		root := docElement(doc)
+		require.NotNil(t, root)
+		var found bool
+		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == helium.ElementNode && c.(*helium.Element).LocalName() == "loaded" {
+				found = true
+				require.Equal(t, "Sub", string(c.Content()))
+			}
+		}
+		require.True(t, found, "included element from dir/inc.xml not found")
+	})
+
+	t.Run("chained base across nested subdirectory include", func(t *testing.T) {
+		t.Parallel()
+		// main.xml lives in dir/; it includes dir/outer.xml, which in turn
+		// includes a sibling dir/inner.xml. The nested href must resolve
+		// against the included file's directory, again exactly once.
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="outer.xml"/>
+		</root>`)
+
+		fsys := fstest.MapFS{
+			"dir/outer.xml": &fstest.MapFile{Data: []byte(`<outer xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="inner.xml"/></outer>`)},
+			"dir/inner.xml": &fstest.MapFile{Data: []byte(`<inner/>`)},
+		}
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(fsys)).
+			BaseURI("dir/main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 2, count)
+
+		root := docElement(doc)
+		var outer *helium.Element
+		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == helium.ElementNode {
+				outer = c.(*helium.Element)
+				break
+			}
+		}
+		require.NotNil(t, outer)
+		require.Equal(t, "outer", outer.LocalName())
+
+		var inner *helium.Element
+		for c := outer.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == helium.ElementNode {
+				inner = c.(*helium.Element)
+				break
+			}
+		}
+		require.NotNil(t, inner)
+		require.Equal(t, "inner", inner.LocalName())
+	})
+
+	t.Run("text include relative to subdirectory base", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="data.txt" parse="text"/>
+		</root>`)
+
+		fsys := fstest.MapFS{
+			"dir/data.txt": &fstest.MapFile{Data: []byte(`Hello Sub`)},
+		}
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(fsys)).
+			BaseURI("dir/main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		root := docElement(doc)
+		require.Equal(t, "Hello Sub", strings.TrimSpace(string(root.Content())))
+	})
+}
+
+// recordingResolver captures the (href, base) pairs it is asked to resolve
+// and serves canned content keyed by the resolved href.
+type recordingResolver struct {
+	files map[string]string
+	calls []struct{ href, base string }
+}
+
+func (r *recordingResolver) Resolve(href, base string) (io.ReadCloser, error) {
+	r.calls = append(r.calls, struct{ href, base string }{href, base})
+	content, ok := r.files[href]
+	if !ok {
+		return nil, &resolveError{href: href}
+	}
+	return io.NopCloser(strings.NewReader(content)), nil
+}
+
+// TestXIncludeResolverReceivesResolvedHref documents the Resolver contract:
+// the processor resolves the href against the effective base before calling
+// Resolve, so the resolver receives the fully-resolved location and must not
+// re-resolve it against base.
+func TestXIncludeResolverReceivesResolvedHref(t *testing.T) {
+	t.Parallel()
+
+	t.Run("href resolved against document base", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="inc.xml"/>
+		</root>`)
+
+		resolver := &recordingResolver{
+			files: map[string]string{
+				// keyed by the already-resolved subdirectory path
+				"dir/inc.xml": `<loaded/>`,
+			},
+		}
+		count, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			BaseURI("dir/main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		require.Len(t, resolver.calls, 1)
+		require.Equal(t, "dir/inc.xml", resolver.calls[0].href,
+			"resolver must receive the href already resolved against the base")
+		require.Equal(t, "dir/main.xml", resolver.calls[0].base,
+			"resolver should still receive the base URI as informational context")
+	})
+
+	t.Run("href and base reflect ancestor xml:base", func(t *testing.T) {
+		t.Parallel()
+		// An ancestor xml:base shifts the effective base into sub/, so the
+		// href must resolve against dir/sub/ and the base argument handed to
+		// the resolver must be the effective base, not the document base.
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude" xml:base="sub/">
+			<xi:include href="inc.xml"/>
+		</root>`)
+
+		resolver := &recordingResolver{
+			files: map[string]string{
+				"dir/sub/inc.xml": `<loaded/>`,
+			},
+		}
+		count, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			BaseURI("dir/main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		require.Len(t, resolver.calls, 1)
+		require.Equal(t, "dir/sub/inc.xml", resolver.calls[0].href,
+			"href must be resolved against the effective base (ancestor xml:base applied)")
+		require.Equal(t, "dir/sub/", resolver.calls[0].base,
+			"base must be the effective base URI, not the document base")
+	})
+}
+
 func TestXIncludeBasicXML(t *testing.T) {
 	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
