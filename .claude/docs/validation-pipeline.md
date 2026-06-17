@@ -61,8 +61,10 @@ namespaces — the instance side via `collectNSContext(elem)`, the schema fixed
 side via the `FixedNS` map captured on the `ElementDecl`/`AttrUse` at read time
 (`collectNSContext` over the declaring schema element) — and the resolved
 `{namespace URI, local name}` pairs are compared, so two different prefixes bound
-to the same URI are equal while a same-prefix different-URI binding is not (an
-unresolved prefix on either side falls back to lexical equality). `fixedValueMatches`
+to the same URI are equal while a same-prefix different-URI binding is not. An
+unresolved prefix on either side is a *rejection*, not a lexical fallback (a
+QName/NOTATION whose prefix cannot be resolved is itself invalid, so the fixed
+comparison must not pass on raw lexical match). `fixedValueMatches`
 takes the instance and fixed namespace contexts as parameters. When `td` is nil it
 falls back to raw string equality. The element fixed-value comparison uses the
 element *declaration's* type (`edecl.Type`), not an `xsi:type` actual type, so a
@@ -72,7 +74,12 @@ validated against the actual type. In `fixedUnionMatches`, when the fixed and
 instance values resolve to *different* active members sharing a value-space family
 (e.g. integer/decimal), each operand is whitespace-normalized with *its* active
 member's effective whiteSpace facet before `value.Compare`, so union fixed `1.0`
-accepts both `1` and ` 1 `. Global attributes matched through an `xs:anyAttribute`
+accepts both `1` and ` 1 `. `unionActiveMember` returns the active *basic*
+(atomic) member, descending through nested unions to the basic member that
+actually accepts the value, so an outer union `memberTypes="inner xs:decimal"`
+(with `inner` a union `xs:integer xs:boolean`) compares instance `1` (active
+basic member xs:integer) against fixed `1.0` (xs:decimal) in the shared decimal
+value space rather than rejecting. Global attributes matched through an `xs:anyAttribute`
 wildcard (`validateWildcardAttr`, processContents strict/lax) also enforce the
 global attribute's `Fixed`/`FixedNS` via `fixedValueMatches`.
 

@@ -258,6 +258,19 @@ func TestFixedValueSpaceQName(t *testing.T) {
 		instanceXML := `<root xmlns:s="urn:example:other" a="s:name"/>`
 		runFixedValueCase(t, schemaXML, instanceXML, true)
 	})
+
+	t.Run("element/instance-prefix-unresolved-rejected", func(t *testing.T) {
+		t.Parallel()
+		// Schema binds prefix s -> targetURI and fixes s:name. The instance text is
+		// the same lexical "s:name" but the instance has NO xmlns:s binding, so the
+		// instance QName prefix cannot be resolved. A genuinely unresolvable QName is
+		// itself invalid; the fixed comparison must NOT pass on raw lexical match.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+  <xs:element name="root" type="xs:QName" fixed="s:name"/>
+</xs:schema>`
+		instanceXML := `<root>s:name</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
 }
 
 // TestFixedValueSpaceListOfUnion verifies that a fixed value of an xs:list whose
@@ -558,6 +571,47 @@ func TestFixedValueSpaceUnionSharedValueSpace(t *testing.T) {
 </xs:schema>`
 		instanceXML := "<root>true</root>"
 		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("element/nested union member same decimal value space", func(t *testing.T) {
+		t.Parallel()
+		// Outer union memberTypes="inner xs:decimal" where inner is ITSELF a union
+		// "xs:integer xs:boolean". fixed "1.0": xs:integer rejects it, xs:boolean
+		// rejects it, so inner rejects and the active member is the outer xs:decimal.
+		// instance "1": validates against inner (xs:integer first), so its active
+		// member is the inner union — and within it, the active basic member is
+		// xs:integer. The active basic members differ (decimal vs integer) but both
+		// reduce to the decimal value space and 1.0 == 1, so the constraint holds.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="inner">
+    <xs:union memberTypes="xs:integer xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="outer">
+    <xs:union memberTypes="inner xs:decimal"/>
+  </xs:simpleType>
+  <xs:element name="root" type="outer" fixed="1.0"/>
+</xs:schema>`
+		instanceXML := "<root>1</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("attribute/nested union member same decimal value space", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="inner">
+    <xs:union memberTypes="xs:integer xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="outer">
+    <xs:union memberTypes="inner xs:decimal"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="outer" fixed="1.0"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a="1"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
 	})
 }
 

@@ -189,22 +189,38 @@ func valueSpaceFamily(builtinLocal string) (string, bool) {
 	}
 }
 
-// unionActiveMember returns the active basic member type for a value within a
-// union: the first member (in declaration order) the value fully validates
-// against. It reuses the validateValue path so the validity criteria match the
-// main validation engine exactly (facets, list items, nested unions, and
-// QName/NOTATION namespace resolution). Errors are discarded via a suppressing
-// validation context with a NilErrorHandler. Returns nil when no member accepts
-// the value.
+// unionActiveMember returns the active BASIC (atomic) member type for a value
+// within a union: the first member (in declaration order) the value fully
+// validates against, descending through nested unions to the basic member that
+// actually accepts the value. It reuses the validateValue path so the validity
+// criteria match the main validation engine exactly (facets, list items, nested
+// unions, and QName/NOTATION namespace resolution). Errors are discarded via a
+// suppressing validation context with a NilErrorHandler. Returns nil when no
+// member accepts the value.
+//
+// Descending into nested unions matters for cross-member value-space comparison:
+// an outer member that is itself a union must contribute its active basic member
+// (e.g. xs:integer), not the union TypeDef, so valueSpaceFamily can reduce it to
+// the comparable family (decimal) and compare it against a sibling decimal
+// member's value.
 func unionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef) *TypeDef {
 	for _, member := range members {
 		vc := &validationContext{
 			errorHandler:  helium.NilErrorHandler{},
 			suppressDepth: 1,
 		}
-		if validateValue(ctx, value, valueNS, member, "", "", 0, vc) == nil {
-			return member
+		if validateValue(ctx, value, valueNS, member, "", "", 0, vc) != nil {
+			continue
 		}
+		// The member accepts the value. If it is itself a union, recurse to find
+		// the active basic member within it; the validateValue success above
+		// guarantees at least one nested member accepts the value.
+		if resolveVariety(member) == TypeVarietyUnion {
+			if basic := unionActiveMember(ctx, value, valueNS, resolveUnionMembers(member)); basic != nil {
+				return basic
+			}
+		}
+		return member
 	}
 	return nil
 }
@@ -219,11 +235,14 @@ func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedN
 	if builtinLocal == "QName" || builtinLocal == "NOTATION" {
 		iqn, ierr := resolveLexicalQName(instance, instanceNS)
 		fqn, ferr := resolveLexicalQName(fixed, fixedNS)
-		if ierr == nil && ferr == nil {
-			return iqn == fqn
+		// A prefix that cannot be resolved makes the QName/NOTATION itself invalid;
+		// the fixed comparison must NOT fall back to raw lexical equality (which
+		// would wrongly accept a fixed "s:name" against an instance "s:name" that
+		// has no binding for s). Reject instead.
+		if ierr != nil || ferr != nil {
+			return false
 		}
-		// A prefix could not be resolved on one side; fall back to lexical.
-		return instance == fixed
+		return iqn == fqn
 	}
 	if _, ok := enumValueSpaceTypes[builtinLocal]; ok {
 		if (builtinLocal == "float" || builtinLocal == "double") &&
