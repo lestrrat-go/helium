@@ -12,9 +12,11 @@ import (
 )
 
 func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTemplatesInst) error {
-	var nodes []helium.Node
-
-	var atomicItems xpath3.ItemSlice // XSLT 3.0: atomic values from select
+	// XSLT 3.0 processes the selected sequence in SEQUENCE ORDER. Keep a
+	// single ordered item list so mixed sequences of nodes and atomic values
+	// (e.g. select="('a', /root/b)") are dispatched in the order they appear,
+	// rather than processing all nodes before all atomic values.
+	var items xpath3.ItemSlice
 	if inst.Select != nil {
 		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)
 		if err != nil {
@@ -24,35 +26,47 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 		// items in apply-templates, matched via pattern rules (e.g.,
 		// match=".[. instance of array(*)]"). Flattening would destroy the
 		// array before template matching can see it.
-		seq := result.Sequence()
-		ns, ok := xpath3.NodesFrom(seq)
-		if ok {
-			nodes = ns
-		} else {
-			// XSLT 3.0: separate nodes from atomic values
-			for item := range sequence.Items(seq) {
-				if ni, ok := item.(xpath3.NodeItem); ok {
-					nodes = append(nodes, ni.Node)
-				} else {
-					atomicItems = append(atomicItems, item)
-				}
-			}
-		}
+		items = xpath3.ItemSlice(sequence.Materialize(result.Sequence()))
 	} else {
 		// Default select is child::node() which requires a node context item.
 		// If the context item is an atomic value (contextNode is nil), raise XTTE0510.
 		if normalizeNode(ec.contextNode) == nil {
 			return dynamicError(errCodeXTTE0510, "apply-templates with default select requires a node context item")
 		}
-		nodes = selectDefaultNodes(ec.contextNode)
+		for _, node := range selectDefaultNodes(ec.contextNode) {
+			items = append(items, xpath3.NodeItem{Node: node})
+		}
 	}
 
-	// Apply sort keys if present
+	// Apply sort keys if present. Sorting reorders the whole selected
+	// sequence per spec. When every selected item is a node, use the
+	// node-only sort path so current() inside the sort key expression
+	// resolves to each sorted node (XSLT 13.1.4); sortItems does not set
+	// currentNode. For mixed/atomic sequences fall back to sortItems, which
+	// handles both node and atomic items.
 	if len(inst.Sort) > 0 {
-		var err error
-		nodes, err = sortNodes(ctx, ec, nodes, inst.Sort)
-		if err != nil {
-			return err
+		if nodes, allNodes := xpath3.NodesFrom(items); allNodes {
+			sorted, err := sortNodes(ctx, ec, nodes, inst.Sort)
+			if err != nil {
+				return err
+			}
+			items = items[:0]
+			for _, node := range sorted {
+				items = append(items, xpath3.NodeItem{Node: node})
+			}
+		} else {
+			// Validate sort key attributes even when the selection is empty
+			// (XTDE0030); sortNodes does this internally, sortItems does not.
+			for _, sk := range inst.Sort {
+				if err := validateSortKeyAttrs(ctx, ec, sk); err != nil {
+					return err
+				}
+			}
+			sorted, err := sortItems(ctx, ec, items, inst.Sort)
+			if err != nil {
+				return err
+			}
+			items = xpath3.ItemSlice(sequence.Materialize(sorted))
 		}
 	}
 
@@ -100,13 +114,14 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 
 	// Filter whitespace-only text nodes per xsl:strip-space before
 	// setting position/size, so position()/last() reflect the filtered list.
-	filtered := nodes[:0]
-	for _, node := range nodes {
-		if !ec.shouldStripWhitespace(node) {
-			filtered = append(filtered, node)
+	filtered := items[:0]
+	for _, item := range items {
+		if ni, ok := item.(xpath3.NodeItem); ok && ec.shouldStripWhitespace(ni.Node) {
+			continue
 		}
+		filtered = append(filtered, item)
 	}
-	nodes = filtered
+	items = filtered
 
 	savedPos := ec.position
 	savedSize := ec.size
@@ -115,7 +130,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 	savedInGroupCtx := ec.inGroupContext
 	savedGroupHasKey := ec.groupHasKey
 	savedInMerge := ec.inMergeAction
-	ec.size = len(nodes)
+	ec.size = len(items)
 	// Per XSLT 3.0: current-grouping-key() and current-group() are only
 	// available in the body of xsl:for-each-group itself, not in templates
 	// invoked by apply-templates within that body.
@@ -135,89 +150,81 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 		ec.inMergeAction = savedInMerge
 	}()
 
-	for i, node := range nodes {
+	// Dispatch each selected item in sequence order. Node items go through
+	// template matching for nodes; atomic values, arrays, and maps use the
+	// XSLT 3.0 atomic dispatch rules.
+	for i, item := range items {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		ec.position = i + 1
 
-		if err := ec.applyTemplates(ctx, node, mode, paramValues); err != nil {
-			return err
-		}
-	}
-
-	// XSLT 3.0: sort atomic items if sort keys are present.
-	if len(inst.Sort) > 0 && len(atomicItems) > 0 {
-		sorted, err := sortItems(ctx, ec, atomicItems, inst.Sort)
-		if err != nil {
-			return err
-		}
-		atomicItems = xpath3.ItemSlice(sequence.Materialize(sorted))
-	}
-
-	// XSLT 3.0: process atomic values — try template matching first,
-	// then fall back to built-in text output.
-	// Set position/size so position()/last() work correctly inside templates.
-	ec.size = len(atomicItems)
-	for i, item := range atomicItems {
-		ec.position = i + 1
-		tmpl, err := ec.findAtomicTemplate(ctx, item, mode)
-		if err != nil {
-			return err
-		}
-		if tmpl != nil {
-			if err := ec.executeAtomicTemplate(ctx, tmpl, item, mode); err != nil {
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			if err := ec.applyTemplates(ctx, ni.Node, mode, paramValues); err != nil {
 				return err
 			}
 			continue
 		}
-		// Built-in template rule for arrays: apply-templates to each member.
-		if arr, ok := item.(xpath3.ArrayItem); ok {
-			for j := 1; j <= arr.Size(); j++ {
-				member, err := arr.Get(j)
-				if err != nil {
-					return err
-				}
-				if err := ec.applyTemplatesToSequence(ctx, member, inst, mode); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-		// Built-in template rule for maps: apply-templates to each value.
-		if m, ok := item.(xpath3.MapItem); ok {
-			if err := m.ForEach(func(_ xpath3.AtomicValue, val xpath3.Sequence) error {
-				return ec.applyTemplatesToSequence(ctx, val, inst, mode)
-			}); err != nil {
-				return err
-			}
-			continue
-		}
-		// Check mode's on-no-match: for "deep-skip" and "shallow-skip",
-		// unmatched atomic items are silently skipped.
-		modeKey := mode
-		if modeKey == "" || modeKey == modeUnnamed {
-			modeKey = modeDefault
-		}
-		modeDef := ec.effectiveModeDefs()[modeKey]
-		if modeDef != nil && (modeDef.OnNoMatch == onNoMatchDeepSkip || modeDef.OnNoMatch == onNoMatchShallowSkip) {
-			continue
-		}
-		av, err := xpath3.AtomizeItem(item)
-		if err != nil {
-			return err
-		}
-		s, err := xpath3.AtomicToString(av)
-		if err != nil {
-			return err
-		}
-		text := ec.resultDoc.CreateText([]byte(s))
-		if err := ec.addNode(text); err != nil {
+
+		if err := ec.dispatchApplyTemplatesItem(ctx, item, inst, mode); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// dispatchApplyTemplatesItem applies templates to a single non-node item
+// (atomic value, array, or map) per the XSLT 3.0 rules: try template matching
+// first, then the built-in rules for arrays/maps, then fall back to built-in
+// text output unless the mode's on-no-match skips unmatched atomic items.
+func (ec *execContext) dispatchApplyTemplatesItem(ctx context.Context, item xpath3.Item, inst *applyTemplatesInst, mode string) error {
+	tmpl, err := ec.findAtomicTemplate(ctx, item, mode)
+	if err != nil {
+		return err
+	}
+	if tmpl != nil {
+		return ec.executeAtomicTemplate(ctx, tmpl, item, mode)
+	}
+	// Built-in template rule for arrays: apply-templates to each member.
+	if arr, ok := item.(xpath3.ArrayItem); ok {
+		for j := 1; j <= arr.Size(); j++ {
+			member, err := arr.Get(j)
+			if err != nil {
+				return err
+			}
+			if err := ec.applyTemplatesToSequence(ctx, member, inst, mode); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	// Built-in template rule for maps: apply-templates to each value.
+	if m, ok := item.(xpath3.MapItem); ok {
+		return m.ForEach(func(_ xpath3.AtomicValue, val xpath3.Sequence) error {
+			return ec.applyTemplatesToSequence(ctx, val, inst, mode)
+		})
+	}
+	// Check mode's on-no-match: for "deep-skip" and "shallow-skip",
+	// unmatched atomic items are silently skipped.
+	modeKey := mode
+	if modeKey == "" || modeKey == modeUnnamed {
+		modeKey = modeDefault
+	}
+	modeDef := ec.effectiveModeDefs()[modeKey]
+	if modeDef != nil && (modeDef.OnNoMatch == onNoMatchDeepSkip || modeDef.OnNoMatch == onNoMatchShallowSkip) {
+		return nil
+	}
+	av, err := xpath3.AtomizeItem(item)
+	if err != nil {
+		return err
+	}
+	s, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return err
+	}
+	text := ec.resultDoc.CreateText([]byte(s))
+	return ec.addNode(text)
 }
 
 // applyTemplatesToSequence applies templates to each item in a sequence,
