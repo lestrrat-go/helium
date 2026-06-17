@@ -140,6 +140,39 @@ func whitespaceReplace(s string) string {
 	}, s)
 }
 
+// WhiteSpace returns the effective XSD whiteSpace facet ("preserve", "replace",
+// or "collapse") for a builtin datatype's local name. xs:string preserves,
+// xs:normalizedString replaces, and every other builtin (token, the integer and
+// date/time families, boolean, the NCName/Name/NMTOKEN family, list types,
+// anyURI, …) collapses, per the XSD 1.1 datatype spec. Unknown names default to
+// "collapse" so callers normalize conservatively.
+func WhiteSpace(builtinLocal string) string {
+	switch builtinLocal {
+	case "string":
+		return "preserve"
+	case "normalizedString":
+		return "replace"
+	default:
+		return "collapse"
+	}
+}
+
+// Normalize applies the XSD whiteSpace facet of the named builtin datatype to a
+// lexical value, returning the whitespace-processed form that must be used
+// before lexical validation (ValidateBuiltin) or value comparison. "preserve"
+// leaves the value untouched, "replace" turns each tab/newline/CR into a space,
+// and "collapse" additionally collapses runs of spaces and trims the ends.
+func Normalize(s, builtinLocal string) string {
+	switch WhiteSpace(builtinLocal) {
+	case "preserve":
+		return s
+	case "replace":
+		return whitespaceReplace(s)
+	default: // collapse
+		return strings.Join(strings.Fields(s), " ")
+	}
+}
+
 func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
 	var dt xsdDateTime
 	var ok bool

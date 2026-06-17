@@ -1687,8 +1687,13 @@ func matchXSDValue(typeName, text, expected string) int {
 	if _, ok := xsdDatatypeNames[typeName]; !ok {
 		return -1
 	}
-	text = strings.TrimSpace(text)
-	expected = strings.TrimSpace(expected)
+	// Normalize both the instance text and the <value> literal using the
+	// datatype's XSD whiteSpace facet (preserve/replace/collapse) before
+	// validating or comparing, rather than a blanket TrimSpace. This lets a
+	// collapsible token like "a  b" validate and value-match "a b", while leaving
+	// xs:string untouched (preserve).
+	text = value.Normalize(text, typeName)
+	expected = value.Normalize(expected, typeName)
 
 	// Both the instance text and the <value> literal must be lexically valid for
 	// the type before either the equality fast-path or value-space comparison may
@@ -1730,12 +1735,14 @@ func (v *validator) matchData(pat *pattern, text string) int {
 	}
 
 	dt := pat.dataType
-	text = strings.TrimSpace(text)
 
 	switch dt.library {
 	case lexicon.NamespaceXSDDatatypes:
+		// validateXSDType applies the per-datatype XSD whiteSpace facet itself, so
+		// the raw (un-trimmed) text is passed through.
 		return validateXSDType(dt.name, text, pat.params)
 	case "":
+		// Built-in RELAX NG datatypes: both "token" and "string" accept any text.
 		switch dt.name {
 		case lexicon.TypeToken:
 			return 0
@@ -1777,10 +1784,14 @@ func validateXSDType(typeName, text string, params []*param) int {
 		return -1
 	}
 	// xs:string has whiteSpace=preserve and may carry RELAX NG <param> facets
-	// (pattern, length, …); validate those locally.
+	// (pattern, length, …); validate those locally against the preserved text.
 	if typeName == "string" {
 		return validateWithParams(text, params)
 	}
+	// Apply the datatype's XSD whiteSpace facet (replace for normalizedString,
+	// collapse for everything else here) before lexical validation, so a value
+	// such as xs:token "a  b" (collapses to "a b") is accepted.
+	text = value.Normalize(text, typeName)
 	if value.ValidateBuiltin(text, typeName) != nil {
 		return -1
 	}

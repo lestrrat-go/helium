@@ -205,3 +205,73 @@ func TestXSDValueInvalidLexical(t *testing.T) {
 			"valid NCName foo should match literal foo")
 	})
 }
+
+// TestXSDDataTypeWhitespaceFacet verifies that <data> applies the per-datatype
+// XSD whiteSpace facet (collapse/replace/preserve) before validating, instead of
+// a blanket TrimSpace. xs:token collapses internal whitespace, so "a  b" is a
+// valid token value; xs:normalizedString replaces tab/newline/CR with spaces but
+// does not collapse, so internal runs of spaces survive but a tab is normalized
+// to a single space (still valid).
+func TestXSDDataTypeWhitespaceFacet(t *testing.T) {
+	t.Parallel()
+
+	t.Run("token-collapsible-internal-whitespace", func(t *testing.T) {
+		grammar := compileXSDDataSchema(t, "token")
+		for _, v := range []string{"a b", "a  b", "a\tb", "  a   b  "} {
+			t.Run("valid/"+v, func(t *testing.T) {
+				require.NoError(t, validateXSDInstance(t, grammar, v),
+					"token collapses whitespace, so %q is a valid xs:token value", v)
+			})
+		}
+	})
+
+	t.Run("normalizedString-replaces-but-not-collapses", func(t *testing.T) {
+		grammar := compileXSDDataSchema(t, "normalizedString")
+		// normalizedString=replace: tab/newline/CR become single spaces and the
+		// result is always lexically valid; internal multi-space runs survive.
+		for _, v := range []string{"a b", "a  b", "a\tb", "a\nb"} {
+			t.Run("valid/"+v, func(t *testing.T) {
+				require.NoError(t, validateXSDInstance(t, grammar, v),
+					"normalizedString replaces whitespace, so %q is valid", v)
+			})
+		}
+	})
+}
+
+// TestXSDValueWhitespaceFacet verifies that <value> normalizes the instance text
+// AND the literal using the datatype's XSD whiteSpace facet before comparing, so
+// value-equal forms that differ only in collapsible whitespace match.
+func TestXSDValueWhitespaceFacet(t *testing.T) {
+	t.Parallel()
+
+	t.Run("token-collapse-match", func(t *testing.T) {
+		// <value type="token">a  b</value> must match instances whose collapsed
+		// form is also "a b".
+		grammar := compileXSDValueSchema(t, "token", "a  b")
+		for _, v := range []string{"a b", "a  b", "a   b", "  a b  ", "a\tb"} {
+			t.Run("match/"+v, func(t *testing.T) {
+				require.NoError(t, validateXSDInstance(t, grammar, v),
+					"token literal \"a  b\" should value-match collapsed %q", v)
+			})
+		}
+		t.Run("nomatch/a-c", func(t *testing.T) {
+			require.Error(t, validateXSDInstance(t, grammar, "a c"),
+				"token literal \"a  b\" should not match \"a c\"")
+		})
+	})
+
+	t.Run("normalizedString-replace-match", func(t *testing.T) {
+		// normalizedString=replace: a literal with a tab and an instance with a
+		// space both normalize to "a b" and match. But two internal spaces do NOT
+		// collapse, so "a b" != "a  b" for normalizedString.
+		grammar := compileXSDValueSchema(t, "normalizedString", "a\tb")
+		t.Run("match/space", func(t *testing.T) {
+			require.NoError(t, validateXSDInstance(t, grammar, "a b"),
+				"normalizedString literal \"a\\tb\" should value-match \"a b\"")
+		})
+		t.Run("nomatch/double-space", func(t *testing.T) {
+			require.Error(t, validateXSDInstance(t, grammar, "a  b"),
+				"normalizedString does not collapse, so \"a  b\" must not match \"a b\"")
+		})
+	})
+}
