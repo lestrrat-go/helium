@@ -7,7 +7,29 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
+
+// fixedValueMatches reports whether an instance value satisfies a fixed value
+// constraint whose declared simple type is td. The comparison is performed in
+// the type's value space via value.CanonicalKey, which applies the type's
+// whitespace facet (preserve/replace/collapse) — so a value-equal but
+// lexically-distinct instance (e.g. integer fixed "1" vs instance "+1") is
+// accepted, while a string-type fixed value with significant trailing
+// whitespace is not collapsed away. When the builtin base type cannot be
+// resolved, it falls back to raw string equality.
+func fixedValueMatches(instance, fixed string, td *TypeDef) bool {
+	builtinLocal := ""
+	if td != nil {
+		builtinLocal = builtinBaseLocal(td)
+	}
+	if builtinLocal == "" {
+		return instance == fixed
+	}
+	ik, _ := value.CanonicalKey(instance, builtinLocal)
+	fk, _ := value.CanonicalKey(fixed, builtinLocal)
+	return ik == fk
+}
 
 type validationContext struct {
 	schema        *Schema
@@ -289,9 +311,12 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	}
 
 	// Fixed value mismatch check (only when element has actual content).
+	// Compare in the declared type's value space (applying its whitespace
+	// facet) rather than an unconditional TrimSpace, so value-equal lexical
+	// variants are accepted and significant whitespace stays significant.
 	if !isEmpty && edecl != nil && edecl.Fixed != nil {
-		if strings.TrimSpace(value) != strings.TrimSpace(*edecl.Fixed) {
-			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", strings.TrimSpace(value), *edecl.Fixed)
+		if !fixedValueMatches(value, *edecl.Fixed, td) {
+			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
 		}
@@ -420,7 +445,11 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
 		present[aqn] = struct{}{}
 		if au, ok := allowed[aqn]; ok {
-			if au.Fixed != nil && a.Value() != *au.Fixed {
+			// Resolve the declared type up front so the fixed-value check can
+			// compare in the type's value space (applying its whitespace
+			// facet) rather than by raw string equality.
+			attrTD, tdOK := vc.attrUseType(au)
+			if au.Fixed != nil && !fixedValueMatches(a.Value(), *au.Fixed, attrTD) {
 				ad := attrDisplayName(a)
 				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
 				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -428,7 +457,6 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			}
 			// Validate the attribute value against its declared type
 			// (inline anonymous simpleType takes precedence over a named type).
-			attrTD, tdOK := vc.attrUseType(au)
 			if tdOK && attrTD.ContentType == ContentTypeSimple {
 				if err := attrTD.Validate(ctx, a.Value(), collectNSContext(elem)); err != nil {
 					ad := attrDisplayName(a)

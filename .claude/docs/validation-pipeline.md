@@ -40,6 +40,14 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
      - Simple: no child elements, validate text vs type facets
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
 
+Fixed value constraints (element content and attribute values) are compared in
+the declared simple type's value space via `fixedValueMatches`
+(`value.CanonicalKey` keyed off `builtinBaseLocal`), which applies the type's
+whitespace facet (preserve/replace/collapse). So integer fixed `1` accepts
+instance `+1`/`01`, while an `xs:string` fixed value with significant trailing
+whitespace is not silently trimmed. When the builtin base cannot be resolved it
+falls back to raw string equality.
+
 Enumeration facets are compared in value space, not raw lexical text. A value is
 a member if it lexically equals a member OR value-compares equal to one (e.g.
 decimal `5.0`≡`5`, boolean `1`≡`true`, float `1.50`≡`1.5`, equal dateTimes in
