@@ -573,6 +573,21 @@ func TestCompileNonRuleInPattern(t *testing.T) {
 	require.Contains(t, errs, "Expecting a rule element instead of bogus")
 }
 
+func TestCompileInvalidValueOfSelect(t *testing.T) {
+	t.Parallel()
+	// An invalid <value-of select="..."> XPath must be reported through the
+	// error handler, mirroring the <name path="..."> case, instead of being
+	// silently swallowed (which leaves a truncated assertion message).
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="/root">
+				<assert test="false()">val is <value-of select="("/></assert>
+			</rule>
+		</pattern>
+	</schema>`)
+	require.Contains(t, errs, "Failed to compile select expression '('")
+}
+
 func TestCompileValidSchema(t *testing.T) {
 	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">

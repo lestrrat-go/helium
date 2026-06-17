@@ -250,8 +250,10 @@ func parseMessageElement(compileCtx context.Context, childElem *helium.Element, 
 		}
 		compiled, err := xpath1.Compile(sel)
 		if err != nil {
-			// XPath compile error — record in handler but still add the part
-			// so validation can emit the error at runtime
+			// Report the compile error through the handler (mirroring the
+			// <name path="..."> case and compileTest), then still add the
+			// part so the message structure is preserved.
+			eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element value-of: Failed to compile select expression '%s': %s\n", sel, err), helium.ErrorLevelFatal))
 			return append(parts, valueOfPart{sel: sel})
 		}
 		return append(parts, valueOfPart{sel: sel, expr: compiled})
