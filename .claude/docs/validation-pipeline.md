@@ -71,10 +71,21 @@ element *declaration's* type (`edecl.Type`), not an `xsi:type` actual type, so a
 declared `xs:string` (whiteSpace="preserve") fixed `abc ` keeps its trailing space
 even when the instance's `xsi:type` collapses whitespace — element content is still
 validated against the actual type. In `fixedUnionMatches`, when the fixed and
-instance values resolve to *different* active members sharing a value-space family
-(e.g. integer/decimal), each operand is whitespace-normalized with *its* active
-member's effective whiteSpace facet before `value.Compare`, so union fixed `1.0`
-accepts both `1` and ` 1 `. `unionActiveMember` returns the active *basic*
+instance values resolve to *different* active members, they are value-equal iff
+their members reduce to the same *primitive* value-space family
+(`primitiveValueSpaceFamily`, XSD 1.1 §2.3 — restrictions create no new values):
+all integer types → `decimal`; all xs:string-derived types
+(string/normalizedString/token/language/Name/NCName/NMTOKEN/IDREF/ENTITY/…) and
+anyURI → `string`; each remaining comparable primitive (boolean, float, double,
+date/time family, hexBinary, base64Binary) is its own family; QName/NOTATION have
+no shared family (namespace-context dependent). Each operand is first
+whitespace-normalized with *its* active member's effective whiteSpace facet; the
+`decimal`/comparable families then compare via `value.Compare` (so union fixed
+`1.0` accepts both `1` and ` 1 `), while the `string` family compares the
+normalized lexical forms (so fixed `a b` active in one xs:string restriction
+accepts instance ` a   b ` active in another xs:string restriction with
+whiteSpace="collapse", both denoting `a b`). This includes string-derived members
+— it is **not** gated on the `enumValueSpaceTypes` allowlist. `unionActiveMember` returns the active *basic*
 (atomic) member, descending through nested unions to the basic member that
 actually accepts the value, so an outer union `memberTypes="inner xs:decimal"`
 (with `inner` a union `xs:integer xs:boolean`) compares instance `1` (active

@@ -638,6 +638,102 @@ func TestFixedValueSpaceXsiTypeDeclaredType(t *testing.T) {
 	runFixedValueCase(t, schemaXML, instanceXML, true)
 }
 
+// TestFixedValueSpaceUnionStringFamily verifies that when the fixed and instance
+// values resolve to DIFFERENT active union members that nonetheless share the
+// same PRIMITIVE string value-space family, they compare equal by their
+// whitespace-normalized lexical forms. memberTypes lists two distinct xs:string
+// restrictions (one with whiteSpace="collapse"); fixed "a b" against instance
+// " a   b " denotes the same collapsed string and must be ACCEPTED. A genuinely
+// different string is rejected, and a cross-family pair (string vs integer) is
+// rejected.
+func TestFixedValueSpaceUnionStringFamily(t *testing.T) {
+	// strExact is an xs:string restriction with whiteSpace="preserve" (inherited)
+	// and a pattern that matches "a b" with a SINGLE internal space; it rejects a
+	// padded/multi-space form. strColl is a SECOND xs:string restriction with
+	// whiteSpace="collapse" that accepts the padded form by collapsing it. Both
+	// reduce to the xs:string primitive value space, so a fixed value active in
+	// strExact and an instance active in strColl that collapse to the same string
+	// must compare equal.
+	const typeDefs = `  <xs:simpleType name="strExact">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[a-z] [a-z]"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="strColl">
+    <xs:restriction base="xs:string">
+      <xs:whiteSpace value="collapse"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="strExactOrColl">
+    <xs:union memberTypes="strExact strColl"/>
+  </xs:simpleType>`
+
+	t.Run("element/different string members value-equal", func(t *testing.T) {
+		t.Parallel()
+		// fixed "a b": matches strExact's pattern (single space) -> active member
+		// strExact (preserve). instance " a   b ": strExact's pattern does NOT match
+		// the padded form (preserve keeps the spaces) -> falls to strColl, which
+		// collapses to "a b". Active members DIFFER (strExact vs strColl) yet both
+		// reduce to the xs:string primitive family and normalize to "a b" -> EQUAL.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="strExactOrColl" fixed="a b"/>
+</xs:schema>`
+		instanceXML := "<root> a   b </root>"
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/different string value rejected", func(t *testing.T) {
+		t.Parallel()
+		// fixed "a b" -> strExact; instance " a   c " -> strColl collapses to "a c".
+		// Same string primitive family but "a b" != "a c" -> rejected.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="strExactOrColl" fixed="a b"/>
+</xs:schema>`
+		instanceXML := "<root> a   c </root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("attribute/different string members value-equal", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="strExactOrColl" fixed="a b"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a="  a   b  "/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/cross-family string vs integer rejected", func(t *testing.T) {
+		t.Parallel()
+		// memberTypes="strColl xs:integer": fixed "1" -> strColl is a collapsing
+		// xs:string and is the first member, so fixed's active member is strColl
+		// (string family). instance "1" -> also strColl. To force a cross-family
+		// pair, put xs:integer first so a bare "1" picks xs:integer while a padded
+		// instance can only pick the string member. integer vs string differ.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="strColl">
+    <xs:restriction base="xs:string">
+      <xs:whiteSpace value="collapse"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="intOrStrColl">
+    <xs:union memberTypes="xs:integer strColl"/>
+  </xs:simpleType>
+  <xs:element name="root" type="intOrStrColl" fixed="1"/>
+</xs:schema>`
+		// instance "x 1" -> xs:integer rejects, strColl accepts (collapses to "x 1").
+		// fixed "1" -> xs:integer accepts (active member xs:integer). Cross-family.
+		instanceXML := "<root>x 1</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+}
+
 // TestFixedValueSpaceUnionWhitespaceOperand verifies that for union values whose
 // active members DIFFER but share a value-space family, each operand is
 // whitespace-normalized with ITS active member's effective whiteSpace facet

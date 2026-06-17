@@ -105,14 +105,18 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 //     the xs:string member (the first member, which accepts any text), so "1"
 //     and "01" compare as strings and do NOT match.
 //   - If the active members DIFFER, the values may still be equal when both
-//     members reduce to the same comparable value-space family (e.g.
-//     memberTypes="xs:integer xs:decimal" with fixed="1.0" → active member
-//     xs:decimal, instance "1" → active member xs:integer: both reduce to the
-//     decimal value space, and 1.0 == 1, so they MUST compare equal). The shared
-//     family is determined by valueSpaceFamily, and the comparison is performed
-//     with value.Compare in that family. Cross-family pairs (xs:string vs
-//     xs:integer, xs:integer vs xs:boolean, …) have no shared comparable value
-//     space and remain unequal.
+//     members reduce to the same PRIMITIVE value-space family (XSD 1.1 §2.3:
+//     restrictions do not create new values). e.g. memberTypes="xs:integer
+//     xs:decimal" with fixed="1.0" → active member xs:decimal, instance "1" →
+//     active member xs:integer: both reduce to the decimal value space, and
+//     1.0 == 1, so they MUST compare equal. This includes string-derived members:
+//     fixed "a b" (active in one xs:string restriction) and instance " a   b "
+//     (active in another xs:string restriction with whiteSpace="collapse") both
+//     reduce to the string value space and denote "a b". The shared family is
+//     determined by primitiveValueSpaceFamily; value-comparable families compare
+//     with value.Compare, while the string family compares whitespace-normalized
+//     lexical forms. Cross-family pairs (xs:string vs xs:integer, xs:integer vs
+//     xs:boolean, …) have no shared value space and remain unequal.
 //
 // The active member is resolved with unionActiveMember, which reuses the same
 // per-member validateValue path the normal (non-fixed) validation uses, so the
@@ -137,55 +141,82 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS)
 	}
 
-	// Different active members. They are still equal iff both reduce to the same
-	// comparable value-space family and the values are equal in that family — so
-	// xs:integer "1" equals xs:decimal "1.0". valueSpaceFamily returns the shared
-	// family only for value-comparable builtins (it excludes string-family/anyURI
-	// and QName/NOTATION, whose value spaces are not cross-member comparable).
+	// Different active members. XSD 1.1 §2.3 — restrictions do not create new
+	// values, so two values are equal iff they denote the same value in their
+	// SHARED PRIMITIVE value-space family (the primitive built-in their members
+	// reduce to). This includes string-derived members: a value active in one
+	// xs:string restriction (e.g. whiteSpace="collapse") compares equal to a value
+	// active in another xs:string-family member when both denote the same string.
+	// primitiveValueSpaceFamily reduces each member's builtin to that primitive
+	// family (e.g. all integer types → "decimal", all string-derived types →
+	// "string"). Cross-family pairs (string vs integer, integer vs boolean, …) have
+	// no shared value space and remain unequal. QName/NOTATION are excluded because
+	// their equality is namespace-context dependent, not a raw lexical/value
+	// comparison.
 	fixedLocal := builtinBaseLocal(fixedMember)
 	instanceLocal := builtinBaseLocal(instanceMember)
-	fixedFamily, fok := valueSpaceFamily(fixedLocal)
-	instanceFamily, iok := valueSpaceFamily(instanceLocal)
+	fixedFamily, fComparable, fok := primitiveValueSpaceFamily(fixedLocal)
+	instanceFamily, _, iok := primitiveValueSpaceFamily(instanceLocal)
 	if !fok || !iok || fixedFamily != instanceFamily {
 		return false
 	}
 	// Normalize each operand with ITS active member's effective whiteSpace facet
-	// before comparing. value.Compare receives raw lexicals, so without this an
-	// instance " 1 " (whose active member would collapse the surrounding space)
-	// would be passed verbatim and fail the comparison even though it is
-	// value-equal to the fixed "1.0".
+	// before comparing, so an instance " 1 " (whose member collapses the spaces)
+	// or " a   b " (whose member collapses to "a b") is reduced to its value-space
+	// form first.
 	ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
 	nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
+	if !fComparable {
+		// String-family: the value space equals the whitespace-processed lexical
+		// space, so compare the normalized lexical forms directly.
+		return ni == nf
+	}
 	cmp, ok := value.Compare(ni, nf, fixedFamily)
 	return ok && cmp == 0
 }
 
-// valueSpaceFamily maps a builtin's local name to the local name of the type
-// whose value space it shares for cross-member fixed-value comparison, returning
-// (family, true) only for value-comparable builtins. All xs:decimal-derived
-// integer types collapse to "decimal" so an xs:integer value compares equal to a
-// value-equal xs:decimal value; every other comparable primitive (boolean,
-// float, double, each date/time-family type, hexBinary, base64Binary) is its own
-// family, so cross-family pairs do not compare. String-family/anyURI and
-// QName/NOTATION are not value-comparable across members and return ("", false),
-// preserving the cross-family rejection.
+// primitiveValueSpaceFamily maps a builtin's local name to the local name of the
+// PRIMITIVE built-in whose value space it shares, for cross-member fixed-value
+// comparison (XSD 1.1 §2.3: restrictions do not create new values). It returns
+// (family, comparable, true) for every type with a recognized primitive ancestor,
+// where:
 //
-// The returned family name is a key value.Compare understands, so callers can
-// pass it straight to value.Compare. Membership is gated on enumValueSpaceTypes,
-// the same allowlist the enumeration path uses, so the two value-space notions
-// stay consistent.
-func valueSpaceFamily(builtinLocal string) (string, bool) {
-	if _, ok := enumValueSpaceTypes[builtinLocal]; !ok {
-		return "", false
-	}
+//   - family is a stable key identifying the shared primitive value space. All
+//     xs:decimal-derived integer types collapse to "decimal"; all xs:string-derived
+//     types (string, normalizedString, token, language, Name, NCName, NMTOKEN,
+//     IDREF, ENTITY, …) and anyURI collapse to "string"; every other primitive
+//     (boolean, float, double, each date/time-family type, hexBinary,
+//     base64Binary) is its own family.
+//   - comparable is true when value.Compare implements value-space equality for
+//     that family (the enumValueSpaceTypes allowlist); for the "string" family it
+//     is false, so callers compare whitespace-normalized lexical forms instead
+//     (the string value space equals the whitespace-processed lexical space).
+//
+// QName/NOTATION return ("", false, false): their equality is namespace-context
+// dependent, not a cross-member value/lexical comparison, so they have no shared
+// primitive family for this path.
+func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 	switch builtinLocal {
+	case "QName", "NOTATION", "":
+		return "", false, false
 	case "decimal", "integer",
 		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort",
 		"unsignedByte", "positiveInteger":
-		return "decimal", true
+		return "decimal", true, true
+	case "string", "normalizedString", "token", "language",
+		"Name", "NCName", "ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES",
+		"NMTOKEN", "NMTOKENS", "anyURI":
+		// String value space equals the whitespace-processed lexical space; not
+		// value-comparable via value.Compare, so the caller compares lexically.
+		return lexicon.TypeString, false, true
 	default:
-		return builtinLocal, true
+		// Remaining comparable primitives (boolean, float, double, date/time
+		// family, binary) are gated on the same allowlist the enumeration path uses.
+		if _, ok := enumValueSpaceTypes[builtinLocal]; !ok {
+			return "", false, false
+		}
+		return builtinLocal, true, true
 	}
 }
 
