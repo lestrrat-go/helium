@@ -68,6 +68,59 @@ func TestParseArgsRepeatZero(t *testing.T) {
 	require.NotEqual(t, heliumcmd.ExitOK, code)
 }
 
+func TestLintEncodeUnknown(t *testing.T) {
+	_, errOut, code := executeLintStdin(t, `<?xml version="1.0"?><root/>`, "--encode", "bogus-enc")
+	require.NotEqual(t, heliumcmd.ExitOK, code)
+	require.Contains(t, errOut, "bogus-enc")
+}
+
+func TestLintEncodeApplied(t *testing.T) {
+	out, _, code := executeLintStdin(t, `<?xml version="1.0"?><root>x</root>`, "--encode", "ISO-8859-1")
+	require.Equal(t, heliumcmd.ExitOK, code)
+	require.Contains(t, out, `encoding="ISO-8859-1"`)
+}
+
+func TestLintEncodeASCIIRejected(t *testing.T) {
+	// US-ASCII and its aliases map to the UTF-8 encoder, which would emit raw
+	// UTF-8 bytes for characters outside the ASCII range while declaring
+	// US-ASCII. The lint command must reject these aliases up-front.
+	for _, name := range []string{"US-ASCII", "ascii", "ANSI_X3.4-1968", "csASCII"} {
+		t.Run(name, func(t *testing.T) {
+			_, errOut, code := executeLintStdin(t, `<?xml version="1.0"?><root>x</root>`, "--encode", name)
+			require.NotEqual(t, heliumcmd.ExitOK, code)
+			require.Contains(t, errOut, name)
+		})
+	}
+}
+
+func TestLintEncodeBytesValid(t *testing.T) {
+	// A character outside the ASCII range (U+20AC EURO SIGN) must be re-encoded
+	// to the declared encoding's bytes, never passed through as raw UTF-8. The
+	// raw UTF-8 form of U+20AC is 0xE2 0x82 0xAC; in ISO-8859-15 the euro sign
+	// is the single byte 0xA4.
+	out, _, code := executeLintStdin(t, "<?xml version=\"1.0\"?><root>€</root>", "--encode", "ISO-8859-15")
+	require.Equal(t, heliumcmd.ExitOK, code)
+	raw := []byte(out)
+	require.NotContains(t, string(raw), "\xe2\x82\xac", "must not emit raw UTF-8 bytes for U+20AC")
+	require.Contains(t, raw, byte(0xA4), "U+20AC must be encoded as ISO-8859-15 byte 0xA4")
+	require.Contains(t, out, `encoding="ISO-8859-15"`)
+}
+
+func TestLintEncodeWithXPathRejected(t *testing.T) {
+	// The --xpath path serializes node values without applying --encode, so the
+	// combination must be rejected rather than silently produce output that does
+	// not match the declared encoding. Order-independent.
+	for _, args := range [][]string{
+		{"--encode", "ISO-8859-1", "--xpath", "//root"},
+		{"--xpath", "//root", "--encode", "ISO-8859-1"},
+	} {
+		_, errOut, code := executeLintStdin(t, `<?xml version="1.0"?><root>x</root>`, args...)
+		require.NotEqual(t, heliumcmd.ExitOK, code)
+		require.Contains(t, errOut, "--encode")
+		require.Contains(t, errOut, "--xpath")
+	}
+}
+
 func TestParseArgsMissingValues(t *testing.T) {
 	flags := []string{"--schema", "--xpath", "--output", "--encode", "--pretty", "--path", "--repeat"}
 	for _, flag := range flags {
