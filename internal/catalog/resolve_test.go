@@ -11,6 +11,8 @@ import (
 
 const sharedCatalogXML = "shared.xml"
 
+const missingCatalogXML = "missing.xml"
+
 func TestResolveURIUnwrapsURN(t *testing.T) {
 	t.Parallel()
 
@@ -173,4 +175,77 @@ func TestVisitedCachePerQuery(t *testing.T) {
 
 	got = root.Resolve(t.Context(), "", "http://example.com/b.dtd")
 	require.Equal(t, "file:///b.dtd", got)
+}
+
+// An in-memory catalog with nextCatalog/delegate entries but no Loader must
+// skip the unresolvable entries instead of dereferencing a nil sub-catalog.
+func TestNoLoaderDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		entries []catalog.Entry
+		resolve func(*catalog.Catalog) string
+	}{
+		{
+			name:    "nextCatalog ResolveURI",
+			entries: []catalog.Entry{{Type: catalog.EntryNextCatalog, URL: missingCatalogXML}},
+			resolve: func(c *catalog.Catalog) string {
+				return c.ResolveURI(context.Background(), "http://example.com/x")
+			},
+		},
+		{
+			name:    "nextCatalog Resolve system",
+			entries: []catalog.Entry{{Type: catalog.EntryNextCatalog, URL: missingCatalogXML}},
+			resolve: func(c *catalog.Catalog) string {
+				return c.Resolve(context.Background(), "", "http://example.com/x")
+			},
+		},
+		{
+			name:    "nextCatalog Resolve public",
+			entries: []catalog.Entry{{Type: catalog.EntryNextCatalog, URL: missingCatalogXML}},
+			resolve: func(c *catalog.Catalog) string {
+				return c.Resolve(context.Background(), "-//Some//DTD//EN", "")
+			},
+		},
+		{
+			name: "delegateSystem",
+			entries: []catalog.Entry{
+				{Type: catalog.EntryDelegateSystem, Name: "http://example.com/", URL: missingCatalogXML},
+			},
+			resolve: func(c *catalog.Catalog) string {
+				return c.Resolve(context.Background(), "", "http://example.com/x")
+			},
+		},
+		{
+			name: "delegatePublic",
+			entries: []catalog.Entry{
+				{Type: catalog.EntryDelegatePublic, Name: "-//Some//", URL: missingCatalogXML, Prefer: catalog.PreferPublic},
+			},
+			resolve: func(c *catalog.Catalog) string {
+				return c.Resolve(context.Background(), "-//Some//DTD//EN", "")
+			},
+		},
+		{
+			name: "delegateURI",
+			entries: []catalog.Entry{
+				{Type: catalog.EntryDelegateURI, Name: "http://example.com/", URL: missingCatalogXML},
+			},
+			resolve: func(c *catalog.Catalog) string {
+				return c.ResolveURI(context.Background(), "http://example.com/x")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cat := &catalog.Catalog{Entries: tc.entries, Prefer: catalog.PreferPublic}
+			var got string
+			require.NotPanics(t, func() {
+				got = tc.resolve(cat)
+			})
+			require.Equal(t, "", got)
+		})
+	}
 }
