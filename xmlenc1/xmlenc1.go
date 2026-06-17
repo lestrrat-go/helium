@@ -208,17 +208,10 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 
 	// Replace in tree.
 	if encType == TypeElement {
-		// Replace the element with EncryptedData.
-		if pe, ok := helium.AsNode[*helium.Element](elem.Parent()); ok {
-			if err := pe.AddChild(edElem); err != nil {
-				return nil, err
-			}
-			helium.UnlinkNode(elem)
-		} else if pd, ok := helium.AsNode[*helium.Document](elem.Parent()); ok {
-			if err := pd.AddChild(edElem); err != nil {
-				return nil, err
-			}
-			helium.UnlinkNode(elem)
+		// Replace the element with EncryptedData in place, preserving the
+		// original element's position among its siblings.
+		if err := elem.Replace(edElem); err != nil {
+			return nil, err
 		}
 	} else {
 		// Replace children with EncryptedData.
