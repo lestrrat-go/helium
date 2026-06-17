@@ -134,7 +134,7 @@ func TestGenuineTransformsStillVerify(t *testing.T) {
 	excTransform := findTransformByAlgorithm(t, signedInfo, ExcC14N10)
 	incNS := findChild(t, excTransform, "InclusiveNamespaces")
 	require.Equal(t, "http://www.w3.org/2001/10/xml-exc-c14n#", elementNamespaceURI(incNS))
-	require.False(t, isDSigNS(incNS), "InclusiveNamespaces must not be in the DSig namespace")
+	require.False(t, isDSigCoreNS(incNS), "InclusiveNamespaces must not be in the DSig namespace")
 
 	verifier := NewVerifier(StaticKey(&key.PublicKey))
 	_, err = verifier.Verify(context.Background(), doc)
