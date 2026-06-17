@@ -434,12 +434,24 @@ func FormatNumber(f float64, isNaN, isPosInf, isNegInf, negative bool, precise *
 	return prefix + result + pp.Suffix, nil
 }
 
+// isFinite reports whether f is neither NaN nor +/-Inf.
+func isFinite(f float64) bool {
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
+}
+
 // FormatFloat formats a float64 value using the parsed picture and decimal format.
 func FormatFloat(f float64, pp ParsedPicture, df DecimalFormat) string {
-	// Round to maxFracDigits
+	// Round to maxFracDigits. Only scale when both the power-of-ten scale and the
+	// scaled product stay finite: a huge MaxFracDigits overflows math.Pow to +Inf
+	// (which would turn a finite f into NaN), and a large f overflows f*scale to
+	// +Inf (which would yield a non-finite result). In either case rounding is a
+	// no-op for the representable value, so leaving f unchanged is correct and
+	// keeps big.Float.SetFloat64 from ever seeing NaN/Inf.
 	if pp.MaxFracDigits >= 0 {
 		scale := math.Pow(10, float64(pp.MaxFracDigits))
-		f = math.Round(f*scale) / scale
+		if scaled := f * scale; isFinite(scale) && isFinite(scaled) {
+			f = math.Round(scaled) / scale
+		}
 	}
 
 	// Split into integer and fractional parts.
