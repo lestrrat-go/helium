@@ -88,8 +88,13 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
   - Key comparison is value-space aware (XSD 3.11.4): each field value is
     canonicalized via its declared simple type (`resolveFieldBuiltinLocal` →
     `value.CanonicalKey`) before map-key use, so `5`/`+5`/`05` collide for
-    xs:integer. Raw values are retained for error display; fields whose type
-    cannot be resolved fall back to raw-string comparison.
+    xs:integer. Attribute-field type resolution (`attrUseTypeDef`) mirrors the
+    content validator's `validationContext.attrUseType`: an inline anonymous
+    `<xs:simpleType>` (`au.Type`) is preferred over the named `au.TypeName`
+    reference, for both complex-type attribute uses and global attributes, so
+    keys on inline-typed attributes canonicalize too. Raw values are retained
+    for error display; fields whose type cannot be resolved fall back to
+    raw-string comparison.
 
 ### Key Data Model
 
