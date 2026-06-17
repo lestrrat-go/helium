@@ -97,13 +97,17 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if cfg != nil && cfg.baseOutputURI != "" {
 		ec.currentOutputURI = cfg.baseOutputURI
 	}
+	// Make the transform config (and thus its URIResolver) available before
+	// any runtime resource loading. initGlobalVars also assigns this; setting
+	// it here ensures schema-location loads below route through the resolver.
+	ec.transformConfig = cfg
 
 	// Build the runtime schema registry from both xsl:import-schema and any
 	// xsi:schemaLocation declarations on the source document so typed source
 	// trees remain available even when the stylesheet itself has no imports.
 	runtimeSchemas := append([]*xsd.Schema(nil), ss.schemas...)
 	if effectiveSource != nil {
-		sourceSchemas, schemaErr := loadSchemasFromSchemaLocation(ctx, effectiveSource)
+		sourceSchemas, schemaErr := ec.loadSchemasFromSchemaLocation(ctx, effectiveSource)
 		if schemaErr != nil && ss.defaultValidation == validationStrict {
 			return nil, schemaErr
 		}

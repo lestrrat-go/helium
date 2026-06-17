@@ -182,6 +182,16 @@ func digestEqual(a, b []byte) bool {
 func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 	parsed := &parsedSignature{}
 
+	// The XML-Signature schema mandates exactly one SignedInfo and exactly one
+	// SignatureValue per ds:Signature. This MUST be enforced rather than
+	// last-one-wins: only a single SignedInfo is canonicalized and checked
+	// against SignatureValue (see verifySignature), yet every SignedInfo's
+	// References were being appended to the result. An attacker could prepend
+	// a second, UNSIGNED SignedInfo whose References carry attacker-computed,
+	// self-consistent digests; those References would then be reported as
+	// verified even though they were never covered by the signature. Reject
+	// duplicate SignedInfo / SignatureValue / KeyInfo outright.
+	var signatureValueSeen bool
 	for child := sigElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
@@ -189,11 +199,18 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 		}
 		switch localName(elem) {
 		case "SignedInfo":
+			if parsed.signedInfoElem != nil {
+				return nil, fmt.Errorf("%w: multiple SignedInfo elements", ErrInvalidSignature)
+			}
 			parsed.signedInfoElem = elem
 			if err := parseSignedInfo(elem, parsed); err != nil {
 				return nil, err
 			}
 		case "SignatureValue":
+			if signatureValueSeen {
+				return nil, fmt.Errorf("%w: multiple SignatureValue elements", ErrInvalidSignature)
+			}
+			signatureValueSeen = true
 			text := strings.TrimSpace(textContent(elem))
 			decoded, err := base64.StdEncoding.DecodeString(text)
 			if err != nil {
@@ -201,6 +218,9 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 			}
 			parsed.signatureValue = decoded
 		case "KeyInfo":
+			if parsed.keyInfoElem != nil {
+				return nil, fmt.Errorf("%w: multiple KeyInfo elements", ErrInvalidSignature)
+			}
 			parsed.keyInfoElem = elem
 		}
 	}
@@ -208,7 +228,7 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 	if parsed.signedInfoElem == nil {
 		return nil, fmt.Errorf("%w: missing SignedInfo", ErrInvalidSignature)
 	}
-	if parsed.signatureValue == nil {
+	if !signatureValueSeen {
 		return nil, fmt.Errorf("%w: missing SignatureValue", ErrInvalidSignature)
 	}
 

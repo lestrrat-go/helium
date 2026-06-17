@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -240,6 +241,269 @@ func TestAESKeyWrapRFC3394(t *testing.T) {
 
 	// Also verify the expected wrap output using the test vector.
 	_ = expected // verified indirectly through successful round-trip
+}
+
+// TestEncryptRSAOAEP11_SHA256RoundTrip verifies that a supported
+// RSA-OAEP 1.1 combination (SHA-256 digest + MGF1-SHA-256) encrypts and
+// decrypts correctly and serializes metadata that matches what was used.
+func TestEncryptRSAOAEP11_SHA256RoundTrip(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		OAEPDigest(xmlenc1.DigestSHA256).
+		OAEPMGF(xmlenc1.MGFSHA256).
+		RecipientPublicKey(&key.PublicKey)
+
+	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, xml, xmlenc1.DigestSHA256)
+	require.Contains(t, xml, xmlenc1.MGFSHA256)
+
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	nodes, err := decryptor.Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+
+	s, err := helium.WriteString(nodes[0])
+	require.NoError(t, err)
+	require.Contains(t, s, "user@example.com")
+}
+
+// TestEncryptRSAOAEP_UnsupportedDigestErrors verifies that an
+// unsupported (non-empty, unrecognized) digest URI is rejected rather
+// than silently downgraded to SHA-1.
+func TestEncryptRSAOAEP_UnsupportedDigestErrors(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		OAEPDigest("http://www.w3.org/2001/04/xmlenc#sha512").
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.Error(t, err)
+	var unsupp *xmlenc1.UnsupportedAlgorithmError
+	require.ErrorAs(t, err, &unsupp)
+}
+
+// TestEncryptRSAOAEP11_MismatchedMGFErrors verifies that a digest hash
+// that differs from the MGF1 hash is rejected, since crypto/rsa OAEP
+// uses a single hash for both and the metadata would otherwise lie.
+func TestEncryptRSAOAEP11_MismatchedMGFErrors(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		OAEPDigest(xmlenc1.DigestSHA256).
+		OAEPMGF(xmlenc1.MGFSHA1).
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+}
+
+// TestEncryptRSAOAEP_MGF1P_SHA256DigestErrors verifies that the legacy
+// rsa-oaep-mgf1p algorithm (whose MGF is fixed to SHA-1) rejects a
+// SHA-256 digest, which Go cannot represent alongside an SHA-1 MGF.
+func TestEncryptRSAOAEP_MGF1P_SHA256DigestErrors(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+		OAEPDigest(xmlenc1.DigestSHA256).
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+}
+
+// TestDecryptRSAOAEP_UnsupportedDigestErrors verifies that decryption
+// rejects an EncryptedKey advertising an unsupported digest URI instead
+// of silently using SHA-1.
+func TestDecryptRSAOAEP_UnsupportedDigestErrors(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		OAEPDigest(xmlenc1.DigestSHA256).
+		OAEPMGF(xmlenc1.MGFSHA256).
+		RecipientPublicKey(&key.PublicKey)
+
+	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	// Tamper with the serialized DigestMethod to an unsupported URI, then
+	// re-parse and attempt to decrypt: it must error, not fall back.
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	tampered := strings.Replace(xml, xmlenc1.DigestSHA256, "http://www.w3.org/2001/04/xmlenc#sha512", 1)
+	require.NotEqual(t, xml, tampered)
+
+	_ = edElem
+	tdoc := mustParseXML(t, tampered)
+	edNodes := findEncryptedData(t, tdoc.DocumentElement())
+	require.NotNil(t, edNodes)
+
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	_, err = decryptor.Decrypt(t.Context(), edNodes)
+	require.Error(t, err)
+	var unsupp *xmlenc1.UnsupportedAlgorithmError
+	require.ErrorAs(t, err, &unsupp)
+}
+
+// TestEncryptRSAOAEP_MGF1P_RejectsAnyMGF verifies that the legacy
+// rsa-oaep-mgf1p algorithm rejects ANY explicit MGF (including
+// MGF1-SHA-1), since XML-Enc 1.1 forbids an xenc11:MGF element for it,
+// and that no MGF element is serialized.
+func TestEncryptRSAOAEP_MGF1P_RejectsAnyMGF(t *testing.T) {
+	key := generateRSAKey(t)
+
+	for _, mgf := range []string{xmlenc1.MGFSHA1, xmlenc1.MGFSHA256} {
+		doc := mustParseXML(t, samlAssertion)
+		encryptor := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			OAEPMGF(mgf).
+			RecipientPublicKey(&key.PublicKey)
+
+		_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+		require.Error(t, err, "mgf %q must be rejected for rsa-oaep-mgf1p", mgf)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+
+		// No partial EncryptedData/MGF element should have been serialized.
+		xml, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.NotContains(t, xml, "MGF")
+	}
+}
+
+// TestDecryptRSAOAEP_ParamErrorIsDecryptionFailed verifies that a
+// parameter-validation failure encountered while decrypting an
+// EncryptedKey (here RSA-OAEP 1.1 advertising SHA-256 digest with an
+// MGF1-SHA-1 that Go cannot represent alongside it) is classified as a
+// decryption failure, not an encryption failure.
+func TestDecryptRSAOAEP_ParamErrorIsDecryptionFailed(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	// Produce a valid RSA-OAEP 1.1 SHA-256 EncryptedData, then tamper the
+	// serialized MGF down to MGF1-SHA-1 so digest and MGF hashes mismatch.
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		OAEPDigest(xmlenc1.DigestSHA256).
+		OAEPMGF(xmlenc1.MGFSHA256).
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	tampered := strings.Replace(xml, xmlenc1.MGFSHA256, xmlenc1.MGFSHA1, 1)
+	require.NotEqual(t, xml, tampered)
+
+	tdoc := mustParseXML(t, tampered)
+	edNode := findEncryptedData(t, tdoc.DocumentElement())
+	require.NotNil(t, edNode)
+
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	_, err = decryptor.Decrypt(t.Context(), edNode)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+	require.NotErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+}
+
+// TestEncryptUnsupportedKeyTransportErrors verifies that an unknown
+// key-transport algorithm URI is rejected on encrypt rather than
+// silently performing RSA-OAEP and serializing a bogus @Algorithm.
+func TestEncryptUnsupportedKeyTransportErrors(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm("urn:bogus").
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+	var unsupp *xmlenc1.UnsupportedAlgorithmError
+	require.ErrorAs(t, err, &unsupp)
+	require.Equal(t, "urn:bogus", unsupp.Algorithm)
+
+	// No EncryptedData (and certainly no bogus URI) should be serialized.
+	xml, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.NotContains(t, xml, "urn:bogus")
+	require.NotContains(t, xml, "EncryptedData")
+}
+
+// TestDecryptUnsupportedKeyTransportErrors verifies that an EncryptedKey
+// advertising an unknown key-transport algorithm URI is rejected on
+// decrypt as a decryption failure, with the typed error preserved.
+func TestDecryptUnsupportedKeyTransportErrors(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	// Produce a valid RSA-OAEP 1.1 EncryptedData, then tamper the
+	// serialized key-transport @Algorithm to an unsupported URI.
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	tampered := strings.Replace(xml, xmlenc1.RSAOAEP11, "urn:bogus", 1)
+	require.NotEqual(t, xml, tampered)
+
+	tdoc := mustParseXML(t, tampered)
+	edNode := findEncryptedData(t, tdoc.DocumentElement())
+	require.NotNil(t, edNode)
+
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	_, err = decryptor.Decrypt(t.Context(), edNode)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+	require.NotErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+	var unsupp *xmlenc1.UnsupportedAlgorithmError
+	require.ErrorAs(t, err, &unsupp)
+	require.Equal(t, "urn:bogus", unsupp.Algorithm)
+}
+
+func findEncryptedData(t *testing.T, n helium.Node) *helium.Element {
+	t.Helper()
+	elem, ok := n.(*helium.Element)
+	if ok && elem.LocalName() == "EncryptedData" {
+		return elem
+	}
+	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		if found := findEncryptedData(t, child); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 // childNames returns the local names of the direct element children of n,

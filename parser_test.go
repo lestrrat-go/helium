@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -1036,6 +1039,104 @@ func TestParserFS(t *testing.T) {
 
 	// Compile-time check that fs.FS is the parameter type.
 	var _ = helium.NewParser().FS(fs.FS(fstest.MapFS{}))
+}
+
+// recordingFS wraps an fs.FS and records every path passed to Open, so a test
+// can assert which resources a parse attempted to load.
+type recordingFS struct {
+	inner  fs.FS
+	mu     sync.Mutex
+	opened []string
+}
+
+func (r *recordingFS) Open(name string) (fs.File, error) {
+	r.mu.Lock()
+	r.opened = append(r.opened, name)
+	r.mu.Unlock()
+	return r.inner.Open(name)
+}
+
+func (r *recordingFS) wasOpened(name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Contains(r.opened, name)
+}
+
+// TestEntitySubParserFSSandbox guards against a sandbox escape where an external
+// entity reached from inside another external entity's sub-parse was resolved
+// via the default permissive os.Open path instead of the parser's configured FS.
+func TestEntitySubParserFSSandbox(t *testing.T) {
+	t.Parallel()
+
+	// A real on-disk file outside any configured sandbox. If the nested external
+	// entity escapes the FS via os.Open, its contents leak into the document.
+	dir := t.TempDir()
+	secretPath := filepath.Join(dir, "secret.xml")
+	require.NoError(t, os.WriteFile(secretPath, []byte("<leaked>TOPSECRET</leaked>"), 0o600))
+
+	t.Run("nested external entity confined to configured FS", func(t *testing.T) {
+		t.Parallel()
+
+		// outer.xml lives inside the sandbox and references &secret;, which is an
+		// external SYSTEM entity pointing at the absolute on-disk path OUTSIDE the
+		// sandbox. The sub-parse of outer.xml must resolve &secret; through the
+		// same configured FS, which does not contain that path, so it must not be
+		// readable and must not leak into the document.
+		input := `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY secret SYSTEM "` + secretPath + `">
+  <!ENTITY outer SYSTEM "outer.xml">
+]>
+<doc>&outer;</doc>`
+
+		rfs := &recordingFS{inner: fstest.MapFS{
+			"outer.xml": &fstest.MapFile{Data: []byte(`<wrap>&secret;</wrap>`)},
+		}}
+		p := helium.NewParser().SubstituteEntities(true).FS(rfs)
+		doc, _ := p.Parse(t.Context(), []byte(input))
+
+		// The on-disk secret must never surface in the resulting document.
+		if doc != nil {
+			var buf bytes.Buffer
+			require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+			require.NotContains(t, buf.String(), "TOPSECRET",
+				"out-of-sandbox file leaked into document")
+		}
+		// Resolution of the nested external entity must be routed through the
+		// configured FS (recorded here). A leak would happen via os.Open, which
+		// bypasses the recording FS entirely, so the path would never be seen.
+		require.True(t, rfs.wasOpened(secretPath),
+			"nested external entity escaped the configured FS sandbox")
+	})
+
+	t.Run("in-sandbox nested external entity still resolves", func(t *testing.T) {
+		t.Parallel()
+
+		// A legitimate external entity available within the configured FS must
+		// still resolve when reached from inside another external entity.
+		input := `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY allowed SYSTEM "allowed.xml">
+  <!ENTITY outer SYSTEM "outer.xml">
+]>
+<doc>&outer;</doc>`
+
+		rfs := &recordingFS{inner: fstest.MapFS{
+			"outer.xml":   &fstest.MapFile{Data: []byte(`<wrap>&allowed;</wrap>`)},
+			"allowed.xml": &fstest.MapFile{Data: []byte("<inner>ok</inner>")},
+		}}
+		p := helium.NewParser().SubstituteEntities(true).FS(rfs)
+		doc, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.True(t, rfs.wasOpened("allowed.xml"),
+			"in-sandbox nested external entity was not loaded through the configured FS")
+
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		out := buf.String()
+		require.Contains(t, out, "<inner", "in-sandbox nested external entity did not expand")
+		require.Contains(t, out, ">ok</inner>", "in-sandbox nested external entity content missing")
+	})
 }
 
 func TestSkipIDs(t *testing.T) {

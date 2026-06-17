@@ -412,6 +412,13 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	newctx.external = true
 	newctx.replaceEntities = pctx.replaceEntities
 	newctx.loadsubset = pctx.loadsubset
+	// Inherit the parent's security/resolution policy so nested external
+	// entities are confined to the same FS sandbox, catalog, and base URI as
+	// the top-level parse. Without this the sub-context defaults fsys to the
+	// permissive os.Open root and escapes the caller's configured sandbox.
+	newctx.fsys = pctx.fsys
+	newctx.catalog = pctx.catalog
+	newctx.baseURI = pctx.baseURI
 	if pctx.elem != nil {
 		for _, ns := range collectInScopeNamespaces(pctx.elem) {
 			newctx.pushNS(ns.Prefix(), ns.URI())
@@ -528,6 +535,14 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	newctx.sizeentcopy = pctx.sizeentcopy
 	newctx.inputSize = pctx.inputSize
 	newctx.maxAmpl = pctx.maxAmpl
+	// Inherit the parent's security/resolution policy so any external entity
+	// reached while expanding this internal-entity replacement text honors the
+	// same FS sandbox, catalog, and base URI as the top-level parse rather than
+	// falling back to the permissive os.Open root.
+	newctx.fsys = pctx.fsys
+	newctx.catalog = pctx.catalog
+	newctx.baseURI = pctx.baseURI
+	newctx.replaceEntities = pctx.replaceEntities
 	defer func() { pctx.sizeentcopy = newctx.sizeentcopy }()
 
 	newRoot := newctx.doc.CreateElement(pseudoRootName)

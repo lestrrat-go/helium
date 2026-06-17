@@ -13,8 +13,9 @@ import (
 
 // idcTable holds key-sequences collected during IDC evaluation for a single constraint.
 type idcTable struct {
-	idc  *IDConstraint
-	keys []idcEntry
+	idc        *IDConstraint
+	keys       []idcEntry
+	keyMissing bool // an xs:key selected node had an absent field (cvc-identity-constraint.4.2.1)
 }
 
 // idcEntry holds a single key-sequence value and the node that produced it.
@@ -40,11 +41,17 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
 		ev := xpath1.NewEvaluator().AdditionalNamespaces(idc.Namespaces)
-		table, err := evaluateIDC(ctx, ev, elem, edecl, idc, vc.schema)
+		table, err := vc.evaluateIDC(ctx, ev, elem, edecl, idc)
 		if err != nil {
 			continue
 		}
 		tables[idc.Name] = table
+
+		// A key with an absent field was already reported during
+		// evaluation; surface it as a validation failure.
+		if table.keyMissing {
+			lastErr = fmt.Errorf("missing key field")
+		}
 
 		// Check unique/key constraints immediately.
 		if idc.Kind == IDCUnique || idc.Kind == IDCKey {
@@ -84,7 +91,8 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 }
 
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
-func evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element, edecl *ElementDecl, idc *IDConstraint, schema *Schema) (*idcTable, error) {
+func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element, edecl *ElementDecl, idc *IDConstraint) (*idcTable, error) {
+	schema := vc.schema
 	// Evaluate selector XPath using pre-compiled expression when available.
 	var selectorResult *xpath1.Result
 	var err error
@@ -160,6 +168,20 @@ func evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element,
 
 		if allPresent {
 			table.keys = append(table.keys, entry)
+			continue
+		}
+
+		// A field that resolved to no node leaves the key-sequence
+		// incomplete. Per cvc-identity-constraint 4.2.1, every field of an
+		// xs:key must evaluate to a node for each selected node, so an
+		// absent field is a validity error. xs:unique and xs:keyref
+		// tolerate absent fields (the node simply drops out of the
+		// qualified node-set), so they only skip the entry.
+		if idc.Kind == IDCKey && entry.elem != nil {
+			table.keyMissing = true
+			idcName := idcDisplayName(idc, vc.schema)
+			msg := fmt.Sprintf("Not all fields of key identity-constraint '%s' evaluate to a node.", idcName)
+			vc.reportValidityError(ctx, vc.filename, entry.elem.Line(), elemDisplayName(entry.elem), msg)
 		}
 	}
 

@@ -16,7 +16,7 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
    - `schema.groups` (model groups)
    - `schema.attrGroups` (attribute groups)
    - `schema.globalAttrs` (global attributes)
-4. **Process includes/imports** — load `xs:include`/`xs:import`/`xs:redefine`, merge declarations
+4. **Process includes/imports** — load `xs:include`/`xs:import`/`xs:redefine`, merge declarations. Nested-schema document loads go through `compileConfig.fsys` (`fs.ReadFile(c.fsys, path)`), an injectable `fs.FS` set via `Compiler.FS(...)`; it defaults to `iofs.PermissiveRoot` (`os.Open`) and is propagated to sub-compilers. `xslt3` injects a resolver-backed `fs.FS` (`schemaResolverFS`) so nested includes inside a resolver-loaded schema obey the same default-deny `URIResolver` policy as the top-level load. Schema-location resolution is **URI-aware** and lives in a **single canonical helper**, `xsd.ResolveSchemaURI(ref, base) (string, error)` (`xsd/resolve_uri.go`), shared by both the xsd nested-include path and `xslt3`'s schema loader so the two layers cannot drift. `validateSchemaPath` is a thin wrapper over it. It keys off whether `ref`/`base` carries a URI scheme (`xsd.URIScheme`, the **one** scheme-detector for both packages — multi-char scheme required so Windows drive letters and bare OS paths stay local): an **absolute-URI** `schemaLocation` (e.g. a cross-host `https://cdn.example.com/part.xsd`) is passed through **unchanged** — never `filepath.Join`ed, which would collapse `//` and drop the host; a **relative** location against a **URI base** resolves via `net/url` `ResolveReference` (RFC 3986), keeping authority intact **and re-applying the base's `OmitHost` flag** when the base had no authority (so `mem:/schemas/main.xsd` + `part.xsd` → `mem:/schemas/part.xsd`, never `mem:///schemas/part.xsd`, while canonical `file:///...` bases keep their `///`); a genuine **local** base/location keeps the historical `filepath.Join` + `..`-escape guard (the only branch that can return an error). The import sub-compiler's `baseDir` is `schemaBaseDir(path)` (the full URI for URI bases, `filepath.Dir` for local). Because resolution happens while base and raw `schemaLocation` are still separate, the name reaching the FS is the **canonical** nested URI, so `schemaResolverFS.Open` forwards it verbatim (no string repair of a collapsed name). `xslt3`'s `resolveSchemaURI` delegates the absolute-URI and URI-base cases to `xsd.ResolveSchemaURI` and only handles its own local **file**-base case (xslt3's base is a full file URI/path, not a directory); it seeds the xsd `BaseDir` via `schemaCompileBaseDir(uri)` (full URI when scheme present, `filepath.Dir` otherwise).
 5. **Resolve references** — resolve all QName refs (types, base types, groups, attr groups, union members), build substitution group maps, detect circular substitution
 6. **Constraint checks** (when errorCount == 0):
    - `checkFinalOnTypes()` — final attribute enforcement
@@ -73,6 +73,11 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
   2. For each selected node, evaluate field XPaths → collect key-sequences
   3. Check unique/key: all key-sequences must be unique
   4. Check keyref: all key-sequences must exist in referenced constraint table
+  - Field presence (cvc-identity-constraint.4.2.1): an `xs:key` requires every
+    field to evaluate to a node for each selected node; an absent field is a
+    validity error (`Not all fields of key identity-constraint '…' evaluate to a
+    node.`). `xs:unique` and `xs:keyref` tolerate absent fields — the node drops
+    out of the qualified node-set.
   - XPath uses namespace context from schema, not instance
   - Key comparison is value-space aware (XSD 3.11.4): each field value is
     canonicalized via its declared simple type (`resolveFieldBuiltinLocal` →
@@ -180,11 +185,13 @@ Message content parsed into `[]messagePart`: text literals, `<name path="..."/>`
 
 1. Create XPath context with schema's namespaces
 2. For each pattern/rule: evaluate `contextExpr` against document root → node set
+   - If the context XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and mark the document invalid (the rule's assertions can't be checked, so it is not silently skipped)
 3. For each context node:
    - Bind `<let>` variables (accumulated, later lets see earlier ones)
    - Create rule-specific XPath context with variables
 4. For each test:
    - Evaluate XPath, convert to boolean
+   - If the test XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and treat the test as `false` (mirrors libxml2 `xmlSchematronRunTest` returning 0): an **assert** then fires/fails, a **report** stays silent. A broken test is never treated as satisfied.
    - **Assert**: error if false
    - **Report**: error if true
 5. Format message (interpolate text/name/value-of parts)

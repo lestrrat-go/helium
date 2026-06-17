@@ -252,6 +252,143 @@ func TestRangeOperator(t *testing.T) {
 	})
 }
 
+// TestSequenceLimitComposition verifies that compositions which accumulate
+// per-item sub-sequences (simple-map `!`, FLWOR `for ... return`, lookup `?`)
+// enforce the configured sequence/node-set size limit instead of materializing
+// unbounded output. maxNodes is lowered so the test is fast and proves the
+// evaluator stops early rather than after building everything.
+func TestSequenceLimitComposition(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+
+	// The domain (left side / for-clause range) stays within maxNodes; only the
+	// accumulated output overflows it. This proves the accumulation sites are
+	// bounded independently of the range guard (which catches an over-limit
+	// domain first).
+	overLimit := []struct {
+		name string
+		expr string
+	}{
+		{"simple-map", `(1 to 600) ! (1, 2)`},
+		{"flwor-for-return", `for $i in 1 to 600 return (1, 2)`},
+		{"lookup", `(1 to 600) ! map { "a": ., "b": . } ? *`},
+	}
+	for _, tc := range overLimit {
+		t.Run("over/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+		})
+	}
+
+	withinLimit := []struct {
+		name string
+		expr string
+		want int
+	}{
+		{"simple-map", `(1 to 10) ! (1, 2)`, 20},
+		{"flwor-for-return", `for $i in 1 to 10 return (1, 2)`, 20},
+		{"lookup", `(1 to 10) ! map { "a": ., "b": . } ? *`, 20},
+	}
+	for _, tc := range withinLimit {
+		t.Run("within/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			res, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, res.Sequence().Len())
+		})
+	}
+}
+
+// TestUnaryLookupLimit verifies that the unary lookup operators (`?*` and a
+// keyed lookup) enforce the configured sequence/node-set size limit when the
+// context item is an array or map whose members exceed maxNodes. The bound must
+// live inside lookupItem so both unary (this test) and postfix lookup are
+// covered through the single helper.
+func TestUnaryLookupLimit(t *testing.T) {
+	t.Parallel()
+
+	const limit = 100
+
+	makeArray := func(n int) xpath3.ArrayItem {
+		members := make([]xpath3.Sequence, n)
+		for i := range members {
+			members[i] = xpath3.SingleInteger(int64(i))
+		}
+		return xpath3.NewArray(members)
+	}
+
+	t.Run("over/array-all", func(t *testing.T) {
+		t.Parallel()
+		compiled, err := xpath3.NewCompiler().Compile(`?*`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			MaxNodesForTesting(limit).
+			ContextItem(makeArray(limit+1)).
+			Evaluate(t.Context(), compiled, nil)
+		require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+	})
+
+	t.Run("over/array-keyed", func(t *testing.T) {
+		t.Parallel()
+		// Each member is itself an array of two; the keyed lookup over the
+		// context array collects every member's two-item value, overflowing.
+		members := make([]xpath3.Sequence, limit+1)
+		for i := range members {
+			members[i] = xpath3.SingleInteger(int64(i))
+		}
+		arr := xpath3.NewArray(members)
+		compiled, err := xpath3.NewCompiler().Compile(`?1`)
+		require.NoError(t, err)
+		// Single keyed lookup stays small; ensure within-limit keyed lookups
+		// remain correct (one item returned).
+		res, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			MaxNodesForTesting(limit).
+			ContextItem(arr).
+			Evaluate(t.Context(), compiled, nil)
+		require.NoError(t, err)
+		require.Equal(t, 1, res.Sequence().Len())
+	})
+
+	t.Run("over/map-all", func(t *testing.T) {
+		t.Parallel()
+		// Build a map whose every value is a two-item sequence so `?*` collects
+		// 2*entries items. (limit/2)+1 entries overflows the limit.
+		pairs := make([]string, 0, limit)
+		for i := range limit/2 + 1 {
+			pairs = append(pairs, fmt.Sprintf(`%d: (1, 2)`, i))
+		}
+		expr := `(map { ` + strings.Join(pairs, ", ") + ` }) ! ? *`
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			MaxNodesForTesting(limit).
+			Evaluate(t.Context(), compiled, nil)
+		require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+	})
+
+	t.Run("within/array-all", func(t *testing.T) {
+		t.Parallel()
+		compiled, err := xpath3.NewCompiler().Compile(`?*`)
+		require.NoError(t, err)
+		res, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			MaxNodesForTesting(limit).
+			ContextItem(makeArray(10)).
+			Evaluate(t.Context(), compiled, nil)
+		require.NoError(t, err)
+		require.Equal(t, 10, res.Sequence().Len())
+	})
+}
+
 func TestNilContextWithContextItem(t *testing.T) {
 	t.Parallel()
 	// Evaluating "." with a context item (atomic value) and nil node must succeed.

@@ -62,6 +62,27 @@ func IsValidPITarget(target string) bool {
 	return IsValidNCName(target)
 }
 
+// IsValidQName checks whether s is a valid XML QName (Namespaces in XML §3):
+//
+//	QName ::= PrefixedName | UnprefixedName
+//	PrefixedName ::= Prefix ':' LocalPart
+//	UnprefixedName ::= LocalPart
+//
+// where Prefix and LocalPart are each an NCName. An unprefixed name is a bare
+// NCName; a prefixed name has exactly one colon separating two NCNames.
+func IsValidQName(s string) bool {
+	if s == "" {
+		return false
+	}
+	if prefix, local, found := strings.Cut(s, ":"); found {
+		// Exactly one colon, splitting two NCNames. A second colon makes
+		// the local part fail IsValidNCName, so no explicit second-colon
+		// check is needed.
+		return IsValidNCName(prefix) && IsValidNCName(local)
+	}
+	return IsValidNCName(s)
+}
+
 // IsValidNCName checks whether s is a valid XML NCName (non-colonized name).
 func IsValidNCName(s string) bool {
 	if s == "" {

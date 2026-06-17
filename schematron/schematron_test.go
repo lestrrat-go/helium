@@ -343,6 +343,147 @@ func TestWithErrorHandler(t *testing.T) {
 	})
 }
 
+// TestErroringTestXPath ensures that an assertion/report test whose XPath
+// cannot be evaluated is not silently treated as satisfied. A broken test
+// must surface the XPath error and, for an assert, fail validation.
+func TestErroringTestXPath(t *testing.T) {
+	t.Parallel()
+	p := helium.NewParser()
+
+	t.Run("assert with erroring test fails and reports error", func(t *testing.T) {
+		t.Parallel()
+		const sct = `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+  <pattern>
+    <rule context="/root">
+      <assert test="not-a-function()">bad assert</assert>
+    </rule>
+  </pattern>
+</schema>`
+		sDoc, err := p.Parse(t.Context(), []byte(sct))
+		require.NoError(t, err)
+		schema, err := schematron.NewCompiler().Compile(t.Context(), sDoc)
+		require.NoError(t, err)
+
+		doc, err := p.Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err)
+
+		var msgs []string
+		handler := messageCollector{msgs: &msgs}
+		verr := schematron.NewValidator(schema).Label("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
+
+		require.ErrorIs(t, verr, schematron.ErrValidationFailed)
+		require.True(t, hasXPathError(msgs), "expected an XPath error to be reported, got %v", msgs)
+	})
+
+	t.Run("report with erroring test reports error without spurious pass", func(t *testing.T) {
+		t.Parallel()
+		const sct = `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+  <pattern>
+    <rule context="/root">
+      <report test="not-a-function()">bad report</report>
+    </rule>
+  </pattern>
+</schema>`
+		sDoc, err := p.Parse(t.Context(), []byte(sct))
+		require.NoError(t, err)
+		schema, err := schematron.NewCompiler().Compile(t.Context(), sDoc)
+		require.NoError(t, err)
+
+		doc, err := p.Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err)
+
+		var msgs []string
+		handler := messageCollector{msgs: &msgs}
+		// A report whose test errors is treated as false (does not fire),
+		// so validation is not marked failed, but the XPath error must
+		// still be surfaced rather than swallowed.
+		verr := schematron.NewValidator(schema).Label("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
+
+		require.NoError(t, verr)
+		require.True(t, hasXPathError(msgs), "expected an XPath error to be reported, got %v", msgs)
+	})
+
+	t.Run("erroring rule context fails and reports error", func(t *testing.T) {
+		t.Parallel()
+		// The context expression compiles but errors at evaluation
+		// (unknown function inside a predicate). libxml2 wraps rule
+		// contexts as //<expr>, so a bare not-a-function() would be
+		// rejected at compile time; using a predicate reaches the
+		// runtime evaluation-error path under test.
+		const sct = `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+  <pattern>
+    <rule context="*[unknownfn()]">
+      <assert test="true()">ok</assert>
+    </rule>
+  </pattern>
+</schema>`
+		sDoc, err := p.Parse(t.Context(), []byte(sct))
+		require.NoError(t, err)
+		schema, err := schematron.NewCompiler().Compile(t.Context(), sDoc)
+		require.NoError(t, err)
+
+		doc, err := p.Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err)
+
+		var msgs []string
+		handler := messageCollector{msgs: &msgs}
+		verr := schematron.NewValidator(schema).Label("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
+
+		require.ErrorIs(t, verr, schematron.ErrValidationFailed)
+		require.True(t, hasXPathError(msgs), "expected an XPath error to be reported, got %v", msgs)
+	})
+
+	t.Run("valid schema still passes and fires genuine assertion", func(t *testing.T) {
+		t.Parallel()
+		const sct = `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+  <pattern>
+    <rule context="/root">
+      <assert test="@id">missing id</assert>
+    </rule>
+  </pattern>
+</schema>`
+		sDoc, err := p.Parse(t.Context(), []byte(sct))
+		require.NoError(t, err)
+		schema, err := schematron.NewCompiler().Compile(t.Context(), sDoc)
+		require.NoError(t, err)
+
+		okDoc, err := p.Parse(t.Context(), []byte(`<root id="x"/>`))
+		require.NoError(t, err)
+		var okMsgs []string
+		require.NoError(t, schematron.NewValidator(schema).ErrorHandler(messageCollector{msgs: &okMsgs}).Validate(t.Context(), okDoc))
+		require.False(t, hasXPathError(okMsgs), "valid run should report no XPath error, got %v", okMsgs)
+
+		badDoc, err := p.Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err)
+		var badMsgs []string
+		verr := schematron.NewValidator(schema).ErrorHandler(messageCollector{msgs: &badMsgs}).Validate(t.Context(), badDoc)
+		require.ErrorIs(t, verr, schematron.ErrValidationFailed)
+		require.False(t, hasXPathError(badMsgs), "genuine assertion failure should not be an XPath error, got %v", badMsgs)
+	})
+}
+
+// messageCollector implements helium.ErrorHandler and records every error
+// message string delivered to it (including non-ValidationError errors such
+// as surfaced XPath errors).
+type messageCollector struct {
+	msgs *[]string
+}
+
+func (c messageCollector) Handle(_ context.Context, err error) {
+	*c.msgs = append(*c.msgs, err.Error())
+}
+
+// hasXPathError reports whether any collected message is a surfaced XPath
+// evaluation error.
+func hasXPathError(msgs []string) bool {
+	for _, m := range msgs {
+		if strings.Contains(m, "XPath error :") {
+			return true
+		}
+	}
+	return false
+}
+
 // validationErrorCollector implements helium.ErrorHandler and extracts
 // *schematron.ValidationError values via errors.As.
 type validationErrorCollector struct {

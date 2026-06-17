@@ -15,6 +15,12 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 		return nil, dynamicError(errCodeXTDE1170, "key() requires at least 2 arguments")
 	}
 
+	// fn:key($key-name as xs:string, ...): the first argument is required to be
+	// a single string. An empty sequence is a type error, not a panic.
+	if args[0] == nil || sequence.Len(args[0]) == 0 {
+		return nil, dynamicError(errCodeXPTY0004, "key() first argument must be a single xs:string, got empty sequence")
+	}
+
 	nameAV, err := xpath3.AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
