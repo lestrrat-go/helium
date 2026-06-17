@@ -7,10 +7,62 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestResolveSchemaURI verifies the single canonical URI-resolution helper:
+// an absolute-URI ref is passed through untouched (never filepath.Join'ed,
+// which would collapse "//" and drop the host), a relative ref against a URI
+// base resolves per RFC 3986, and a no-authority base preserves OmitHost so
+// "mem:/..." stays "mem:/..." (not "mem:///...") while "file:///..." keeps its
+// "///".
+func TestResolveSchemaURI(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		base string
+		ref  string
+		want string
+	}{
+		// Absolute-URI ref: returned verbatim regardless of base.
+		{"absolute cross-host", httpsMain, "https://cdn.example.com/part.xsd", "https://cdn.example.com/part.xsd"},
+		{"absolute file location", httpsMain, "file:///etc/x.xsd", "file:///etc/x.xsd"},
+		{"absolute opaque ref, uri base", httpsMain, "urn:schemas:s", "urn:schemas:s"},
+		{"absolute single-slash ref, uri base", httpsMain, "mem:/o/s.xsd", "mem:/o/s.xsd"},
+		// Relative ref against an http authority base: RFC 3986 resolution.
+		{"https sibling", httpsMain, part, "https://example.com/s/part.xsd"},
+		{"https subdir", httpsMain, "sub/part.xsd", "https://example.com/s/sub/part.xsd"},
+		{"https parent", "https://example.com/s/sub/main.xsd", "../part.xsd", "https://example.com/s/part.xsd"},
+		{"https root-relative", httpsMain, "/p/s.xsd", "https://example.com/p/s.xsd"},
+		// Relative ref against a file:/// base: canonical "///" preserved.
+		{"file sibling keeps ///", "file:///tmp/s/main.xsd", part, "file:///tmp/s/part.xsd"},
+		{"file parent keeps ///", "file:///tmp/s/sub/main.xsd", "../part.xsd", "file:///tmp/s/part.xsd"},
+		{"file root-relative keeps ///", "file:///tmp/s/main.xsd", "/p/s.xsd", "file:///p/s.xsd"},
+		// No-authority single-slash base (OmitHost): "mem:/..." must stay
+		// "mem:/...", never gain an empty "//" authority ("mem:///...").
+		{"mem sibling", "mem:/schemas/main.xsd", part, "mem:/schemas/part.xsd"},
+		{"mem subdir", "mem:/schemas/main.xsd", "sub/part.xsd", "mem:/schemas/sub/part.xsd"},
+		{"mem parent", "mem:/schemas/sub/main.xsd", "../part.xsd", "mem:/schemas/part.xsd"},
+		{"mem root-relative", "mem:/schemas/main.xsd", "/p/s.xsd", "mem:/p/s.xsd"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ResolveSchemaURI(tc.ref, tc.base)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestURIScheme confirms the shared scheme-detector: multi-character schemes
+// count, bare local paths and single-letter Windows drive letters do not.
+func TestURIScheme(t *testing.T) {
+	require.Equal(t, "https", URIScheme("https://x/y"))
+	require.Equal(t, "mem", URIScheme("mem:/x"))
+	require.Equal(t, "file", URIScheme("file:///x"))
+	require.Equal(t, "urn", URIScheme("urn:a:b"))
+	require.Equal(t, "", URIScheme("/tmp/x"))
+	require.Equal(t, "", URIScheme("part.xsd"))
+	require.Equal(t, "", URIScheme(`C:\x`))
+}
+
 // TestValidateSchemaPathURIAware verifies that xs:include/xs:import/xs:redefine
-// schema-location resolution is URI-aware: an absolute-URI location is passed
-// through untouched (never filepath.Join'ed, which would collapse "//" and drop
-// the host), and a relative location against a URI base resolves per RFC 3986.
+// schema-location resolution (via the validateSchemaPath wrapper) is URI-aware.
 func TestValidateSchemaPathURIAware(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -18,15 +70,9 @@ func TestValidateSchemaPathURIAware(t *testing.T) {
 		loc     string
 		want    string
 	}{
-		// Absolute-URI location: returned verbatim regardless of base.
-		{"absolute cross-host", "https://example.com/s/main.xsd", "https://cdn.example.com/part.xsd", "https://cdn.example.com/part.xsd"},
-		{"absolute file location", "https://example.com/s/main.xsd", "file:///etc/x.xsd", "file:///etc/x.xsd"},
-		// Relative location against an http base: RFC 3986 resolution.
-		{"relative sibling", "https://example.com/s/main.xsd", part, "https://example.com/s/part.xsd"},
-		{"relative subdir", "https://example.com/s/main.xsd", "sub/part.xsd", "https://example.com/s/sub/part.xsd"},
-		{"relative parent", "https://example.com/s/sub/main.xsd", "../part.xsd", "https://example.com/s/part.xsd"},
-		// Relative location against a file:// base.
-		{"file relative sibling", "file:///tmp/s/main.xsd", part, "file:///tmp/s/part.xsd"},
+		{"absolute cross-host", httpsMain, "https://cdn.example.com/part.xsd", "https://cdn.example.com/part.xsd"},
+		{"relative sibling", httpsMain, part, "https://example.com/s/part.xsd"},
+		{"mem sibling preserves OmitHost", "mem:/schemas/main.xsd", part, "mem:/schemas/part.xsd"},
 		{"file relative parent", "file:///tmp/s/sub/main.xsd", "../part.xsd", "file:///tmp/s/part.xsd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -39,6 +85,9 @@ func TestValidateSchemaPathURIAware(t *testing.T) {
 
 // part is the relative schema-location used in these cases.
 const part = "part.xsd"
+
+// httpsMain is the canonical https base schema URI reused across cases.
+const httpsMain = "https://example.com/s/main.xsd"
 
 // TestValidateSchemaPathLocalUnchanged verifies that genuine local-filesystem
 // bases keep their historical filepath.Join behavior and ".."-escape guard, so

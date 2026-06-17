@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"net/url"
 	"path/filepath"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -24,93 +22,12 @@ var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
 // so the containment violation is visible to callers.
 var errSchemaPathEscape = errors.New("xsd: schema location escapes base directory")
 
-// uriScheme reports whether s is an absolute URI reference (has a scheme
-// per RFC 3986, e.g. "https://...", "file:///...", "mem:/..."). A bare
-// local filesystem path — even an absolute one like "/tmp/x" or a Windows
-// "C:\x" — is NOT treated as a URI: url.Parse assigns no Scheme to "/tmp/x",
-// and a single-letter Windows drive letter is rejected here so OS paths keep
-// their historical filepath handling. Only multi-character schemes count.
-func uriScheme(s string) string {
-	u, err := url.Parse(s)
-	if err != nil || len(u.Scheme) < 2 {
-		return ""
-	}
-	return u.Scheme
-}
-
 // validateSchemaPath resolves an xs:include/xs:import/xs:redefine
-// schemaLocation against baseDir and returns the name handed to the
-// configured fs.FS.
-//
-// Resolution is URI-aware so that absolute and relative URI references are
-// not mangled by [filepath]:
-//
-//   - An ABSOLUTE-URI location (it has a scheme, e.g.
-//     "https://cdn.example.com/part.xsd") is passed through UNCHANGED. It must
-//     not be filepath.Join'ed with baseDir — doing so collapses the "//"
-//     authority separator and drops the host, producing a malformed
-//     "https:/cdn.example.com/part.xsd". Absolute references address their own
-//     location, so there is nothing to resolve and no baseDir escape to check.
-//   - A RELATIVE location against a URI baseDir (baseDir has a scheme) is
-//     resolved with RFC 3986 [url.URL.ResolveReference] semantics, which keeps
-//     the authority intact and applies "../"/subdir rules correctly. The
-//     resulting URI authority is fixed by the base, so ".." cannot escape it.
-//   - Otherwise (a genuine local filesystem baseDir/location) the historical
-//     [filepath] join + ".."-escape guard is used unchanged.
-//
-// The local-path escape check compares the joined path back to baseDir via
-// [filepath.Rel] — a relative result that begins with ".." means location
-// ascended above baseDir. Mirrors the defense-in-depth path normalization in
-// xinclude (#420/#425); the configured fs.FS may further constrain (os.DirFS
-// rejects absolute paths and ValidPath violations on its own), but catching
-// the escape here gives consistent behavior with permissive FS implementations.
-//
-// Note: [filepath.Join] does not preserve an absolute prefix on the second
-// argument — Join("schemas", "/etc/passwd") returns "schemas/etc/passwd",
-// which lives inside baseDir and is not an escape. Absolute local
-// schemaLocation values therefore do not bypass this check; they land inside
-// baseDir. (When baseDir is empty there is nothing to escape from, and the
-// configured fs.FS decides what to accept.)
+// schemaLocation against baseDir and returns the name handed to the configured
+// fs.FS. It is a thin wrapper over [ResolveSchemaURI], the single canonical
+// URI-resolution helper shared with xslt3 (so the two layers cannot drift).
 func validateSchemaPath(baseDir, location string) (string, error) {
-	// Absolute-URI location: address its own location verbatim.
-	if uriScheme(location) != "" {
-		return location, nil
-	}
-	// Relative location against a URI base: resolve per RFC 3986.
-	if uriScheme(baseDir) != "" {
-		return resolveURIReference(baseDir, location)
-	}
-	if baseDir == "" {
-		return filepath.Clean(location), nil
-	}
-	p := filepath.Join(baseDir, location)
-	rel, err := filepath.Rel(baseDir, p)
-	if err != nil {
-		// Rel only fails when one is absolute and the other isn't;
-		// nothing actionable here — accept and let fs.FS decide.
-		return p, nil //nolint:nilerr
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: %q", errSchemaPathEscape, location)
-	}
-	return p, nil
-}
-
-// resolveURIReference resolves a relative reference against a URI base using
-// RFC 3986 semantics. The base is the FULL schema URI (e.g.
-// "https://example.com/s/main.xsd"); url.URL.ResolveReference treats its last
-// path segment as the document and replaces it, so a sibling "part.xsd"
-// resolves to "https://example.com/s/part.xsd".
-func resolveURIReference(baseURI, ref string) (string, error) {
-	base, err := url.Parse(baseURI)
-	if err != nil {
-		return "", fmt.Errorf("%w: invalid base URI %q", errSchemaPathEscape, baseURI)
-	}
-	refURL, err := url.Parse(ref)
-	if err != nil {
-		return "", fmt.Errorf("%w: invalid reference %q", errSchemaPathEscape, ref)
-	}
-	return base.ResolveReference(refURL).String(), nil
+	return ResolveSchemaURI(location, baseDir)
 }
 
 // schemaBaseDir returns the base used to resolve nested includes/imports of

@@ -5,9 +5,10 @@ import (
 	"context"
 	"io"
 	"io/fs"
-	"net/url"
 	"path/filepath"
 	"time"
+
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 // schemaResolverFS adapts a byte-loader (backed by the XSLT engine's
@@ -45,86 +46,36 @@ func (s schemaResolverFS) Open(name string) (fs.File, error) {
 	return &schemaResolverFile{name: name, r: bytes.NewReader(data), size: int64(len(data))}, nil
 }
 
-// uriScheme reports the scheme of s when s is an absolute URI reference (has a
-// scheme per RFC 3986, e.g. "https://...", "file:/...", "mem:/...", "urn:..."),
-// or "" otherwise. A bare local filesystem path — even an absolute one like
-// "/tmp/x" — has no scheme; a single-letter scheme is rejected so a Windows
-// drive letter ("C:\x") keeps its filepath handling. This mirrors the xsd
-// package's own uriScheme detection so the two layers agree on what counts as
-// an absolute URI.
-func uriScheme(s string) string {
-	u, err := url.Parse(s)
-	if err != nil || len(u.Scheme) < 2 {
-		return ""
-	}
-	return u.Scheme
-}
-
 // resolveSchemaURI resolves a schema-location reference against a base URI.
 //
-// The function branches on the BASE TYPE first, then handles the ref within each
-// branch. This ordering is deliberate: earlier revisions interleaved filepath
-// and URI checks and repeatedly accumulated precedence bugs (the worst being a
-// root-relative "/schemas/s.xsd" ref against a URI base wrongly returned
-// verbatim instead of being resolved against the base authority). Branching on
-// the base type makes the invariant explicit:
+// The URI cases (absolute-URI ref pass-through, and RFC 3986 resolution against
+// a URI base with OmitHost preservation) are delegated to [xsd.ResolveSchemaURI]
+// — the single canonical helper shared with the xsd nested-include path, so the
+// two layers cannot drift apart again. Only the LOCAL filesystem base case is
+// handled here, because xslt3's base is the full FILE URI/path of the
+// referencing stylesheet or document (not a directory): an absolute local ref
+// is returned as-is, otherwise the ref is joined onto the base's directory.
 //
-//   - An absolute-URI ref (it has its own scheme — with or without a "//"
-//     authority, e.g. "https://other/x.xsd", "mem:/schemas/s.xsd",
-//     "urn:schemas:s", "file:/tmp/s") addresses its own location and is returned
-//     UNCHANGED, regardless of base. It must never be filepath.Join'ed onto a
-//     local base — that would produce a bogus path like "/work/mem:/schemas/s".
-//
-//   - URI base (the base has a scheme): EVERY remaining ref — relative
-//     "part.xsd", subdir "sub/part.xsd", parent "../o/part.xsd", or
-//     root-relative "/schemas/s.xsd" — is resolved per RFC 3986 via net/url
-//     ResolveReference. filepath is NEVER used for a URI base, so the result
-//     preserves scheme+authority and applies dot-segment/root-relative semantics
-//     correctly without filepath collapsing.
-//
-//   - Local filesystem base: the historical filepath behavior is kept. An
-//     absolute local path ref is returned as-is; otherwise it is joined onto the
-//     base directory.
-//
-// Absolute-URI detection matches the xsd package's uriScheme semantics
-// (url.Parse + multi-character scheme), keeping the two layers consistent.
+// xsd.ResolveSchemaURI may return an error only for its local-base ".."-escape
+// guard, which is unreachable here: this function never delegates the local
+// case to it. The URI branches never error, so the error is discarded.
 func resolveSchemaURI(ref, baseURI string) string {
 	if ref == "" || baseURI == "" {
 		return ref
 	}
 
-	// 1. Absolute-URI ref (any scheme, "//" or not): always used as-is.
-	if uriScheme(ref) != "" {
-		return ref
-	}
-
-	// 2. URI base: resolve every remaining ref form via RFC 3986. Never touch
-	//    filepath here — a root-relative "/schemas/s.xsd" must keep the base's
-	//    scheme+authority and replace the path.
-	if uriScheme(baseURI) != "" {
-		base, baseErr := url.Parse(baseURI)
-		refURL, refErr := url.Parse(ref)
-		if baseErr == nil && refErr == nil {
-			resolved := base.ResolveReference(refURL)
-			// net/url quirk: ResolveReference returns a fresh URL that does NOT
-			// carry the base's OmitHost flag. For a no-authority base like
-			// "mem:/stylesheets/main.xsl" (OmitHost=true, no "//") the resolved
-			// URL would otherwise emit an empty "//" authority — "mem:///..." —
-			// breaking exact-match resolvers keyed on "mem:/...". Re-apply
-			// OmitHost only when the base was the no-authority form AND the
-			// resolved URL has no authority, so canonical empty-authority bases
-			// like "file:///..." (OmitHost=false) keep their "///".
-			if base.OmitHost && resolved.Host == "" && resolved.User == nil {
-				resolved.OmitHost = true
-			}
-			return resolved.String()
+	// Absolute-URI ref, or any ref against a URI base: defer to the shared
+	// canonical resolver (RFC 3986 + OmitHost preservation).
+	if xsd.URIScheme(ref) != "" || xsd.URIScheme(baseURI) != "" {
+		resolved, err := xsd.ResolveSchemaURI(ref, baseURI)
+		if err == nil {
+			return resolved
 		}
-		// Unparseable URI base/ref: fall back to the local-base join below
-		// rather than silently dropping the ref.
+		// Unreachable for URI inputs; fall back rather than drop the ref.
 		return filepath.Join(filepath.Dir(baseURI), ref)
 	}
 
-	// 3. Local filesystem base: keep historical filepath semantics.
+	// Local filesystem base (a FILE path): keep historical filepath semantics.
 	if filepath.IsAbs(ref) {
 		return ref
 	}
@@ -141,7 +92,7 @@ func resolveSchemaURI(ref, baseURI string) string {
 // DIRECTORY. (A single-letter "scheme" is treated as a Windows drive letter,
 // not a URI, matching the xsd package's own detection.)
 func schemaCompileBaseDir(base string) string {
-	if uriScheme(base) != "" {
+	if xsd.URIScheme(base) != "" {
 		return base
 	}
 	return filepath.Dir(base)

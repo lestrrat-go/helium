@@ -201,6 +201,50 @@ func TestImportSchemaNestedIncludeFileURIBase(t *testing.T) {
 	require.Contains(t, out, "out")
 }
 
+// TestImportSchemaNestedIncludeMemURIBase verifies that a compile-time
+// xsl:import-schema whose schema-location is a no-authority single-slash
+// "mem:/..." URI routes its nested relative xs:include through the resolver
+// under the CANONICAL "mem:/schemas/part.xsd" — NOT the "mem:///schemas/..."
+// form that net/url's ResolveReference would emit by dropping the base's
+// OmitHost flag. An exact-match resolver keyed on the canonical URI must be
+// asked for it.
+func TestImportSchemaNestedIncludeMemURIBase(t *testing.T) {
+	const mainSchemaURI = "mem:/schemas/main.xsd"
+	const partSchemaURI = "mem:/schemas/part.xsd"
+	const collapsedURI = "mem:///schemas/part.xsd"
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s" schema-location="mem:/schemas/main.xsd"/>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	resolver := &exactURIResolver{files: map[string]string{
+		mainSchemaURI: ddMainSchemaWithInclude,
+		partSchemaURI: ddPartSchemaXSD,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "nested xs:include over a mem:/ base must resolve through the resolver")
+	require.True(t, resolver.askedFor(partSchemaURI),
+		"resolver must be asked for the canonical mem:/ nested URI %q; got %v", partSchemaURI, resolver.asked)
+	require.False(t, resolver.askedFor(collapsedURI),
+		"resolver must NOT be asked for the OmitHost-dropped URI %q; got %v", collapsedURI, resolver.asked)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "out")
+}
+
 // ddMainSchemaWithSubdirInclude pulls in a part from a subdirectory, exercising
 // multi-segment relative nested-include resolution. (The xsd compiler forbids a
 // nested reference that climbs above its schema's own directory via "../", by
