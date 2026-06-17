@@ -73,6 +73,11 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
   2. For each selected node, evaluate field XPaths → collect key-sequences
   3. Check unique/key: all key-sequences must be unique
   4. Check keyref: all key-sequences must exist in referenced constraint table
+  - Field presence (cvc-identity-constraint.4.2.1): an `xs:key` requires every
+    field to evaluate to a node for each selected node; an absent field is a
+    validity error (`Not all fields of key identity-constraint '…' evaluate to a
+    node.`). `xs:unique` and `xs:keyref` tolerate absent fields — the node drops
+    out of the qualified node-set.
   - XPath uses namespace context from schema, not instance
   - Key comparison is value-space aware (XSD 3.11.4): each field value is
     canonicalized via its declared simple type (`resolveFieldBuiltinLocal` →
