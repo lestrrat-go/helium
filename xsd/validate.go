@@ -314,7 +314,7 @@ func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *hel
 			}
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), ce.LocalName(), "This element is not expected.")
 			return fmt.Errorf("not expected")
-		case helium.TextNode:
+		case helium.TextNode, helium.CDATASectionNode:
 			if !isBlank(child.Content()) {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple.")
 				return fmt.Errorf("not expected")
