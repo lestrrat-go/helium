@@ -123,6 +123,9 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 	if typeRef != "" {
 		qn := c.resolveQName(ctx, elem, typeRef)
 		c.elemRefs[decl] = qn
+		if refIsPrefixed(typeRef) {
+			c.prefixedElemTypeRefs[decl] = struct{}{}
+		}
 		c.elemRefSources[decl] = elemRefSource{elemName: sourceName, line: elem.Line()}
 		return nil
 	}

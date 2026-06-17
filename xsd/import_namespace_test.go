@@ -124,23 +124,32 @@ func TestCompile_ImportNamespaceMismatch(t *testing.T) {
 // element-type and base-type ref paths. A genuinely missing type must still
 // fail.
 func TestCompile_ImportNoNamespaceListUnionRefs(t *testing.T) {
-	compileErrors := func(t *testing.T, fsys fstest.MapFS) string {
+	// compileSchema compiles the importMainXSD entry of fsys and returns the
+	// compiled schema together with the concatenated ErrorHandler diagnostics.
+	// Returning the schema (not just the error string) lets the no-namespace
+	// cases assert the *actual* resolution target, so they fail against the old
+	// silent-placeholder behavior — not merely against a compile error.
+	compileSchema := func(t *testing.T, fsys fstest.MapFS) (*xsd.Schema, string) {
 		t.Helper()
 		data, err := fsys.ReadFile(importMainXSD)
 		require.NoError(t, err)
 		doc, err := helium.NewParser().Parse(t.Context(), data)
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+		schema, err := xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
 		require.NoError(t, err)
 		var b strings.Builder
 		for _, e := range collector.Errors() {
 			b.WriteString(e.Error())
 		}
-		return b.String()
+		return schema, b.String()
 	}
 
-	// xs:list itemType referencing a type from a no-TNS imported schema.
+	// xs:list itemType referencing a type from a no-TNS imported schema. The
+	// unprefixed itemType="t" must resolve to the empty-namespace {}t the
+	// imported schema actually defines — not to a silent {urn:main}t placeholder
+	// (the old behavior). Asserting ItemType.Name == {Local:"t", NS:""} makes
+	// this test fail against that placeholder behavior.
 	t.Run("list itemType resolves against empty namespace", func(t *testing.T) {
 		fsys := fstest.MapFS{
 			importMainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -157,11 +166,18 @@ func TestCompile_ImportNoNamespaceListUnionRefs(t *testing.T) {
   </xs:simpleType>
 </xs:schema>`)},
 		}
-		got := compileErrors(t, fsys)
+		schema, got := compileSchema(t, fsys)
 		require.Empty(t, got, "list itemType from a no-namespace import must resolve to {}t, not error on {urn:main}t; got: %q", got)
+		myList, ok := schema.LookupType("myList", "urn:main")
+		require.True(t, ok, "myList must be present in the compiled schema")
+		require.NotNil(t, myList.ItemType, "myList.ItemType must be resolved")
+		require.Equal(t, xsd.QName{Local: "t", NS: ""}, myList.ItemType.Name,
+			"itemType must resolve to the imported {}t, not a {urn:main}t placeholder")
 	})
 
-	// xs:union memberTypes referencing a type from a no-TNS imported schema.
+	// xs:union memberTypes referencing a type from a no-TNS imported schema. The
+	// unprefixed member "t" must resolve to {}t; assert the resolved member set
+	// to fail against the old {urn:main}t placeholder behavior.
 	t.Run("union memberTypes resolves against empty namespace", func(t *testing.T) {
 		fsys := fstest.MapFS{
 			importMainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -178,8 +194,16 @@ func TestCompile_ImportNoNamespaceListUnionRefs(t *testing.T) {
   </xs:simpleType>
 </xs:schema>`)},
 		}
-		got := compileErrors(t, fsys)
+		schema, got := compileSchema(t, fsys)
 		require.Empty(t, got, "union memberTypes from a no-namespace import must resolve to {}t, not error on {urn:main}t; got: %q", got)
+		myUnion, ok := schema.LookupType("myUnion", "urn:main")
+		require.True(t, ok, "myUnion must be present in the compiled schema")
+		memberNames := make([]xsd.QName, 0, len(myUnion.MemberTypes))
+		for _, m := range myUnion.MemberTypes {
+			memberNames = append(memberNames, m.Name)
+		}
+		require.Contains(t, memberNames, xsd.QName{Local: "t", NS: ""},
+			"a union member must resolve to the imported {}t, not a {urn:main}t placeholder; got members %v", memberNames)
 	})
 
 	// A genuinely missing itemType must still report a fatal error even after the
@@ -200,8 +224,104 @@ func TestCompile_ImportNoNamespaceListUnionRefs(t *testing.T) {
   </xs:simpleType>
 </xs:schema>`)},
 		}
-		got := compileErrors(t, fsys)
+		_, got := compileSchema(t, fsys)
 		require.Contains(t, got, "does not resolve to a(n) type definition",
 			"a genuinely missing list itemType must still report a fatal error; got: %q", got)
 	})
+}
+
+// The no-targetNamespace ({}) fallback for unresolved type references must apply
+// ONLY to unprefixed (chameleon-style) refs. A PREFIXED ref binds to its
+// prefix's namespace: if xmlns:o="urn:other" and the no-TNS imported schema
+// defines an UNQUALIFIED type t, then a ref written as "o:t" must report
+// unresolved {urn:other}t rather than silently falling back to {}t. This guards
+// all four ref kinds (element type, base, list itemType, union memberTypes).
+func TestCompile_PrefixedRefNoEmptyNamespaceFallback(t *testing.T) {
+	compileErrors := func(t *testing.T, fsys fstest.MapFS) string {
+		t.Helper()
+		data, err := fsys.ReadFile(importMainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		var b strings.Builder
+		for _, e := range collector.Errors() {
+			b.WriteString(e.Error())
+		}
+		return b.String()
+	}
+
+	// other.xsd has no targetNamespace and defines an unqualified type t.
+	const otherNoTNS = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="t">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="ct"/>
+</xs:schema>`
+
+	// Each case binds prefix o to urn:other (a namespace that contains no type
+	// t) and references o:t. The empty-NS fallback must NOT fire, so resolution
+	// must report unresolved {urn:other}t.
+	cases := []struct {
+		name string
+		main string
+	}{
+		{
+			name: "element type",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:o="urn:other" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:element name="root" type="o:t"/>
+</xs:schema>`,
+		},
+		{
+			name: "base type",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:o="urn:other" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="d">
+    <xs:restriction base="o:t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="d"/>
+</xs:schema>`,
+		},
+		{
+			name: "list itemType",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:o="urn:other" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="myList">
+    <xs:list itemType="o:t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="myList"/>
+</xs:schema>`,
+		},
+		{
+			name: "union memberTypes",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:o="urn:other" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="myUnion">
+    <xs:union memberTypes="xs:string o:t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="myUnion"/>
+</xs:schema>`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fsys := fstest.MapFS{
+				importMainXSD:  &fstest.MapFile{Data: []byte(tc.main)},
+				importOtherXSD: &fstest.MapFile{Data: []byte(otherNoTNS)},
+			}
+			got := compileErrors(t, fsys)
+			require.Contains(t, got, "{urn:other}t",
+				"a prefixed o:t (o=urn:other) must report unresolved {urn:other}t, not silently fall back to {}t; got: %q", got)
+			require.Contains(t, got, "does not resolve to a(n) type definition",
+				"prefixed unresolved ref must produce a fatal unresolved-type error; got: %q", got)
+		})
+	}
 }

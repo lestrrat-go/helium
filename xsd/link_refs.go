@@ -53,11 +53,14 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				edecl.Type = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 				continue
 			}
+			_, edeclPrefixed := c.prefixedElemTypeRefs[edecl]
 			td, ok := c.schema.types[qn]
-			if !ok && qn.NS != "" {
+			if !ok && qn.NS != "" && !edeclPrefixed {
 				// Try empty namespace as fallback — the type may come from an
 				// imported schema with no targetNamespace (mirrors the base-type
-				// ref resolution below).
+				// ref resolution below). Restricted to UNPREFIXED refs: a
+				// prefixed ref (e.g. type="o:t") binds to its prefix's namespace
+				// and must report unresolved there, not silently bind to {}t.
 				td, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
 			}
 			if !ok {
@@ -79,10 +82,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 
 	// Resolve base type references.
 	for td, qn := range c.typeRefs {
+		_, basePrefixed := c.prefixedBaseRefs[td]
 		base, ok := c.schema.types[qn]
-		if !ok && qn.NS != "" {
+		if !ok && qn.NS != "" && !basePrefixed {
 			// Try empty namespace as fallback — the type may come from an
-			// imported schema with no targetNamespace.
+			// imported schema with no targetNamespace. Restricted to UNPREFIXED
+			// refs: a prefixed base="o:t" binds to its prefix's namespace.
 			base, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
 		}
 		if !ok {
@@ -97,10 +102,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 
 	// Resolve list item type references.
 	for td, qn := range c.itemTypeRefs {
+		_, itemPrefixed := c.prefixedItemTypeRefs[td]
 		itemTD, ok := c.schema.types[qn]
-		if !ok && qn.NS != "" {
+		if !ok && qn.NS != "" && !itemPrefixed {
 			// Try empty namespace as fallback — the item type may come from an
-			// imported schema with no targetNamespace.
+			// imported schema with no targetNamespace. Restricted to UNPREFIXED
+			// refs: a prefixed itemType="o:t" binds to its prefix's namespace.
 			itemTD, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
 		}
 		if !ok {
@@ -114,9 +121,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve union member type references.
 	for _, ref := range c.unionMemberRefs {
 		memberTD, ok := c.schema.types[ref.name]
-		if !ok && ref.name.NS != "" {
+		if !ok && ref.name.NS != "" && !ref.prefixed {
 			// Try empty namespace as fallback — the member type may come from an
-			// imported schema with no targetNamespace.
+			// imported schema with no targetNamespace. Restricted to UNPREFIXED
+			// refs: a prefixed memberTypes="o:t" binds to its prefix's namespace.
 			memberTD, ok = c.schema.types[QName{Local: ref.name.Local, NS: ""}]
 		}
 		if !ok {
@@ -774,6 +782,14 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 		td = td.BaseType
 	}
 	return false
+}
+
+// refIsPrefixed reports whether a lexical QName reference (as written in the
+// schema, e.g. "o:t" or "t") carried an explicit namespace prefix. Only
+// unprefixed refs are eligible for the no-targetNamespace ({}) fallback when
+// they fail to resolve, because a prefixed ref binds to its prefix's namespace.
+func refIsPrefixed(ref string) bool {
+	return strings.IndexByte(ref, ':') >= 0
 }
 
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName
