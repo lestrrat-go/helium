@@ -452,10 +452,21 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 
 	// The replaced node is logically removed from the tree. Clear its own
 	// parent/sibling links so a stale handle cannot rewrite the spliced-in
-	// replacement (e.g. via a later UnlinkNode or Replace).
-	ndn.parent = nil
-	ndn.prev = nil
-	ndn.next = nil
+	// replacement (e.g. via a later UnlinkNode or Replace). Skip this when the
+	// replaced node is itself one of the inserted nodes (e.g. self-replacement),
+	// since it remains live in the tree and clearing its links would corrupt it.
+	replacedIsInserted := false
+	for _, nn := range nodes {
+		if nn.baseDocNode() == ndn {
+			replacedIsInserted = true
+			break
+		}
+	}
+	if !replacedIsInserted {
+		ndn.parent = nil
+		ndn.prev = nil
+		ndn.next = nil
+	}
 
 	return nil
 }
