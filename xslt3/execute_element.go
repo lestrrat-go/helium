@@ -612,9 +612,40 @@ func (ec *execContext) annotateAttributesFromType(elem *helium.Element, typeName
 	}
 }
 
+// validateComputedAttributeName performs the name-validity checks for a
+// computed xsl:attribute name that are independent of the output target:
+// XTDE0855 (the name must not be "xmlns" when no namespace attribute is given)
+// and XTDE0850 (the name must be a lexically valid QName/EQName). It is invoked
+// before the element-output, sequence-mode, and item-capture branches so every
+// path enforces the same rules.
+func validateComputedAttributeName(name string, inst *attributeInst) error {
+	// XTDE0855: when no namespace attribute, name must not be "xmlns"
+	if inst.Namespace == nil && name == lexicon.PrefixXMLNS {
+		return dynamicError(errCodeXTDE0855,
+			"xsl:attribute name must not be %q when no namespace attribute is specified", name)
+	}
+
+	// XTDE0850: name must be a valid QName
+	if !isValidQName(name) && !isValidEQName(name) {
+		return dynamicError(errCodeXTDE0850,
+			"xsl:attribute name %q is not a valid QName", name)
+	}
+
+	return nil
+}
+
 func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) error {
 	name, err := inst.Name.evaluate(ctx, ec.contextNode)
 	if err != nil {
+		return err
+	}
+
+	// Validate the computed attribute name up front so that the lexical-QName
+	// (XTDE0850) and reserved-xmlns (XTDE0855) checks apply uniformly across the
+	// element-output, sequence-mode, and item-capture paths below. The
+	// undeclared-prefix (XTDE0860) check stays inline in each path because it
+	// only applies when no explicit namespace attribute is supplied.
+	if err := validateComputedAttributeName(name, inst); err != nil {
 		return err
 	}
 
@@ -795,18 +826,6 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 	// and later filtered, so attribute-after-child is permitted during evaluation.
 	if elem.FirstChild() != nil && !out.wherePopulated {
 		return dynamicError(errCodeXTRE0540, "cannot add attribute to element after children have been added")
-	}
-
-	// XTDE0855: when no namespace attribute, name must not be "xmlns"
-	if inst.Namespace == nil && name == lexicon.PrefixXMLNS {
-		return dynamicError(errCodeXTDE0855,
-			"xsl:attribute name must not be %q when no namespace attribute is specified", name)
-	}
-
-	// XTDE0850: name must be a valid QName
-	if !isValidQName(name) && !isValidEQName(name) {
-		return dynamicError(errCodeXTDE0850,
-			"xsl:attribute name %q is not a valid QName", name)
 	}
 
 	if inst.Namespace != nil {
