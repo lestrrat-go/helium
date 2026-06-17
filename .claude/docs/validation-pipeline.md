@@ -103,8 +103,15 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     namespaces to a `{uri,local}` Clark-name key (so `p:a`/`q:a` bound to the
     same URI collide, different URIs stay distinct), list fields canonicalize
     each item in the item type's value space (so `5 6`/`+5 06` collide for
-    itemType="xs:integer"), and union fields pick the first member type that
-    yields a defined canonical form. Raw values are retained for error display;
+    itemType="xs:integer"), and union fields resolve the **active member** the
+    same way `validateUnionValue` does — the first member type (declaration
+    order, descending nested unions) whose lexical space accepts the value — then
+    canonicalize in THAT member's space (`unionActiveMember` →
+    `canonicalAtomicKey`): value-comparable members use `value.CanonicalKey`,
+    lexical-only members (xs:string family, anyURI) use the whitespace-processed
+    lexical value. So memberTypes="xs:string xs:integer" keeps `5` and `+5`
+    distinct (active member xs:string), while "xs:integer xs:string" collapses
+    them. Raw values are retained for error display;
     fields whose type cannot be resolved fall back to raw-string comparison.
 
 ### Key Data Model

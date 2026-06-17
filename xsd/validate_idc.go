@@ -292,8 +292,9 @@ func (vc *validationContext) checkKeyRef(ctx context.Context, keyrefTable, refTa
 //     same URI compare equal (and to different URIs compare distinct).
 //   - list fields canonicalize each whitespace-separated item in the item type's
 //     value space, so "5 6" and "+5 06" compare equal for itemType="xs:integer".
-//   - union fields pick the first member type that produces a defined canonical
-//     form for the value.
+//   - union fields resolve the active member (first member the value validates
+//     against, per validateUnionValue) and canonicalize in that member's value
+//     space, so a value whose active member is xs:string stays lexically distinct.
 func canonicalFieldKey(raw string, fieldNode helium.Node, typeDef *TypeDef) string {
 	if typeDef == nil {
 		return raw
@@ -320,36 +321,47 @@ func canonicalValueKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 		}
 		return strings.Join(parts, " ")
 	case TypeVarietyUnion:
-		for _, m := range collectUnionMembers(td) {
-			if key, ok := canonicalAtomicKey(raw, fieldNode, m); ok {
-				return key
-			}
+		// The active member of a union value is the first member (declaration
+		// order) the value actually VALIDATES against — mirroring
+		// validateUnionValue's ordered active-member resolution — NOT the first
+		// member that happens to yield a value-space canonical key. Once the
+		// active member is chosen, canonicalize the value in that member's space:
+		// value-comparable members use value.CanonicalKey; lexical-only members
+		// (xs:string family, anyURI, …) use their whitespace-processed lexical
+		// value as the key (canonicalAtomicKey returns the whitespace-processed
+		// lexical value for such members). So memberTypes="xs:string xs:integer"
+		// keeps "5" and "+5" distinct (both active member xs:string), while
+		// "xs:integer xs:string" collapses them.
+		if m := unionActiveMember(raw, td); m != nil {
+			return canonicalAtomicKey(raw, fieldNode, m)
 		}
 		return raw
 	default:
-		key, _ := canonicalAtomicKey(raw, fieldNode, td)
-		return key
+		return canonicalAtomicKey(raw, fieldNode, td)
 	}
 }
 
-// canonicalAtomicKey canonicalizes raw for an atomic type td, returning (key,
-// true) when a value-space canonical form is defined. QName/NOTATION resolve the
-// prefix against fieldNode's in-scope namespaces; everything else delegates to
-// value.CanonicalKey on the builtin base local.
-func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) (string, bool) {
+// canonicalAtomicKey canonicalizes raw for an atomic type td. QName/NOTATION
+// resolve the prefix against fieldNode's in-scope namespaces to a Clark-name key;
+// everything else delegates to value.CanonicalKey on the builtin base local,
+// which returns a value-space canonical form for value-comparable types and the
+// whitespace-processed lexical value for lexical-only ones (xs:string family,
+// anyURI, …). An unresolvable type or QName falls back to the raw value.
+func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 	builtinLocal := builtinBaseLocal(td)
 	if builtinLocal == "" {
-		return raw, false
+		return raw
 	}
 	if builtinLocal == "QName" || builtinLocal == "NOTATION" {
 		ns := fieldNodeNSContext(fieldNode)
 		qn, err := resolveLexicalQName(strings.TrimSpace(raw), ns)
 		if err != nil {
-			return raw, false
+			return raw
 		}
-		return helium.ClarkName(qn.NS, qn.Local), true
+		return helium.ClarkName(qn.NS, qn.Local)
 	}
-	return value.CanonicalKey(raw, builtinLocal)
+	key, _ := value.CanonicalKey(raw, builtinLocal)
+	return key
 }
 
 // collectUnionMembers flattens a union type's member types, descending into
@@ -367,6 +379,28 @@ func collectUnionMembers(td *TypeDef) []*TypeDef {
 		out = append(out, m)
 	}
 	return out
+}
+
+// unionActiveMember resolves the active member type of a union value: the first
+// flattened member (declaration order) whose lexical space accepts raw, applying
+// each member's own whiteSpace processing first. This matches the active-member
+// semantics validateUnionValue uses (first member the value validates against),
+// rather than the first member that yields a value-space canonical key — so a
+// value whose active member is xs:string is canonicalized lexically and stays
+// distinct from a value-equal-but-lexically-different sibling. Returns nil when
+// no member accepts raw (the caller then falls back to the raw value).
+func unionActiveMember(raw string, td *TypeDef) *TypeDef {
+	for _, m := range collectUnionMembers(td) {
+		builtinLocal := builtinBaseLocal(m)
+		if builtinLocal == "" {
+			continue
+		}
+		trimmed := normalizeWhiteSpace(raw, resolveWhiteSpace(m))
+		if validateBuiltinValue(trimmed, builtinLocal) == nil {
+			return m
+		}
+	}
+	return nil
 }
 
 // fieldNodeNSContext returns the in-scope namespace bindings visible at an IDC
