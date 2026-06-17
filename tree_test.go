@@ -727,3 +727,69 @@ func TestReplaceSelf(t *testing.T) {
 		require.Equal(t, b, root.LastChild())
 	})
 }
+
+func TestReplaceWithExistingSibling(t *testing.T) {
+	t.Run("replace node with its own next sibling", func(t *testing.T) {
+		// Build <root><a/><b/></root>
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.AddChild(root))
+		a := doc.CreateElement("a")
+		b := doc.CreateElement("b")
+		require.NoError(t, root.AddChild(a))
+		require.NoError(t, root.AddChild(b))
+
+		// Replacing a with its own next sibling b must yield a
+		// well-formed chain with just b as root's only child.
+		require.NoError(t, a.Replace(b))
+
+		require.Equal(t, root, b.Parent())
+		require.Equal(t, b, root.FirstChild())
+		require.Equal(t, b, root.LastChild())
+		require.Nil(t, b.NextSibling(), "b.NextSibling() must be nil (no self-loop)")
+		require.Nil(t, b.PrevSibling(), "b.PrevSibling() must be nil (no self-loop)")
+	})
+
+	t.Run("replace node with its own previous sibling", func(t *testing.T) {
+		// Build <root><a/><b/></root>
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.AddChild(root))
+		a := doc.CreateElement("a")
+		b := doc.CreateElement("b")
+		require.NoError(t, root.AddChild(a))
+		require.NoError(t, root.AddChild(b))
+
+		// Replacing b with its own previous sibling a must yield a
+		// well-formed chain with just a as root's only child.
+		require.NoError(t, b.Replace(a))
+
+		require.Equal(t, root, a.Parent())
+		require.Equal(t, a, root.FirstChild())
+		require.Equal(t, a, root.LastChild())
+		require.Nil(t, a.NextSibling(), "a.NextSibling() must be nil (no self-loop)")
+		require.Nil(t, a.PrevSibling(), "a.PrevSibling() must be nil (no self-loop)")
+	})
+
+	t.Run("replace middle node with its next sibling", func(t *testing.T) {
+		// Build <root><a/><b/><c/></root>
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.AddChild(root))
+		a := doc.CreateElement("a")
+		b := doc.CreateElement("b")
+		c := doc.CreateElement("c")
+		require.NoError(t, root.AddChild(a))
+		require.NoError(t, root.AddChild(b))
+		require.NoError(t, root.AddChild(c))
+
+		// Replace b with c: chain becomes a / c with no self-loop.
+		require.NoError(t, b.Replace(c))
+
+		require.Equal(t, a, root.FirstChild())
+		require.Equal(t, c, a.NextSibling())
+		require.Equal(t, a, c.PrevSibling())
+		require.Nil(t, c.NextSibling(), "c.NextSibling() must be nil")
+		require.Equal(t, c, root.LastChild())
+	})
+}
