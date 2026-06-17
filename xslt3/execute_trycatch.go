@@ -236,10 +236,12 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 			}
 		}
 		// Transfer captured items (maps, arrays, function items) to parent.
+		// Route through captureSequenceItems so that in a document-constructor
+		// frame the items keep document order (via a placeholder at the current
+		// position) with the DOM children copied just above and any surrounding
+		// literal result elements.
 		if len(tryFrame.pendingItems) > 0 {
-			out := ec.currentOutput()
-			out.pendingItems = append(out.pendingItems, tryFrame.pendingItems...)
-			out.noteOutput()
+			ec.currentOutput().captureSequenceItems(tryFrame.pendingItems)
 		}
 		return nil
 	}

@@ -19,21 +19,23 @@ import (
 
 // outputFrame represents the current output target during transformation.
 type outputFrame struct {
-	doc               *helium.Document   // result document being built
-	current           helium.MutableNode // current insertion point
-	captureItems      bool               // when true, xsl:sequence adds to pendingItems instead of DOM
-	separateTextNodes bool               // when true, text nodes are captured as separate string items (prevents DOM merging)
-	sequenceMode      bool               // when true, all nodes (text, element, attr, comment, PI) are captured as separate items
-	mapConstructor    bool               // when true, xsl:map-entry emits single-entry maps into pendingItems
-	pendingItems      xpath3.ItemSlice   // captured items from xsl:sequence
-	prevWasAtomic     bool               // true when last xsl:sequence output was an atomic value (for inter-call space separation)
-	emptyAtomicGen    uint64             // seqConstructorGen when prevWasAtomic was set by an empty-string atomic
-	wherePopulated    bool               // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
-	itemSeparator     *string            // item-separator serialization parameter; nil means default (" " between adjacent atomics)
-	prevHadOutput     bool               // true when any item (node or atomic) was previously output; used for item-separator between non-atomic items
-	outputSerial      int                // monotonically increases whenever visible output is produced
-	seqConstructorGen uint64             // incremented each time executeSequenceConstructor is called
-	conditionalScopes []conditionalScope
+	doc                 *helium.Document                 // result document being built
+	current             helium.MutableNode               // current insertion point
+	captureItems        bool                             // when true, xsl:sequence adds to pendingItems instead of DOM
+	separateTextNodes   bool                             // when true, text nodes are captured as separate string items (prevents DOM merging)
+	sequenceMode        bool                             // when true, all nodes (text, element, attr, comment, PI) are captured as separate items
+	mapConstructor      bool                             // when true, xsl:map-entry emits single-entry maps into pendingItems
+	documentConstructor bool                             // when true, the frame builds a document node tree; xsl:sequence output is marked with placeholders in the DOM so it interleaves in document order with literal result elements
+	seqPlaceholders     map[helium.Node]xpath3.ItemSlice // placeholder PI node -> buffered xsl:sequence items, resolved by evaluateBodyAsDocument
+	pendingItems        xpath3.ItemSlice                 // captured items from xsl:sequence
+	prevWasAtomic       bool                             // true when last xsl:sequence output was an atomic value (for inter-call space separation)
+	emptyAtomicGen      uint64                           // seqConstructorGen when prevWasAtomic was set by an empty-string atomic
+	wherePopulated      bool                             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
+	itemSeparator       *string                          // item-separator serialization parameter; nil means default (" " between adjacent atomics)
+	prevHadOutput       bool                             // true when any item (node or atomic) was previously output; used for item-separator between non-atomic items
+	outputSerial        int                              // monotonically increases whenever visible output is produced
+	seqConstructorGen   uint64                           // incremented each time executeSequenceConstructor is called
+	conditionalScopes   []conditionalScope
 }
 
 type conditionalKind int
@@ -58,6 +60,32 @@ type conditionalScope struct {
 
 func (out *outputFrame) noteOutput() {
 	out.outputSerial++
+}
+
+// captureSequenceItems records captured sequence items for later assembly.
+//
+// In a document-constructor frame (variable/param body without as) at the
+// document-node level, the items are recorded behind a placeholder PI inserted
+// at the current position in the DOM, so they keep document order with literal
+// result elements built directly into the tree (evaluateBodyAsDocument resolves
+// the placeholders). In every other case the items are appended to pendingItems
+// as before. Callers should only invoke this with a non-empty item slice.
+func (out *outputFrame) captureSequenceItems(items xpath3.ItemSlice) {
+	if out.documentConstructor && out.current == out.doc {
+		ph := out.doc.CreatePI(seqPlaceholderTarget, "")
+		if err := out.current.AddChild(ph); err == nil {
+			if out.seqPlaceholders == nil {
+				out.seqPlaceholders = make(map[helium.Node]xpath3.ItemSlice)
+			}
+			out.seqPlaceholders[ph] = items
+			out.noteOutput()
+			return
+		}
+		// AddChild on a document node only fails for invalid input; fall back
+		// to buffering so output order is preserved as best-effort.
+	}
+	out.pendingItems = append(out.pendingItems, items...)
+	out.noteOutput()
 }
 
 // SerializeItems writes a sequence of items (maps, arrays, atomics, nodes)

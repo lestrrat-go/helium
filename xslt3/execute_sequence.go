@@ -23,6 +23,11 @@ func checkAtomizable(seq xpath3.Sequence) error {
 	return nil
 }
 
+// seqPlaceholderTarget is the PI target used to mark, within a
+// document-constructor frame, the position where buffered xsl:sequence output
+// must be inserted so it keeps document order with literal result elements.
+const seqPlaceholderTarget = "helium-xsl-sequence-placeholder"
+
 func (ec *execContext) execValueOf(ctx context.Context, inst *valueOfInst) error {
 	var value string
 
@@ -293,14 +298,34 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceIns
 	// as children of that element.
 	// For the principal output with json/adaptive method, the current node
 	// is the Document itself (not a wrapper element), so also match that case.
-	atRootLevel := out.doc != nil && (out.current == out.doc.DocumentElement() || out.current == out.doc)
-	if out.captureItems && atRootLevel {
-		rSeq := result.Sequence()
-		if rSeq != nil && sequence.Len(rSeq) > 0 {
-			out.pendingItems = append(out.pendingItems, sequence.Materialize(rSeq)...)
-			out.noteOutput()
+	// In a document-constructor frame (variable/param body without as), the
+	// document node itself is the insertion point, and a copied element can
+	// legitimately become its document element. xsl:sequence output is then
+	// interleaved with literal result elements via a placeholder PI written
+	// at the document level (resolved by evaluateBodyAsDocument). Content
+	// nested inside such a copied element must be written into that element,
+	// NOT captured — so the document-constructor root is the document node
+	// alone, never the document element.
+	if out.documentConstructor {
+		if out.captureItems && out.current == out.doc {
+			rSeq := result.Sequence()
+			if rSeq != nil && sequence.Len(rSeq) > 0 {
+				out.captureSequenceItems(sequence.Materialize(rSeq))
+			}
+			return nil
 		}
-		return nil
+		// Nested inside a copied/constructed element: fall through to write
+		// items into the current element in document order.
+	} else {
+		atRootLevel := out.doc != nil && (out.current == out.doc.DocumentElement() || out.current == out.doc)
+		if out.captureItems && atRootLevel {
+			rSeq := result.Sequence()
+			if rSeq != nil && sequence.Len(rSeq) > 0 {
+				out.pendingItems = append(out.pendingItems, sequence.Materialize(rSeq)...)
+				out.noteOutput()
+			}
+			return nil
+		}
 	}
 
 	prevWasAtomic := out.prevWasAtomic
@@ -463,8 +488,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 	// functions, and other non-DOM items that cannot be serialized to a tree).
 	if out.captureItems {
 		if seq != nil && sequence.Len(seq) > 0 {
-			out.pendingItems = append(out.pendingItems, sequence.Materialize(seq)...)
-			out.noteOutput()
+			out.captureSequenceItems(sequence.Materialize(seq))
 		}
 		return nil
 	}
