@@ -306,6 +306,14 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 				if !ok {
 					continue
 				}
+				// A Transform element must be in the XML-Signature namespace; do
+				// not honor foreign-namespace look-alikes (e.g.
+				// <evil:Transform Algorithm="...">). Its InclusiveNamespaces
+				// child lives in the xml-exc-c14n namespace and is handled
+				// separately below.
+				if !isDSigNS(te) {
+					continue
+				}
 				if localName(te) != "Transform" {
 					continue
 				}
