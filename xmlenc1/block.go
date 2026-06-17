@@ -20,11 +20,31 @@ func keySizeForAlgorithm(algorithm string) (int, error) {
 	}
 }
 
+// validateKeySize ensures key is exactly the length required by the
+// declared algorithm URI. This binds the wire-declared algorithm to the
+// real key length: requesting, e.g., an AES-256 algorithm with a 16-byte
+// key (which crypto/aes silently accepts as AES-128) is rejected instead
+// of producing data that DECLARES AES-256 but uses AES-128. Enforced on
+// both encrypt and decrypt, including after key unwrap / key transport.
+func validateKeySize(algorithm string, key []byte) error {
+	want, err := keySizeForAlgorithm(algorithm)
+	if err != nil {
+		return err
+	}
+	if len(key) != want {
+		return &KeySizeError{Algorithm: algorithm, Want: want, Got: len(key)}
+	}
+	return nil
+}
+
 // blockEncrypt encrypts plaintext with the given algorithm. For AEAD
 // algorithms (GCM) the algorithm URI is bound into the additional
 // authenticated data so that an attacker cannot substitute a different
 // EncryptionMethod/@Algorithm on the wire.
 func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
+	if err := validateKeySize(algorithm, key); err != nil {
+		return nil, err
+	}
 	switch algorithm {
 	case AES128CBC, AES256CBC:
 		return encryptCBC(key, plaintext)
@@ -41,6 +61,13 @@ func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
 // padding, or downstream parse) so callers cannot mount a padding
 // oracle by distinguishing the cause.
 func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
+	// Bind the declared algorithm URI to the real key length before
+	// touching the ciphertext. The key length is not attacker-controlled
+	// (it is the recipient's configured / unwrapped key), so reporting a
+	// distinguishable KeySizeError here is not a padding-oracle signal.
+	if err := validateKeySize(algorithm, key); err != nil {
+		return nil, err
+	}
 	switch algorithm {
 	case AES128CBC, AES256CBC:
 		return decryptCBC(key, ciphertext)

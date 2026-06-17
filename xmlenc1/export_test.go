@@ -27,3 +27,11 @@ func MarshalEncryptedDataForTest(doc *helium.Document, ed *EncryptedData) (*heli
 func HardenedParserForTest() helium.Parser {
 	return newHardenedInnerParser()
 }
+
+// AESKeyWrapForTest wraps key material under a KEK using RFC 3394 AES Key
+// Wrap. It exists so security tests can assemble an EncryptedKey whose
+// wrapped session-key length does not match the declared block algorithm,
+// exercising the post-unwrap key-size binding.
+func AESKeyWrapForTest(kek, plaintext []byte) ([]byte, error) {
+	return aesKeyWrap(kek, plaintext)
+}
