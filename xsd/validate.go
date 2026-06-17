@@ -189,29 +189,25 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 		return fmt.Errorf("no matching global declaration")
 	}
 
-	if edecl.Type == nil {
-		// Substitution group members inherit the type from the head element.
-		if edecl.SubstitutionGroup != (QName{}) {
-			headDecl, headOK := vc.schema.LookupElement(edecl.SubstitutionGroup.Local, edecl.SubstitutionGroup.NS)
-			if headOK && headDecl.Type != nil {
-				edecl = headDecl
-			} else {
-				return nil
-			}
-		} else {
-			return nil
-		}
+	// Keep edecl as the ACTUAL root declaration so its own Nillable flag is
+	// honored by the nilled-element check. For a no-type substitution-group
+	// member, the effective TYPE is inherited from the head (effectiveDeclType
+	// walks the substitutionGroup chain), but the declaration — and thus the
+	// nillable flag — stays the member's. This mirrors the particle paths.
+	declType := effectiveDeclType(edecl, vc.schema)
+	if declType == nil {
+		return nil
 	}
 
-	td, err := vc.resolveXsiType(ctx, elem, edecl.Type)
+	td, err := vc.resolveXsiType(ctx, elem, declType)
 	if err != nil {
 		return err
 	}
 	// Check block flags against xsi:type derivation.
-	if td != edecl.Type && edecl.Type != nil && isDerivationBlocked(td, edecl.Type, edecl.Block) {
+	if td != declType && isDerivationBlocked(td, declType, edecl.Block) {
 		msg := "The xsi:type definition is blocked by the element declaration."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
-		td = edecl.Type // fall back to declared type
+		td = declType // fall back to declared type
 	}
 	if td != nil && td.Abstract {
 		msg := "The type definition is abstract."
