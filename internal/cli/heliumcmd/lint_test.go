@@ -414,6 +414,19 @@ func TestXIncludeTextInclusion(t *testing.T) {
 	require.Contains(t, out, "Hello, World!")
 }
 
+func TestXIncludeMissingTargetExitCode(t *testing.T) {
+	dir := t.TempDir()
+	mainXML := `<?xml version="1.0"?>
+<book xmlns:xi="http://www.w3.org/2001/XInclude">
+  <xi:include href="missing.xml"/>
+</book>`
+	f := writeFile(t, dir, "main.xml", mainXML)
+
+	_, errOut, code := executeLintFile(t, f, "--xinclude", "--noout")
+	require.NotEqual(t, heliumcmd.ExitOK, code, "failed XInclude should yield non-zero exit code")
+	require.NotEmpty(t, errOut, "XInclude error should be reported on stderr")
+}
+
 func TestSchemaValidation(t *testing.T) {
 	tests := []struct {
 		name     string
