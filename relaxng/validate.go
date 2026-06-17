@@ -1673,12 +1673,15 @@ var xsdValueSpaceTypes = map[string]struct{}{
 }
 
 // matchXSDValue compares an instance value against a <value> literal using the
-// XSD value space for the named datatype. A lexical match (after whitespace
-// processing) always succeeds; additionally, for value-space-comparable types
-// (numeric, boolean, date/time, binary) a lexically distinct but value-equal form
-// also matches (e.g. integer "5" == "+5" == "05"), agreeing with the XSD layer.
-// String-family and anyURI types stay lexical-only. An unknown datatype name
-// never matches.
+// XSD value space for the named datatype. For value-space-comparable types
+// (numeric, boolean, date/time, binary) both the instance text and the <value>
+// literal must first be lexically valid for the type; a lexically distinct but
+// value-equal form then also matches (e.g. integer "5" == "+5" == "05"),
+// agreeing with the XSD layer. Because the lexical-validity check runs before
+// the equality fast-path, an identical-but-invalid lexical (e.g.
+// type="integer" with both forms "5.0") is rejected rather than accepted.
+// String-family and anyURI types stay lexical-only (whitespace-processed
+// lexical equality). An unknown datatype name never matches.
 func matchXSDValue(typeName, text, expected string) int {
 	if _, ok := xsdDatatypeNames[typeName]; !ok {
 		return -1
@@ -1686,17 +1689,24 @@ func matchXSDValue(typeName, text, expected string) int {
 	text = strings.TrimSpace(text)
 	expected = strings.TrimSpace(expected)
 
-	if text == expected {
-		return 0
+	if _, ok := xsdValueSpaceTypes[typeName]; !ok {
+		// Lexical-only (string-family/anyURI) type: compare by whitespace-processed
+		// lexical value, which equals the value space for these types.
+		if text == expected {
+			return 0
+		}
+		return -1
 	}
 
-	if _, ok := xsdValueSpaceTypes[typeName]; !ok {
-		// Lexical-only type and the lexical forms differ.
-		return -1
-	}
-	// Value-space comparison: both operands must be lexically valid for the type.
+	// Value-space-comparable type. Both the instance text and the <value>
+	// literal must be lexically valid for the type before either the equality
+	// fast-path or value-space comparison may accept: an identical-but-invalid
+	// lexical (e.g. type="integer">5.0< accepting <e>5.0</e>) must be rejected.
 	if value.ValidateBuiltin(text, typeName) != nil || value.ValidateBuiltin(expected, typeName) != nil {
 		return -1
+	}
+	if text == expected {
+		return 0
 	}
 	if (typeName == "float" || typeName == "double") && value.IsFloatNaN(text) && value.IsFloatNaN(expected) {
 		return 0

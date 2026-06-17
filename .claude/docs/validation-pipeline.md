@@ -170,11 +170,15 @@ spaces (date/time/duration ranges, integer subtype bounds, binary alphabets) so
 RELAX NG and XSD stay consistent. `xsdDatatypeNames` is the recognized-name
 allowlist; any name outside it is an unknown datatype and is rejected (no silent
 accept). `xs:string` keeps the local `<param>`-facet path (whiteSpace=preserve).
-`<value>` matches by whitespace-processed lexical equality first, then — for the
-value-space-comparable types in `xsdValueSpaceTypes` (numeric, boolean,
-date/time, binary; mirrors xsd's `enumValueSpaceTypes`) — by `value.Compare`
-value-space equality (e.g. integer `5`≡`+5`≡`05`, NaN≡NaN for float/double).
-String-family and anyURI stay lexical-only.
+For `<value>` with a value-space-comparable type in `xsdValueSpaceTypes`
+(numeric, boolean, date/time, binary; mirrors xsd's `enumValueSpaceTypes`),
+`matchXSDValue` first requires **both** the instance text and the `<value>`
+literal to be lexically valid via `ValidateBuiltin` — the lexical-equality
+fast-path runs only after that, so an identical-but-invalid lexical (e.g.
+`type="integer"` with both forms `5.0`) is rejected, not accepted. Valid forms
+then match by `value.Compare` value-space equality (e.g. integer `5`≡`+5`≡`05`,
+NaN≡NaN for float/double). String-family and anyURI stay lexical-only
+(whitespace-processed lexical equality, no `ValidateBuiltin` gate).
 
 ### Error Suppression
 
