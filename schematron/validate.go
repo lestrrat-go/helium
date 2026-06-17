@@ -26,6 +26,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		for _, r := range pat.rules {
 			result, err := ev.Evaluate(ctx, r.contextExpr, doc)
 			if err != nil {
+				// A rule context that cannot be evaluated means none of
+				// the rule's assertions can be checked. Treat this as a
+				// validation failure and surface the error rather than
+				// silently skipping the rule (which would let a broken
+				// schema report a false "valid" result).
+				valid = false
+				handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
 				continue
 			}
 			if result.Type != xpath1.NodeSetResult {
@@ -56,11 +63,19 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 
 				for _, t := range r.tests {
 					testResult, err := ruleEv.Evaluate(ctx, t.compiled, node)
-					if err != nil {
-						continue
-					}
 
-					boolVal := xpathResultToBool(testResult)
+					// A test XPath that cannot be evaluated must not be
+					// treated as satisfied. Surface the error and treat
+					// the test as false: an assert (fires when false)
+					// then fails, while a report (fires when true) stays
+					// silent — mirroring libxml2's xmlSchematronRunTest,
+					// which returns 0 (false) on evaluation failure.
+					var boolVal bool
+					if err != nil {
+						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
+					} else {
+						boolVal = xpathResultToBool(testResult)
+					}
 
 					// Assert: fire error when false.
 					// Report: fire error when true.

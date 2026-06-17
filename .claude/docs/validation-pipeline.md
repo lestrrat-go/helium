@@ -180,11 +180,13 @@ Message content parsed into `[]messagePart`: text literals, `<name path="..."/>`
 
 1. Create XPath context with schema's namespaces
 2. For each pattern/rule: evaluate `contextExpr` against document root → node set
+   - If the context XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and mark the document invalid (the rule's assertions can't be checked, so it is not silently skipped)
 3. For each context node:
    - Bind `<let>` variables (accumulated, later lets see earlier ones)
    - Create rule-specific XPath context with variables
 4. For each test:
    - Evaluate XPath, convert to boolean
+   - If the test XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and treat the test as `false` (mirrors libxml2 `xmlSchematronRunTest` returning 0): an **assert** then fires/fails, a **report** stays silent. A broken test is never treated as satisfied.
    - **Assert**: error if false
    - **Report**: error if true
 5. Format message (interpolate text/name/value-of parts)
