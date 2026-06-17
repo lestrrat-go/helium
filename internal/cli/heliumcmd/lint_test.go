@@ -68,6 +68,18 @@ func TestParseArgsRepeatZero(t *testing.T) {
 	require.NotEqual(t, heliumcmd.ExitOK, code)
 }
 
+func TestLintEncodeUnknown(t *testing.T) {
+	_, errOut, code := executeLintStdin(t, `<?xml version="1.0"?><root/>`, "--encode", "bogus-enc")
+	require.NotEqual(t, heliumcmd.ExitOK, code)
+	require.Contains(t, errOut, "bogus-enc")
+}
+
+func TestLintEncodeApplied(t *testing.T) {
+	out, _, code := executeLintStdin(t, `<?xml version="1.0"?><root>x</root>`, "--encode", "ISO-8859-1")
+	require.Equal(t, heliumcmd.ExitOK, code)
+	require.Contains(t, out, `encoding="ISO-8859-1"`)
+}
+
 func TestParseArgsMissingValues(t *testing.T) {
 	flags := []string{"--schema", "--xpath", "--output", "--encode", "--pretty", "--path", "--repeat"}
 	for _, flag := range flags {

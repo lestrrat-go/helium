@@ -84,6 +84,12 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 - XPath mode → type-aware result printing
 - Standard dump → `helium.NewWriter()` with format/dropdtd options
 
+### `--encode ENC`
+
+- Validated at parse time against `internal/encoding.Load`; an unrecognized encoding name is rejected with `--encode: unsupported encoding` and `ExitErr` (no silent fallback).
+- Applied to the standard dump path via `doc.SetEncoding`, so the serializer loads the matching encoder and emits the matching encoding declaration.
+- Ignored for C14N modes, which are always UTF-8 per the C14N spec.
+
 ## `helium xpath`
 
 Primary file: `internal/cli/heliumcmd/xpath.go`
