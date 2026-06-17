@@ -346,6 +346,55 @@ func TestDurationParsing(t *testing.T) {
 	}
 }
 
+// TestYearZeroXSD11 verifies that year 0000 is accepted for date/dateTime under
+// XSD 1.1 (which this package targets), and that parsing, round-trip string
+// formatting, and comparisons across the year boundary all behave correctly.
+func TestYearZeroXSD11(t *testing.T) {
+	t.Run("parse and round-trip xs:date 0000-01-01", func(t *testing.T) {
+		v, err := xpath3.CastFromString("0000-01-01", xpath3.TypeDate)
+		require.NoError(t, err, "year 0000 must be a valid xs:date under XSD 1.1")
+		require.Equal(t, xpath3.TypeDate, v.TypeName)
+
+		s, err := xpath3.CastAtomic(v, xpath3.TypeString)
+		require.NoError(t, err)
+		require.Equal(t, "0000-01-01", s.StringVal())
+	})
+
+	t.Run("parse and round-trip xs:dateTime 0000-01-01T00:00:00", func(t *testing.T) {
+		v, err := xpath3.CastFromString("0000-01-01T00:00:00", xpath3.TypeDateTime)
+		require.NoError(t, err, "year 0000 must be a valid xs:dateTime under XSD 1.1")
+		require.Equal(t, xpath3.TypeDateTime, v.TypeName)
+
+		s, err := xpath3.CastAtomic(v, xpath3.TypeString)
+		require.NoError(t, err)
+		require.Equal(t, "0000-01-01T00:00:00", s.StringVal())
+	})
+
+	t.Run("comparisons across the year boundary", func(t *testing.T) {
+		ctx := t.Context()
+		cases := []struct {
+			name   string
+			expr   string
+			expect bool
+		}{
+			{"year -1 before year 0", `xs:date("-0001-12-31") < xs:date("0000-01-01")`, true},
+			{"year 0 before year +1", `xs:date("0000-12-31") < xs:date("0001-01-01")`, true},
+			{"year 0 equals itself", `xs:date("0000-06-15") = xs:date("0000-06-15")`, true},
+			{"year 0 after year -1", `xs:date("0000-01-01") > xs:date("-0001-12-31")`, true},
+			{"dateTime ordering across zero", `xs:dateTime("-0001-12-31T23:59:59") < xs:dateTime("0000-01-01T00:00:00")`, true},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				r, err := evaluate(ctx, nil, tc.expr)
+				require.NoError(t, err)
+				b, ok := r.IsBoolean()
+				require.True(t, ok, "result must be a boolean")
+				require.Equal(t, tc.expect, b)
+			})
+		}
+	})
+}
+
 func mustParseDateTime(s string) any {
 	v, err := xpath3.CastFromString(s, xpath3.TypeDateTime)
 	if err != nil {
