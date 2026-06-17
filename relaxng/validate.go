@@ -10,6 +10,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
 // validator holds state during document validation.
@@ -1742,7 +1743,10 @@ func validateXSDType(typeName, value string, params []*param) int {
 	case "language":
 		return 0
 	case "base64Binary":
-		return 0
+		// Reuse the shared XSD lexical validator so RELAX NG and XSD agree on
+		// base64Binary semantics (alphabet-only; unpadded forms accepted as
+		// value-equivalent, matching the XSD layer).
+		return validateXSDBase64Binary(value)
 	case "hexBinary":
 		return validateXSDHexBinary(value)
 	default:
@@ -1935,6 +1939,18 @@ func validateXSDNMTOKENS(value string) int {
 		if validateXSDNMTOKEN(t) != 0 {
 			return -1
 		}
+	}
+	return 0
+}
+
+// validateXSDBase64Binary checks the lexical space of xs:base64Binary by
+// delegating to the shared XSD value validator (internal/xsd/value) so RELAX NG
+// and XSD agree on the datatype. The shared validator accepts the base64
+// alphabet plus whitespace and treats unpadded forms as value-equivalent to
+// their padded counterparts; only characters outside the alphabet are rejected.
+func validateXSDBase64Binary(s string) int {
+	if value.ValidateBuiltin(s, "base64Binary") != nil {
+		return -1
 	}
 	return 0
 }
