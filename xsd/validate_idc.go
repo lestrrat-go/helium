@@ -185,12 +185,14 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 			}
 			entry.values = append(entry.values, value)
 
-			// Canonicalize to the value space using the field's declared
-			// simple type, so lexically-distinct but value-equal keys (e.g.
-			// "5" and "+5" for xs:integer) compare equal. Falls back to the
-			// raw value when the type cannot be resolved.
-			builtinLocal := resolveFieldBuiltinLocal(fieldNode, elem, edecl, schema)
-			entry.canon = append(entry.canon, canonicalKey(value, builtinLocal))
+			// Canonicalize to the value space using the field's resolved simple
+			// type (and, for QName/NOTATION/list, the field node's namespace
+			// context), so lexically-distinct but value-equal keys (e.g. "5" and
+			// "+5" for xs:integer, "p:a"/"q:a" bound to the same URI, or list
+			// "5 6"/"+5 06") compare equal. Falls back to the raw value when the
+			// type cannot be resolved.
+			fieldTD := vc.resolveFieldType(fieldNode, elem, edecl, schema)
+			entry.canon = append(entry.canon, canonicalFieldKey(value, fieldNode, fieldTD))
 		}
 
 		if allPresent {
@@ -279,64 +281,156 @@ func (vc *validationContext) checkKeyRef(ctx context.Context, keyrefTable, refTa
 	return lastErr
 }
 
-// canonicalKey maps a raw field value to a value-space canonical key for the
-// given builtin type. An empty builtinLocal (unresolved type) falls back to the
-// raw value, preserving the previous lexical-only behavior for that field.
-func canonicalKey(raw, builtinLocal string) string {
-	if builtinLocal == "" {
+// canonicalFieldKey maps a raw IDC field value to a value-space canonical key
+// using the field's resolved *TypeDef and the field node's namespace context.
+// A nil typeDef (unresolved type) falls back to the raw value, preserving the
+// previous lexical-only behavior for that field.
+//
+// Unlike a flat builtin-base-local reduction, this honours the full type:
+//   - QName/NOTATION fields resolve the lexical prefix against the field node's
+//     in-scope namespaces to a {uri, local} key, so "p:a" and "q:a" bound to the
+//     same URI compare equal (and to different URIs compare distinct).
+//   - list fields canonicalize each whitespace-separated item in the item type's
+//     value space, so "5 6" and "+5 06" compare equal for itemType="xs:integer".
+//   - union fields pick the first member type that produces a defined canonical
+//     form for the value.
+func canonicalFieldKey(raw string, fieldNode helium.Node, typeDef *TypeDef) string {
+	if typeDef == nil {
 		return raw
 	}
-	key, _ := value.CanonicalKey(raw, builtinLocal)
-	return key
+	return canonicalValueKey(raw, fieldNode, typeDef)
 }
 
-// resolveFieldBuiltinLocal resolves the builtin XSD base local name of the
-// simple type declared for an IDC field node. host/hostDecl are the element the
-// constraint is declared on, used to descend the schema content model down to
-// the field node. Returns "" when the type cannot be determined, in which case
-// the caller falls back to raw-string comparison for that field.
-func resolveFieldBuiltinLocal(n helium.Node, host *helium.Element, hostDecl *ElementDecl, schema *Schema) string {
-	switch v := n.(type) {
-	case *helium.Element:
-		td := resolveElemType(v, host, hostDecl, schema)
-		if td == nil {
-			return ""
+// canonicalValueKey canonicalizes raw in the value space of td, dispatching on
+// the type's variety (atomic / list / union). fieldNode supplies the namespace
+// context needed to resolve QName/NOTATION prefixes; it may be nil, in which case
+// only the field node's own bindings are unavailable and lexical-only fallback
+// applies for QName-family types.
+func canonicalValueKey(raw string, fieldNode helium.Node, td *TypeDef) string {
+	switch td.Variety {
+	case TypeVarietyList:
+		item := resolveItemType(td)
+		if item == nil {
+			return raw
 		}
-		return builtinBaseLocal(td)
-	case *helium.Attribute:
-		return resolveAttrBuiltinLocal(v, host, hostDecl, schema)
+		fields := strings.Fields(raw)
+		parts := make([]string, len(fields))
+		for i, f := range fields {
+			parts[i] = canonicalValueKey(f, fieldNode, item)
+		}
+		return strings.Join(parts, " ")
+	case TypeVarietyUnion:
+		for _, m := range collectUnionMembers(td) {
+			if key, ok := canonicalAtomicKey(raw, fieldNode, m); ok {
+				return key
+			}
+		}
+		return raw
 	default:
-		return ""
+		key, _ := canonicalAtomicKey(raw, fieldNode, td)
+		return key
 	}
 }
 
-// resolveAttrBuiltinLocal resolves the builtin base local of an attribute's
-// declared type, preferring the owning element's complex-type attribute uses
-// and falling back to a matching global attribute declaration.
-func resolveAttrBuiltinLocal(attr *helium.Attribute, host *helium.Element, hostDecl *ElementDecl, schema *Schema) string {
+// canonicalAtomicKey canonicalizes raw for an atomic type td, returning (key,
+// true) when a value-space canonical form is defined. QName/NOTATION resolve the
+// prefix against fieldNode's in-scope namespaces; everything else delegates to
+// value.CanonicalKey on the builtin base local.
+func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) (string, bool) {
+	builtinLocal := builtinBaseLocal(td)
+	if builtinLocal == "" {
+		return raw, false
+	}
+	if builtinLocal == "QName" || builtinLocal == "NOTATION" {
+		ns := fieldNodeNSContext(fieldNode)
+		qn, err := resolveLexicalQName(strings.TrimSpace(raw), ns)
+		if err != nil {
+			return raw, false
+		}
+		return helium.ClarkName(qn.NS, qn.Local), true
+	}
+	return value.CanonicalKey(raw, builtinLocal)
+}
+
+// collectUnionMembers flattens a union type's member types, descending into
+// nested unions, so a union of unions yields all leaf member types in order.
+func collectUnionMembers(td *TypeDef) []*TypeDef {
+	var out []*TypeDef
+	for _, m := range td.MemberTypes {
+		if m == nil {
+			continue
+		}
+		if m.Variety == TypeVarietyUnion {
+			out = append(out, collectUnionMembers(m)...)
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// fieldNodeNSContext returns the in-scope namespace bindings visible at an IDC
+// field node, used to resolve lexical QName/NOTATION prefixes. For an attribute
+// node it uses the owning element's context.
+func fieldNodeNSContext(n helium.Node) map[string]string {
+	switch v := n.(type) {
+	case *helium.Element:
+		return collectNSContext(v)
+	case *helium.Attribute:
+		if owner, ok := v.Parent().(*helium.Element); ok {
+			return collectNSContext(owner)
+		}
+	}
+	return map[string]string{}
+}
+
+// resolveFieldType resolves the *TypeDef of an IDC field node. host/hostDecl are
+// the element the constraint is declared on, used to descend the schema content
+// model down to the field node. Returns nil when the type cannot be determined,
+// in which case the caller falls back to raw-string comparison for that field.
+func (vc *validationContext) resolveFieldType(n helium.Node, host *helium.Element, hostDecl *ElementDecl, schema *Schema) *TypeDef {
+	switch v := n.(type) {
+	case *helium.Element:
+		return vc.resolveElemType(v, host, hostDecl, schema)
+	case *helium.Attribute:
+		return vc.resolveAttrType(v, host, hostDecl, schema)
+	default:
+		return nil
+	}
+}
+
+// resolveAttrType resolves the *TypeDef of an attribute's declared type,
+// preferring the owning element's complex-type attribute uses and falling back
+// to a matching global attribute declaration.
+func (vc *validationContext) resolveAttrType(attr *helium.Attribute, host *helium.Element, hostDecl *ElementDecl, schema *Schema) *TypeDef {
 	aqn := QName{Local: attr.LocalName(), NS: attr.URI()}
 
 	if owner, ok := attr.Parent().(*helium.Element); ok {
-		if td := resolveElemType(owner, host, hostDecl, schema); td != nil {
+		if td := vc.resolveElemType(owner, host, hostDecl, schema); td != nil {
 			if at := attrUseType(td, aqn, schema); at != nil {
-				return builtinBaseLocal(at)
+				return at
 			}
 		}
 	}
 
 	if ga, ok := schema.globalAttrs[aqn]; ok {
 		if td := attrUseTypeDef(ga, schema); td != nil {
-			return builtinBaseLocal(td)
+			return td
 		}
 	}
-	return ""
+	return nil
 }
 
-// resolveElemType resolves the schema type of an instance element by descending
-// the host element's content model along the element's ancestor chain. The
-// element must be a descendant of host (true for IDC selector/field results).
-// Falls back to a global element declaration lookup.
-func resolveElemType(target, host *helium.Element, hostDecl *ElementDecl, schema *Schema) *TypeDef {
+// resolveElemType resolves the schema type of an instance element. It first
+// consults the actual-type map recorded during pass-1 content validation (which
+// already accounts for any xsi:type override). Failing that, it descends the
+// host element's content model along the element's ancestor chain. The element
+// must be a descendant of host (true for IDC selector/field results). Falls back
+// to a global element declaration lookup.
+func (vc *validationContext) resolveElemType(target, host *helium.Element, hostDecl *ElementDecl, schema *Schema) *TypeDef {
+	if td := vc.actualElemType[target]; td != nil {
+		return td
+	}
 	if target == host {
 		if hostDecl != nil {
 			return hostDecl.Type

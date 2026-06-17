@@ -86,15 +86,26 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     first node.
   - XPath uses namespace context from schema, not instance
   - Key comparison is value-space aware (XSD 3.11.4): each field value is
-    canonicalized via its declared simple type (`resolveFieldBuiltinLocal` →
-    `value.CanonicalKey`) before map-key use, so `5`/`+5`/`05` collide for
-    xs:integer. Attribute-field type resolution (`attrUseTypeDef`) mirrors the
+    canonicalized via its resolved simple type (`resolveFieldType` →
+    `canonicalFieldKey`/`canonicalValueKey`) before map-key use, so
+    `5`/`+5`/`05` collide for xs:integer. Field-type resolution first consults
+    the actual `*TypeDef` recorded for each element during pass-1 content
+    validation (`validationContext.actualElemType`, populated by
+    `annotateElement`), so an IDC field whose type is contributed by an
+    `xsi:type` actual type is canonicalized in the correct value space; it falls
+    back to descending the declared content model only when the actual type is
+    unknown. Attribute-field type resolution (`attrUseTypeDef`) mirrors the
     content validator's `validationContext.attrUseType`: an inline anonymous
     `<xs:simpleType>` (`au.Type`) is preferred over the named `au.TypeName`
-    reference, for both complex-type attribute uses and global attributes, so
-    keys on inline-typed attributes canonicalize too. Raw values are retained
-    for error display; fields whose type cannot be resolved fall back to
-    raw-string comparison.
+    reference, for both complex-type attribute uses and global attributes.
+    Canonicalization is full-type aware via per-variety dispatch: QName/NOTATION
+    fields resolve the lexical prefix against the field node's in-scope
+    namespaces to a `{uri,local}` Clark-name key (so `p:a`/`q:a` bound to the
+    same URI collide, different URIs stay distinct), list fields canonicalize
+    each item in the item type's value space (so `5 6`/`+5 06` collide for
+    itemType="xs:integer"), and union fields pick the first member type that
+    yields a defined canonical form. Raw values are retained for error display;
+    fields whose type cannot be resolved fall back to raw-string comparison.
 
 ### Key Data Model
 

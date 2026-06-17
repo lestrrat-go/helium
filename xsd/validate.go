@@ -15,14 +15,21 @@ type validationContext struct {
 	filename      string
 	errorHandler  helium.ErrorHandler
 	suppressDepth int
+	// actualElemType records the ACTUAL *TypeDef determined for each element
+	// during pass-1 content validation, including any xsi:type override. Pass-2
+	// identity-constraint field resolution consults this before falling back to
+	// descending the declared content model, so an IDC field whose type is
+	// contributed by xsi:type is canonicalized in the correct value space.
+	actualElemType map[*helium.Element]*TypeDef
 }
 
 func newValidationContext(schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext {
 	return &validationContext{
-		schema:       schema,
-		cfg:          cfg,
-		filename:     filename,
-		errorHandler: handler,
+		schema:         schema,
+		cfg:            cfg,
+		filename:       filename,
+		errorHandler:   handler,
+		actualElemType: make(map[*helium.Element]*TypeDef),
 	}
 }
 
@@ -760,6 +767,11 @@ func xsdTypeName(td *TypeDef) string {
 
 // annotateElement records a type annotation for an element node.
 func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef) {
+	// Always record the actual *TypeDef (post-xsi:type) for pass-2 IDC field
+	// type resolution, independent of the optional user-facing annotations map.
+	if vc.actualElemType != nil && td != nil {
+		vc.actualElemType[elem] = td
+	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
