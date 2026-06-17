@@ -44,6 +44,15 @@ func TestEvalRootPath(t *testing.T) {
 	require.Equal(t, helium.DocumentNode, r.NodeSet[0].Type())
 }
 
+func TestEvalAbsolutePathNilContextNode(t *testing.T) {
+	expr, err := xpath1.Compile("/")
+	require.NoError(t, err)
+	// A nil context node must produce an evaluation error, not a panic.
+	_, err = expr.Evaluate(t.Context(), nil)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xpath1.ErrNoContextNode)
+}
+
 func TestEvalAbsoluteChild(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/></root>`)
 	r, err := xpath1.Evaluate(t.Context(), doc, "/root/a")
