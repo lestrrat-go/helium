@@ -53,14 +53,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				edecl.Type = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 				continue
 			}
-			_, edeclPrefixed := c.prefixedElemTypeRefs[edecl]
 			td, ok := c.schema.types[qn]
-			if !ok && qn.NS != "" && !edeclPrefixed {
+			if !ok && c.chameleonFallbackNS(qn) {
 				// Try empty namespace as fallback — the type may come from an
-				// imported schema with no targetNamespace (mirrors the base-type
-				// ref resolution below). Restricted to UNPREFIXED refs: a
-				// prefixed ref (e.g. type="o:t") binds to its prefix's namespace
-				// and must report unresolved there, not silently bind to {}t.
+				// imported schema with no targetNamespace (chameleon include).
 				td, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
 			}
 			if !ok {
@@ -82,12 +78,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 
 	// Resolve base type references.
 	for td, qn := range c.typeRefs {
-		_, basePrefixed := c.prefixedBaseRefs[td]
 		base, ok := c.schema.types[qn]
-		if !ok && qn.NS != "" && !basePrefixed {
+		if !ok && c.chameleonFallbackNS(qn) {
 			// Try empty namespace as fallback — the type may come from an
-			// imported schema with no targetNamespace. Restricted to UNPREFIXED
-			// refs: a prefixed base="o:t" binds to its prefix's namespace.
+			// imported schema with no targetNamespace (chameleon include).
 			base, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
 		}
 		if !ok {
@@ -102,12 +96,10 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 
 	// Resolve list item type references.
 	for td, qn := range c.itemTypeRefs {
-		_, itemPrefixed := c.prefixedItemTypeRefs[td]
 		itemTD, ok := c.schema.types[qn]
-		if !ok && qn.NS != "" && !itemPrefixed {
+		if !ok && c.chameleonFallbackNS(qn) {
 			// Try empty namespace as fallback — the item type may come from an
-			// imported schema with no targetNamespace. Restricted to UNPREFIXED
-			// refs: a prefixed itemType="o:t" binds to its prefix's namespace.
+			// imported schema with no targetNamespace (chameleon include).
 			itemTD, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
 		}
 		if !ok {
@@ -121,10 +113,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve union member type references.
 	for _, ref := range c.unionMemberRefs {
 		memberTD, ok := c.schema.types[ref.name]
-		if !ok && ref.name.NS != "" && !ref.prefixed {
+		if !ok && c.chameleonFallbackNS(ref.name) {
 			// Try empty namespace as fallback — the member type may come from an
-			// imported schema with no targetNamespace. Restricted to UNPREFIXED
-			// refs: a prefixed memberTypes="o:t" binds to its prefix's namespace.
+			// imported schema with no targetNamespace (chameleon include).
 			memberTD, ok = c.schema.types[QName{Local: ref.name.Local, NS: ""}]
 		}
 		if !ok {
@@ -784,12 +775,24 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 	return false
 }
 
-// refIsPrefixed reports whether a lexical QName reference (as written in the
-// schema, e.g. "o:t" or "t") carried an explicit namespace prefix. Only
-// unprefixed refs are eligible for the no-targetNamespace ({}) fallback when
-// they fail to resolve, because a prefixed ref binds to its prefix's namespace.
-func refIsPrefixed(ref string) bool {
-	return strings.IndexByte(ref, ':') >= 0
+// chameleonFallbackNS reports whether an unresolved type ref qn is eligible for
+// the no-targetNamespace ({}) fallback. The fallback exists for chameleon
+// includes: an imported no-targetNamespace schema contributes its unqualified
+// types as if they belonged to the including schema's target namespace, so a
+// ref that resolved to {targetNamespace}name may instead bind to the imported
+// {}name.
+//
+// The fallback fires ONLY when the resolved namespace equals the schema's own
+// target namespace. This is stricter than a mere "unprefixed" test: an
+// unprefixed ref can still bind to a foreign namespace via a default-namespace
+// declaration (xmlns="..."). For example, with xmlns="http://www.w3.org/2001/
+// XMLSchema" an unprefixed type="Bad" resolves to {XMLSchema}Bad, which must
+// report unresolved in that namespace rather than silently masking to {}Bad. A
+// prefixed ref whose prefix binds to the target namespace is likewise a valid
+// chameleon reference and is allowed; a prefixed (or default-ns-bound) ref to
+// any other namespace is not.
+func (c *compiler) chameleonFallbackNS(qn QName) bool {
+	return qn.NS != "" && qn.NS == c.schema.targetNamespace
 }
 
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName

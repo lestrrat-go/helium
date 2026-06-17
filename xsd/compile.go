@@ -34,14 +34,6 @@ type compiler struct {
 	itemTypeRefs map[*TypeDef]QName
 	// unresolved union member type references
 	unionMemberRefs []unionMemberRef
-	// The prefixed*Refs sets record, per ref kind, which refs used a prefixed
-	// lexical QName (e.g. "o:t"). The no-targetNamespace ({}) fallback in
-	// resolveRefs applies ONLY to unprefixed (chameleon-style) refs; a
-	// prefixed ref binds to its prefix's namespace and must report unresolved
-	// in that namespace rather than silently fall back to the empty namespace.
-	prefixedElemTypeRefs map[*ElementDecl]struct{}
-	prefixedBaseRefs     map[*TypeDef]struct{}
-	prefixedItemTypeRefs map[*TypeDef]struct{}
 	// unresolved attribute references: maps from AttrUse to global attr QName
 	attrRefs map[*AttrUse]QName
 	// error handler for reporting schema errors/warnings
@@ -80,10 +72,6 @@ type elemRefSource struct {
 type unionMemberRef struct {
 	owner *TypeDef
 	name  QName
-	// prefixed is true when the memberTypes QName used an explicit prefix.
-	// Only unprefixed members are eligible for the no-targetNamespace ({})
-	// fallback in resolveRefs.
-	prefixed bool
 }
 
 // typeDefSource tracks source location and context for type definitions.
@@ -115,22 +103,19 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 			globalAttrs: make(map[QName]*AttrUse),
 			substGroups: make(map[QName][]*ElementDecl),
 		},
-		baseDir:              baseDir,
-		fsys:                 fsys,
-		typeRefs:             make(map[*TypeDef]QName),
-		elemRefs:             make(map[*ElementDecl]QName),
-		elemRefSources:       make(map[*ElementDecl]elemRefSource),
-		groupRefs:            make(map[*ModelGroup]QName),
-		attrGroupRefs:        make(map[*TypeDef][]QName),
-		globalElemSources:    make(map[*ElementDecl]elemRefSource),
-		typeDefSources:       make(map[*TypeDef]typeDefSource),
-		itemTypeRefs:         make(map[*TypeDef]QName),
-		prefixedElemTypeRefs: make(map[*ElementDecl]struct{}),
-		prefixedBaseRefs:     make(map[*TypeDef]struct{}),
-		prefixedItemTypeRefs: make(map[*TypeDef]struct{}),
-		attrRefs:             make(map[*AttrUse]QName),
-		importedNS:           make(map[string]string),
-		maxImportDepth:       defaultMaxImportDepth,
+		baseDir:           baseDir,
+		fsys:              fsys,
+		typeRefs:          make(map[*TypeDef]QName),
+		elemRefs:          make(map[*ElementDecl]QName),
+		elemRefSources:    make(map[*ElementDecl]elemRefSource),
+		groupRefs:         make(map[*ModelGroup]QName),
+		attrGroupRefs:     make(map[*TypeDef][]QName),
+		globalElemSources: make(map[*ElementDecl]elemRefSource),
+		typeDefSources:    make(map[*TypeDef]typeDefSource),
+		itemTypeRefs:      make(map[*TypeDef]QName),
+		attrRefs:          make(map[*AttrUse]QName),
+		importedNS:        make(map[string]string),
+		maxImportDepth:    defaultMaxImportDepth,
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {

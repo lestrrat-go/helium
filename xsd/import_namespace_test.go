@@ -325,3 +325,103 @@ func TestCompile_PrefixedRefNoEmptyNamespaceFallback(t *testing.T) {
 		})
 	}
 }
+
+// The no-targetNamespace ({}) fallback for unresolved type references must NOT
+// fire for an UNPREFIXED ref that a DEFAULT namespace declaration (xmlns="...")
+// binds to a namespace other than the schema's own target namespace. resolveQName
+// binds unprefixed lexical QNames through the in-scope default namespace, so with
+// xmlns="urn:other" and a no-TNS imported schema that defines an unqualified type
+// t, an unprefixed ref "t" resolves to {urn:other}t — which must report unresolved
+// {urn:other}t rather than silently masking to {}t. A "not prefixed" gate alone
+// would wrongly fire the fallback here; the gate must instead require the resolved
+// namespace to equal the schema's target namespace. Guards all four ref kinds.
+func TestCompile_DefaultNamespaceBoundRefNoEmptyNamespaceFallback(t *testing.T) {
+	compileErrors := func(t *testing.T, fsys fstest.MapFS) string {
+		t.Helper()
+		data, err := fsys.ReadFile(importMainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		var b strings.Builder
+		for _, e := range collector.Errors() {
+			b.WriteString(e.Error())
+		}
+		return b.String()
+	}
+
+	// other.xsd has no targetNamespace and defines an unqualified type t.
+	const otherNoTNS = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="t">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+  <xs:complexType name="ct"/>
+</xs:schema>`
+
+	// Each main schema declares a DEFAULT namespace xmlns="urn:other" (which holds
+	// no type t) and references an unprefixed t. resolveQName binds the unprefixed
+	// name through the default ns to {urn:other}t, so the empty-NS fallback must
+	// NOT fire and resolution must report unresolved {urn:other}t.
+	cases := []struct {
+		name string
+		main string
+	}{
+		{
+			name: "element type",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="urn:other" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:element name="root" type="t"/>
+</xs:schema>`,
+		},
+		{
+			name: "base type",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="urn:other" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="d">
+    <xs:restriction base="t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="d"/>
+</xs:schema>`,
+		},
+		{
+			name: "list itemType",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="urn:other" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="myList">
+    <xs:list itemType="t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="myList"/>
+</xs:schema>`,
+		},
+		{
+			name: "union memberTypes",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="urn:other" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="myUnion">
+    <xs:union memberTypes="xs:string t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="myUnion"/>
+</xs:schema>`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fsys := fstest.MapFS{
+				importMainXSD:  &fstest.MapFile{Data: []byte(tc.main)},
+				importOtherXSD: &fstest.MapFile{Data: []byte(otherNoTNS)},
+			}
+			got := compileErrors(t, fsys)
+			require.Contains(t, got, "{urn:other}t",
+				"a default-ns-bound unprefixed t (xmlns=urn:other) must report unresolved {urn:other}t, not silently fall back to {}t; got: %q", got)
+			require.Contains(t, got, "does not resolve to a(n) type definition",
+				"default-ns-bound unresolved ref must produce a fatal unresolved-type error; got: %q", got)
+		})
+	}
+}

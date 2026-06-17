@@ -488,24 +488,21 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 			globalAttrs: make(map[QName]*AttrUse),
 			substGroups: make(map[QName][]*ElementDecl),
 		},
-		baseDir:              schemaBaseDir(path),
-		fsys:                 c.fsys,
-		typeRefs:             make(map[*TypeDef]QName),
-		elemRefs:             make(map[*ElementDecl]QName),
-		elemRefSources:       make(map[*ElementDecl]elemRefSource),
-		groupRefs:            make(map[*ModelGroup]QName),
-		attrGroupRefs:        make(map[*TypeDef][]QName),
-		globalElemSources:    make(map[*ElementDecl]elemRefSource),
-		typeDefSources:       make(map[*TypeDef]typeDefSource),
-		itemTypeRefs:         make(map[*TypeDef]QName),
-		prefixedElemTypeRefs: make(map[*ElementDecl]struct{}),
-		prefixedBaseRefs:     make(map[*TypeDef]struct{}),
-		prefixedItemTypeRefs: make(map[*TypeDef]struct{}),
-		attrRefs:             make(map[*AttrUse]QName),
-		filename:             impFilename,
-		importedNS:           make(map[string]string),
-		importDepth:          c.importDepth + 1,
-		maxImportDepth:       c.maxImportDepth,
+		baseDir:           schemaBaseDir(path),
+		fsys:              c.fsys,
+		typeRefs:          make(map[*TypeDef]QName),
+		elemRefs:          make(map[*ElementDecl]QName),
+		elemRefSources:    make(map[*ElementDecl]elemRefSource),
+		groupRefs:         make(map[*ModelGroup]QName),
+		attrGroupRefs:     make(map[*TypeDef][]QName),
+		globalElemSources: make(map[*ElementDecl]elemRefSource),
+		typeDefSources:    make(map[*TypeDef]typeDefSource),
+		itemTypeRefs:      make(map[*TypeDef]QName),
+		attrRefs:          make(map[*AttrUse]QName),
+		filename:          impFilename,
+		importedNS:        make(map[string]string),
+		importDepth:       c.importDepth + 1,
+		maxImportDepth:    c.maxImportDepth,
 	}
 
 	// Sub-compiler collects errors into its own collector so we can
@@ -595,9 +592,6 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
 	maps.Copy(c.globalElemSources, impC.globalElemSources)
 	maps.Copy(c.itemTypeRefs, impC.itemTypeRefs)
-	maps.Copy(c.prefixedElemTypeRefs, impC.prefixedElemTypeRefs)
-	maps.Copy(c.prefixedBaseRefs, impC.prefixedBaseRefs)
-	maps.Copy(c.prefixedItemTypeRefs, impC.prefixedItemTypeRefs)
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
 	maps.Copy(c.attrRefs, impC.attrRefs)
 
