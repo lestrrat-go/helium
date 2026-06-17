@@ -1435,3 +1435,44 @@ func TestFnSequenceIntegerCardinalityArgs(t *testing.T) {
 		require.Equal(t, []string{"c"}, evalStrings(t, `subsequence(("a","b","c"), 2.6)`))
 	})
 }
+
+// fn:index-of's $search-param is a single atomic item (xs:anyAtomicType), so a
+// non-singleton search value is a type error (XPTY0004) rather than a silent
+// search for just the first item.
+func TestFnIndexOfSearchCardinality(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	evalErrCode := func(t *testing.T, expr, code string) {
+		t.Helper()
+		compiled, err := xpath3.NewCompiler().Compile(expr)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err, "expected error for %q", expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: code}, "expected %s for %q", code, expr)
+	}
+
+	t.Run("multi-item search raises XPTY0004", func(t *testing.T) {
+		for _, expr := range []string{
+			`index-of((1, 2, 1), (1, 2))`,
+			`index-of(("a", "b", "a"), ("a", "b"))`,
+		} {
+			t.Run(expr, func(t *testing.T) { evalErrCode(t, expr, "XPTY0004") })
+		}
+	})
+
+	t.Run("empty search raises XPTY0004", func(t *testing.T) {
+		evalErrCode(t, `index-of((1, 2, 1), ())`, "XPTY0004")
+	})
+
+	t.Run("single-item search still works", func(t *testing.T) {
+		seq := evalExpr(t, doc, `index-of((10, 20, 30, 20), 20)`)
+		require.Equal(t, 2, seq.Len())
+		require.Equal(t, int64(2), seq.Get(0).(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(4), seq.Get(1).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("empty sequence with single search returns empty", func(t *testing.T) {
+		seq := evalExpr(t, doc, `index-of((), 5)`)
+		require.Equal(t, 0, seq.Len())
+	})
+}
