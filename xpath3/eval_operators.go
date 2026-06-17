@@ -114,6 +114,18 @@ func concatToString(seq Sequence) (string, error) {
 	return seqToStringErr(seq)
 }
 
+// appendBounded appends src to dst, enforcing the configured sequence/node-set
+// size limit. Returns ErrNodeSetLimit once the accumulated length would exceed
+// maxNodes. Used by accumulation sites (simple-map, FLWOR return, lookup) that
+// concatenate per-item sub-sequences and could otherwise materialize unbounded
+// output regardless of maxNodes.
+func appendBounded(dst ItemSlice, src []Item, maxNodes int) (ItemSlice, error) {
+	if maxNodes > 0 && len(dst)+len(src) > maxNodes {
+		return nil, ErrNodeSetLimit
+	}
+	return append(dst, src...), nil
+}
+
 func evalSimpleMapExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e SimpleMapExpr) (Sequence, error) {
 	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
@@ -134,7 +146,10 @@ func evalSimpleMapExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContex
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBounded(result, seqMaterialize(r), ec.maxNodes)
+		if err != nil {
+			return nil, err
+		}
 		i++
 	}
 	return result, nil

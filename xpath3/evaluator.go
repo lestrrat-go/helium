@@ -61,6 +61,7 @@ type evaluatorCfg struct {
 	allowXML11Chars        bool
 	docOrder               *DocOrderCache
 	traceWriter            io.Writer
+	maxNodes               int // 0 means use the package default (maxNodeSetLength)
 }
 
 // NewEvaluator creates a new Evaluator with the given options.
@@ -329,13 +330,18 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 		cfg = &evaluatorCfg{}
 	}
 
+	maxNodes := maxNodeSetLength
+	if cfg.maxNodes > 0 {
+		maxNodes = cfg.maxNodes
+	}
+
 	ec := &evalContext{
 		node:     node,
 		position: 1,
 		size:     1,
 		opCount:  &opCount,
 		docOrder: &ixpath.DocOrderCache{},
-		maxNodes: maxNodeSetLength,
+		maxNodes: maxNodes,
 		docCache: make(map[string]helium.Node),
 	}
 

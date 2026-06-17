@@ -40,7 +40,12 @@ func evalLookupExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seqMaterialize(r)...)
+		// lookupItem already bounds its internal accumulation; bound the
+		// cross-item concatenation here too so the running total is enforced.
+		result, err = appendBounded(result, seqMaterialize(r), ec.maxNodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -55,15 +60,23 @@ func evalUnaryLookupExpr(evalFn exprEvaluator, ctx context.Context, ec *evalCont
 	return lookupItem(evalFn, ctx, ec, NodeItem{Node: ec.node}, e.Key, e.All)
 }
 
+// lookupItem evaluates a `?` lookup against a single map or array item. It
+// enforces ec.maxNodes on every accumulating branch (map/array all-values and
+// keyed lookups), so both unary (`evalUnaryLookupExpr`) and postfix
+// (`evalLookupExpr`) lookups bound their output through this single helper.
 func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, error) {
 	switch v := item.(type) {
 	case MapItem:
 		if all {
 			var result ItemSlice
+			var boundErr error
 			_ = v.ForEach(func(_ AtomicValue, val Sequence) error {
-				result = append(result, seqMaterialize(val)...)
-				return nil
+				result, boundErr = appendBounded(result, seqMaterialize(val), ec.maxNodes)
+				return boundErr
 			})
+			if boundErr != nil {
+				return nil, boundErr
+			}
 			return result, nil
 		}
 		keySeq, err := evalFn(ctx, ec, keyExpr)
@@ -80,8 +93,12 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 				return nil, err
 			}
 			val, ok := v.Get(ka)
-			if ok {
-				result = append(result, seqMaterialize(val)...)
+			if !ok {
+				continue
+			}
+			result, err = appendBounded(result, seqMaterialize(val), ec.maxNodes)
+			if err != nil {
+				return nil, err
 			}
 		}
 		return result, nil
@@ -89,7 +106,11 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 		if all {
 			var result ItemSlice
 			for _, m := range v.members0() {
-				result = append(result, seqMaterialize(m)...)
+				var err error
+				result, err = appendBounded(result, seqMaterialize(m), ec.maxNodes)
+				if err != nil {
+					return nil, err
+				}
 			}
 			return result, nil
 		}
@@ -123,7 +144,10 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 			if err != nil {
 				return nil, err
 			}
-			result = append(result, seqMaterialize(member)...)
+			result, err = appendBounded(result, seqMaterialize(member), ec.maxNodes)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return result, nil
 	default:
@@ -154,7 +178,10 @@ func evalFLWOR(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e FLW
 		if err != nil {
 			return err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBounded(result, seqMaterialize(r), ec.maxNodes)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 
