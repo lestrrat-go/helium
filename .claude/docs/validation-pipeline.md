@@ -147,6 +147,13 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     descendant under an anyType ancestor still has its actual type recorded before
     pass-2 IDC evaluation — otherwise a nested `<item xsi:type="itemType" n="5"/>`
     / `n="+5"` pair would be compared lexically and wrongly accepted as unique.
+    The same recursion runs for the lax/skip **wildcard** path: when
+    `matchWildcardParticle` (`xs:any processContents="lax"`/`skip`) matches an
+    element that has no global declaration, that element is not schema-assessed
+    but its subtree is still walked via `annotateAnyTypeChildren`, so a nested
+    global IDC host deeper under an unknown wildcard wrapper has its descendants'
+    actual types recorded before pass-2 IDC — otherwise the same
+    lexical-vs-value-space `5`/`+5` collision would be missed.
 
 ### Key Data Model
 

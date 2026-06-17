@@ -612,6 +612,16 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 					vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
 					contentErr = fmt.Errorf("strict wildcard: no global element decl")
 				}
+				// Lax/skip: this element has no global declaration, so it is not
+				// schema-assessed. Still recurse into its subtree so any deeper
+				// descendant that DOES have a global declaration gets its ACTUAL
+				// type (honoring xsi:type) recorded via annotateElement before
+				// pass-2 IDC evaluation — otherwise a nested global IDC host's
+				// fields would be canonicalized with declared (or raw) types and
+				// xsi:type overrides on descendants would be missed.
+				if err := vc.annotateAnyTypeChildren(ctx, child.elem); err != nil {
+					contentErr = err
+				}
 				continue
 			}
 			td := edecl.Type
