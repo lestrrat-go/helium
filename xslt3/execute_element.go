@@ -634,6 +634,70 @@ func validateComputedAttributeName(name string, inst *attributeInst) error {
 	return nil
 }
 
+// resolvedAttrName is the fully resolved expanded name of a computed
+// xsl:attribute: the local name, the namespace URI it belongs to, and the
+// prefix that should be used when serializing it.
+type resolvedAttrName struct {
+	localName string
+	nsURI     string
+	prefix    string
+}
+
+// resolveComputedAttributeName resolves the expanded name of a computed
+// xsl:attribute exactly once, honoring an explicit namespace= attribute when
+// present and otherwise resolving the lexical prefix against the in-scope
+// namespaces. It enforces the namespace-related constraints (XTDE0865 for the
+// reserved xmlns URI, XTDE0860 for an undeclared prefix when no namespace
+// attribute is given). The lexical-QName (XTDE0850) and reserved-xmlns-name
+// (XTDE0855) checks are performed separately by validateComputedAttributeName.
+//
+// The resulting {localName, nsURI, prefix} is reused by every output path
+// (sequence-mode capture, item capture, and element output) so a name such as
+// name="p:a" namespace="urn:p" yields an attribute in urn:p in all modes.
+func (ec *execContext) resolveComputedAttributeName(ctx context.Context, name string, inst *attributeInst) (resolvedAttrName, error) {
+	prefix := ""
+	localName := name
+	if p, l, ok := strings.Cut(name, ":"); ok {
+		prefix = p
+		localName = l
+	}
+
+	// An explicit namespace= attribute overrides prefix resolution.
+	if inst.Namespace != nil {
+		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return resolvedAttrName{}, err
+		}
+		// XTDE0865: the xmlns namespace URI is reserved.
+		if nsURI == lexicon.NamespaceXMLNS {
+			return resolvedAttrName{}, dynamicError(errCodeXTDE0865,
+				"namespace URI %q is reserved and cannot be used for attributes", nsURI)
+		}
+		if nsURI == "" {
+			// namespace="" explicitly: no-namespace attribute, prefix discarded.
+			return resolvedAttrName{localName: localName}, nil
+		}
+		// Attributes in a namespace require a non-empty prefix (unlike
+		// elements, the default namespace does not apply to attributes).
+		if prefix == "" {
+			prefix = "ns0"
+		}
+		return resolvedAttrName{localName: localName, nsURI: nsURI, prefix: prefix}, nil
+	}
+
+	// No explicit namespace= attribute: resolve the lexical prefix.
+	if prefix == "" {
+		return resolvedAttrName{localName: localName}, nil
+	}
+	nsURI := ec.resolvePrefix(prefix)
+	if nsURI == "" {
+		// XTDE0860: prefix in computed attribute name is undeclared.
+		return resolvedAttrName{}, dynamicError(errCodeXTDE0860,
+			"undeclared namespace prefix %q in attribute name %q", prefix, name)
+	}
+	return resolvedAttrName{localName: localName, nsURI: nsURI, prefix: prefix}, nil
+}
+
 func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) error {
 	name, err := inst.Name.evaluate(ctx, ec.contextNode)
 	if err != nil {
@@ -642,10 +706,18 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 
 	// Validate the computed attribute name up front so that the lexical-QName
 	// (XTDE0850) and reserved-xmlns (XTDE0855) checks apply uniformly across the
-	// element-output, sequence-mode, and item-capture paths below. The
-	// undeclared-prefix (XTDE0860) check stays inline in each path because it
-	// only applies when no explicit namespace attribute is supplied.
+	// element-output, sequence-mode, and item-capture paths below.
 	if err := validateComputedAttributeName(name, inst); err != nil {
+		return err
+	}
+
+	// Resolve the full expanded name (local name + namespace URI + prefix) once,
+	// honoring an explicit namespace= attribute and enforcing the namespace
+	// constraints (XTDE0860 undeclared prefix, XTDE0865 reserved xmlns URI). Every
+	// output path below reuses this resolved name so that, e.g., name="p:a"
+	// namespace="urn:p" produces an attribute in urn:p in all modes.
+	resolved, err := ec.resolveComputedAttributeName(ctx, name, inst)
+	if err != nil {
 		return err
 	}
 
@@ -729,23 +801,12 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 	// standalone item rather than attaching it to an element.
 	out := ec.currentOutput()
 	if out.sequenceMode {
-		// Resolve namespace for prefixed attribute names.
+		localName := resolved.localName
+		nsURI := resolved.nsURI
 		var attrNS *helium.Namespace
-		localName := name
-		nsURI := ""
-		if idx := strings.IndexByte(name, ':'); idx >= 0 {
-			prefix := name[:idx]
-			localName = name[idx+1:]
-			nsURI = ec.resolvePrefix(prefix)
-			if nsURI == "" && inst.Namespace == nil {
-				// XTDE0860: prefix in computed attribute name is undeclared.
-				return dynamicError(errCodeXTDE0860,
-					"undeclared namespace prefix %q in attribute name %q", prefix, name)
-			}
-			if nsURI != "" {
-				ns, _ := out.doc.CreateNamespace(prefix, nsURI)
-				attrNS = ns
-			}
+		if nsURI != "" {
+			ns, _ := out.doc.CreateNamespace(resolved.prefix, nsURI)
+			attrNS = ns
 		}
 		// Schema validation when validation attribute is set.
 		if inst.Validation == validationStrict || inst.Validation == validationLax {
@@ -796,19 +857,11 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			tmpDoc := helium.NewDefaultDocument()
 			tmpElem := tmpDoc.CreateElement("_tmp")
 			{
-				if idx := strings.IndexByte(name, ':'); idx >= 0 {
-					prefix := name[:idx]
-					local := name[idx+1:]
-					uri := ec.resolvePrefix(prefix)
-					if uri == "" && inst.Namespace == nil {
-						// XTDE0860: prefix in computed attribute name is undeclared.
-						return dynamicError(errCodeXTDE0860,
-							"undeclared namespace prefix %q in attribute name %q", prefix, name)
-					}
-					ns, _ := tmpDoc.CreateNamespace(prefix, uri)
-					_, _ = tmpElem.SetAttributeNS(local, value, ns)
+				if resolved.nsURI != "" {
+					ns, _ := tmpDoc.CreateNamespace(resolved.prefix, resolved.nsURI)
+					_, _ = tmpElem.SetAttributeNS(resolved.localName, value, ns)
 				} else {
-					_, _ = tmpElem.SetAttribute(name, value)
+					_, _ = tmpElem.SetAttribute(resolved.localName, value)
 				}
 				for _, attr := range tmpElem.Attributes() {
 					out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
@@ -828,116 +881,53 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		return dynamicError(errCodeXTRE0540, "cannot add attribute to element after children have been added")
 	}
 
-	if inst.Namespace != nil {
-		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
-		if err != nil {
-			return err
-		}
-		// XTDE0865: the xmlns namespace URI is reserved
-		if nsURI == lexicon.NamespaceXMLNS {
-			return dynamicError(errCodeXTDE0865,
-				"namespace URI %q is reserved and cannot be used for attributes", nsURI)
-		}
-		if nsURI != "" {
-			prefix := ""
-			localName := name
-			if idx := strings.IndexByte(name, ':'); idx >= 0 {
-				prefix = name[:idx]
-				localName = name[idx+1:]
-			}
-			// Attributes in a namespace require a non-empty prefix (unlike
-			// elements, the default namespace does not apply to attributes).
-			if prefix == "" {
-				prefix = "ns0"
-			}
-			// Schema validation when validation attribute is set.
-			if inst.Validation == validationStrict || inst.Validation == validationLax {
-				if err := ec.validateConstructedAttribute(ctx, localName, nsURI, value, inst.Validation); err != nil {
-					return err
-				}
-			}
-			// If the prefix is already bound to a different URI on this element,
-			// generate a unique prefix to avoid conflicts.
-			prefix = uniqueNSPrefix(elem, prefix, nsURI)
-			// Ensure the namespace is declared on the element
-			if !hasNSDecl(elem, prefix, nsURI) {
-				if err := elem.DeclareNamespace(prefix, nsURI); err != nil {
-					return err
-				}
-			}
-			// Remove existing attribute with same expanded name to allow replacement
-			elem.RemoveAttributeNS(localName, nsURI)
-			ns, err := ec.resultDoc.CreateNamespace(prefix, nsURI)
-			if err != nil {
-				return err
-			}
-			// Use literal mode: XSLT evaluation values are plain text
-			// that may contain & from resolved entities.
-			_ = elem.SetLiteralAttributeNS(localName, value, ns)
-			ec.annotateAttr(elem, inst.TypeName, localName, nsURI, value)
-			out.noteOutput()
-			return nil
-		}
-		// namespace="" explicitly: strip prefix, use no-namespace attribute
-		if idx := strings.IndexByte(name, ':'); idx >= 0 {
-			name = name[idx+1:]
-		}
-		// Schema validation for no-namespace attribute.
+	// Attribute belongs to a namespace: declare the namespace on the element
+	// (applying prefix fixup) and attach the namespaced attribute.
+	if resolved.nsURI != "" {
+		localName := resolved.localName
+		nsURI := resolved.nsURI
+		// Schema validation when validation attribute is set.
 		if inst.Validation == validationStrict || inst.Validation == validationLax {
-			if err := ec.validateConstructedAttribute(ctx, name, "", value, inst.Validation); err != nil {
+			if err := ec.validateConstructedAttribute(ctx, localName, nsURI, value, inst.Validation); err != nil {
 				return err
 			}
 		}
-		elem.RemoveAttribute(name)
-		_ = elem.SetLiteralAttribute(name, value)
-		ec.annotateAttr(elem, inst.TypeName, name, "", value)
-		out.noteOutput()
-		return nil
-	}
-
-	// Handle prefixed attribute names without explicit namespace
-	if prefix, localName, ok := strings.Cut(name, ":"); ok {
-		uri := ec.resolvePrefix(prefix)
-		if uri == "" {
-			// XTDE0860: prefix in computed attribute name is undeclared
-			return dynamicError(errCodeXTDE0860,
-				"undeclared namespace prefix %q in attribute name %q", prefix, name)
-		}
-		// Schema validation for prefixed attribute.
-		if inst.Validation == validationStrict || inst.Validation == validationLax {
-			if err := ec.validateConstructedAttribute(ctx, localName, uri, value, inst.Validation); err != nil {
-				return err
-			}
-		}
+		// If the prefix is already bound to a different URI on this element,
+		// generate a unique prefix to avoid conflicts.
+		prefix := uniqueNSPrefix(elem, resolved.prefix, nsURI)
 		// Ensure the namespace is declared on the element
-		if !hasNSDecl(elem, prefix, uri) {
-			if err := elem.DeclareNamespace(prefix, uri); err != nil {
+		if !hasNSDecl(elem, prefix, nsURI) {
+			if err := elem.DeclareNamespace(prefix, nsURI); err != nil {
 				return err
 			}
 		}
 		// Remove existing attribute with same expanded name to allow replacement
-		elem.RemoveAttributeNS(localName, uri)
-		ns, err := ec.resultDoc.CreateNamespace(prefix, uri)
+		elem.RemoveAttributeNS(localName, nsURI)
+		ns, err := ec.resultDoc.CreateNamespace(prefix, nsURI)
 		if err != nil {
 			return err
 		}
+		// Use literal mode: XSLT evaluation values are plain text
+		// that may contain & from resolved entities.
 		_ = elem.SetLiteralAttributeNS(localName, value, ns)
-		ec.annotateAttr(elem, inst.TypeName, localName, uri, value)
+		ec.annotateAttr(elem, inst.TypeName, localName, nsURI, value)
 		out.noteOutput()
 		return nil
 	}
 
-	// Schema validation for simple unprefixed attribute.
+	// No-namespace attribute (no namespace= and either no prefix, or an
+	// explicit namespace="" that discarded the prefix).
+	localName := resolved.localName
+	// Schema validation for no-namespace attribute.
 	if inst.Validation == validationStrict || inst.Validation == validationLax {
-		if err := ec.validateConstructedAttribute(ctx, name, "", value, inst.Validation); err != nil {
+		if err := ec.validateConstructedAttribute(ctx, localName, "", value, inst.Validation); err != nil {
 			return err
 		}
 	}
-
 	// Remove existing attribute with same name to allow replacement
-	elem.RemoveAttribute(name)
-	_ = elem.SetLiteralAttribute(name, value)
-	ec.annotateAttr(elem, inst.TypeName, name, "", value)
+	elem.RemoveAttribute(localName)
+	_ = elem.SetLiteralAttribute(localName, value)
+	ec.annotateAttr(elem, inst.TypeName, localName, "", value)
 	out.noteOutput()
 	return nil
 }

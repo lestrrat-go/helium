@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -144,4 +145,94 @@ func TestAttributeInvalidQNameItemCapture(t *testing.T) {
 	require.Error(t, err, "invalid QName in computed attribute name must raise an error")
 	require.True(t, strings.Contains(err.Error(), "XTDE0850"),
 		"expected XTDE0850, got: %v", err)
+}
+
+// TestAttributeExplicitNamespaceSequenceMode verifies that an xsl:attribute with
+// a computed name using an undeclared prefix BUT an explicit namespace= attribute
+// is assigned that namespace (not no-namespace) when constructed in sequence mode.
+func TestAttributeExplicitNamespaceSequenceMode(t *testing.T) {
+	ctx := t.Context()
+
+	// The prefix "p" is undeclared, but namespace="urn:p" is supplied, so the
+	// attribute must be in urn:p, not in no-namespace. We capture it in a
+	// sequence-typed variable and emit its namespace URI as text.
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="text"/>
+  <xsl:template match="/">
+    <xsl:variable name="v" as="attribute()*">
+      <xsl:attribute name="{'p:a'}" namespace="urn:p" select="'x'"/>
+    </xsl:variable>
+    <xsl:value-of select="namespace-uri-from-QName(node-name($v[1]))"/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+	require.NoError(t, err)
+
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "urn:p", strings.TrimSpace(out),
+		"computed attribute with explicit namespace= must be in that namespace in sequence mode")
+}
+
+// primaryItemsCapture is a PrimaryItemsHandler that records the items captured
+// from the primary output so a test can inspect captured attribute nodes.
+type primaryItemsCapture struct {
+	seq xpath3.Sequence
+}
+
+func (p *primaryItemsCapture) HandlePrimaryItems(seq xpath3.Sequence) error {
+	p.seq = seq
+	return nil
+}
+
+// TestAttributeExplicitNamespaceItemCapture verifies that an xsl:attribute with a
+// computed name using an undeclared prefix BUT an explicit namespace= attribute
+// is assigned that namespace (not no-namespace) when captured as a standalone
+// item via an item-serialization output method (the item-capture path). The
+// captured attribute node's namespace URI is inspected via a PrimaryItemsHandler.
+func TestAttributeExplicitNamespaceItemCapture(t *testing.T) {
+	ctx := t.Context()
+
+	// method="adaptive" is an item-serialization method, so the standalone
+	// xsl:attribute at the top level is captured as a pending item rather than
+	// attached to an element. The undeclared prefix "p" is overridden by
+	// namespace="urn:p", so the captured attribute node must be in urn:p.
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive"/>
+  <xsl:template match="/">
+    <xsl:attribute name="{'p:a'}" namespace="urn:p" select="'x'"/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+	require.NoError(t, err)
+
+	capture := &primaryItemsCapture{}
+	_, err = ss.Transform(src).PrimaryItemsHandler(capture).Do(ctx)
+	require.NoError(t, err)
+
+	require.NotNil(t, capture.seq, "expected primary items to be captured")
+	require.Equal(t, 1, capture.seq.Len(), "expected a single captured attribute item")
+	ni, ok := capture.seq.Get(0).(xpath3.NodeItem)
+	require.True(t, ok, "captured item must be a node item")
+	attr, ok := helium.AsNode[*helium.Attribute](ni.Node)
+	require.True(t, ok, "captured node must be an attribute")
+	require.Equal(t, "a", attr.LocalName())
+	require.Equal(t, "urn:p", attr.URI(),
+		"computed attribute with explicit namespace= must be in that namespace in item-capture mode")
 }
