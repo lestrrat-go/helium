@@ -920,11 +920,12 @@ func (c *canonicalizer) documentBaseURI() string {
 	if c.baseURI == "" {
 		return ""
 	}
-	// An absolute URI with a scheme and authority must not be rewritten as a
-	// filesystem path. url.Parse treats a single-letter Windows drive prefix
-	// (e.g. "c:\dir") as a scheme, so require an authority component to
-	// distinguish genuine URIs from drive-letter paths.
-	if u, err := url.Parse(c.baseURI); err == nil && u.IsAbs() && (u.Host != "" || strings.HasPrefix(c.baseURI, u.Scheme+"://")) {
+	// An absolute URI (one with a scheme, e.g. "http://example.com/...",
+	// "file:/tmp/doc.xml", or "urn:...") must not be rewritten as a filesystem
+	// path. url.Parse treats a single-letter Windows drive prefix (e.g.
+	// "c:\dir") as a scheme, so exclude single-letter schemes to keep treating
+	// drive-letter paths as filesystem paths.
+	if u, err := url.Parse(c.baseURI); err == nil && u.IsAbs() && len(u.Scheme) > 1 {
 		return c.baseURI
 	}
 	// Convert file path to URL for proper URI resolution.

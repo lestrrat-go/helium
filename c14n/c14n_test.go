@@ -419,3 +419,26 @@ func TestC14N11HTTPBaseURIFixup(t *testing.T) {
 	// http://example.com/a/b/doc.xml this is "../../c/".
 	require.Contains(t, string(got), `xml:base="../../c/"`, "expected URI-relative xml:base, got: %s", string(got))
 }
+
+// TestC14N11SchemeOnlyBaseURIFixup verifies the fix also covers absolute URIs
+// that carry a scheme but no // authority component (e.g. "mem:/a/b/doc.xml").
+// Such URIs must not be routed through filepath.Abs.
+func TestC14N11SchemeOnlyBaseURIFixup(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="/c/"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	nodes := collectDescendantElements(t, doc, "child")
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("mem:/a/b/doc.xml").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	require.NotContains(t, string(got), "file:", "scheme-only URI base must not become a file path")
+	// root xml:base "/c/" resolved against mem:/a/b/doc.xml is mem:/c/;
+	// relative to the ancestor base mem:/a/b/doc.xml this is "../../c/".
+	require.Contains(t, string(got), `xml:base="../../c/"`, "expected URI-relative xml:base, got: %s", string(got))
+}
