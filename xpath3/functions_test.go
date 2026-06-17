@@ -780,6 +780,44 @@ func TestFnDateTime(t *testing.T) {
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.IntegerVal() >= 2024)
 	})
+
+	t.Run("date and time combine", func(t *testing.T) {
+		// fn:dateTime($arg1 as xs:date?, $arg2 as xs:time?) combines a date
+		// and a time into an xs:dateTime.
+		seq := evalExpr(t, doc, `dateTime(xs:date("2020-01-01"), xs:time("01:02:03"))`)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, xpath3.TypeDateTime, av.TypeName)
+
+		strSeq := evalExpr(t, doc, `string(dateTime(xs:date("2020-01-01"), xs:time("01:02:03")))`)
+		require.Equal(t, 1, strSeq.Len())
+		require.Equal(t, "2020-01-01T01:02:03", strSeq.Get(0).(xpath3.AtomicValue).Value)
+	})
+
+	t.Run("empty arg yields empty sequence", func(t *testing.T) {
+		require.Nil(t, evalExpr(t, doc, `dateTime((), xs:time("01:02:03"))`))
+		require.Nil(t, evalExpr(t, doc, `dateTime(xs:date("2020-01-01"), ())`))
+	})
+
+	t.Run("dateTime as first arg is a type error", func(t *testing.T) {
+		// $arg1 is declared xs:date?; passing an xs:dateTime must raise
+		// XPTY0004 rather than being reinterpreted as a date.
+		compiled, err := xpath3.NewCompiler().Compile(`dateTime(xs:dateTime("2020-01-01T12:00:00"), xs:time("01:02:03"))`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+	})
+
+	t.Run("dateTime as second arg is a type error", func(t *testing.T) {
+		// $arg2 is declared xs:time?; passing an xs:dateTime must raise
+		// XPTY0004 rather than being reinterpreted as a time.
+		compiled, err := xpath3.NewCompiler().Compile(`dateTime(xs:date("2020-01-01"), xs:dateTime("2020-01-01T12:00:00"))`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+	})
 }
 
 func TestFnAvgLexicalDecimal(t *testing.T) {

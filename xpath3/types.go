@@ -170,6 +170,22 @@ func isSubtypeOf(actualType, targetType string) bool {
 	return result
 }
 
+// isAtomicSubtypeOf reports whether the atomic value's type is targetType or a
+// subtype of it, honoring both the built-in XSD hierarchy and the value's
+// built-in BaseType (set when TypeName is a user-defined schema type derived by
+// restriction). Unlike PromoteSchemaType it never falls back to the Go value's
+// kind, so a sibling type (e.g. xs:dateTime relative to xs:date) is correctly
+// rejected rather than reinterpreted from its time.Time payload.
+func isAtomicSubtypeOf(av AtomicValue, targetType string) bool {
+	if isSubtypeOf(av.TypeName, targetType) {
+		return true
+	}
+	if av.BaseType != "" && IsKnownXSDType(av.BaseType) && isSubtypeOf(av.BaseType, targetType) {
+		return true
+	}
+	return false
+}
+
 // BuiltinIsSubtypeOf reports whether actualType is the same as or a subtype of
 // targetType using only the built-in XSD type hierarchy (no schema lookup).
 // This is exported for use by schema-aware backends (e.g. xslt3) that need to
