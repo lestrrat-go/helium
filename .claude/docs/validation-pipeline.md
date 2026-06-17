@@ -16,7 +16,7 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
    - `schema.groups` (model groups)
    - `schema.attrGroups` (attribute groups)
    - `schema.globalAttrs` (global attributes)
-4. **Process includes/imports** — load `xs:include`/`xs:import`/`xs:redefine`, merge declarations
+4. **Process includes/imports** — load `xs:include`/`xs:import`/`xs:redefine`, merge declarations. Nested-schema document loads go through `compileConfig.fsys` (`fs.ReadFile(c.fsys, path)`), an injectable `fs.FS` set via `Compiler.FS(...)`; it defaults to `iofs.PermissiveRoot` (`os.Open`) and is propagated to sub-compilers. `xslt3` injects a resolver-backed `fs.FS` (`schemaResolverFS`) so nested includes inside a resolver-loaded schema obey the same default-deny `URIResolver` policy as the top-level load.
 5. **Resolve references** — resolve all QName refs (types, base types, groups, attr groups, union members), build substitution group maps, detect circular substitution
 6. **Constraint checks** (when errorCount == 0):
    - `checkFinalOnTypes()` — final attribute enforcement

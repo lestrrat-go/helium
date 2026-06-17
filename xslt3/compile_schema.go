@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -25,26 +24,41 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if c.resolver == nil {
-		return nil, staticError(errCodeXTSE0165,
-			"cannot load schema %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
-	}
-	rc, resolveErr := c.resolver.Resolve(uri)
-	if resolveErr != nil {
-		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, resolveErr)
-	}
-	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
+	data, err := c.loadSchemaBytes(ctx, uri)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read schema %q: %w", uri, err)
+		return nil, err
 	}
 	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
 	}
 	// Preserve relative include/import resolution within the schema by
-	// rooting the XSD compiler's base directory at the schema's location.
-	return xsd.NewCompiler().BaseDir(filepath.Dir(uri)).Compile(ctx, doc)
+	// rooting the XSD compiler's base directory at the schema's location,
+	// and route the schema's nested xs:include/xs:import/xs:redefine loads
+	// through the same compile-time resolver (default-deny) instead of the
+	// xsd compiler's default os.Open.
+	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
+	return xsd.NewCompiler().BaseDir(filepath.Dir(uri)).FS(fsys).Compile(ctx, doc)
+}
+
+// loadSchemaBytes loads a nested-schema document referenced by
+// xs:include/xs:import/xs:redefine through the compile-time URIResolver,
+// preserving the default-deny policy (no resolver → refused, no os.Open
+// fallback).
+func (c *compiler) loadSchemaBytes(_ context.Context, uri string) ([]byte, error) {
+	if c.resolver == nil {
+		return nil, staticError(errCodeXTSE0165,
+			"cannot load schema %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
+	}
+	rc, err := c.resolver.Resolve(uri)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, err)
+	}
+	data, err := readCloserToBytes(rc)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read schema %q: %w", uri, err)
+	}
+	return data, nil
 }
 
 // fatalErrorCounter is an error handler that counts fatal errors during schema compilation.

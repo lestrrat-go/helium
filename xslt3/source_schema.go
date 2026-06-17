@@ -72,8 +72,11 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 			return nil, fmt.Errorf("parse source schema %q: %w", uri, err)
 		}
 		// Root the XSD compiler's base directory at the schema's location so
-		// the schema's own relative xs:include/xs:import references resolve.
-		schema, err := xsd.NewCompiler().BaseDir(filepath.Dir(uri)).Compile(ctx, schemaDoc)
+		// the schema's own relative xs:include/xs:import references resolve,
+		// and route those nested loads through the invocation's resolver
+		// (default-deny) instead of the xsd compiler's default os.Open.
+		fsys := schemaResolverFS{ctx: ctx, load: ec.retrieveDocumentBytes}
+		schema, err := xsd.NewCompiler().BaseDir(filepath.Dir(uri)).FS(fsys).Compile(ctx, schemaDoc)
 		if err != nil {
 			return nil, fmt.Errorf("compile source schema %q: %w", uri, err)
 		}
