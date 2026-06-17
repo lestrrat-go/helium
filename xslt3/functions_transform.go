@@ -303,6 +303,25 @@ func resolveRelativeURI(base, ref string) string {
 	return filepath.Join(filepath.Dir(base), ref)
 }
 
+// resolveStylesheetLocation resolves an fn:transform stylesheet-location loc
+// against the current stylesheet base URI.
+//
+// Absoluteness is decided with [xsd.URIScheme] (RFC 3986), not filepath.IsAbs:
+// when base is a URI (it has a scheme), a filepath-absolute or root-relative
+// loc such as "/inner.xsl" must be resolved against the base scheme/authority
+// (mem://pkg/main.xsl + /inner.xsl -> mem://pkg/inner.xsl) rather than passed
+// through verbatim. Only a purely-local absolute path against a local base is
+// left unchanged.
+func resolveStylesheetLocation(base, loc string) string {
+	if base == "" {
+		return loc
+	}
+	if xsd.URIScheme(base) != "" || !filepath.IsAbs(loc) {
+		return resolveRelativeURI(base, loc)
+	}
+	return loc
+}
+
 // newNestedCompiler creates a Compiler pre-configured with the same
 // resolver, package resolver, and import schemas that were used to
 // compile this stylesheet, so that fn:transform nested compiles
@@ -439,11 +458,8 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	// Compile the stylesheet
 	var ss *Stylesheet
 	if stylesheetLoc != "" {
-		// Resolve relative to the current stylesheet base URI
-		loc := stylesheetLoc
-		if ec.stylesheet.baseURI != "" && !filepath.IsAbs(loc) {
-			loc = resolveRelativeURI(ec.stylesheet.baseURI, loc)
-		}
+		// Resolve relative to the current stylesheet base URI.
+		loc := resolveStylesheetLocation(ec.stylesheet.baseURI, stylesheetLoc)
 		var data []byte
 		baseURI := loc
 		if ec.stylesheet.uriResolver == nil {

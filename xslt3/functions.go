@@ -617,7 +617,22 @@ func (ec *execContext) resolveDocumentURI(uri string, baseDir string) string {
 	if strings.HasPrefix(cleanURI, "file:///") {
 		return cleanURI[len("file://"):]
 	}
-	if strings.Contains(cleanURI, "://") || filepath.IsAbs(cleanURI) {
+	// Decide absoluteness with xsd.URIScheme (RFC 3986), not a "://" substring
+	// check or filepath.IsAbs: an absolute-URI ref may carry a scheme with no
+	// "//" authority (e.g. document('urn:doc'), doc('file:/x.xml')) and must be
+	// returned unchanged, while a relative ref against a URI base must keep the
+	// base scheme/authority (resolved per RFC 3986) instead of being joined as a
+	// local path. Only when both base and ref are local filesystem paths is
+	// filepath.Join used. Resolution of the URI cases is delegated to the shared
+	// canonical xsd.ResolveSchemaURI helper.
+	if xsd.URIScheme(cleanURI) != "" || (baseDir != "" && xsd.URIScheme(baseDir) != "") {
+		resolved, err := xsd.ResolveSchemaURI(cleanURI, baseDir)
+		if err != nil {
+			return cleanURI
+		}
+		return resolved
+	}
+	if filepath.IsAbs(cleanURI) {
 		return cleanURI
 	}
 	if baseDir != "" {
