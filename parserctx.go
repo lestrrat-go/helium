@@ -127,6 +127,7 @@ type parserCtx struct {
 	nameCache        map[string]string // per-parse string interning for element/attribute names
 	charBuf          []byte            // reusable buffer for parseCharDataContent
 	attrBuf          []attrData        // reusable attribute scratch buffer for start-tag parsing
+	nsDeclaredBuf    []string          // reusable scratch buffer of ns prefixes declared on the current start tag
 }
 
 type parserCtxKey struct{}

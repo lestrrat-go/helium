@@ -176,21 +176,65 @@ func TestParseRejectsDuplicateAttribute(t *testing.T) {
 	reject := []string{
 		`<root a="1" a="2"/>`,
 		`<root xmlns:p="urn:x" p:a="1" p:a="2"/>`,
+		// Duplicate default namespace declarations on the same element,
+		// including when one or both are empty (xmlns="").
+		`<root xmlns="urn:x" xmlns="urn:y"/>`,
+		`<root xmlns="urn:x" xmlns="urn:x"/>`,
+		`<root xmlns="" xmlns="urn:x"/>`,
+		`<root xmlns="" xmlns=""/>`,
+		// Two attributes with different prefixes but the same expanded
+		// name ({urn:x}a). Forbidden by Namespaces in XML.
+		`<root xmlns:p="urn:x" xmlns:q="urn:x" p:a="1" q:a="2"/>`,
 	}
 	for _, input := range reject {
 		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.Error(t, err, "Parse should reject duplicate attribute in %q", input)
 	}
 
+	// The same well-formedness violations must remain fatal even with
+	// CleanNamespaces(true) (parseNsClean), which only suppresses redundant
+	// ancestor redeclarations, never same-element duplicates.
+	rejectClean := []string{
+		`<root xmlns:p="urn:x" xmlns:p="urn:x"/>`,
+		`<root xmlns="urn:x" xmlns="urn:x"/>`,
+		`<root xmlns="" xmlns=""/>`,
+		`<root xmlns="" xmlns="urn:x"/>`,
+		// A child re-declaring a prefix already bound by an ancestor to the
+		// same URI is the parseNsClean redundant-redeclaration case; a
+		// SECOND same-element declaration must still be fatal even though the
+		// first one is skipped as redundant (not pushed onto the ns stack).
+		`<root xmlns="urn:x"><child xmlns="urn:x" xmlns="urn:x"/></root>`,
+		`<root xmlns:p="urn:x"><child xmlns:p="urn:x" xmlns:p="urn:x"/></root>`,
+	}
+	for _, input := range rejectClean {
+		_, err := helium.NewParser().CleanNamespaces(true).Parse(t.Context(), []byte(input))
+		require.Error(t, err, "Parse with CleanNamespaces should reject duplicate ns decl in %q", input)
+	}
+
 	// Distinct qualified names must still parse, including the same local
-	// name carried by different prefixes.
+	// name carried by different prefixes mapped to different URIs.
 	accept := []string{
 		`<root a="1" b="2"/>`,
 		`<root xmlns:p="urn:x" xmlns:q="urn:y" p:a="1" q:a="2"/>`,
+		// Unprefixed attributes are in no namespace; a default xmlns does
+		// not put them in a namespace, so distinct local names are fine.
+		`<root xmlns="urn:x" a="1" b="2"/>`,
 	}
 	for _, input := range accept {
 		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should accept distinct attributes in %q", input)
+	}
+
+	// A single child redeclaration of an ancestor binding (no same-element
+	// duplicate) is a legitimate parseNsClean redundant redeclaration and
+	// must still parse.
+	acceptClean := []string{
+		`<root xmlns="urn:x"><child xmlns="urn:x"/></root>`,
+		`<root xmlns:p="urn:x"><child xmlns:p="urn:x"/></root>`,
+	}
+	for _, input := range acceptClean {
+		_, err := helium.NewParser().CleanNamespaces(true).Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "Parse with CleanNamespaces should accept redundant redecl in %q", input)
 	}
 }
 
