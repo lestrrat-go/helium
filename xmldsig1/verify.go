@@ -260,6 +260,13 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 			parsed.references = append(parsed.references, ref)
 		}
 	}
+
+	// XML-Signature requires at least one Reference. A SignatureValue computed
+	// over a reference-free SignedInfo verifies cryptographically yet covers no
+	// document content, so accepting it would attest to nothing. Reject it.
+	if len(parsed.references) == 0 {
+		return fmt.Errorf("%w: SignedInfo has no Reference", ErrInvalidSignature)
+	}
 	return nil
 }
 
