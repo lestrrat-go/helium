@@ -367,6 +367,69 @@ func TestDecryptRSAOAEP_UnsupportedDigestErrors(t *testing.T) {
 	require.ErrorAs(t, err, &unsupp)
 }
 
+// TestEncryptRSAOAEP_MGF1P_RejectsAnyMGF verifies that the legacy
+// rsa-oaep-mgf1p algorithm rejects ANY explicit MGF (including
+// MGF1-SHA-1), since XML-Enc 1.1 forbids an xenc11:MGF element for it,
+// and that no MGF element is serialized.
+func TestEncryptRSAOAEP_MGF1P_RejectsAnyMGF(t *testing.T) {
+	key := generateRSAKey(t)
+
+	for _, mgf := range []string{xmlenc1.MGFSHA1, xmlenc1.MGFSHA256} {
+		doc := mustParseXML(t, samlAssertion)
+		encryptor := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			OAEPMGF(mgf).
+			RecipientPublicKey(&key.PublicKey)
+
+		_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+		require.Error(t, err, "mgf %q must be rejected for rsa-oaep-mgf1p", mgf)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+
+		// No partial EncryptedData/MGF element should have been serialized.
+		xml, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.NotContains(t, xml, "MGF")
+	}
+}
+
+// TestDecryptRSAOAEP_ParamErrorIsDecryptionFailed verifies that a
+// parameter-validation failure encountered while decrypting an
+// EncryptedKey (here RSA-OAEP 1.1 advertising SHA-256 digest with an
+// MGF1-SHA-1 that Go cannot represent alongside it) is classified as a
+// decryption failure, not an encryption failure.
+func TestDecryptRSAOAEP_ParamErrorIsDecryptionFailed(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	// Produce a valid RSA-OAEP 1.1 SHA-256 EncryptedData, then tamper the
+	// serialized MGF down to MGF1-SHA-1 so digest and MGF hashes mismatch.
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		OAEPDigest(xmlenc1.DigestSHA256).
+		OAEPMGF(xmlenc1.MGFSHA256).
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	tampered := strings.Replace(xml, xmlenc1.MGFSHA256, xmlenc1.MGFSHA1, 1)
+	require.NotEqual(t, xml, tampered)
+
+	tdoc := mustParseXML(t, tampered)
+	edNode := findEncryptedData(t, tdoc.DocumentElement())
+	require.NotNil(t, edNode)
+
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	_, err = decryptor.Decrypt(t.Context(), edNode)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+	require.NotErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+}
+
 func findEncryptedData(t *testing.T, n helium.Node) *helium.Element {
 	t.Helper()
 	elem, ok := n.(*helium.Element)
