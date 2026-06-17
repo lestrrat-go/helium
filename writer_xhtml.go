@@ -95,7 +95,13 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		d.writeString(out, ` xmlns="http://www.w3.org/1999/xhtml"`)
 	}
 
-	d.dumpXHTMLAttrList(out, e)
+	// dumpXHTMLAttrList returns a non-nil error (e.g. an invalid/reserved
+	// attribute name) when it stopped early. Abort here, mirroring writeNode,
+	// so no element body, child content, or closing tag is emitted past the
+	// error.
+	if err := d.dumpXHTMLAttrList(out, e); err != nil {
+		return err
+	}
 
 	addMeta := false
 	if localName == "head" {
@@ -182,7 +188,7 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 	return d.err
 }
 
-func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
+func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 	var langAttr, xmlLangAttr, nameAttr, idAttr *Attribute
 	localName := e.LocalName()
 
@@ -191,9 +197,10 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
 
 		// The attribute name is emitted verbatim below. Validate it just like
 		// writeNode so an injected name cannot inject raw markup. Stop on the
-		// first invalid name; the sticky error is propagated to the caller.
+		// first invalid name and return the sticky error so the caller aborts
+		// before emitting any element body or child content.
 		if !d.checkAttributeName(attrName) {
-			return
+			return d.err
 		}
 
 		switch attrName {
@@ -247,6 +254,7 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
 		d.check(escapeAttrValue(out, xmlLangAttr.Content(), d.escapeNonASCII))
 		d.writeString(out, `"`)
 	}
+	return d.err
 }
 
 func (d *writeSession) headHasContentTypeMeta(head *Element) bool {

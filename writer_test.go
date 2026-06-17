@@ -349,6 +349,73 @@ func TestXHTMLWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 	})
 }
 
+// TestXHTMLAttrErrorEmitsNoPartialChildren reproduces Finding 1: when an XHTML
+// element has an invalid attribute name AND non-element child content, the
+// serializer must abort at the first error and must NOT emit any of the child
+// content before returning the error.
+func TestXHTMLAttrErrorEmitsNoPartialChildren(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	_, err := doc.CreateInternalSubset(
+		"html",
+		"-//W3C//DTD XHTML 1.0 Strict//EN",
+		"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
+	)
+	require.NoError(t, err)
+
+	root := doc.CreateElement("html")
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	// Invalid attribute name on the element: serialization must fail before any
+	// child content is written.
+	_, err = root.SetAttribute(`x onmouseover`, "1")
+	require.NoError(t, err)
+
+	const childMarker = "SECRET_CHILD_TEXT"
+	text := doc.CreateText([]byte(childMarker))
+	require.NoError(t, root.AddChild(text))
+
+	var buf strings.Builder
+	err = helium.NewWriter().WriteTo(&buf, doc)
+	require.Error(t, err, "invalid XHTML attribute name must fail serialization")
+	require.NotContains(t, buf.String(), childMarker,
+		"no child content must be emitted after an attribute-name error")
+}
+
+// TestWriteRejectsXmlnsElementName reproduces Finding 2: an element whose QName
+// prefix is the reserved "xmlns" prefix must not serialize, even when an active
+// namespace bypasses dumpNs.
+func TestWriteRejectsXmlnsElementName(t *testing.T) {
+	t.Parallel()
+
+	t.Run("xmlns-prefixed element name rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		// SetActiveNamespace sets the node's active namespace directly, so the
+		// "xmlns" prefix is emitted as the element QName prefix (<xmlns:root/>),
+		// which Namespaces-in-XML forbids.
+		require.NoError(t, root.SetActiveNamespace("xmlns", "urn:evil"))
+
+		_, err := helium.WriteString(doc)
+		require.Error(t, err, "xmlns-prefixed element name must not serialize")
+	})
+
+	t.Run("valid namespaced element name serializes", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.SetActiveNamespace("p", "urn:example"))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, "<p:root")
+	})
+}
+
 // BenchmarkWriteNonASCII serializes a document containing many non-ASCII
 // characters with EscapeNonASCII enabled, exercising the hex char ref path.
 func BenchmarkWriteNonASCII(b *testing.B) {
