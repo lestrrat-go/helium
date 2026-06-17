@@ -42,6 +42,10 @@ type compiler struct {
 	chameleonEligible map[any]struct{}
 	// unresolved attribute references: maps from AttrUse to global attr QName
 	attrRefs map[*AttrUse]QName
+	// source info for attribute uses carrying a default/fixed value, used to
+	// validate the constraint value against the attribute's simple type once
+	// all type references are resolved (deferred to resolveRefs).
+	attrUseConstraintSources map[*AttrUse]attrConstraintSource
 	// error handler for reporting schema errors/warnings
 	errorHandler helium.ErrorHandler
 	errorCount   int    // count of fatal errors reported
@@ -84,6 +88,15 @@ type unionMemberRef struct {
 	chameleonEligible bool
 }
 
+// attrConstraintSource tracks where an attribute use's default/fixed value
+// came from, so its value can be validated against the attribute's declared
+// simple type after type references are resolved.
+type attrConstraintSource struct {
+	line  int
+	local string            // attribute display name (local name)
+	nsMap map[string]string // in-scope namespaces for value validation (QName/NOTATION)
+}
+
 // typeDefSource tracks source location and context for type definitions.
 type typeDefSource struct {
 	line    int
@@ -113,20 +126,21 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 			globalAttrs: make(map[QName]*AttrUse),
 			substGroups: make(map[QName][]*ElementDecl),
 		},
-		baseDir:           baseDir,
-		fsys:              fsys,
-		typeRefs:          make(map[*TypeDef]QName),
-		elemRefs:          make(map[*ElementDecl]QName),
-		elemRefSources:    make(map[*ElementDecl]elemRefSource),
-		groupRefs:         make(map[*ModelGroup]QName),
-		attrGroupRefs:     make(map[*TypeDef][]QName),
-		globalElemSources: make(map[*ElementDecl]elemRefSource),
-		typeDefSources:    make(map[*TypeDef]typeDefSource),
-		itemTypeRefs:      make(map[*TypeDef]QName),
-		chameleonEligible: make(map[any]struct{}),
-		attrRefs:          make(map[*AttrUse]QName),
-		importedNS:        make(map[string]string),
-		maxImportDepth:    defaultMaxImportDepth,
+		baseDir:                  baseDir,
+		fsys:                     fsys,
+		typeRefs:                 make(map[*TypeDef]QName),
+		elemRefs:                 make(map[*ElementDecl]QName),
+		elemRefSources:           make(map[*ElementDecl]elemRefSource),
+		groupRefs:                make(map[*ModelGroup]QName),
+		attrGroupRefs:            make(map[*TypeDef][]QName),
+		globalElemSources:        make(map[*ElementDecl]elemRefSource),
+		typeDefSources:           make(map[*TypeDef]typeDefSource),
+		itemTypeRefs:             make(map[*TypeDef]QName),
+		chameleonEligible:        make(map[any]struct{}),
+		attrRefs:                 make(map[*AttrUse]QName),
+		attrUseConstraintSources: make(map[*AttrUse]attrConstraintSource),
+		importedNS:               make(map[string]string),
+		maxImportDepth:           defaultMaxImportDepth,
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
@@ -262,6 +276,25 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 }
 
 // collectNSContext collects namespace declarations from a schema element and its ancestors.
+// inScopeNamespace returns the nearest in-scope namespace declaration on elem
+// or its ancestors whose URI matches href, or nil if none is declared. The
+// returned declaration's prefix is reused when inserting a qualified default
+// attribute so the inserted node mirrors the document's own prefix binding.
+func inScopeNamespace(elem *helium.Element, href string) *helium.Namespace {
+	var node helium.Node = elem
+	for node != nil {
+		if e, ok := node.(*helium.Element); ok {
+			for _, ns := range e.Namespaces() {
+				if ns.URI() == href {
+					return ns
+				}
+			}
+		}
+		node = node.Parent()
+	}
+	return nil
+}
+
 func collectNSContext(elem *helium.Element) map[string]string {
 	nsMap := make(map[string]string)
 	var node helium.Node = elem
@@ -283,8 +316,12 @@ func isXSDElement(elem *helium.Element, localName string) bool {
 	return elem.LocalName() == localName && elem.URI() == lexicon.NamespaceXSD
 }
 
+// getAttr returns the value of an unqualified (no-namespace) schema attribute.
+// XSD schema attributes (name/type/fixed/default/minOccurs/...) are always
+// unqualified, so a foreign-namespaced attribute sharing the local name (e.g.
+// other:fixed) must not be mistaken for the XSD attribute.
 func getAttr(elem *helium.Element, name string) string {
-	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
+	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
 	if !ok {
 		return ""
 	}

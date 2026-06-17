@@ -130,7 +130,10 @@ func canonicalFloatKey(s string, bitSize int) (string, bool) {
 }
 
 // whitespaceReplace applies the XSD whiteSpace="replace" normalization: each
-// tab, newline, and carriage return becomes a single space.
+// of the four XSD whitespace characters tab (#x9), newline (#xA), and carriage
+// return (#xD) becomes a single space (#x20). Per the XSD datatype spec only
+// those ASCII whitespace characters are affected; Unicode whitespace such as
+// NBSP (U+00A0) is left untouched.
 func whitespaceReplace(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r == '\t' || r == '\n' || r == '\r' {
@@ -138,6 +141,64 @@ func whitespaceReplace(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// whitespaceCollapse applies the XSD whiteSpace="collapse" normalization:
+// replace tab/newline/CR with space (ASCII-only, like whitespaceReplace), then
+// collapse runs of spaces and trim leading/trailing spaces. Only the four XSD
+// whitespace characters (#x20, #x9, #xD, #xA) are treated as whitespace; Unicode
+// whitespace such as NBSP (U+00A0) is preserved, so an invalid value containing
+// it remains invalid under subsequent lexical validation.
+func whitespaceCollapse(s string) string {
+	replaced := whitespaceReplace(s)
+	var b strings.Builder
+	b.Grow(len(replaced))
+	inSpace := true // treat start as space to trim leading
+	for i := range len(replaced) {
+		if replaced[i] == ' ' {
+			inSpace = true
+			continue
+		}
+		if inSpace && b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteByte(replaced[i])
+		inSpace = false
+	}
+	return b.String()
+}
+
+// WhiteSpace returns the effective XSD whiteSpace facet ("preserve", "replace",
+// or "collapse") for a builtin datatype's local name. xs:string preserves,
+// xs:normalizedString replaces, and every other builtin (token, the integer and
+// date/time families, boolean, the NCName/Name/NMTOKEN family, list types,
+// anyURI, …) collapses, per the XSD 1.1 datatype spec. Unknown names default to
+// "collapse" so callers normalize conservatively.
+func WhiteSpace(builtinLocal string) string {
+	switch builtinLocal {
+	case "string":
+		return "preserve"
+	case "normalizedString":
+		return "replace"
+	default:
+		return "collapse"
+	}
+}
+
+// Normalize applies the XSD whiteSpace facet of the named builtin datatype to a
+// lexical value, returning the whitespace-processed form that must be used
+// before lexical validation (ValidateBuiltin) or value comparison. "preserve"
+// leaves the value untouched, "replace" turns each tab/newline/CR into a space,
+// and "collapse" additionally collapses runs of spaces and trims the ends.
+func Normalize(s, builtinLocal string) string {
+	switch WhiteSpace(builtinLocal) {
+	case "preserve":
+		return s
+	case "replace":
+		return whitespaceReplace(s)
+	default: // collapse
+		return whitespaceCollapse(s)
+	}
 }
 
 func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {

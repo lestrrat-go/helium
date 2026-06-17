@@ -31,6 +31,16 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				if edecl.Fixed == nil {
 					edecl.Fixed = ge.Fixed
 				}
+				// Copy the referenced declaration's substitution-group
+				// affiliation. A no-type substitution-group member leaves
+				// edecl.Type nil here; without the affiliation, effectiveDeclType
+				// cannot walk to the typed head, so xsi:nil lexical and
+				// nilled-empty checks would be silently skipped for a direct
+				// ref="member". The member's own Nillable (copied below) still
+				// governs the nilled-element check.
+				if edecl.SubstitutionGroup == (QName{}) {
+					edecl.SubstitutionGroup = ge.SubstitutionGroup
+				}
 				edecl.Nillable = ge.Nillable
 				edecl.Abstract = ge.Abstract
 				if !edecl.BlockSet {
@@ -193,6 +203,13 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			au.Type = ga.Type
 		}
 	}
+
+	// Validate attribute default/fixed constraint values against the
+	// attribute's declared simple type now that all type refs are resolved.
+	// A retained-but-invalid constraint (e.g. an empty default="" on an
+	// xs:integer attribute) is a schema error; catching it here avoids
+	// injecting an invalid value into the instance during validation.
+	c.checkAttrUseConstraints(ctx)
 
 	// Topologically order extension types so each base type is merged before
 	// the types that derive from it (the merge reads the base's finalized
@@ -372,6 +389,48 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", component, msg), helium.ErrorLevelFatal))
 	c.errorCount++
+}
+
+// checkAttrUseConstraints validates each attribute use's default/fixed value
+// against its declared simple type. Reported errors are deterministic
+// (ordered by source line then attribute name).
+func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	type pending struct {
+		au  *AttrUse
+		src attrConstraintSource
+	}
+	items := make([]pending, 0, len(c.attrUseConstraintSources))
+	for au, src := range c.attrUseConstraintSources {
+		items = append(items, pending{au: au, src: src})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].src.line != items[j].src.line {
+			return items[i].src.line < items[j].src.line
+		}
+		return items[i].src.local < items[j].src.local
+	})
+
+	for _, it := range items {
+		val := it.au.Default
+		if val == nil {
+			val = it.au.Fixed
+		}
+		if val == nil {
+			continue
+		}
+		td := attrUseTypeDef(it.au, c.schema)
+		if td == nil || td.ContentType != ContentTypeSimple {
+			continue
+		}
+		if err := td.Validate(ctx, *val, it.src.nsMap); err != nil {
+			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(td))
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, it.src.line, it.src.local, "attribute", it.src.local, msg), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+	}
 }
 
 // checkRestrictionAttrs validates that a restriction-derived type's attributes

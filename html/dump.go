@@ -142,6 +142,132 @@ func (d *htmlDumper) writeString(out io.Writer, s string) {
 	d.check(err)
 }
 
+// checkName verifies that an element or attribute name is safe to write into
+// an HTML tag. Names built through public DOM construction paths
+// (CreateElement, SetLiteralAttribute, ...) are not validated, so a name
+// containing characters that terminate or escape a tag — whitespace, quotes,
+// '<', '>', '=', '/', or control characters — would otherwise be written
+// verbatim and produce malformed or injected markup. When name is unsafe (or
+// empty), the first such failure is recorded as the sticky error so
+// serialization aborts before writing.
+//
+// This is intentionally permissive about characters HTML tolerates but XML
+// does not (e.g. '?' or '.' in "gentus?.?"), matching libxml2's HTML
+// serializer, which preserves such names verbatim. Only characters that can
+// break out of the tag are rejected.
+func (d *htmlDumper) checkName(kind, name string) {
+	if d.err != nil {
+		return
+	}
+	if name == "" {
+		d.check(fmt.Errorf("invalid HTML %s name: empty", kind))
+		return
+	}
+	// Decode rune-by-rune rather than ranging over the string: a range loop
+	// yields utf8.RuneError both for genuinely invalid bytes and for a
+	// validly-encoded U+FFFD, so we cannot tell them apart by rune alone.
+	// DecodeRuneInString returns size==1 for invalid encodings, letting us
+	// reject only the former while permitting a real U+FFFD (size==3), which
+	// the parser accepts and which does not break out of the tag.
+	for i := 0; i < len(name); {
+		r, size := utf8.DecodeRuneInString(name[i:])
+		if r == utf8.RuneError && size == 1 {
+			d.check(fmt.Errorf("invalid HTML %s name %q", kind, name))
+			return
+		}
+		if isUnsafeNameRune(r) {
+			d.check(fmt.Errorf("invalid HTML %s name %q", kind, name))
+			return
+		}
+		i += size
+	}
+}
+
+// isUnsafeNameRune reports whether r may not appear in a serialized HTML
+// element or attribute name because it would terminate or escape the tag.
+// The set mirrors the characters that terminate an attribute name in the
+// HTML parser (see parser.parseAttrName) plus ASCII control characters.
+// '&' is intentionally excluded: the parser's liberal attribute-name rule
+// accepts it and it does not break out of the tag, so rejecting it would
+// regress parse/serialize round-trip parity. A validly-encoded U+FFFD is
+// likewise accepted; only invalid UTF-8 is rejected, by the caller.
+//
+// This is the loose rule used for ATTRIBUTE names. Element names use the
+// stricter checkElementName / isElementNameRune grammar instead.
+func isUnsafeNameRune(r rune) bool {
+	switch r {
+	case ' ', '\t', '\n', '\r', '\f', '"', '\'', '<', '>', '=', '/':
+		return true
+	}
+	return r < 0x20 || r == 0x7f
+}
+
+// checkElementName verifies that an element name is a valid HTML tag name
+// before it is written into a tag. Unlike checkName (the loose attribute
+// rule), this enforces the HTML tag-name grammar so that names libxml2 treats
+// as malformed — e.g. CreateElement("a?b") or CreateElement("a&b") — are
+// rejected rather than serialized verbatim as <a?b> / <a&b>.
+//
+// The accepted set is derived from what the HTML parser tokenizes as a tag
+// name (parser.parseName via isNameChar): ASCII letters, digits, ':', '-',
+// '_', '.'. ASCII punctuation outside that set — '?', '&', '=', '/', quotes,
+// angle brackets, whitespace, control chars — is rejected. Non-ASCII runes
+// are permitted so that legitimate Unicode element names (e.g. produced by
+// XSLT HTML output) are not over-rejected; a validly-encoded U+FFFD is one
+// such rune and is accepted, while invalid UTF-8 is rejected.
+func (d *htmlDumper) checkElementName(name string) {
+	if d.err != nil {
+		return
+	}
+	if name == "" {
+		d.check(fmt.Errorf("invalid HTML element name: empty"))
+		return
+	}
+	// Decode rune-by-rune rather than ranging over the string: a range loop
+	// yields utf8.RuneError both for genuinely invalid bytes and for a
+	// validly-encoded U+FFFD. DecodeRuneInString returns size==1 for invalid
+	// encodings, letting us reject only the former while permitting a real
+	// U+FFFD (size==3), which the parser accepts and which does not break out
+	// of the tag.
+	for i := 0; i < len(name); {
+		r, size := utf8.DecodeRuneInString(name[i:])
+		if r == utf8.RuneError && size == 1 {
+			d.check(fmt.Errorf("invalid HTML element name %q", name))
+			return
+		}
+		if !isElementNameRune(r) {
+			d.check(fmt.Errorf("invalid HTML element name %q", name))
+			return
+		}
+		i += size
+	}
+}
+
+// isElementNameRune reports whether r may appear in a serialized HTML element
+// name. ASCII runes must be a valid HTML tag-name character (letters, digits,
+// ':', '-', '_', '.'), mirroring the parser's isNameChar; this rejects
+// tag-breaking and clearly-malformed characters such as '?', '&', '=', '/',
+// quotes, angle brackets, whitespace and control characters. Non-ASCII runes
+// are permitted to avoid over-rejecting legitimate Unicode element names.
+func isElementNameRune(r rune) bool {
+	if r >= 0x80 {
+		return true
+	}
+	switch {
+	case r >= 'A' && r <= 'Z':
+		return true
+	case r >= 'a' && r <= 'z':
+		return true
+	case r >= '0' && r <= '9':
+		return true
+	}
+	switch r {
+	case ':', '-', '_', '.':
+		return true
+	}
+	return false
+}
+
 // writeBytes writes b to out, recording the first failure as the sticky
 // error. It is a no-op once an error has been recorded. A short write
 // reported with a nil error by a non-conformant io.Writer is promoted to
@@ -366,6 +492,14 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 		name = e.Name()
 	}
 
+	// Reject element names that are not valid HTML tag names (malformed names
+	// such as "a?b" or "a&b", or names containing tag-breaking characters)
+	// before writing them into the tag.
+	d.checkElementName(name)
+	if d.err != nil {
+		return d.err
+	}
+
 	// Opening tag
 	d.writeString(out, "<")
 	d.writeString(out, name)
@@ -510,6 +644,11 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 		if d.preserveCase {
 			attrName = attr.Name()
 		}
+		// Reject names that would inject markup into the tag.
+		d.checkName("attribute", attrName)
+		if d.err != nil {
+			return d.err
+		}
 		d.writeString(out, " ")
 		d.writeString(out, attrName)
 
@@ -552,13 +691,21 @@ func (d *htmlDumper) writeNSDecl(out io.Writer, prefix, uri string) {
 		d.writeString(out, " xmlns=\"")
 		d.writeString(out, uri)
 		d.writeString(out, "\"")
-	} else {
-		d.writeString(out, " xmlns:")
-		d.writeString(out, prefix)
-		d.writeString(out, "=\"")
-		d.writeString(out, uri)
-		d.writeString(out, "\"")
+		return
 	}
+	// A non-empty prefix is written verbatim into the xmlns: attribute name,
+	// so an unsafe prefix could break out of the tag (e.g. a prefix
+	// containing a space and quote yields a separate injected attribute).
+	// Reject it the same way element/attribute names are rejected.
+	d.checkName("namespace prefix", prefix)
+	if d.err != nil {
+		return
+	}
+	d.writeString(out, " xmlns:")
+	d.writeString(out, prefix)
+	d.writeString(out, "=\"")
+	d.writeString(out, uri)
+	d.writeString(out, "\"")
 }
 
 // emitAttrNSDecls emits namespace declarations for attribute prefixes

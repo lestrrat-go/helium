@@ -1643,13 +1643,86 @@ func (v *validator) matchValue(pat *pattern, text string) int {
 				expected = normalizeToken(expected)
 			}
 		case lexicon.NamespaceXSDDatatypes:
-			// XSD type-aware comparison: normalize both values
-			text = strings.TrimSpace(text)
-			expected = strings.TrimSpace(expected)
+			return matchXSDValue(pat.dataType.name, text, expected)
 		}
 	}
 
 	if text == expected {
+		return 0
+	}
+	return -1
+}
+
+// xsdValueSpaceTypes is the set of XSD datatypes for which value.Compare
+// implements correct value-space equality. It mirrors the XSD layer's
+// enumValueSpaceTypes and deliberately excludes string-family and anyURI types:
+// value.Compare falls back to decimal comparison for unrecognized builtins, which
+// would wrongly treat numeric-looking lexicals as equal (e.g. a string "5"
+// matching "5.0"). Those types compare by their whitespace-processed lexical
+// value, which equals their value space.
+var xsdValueSpaceTypes = map[string]struct{}{
+	"decimal": {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
+	"long": {}, "int": {}, "short": {}, "byte": {},
+	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
+	"unsignedShort": {}, "unsignedByte": {}, lexicon.TypePositiveInteger: {},
+	"float": {}, "double": {},
+	"boolean":  {},
+	"dateTime": {}, "date": {}, "time": {}, "duration": {},
+	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
+	"hexBinary": {}, "base64Binary": {},
+}
+
+// matchXSDValue compares an instance value against a <value> literal using the
+// XSD value space for the named datatype. For every recognized XSD datatype,
+// both the instance text and the <value> literal must first be lexically valid
+// for the type (via value.ValidateBuiltin); an invalid lexical never matches,
+// even when the two forms are identical (e.g. type="NCName">1foo< does not
+// accept <e>1foo</e>, and type="integer">5.0< does not accept <e>5.0</e>). For
+// value-space-comparable types (numeric, boolean, date/time, binary) a
+// lexically distinct but value-equal form then also matches (e.g. integer
+// "5" == "+5" == "05"), agreeing with the XSD layer. String-family and anyURI
+// types stay lexical-only (whitespace-processed lexical equality, which equals
+// their value space). An unknown datatype name never matches.
+func matchXSDValue(typeName, text, expected string) int {
+	if _, ok := xsdDatatypeNames[typeName]; !ok {
+		return -1
+	}
+	// Normalize both the instance text and the <value> literal using the
+	// datatype's XSD whiteSpace facet (preserve/replace/collapse) before
+	// validating or comparing, rather than a blanket TrimSpace. This lets a
+	// collapsible token like "a  b" validate and value-match "a b", while leaving
+	// xs:string untouched (preserve).
+	text = value.Normalize(text, typeName)
+	expected = value.Normalize(expected, typeName)
+
+	// Both the instance text and the <value> literal must be lexically valid for
+	// the type before either the equality fast-path or value-space comparison may
+	// accept. This gate runs for every recognized type so that an invalid lexical
+	// (e.g. "1foo" for NCName, or "5.0" for integer) is rejected even when the two
+	// forms are byte-identical. value.ValidateBuiltin imposes no constraint on
+	// xs:string / xs:anyURI, so those stay effectively lexical-only.
+	if value.ValidateBuiltin(text, typeName) != nil || value.ValidateBuiltin(expected, typeName) != nil {
+		return -1
+	}
+
+	if _, ok := xsdValueSpaceTypes[typeName]; !ok {
+		// Lexical-only (string-family/anyURI) type: compare by whitespace-processed
+		// lexical value, which equals the value space for these types.
+		if text == expected {
+			return 0
+		}
+		return -1
+	}
+
+	// Value-space-comparable type: a lexically distinct but value-equal form
+	// matches (e.g. integer "5" == "+5" == "05", NaN == NaN for float/double).
+	if text == expected {
+		return 0
+	}
+	if (typeName == "float" || typeName == "double") && value.IsFloatNaN(text) && value.IsFloatNaN(expected) {
+		return 0
+	}
+	if cmpResult, ok := value.Compare(text, expected, typeName); ok && cmpResult == 0 {
 		return 0
 	}
 	return -1
@@ -1662,12 +1735,14 @@ func (v *validator) matchData(pat *pattern, text string) int {
 	}
 
 	dt := pat.dataType
-	text = strings.TrimSpace(text)
 
 	switch dt.library {
 	case lexicon.NamespaceXSDDatatypes:
+		// validateXSDType applies the per-datatype XSD whiteSpace facet itself, so
+		// the raw (un-trimmed) text is passed through.
 		return validateXSDType(dt.name, text, pat.params)
 	case "":
+		// Built-in RELAX NG datatypes: both "token" and "string" accept any text.
 		switch dt.name {
 		case lexicon.TypeToken:
 			return 0
@@ -1679,79 +1754,48 @@ func (v *validator) matchData(pat *pattern, text string) int {
 	return 0
 }
 
-// validateXSDType validates a value against an XSD datatype.
-func validateXSDType(typeName, value string, params []*param) int {
-	switch typeName {
-	case "string":
-		return validateWithParams(value, params)
-	case "normalizedString", "token":
-		return 0
-	case "integer", "int", "long", "short", "byte",
-		"nonNegativeInteger", lexicon.TypePositiveInteger,
-		"nonPositiveInteger", "negativeInteger",
-		"unsignedInt", "unsignedLong", "unsignedShort", "unsignedByte":
-		return validateXSDInteger(typeName, value)
-	case "decimal":
-		return validateXSDDecimal(value)
-	case "float", "double":
-		return validateXSDFloat(value)
-	case "boolean":
-		return validateXSDBoolean(value)
-	case "date":
-		if len(value) < 10 {
-			return -1
-		}
-		return 0
-	case "dateTime":
-		if len(value) < 19 {
-			return -1
-		}
-		return 0
-	case "time":
-		if len(value) < 8 {
-			return -1
-		}
-		return 0
-	case "duration":
-		if len(value) < 2 || value[0] != 'P' {
-			return -1
-		}
-		return 0
-	case "anyURI":
-		return 0
-	case "QName":
-		return validateXSDQName(value)
-	case "NCName", "ID", "IDREF":
-		return validateXSDNCName(value)
-	case "Name":
-		return validateXSDName(value)
-	case "NMTOKEN":
-		return validateXSDNMTOKEN(value)
-	case "NMTOKENS":
-		return validateXSDNMTOKENS(value)
-	case "IDREFS":
-		tokens := strings.Fields(value)
-		if len(tokens) == 0 {
-			return -1
-		}
-		for _, t := range tokens {
-			if validateXSDNCName(t) != 0 {
-				return -1
-			}
-		}
-		return 0
-	case "language":
-		return 0
-	case "base64Binary":
-		// Reuse the shared XSD lexical validator so RELAX NG and XSD agree on
-		// base64Binary semantics (alphabet-only; unpadded forms accepted as
-		// value-equivalent, matching the XSD layer).
-		return validateXSDBase64Binary(value)
-	case "hexBinary":
-		return validateXSDHexBinary(value)
-	default:
-		return 0
+// xsdDatatypeNames is the set of XSD datatype-library names RELAX NG recognizes.
+// Validation of any of these is routed through the shared XSD value validator
+// (internal/xsd/value) so RELAX NG and XSD agree on lexical/value spaces. Any
+// name outside this set is an unknown datatype and is rejected (a <data> against
+// an unsupported XSD type cannot be satisfied), rather than silently accepted.
+var xsdDatatypeNames = map[string]struct{}{
+	"string": {}, "normalizedString": {}, "token": {},
+	"integer": {}, "int": {}, "long": {}, "short": {}, "byte": {},
+	"nonNegativeInteger": {}, lexicon.TypePositiveInteger: {},
+	"nonPositiveInteger": {}, "negativeInteger": {},
+	"unsignedInt": {}, "unsignedLong": {}, "unsignedShort": {}, "unsignedByte": {},
+	"decimal": {}, "float": {}, "double": {}, "boolean": {},
+	"date": {}, "dateTime": {}, "time": {}, "duration": {},
+	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
+	"anyURI": {}, "QName": {}, "NOTATION": {},
+	"NCName": {}, "ID": {}, "IDREF": {}, "ENTITY": {}, "Name": {},
+	"NMTOKEN": {}, "NMTOKENS": {}, "IDREFS": {}, "ENTITIES": {},
+	"language": {}, "base64Binary": {}, "hexBinary": {},
+}
+
+// validateXSDType validates a value against an XSD datatype. Recognized type
+// names are validated through the shared XSD value validator so RELAX NG and
+// XSD stay consistent (date/time/duration value-space ranges, integer subtype
+// ranges, binary alphabets, …). xs:string carries RELAX NG <param> facets, so it
+// stays on the local param path. Unknown type names are rejected.
+func validateXSDType(typeName, text string, params []*param) int {
+	if _, ok := xsdDatatypeNames[typeName]; !ok {
+		return -1
 	}
+	// xs:string has whiteSpace=preserve and may carry RELAX NG <param> facets
+	// (pattern, length, …); validate those locally against the preserved text.
+	if typeName == "string" {
+		return validateWithParams(text, params)
+	}
+	// Apply the datatype's XSD whiteSpace facet (replace for normalizedString,
+	// collapse for everything else here) before lexical validation, so a value
+	// such as xs:token "a  b" (collapses to "a b") is accepted.
+	text = value.Normalize(text, typeName)
+	if value.ValidateBuiltin(text, typeName) != nil {
+		return -1
+	}
+	return 0
 }
 
 func validateWithParams(value string, params []*param) int {
@@ -1769,210 +1813,6 @@ func validateWithParams(value string, params []*param) int {
 		}
 	}
 	return 0
-}
-
-func validateXSDInteger(typeName, value string) int {
-	if value == "" {
-		return -1
-	}
-	start := 0
-	if value[0] == '+' || value[0] == '-' {
-		start = 1
-	}
-	if start >= len(value) {
-		return -1
-	}
-	for i := start; i < len(value); i++ {
-		if value[i] < '0' || value[i] > '9' {
-			return -1
-		}
-	}
-	switch typeName {
-	case "nonNegativeInteger", "positiveInteger", "unsignedInt", "unsignedLong", "unsignedShort", "unsignedByte":
-		if value[0] == '-' {
-			return -1
-		}
-		if typeName == "positiveInteger" && value == "0" {
-			return -1
-		}
-	case "nonPositiveInteger":
-		if value[0] != '-' && value != "0" {
-			return -1
-		}
-	case "negativeInteger":
-		if value[0] != '-' || value == "-0" {
-			return -1
-		}
-	}
-	return 0
-}
-
-func validateXSDDecimal(value string) int {
-	if value == "" {
-		return -1
-	}
-	start := 0
-	if value[0] == '+' || value[0] == '-' {
-		start = 1
-	}
-	if start >= len(value) {
-		return -1
-	}
-	dotSeen := false
-	for i := start; i < len(value); i++ {
-		if value[i] == '.' {
-			if dotSeen {
-				return -1
-			}
-			dotSeen = true
-		} else if value[i] < '0' || value[i] > '9' {
-			return -1
-		}
-	}
-	return 0
-}
-
-func validateXSDFloat(value string) int {
-	if value == "" {
-		return -1
-	}
-	switch value {
-	case "INF", "-INF", "+INF", "NaN":
-		return 0
-	}
-	start := 0
-	if value[0] == '+' || value[0] == '-' {
-		start = 1
-	}
-	if start >= len(value) {
-		return -1
-	}
-	dotSeen := false
-	eSeen := false
-	for i := start; i < len(value); i++ {
-		if value[i] == '.' {
-			if dotSeen || eSeen {
-				return -1
-			}
-			dotSeen = true
-		} else if value[i] == 'e' || value[i] == 'E' {
-			if eSeen {
-				return -1
-			}
-			eSeen = true
-			if i+1 < len(value) && (value[i+1] == '+' || value[i+1] == '-') {
-				i++
-			}
-		} else if value[i] < '0' || value[i] > '9' {
-			return -1
-		}
-	}
-	return 0
-}
-
-func validateXSDBoolean(value string) int {
-	switch value {
-	case "true", "false", "1", "0":
-		return 0
-	}
-	return -1
-}
-
-func validateXSDQName(value string) int {
-	parts := strings.SplitN(value, ":", 2)
-	for _, p := range parts {
-		if validateXSDNCName(p) != 0 {
-			return -1
-		}
-	}
-	return 0
-}
-
-func validateXSDNCName(value string) int {
-	if value == "" {
-		return -1
-	}
-	if !isNameStartChar(rune(value[0])) {
-		return -1
-	}
-	for _, r := range value[1:] {
-		if !isNameChar(r) || r == ':' {
-			return -1
-		}
-	}
-	return 0
-}
-
-func validateXSDName(value string) int {
-	if value == "" {
-		return -1
-	}
-	if !isNameStartChar(rune(value[0])) && value[0] != ':' {
-		return -1
-	}
-	for _, r := range value[1:] {
-		if !isNameChar(r) {
-			return -1
-		}
-	}
-	return 0
-}
-
-func validateXSDNMTOKEN(value string) int {
-	if value == "" {
-		return -1
-	}
-	for _, r := range value {
-		if !isNameChar(r) {
-			return -1
-		}
-	}
-	return 0
-}
-
-func validateXSDNMTOKENS(value string) int {
-	tokens := strings.Fields(value)
-	if len(tokens) == 0 {
-		return -1
-	}
-	for _, t := range tokens {
-		if validateXSDNMTOKEN(t) != 0 {
-			return -1
-		}
-	}
-	return 0
-}
-
-// validateXSDBase64Binary checks the lexical space of xs:base64Binary by
-// delegating to the shared XSD value validator (internal/xsd/value) so RELAX NG
-// and XSD agree on the datatype. The shared validator accepts the base64
-// alphabet plus whitespace and treats unpadded forms as value-equivalent to
-// their padded counterparts; only characters outside the alphabet are rejected.
-func validateXSDBase64Binary(s string) int {
-	if value.ValidateBuiltin(s, "base64Binary") != nil {
-		return -1
-	}
-	return 0
-}
-
-func validateXSDHexBinary(value string) int {
-	if len(value)%2 != 0 {
-		return -1
-	}
-	for _, r := range value {
-		if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
-			return -1
-		}
-	}
-	return 0
-}
-
-func isNameStartChar(r rune) bool {
-	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_'
-}
-
-func isNameChar(r rune) bool {
-	return isNameStartChar(r) || (r >= '0' && r <= '9') || r == '-' || r == '.' || r == ':'
 }
 
 // normalizeToken collapses whitespace and trims.
