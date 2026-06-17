@@ -285,15 +285,24 @@ func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionR
 			if len(args) < minArity {
 				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s requires at least %d arguments, got %d", e.Name, minArity, len(args))}
 			}
-			// Type-check arguments against declared parameter types
+			// Type-check arguments against declared parameter types. Coercion may
+			// convert an argument (e.g. xs:integer -> xs:double); the coerced value
+			// must be what the function observes, so store it back into a copy of the
+			// argument slice rather than discarding it and invoking with the original
+			// — mirroring the direct call path and fn:function-lookup.
 			if paramTypes != nil {
+				coerced := make([]Sequence, len(args))
+				copy(coerced, args)
 				for i, arg := range args {
 					if i < len(paramTypes) {
-						if _, ok := coerceToSequenceType(arg, paramTypes[i], nil); !ok {
+						c, ok := coerceToSequenceType(arg, paramTypes[i], capturedEC)
+						if !ok {
 							return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, i+1, paramTypes[i])}
 						}
+						coerced[i] = c
 					}
 				}
+				args = coerced
 			}
 			// Use caller's ctx for cancellation, captured ec for focus/eval state
 			return fn.Call(withFnContext(ctx, capturedEC), args)
