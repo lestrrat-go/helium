@@ -196,6 +196,13 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 		if !ok {
 			continue
 		}
+		// Only elements in the XML-Signature namespace count as core signature
+		// children. Matching on local name alone lets a foreign-namespace
+		// element masquerade as a core child (e.g. an <evil:Reference> passing
+		// the at-least-one-Reference check), so namespace must be enforced.
+		if !isDSigNS(elem) {
+			continue
+		}
 		switch localName(elem) {
 		case "SignedInfo":
 			if parsed.signedInfoElem != nil {
@@ -239,6 +246,13 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 		if !ok {
 			continue
 		}
+		// Require the XML-Signature namespace: a foreign-namespace
+		// <evil:Reference> must not be counted toward the mandatory
+		// at-least-one-Reference rule below, which would otherwise re-open the
+		// no-content-signature bypass.
+		if !isDSigNS(e) {
+			continue
+		}
 		switch localName(e) {
 		case "CanonicalizationMethod":
 			alg, ok := e.GetAttribute("Algorithm")
@@ -277,6 +291,12 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
+			continue
+		}
+		// Core Reference children (Transforms/DigestMethod/DigestValue) must be
+		// in the XML-Signature namespace; do not honor foreign-namespace
+		// look-alikes.
+		if !isDSigNS(e) {
 			continue
 		}
 		switch localName(e) {
