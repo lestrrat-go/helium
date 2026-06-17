@@ -374,3 +374,43 @@ func TestParseErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestParseSequenceType(t *testing.T) {
+	valid := []string{
+		"xs:string",
+		"xs:integer?",
+		"xs:double*",
+		"xs:anyAtomicType+",
+		"item()",
+		"item()*",
+		"empty-sequence()",
+		"node()",
+		"element()",
+		"element(e)",
+		"attribute(*, xs:string)",
+		"map(*)",
+		"array(*)",
+		"function(*)",
+		"function(xs:string) as xs:boolean",
+	}
+	for _, in := range valid {
+		t.Run("valid/"+in, func(t *testing.T) {
+			_, err := xpath3.ParseSequenceType(in)
+			require.NoError(t, err, "input: %s", in)
+		})
+	}
+
+	invalid := []string{
+		"xs:string garbage",
+		"xs:integer? extra",
+		"item() ()",
+		"empty-sequence() *",
+		"node() element()",
+	}
+	for _, in := range invalid {
+		t.Run("invalid/"+in, func(t *testing.T) {
+			_, err := xpath3.ParseSequenceType(in)
+			require.Error(t, err, "input: %s", in)
+		})
+	}
+}
