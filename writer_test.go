@@ -414,6 +414,21 @@ func TestWriteRejectsXmlnsElementName(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, str, "<p:root")
 	})
+
+	t.Run("bare xmlns element name serializes", func(t *testing.T) {
+		t.Parallel()
+		// "xmlns" is a valid element name: <xmlns>...</xmlns> is well-formed XML.
+		// It is reserved only as an attribute name (default-namespace decl), so
+		// an element literally named "xmlns" must serialize without error. This
+		// is the regression case from xslt3 test si-element-261.
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("xmlns")
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err, "bare xmlns element name must serialize")
+		require.Contains(t, str, "<xmlns")
+	})
 }
 
 // BenchmarkWriteNonASCII serializes a document containing many non-ASCII

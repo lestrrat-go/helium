@@ -99,13 +99,14 @@ func (s *writeSession) check(err error) {
 	}
 }
 
-// hasReservedXmlnsPrefix reports whether name is the reserved "xmlns" name or
-// carries the reserved "xmlns:" QName prefix. Namespaces-in-XML forbids using
-// "xmlns" as an element/attribute prefix; such a name would be serialized as a
-// (bogus) namespace declaration or as a forbidden prefixed name. Shared by the
-// element and attribute name checks so they stay consistent.
-func hasReservedXmlnsPrefix(name string) bool {
-	return name == "xmlns" || strings.HasPrefix(name, "xmlns:")
+// hasXmlnsPrefix reports whether name carries the reserved "xmlns:" QName
+// prefix. Namespaces-in-XML forbids using "xmlns" as an element/attribute
+// prefix; such a name (e.g. "xmlns:root") would be serialized as a forbidden
+// prefixed name. Note this does NOT match the bare name "xmlns": that name is a
+// valid element name (<xmlns/> is well-formed) and is only reserved as an
+// attribute name, which checkAttributeName handles separately.
+func hasXmlnsPrefix(name string) bool {
+	return strings.HasPrefix(name, "xmlns:")
 }
 
 // checkElementName validates an element name about to be emitted verbatim. An
@@ -114,12 +115,14 @@ func hasReservedXmlnsPrefix(name string) bool {
 // error (preserving any earlier one) and returns false. Shared by both the
 // generic and XHTML serialization paths so they cannot diverge.
 //
-// An element whose QName prefix is the reserved "xmlns" prefix is also rejected:
+// An element whose QName prefix is the reserved "xmlns" prefix is rejected:
 // IsValidQName only checks QName grammar, but Namespaces-in-XML forbids using
 // "xmlns" as a prefix. With an active namespace (which bypasses dumpNs) such a
-// name (e.g. "xmlns:root") could otherwise be serialized as <xmlns:root/>.
+// name (e.g. "xmlns:root") could otherwise be serialized as <xmlns:root/>. The
+// bare name "xmlns" is NOT rejected: it is a valid element name (<xmlns/> is
+// well-formed XML); "xmlns" is reserved only as an attribute name.
 func (s *writeSession) checkElementName(name string) bool {
-	if hasReservedXmlnsPrefix(name) {
+	if hasXmlnsPrefix(name) {
 		s.check(fmt.Errorf("helium: reserved element name %q: namespace declarations must use DeclareNamespace", name))
 		return false
 	}
@@ -142,7 +145,7 @@ func (s *writeSession) checkElementName(name string) bool {
 // xmlns output never reaches this function, so rejecting here only blocks
 // user-supplied misuse.
 func (s *writeSession) checkAttributeName(name string) bool {
-	if hasReservedXmlnsPrefix(name) {
+	if name == "xmlns" || hasXmlnsPrefix(name) {
 		s.check(fmt.Errorf("helium: reserved attribute name %q: namespace declarations must use DeclareNamespace", name))
 		return false
 	}
