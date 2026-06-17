@@ -39,12 +39,14 @@ func parseParticleOccurs(elem *helium.Element) (int, int) {
 
 func readDefaultOrFixed(elem *helium.Element) (*string, *string) {
 	var defaultValue *string
-	if v := getAttr(elem, attrDefault); v != "" {
+	if hasAttr(elem, attrDefault) {
+		v := getAttr(elem, attrDefault)
 		defaultValue = &v
 	}
 
 	var fixedValue *string
-	if v := getAttr(elem, attrFixed); v != "" {
+	if hasAttr(elem, attrFixed) {
+		v := getAttr(elem, attrFixed)
 		fixedValue = &v
 	}
 
@@ -328,10 +330,12 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 		if getAttr(elem, attrUse) == attrValRequired {
 			au.Required = true
 		}
-		if v := getAttr(elem, attrDefault); v != "" {
+		if hasAttr(elem, attrDefault) {
+			v := getAttr(elem, attrDefault)
 			au.Default = &v
 		}
-		if v := getAttr(elem, attrFixed); v != "" {
+		if hasAttr(elem, attrFixed) {
+			v := getAttr(elem, attrFixed)
 			au.Fixed = &v
 		}
 		c.attrRefs[au] = qn
