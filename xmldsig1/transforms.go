@@ -2,10 +2,12 @@ package xmldsig1
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -108,14 +110,24 @@ func resolveC14NMode(method string) (c14n.Mode, bool, error) {
 
 // collectSubtreeNodes returns all nodes in the subtree rooted at n
 // (including n itself) in document order.
+//
+// For each element it also emits one namespace node per in-scope namespace
+// (walking ancestors so that bindings declared above the subtree root are
+// carried in). The c14n package in node-set mode only renders namespaces that
+// are explicitly present in the node set, so without these the canonical bytes
+// of a namespace-qualified subtree would drop their xmlns declarations,
+// producing non-W3C output that breaks signature interop.
 func collectSubtreeNodes(n helium.Node) []helium.Node {
 	var nodes []helium.Node
 	var walk func(helium.Node)
 	walk = func(cur helium.Node) {
 		nodes = append(nodes, cur)
-		// Include attribute nodes for elements.
-		// Namespace nodes are handled internally by the c14n package.
 		if elem, ok := helium.AsNode[*helium.Element](cur); ok {
+			// In-scope namespace axis. c14n keys namespace nodes by their
+			// parent element, so each wrapper is parented to this element.
+			for _, ns := range inScopeNamespaces(elem) {
+				nodes = append(nodes, helium.NewNamespaceNodeWrapper(ns, elem))
+			}
 			for _, attr := range elem.Attributes() {
 				nodes = append(nodes, attr)
 			}
@@ -126,6 +138,41 @@ func collectSubtreeNodes(n helium.Node) []helium.Node {
 	}
 	walk(n)
 	return nodes
+}
+
+// inScopeNamespaces returns the namespaces in scope for elem, walking from the
+// document root down so that closer (inner) declarations override outer ones.
+// The implicit xml namespace is excluded — C14N never declares it explicitly.
+func inScopeNamespaces(elem *helium.Element) []*helium.Namespace {
+	byPrefix := make(map[string]*helium.Namespace)
+
+	var chain []*helium.Element
+	for n := helium.Node(elem); n != nil; n = n.Parent() {
+		if anc, ok := helium.AsNode[*helium.Element](n); ok {
+			chain = append(chain, anc)
+		}
+	}
+
+	// Outermost to innermost so the innermost binding wins.
+	for _, anc := range slices.Backward(chain) {
+		for _, ns := range anc.Namespaces() {
+			byPrefix[ns.Prefix()] = ns
+		}
+		if ns := anc.Namespace(); ns != nil {
+			if _, ok := byPrefix[ns.Prefix()]; !ok {
+				byPrefix[ns.Prefix()] = ns
+			}
+		}
+	}
+
+	var result []*helium.Namespace
+	for prefix, ns := range byPrefix {
+		if prefix == lexicon.PrefixXML {
+			continue
+		}
+		result = append(result, ns)
+	}
+	return result
 }
 
 // resolveReference resolves a Reference URI to the target node.

@@ -16,7 +16,7 @@ relaxng        → helium
 schematron     → helium, xpath1
 xpointer       → helium, xpath1
 c14n           → helium
-xmldsig1       → helium, c14n
+xmldsig1       → helium, c14n, internal/lexicon
 xmlenc1        → helium
 html           → helium, sax, push
 catalog        → helium, internal/catalog, internal/lexicon
@@ -47,7 +47,7 @@ helium (root) → sax, enum, internal/*
 c14n, xpath1, xpath3, html, catalog, relaxng, stream, xmlenc1
 
 ## Security layer (depends on processing)
-xmldsig1 (root + c14n)
+xmldsig1 (root + c14n + internal/lexicon)
 
 ## Composition layer (depends on processing)
 xsd (root + xpath1 + internal/lexicon), xpointer (root + xpath1), schematron (root + xpath1), xinclude (root + xpointer), xslt3 (root + xpath3 + xsd + html + internal/elements), shim (root + stream)
