@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 
@@ -13,6 +12,53 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
+
+// compileSchemaFromURI loads a schema document through the compiler's
+// configured URIResolver (default-deny: with no resolver, the load is
+// refused rather than falling back to os.ReadFile) and compiles it
+// in-memory. The resolver provides the same secure-by-default and
+// path-traversal sandboxing model that xsl:import/include stylesheet
+// loads use.
+func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.Schema, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	data, err := c.loadSchemaBytes(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := helium.NewParser().Parse(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
+	}
+	// Preserve relative include/import resolution within the schema by
+	// rooting the XSD compiler's base directory at the schema's location,
+	// and route the schema's nested xs:include/xs:import/xs:redefine loads
+	// through the same compile-time resolver (default-deny) instead of the
+	// xsd compiler's default os.Open.
+	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
+	return xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys).Compile(ctx, doc)
+}
+
+// loadSchemaBytes loads a nested-schema document referenced by
+// xs:include/xs:import/xs:redefine through the compile-time URIResolver,
+// preserving the default-deny policy (no resolver → refused, no os.Open
+// fallback).
+func (c *compiler) loadSchemaBytes(_ context.Context, uri string) ([]byte, error) {
+	if c.resolver == nil {
+		return nil, staticError(errCodeXTSE0165,
+			"cannot load schema %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
+	}
+	rc, err := c.resolver.Resolve(uri)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, err)
+	}
+	data, err := readCloserToBytes(rc)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read schema %q: %w", uri, err)
+	}
+	return data, nil
+}
 
 // fatalErrorCounter is an error handler that counts fatal errors during schema compilation.
 type fatalErrorCounter struct {
@@ -59,14 +105,20 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 	}
 
 	if schemaLoc != "" {
-		// File-backed schema
+		// File-backed schema. Resolve the schema-location against the
+		// stylesheet base URI using RFC 3986 URI semantics when the base is a
+		// URL (so the authority survives and nested includes can be recovered),
+		// falling back to filepath joins for local filesystem bases.
 		uri := schemaLoc
-		if c.baseURI != "" && !strings.Contains(schemaLoc, "://") && !filepath.IsAbs(schemaLoc) {
-			baseDir := filepath.Dir(c.baseURI)
-			uri = filepath.Join(baseDir, schemaLoc)
+		if c.baseURI != "" {
+			resolved, err := resolveSchemaURI(schemaLoc, c.baseURI)
+			if err != nil {
+				return fmt.Errorf("xsl:import-schema: cannot resolve schema-location %q against base %q: %w", schemaLoc, c.baseURI, err)
+			}
+			uri = resolved
 		}
 
-		schema, err := xsd.NewCompiler().CompileFile(ctx, uri)
+		schema, err := c.compileSchemaFromURI(ctx, uri)
 		if err != nil {
 			// File not found — try pre-compiled import schemas by namespace.
 			if declaredNS != "" {
@@ -126,9 +178,16 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 				return fmt.Errorf("xsl:import-schema: cannot build inline schema doc: %w", err)
 			}
 			errCounter := &fatalErrorCounter{}
-			compiler := xsd.NewCompiler().ErrorHandler(errCounter)
+			// Route the inline schema's nested xs:include/xs:import/xs:redefine
+			// loads through the SAME compile-time resolver (default-deny) used by
+			// the schema-location path, instead of the xsd compiler's default
+			// os.Open. The inline schema bytes themselves are already in-memory
+			// (inlineDoc); only their nested references reach the resolver FS,
+			// rooted at the import-schema element's base URI.
+			fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
+			compiler := xsd.NewCompiler().ErrorHandler(errCounter).FS(fsys)
 			if c.baseURI != "" {
-				compiler = compiler.BaseDir(filepath.Dir(c.baseURI))
+				compiler = compiler.BaseDir(schemaCompileBaseDir(c.baseURI))
 			}
 			schema, err := compiler.Compile(ctx, inlineDoc)
 			if err != nil {
