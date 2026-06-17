@@ -104,18 +104,31 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     same URI collide, different URIs stay distinct), list fields canonicalize
     each item in the item type's value space (so `5 6`/`+5 06` collide for
     itemType="xs:integer"), and union fields resolve the **active member** the
-    same way `validateUnionValue` does — the first member type (declaration
-    order, descending nested unions) the value **fully validates against**
-    (lexical space AND facets AND nested unions, via `typeAcceptsValue` →
-    `validateValue`, not lexical space alone) — then canonicalize in THAT
-    member's space (`unionActiveMember` → `canonicalAtomicKey`): value-comparable
-    members use `value.CanonicalKey`, lexical-only members (xs:string family,
-    anyURI) use the whitespace-processed lexical value. So
-    memberTypes="xs:string xs:integer" keeps `5` and `+5` distinct (active member
-    xs:string), while "xs:integer xs:string" collapses them; and a member whose
-    facets reject the value (e.g. an xs:integer restriction with maxInclusive="0"
-    fed `5`) is skipped so the value falls through to the next member, exactly as
-    the validator does. Variety dispatch in `canonicalValueKey` and the
+    same way `validateUnionValue` does — the first **direct** member type
+    (declaration order) the value **fully validates against** (lexical space AND
+    that member's facets AND, for a nested-union member, the union wrapper's own
+    facets and member resolution, via `typeAcceptsValue` → `validateValue`, not
+    lexical space alone). Members are **not** pre-flattened to leaves: each direct
+    member (`resolveUnionMembers`) is validated as-is, so a nested-union member
+    whose wrapper restriction rejects the value by facet is correctly skipped
+    (flattening to the bare leaf would drop that wrapper facet and falsely accept
+    the value). Once the active member is chosen, the value is canonicalized in
+    THAT member's space by **recursing** through `canonicalValueKey`
+    (`unionActiveMember` → `canonicalValueKey`), so a **list** member canonicalizes
+    item-by-item and a nested-**union** member resolves its own active member;
+    an atomic member reaches `canonicalAtomicKey`, where value-comparable members
+    use `value.CanonicalKey` and lexical-only members (xs:string family, anyURI)
+    use the whitespace-processed lexical value. So memberTypes="xs:string
+    xs:integer" keeps `5` and `+5` distinct (active member xs:string), while
+    "xs:integer xs:string" collapses them; memberTypes="intList xs:string" (intList
+    = xs:list itemType="xs:integer") collapses `5 6` and `+5 06`; and a member
+    whose facets reject the value (e.g. an xs:integer restriction with
+    maxInclusive="0" fed `5`) is skipped so the value falls through to the next
+    member, exactly as the validator does. `typeAcceptsValue` (and thus
+    active-member selection) threads `fieldNodeNSContext(fieldNode)` as the value's
+    namespace context, so a union member with a QName/NOTATION-valued facet (e.g.
+    an enumeration of prefixed names) resolves its prefixes against the same
+    bindings as the instance value. Variety dispatch in `canonicalValueKey` and the
     list/union member resolution use the same base-chain helpers the validator
     uses (`resolveVariety`, `resolveItemType`, `resolveUnionMembers`), so a
     restriction over an inline list/union (which keeps `Variety==Atomic` on the

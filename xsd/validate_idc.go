@@ -328,21 +328,24 @@ func canonicalValueKey(ctx context.Context, raw string, fieldNode helium.Node, t
 		}
 		return strings.Join(parts, " ")
 	case TypeVarietyUnion:
-		// The active member of a union value is the first member (declaration
-		// order) the value actually VALIDATES against — full lexical+facet+nested-
-		// union validation, mirroring validateUnionValue's ordered active-member
-		// resolution — NOT the first member whose lexical space alone accepts it.
-		// So a member whose facets reject the value is skipped and the value falls
-		// through to the next member. Once the active member is chosen,
-		// canonicalize the value in that member's space:
-		// value-comparable members use value.CanonicalKey; lexical-only members
-		// (xs:string family, anyURI, …) use their whitespace-processed lexical
-		// value as the key (canonicalAtomicKey returns the whitespace-processed
-		// lexical value for such members). So memberTypes="xs:string xs:integer"
-		// keeps "5" and "+5" distinct (both active member xs:string), while
-		// "xs:integer xs:string" collapses them.
-		if m := unionActiveMember(ctx, raw, td); m != nil {
-			return canonicalAtomicKey(raw, fieldNode, m)
+		// The active member of a union value is the first DIRECT member
+		// (declaration order, descending nested unions only when the value
+		// validates against the wrapper) the value actually VALIDATES against —
+		// full lexical+facet+nested-union validation, mirroring validateUnionValue's
+		// ordered active-member resolution — NOT the first member whose lexical
+		// space alone accepts it. So a member whose facets reject the value is
+		// skipped and the value falls through to the next member; a nested-union
+		// member is validated AS-IS (its wrapper facets included), never pre-
+		// flattened to a leaf that would drop those facets. Once the active member
+		// is chosen, canonicalize the value in THAT member's space by recursing
+		// through canonicalValueKey, so a list member canonicalizes item-by-item
+		// and a nested-union member resolves its own active member. So
+		// memberTypes="xs:string xs:integer" keeps "5" and "+5" distinct (both
+		// active member xs:string), "xs:integer xs:string" collapses them, and
+		// memberTypes="intList xs:string" (intList = xs:list itemType="xs:integer")
+		// collapses "5 6" and "+5 06".
+		if m := unionActiveMember(ctx, raw, fieldNode, td); m != nil {
+			return canonicalValueKey(ctx, raw, fieldNode, m)
 		}
 		return raw
 	default:
@@ -377,43 +380,30 @@ func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 	return key
 }
 
-// collectUnionMembers flattens a union type's member types, descending into
-// nested unions, so a union of unions yields all leaf member types in order.
-// Member types are resolved through the base chain (resolveUnionMembers), so a
-// restriction over an inline union still finds its members; nested-union descent
-// likewise tests the resolved variety (resolveVariety) so a member that is itself
-// a restriction of a union is flattened rather than treated as a leaf.
-func collectUnionMembers(td *TypeDef) []*TypeDef {
-	var out []*TypeDef
+// unionActiveMember resolves the active member type of a union value: the first
+// DIRECT member (declaration order) the value fully VALIDATES against — matching
+// validateUnionValue's active-member semantics. Members are NOT pre-flattened:
+// each direct member (resolved through the base chain via resolveUnionMembers) is
+// validated AS-IS via the validator's full path (typeAcceptsValue → validateValue:
+// lexical space AND the member's own facets AND, for a nested-union member, that
+// union's wrapper facets and its own member resolution). So a nested-union member
+// whose wrapper restriction rejects the value by FACET is correctly skipped — a
+// pre-flattened leaf would lose that wrapper facet and falsely accept the value.
+// A member that is itself a list or union is returned as-is; the caller then
+// canonicalizes it by recursing through canonicalValueKey, so list/union members
+// are handled in their own value space rather than as opaque atoms.
+//
+// fieldNode supplies the namespace context threaded into member validation so a
+// QName/NOTATION member with a QName-valued facet (e.g. an enumeration of
+// prefixed names) resolves its prefixes against the field node's in-scope
+// namespaces. Returns nil when no member accepts raw (the caller then falls back
+// to the raw value).
+func unionActiveMember(ctx context.Context, raw string, fieldNode helium.Node, td *TypeDef) *TypeDef {
 	for _, m := range resolveUnionMembers(td) {
 		if m == nil {
 			continue
 		}
-		if resolveVariety(m) == TypeVarietyUnion {
-			out = append(out, collectUnionMembers(m)...)
-			continue
-		}
-		out = append(out, m)
-	}
-	return out
-}
-
-// unionActiveMember resolves the active member type of a union value: the first
-// flattened member (declaration order) the value fully VALIDATES against —
-// matching validateUnionValue's active-member semantics. The match uses the same
-// full validation path as the validator (typeAcceptsValue → validateValue):
-// lexical space AND each member's facets AND any nested unions — not merely the
-// lexical space. So a member whose lexical space accepts the value but whose
-// facets reject it (e.g. an xs:integer restriction with maxInclusive="0" fed
-// "5") is skipped and the value falls through to the next member, exactly as the
-// validator does. Returns nil when no member accepts raw (the caller then falls
-// back to the raw value).
-func unionActiveMember(ctx context.Context, raw string, td *TypeDef) *TypeDef {
-	for _, m := range collectUnionMembers(td) {
-		if builtinBaseLocal(m) == "" {
-			continue
-		}
-		if typeAcceptsValue(ctx, m, raw) {
+		if typeAcceptsValue(ctx, m, raw, fieldNode) {
 			return m
 		}
 	}
@@ -424,13 +414,15 @@ func unionActiveMember(ctx context.Context, raw string, td *TypeDef) *TypeDef {
 // the validator's full validation path (lexical space, facets, list/union
 // varieties), suppressing all diagnostics. It mirrors what validateValue does in
 // the content validator, so IDC active-member selection cannot diverge from
-// validation.
-func typeAcceptsValue(ctx context.Context, td *TypeDef, raw string) bool {
+// validation. fieldNode's in-scope namespaces are passed as the value's namespace
+// context so QName/NOTATION facets (e.g. enumerations of prefixed names) resolve
+// against the same bindings the instance value uses.
+func typeAcceptsValue(ctx context.Context, td *TypeDef, raw string, fieldNode helium.Node) bool {
 	vc := &validationContext{
 		errorHandler:  helium.NilErrorHandler{},
 		suppressDepth: 1,
 	}
-	return validateValue(ctx, raw, nil, td, "", "", 0, vc) == nil
+	return validateValue(ctx, raw, fieldNodeNSContext(fieldNode), td, "", "", 0, vc) == nil
 }
 
 // fieldNodeNSContext returns the in-scope namespace bindings visible at an IDC

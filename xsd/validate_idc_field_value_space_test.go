@@ -480,6 +480,225 @@ func TestIDCFieldWhiteSpaceCollapse(t *testing.T) {
 	}
 }
 
+// TestIDCFieldUnionListMember covers active-member selection and canonicalization
+// for a union one of whose members is an xs:list. memberTypes="intList xs:string"
+// (intList = xs:list itemType="xs:integer"): a whitespace-separated integer list
+// validates against intList, so its active member is the LIST and the key must be
+// canonicalized item-by-item in xs:integer value space — `5 6` and `+5 06` collide.
+// The previous code skipped list members (no builtin atomic base) and, even when a
+// member was selected, always canonicalized atomically, so it compared the list
+// text lexically and missed the collision.
+func TestIDCFieldUnionListMember(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intList">
+    <xs:list itemType="xs:integer"/>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="intList xs:string"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="u" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// both validate as intList; canonicalized item-by-item, 5 6 == +5 06.
+			name:     "list-member integers 5 6 and +5 06 collide",
+			instance: `<root><item>5 6</item><item>+5 06</item></root>`,
+			valid:    false,
+		},
+		{
+			name:     "list-member integers 5 6 and 5 7 distinct",
+			instance: `<root><item>5 6</item><item>5 7</item></root>`,
+			valid:    true,
+		},
+		{
+			// non-numeric text fails the list member, falls through to xs:string;
+			// active member xs:string, lexically distinct.
+			name:     "non-list text falls through to string and stays distinct",
+			instance: `<root><item>a b</item><item>c d</item></root>`,
+			valid:    true,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
+// TestIDCFieldNestedUnionFacetFallthrough covers active-member selection for a
+// union whose first member is itself a NESTED UNION whose wrapper restriction
+// rejects the value by FACET. inner = restriction of a union over xs:integer with
+// maxInclusive="0"; outer = union memberTypes="inner xs:string". `5`/`+5` are
+// lexical integers but the inner wrapper facet rejects them, so they must fall
+// through to xs:string (active member xs:string, lexical-only) and stay DISTINCT.
+// Pre-flattening the nested union to its xs:integer leaf dropped the wrapper facet
+// and wrongly collapsed `5`/`+5`, reporting a spurious duplicate.
+func TestIDCFieldNestedUnionFacetFallthrough(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="inner">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:integer"/>
+      </xs:simpleType>
+      <xs:maxInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="inner xs:string"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="u" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="."/>
+    </xs:key>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// inner wrapper facet rejects 5/+5, fall through to xs:string; distinct.
+			name:     "nested-union facet-rejected ints fall through to string",
+			instance: `<root><item>5</item><item>+5</item></root>`,
+			valid:    true,
+		},
+		{
+			// inner accepts -1/-01 (== -1 in integer value space): collide.
+			name:     "nested-union facet-accepted ints collapse",
+			instance: `<root><item>-1</item><item>-01</item></root>`,
+			valid:    false,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
+// TestIDCFieldUnionQNameMember covers a union member that is an xs:QName-derived
+// enumeration whose facet values are PREFIXED names. Active-member validation must
+// thread the field node's in-scope namespaces so the member's QName-valued
+// enumeration facet resolves prefixes against the same bindings as the instance
+// value. memberTypes="kind xs:string" where kind enumerates p:a/p:b (p bound in
+// the schema). Once kind is the active member, the QName value is canonicalized to
+// its {uri,local} key, so two prefixes bound to the same URI collide.
+func TestIDCFieldUnionQNameMember(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:x">
+  <xs:simpleType name="kind">
+    <xs:restriction base="xs:QName">
+      <xs:enumeration value="p:a"/>
+      <xs:enumeration value="p:b"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="kind xs:string"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="u" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// p:a and q:a both bound to urn:x: QName member active, same {uri,local}.
+			name: "qname union member same uri different prefix collide",
+			instance: `<root xmlns:p="urn:x" xmlns:q="urn:x">` +
+				`<item>p:a</item><item>q:a</item></root>`,
+			valid: false,
+		},
+		{
+			// p:a and p:b are distinct enumerated QNames.
+			name: "qname union member distinct enumerated names",
+			instance: `<root xmlns:p="urn:x">` +
+				`<item>p:a</item><item>p:b</item></root>`,
+			valid: true,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
 func compileValidator(t *testing.T, src string) xsd.Validator {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
