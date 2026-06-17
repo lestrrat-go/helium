@@ -166,6 +166,12 @@ func evalLocationPath(ctx context.Context, ec *evalContext, lp *LocationPath) (*
 	var nodes []helium.Node
 
 	if lp.Absolute {
+		// DocumentRoot dereferences the context node; guard against a
+		// nil/typed-nil context so a missing context node yields an
+		// evaluation error instead of a panic.
+		if ixpath.IsNilNode(ec.node) {
+			return nil, ErrNoContextNode
+		}
 		root := ixpath.DocumentRoot(ec.node)
 		nodes = []helium.Node{root}
 	} else {

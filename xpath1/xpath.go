@@ -59,6 +59,10 @@ var ErrPathNotNodeSet = errors.New("xpath: path expression requires a node-set")
 // ErrInvalidFunctionContext is returned when a function receives an unexpected context type.
 var ErrInvalidFunctionContext = errors.New("xpath: invalid function context type")
 
+// ErrNoContextNode is returned when an expression that requires a context node
+// (such as an absolute location path) is evaluated with a nil context node.
+var ErrNoContextNode = errors.New("xpath: no context node")
+
 // ErrExprTooDeep is returned when expression nesting exceeds the maximum parse depth.
 var ErrExprTooDeep = errors.New("xpath: expression nesting too deep")
 
