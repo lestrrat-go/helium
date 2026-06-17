@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"strings"
 )
 
@@ -9,6 +10,11 @@ import (
 // tried but all failed" — stops nextCatalog fallback (the libxml2 "cut"
 // algorithm).
 const CatalogBreak = "\x00CATAL_BREAK"
+
+// errNoLoader is returned by lazyLoad when an entry references a catalog that
+// must be loaded but no Loader is configured. Callers treat it like any other
+// load failure and skip the entry.
+var errNoLoader = errors.New("catalog: no loader configured")
 
 // Resolve resolves an external identifier (pubID and/or sysID) to a URI.
 // Returns the resolved URI or "" if not found.
@@ -408,7 +414,10 @@ func (c *Catalog) lazyLoad(ctx context.Context, e *Entry) error {
 		return nil
 	}
 	if c.Loader == nil {
-		return nil
+		// The referenced catalog needs loading but no loader is configured.
+		// Return an error so callers skip this entry instead of dereferencing
+		// the still-nil e.Catalog.
+		return errNoLoader
 	}
 	cat, err := c.Loader.Load(ctx, e.URL)
 	if err != nil {
