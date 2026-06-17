@@ -112,3 +112,39 @@ func TestEmptyDefaultInvalidForType(t *testing.T) {
 	_, errs := compileWithErrors(t, schemaXML)
 	require.NotEmpty(t, errs, "expected a schema error for invalid empty default")
 }
+
+// TestEmptyDefaultInvalidForTypeViaRef checks the same invalid-constraint
+// detection for a ref'd attribute use: <xs:attribute ref="a" default=""/>
+// where global "a" is xs:integer. The empty default is invalid for the
+// resolved integer type and must produce a schema error.
+func TestEmptyDefaultInvalidForTypeViaRef(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default empty on integer ref", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="a" type="xs:integer"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute ref="a" default=""/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		_, errs := compileWithErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a schema error for invalid empty default on ref")
+	})
+
+	t.Run("fixed empty on integer ref", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="a" type="xs:integer"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute ref="a" fixed=""/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		_, errs := compileWithErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a schema error for invalid empty fixed on ref")
+	})
+}
