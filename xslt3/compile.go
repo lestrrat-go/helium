@@ -1085,14 +1085,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// the effective base URI becomes /a/b/innerdoc/style.xsl, so that
 	// filepath.Dir() returns /a/b/innerdoc for relative URI resolution.
 	if xmlBase := getAttr(root, lexicon.QNameXMLBase); xmlBase != "" {
-		if strings.Contains(xmlBase, "://") {
-			// Absolute URI (http://, file://, etc.) — use as-is.
-			c.baseURI = xmlBase
-		} else if c.baseURI != "" {
-			baseDir := filepath.Dir(c.baseURI)
-			baseName := filepath.Base(c.baseURI)
-			c.baseURI = filepath.Join(baseDir, xmlBase, baseName)
-		}
+		c.baseURI = resolveRootXMLBase(c.baseURI, xmlBase)
 	}
 
 	// Collect namespace declarations from root
@@ -1404,6 +1397,46 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	sortAccumulatorOrder(c.stylesheet)
 
 	return c.stylesheet, nil
+}
+
+// resolveRootXMLBase resolves a root-element xml:base value against the current
+// module base URI to produce the new effective base URI.
+//
+// Absoluteness is decided with [xsd.URIScheme] (RFC 3986), not a "://"
+// substring check: an absolute-URI xml:base may carry a scheme with no "//"
+// authority (e.g. xml:base="urn:base") and must be used as-is, while a
+// relative/root-relative xml:base under a URI base must be resolved per RFC
+// 3986 so the base scheme/authority survives. Only when both the current base
+// and xml:base are local filesystem paths is filepath used.
+//
+// To mirror the local-path branch — which re-appends the stylesheet filename so
+// filepath.Dir() recovers the directory downstream — the URI branch resolves
+// xml:base as a directory and re-resolves the original filename against it:
+// xml:base="innerdoc/" under "mem:/a/b/style.xsl" yields
+// "mem:/a/b/innerdoc/style.xsl".
+func resolveRootXMLBase(baseURI, xmlBase string) string {
+	switch {
+	case xsd.URIScheme(xmlBase) != "":
+		// Absolute URI — use as-is.
+		return xmlBase
+	case baseURI != "" && xsd.URIScheme(baseURI) != "":
+		baseName := filepath.Base(baseURI)
+		dirURI, err := xsd.ResolveSchemaURI(xmlBase, baseURI)
+		if err != nil {
+			return baseURI
+		}
+		resolved, err := xsd.ResolveSchemaURI(baseName, dirURI)
+		if err != nil {
+			return baseURI
+		}
+		return resolved
+	case baseURI != "":
+		baseDir := filepath.Dir(baseURI)
+		baseName := filepath.Base(baseURI)
+		return filepath.Join(baseDir, xmlBase, baseName)
+	default:
+		return baseURI
+	}
 }
 
 // checkAbstractComponents checks that no abstract components remain

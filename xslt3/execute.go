@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -131,9 +130,9 @@ type execContext struct {
 func (ec *execContext) setCurrentTemplate(tmpl *template) {
 	ec.currentTemplate = tmpl
 	if tmpl != nil && tmpl.BaseURI != "" {
-		ec.currentTemplateBaseDir = filepath.Dir(tmpl.BaseURI)
+		ec.currentTemplateBaseDir = documentBaseDir(tmpl.BaseURI)
 	} else if ec.stylesheet.baseURI != "" {
-		ec.currentTemplateBaseDir = filepath.Dir(ec.stylesheet.baseURI)
+		ec.currentTemplateBaseDir = documentBaseDir(ec.stylesheet.baseURI)
 	} else {
 		ec.currentTemplateBaseDir = ""
 	}

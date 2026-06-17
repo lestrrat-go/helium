@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -39,12 +40,14 @@ func parseParticleOccurs(elem *helium.Element) (int, int) {
 
 func readDefaultOrFixed(elem *helium.Element) (*string, *string) {
 	var defaultValue *string
-	if v := getAttr(elem, attrDefault); v != "" {
+	if hasAttr(elem, attrDefault) {
+		v := getAttr(elem, attrDefault)
 		defaultValue = &v
 	}
 
 	var fixedValue *string
-	if v := getAttr(elem, attrFixed); v != "" {
+	if hasAttr(elem, attrFixed) {
+		v := getAttr(elem, attrFixed)
 		fixedValue = &v
 	}
 
@@ -80,7 +83,7 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 		Name:      QName{Local: opts.name, NS: opts.namespace},
 		MinOccurs: opts.minOccurs,
 		MaxOccurs: opts.maxOccurs,
-		Nillable:  getAttr(elem, attrNillable) == attrValTrue,
+		Nillable:  c.readBooleanAttr(ctx, elem, attrNillable),
 	}
 
 	if opts.allowAbstract {
@@ -121,6 +124,28 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	return decl, nil
 }
 
+// readBooleanAttr reads a schema-side xs:boolean attribute (e.g. nillable),
+// applying whitespace-collapse lexical rules (true/false/1/0). An absent
+// attribute is false. An invalid lexical is reported as a schema parser error
+// and treated as false.
+func (c *compiler) readBooleanAttr(ctx context.Context, elem *helium.Element, attr string) bool {
+	if !hasAttr(elem, attr) {
+		return false
+	}
+	v := normalizeWhiteSpace(getAttr(elem, attr), "collapse")
+	switch v {
+	case "true", "1":
+		return true
+	case "false", "0":
+		return false
+	}
+	msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", v)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, elem.Line(),
+		elem.LocalName(), elemElement, attr, msg), helium.ErrorLevelFatal))
+	c.errorCount++
+	return false
+}
+
 func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, decl *ElementDecl, sourceName string) error {
 	typeRef := getAttr(elem, attrType)
 	if typeRef != "" {
@@ -154,6 +179,16 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 			}
 			decl.Type = td
 		}
+	}
+
+	// An element declaration with no explicit type, no inline type, and no
+	// substitution-group head to inherit from defaults to the built-in
+	// xs:anyType (XSD 3.3.2: {type definition} defaults to xs:anyType). This
+	// ensures xsi:nil lexical validation and nilled-empty enforcement run for
+	// no-type declarations the same as for typed ones. Substitution-group
+	// members are left untyped so they can inherit the head's type at validation.
+	if decl.Type == nil && decl.SubstitutionGroup == (QName{}) {
+		decl.Type = c.schema.types[QName{Local: "anyType", NS: lexicon.NamespaceXSD}]
 	}
 
 	return nil
@@ -200,6 +235,15 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 	au.Default, au.Fixed = readDefaultOrFixed(elem)
 	if au.Fixed != nil {
 		au.FixedNS = collectNSContext(elem)
+	}
+	// Record source info so the default/fixed constraint value can be validated
+	// against the attribute's declared simple type once type refs are resolved.
+	if au.Default != nil || au.Fixed != nil {
+		c.attrUseConstraintSources[au] = attrConstraintSource{
+			line:  elem.Line(),
+			local: opts.name.Local,
+			nsMap: collectNSContext(elem),
+		}
 	}
 	return au
 }
@@ -334,12 +378,24 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 		if getAttr(elem, attrUse) == attrValRequired {
 			au.Required = true
 		}
-		if v := getAttr(elem, attrDefault); v != "" {
+		if hasAttr(elem, attrDefault) {
+			v := getAttr(elem, attrDefault)
 			au.Default = &v
 		}
-		if v := getAttr(elem, attrFixed); v != "" {
+		if hasAttr(elem, attrFixed) {
+			v := getAttr(elem, attrFixed)
 			au.Fixed = &v
 			au.FixedNS = collectNSContext(elem)
+		}
+		// Record source info so a local default/fixed constraint on a ref'd
+		// attribute use is validated against the resolved (global) attribute's
+		// simple type once resolveRefs copies the type in.
+		if au.Default != nil || au.Fixed != nil {
+			c.attrUseConstraintSources[au] = attrConstraintSource{
+				line:  elem.Line(),
+				local: qn.Local,
+				nsMap: collectNSContext(elem),
+			}
 		}
 		c.attrRefs[au] = qn
 		return au

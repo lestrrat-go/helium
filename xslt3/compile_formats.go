@@ -13,6 +13,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element) error {
@@ -502,10 +503,23 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 // called at both compile-time and runtime; the loadBytes callback performs the
 // actual retrieval so each caller supplies its own (opt-in) loader.
 func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseURI, href string, loadBytes func(context.Context, string) ([]byte, error)) error {
+	// Decide absoluteness with xsd.URIScheme (RFC 3986), not filepath.IsAbs or a
+	// "://" substring check: an absolute-URI href may carry a scheme with no
+	// "//" authority (e.g. "urn:params", "file:/p/p.xml") and must pass through
+	// unchanged, while a relative href against a URI base must keep the base
+	// scheme/authority. Only when both base and ref are local filesystem paths
+	// is filepath.Join used.
 	uri := href
-	if baseURI != "" && !strings.Contains(href, "://") && !filepath.IsAbs(href) {
-		baseDir := filepath.Dir(baseURI)
-		uri = filepath.Join(baseDir, href)
+	if baseURI != "" {
+		switch {
+		case xsd.URIScheme(href) != "" || xsd.URIScheme(baseURI) != "":
+			resolved, rErr := xsd.ResolveSchemaURI(href, baseURI)
+			if rErr == nil {
+				uri = resolved
+			}
+		case !filepath.IsAbs(href):
+			uri = filepath.Join(filepath.Dir(baseURI), href)
+		}
 	}
 
 	data, err := loadBytes(ctx, uri)

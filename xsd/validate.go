@@ -467,29 +467,25 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 		return fmt.Errorf("no matching global declaration")
 	}
 
-	if edecl.Type == nil {
-		// Substitution group members inherit the type from the head element.
-		if edecl.SubstitutionGroup != (QName{}) {
-			headDecl, headOK := vc.schema.LookupElement(edecl.SubstitutionGroup.Local, edecl.SubstitutionGroup.NS)
-			if headOK && headDecl.Type != nil {
-				edecl = headDecl
-			} else {
-				return nil
-			}
-		} else {
-			return nil
-		}
+	// Keep edecl as the ACTUAL root declaration so its own Nillable flag is
+	// honored by the nilled-element check. For a no-type substitution-group
+	// member, the effective TYPE is inherited from the head (effectiveDeclType
+	// walks the substitutionGroup chain), but the declaration — and thus the
+	// nillable flag — stays the member's. This mirrors the particle paths.
+	declType := effectiveDeclType(edecl, vc.schema)
+	if declType == nil {
+		return nil
 	}
 
-	td, err := vc.resolveXsiType(ctx, elem, edecl.Type)
+	td, err := vc.resolveXsiType(ctx, elem, declType)
 	if err != nil {
 		return err
 	}
 	// Check block flags against xsi:type derivation.
-	if td != edecl.Type && edecl.Type != nil && isDerivationBlocked(td, edecl.Type, edecl.Block) {
+	if td != declType && isDerivationBlocked(td, declType, edecl.Block) {
 		msg := "The xsi:type definition is blocked by the element declaration."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
-		td = edecl.Type // fall back to declared type
+		td = declType // fall back to declared type
 	}
 	if td != nil && td.Abstract {
 		msg := "The type definition is abstract."
@@ -500,7 +496,11 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// Annotate root element with its type.
 	vc.annotateElement(ctx, elem, td)
 
-	if hasXsiNil(elem) {
+	nilled, err := vc.checkXsiNil(ctx, elem)
+	if err != nil {
+		return err
+	}
+	if nilled {
 		return vc.validateNilledElement(ctx, elem, edecl, td)
 	}
 
@@ -775,8 +775,19 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		if _, ok := present[au.Name]; ok {
 			continue
 		}
-		// Insert the default/fixed value as an attribute on the element.
-		_, _ = elem.SetAttribute(au.Name.Local, defVal)
+		// Insert the default/fixed value as an attribute on the element. A
+		// qualified attribute (non-empty NS, e.g. under attributeFormDefault=
+		// "qualified") must be inserted with its namespace so later consumers
+		// such as an xs:key field "@t:a" can match it.
+		if au.Name.NS != "" {
+			ns := inScopeNamespace(elem, au.Name.NS)
+			if ns == nil {
+				ns = helium.NewNamespace("", au.Name.NS)
+			}
+			_, _ = elem.SetAttributeNS(au.Name.Local, defVal, ns)
+		} else {
+			_, _ = elem.SetAttribute(au.Name.Local, defVal)
+		}
 		// Annotate the newly inserted attribute.
 		for _, a := range elem.Attributes() {
 			if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
@@ -882,14 +893,29 @@ func isBlank(b []byte) bool {
 	return true
 }
 
-// hasXsiNil returns true if the element has xsi:nil="true".
-func hasXsiNil(elem *helium.Element) bool {
+// checkXsiNil parses the element's xsi:nil attribute as an xs:boolean (after
+// whitespace collapse). It returns whether the element is nilled ("true"/"1").
+// "false"/"0" and an absent attribute mean not-nilled. Any other lexical form
+// is an invalid xs:boolean value: a validity error is reported and a non-nil
+// error is returned so the element is not silently validated as ordinary
+// content.
+func (vc *validationContext) checkXsiNil(ctx context.Context, elem *helium.Element) (bool, error) {
 	for _, a := range elem.Attributes() {
-		if a.URI() == lexicon.NamespaceXSI && a.LocalName() == attrNil {
-			return a.Value() == "true" || a.Value() == "1"
+		if a.URI() != lexicon.NamespaceXSI || a.LocalName() != attrNil {
+			continue
 		}
+		v := normalizeWhiteSpace(a.Value(), "collapse")
+		switch v {
+		case "true", "1":
+			return true, nil
+		case "false", "0":
+			return false, nil
+		}
+		msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", v)
+		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), attrDisplayName(a), msg)
+		return false, fmt.Errorf("invalid xsi:nil value %q", a.Value())
 	}
-	return false
+	return false, nil
 }
 
 // validateNilledElement handles an element with xsi:nil="true".

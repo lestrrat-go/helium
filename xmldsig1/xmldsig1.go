@@ -167,7 +167,7 @@ func findSignatureElements(n helium.Node) []*helium.Element {
 		if !ok {
 			return
 		}
-		if localName(elem) == "Signature" && isDSigNS(elem) {
+		if localName(elem) == "Signature" && isDSigCoreNS(elem) {
 			out = append(out, elem)
 			// Do not descend into a Signature — a Signature inside
 			// another Signature (e.g. inside KeyInfo) is not itself a
@@ -182,9 +182,16 @@ func findSignatureElements(n helium.Node) []*helium.Element {
 	return out
 }
 
-func isDSigNS(e *helium.Element) bool {
-	ns := elementNamespaceURI(e)
-	return ns == NamespaceDSig || ns == NamespaceDSig11
+// isDSigCoreNS reports whether e is in the core XML-Signature namespace
+// (http://www.w3.org/2000/09/xmldsig#). Core structural elements — Signature,
+// SignedInfo, SignatureValue, CanonicalizationMethod, SignatureMethod,
+// Reference, Transforms, Transform, DigestMethod, DigestValue, KeyInfo — are
+// ALWAYS in this namespace. The XML-Signature 1.1 namespace
+// (http://www.w3.org/2009/xmldsig11#) is only for new 1.1-specific elements
+// (e.g. ECKeyValue, DEREncodedKeyValue); it is not an alternate spelling of the
+// core elements, so a dsig11:Reference must not satisfy a core-element check.
+func isDSigCoreNS(e *helium.Element) bool {
+	return elementNamespaceURI(e) == NamespaceDSig
 }
 
 func elementNamespaceURI(e *helium.Element) string {
