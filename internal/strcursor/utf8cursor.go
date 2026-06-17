@@ -219,6 +219,24 @@ func (c *UTF8Cursor) PeekAt(offset int) byte {
 	return c.buf[pos]
 }
 
+// HasByteAt reports whether a byte is available at offset bytes from the
+// current position. Unlike PeekAt (which returns 0 both for a genuine NUL byte
+// and for a position past EOF), this lets callers distinguish a real U+0000 in
+// the input from end-of-stream.
+func (c *UTF8Cursor) HasByteAt(offset int) bool {
+	pos := c.bufpos + offset
+	if pos >= c.buflen {
+		if c.fillBuffer(offset+1) != nil {
+			return false
+		}
+		pos = c.bufpos + offset
+		if pos >= c.buflen {
+			return false
+		}
+	}
+	return true
+}
+
 // PeekRune decodes and returns the rune at the current position.
 func (c *UTF8Cursor) PeekRune() rune {
 	if c.bufpos >= c.buflen {

@@ -766,6 +766,19 @@ func (p *parser) parseCharacters() {
 	// triggers head-close + body-open.
 	inHead := p.currentName() == elemHead
 
+	// A real U+0000 (NUL) byte is indistinguishable from EOF via Peek/PeekAt
+	// (both return 0), so the scan loops below would break with no progress and
+	// the outer parse loop would spin forever. Per HTML5 the data state treats
+	// U+0000 as a parse error and replaces it with U+FFFD. Consume the NUL and
+	// emit the replacement character, guaranteeing forward progress. EOF is
+	// distinguished by Done().
+	if !p.cur.Done() && p.cur.Peek() == 0 {
+		_ = p.cur.Advance(1)
+		p.htmlStartCharData()
+		_ = p.emitCharacters([]byte("�"))
+		return
+	}
+
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
@@ -837,6 +850,18 @@ func (p *parser) htmlStartCharData() {
 	p.htmlCheckImplied("p")
 }
 
+// normalizeNumericCharRef applies the HTML5 numeric-character-reference fixups
+// relevant to NUL handling. A U+0000 reference is a parse error that maps to the
+// replacement character U+FFFD rather than being dropped. Out-of-range and
+// surrogate code points likewise map to U+FFFD instead of producing an invalid
+// rune.
+func normalizeNumericCharRef(cp int) rune {
+	if cp == 0 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF) {
+		return '�'
+	}
+	return rune(cp)
+}
+
 // parseCharRef handles entity references (&name; or &#num; or &#xhex;).
 // Emits the resolved value as a Characters SAX event (entity splitting behavior).
 func (p *parser) parseCharRef() {
@@ -848,26 +873,33 @@ func (p *parser) parseCharRef() {
 	if p.cur.Peek() == '#' {
 		_ = p.cur.Advance(1) // skip '#'
 		var codepoint int
+		var haveDigits bool
 		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 			_ = p.cur.Advance(1) // skip 'x'
 			hexStr := p.parseWhile(isHexDigit)
 			codepoint64, err := strconv.ParseInt(hexStr, 16, 32)
 			if err == nil {
 				codepoint = int(codepoint64)
+				haveDigits = true
 			}
 		} else {
 			numStr := p.parseWhile(isDigit)
 			codepoint64, err := strconv.ParseInt(numStr, 10, 32)
 			if err == nil {
 				codepoint = int(codepoint64)
+				haveDigits = true
 			}
 		}
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
 		}
-		if codepoint > 0 {
+		// Per HTML5, a U+0000 numeric character reference (&#0; / &#x0;) is a
+		// parse error that maps to U+FFFD rather than being dropped. Only emit
+		// nothing when no digits were present at all (a bare "&#" / "&#x").
+		if haveDigits {
+			cp := normalizeNumericCharRef(codepoint)
 			var buf [4]byte
-			n := utf8.EncodeRune(buf[:], rune(codepoint))
+			n := utf8.EncodeRune(buf[:], cp)
 			_ = p.emitCharacters(buf[:n])
 		}
 		return
@@ -1032,9 +1064,16 @@ func (p *parser) parseRawContent(tagName string) {
 			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
 				validEnd := false
-				switch p.cur.PeekAt(afterTag) {
-				case 0, '>', ' ', '\t', '\n', '\r':
+				switch {
+				case !p.cur.HasByteAt(afterTag):
+					// True EOF after the matched tag terminates the element.
+					// A real NUL byte (HasByteAt true, PeekAt 0) does not.
 					validEnd = true
+				default:
+					switch p.cur.PeekAt(afterTag) {
+					case '>', ' ', '\t', '\n', '\r':
+						validEnd = true
+					}
 				}
 				if validEnd {
 					if state == scriptDoubleEscaped {
@@ -1056,6 +1095,14 @@ func (p *parser) parseRawContent(tagName string) {
 				}
 			}
 		}
+		// Per HTML5 the RAWTEXT/script-data states replace U+0000 with U+FFFD.
+		// The loop already advances on every byte (so no spin), but emit the
+		// replacement character instead of a literal NUL for correctness.
+		if p.cur.Peek() == 0 {
+			content.WriteString("�")
+			_ = p.cur.Advance(1)
+			continue
+		}
 		content.WriteByte(p.cur.Peek())
 		_ = p.cur.Advance(1)
 	}
@@ -1075,14 +1122,26 @@ func (p *parser) parseRCDATAContent(tagName string) {
 		if p.cur.Peek() == '<' && p.cur.PeekAt(1) == '/' {
 			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
-				ch := p.cur.PeekAt(afterTag)
-				if ch == 0 {
+				// True EOF after the matched tag terminates the element; a real
+				// NUL byte (HasByteAt true, PeekAt 0) does not.
+				if !p.cur.HasByteAt(afterTag) {
 					return
 				}
-				if ch == '>' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+				switch p.cur.PeekAt(afterTag) {
+				case '>', ' ', '\t', '\n', '\r':
 					return
 				}
 			}
+		}
+
+		// A real U+0000 (NUL) byte reads as 0, the same sentinel used to stop
+		// the text scan below, so without this guard the scan makes no progress
+		// and the loop spins forever. Per HTML5 the RCDATA state replaces U+0000
+		// with U+FFFD. EOF is distinguished by Done() in the loop condition.
+		if p.cur.Peek() == 0 {
+			_ = p.cur.Advance(1)
+			_ = p.emitCharacters([]byte("�"))
+			continue
 		}
 
 		if p.cur.Peek() == '&' {
@@ -1112,9 +1171,16 @@ func (p *parser) parseRCDATAContent(tagName string) {
 				// tag so the cursor is guaranteed to progress.
 				validEnd := false
 				if p.cur.PeekAt(1) == '/' && p.hasPrefixFold(endTag) {
-					switch p.cur.PeekAt(len(endTag)) {
-					case 0, '>', ' ', '\t', '\n', '\r':
+					switch {
+					case !p.cur.HasByteAt(len(endTag)):
+						// True EOF after the matched tag; a real NUL does not
+						// count as a valid end-tag terminator.
 						validEnd = true
+					default:
+						switch p.cur.PeekAt(len(endTag)) {
+						case '>', ' ', '\t', '\n', '\r':
+							validEnd = true
+						}
 					}
 				}
 				if !validEnd {
@@ -1128,14 +1194,23 @@ func (p *parser) parseRCDATAContent(tagName string) {
 
 // parsePlaintext parses plaintext content — everything until EOF.
 func (p *parser) parsePlaintext() {
-	n := 0
-	for p.cur.PeekAt(n) != 0 {
-		n++
+	var content bytes.Buffer
+	for !p.cur.Done() {
+		// A real U+0000 (NUL) byte reads as 0, which the previous PeekAt-based
+		// scan treated as EOF, truncating plaintext early. Per HTML5 the
+		// PLAINTEXT state replaces U+0000 with U+FFFD; consume the rest of the
+		// input verbatim, distinguishing genuine EOF via Done().
+		b := p.cur.Peek()
+		if b == 0 {
+			content.WriteString("�")
+			_ = p.cur.Advance(1)
+			continue
+		}
+		content.WriteByte(b)
+		_ = p.cur.Advance(1)
 	}
-	if n > 0 {
-		text := p.cur.PeekString(n)
-		_ = p.cur.Advance(n)
-		p.handleSAXErr(p.sax.Characters([]byte(text)))
+	if content.Len() > 0 {
+		p.handleSAXErr(p.sax.Characters(content.Bytes()))
 	}
 }
 
@@ -1284,25 +1359,30 @@ func (p *parser) resolveEntityInAttr() string {
 	if p.cur.Peek() == '#' {
 		_ = p.cur.Advance(1)
 		var codepoint int
+		var haveDigits bool
 		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 			_ = p.cur.Advance(1)
 			hexStr := p.parseWhile(isHexDigit)
 			cp, err := strconv.ParseInt(hexStr, 16, 32)
 			if err == nil {
 				codepoint = int(cp)
+				haveDigits = true
 			}
 		} else {
 			numStr := p.parseWhile(isDigit)
 			cp, err := strconv.ParseInt(numStr, 10, 32)
 			if err == nil {
 				codepoint = int(cp)
+				haveDigits = true
 			}
 		}
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
 		}
-		if codepoint > 0 {
-			return string(rune(codepoint))
+		// Per HTML5, &#0; / &#x0; in an attribute value maps to U+FFFD rather
+		// than being dropped. Emit nothing only for a bare "&#" with no digits.
+		if haveDigits {
+			return string(normalizeNumericCharRef(codepoint))
 		}
 		return ""
 	}
