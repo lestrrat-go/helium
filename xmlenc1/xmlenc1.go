@@ -170,7 +170,7 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 	if hasKeyTransport {
 		encKeyBytes, err := encryptSessionKey(cfg.keyTransport, cfg.recipientPubKey, sessionKey, cfg.oaepDigest, cfg.oaepMGF, cfg.oaepParams)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
+			return nil, err
 		}
 		encKey = &EncryptedKey{
 			EncryptionMethod: &EncryptionMethod{
