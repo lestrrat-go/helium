@@ -107,7 +107,7 @@ func normalizeXMLContent(data []byte, nf norm.Form) []byte {
 					i += end + 3
 					continue
 				}
-				if j+7 < len(data) && string(data[j:j+7]) == "[CDATA[" {
+				if bytes.HasPrefix(data[i:], []byte("<![CDATA[")) {
 					// CDATA: normalize content inside
 					end := bytes.Index(data[i:], []byte("]]>"))
 					if end < 0 {
