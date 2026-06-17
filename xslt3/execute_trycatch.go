@@ -196,11 +196,15 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 	tryFrame := ec.outputStack[len(ec.outputStack)-1]
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
+	// Restore the variable scope from before the try body on every exit path
+	// (success, control-flow signal, error, and catch). Variables declared
+	// inside the try must not be visible afterward, nor leak into the catch.
+	ec.localVars = savedVarScope
+
 	// XTDE0640: circular reference errors cannot be caught by xsl:try.
 	// Per spec: "the result of any attempt to catch the error using an
 	// xsl:try instruction is implementation-dependent."
 	if tryErr != nil && errors.Is(tryErr, ErrCircularRef) {
-		ec.localVars = savedVarScope
 		return dynamicError(errCodeXTDE0640, "%s", tryErr.Error())
 	}
 
@@ -278,10 +282,6 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 	if errQName.URI != "" {
 		errClark = helium.ClarkName(errQName.URI, errQName.Local)
 	}
-
-	// Restore variable scope to before the try body.
-	// Variables declared inside the try must not be visible in catch.
-	ec.localVars = savedVarScope
 
 	// Find matching catch clause
 	var matchedCatch *catchClause
@@ -374,6 +374,10 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 		return nil
 	}()
 
+	// Restore the variable scope from before the try body on every exit path.
+	// Variables declared inside the try must not be visible afterward.
+	ec.localVars = savedVarScope
+
 	if tryErr == nil {
 		return nil
 	}
@@ -390,7 +394,6 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 	}
 
 	// No output was written — safe to execute catch.
-	ec.localVars = savedVarScope
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
