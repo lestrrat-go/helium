@@ -706,6 +706,11 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			prefix := name[:idx]
 			localName = name[idx+1:]
 			nsURI = ec.resolvePrefix(prefix)
+			if nsURI == "" && inst.Namespace == nil {
+				// XTDE0860: prefix in computed attribute name is undeclared.
+				return dynamicError(errCodeXTDE0860,
+					"undeclared namespace prefix %q in attribute name %q", prefix, name)
+			}
 			if nsURI != "" {
 				ns, _ := out.doc.CreateNamespace(prefix, nsURI)
 				attrNS = ns
@@ -764,6 +769,11 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 					prefix := name[:idx]
 					local := name[idx+1:]
 					uri := ec.resolvePrefix(prefix)
+					if uri == "" && inst.Namespace == nil {
+						// XTDE0860: prefix in computed attribute name is undeclared.
+						return dynamicError(errCodeXTDE0860,
+							"undeclared namespace prefix %q in attribute name %q", prefix, name)
+					}
 					ns, _ := tmpDoc.CreateNamespace(prefix, uri)
 					_, _ = tmpElem.SetAttributeNS(local, value, ns)
 				} else {
