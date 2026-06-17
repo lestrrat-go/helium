@@ -804,18 +804,32 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 	}
 
 	evalState := ec.sortXPathEvalState(ctx)
+	// Set size/position/current() context for the FULL mixed sequence so
+	// sort keys referencing position()/last()/current() compute correctly
+	// (XSLT spec 13.1.4). Mirror the node-only path (sortNodes1).
+	evalState.SetSize(sequence.Len(items))
 	entries := make([]keyed1[xpath3.Item], sequence.Len(items))
 
 	savedItem := ec.contextItem
-	defer func() { ec.contextItem = savedItem }()
+	savedCurrent := ec.currentNode
+	defer func() {
+		ec.contextItem = savedItem
+		ec.currentNode = savedCurrent
+	}()
 
 	for i := range sequence.Len(items) {
+		evalState.SetPosition(i + 1)
 		item := items.Get(i)
 		ec.contextItem = item
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			node = ni.Node
 			ec.contextItem = nil
+			// current() resolves via ec.currentNode for node items.
+			ec.currentNode = node
+		} else {
+			// current() resolves via ec.contextItem for non-node items.
+			ec.currentNode = nil
 		}
 		sv, err := evaluateSortKey(ctx, ec, sk, node, &dtMode, evalState)
 		if err != nil {
@@ -897,18 +911,32 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 	}
 
 	evalState := ec.sortXPathEvalState(ctx)
+	// Set size/position/current() context for the FULL mixed sequence so
+	// sort keys referencing position()/last()/current() compute correctly
+	// (XSLT spec 13.1.4). Mirror the node-only path (sortNodesN).
+	evalState.SetSize(sequence.Len(items))
 	entries := make(keyedSlice[xpath3.Item], sequence.Len(items))
 
 	savedItem := ec.contextItem
-	defer func() { ec.contextItem = savedItem }()
+	savedCurrent := ec.currentNode
+	defer func() {
+		ec.contextItem = savedItem
+		ec.currentNode = savedCurrent
+	}()
 
 	for i := range sequence.Len(items) {
+		evalState.SetPosition(i + 1)
 		item := items.Get(i)
 		ec.contextItem = item
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			node = ni.Node
 			ec.contextItem = nil
+			// current() resolves via ec.currentNode for node items.
+			ec.currentNode = node
+		} else {
+			// current() resolves via ec.contextItem for non-node items.
+			ec.currentNode = nil
 		}
 		keys, err := extractSortValues(ctx, ec, sortKeys, node, dtModes, evalState)
 		if err != nil {
