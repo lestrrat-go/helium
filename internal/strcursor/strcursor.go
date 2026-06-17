@@ -853,5 +853,12 @@ func (c *ByteCursor) Read(buf []byte) (int, error) {
 		}
 	}
 	n, err := c.in.Read(buf)
+	// A sticky non-EOF error recorded by fillBuffer (a reader returning data
+	// and an error on the same Read) must still reach a wrapping reader such as
+	// UTF8Cursor. Once the underlying reader stops producing fresh errors,
+	// replay it in place of a clean EOF so the error is never swallowed.
+	if c.readErr != nil && (err == nil || err == io.EOF) {
+		err = c.readErr
+	}
 	return n + nread, err
 }

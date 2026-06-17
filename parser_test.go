@@ -3,7 +3,9 @@ package helium_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -1670,4 +1672,34 @@ func TestParseNCNameReportsInvalidStartRune(t *testing.T) {
 	p := helium.NewParser()
 	_, err := p.Parse(t.Context(), xml)
 	require.Error(t, err)
+}
+
+// dataThenErrReader returns its payload together with a non-EOF error on the
+// same Read (which io.Reader permits), then reports EOF. It models a reader
+// that detects corruption/truncation only after emitting the final bytes,
+// e.g. a checksumming or decompressing stream.
+type dataThenErrReader struct {
+	data []byte
+	err  error
+	done bool
+}
+
+func (r *dataThenErrReader) Read(p []byte) (int, error) {
+	if r.done {
+		return 0, io.EOF
+	}
+	r.done = true
+	n := copy(p, r.data)
+	return n, r.err
+}
+
+func TestParseReaderSurfacesErrorReturnedWithData(t *testing.T) {
+	wantErr := errors.New("checksum mismatch")
+	p := helium.NewParser()
+
+	_, err := p.ParseReader(t.Context(), &dataThenErrReader{
+		data: []byte("<root/>"),
+		err:  wantErr,
+	})
+	require.ErrorIs(t, err, wantErr, "a reader error returned alongside the final bytes must not be swallowed")
 }
