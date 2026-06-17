@@ -126,6 +126,37 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 		require.Error(t, err, "injected attribute name must not serialize")
 	})
 
+	t.Run("reserved xmlns attribute name rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		// "xmlns" is a valid NCName, but a normal attribute named "xmlns"
+		// would be emitted as a namespace declaration that never went through
+		// DeclareNamespace.
+		_, err := root.SetAttribute("xmlns", "urn:evil")
+		require.NoError(t, err)
+
+		_, err = helium.WriteString(doc)
+		require.Error(t, err, "reserved xmlns attribute name must not serialize")
+	})
+
+	t.Run("reserved xmlns-prefixed attribute name rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		// An attribute whose QName prefix is "xmlns" (e.g. "xmlns:foo") is a
+		// namespace declaration and must not be emitted as a normal attribute.
+		ns, err := doc.CreateNamespace("xmlns", "urn:x")
+		require.NoError(t, err)
+		_, err = root.SetAttributeNS("foo", "v", ns)
+		require.NoError(t, err)
+
+		_, err = helium.WriteString(doc)
+		require.Error(t, err, "reserved xmlns-prefixed attribute name must not serialize")
+	})
+
 	t.Run("valid element name serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
@@ -263,6 +294,19 @@ func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 
 		_, err := helium.WriteString(doc)
 		require.NoError(t, err, "reserved xml prefix must still serialize")
+	})
+
+	t.Run("reserved xmlns prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+		// Namespaces-in-XML forbids declaring the xmlns prefix; the serializer
+		// must not emit xmlns:xmlns="...".
+		require.NoError(t, root.DeclareNamespace("xmlns", "urn"))
+
+		_, err := helium.WriteString(doc)
+		require.Error(t, err, "reserved xmlns prefix must not serialize")
 	})
 }
 

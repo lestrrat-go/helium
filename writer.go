@@ -115,7 +115,19 @@ func (s *writeSession) checkElementName(name string) bool {
 // checkAttributeName validates an attribute name about to be emitted verbatim.
 // An unvalidated name can inject raw markup (extra attributes, '>') into the
 // start tag. On failure it records a sticky error and returns false.
+//
+// The reserved "xmlns" name is also rejected: a normal attribute named
+// "xmlns" (or one whose QName prefix is "xmlns", e.g. "xmlns:foo") would be
+// emitted as a namespace declaration even though it never went through
+// DeclareNamespace. Namespace declarations are stored as separate Namespace
+// nodes (nsDefs) and serialized by dumpNs; the serializer's own correct
+// xmlns output never reaches this function, so rejecting here only blocks
+// user-supplied misuse.
 func (s *writeSession) checkAttributeName(name string) bool {
+	if name == "xmlns" || strings.HasPrefix(name, "xmlns:") {
+		s.check(fmt.Errorf("helium: reserved attribute name %q: namespace declarations must use DeclareNamespace", name))
+		return false
+	}
 	if xmlchar.IsValidQName(name) {
 		return true
 	}
@@ -127,11 +139,17 @@ func (s *writeSession) checkAttributeName(name string) bool {
 // emitted as "xmlns:"+prefix. An unvalidated prefix (e.g. from
 // DeclareNamespace) can carry whitespace, quotes, or '>' that inject raw markup
 // into the start tag. The empty prefix (default namespace, xmlns="...") is
-// allowed; any non-empty prefix must be a valid NCName (no colon). On failure
-// it records a sticky error (preserving any earlier one) and returns false.
-// Shared by both the generic and XHTML serialization paths so they cannot
-// diverge.
+// allowed; any non-empty prefix must be a valid NCName (no colon). The
+// reserved "xmlns" prefix is rejected: Namespaces-in-XML forbids declaring it,
+// so dumpNs must not emit xmlns:xmlns="...". The "xml" prefix is handled by
+// dumpNs before this function is called. On failure it records a sticky error
+// (preserving any earlier one) and returns false. Shared by both the generic
+// and XHTML serialization paths so they cannot diverge.
 func (s *writeSession) checkNamespacePrefix(prefix string) bool {
+	if prefix == "xmlns" {
+		s.check(fmt.Errorf("helium: reserved namespace prefix %q must not be declared", prefix))
+		return false
+	}
 	if prefix == "" || xmlchar.IsValidNCName(prefix) {
 		return true
 	}
