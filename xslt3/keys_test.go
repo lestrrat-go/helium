@@ -127,6 +127,24 @@ func TestCanonicalKeyUsesQNameValueSpace(t *testing.T) {
 	require.Contains(t, result, "<count>2</count>")
 }
 
+func TestKeyEmptyNameArgReturnsError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:key name="items" match="item" use="@id"/>
+  <xsl:template match="/">
+    <out><xsl:value-of select="key((), 'v')"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item id="v"/></root>`))
+	require.NoError(t, err)
+
+	// An empty sequence for the key name must produce a dynamic type error,
+	// not an index-out-of-range panic.
+	_, err = xslt3.TransformString(t.Context(), src, ss)
+	require.Error(t, err)
+}
+
 func TestMutuallyRecursiveKeysDoNotOverflow(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
