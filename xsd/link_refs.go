@@ -98,6 +98,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve list item type references.
 	for td, qn := range c.itemTypeRefs {
 		itemTD, ok := c.schema.types[qn]
+		if !ok && qn.NS != "" {
+			// Try empty namespace as fallback — the item type may come from an
+			// imported schema with no targetNamespace.
+			itemTD, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+		}
 		if !ok {
 			c.reportUnresolvedTypeRef(ctx, td, qn)
 			itemTD = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
@@ -109,6 +114,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve union member type references.
 	for _, ref := range c.unionMemberRefs {
 		memberTD, ok := c.schema.types[ref.name]
+		if !ok && ref.name.NS != "" {
+			// Try empty namespace as fallback — the member type may come from an
+			// imported schema with no targetNamespace.
+			memberTD, ok = c.schema.types[QName{Local: ref.name.Local, NS: ""}]
+		}
 		if !ok {
 			c.reportUnresolvedTypeRef(ctx, ref.owner, ref.name)
 			memberTD = &TypeDef{Name: ref.name, ContentType: ContentTypeSimple}
