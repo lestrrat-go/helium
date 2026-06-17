@@ -161,6 +161,21 @@ is a thin greedy-max wrapper over `matchAttrTokensCounts`. `validateList` (the
 naive `validatePattern` path) delegates to `matchListContent`, so every `<list>`
 path shares these semantics.
 
+### XSD Datatype Library (`<data>` / `<value>`)
+
+When `datatypeLibrary` is the XSD datatypes namespace, `validateXSDType`
+(`<data>`) and `matchXSDValue` (`<value>`) route through the shared XSD value
+validator (`internal/xsd/value`): `ValidateBuiltin` enforces lexical/value
+spaces (date/time/duration ranges, integer subtype bounds, binary alphabets) so
+RELAX NG and XSD stay consistent. `xsdDatatypeNames` is the recognized-name
+allowlist; any name outside it is an unknown datatype and is rejected (no silent
+accept). `xs:string` keeps the local `<param>`-facet path (whiteSpace=preserve).
+`<value>` matches by whitespace-processed lexical equality first, then — for the
+value-space-comparable types in `xsdValueSpaceTypes` (numeric, boolean,
+date/time, binary; mirrors xsd's `enumValueSpaceTypes`) — by `value.Compare`
+value-space equality (e.g. integer `5`≡`+5`≡`05`, NaN≡NaN for float/double).
+String-family and anyURI stay lexical-only.
+
 ### Error Suppression
 
 - `suppressDepth` counter incremented during choice branch exploration
