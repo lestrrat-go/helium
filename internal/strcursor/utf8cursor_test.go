@@ -99,3 +99,32 @@ func TestUTF8CursorScanQNameBytesRejectsSecondColon(t *testing.T) {
 	require.Zero(t, n)
 	require.Equal(t, byte('a'), cur.Peek())
 }
+
+func TestRuneCursorReadShortBufferBufferedRune(t *testing.T) {
+	cur := NewRuneCursor(strings.NewReader("é"))
+	// Buffer the multibyte rune in the ring.
+	require.Equal(t, 'é', cur.Peek())
+
+	// A 1-byte destination cannot hold the 2-byte rune. Read must not panic
+	// and must not corrupt or drop the buffered rune.
+	first := make([]byte, 1)
+	n, err := cur.Read(first)
+	require.NoError(t, err)
+	require.Zero(t, n, "no full rune fits in a 1-byte buffer")
+
+	// The rune must still be deliverable on a subsequent read.
+	rest := make([]byte, 8)
+	var got []byte
+	for {
+		m, rerr := cur.Read(rest)
+		got = append(got, rest[:m]...)
+		if rerr == io.EOF {
+			break
+		}
+		require.NoError(t, rerr)
+		if m == 0 {
+			break
+		}
+	}
+	require.Equal(t, "é", string(got), "rune delivered intact across reads")
+}
