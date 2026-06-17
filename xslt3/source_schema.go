@@ -34,7 +34,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		case "schemaLocation":
 			fields := strings.Fields(attr.Value())
 			for i := 1; i < len(fields); i += 2 {
-				resolved := resolveAgainstBaseURI(fields[i], baseURI)
+				resolved := resolveSchemaURI(fields[i], baseURI)
 				if resolved == "" {
 					continue
 				}
@@ -45,7 +45,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 				paths = append(paths, resolved)
 			}
 		case "noNamespaceSchemaLocation":
-			resolved := resolveAgainstBaseURI(strings.TrimSpace(attr.Value()), baseURI)
+			resolved := resolveSchemaURI(strings.TrimSpace(attr.Value()), baseURI)
 			if resolved == "" {
 				continue
 			}
@@ -75,7 +75,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		// the schema's own relative xs:include/xs:import references resolve,
 		// and route those nested loads through the invocation's resolver
 		// (default-deny) instead of the xsd compiler's default os.Open.
-		fsys := schemaResolverFS{ctx: ctx, load: ec.retrieveDocumentBytes}
+		fsys := schemaResolverFS{ctx: ctx, load: ec.retrieveDocumentBytes, baseURI: uri}
 		schema, err := xsd.NewCompiler().BaseDir(filepath.Dir(uri)).FS(fsys).Compile(ctx, schemaDoc)
 		if err != nil {
 			return nil, fmt.Errorf("compile source schema %q: %w", uri, err)

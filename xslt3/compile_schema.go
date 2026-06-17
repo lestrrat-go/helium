@@ -37,7 +37,7 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// and route the schema's nested xs:include/xs:import/xs:redefine loads
 	// through the same compile-time resolver (default-deny) instead of the
 	// xsd compiler's default os.Open.
-	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
+	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes, baseURI: uri}
 	return xsd.NewCompiler().BaseDir(filepath.Dir(uri)).FS(fsys).Compile(ctx, doc)
 }
 
@@ -106,11 +106,13 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 	}
 
 	if schemaLoc != "" {
-		// File-backed schema
+		// File-backed schema. Resolve the schema-location against the
+		// stylesheet base URI using RFC 3986 URI semantics when the base is a
+		// URL (so the authority survives and nested includes can be recovered),
+		// falling back to filepath joins for local filesystem bases.
 		uri := schemaLoc
-		if c.baseURI != "" && !strings.Contains(schemaLoc, "://") && !filepath.IsAbs(schemaLoc) {
-			baseDir := filepath.Dir(c.baseURI)
-			uri = filepath.Join(baseDir, schemaLoc)
+		if c.baseURI != "" {
+			uri = resolveSchemaURI(schemaLoc, c.baseURI)
 		}
 
 		schema, err := c.compileSchemaFromURI(ctx, uri)

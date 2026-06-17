@@ -5,6 +5,8 @@ import (
 	"context"
 	"io"
 	"io/fs"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -18,18 +20,28 @@ import (
 // would have its nested references read off the local filesystem, bypassing
 // the secure-by-default policy.
 //
-// The names handed to Open are produced by the xsd compiler via
-// filepath.Join(baseDir, schemaLocation), where baseDir is the directory of
-// the parent schema's URI. When the parent schema URI is an absolute URL
-// (e.g. https://example.com/s/main.xsd), filepath.Dir/Join collapse the
-// "scheme://" authority separator down to "scheme:/" — so the name reaching
-// Open is the malformed "https:/example.com/s/part.xsd". canonicalizeName
-// restores the dropped slash before the loader (and thus the resolver) sees
-// it, so nested loads target the correct canonical URI. Genuine local paths
-// (no URL scheme) are forwarded verbatim.
+// The xsd compiler forms the name handed to Open via
+// filepath.Join(baseDir, schemaLocation), where baseDir is seeded from
+// filepath.Dir(parentSchemaURI). When the parent schema URI is an absolute
+// URL (e.g. https://example.com/s/main.xsd), filepath collapses the
+// "scheme://" authority separator down to "scheme:/", and the name reaching
+// Open is the lossy "https:/example.com/s/part.xsd". The collapsed string
+// alone is ambiguous — from "scheme:/X" you cannot tell whether the first
+// segment of X is a URI authority/host or a path component.
+//
+// To avoid that ambiguity, the adapter keeps the ORIGINAL (un-collapsed)
+// base URI and reconstructs the nested reference from it: it recovers the
+// relative schema-location as filepath.Rel(filepath.Dir(baseURI), name) —
+// undoing the join the xsd compiler performed — and resolves it against the
+// base URI with net/url ResolveReference, applying standard RFC 3986 URI
+// resolution (correct for http/https/file/ftp and for relative "../"/subdir
+// references alike). When the base URI carries no URL scheme — i.e. it is a
+// genuine local filesystem path — the name is forwarded verbatim, preserving
+// the existing local-path and default-deny behavior.
 type schemaResolverFS struct {
-	ctx  context.Context //nolint:containedctx // loader needs the request context; FS has no per-Open ctx
-	load func(ctx context.Context, uri string) ([]byte, error)
+	ctx     context.Context //nolint:containedctx // loader needs the request context; FS has no per-Open ctx
+	load    func(ctx context.Context, uri string) ([]byte, error)
+	baseURI string
 }
 
 // Open implements [fs.FS]. It loads the named schema document through the
@@ -37,64 +49,71 @@ type schemaResolverFS struct {
 // error (including the default-deny "no URIResolver configured" case) is
 // returned as a *fs.PathError so fs.ReadFile surfaces it.
 func (s schemaResolverFS) Open(name string) (fs.File, error) {
-	name = canonicalizeName(name)
-	data, err := s.load(s.ctx, name)
+	uri := s.resolveName(name)
+	data, err := s.load(s.ctx, uri)
 	if err != nil {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+		return nil, &fs.PathError{Op: "open", Path: uri, Err: err}
 	}
-	return &schemaResolverFile{name: name, r: bytes.NewReader(data), size: int64(len(data))}, nil
+	return &schemaResolverFile{name: uri, r: bytes.NewReader(data), size: int64(len(data))}, nil
 }
 
-// canonicalizeName repairs a name whose "scheme://authority" was collapsed to
-// "scheme:/authority" by filepath.Dir/Join (which treat the URI as a local
-// path and squash the doubled slash). It restores the missing slash so the
-// loader receives the canonical absolute URI. Names without a URL scheme — i.e.
-// genuine local filesystem paths — are returned unchanged, so local-schema
-// resolution and the default-deny tests are unaffected.
-func canonicalizeName(name string) string {
-	scheme, rest, ok := splitURLScheme(name)
-	if !ok {
+// resolveName recovers the canonical URI for a nested schema reference whose
+// authority separator the xsd compiler's filepath.Join collapsed.
+//
+// name is filepath.Join(filepath.Dir(baseURI), schemaLocation). Recovering the
+// original relative schema-location is therefore filepath.Rel against
+// filepath.Dir(baseURI); resolving it against the original base URI via
+// net/url then yields the correct absolute URI under standard URI rules. This
+// works for arbitrarily nested includes because every name the xsd compiler
+// produces is a filepath.Join under the (collapsed) tree rooted at the
+// original base directory, so the recovered Rel is always the correct relative
+// reference from that base.
+//
+// If baseURI has no URL scheme (a genuine local filesystem path) or the
+// reconstruction cannot be performed, name is returned unchanged.
+func (s schemaResolverFS) resolveName(name string) string {
+	base, err := url.Parse(s.baseURI)
+	if err != nil || base.Scheme == "" {
+		// No base URI, or a local filesystem path: forward verbatim.
 		return name
 	}
-	// A canonical URL already has "scheme://"; only repair when filepath
-	// collapsed it to "scheme:/" with a single leading slash on the rest.
-	if strings.HasPrefix(rest, "//") {
+	ref, err := filepath.Rel(filepath.Dir(s.baseURI), name)
+	if err != nil {
 		return name
 	}
-	if !strings.HasPrefix(rest, "/") {
-		// Opaque or relative remainder (e.g. "mailto:x") — leave as-is.
+	ref = filepath.ToSlash(ref)
+	refURL, err := url.Parse(ref)
+	if err != nil {
 		return name
 	}
-	return scheme + "://" + rest[1:]
+	return base.ResolveReference(refURL).String()
 }
 
-// splitURLScheme splits name into its URL scheme and the remainder after the
-// "scheme:" prefix. It returns ok=false when name does not begin with a valid
-// RFC 3986 scheme (ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) ":"), which
-// covers all local filesystem paths.
-func splitURLScheme(name string) (string, string, bool) {
-	colon := strings.IndexByte(name, ':')
-	if colon <= 0 {
-		return "", "", false
+// resolveSchemaURI resolves a schema-location reference against a base URI.
+//
+// When the base is an absolute URL (has a scheme), resolution follows RFC 3986
+// via net/url ResolveReference, so the result preserves the authority and
+// applies "../"/subdir semantics correctly — and crucially is NOT collapsed by
+// filepath. When the base is a local filesystem path (no scheme), or either
+// side is empty/absolute, the existing filepath-based join is used so local
+// schema resolution and the default-deny behavior are unchanged.
+func resolveSchemaURI(ref, baseURI string) string {
+	if ref == "" || baseURI == "" {
+		return ref
 	}
-	scheme := name[:colon]
-	// Require at least two characters so a Windows drive letter ("C:\path")
-	// is never mistaken for a URL scheme.
-	if len(scheme) < 2 || !isASCIILetter(scheme[0]) {
-		return "", "", false
+	if strings.Contains(ref, "://") || filepath.IsAbs(ref) {
+		return ref
 	}
-	for i := 1; i < len(scheme); i++ {
-		c := scheme[i]
-		if isASCIILetter(c) || (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.' {
-			continue
-		}
-		return "", "", false
+	base, err := url.Parse(baseURI)
+	if err != nil || base.Scheme == "" {
+		// Local filesystem path: keep the historical filepath join.
+		return filepath.Join(filepath.Dir(baseURI), ref)
 	}
-	return scheme, name[colon+1:], true
-}
-
-func isASCIILetter(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+	refURL, err := url.Parse(ref)
+	if err != nil {
+		return filepath.Join(filepath.Dir(baseURI), ref)
+	}
+	return base.ResolveReference(refURL).String()
 }
 
 // schemaResolverFile is a minimal read-only [fs.File] backed by an in-memory

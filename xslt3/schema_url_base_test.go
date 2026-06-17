@@ -104,6 +104,110 @@ func TestImportSchemaNestedIncludeAbsoluteURLBase(t *testing.T) {
 	require.Contains(t, out, "out")
 }
 
+// TestImportSchemaNestedIncludeFileURIBase verifies that a file:// base URI is
+// NOT corrupted by the round-2 string-repair (which turned file:/tmp/... into
+// file://tmp/..., reinterpreting "tmp" as a URI host). The nested xs:include
+// must resolve to the canonical three-slash file:///tmp/s/part.xsd.
+func TestImportSchemaNestedIncludeFileURIBase(t *testing.T) {
+	const baseURI = "file:///tmp/s/main.xsl"
+	const mainSchemaURI = "file:///tmp/s/main.xsd"
+	const partSchemaURI = "file:///tmp/s/part.xsd"
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s" schema-location="main.xsd"/>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	resolver := &exactURIResolver{files: map[string]string{
+		mainSchemaURI: ddMainSchemaWithInclude,
+		partSchemaURI: ddPartSchemaXSD,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "nested xs:include over a file:// base must resolve through the resolver")
+	require.True(t, resolver.askedFor(mainSchemaURI),
+		"resolver must be asked for the canonical main URI %q; got %v", mainSchemaURI, resolver.asked)
+	require.True(t, resolver.askedFor(partSchemaURI),
+		"resolver must be asked for the canonical nested URI %q (three slashes, not file://tmp/...); got %v", partSchemaURI, resolver.asked)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "out")
+}
+
+// ddMainSchemaWithSubdirInclude pulls in a part from a subdirectory, exercising
+// multi-segment relative nested-include resolution. (The xsd compiler forbids a
+// nested reference that climbs above its schema's own directory via "../", by
+// design, as a path-traversal guard; the pure "../" URI rule is covered by the
+// resolveSchemaURI unit test below.)
+const ddMainSchemaWithSubdirInclude = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/s"
+           xmlns:s="http://example.com/s"
+           elementFormDefault="qualified">
+  <xs:include schemaLocation="sub/part.xsd"/>
+  <xs:element name="root" type="s:rootType"/>
+</xs:schema>`
+
+const ddSubdirPartSchemaXSD = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/s"
+           xmlns:s="http://example.com/s"
+           elementFormDefault="qualified">
+  <xs:simpleType name="rootType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`
+
+// TestImportSchemaNestedIncludeSubdirRelative verifies that a relative nested
+// include into a subdirectory resolves to its canonical URL per RFC 3986 rules
+// — the resolver is asked for the precise nested URI, not a filepath-collapsed
+// spelling.
+func TestImportSchemaNestedIncludeSubdirRelative(t *testing.T) {
+	const baseURI = "https://example.com/style/main.xsl"
+	const mainSchemaURI = "https://example.com/s/main.xsd"
+	const partSchemaURI = "https://example.com/s/sub/part.xsd"
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s" schema-location="https://example.com/s/main.xsd"/>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	resolver := &exactURIResolver{files: map[string]string{
+		mainSchemaURI: ddMainSchemaWithSubdirInclude,
+		partSchemaURI: ddSubdirPartSchemaXSD,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "a relative subdir nested include must resolve via URI rules")
+	require.True(t, resolver.askedFor(partSchemaURI),
+		"resolver must be asked for the subdir URI %q; got %v", partSchemaURI, resolver.asked)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "out")
+}
+
 // TestSourceSchemaLocationNestedIncludeAbsoluteURLBase verifies the runtime
 // (xsi:schemaLocation) path resolves the nested xs:include over an absolute
 // URL base to its canonical URI through the invocation resolver.
