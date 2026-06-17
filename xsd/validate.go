@@ -425,16 +425,15 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
 				hasErr = true
 			}
-			// Validate the attribute value against its declared type.
-			if au.TypeName.Local != "" {
-				attrTD, tdOK := vc.schema.LookupType(au.TypeName.Local, au.TypeName.NS)
-				if tdOK && attrTD.ContentType == ContentTypeSimple {
-					if err := attrTD.Validate(ctx, a.Value(), collectNSContext(elem)); err != nil {
-						ad := attrDisplayName(a)
-						msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
-						vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
-						hasErr = true
-					}
+			// Validate the attribute value against its declared type
+			// (inline anonymous simpleType takes precedence over a named type).
+			attrTD, tdOK := vc.attrUseType(au)
+			if tdOK && attrTD.ContentType == ContentTypeSimple {
+				if err := attrTD.Validate(ctx, a.Value(), collectNSContext(elem)); err != nil {
+					ad := attrDisplayName(a)
+					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					hasErr = true
 				}
 			}
 			// Annotate the attribute with its declared type.
@@ -750,15 +749,25 @@ func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Ele
 	(*vc.cfg.annotations)[elem] = xsdTypeName(td)
 }
 
+// attrUseType resolves the effective simple type for an attribute use. An inline
+// anonymous <xs:simpleType> (au.Type) takes precedence over a named type
+// reference (au.TypeName).
+func (vc *validationContext) attrUseType(au *AttrUse) (*TypeDef, bool) {
+	if au.Type != nil {
+		return au.Type, true
+	}
+	if au.TypeName.Local == "" {
+		return nil, false
+	}
+	return vc.schema.LookupType(au.TypeName.Local, au.TypeName.NS)
+}
+
 // annotateAttrUse records a type annotation for an attribute node based on its AttrUse declaration.
 func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attribute, au *AttrUse) {
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
-	if au.TypeName.Local == "" {
-		return
-	}
-	td, ok := vc.schema.types[au.TypeName]
+	td, ok := vc.attrUseType(au)
 	if !ok {
 		return
 	}
