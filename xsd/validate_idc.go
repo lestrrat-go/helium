@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 	"github.com/lestrrat-go/helium/xpath1"
 )
@@ -368,7 +369,7 @@ func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 		return raw
 	}
 	normalized := normalizeWhiteSpace(raw, resolveWhiteSpace(td))
-	if builtinLocal == "QName" || builtinLocal == "NOTATION" {
+	if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
 		ns := fieldNodeNSContext(fieldNode)
 		qn, err := resolveLexicalQName(strings.TrimSpace(normalized), ns)
 		if err != nil {

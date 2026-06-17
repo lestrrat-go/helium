@@ -92,6 +92,8 @@ const (
 	TypeIDREF              = "IDREF"
 	TypeToken              = "token"
 	TypeNumber             = "number"
+	TypeQName              = "QName"
+	TypeNotation           = "NOTATION"
 )
 
 // XPath node test string constants (with parentheses).

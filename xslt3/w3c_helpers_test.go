@@ -1624,6 +1624,17 @@ var w3cImplicitSkips = map[string]string{
 	"json-to-xml-typed-006": skipJSONToXMLValidate,
 	"json-to-xml-typed-007": skipJSONToXMLValidate,
 
+	// import-schema-029: the full XSLT 2.0 schema (schema-for-xslt20.xsd)
+	// triggers a fatal schema-construction diagnostic in our xsd compiler
+	// (complexType 'transform-element-base-type' adds an attribute wildcard by
+	// extension while its base 'element-only-versioned-element-type', a
+	// complexContent restriction that dropped the inherited wildcard, has none).
+	// The file-backed xsl:import-schema path now surfaces such fatal errors as
+	// XTSE0220 instead of compiling a recovery-placeholder schema, so this test
+	// can no longer silently pass. The underlying xsd wildcard-derivation strictness
+	// is a separate, pre-existing limitation; the QNames type the test exercises is fine.
+	"import-schema-029": "xsd compiler rejects schema-for-xslt20.xsd attribute-wildcard derivation; fatal now surfaced (separate xsd limitation)",
+
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
 

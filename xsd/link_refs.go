@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func (c *compiler) resolveRefs(ctx context.Context) {
@@ -31,6 +30,17 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				}
 				if edecl.Fixed == nil {
 					edecl.Fixed = ge.Fixed
+					edecl.FixedNS = ge.FixedNS
+				}
+				// Copy the referenced declaration's substitution-group
+				// affiliation. A no-type substitution-group member leaves
+				// edecl.Type nil here; without the affiliation, effectiveDeclType
+				// cannot walk to the typed head, so xsi:nil lexical and
+				// nilled-empty checks would be silently skipped for a direct
+				// ref="member". The member's own Nillable (copied below) still
+				// governs the nilled-element check.
+				if edecl.SubstitutionGroup == (QName{}) {
+					edecl.SubstitutionGroup = ge.SubstitutionGroup
 				}
 				edecl.Nillable = ge.Nillable
 				edecl.Abstract = ge.Abstract
@@ -56,13 +66,21 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			td, ok := c.schema.types[qn]
 			if !ok {
-				// Report unresolved type error for XSD built-in types that should exist.
-				if qn.NS == lexicon.NamespaceXSD {
-					if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
-						msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-						c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
-						c.errorCount++
-					}
+				if _, eligible := c.chameleonEligible[edecl]; eligible {
+					// Try empty namespace as fallback — the type may come from an
+					// imported schema with no targetNamespace (chameleon include).
+					td, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+				}
+			}
+			if !ok {
+				// Report the unresolved element type — whether an XSD built-in
+				// that should exist or a missing user-defined type — before
+				// installing a recovery placeholder, so an invalid schema cannot
+				// silently compile and validate as if the type existed.
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
+					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
+					c.errorCount++
 				}
 				td = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 				c.schema.types[qn] = td
@@ -74,12 +92,17 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve base type references.
 	for td, qn := range c.typeRefs {
 		base, ok := c.schema.types[qn]
-		if !ok && qn.NS != "" {
-			// Try empty namespace as fallback — the type may come from an
-			// imported schema with no targetNamespace.
-			base, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+		if !ok {
+			if _, eligible := c.chameleonEligible[td]; eligible {
+				// Try empty namespace as fallback — the type may come from an
+				// imported schema with no targetNamespace (chameleon include).
+				base, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+			}
 		}
 		if !ok {
+			// Report the unresolved base type before installing a recovery
+			// placeholder, so an invalid schema cannot silently compile.
+			c.reportUnresolvedTypeRef(ctx, td, qn)
 			base = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 			c.schema.types[qn] = base
 		}
@@ -90,6 +113,14 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	for td, qn := range c.itemTypeRefs {
 		itemTD, ok := c.schema.types[qn]
 		if !ok {
+			if _, eligible := c.chameleonEligible[td]; eligible {
+				// Try empty namespace as fallback — the item type may come from an
+				// imported schema with no targetNamespace (chameleon include).
+				itemTD, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+			}
+		}
+		if !ok {
+			c.reportUnresolvedTypeRef(ctx, td, qn)
 			itemTD = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 			c.schema.types[qn] = itemTD
 		}
@@ -99,7 +130,13 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve union member type references.
 	for _, ref := range c.unionMemberRefs {
 		memberTD, ok := c.schema.types[ref.name]
+		if !ok && ref.chameleonEligible {
+			// Try empty namespace as fallback — the member type may come from an
+			// imported schema with no targetNamespace (chameleon include).
+			memberTD, ok = c.schema.types[QName{Local: ref.name.Local, NS: ""}]
+		}
 		if !ok {
+			c.reportUnresolvedTypeRef(ctx, ref.owner, ref.name)
 			memberTD = &TypeDef{Name: ref.name, ContentType: ContentTypeSimple}
 			c.schema.types[ref.name] = memberTD
 		}
@@ -159,6 +196,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 		if au.Fixed == nil {
 			au.Fixed = ga.Fixed
+			au.FixedNS = ga.FixedNS
 		}
 		if au.TypeName == (QName{}) {
 			au.TypeName = ga.TypeName
@@ -167,6 +205,13 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			au.Type = ga.Type
 		}
 	}
+
+	// Validate attribute default/fixed constraint values against the
+	// attribute's declared simple type now that all type refs are resolved.
+	// A retained-but-invalid constraint (e.g. an empty default="" on an
+	// xs:integer attribute) is a schema error; catching it here avoids
+	// injecting an invalid value into the instance during validation.
+	c.checkAttrUseConstraints(ctx)
 
 	// Topologically order extension types so each base type is merged before
 	// the types that derive from it (the merge reads the base's finalized
@@ -322,6 +367,70 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			if td.ContentModel != nil {
 				c.checkUPA(ctx, td, src)
 			}
+		}
+	}
+}
+
+// reportUnresolvedTypeRef reports a fatal schema parser error for a type
+// reference (base type, list item type, or union member type) on owner that
+// does not resolve to a type definition. The caller installs a recovery
+// placeholder only after this records the error, so an invalid schema cannot
+// silently compile and validate documents as if the missing type existed.
+func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, qn QName) {
+	if c.filename == "" {
+		return
+	}
+	src, hasSrc := c.typeDefSources[owner]
+	if !hasSrc {
+		return
+	}
+	component := owner.Name.Local
+	if component == "" || src.isLocal {
+		component = "local simple type"
+	}
+	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", component, msg), helium.ErrorLevelFatal))
+	c.errorCount++
+}
+
+// checkAttrUseConstraints validates each attribute use's default/fixed value
+// against its declared simple type. Reported errors are deterministic
+// (ordered by source line then attribute name).
+func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	type pending struct {
+		au  *AttrUse
+		src attrConstraintSource
+	}
+	items := make([]pending, 0, len(c.attrUseConstraintSources))
+	for au, src := range c.attrUseConstraintSources {
+		items = append(items, pending{au: au, src: src})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].src.line != items[j].src.line {
+			return items[i].src.line < items[j].src.line
+		}
+		return items[i].src.local < items[j].src.local
+	})
+
+	for _, it := range items {
+		val := it.au.Default
+		if val == nil {
+			val = it.au.Fixed
+		}
+		if val == nil {
+			continue
+		}
+		td := attrUseTypeDef(it.au, c.schema)
+		if td == nil || td.ContentType != ContentTypeSimple {
+			continue
+		}
+		if err := td.Validate(ctx, *val, it.src.nsMap); err != nil {
+			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(td))
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, it.src.line, it.src.local, "attribute", it.src.local, msg), helium.ErrorLevelFatal))
+			c.errorCount++
 		}
 	}
 }
@@ -731,6 +840,40 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 		td = td.BaseType
 	}
 	return false
+}
+
+// refChameleonEligible reports whether the lexical type ref at the given
+// element is eligible for the no-targetNamespace ({}) chameleon fallback. The
+// fallback exists for chameleon includes: an imported no-targetNamespace schema
+// contributes its unqualified types as if they belonged to the including
+// schema's target namespace, so a ref that resolved to {targetNamespace}name
+// may instead bind to the imported {}name.
+//
+// Eligibility is tracked from the LEXICAL ref and fires ONLY when the ref was
+// BOTH (a) unprefixed (no "prefix:" in the lexical QName) AND (b) had no
+// in-scope default namespace (no xmlns="..." covering it). In every other case
+// the ref is qualified: a prefixed ref (m:t) binds to its prefix's namespace,
+// and an unprefixed ref under a default namespace (xmlns="urn:main" -> t binds
+// to urn:main) binds to that namespace. Such qualified refs must NOT mask to
+// {}; if they do not resolve in their bound namespace, an unresolved error is
+// reported. The eligibility bit is recorded at the ref collection site (where
+// the lexical form and in-scope namespaces are available) via
+// markChameleonEligible / unionMemberRef.chameleonEligible.
+func refChameleonEligible(elem *helium.Element, ref string) bool {
+	if strings.ContainsRune(ref, ':') {
+		return false
+	}
+	// A default namespace in scope (xmlns="...") qualifies the unprefixed ref.
+	return lookupNS(elem, "") == ""
+}
+
+// markChameleonEligible records that the ref owned by owner (an *ElementDecl or
+// *TypeDef) is eligible for the no-targetNamespace ({}) fallback, based on the
+// lexical ref at elem. Call at the collection site.
+func (c *compiler) markChameleonEligible(owner any, elem *helium.Element, ref string) {
+	if refChameleonEligible(elem, ref) {
+		c.chameleonEligible[owner] = struct{}{}
+	}
 }
 
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName

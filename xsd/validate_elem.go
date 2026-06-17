@@ -233,7 +233,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			continue
 		}
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
-		td := actualDecl.Type
+		td := effectiveDeclType(actualDecl, vc.schema)
 		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
 		if xsiErr != nil {
 			contentErr = xsiErr
@@ -356,14 +356,14 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 	for i := range count {
 		child := children[pos+i]
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
-		td := actualDecl.Type
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
+		declType := effectiveDeclType(actualDecl, vc.schema)
+		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType)
 		if xsiErr != nil {
 			contentErr = xsiErr
 			continue
 		}
 		// Check block flags against xsi:type derivation.
-		if td != actualDecl.Type && actualDecl.Type != nil && isDerivationBlocked(td, actualDecl.Type, actualDecl.Block) {
+		if td != declType && declType != nil && isDerivationBlocked(td, declType, actualDecl.Block) {
 			msg := "The xsi:type definition is blocked by the element declaration."
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("blocked xsi:type")
@@ -409,6 +409,43 @@ func resolveSubstDecl(child childElem, edecl *ElementDecl, schema *Schema) *Elem
 		}
 	}
 	return edecl
+}
+
+// effectiveDeclType returns the effective type definition for a declaration.
+// It is actualDecl.Type when present; otherwise, for a no-type
+// substitution-group member, it is the type inherited from the substitution
+// head (walking the substitutionGroup chain until a typed head is found).
+// Returns nil when no type can be resolved. The returned type is used to drive
+// xsi:nil lexical validation and nilled-empty enforcement for no-type members;
+// the member declaration itself is still used elsewhere so its own nillable
+// flag is honored independently of the head.
+func effectiveDeclType(decl *ElementDecl, schema *Schema) *TypeDef {
+	if decl == nil {
+		return nil
+	}
+	if decl.Type != nil {
+		return decl.Type
+	}
+	if schema == nil {
+		return nil
+	}
+	seen := map[QName]struct{}{decl.Name: {}}
+	head := decl.SubstitutionGroup
+	for head != (QName{}) {
+		if _, ok := seen[head]; ok {
+			return nil
+		}
+		seen[head] = struct{}{}
+		headDecl, ok := schema.LookupElement(head.Local, head.NS)
+		if !ok {
+			return nil
+		}
+		if headDecl.Type != nil {
+			return headDecl.Type
+		}
+		head = headDecl.SubstitutionGroup
+	}
+	return nil
 }
 
 // tryMatchParticle is like matchParticle but does not write errors.
@@ -624,7 +661,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 				}
 				continue
 			}
-			td := edecl.Type
+			td := effectiveDeclType(edecl, vc.schema)
 			td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
 			if xsiErr != nil {
 				contentErr = xsiErr

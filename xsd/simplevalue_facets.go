@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
@@ -102,7 +103,7 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 	// Enumeration.
 	if len(fs.Enumeration) > 0 {
 		found := false
-		if builtinLocal == "QName" || builtinLocal == "NOTATION" {
+		if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
 			valueQN, err := resolveLexicalQName(value, valueNS)
 			if err == nil {
 				for i, ev := range fs.Enumeration {

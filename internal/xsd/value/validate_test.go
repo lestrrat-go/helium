@@ -272,10 +272,18 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeFloat, lexicon.FloatNaN, lexicon.FloatNaN, 0, false},
 		{lexicon.TypeFloat, "1e2", "100", 0, true},
 		{lexicon.TypeFloat, "1.5E-3", "0.0015", 0, true},
+		// xs:float value space is IEEE-754 single precision: 16777216 and
+		// 16777217 round to the same float32 (2^24 and 2^24+1 are not both
+		// representable), so they are equal in the xs:float value space.
+		{lexicon.TypeFloat, "16777216", "16777217", 0, true},
+		{lexicon.TypeFloat, "16777217", "16777216", 0, true},
 
-		// double (same path as float)
+		// double (the value space is float64, so 16777216 and 16777217 remain
+		// distinct — only the float path rounds to single precision).
 		{lexicon.TypeDouble, lexicon.FloatINF, lexicon.FloatNegINF, 1, true},
 		{lexicon.TypeDouble, "1e10", "9999999999", 1, true},
+		{lexicon.TypeDouble, "16777216", "16777217", -1, true},
+		{lexicon.TypeDouble, "16777217", "16777216", 1, true},
 
 		// dateTime
 		{lexicon.TypeDateTime, testDT0, testDT0, 0, true},
@@ -365,6 +373,41 @@ func TestCompareValues(t *testing.T) {
 			if ok {
 				require.Equal(t, tt.want, got, "cmp mismatch")
 			}
+		})
+	}
+}
+
+// TestNormalize verifies that Normalize applies the XSD whiteSpace facet using
+// only the four ASCII XSD whitespace characters (#x20, #x9, #xD, #xA). Unicode
+// whitespace such as NBSP (U+00A0) must NOT be treated as whitespace, so an
+// invalid value containing it survives normalization and is later rejected by
+// lexical validation.
+func TestNormalize(t *testing.T) {
+	const nbsp = " "
+	tests := []struct {
+		typ  string
+		in   string
+		want string
+	}{
+		// preserve: xs:string leaves everything untouched.
+		{lexicon.TypeString, "  a\tb  ", "  a\tb  "},
+		// replace: xs:normalizedString maps the ASCII whitespace to spaces but
+		// does not collapse or trim, and leaves NBSP alone.
+		{"normalizedString", "a\tb\nc\rd", "a b c d"},
+		{"normalizedString", "a" + nbsp + "b", "a" + nbsp + "b"},
+		// collapse (the default for token and other types): ASCII whitespace runs
+		// collapse to a single space and the ends trim.
+		{lexicon.TypeToken, "  a\t b  ", "a b"},
+		{lexicon.TypeToken, "a  b", "a b"},
+		// collapse must NOT touch NBSP: it is preserved verbatim so the value
+		// remains lexically invalid afterwards.
+		{lexicon.TypeToken, "a" + nbsp + "b", "a" + nbsp + "b"},
+		{lexicon.TypeInteger, nbsp + "5", nbsp + "5"},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s/%q", tt.typ, tt.in), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, value.Normalize(tt.in, tt.typ))
 		})
 	}
 }

@@ -143,10 +143,14 @@ type ElementDecl struct {
 	IDCs              []*IDConstraint
 	Default           *string // nil = not set
 	Fixed             *string // nil = not set
-	Block             BlockFlags
-	BlockSet          bool // true if block was explicitly set (even to empty)
-	Final             FinalFlags
-	FinalSet          bool // true if final was explicitly set (even to empty)
+	// FixedNS holds the in-scope namespace bindings (prefix → URI) at the point
+	// the Fixed value was declared in the schema document. It is used to resolve
+	// a QName/NOTATION fixed value's prefix when comparing in value space.
+	FixedNS  map[string]string
+	Block    BlockFlags
+	BlockSet bool // true if block was explicitly set (even to empty)
+	Final    FinalFlags
+	FinalSet bool // true if final was explicitly set (even to empty)
 }
 
 // IDCKind describes the kind of identity constraint.
@@ -245,6 +249,10 @@ type AttrUse struct {
 	Prohibited bool
 	Default    *string // nil = not set
 	Fixed      *string // nil = not set
+	// FixedNS holds the in-scope namespace bindings (prefix → URI) at the point
+	// the Fixed value was declared in the schema document, used to resolve a
+	// QName/NOTATION fixed value's prefix when comparing in value space.
+	FixedNS map[string]string
 }
 
 // ModelGroup is a content model compositor (sequence, choice, all).

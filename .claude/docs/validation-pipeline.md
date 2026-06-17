@@ -17,7 +17,7 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
    - `schema.attrGroups` (attribute groups)
    - `schema.globalAttrs` (global attributes)
 4. **Process includes/imports** — load `xs:include`/`xs:import`/`xs:redefine`, merge declarations. Nested-schema document loads go through `compileConfig.fsys` (`fs.ReadFile(c.fsys, path)`), an injectable `fs.FS` set via `Compiler.FS(...)`; it defaults to `iofs.PermissiveRoot` (`os.Open`) and is propagated to sub-compilers. `xslt3` injects a resolver-backed `fs.FS` (`schemaResolverFS`) so nested includes inside a resolver-loaded schema obey the same default-deny `URIResolver` policy as the top-level load. Schema-location resolution is **URI-aware** and lives in a **single canonical helper**, `xsd.ResolveSchemaURI(ref, base) (string, error)` (`xsd/resolve_uri.go`), shared by both the xsd nested-include path and `xslt3`'s schema loader so the two layers cannot drift. `validateSchemaPath` is a thin wrapper over it. It keys off whether `ref`/`base` carries a URI scheme (`xsd.URIScheme`, the **one** scheme-detector for both packages — multi-char scheme required so Windows drive letters and bare OS paths stay local): an **absolute-URI** `schemaLocation` (e.g. a cross-host `https://cdn.example.com/part.xsd`) is passed through **unchanged** — never `filepath.Join`ed, which would collapse `//` and drop the host; a **relative** location against a **URI base** resolves via `net/url` `ResolveReference` (RFC 3986), keeping authority intact **and re-applying the base's `OmitHost` flag** when the base had no authority (so `mem:/schemas/main.xsd` + `part.xsd` → `mem:/schemas/part.xsd`, never `mem:///schemas/part.xsd`, while canonical `file:///...` bases keep their `///`); a genuine **local** base/location keeps the historical `filepath.Join` + `..`-escape guard (the only branch that can return an error). The import sub-compiler's `baseDir` is `schemaBaseDir(path)` (the full URI for URI bases, `filepath.Dir` for local). Because resolution happens while base and raw `schemaLocation` are still separate, the name reaching the FS is the **canonical** nested URI, so `schemaResolverFS.Open` forwards it verbatim (no string repair of a collapsed name). `xslt3`'s `resolveSchemaURI` delegates the absolute-URI and URI-base cases to `xsd.ResolveSchemaURI` and only handles its own local **file**-base case (xslt3's base is a full file URI/path, not a directory); it seeds the xsd `BaseDir` via `schemaCompileBaseDir(uri)` (full URI when scheme present, `filepath.Dir` otherwise). **targetNamespace match (src-import / src-include):** `loadImport` rejects the located schema when its `targetNamespace` differs from the `namespace` declared on `<xs:import>` — a present `namespace` requires that exact TNS, an absent `namespace` requires the imported schema to have no TNS (so a schema imported as one namespace cannot silently contribute another's declarations). `loadInclude`/`loadRedefine` enforce the analogous include rule (included TNS must equal the including schema's, modulo chameleon includes with no TNS). Both raise a fatal `Schemas parser error` and stop merging that document.
-5. **Resolve references** — resolve all QName refs (types, base types, groups, attr groups, union members), build substitution group maps, detect circular substitution
+5. **Resolve references** — resolve all QName refs (types, base types, groups, attr groups, union members), build substitution group maps, detect circular substitution. After attribute type refs resolve, `checkAttrUseConstraints()` validates each attribute use's `default`/`fixed` constraint value against the attribute's declared simple type, so a retained-but-invalid constraint (e.g. `default=""` on an `xs:integer` attribute) is reported as a schema parser error rather than injected into the instance at validation time. Presence-based schema checks (`check_elements.go`) use `hasAttr`, and both `hasAttr`/`getAttr` require an **unqualified** attribute (`URI()==""`) so a foreign-namespaced `other:fixed` is not mistaken for the XSD `fixed`. When validation inserts an absent qualified attribute's default/fixed value, it is inserted **namespace-aware** (`SetAttributeNS`, reusing the in-scope prefix) so a later `xs:key` field like `@t:a` matches it.
 6. **Constraint checks** (when errorCount == 0):
    - `checkFinalOnTypes()` — final attribute enforcement
    - `checkFinalOnSubstGroups()` — substitution group final
@@ -39,6 +39,60 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
      - Empty: no child elements
      - Simple: no child elements, validate text vs type facets
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
+
+Fixed value constraints (element content and attribute values) are compared in
+the declared simple type's value space via `fixedValueMatches`. Both the fixed
+and instance values are first whitespace-normalized using the type's *effective*
+whiteSpace facet (`resolveWhiteSpace` walks the derivation chain, so a facet
+derived on a restriction — e.g. `xs:string` restricted with
+`whiteSpace="collapse"` — is honoured, not just the builtin default). Then the
+comparison dispatches on variety (`resolveVariety`): list types split into items
+and recurse each item through the variety-aware comparator on the actual item
+type, so an `xs:integer` list fixed `1 2` accepts `01 +2` **and** a list whose
+item type is a union dispatches each item to the union's member value spaces;
+union types accept when any member's value space matches; atomic types compare
+via `value.Compare` for the value-comparable builtins in `enumValueSpaceTypes`
+(numeric, boolean, date/time, and binary — so `xs:hexBinary` fixed `0A` accepts
+`0a` and integer fixed `1` accepts `+1`/`01`), falling back to normalized-lexical
+equality for string-family/anyURI (so a numeric-looking `xs:string` fixed `5`
+does not accept `5.0`). `xs:QName`/`xs:NOTATION` fixed values are resolved in
+namespace context: each lexical QName is resolved against its own in-scope
+namespaces — the instance side via `collectNSContext(elem)`, the schema fixed
+side via the `FixedNS` map captured on the `ElementDecl`/`AttrUse` at read time
+(`collectNSContext` over the declaring schema element) — and the resolved
+`{namespace URI, local name}` pairs are compared, so two different prefixes bound
+to the same URI are equal while a same-prefix different-URI binding is not. An
+unresolved prefix on either side is a *rejection*, not a lexical fallback (a
+QName/NOTATION whose prefix cannot be resolved is itself invalid, so the fixed
+comparison must not pass on raw lexical match). `fixedValueMatches`
+takes the instance and fixed namespace contexts as parameters. When `td` is nil it
+falls back to raw string equality. The element fixed-value comparison uses the
+element *declaration's* type (`edecl.Type`), not an `xsi:type` actual type, so a
+declared `xs:string` (whiteSpace="preserve") fixed `abc ` keeps its trailing space
+even when the instance's `xsi:type` collapses whitespace — element content is still
+validated against the actual type. In `fixedUnionMatches`, when the fixed and
+instance values resolve to *different* active members, they are value-equal iff
+their members reduce to the same *primitive* value-space family
+(`primitiveValueSpaceFamily`, XSD 1.1 §2.3 — restrictions create no new values):
+all integer types → `decimal`; all xs:string-derived types
+(string/normalizedString/token/language/Name/NCName/NMTOKEN/IDREF/ENTITY/…) and
+anyURI → `string`; each remaining comparable primitive (boolean, float, double,
+date/time family, hexBinary, base64Binary) is its own family; QName/NOTATION have
+no shared family (namespace-context dependent). Each operand is first
+whitespace-normalized with *its* active member's effective whiteSpace facet; the
+`decimal`/comparable families then compare via `value.Compare` (so union fixed
+`1.0` accepts both `1` and ` 1 `), while the `string` family compares the
+normalized lexical forms (so fixed `a b` active in one xs:string restriction
+accepts instance ` a   b ` active in another xs:string restriction with
+whiteSpace="collapse", both denoting `a b`). This includes string-derived members
+— it is **not** gated on the `enumValueSpaceTypes` allowlist. `unionActiveMember` returns the active *basic*
+(atomic) member, descending through nested unions to the basic member that
+actually accepts the value, so an outer union `memberTypes="inner xs:decimal"`
+(with `inner` a union `xs:integer xs:boolean`) compares instance `1` (active
+basic member xs:integer) against fixed `1.0` (xs:decimal) in the shared decimal
+value space rather than rejecting. Global attributes matched through an `xs:anyAttribute`
+wildcard (`validateWildcardAttr`, processContents strict/lax) also enforce the
+global attribute's `Fixed`/`FixedNS` via `fixedValueMatches`.
 
 Enumeration facets are compared in value space, not raw lexical text. A value is
 a member if it lexically equals a member OR value-compares equal to one (e.g.
@@ -224,6 +278,28 @@ branch (e.g. `empty`) does not shadow a consuming branch. `matchAttrTokens`
 is a thin greedy-max wrapper over `matchAttrTokensCounts`. `validateList` (the
 naive `validatePattern` path) delegates to `matchListContent`, so every `<list>`
 path shares these semantics.
+
+### XSD Datatype Library (`<data>` / `<value>`)
+
+When `datatypeLibrary` is the XSD datatypes namespace, `validateXSDType`
+(`<data>`) and `matchXSDValue` (`<value>`) route through the shared XSD value
+validator (`internal/xsd/value`): `ValidateBuiltin` enforces lexical/value
+spaces (date/time/duration ranges, integer subtype bounds, binary alphabets) so
+RELAX NG and XSD stay consistent. `xsdDatatypeNames` is the recognized-name
+allowlist; any name outside it is an unknown datatype and is rejected (no silent
+accept). `xs:string` keeps the local `<param>`-facet path (whiteSpace=preserve).
+For `<value>`, `matchXSDValue` first requires **both** the instance text and the
+`<value>` literal to be lexically valid via `ValidateBuiltin` for **every**
+recognized XSD datatype — this gate runs before the lexical-equality fast-path
+and the value-space branch, so an identical-but-invalid lexical is rejected for
+both comparable types (e.g. `type="integer"` with both forms `5.0`) and
+constrained non-comparable string-family types (e.g. `type="NCName"` with both
+forms `1foo`). `ValidateBuiltin` imposes no constraint on `xs:string`/`xs:anyURI`,
+so those stay effectively lexical-only. After the gate, value-space-comparable
+types in `xsdValueSpaceTypes` (numeric, boolean, date/time, binary; mirrors
+xsd's `enumValueSpaceTypes`) match by `value.Compare` value-space equality (e.g.
+integer `5`≡`+5`≡`05`, NaN≡NaN for float/double); all other recognized types
+(string-family, anyURI) match by whitespace-processed lexical equality.
 
 ### Error Suppression
 

@@ -488,21 +488,23 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 			globalAttrs: make(map[QName]*AttrUse),
 			substGroups: make(map[QName][]*ElementDecl),
 		},
-		baseDir:           schemaBaseDir(path),
-		fsys:              c.fsys,
-		typeRefs:          make(map[*TypeDef]QName),
-		elemRefs:          make(map[*ElementDecl]QName),
-		elemRefSources:    make(map[*ElementDecl]elemRefSource),
-		groupRefs:         make(map[*ModelGroup]QName),
-		attrGroupRefs:     make(map[*TypeDef][]QName),
-		globalElemSources: make(map[*ElementDecl]elemRefSource),
-		typeDefSources:    make(map[*TypeDef]typeDefSource),
-		itemTypeRefs:      make(map[*TypeDef]QName),
-		attrRefs:          make(map[*AttrUse]QName),
-		filename:          impFilename,
-		importedNS:        make(map[string]string),
-		importDepth:       c.importDepth + 1,
-		maxImportDepth:    c.maxImportDepth,
+		baseDir:                  schemaBaseDir(path),
+		fsys:                     c.fsys,
+		typeRefs:                 make(map[*TypeDef]QName),
+		elemRefs:                 make(map[*ElementDecl]QName),
+		elemRefSources:           make(map[*ElementDecl]elemRefSource),
+		groupRefs:                make(map[*ModelGroup]QName),
+		attrGroupRefs:            make(map[*TypeDef][]QName),
+		globalElemSources:        make(map[*ElementDecl]elemRefSource),
+		typeDefSources:           make(map[*TypeDef]typeDefSource),
+		itemTypeRefs:             make(map[*TypeDef]QName),
+		chameleonEligible:        make(map[any]struct{}),
+		attrRefs:                 make(map[*AttrUse]QName),
+		attrUseConstraintSources: make(map[*AttrUse]attrConstraintSource),
+		filename:                 impFilename,
+		importedNS:               make(map[string]string),
+		importDepth:              c.importDepth + 1,
+		maxImportDepth:           c.maxImportDepth,
 	}
 
 	// Sub-compiler collects errors into its own collector so we can
@@ -592,8 +594,10 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
 	maps.Copy(c.globalElemSources, impC.globalElemSources)
 	maps.Copy(c.itemTypeRefs, impC.itemTypeRefs)
+	maps.Copy(c.chameleonEligible, impC.chameleonEligible)
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
 	maps.Copy(c.attrRefs, impC.attrRefs)
+	maps.Copy(c.attrUseConstraintSources, impC.attrUseConstraintSources)
 
 	return nil
 }
