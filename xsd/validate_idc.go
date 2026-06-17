@@ -16,6 +16,7 @@ type idcTable struct {
 	idc        *IDConstraint
 	keys       []idcEntry
 	keyMissing bool // an xs:key selected node had an absent field (cvc-identity-constraint.4.2.1)
+	fieldError bool // a field XPath selected more than one node (cvc-identity-constraint.3)
 }
 
 // idcEntry holds a single key-sequence value and the node that produced it.
@@ -51,6 +52,12 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 		// evaluation; surface it as a validation failure.
 		if table.keyMissing {
 			lastErr = fmt.Errorf("missing key field")
+		}
+
+		// A field that selected more than one node was already reported during
+		// evaluation; surface it as a validation failure.
+		if table.fieldError {
+			lastErr = fmt.Errorf("field evaluates to more than one node")
 		}
 
 		// Check unique/key constraints immediately.
@@ -123,7 +130,11 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 		}
 
 		// Evaluate each field XPath relative to the selected node.
+		// fieldErr marks that a field already produced a definitive validity
+		// error (e.g. a node-set with more than one member) for this entry, so
+		// the absent-field handling below does not also fire for the same node.
 		allPresent := true
+		fieldErr := false
 		for i, fieldXPath := range idc.Fields {
 			var fieldResult *xpath1.Result
 			if i < len(idc.FieldExprs) && idc.FieldExprs[i] != nil {
@@ -145,6 +156,22 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 			var fieldNode helium.Node
 			switch fieldResult.Type {
 			case xpath1.NodeSetResult:
+				if len(fieldResult.NodeSet) > 1 {
+					// cvc-identity-constraint.3: with the selected node as the
+					// context node, each field must evaluate to either an empty
+					// node-set or a node-set with exactly one member. More than
+					// one selected node is a validity error for every IDC kind.
+					if entry.elem != nil {
+						idcName := idcDisplayName(idc, vc.schema)
+						msg := fmt.Sprintf("The XPath '%s' of a field of %s identity-constraint '%s' evaluates to a node-set with more than one member.",
+							fieldXPath, idcKindName(idc.Kind), idcName)
+						vc.reportValidityError(ctx, vc.filename, entry.elem.Line(), elemDisplayName(entry.elem), msg)
+					}
+					table.fieldError = true
+					allPresent = false
+					fieldErr = true
+					break
+				}
 				if len(fieldResult.NodeSet) == 0 {
 					allPresent = false
 				} else {
@@ -177,6 +204,9 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 		// absent field is a validity error. xs:unique and xs:keyref
 		// tolerate absent fields (the node simply drops out of the
 		// qualified node-set), so they only skip the entry.
+		if fieldErr {
+			continue
+		}
 		if idc.Kind == IDCKey && entry.elem != nil {
 			table.keyMissing = true
 			idcName := idcDisplayName(idc, vc.schema)
@@ -450,6 +480,19 @@ func entryDisplayName(entry idcEntry) string {
 		return elemDisplayName(entry.elem)
 	}
 	return ""
+}
+
+// idcKindName returns the XSD keyword for an IDC kind ("unique", "key",
+// "keyref"), used in validity-error designations.
+func idcKindName(kind IDCKind) string {
+	switch kind {
+	case IDCKey:
+		return elemKey
+	case IDCKeyRef:
+		return elemKeyRef
+	default:
+		return elemUnique
+	}
 }
 
 // idcDisplayName returns the namespace-qualified display name of an IDC.

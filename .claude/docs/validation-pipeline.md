@@ -78,6 +78,12 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     validity error (`Not all fields of key identity-constraint '…' evaluate to a
     node.`). `xs:unique` and `xs:keyref` tolerate absent fields — the node drops
     out of the qualified node-set.
+  - Field cardinality (cvc-identity-constraint.3): for each selected node every
+    field must evaluate to an empty node-set or a node-set with exactly one
+    member. A field selecting more than one node is a validity error for all IDC
+    kinds (`The XPath '…' of a field of <kind> identity-constraint '…' evaluates
+    to a node-set with more than one member.`) rather than silently using the
+    first node.
   - XPath uses namespace context from schema, not instance
   - Key comparison is value-space aware (XSD 3.11.4): each field value is
     canonicalized via its declared simple type (`resolveFieldBuiltinLocal` →
