@@ -177,11 +177,12 @@ func (vc *validationContext) validateElement(ctx context.Context, elem *helium.E
 func (vc *validationContext) validateRootElement(ctx context.Context, elem *helium.Element) error {
 	local := elem.LocalName()
 	ns := elem.URI()
+	// Match on the element's full expanded name. An element with a non-empty
+	// namespace must NOT fall back to an unqualified declaration that merely
+	// shares the local name: cvc-elt requires the instance and declaration
+	// expanded names to be identical (libxml2 rejects {urn:wrong}foo against a
+	// no-namespace schema declaring {}foo).
 	edecl, ok := vc.schema.LookupElement(local, ns)
-	if !ok {
-		// Try with empty namespace.
-		edecl, ok = vc.schema.LookupElement(local, "")
-	}
 	if !ok {
 		msg := "No matching global declaration available for the validation root."
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), local, msg)
@@ -547,12 +548,10 @@ func wildcardMatchesAttr(wc *Wildcard, attrNS string) bool {
 }
 
 // lookupElemDecl finds the global element declaration for an instance element.
+// Matching is on the element's full expanded name: a namespaced element does
+// not fall back to an unqualified declaration sharing the local name.
 func lookupElemDecl(elem *helium.Element, schema *Schema) *ElementDecl {
 	edecl, ok := schema.LookupElement(elem.LocalName(), elem.URI())
-	if ok {
-		return edecl
-	}
-	edecl, ok = schema.LookupElement(elem.LocalName(), "")
 	if ok {
 		return edecl
 	}
