@@ -161,6 +161,7 @@ func (e Evaluator) NewEvalState(node helium.Node) *EvalState {
 
 	// limits
 	ec.opLimit = cfg.opLimit
+	ec.maxRecursionDepth = DefaultMaxRecursionDepth
 
 	// time
 	if cfg.currentTime != nil {

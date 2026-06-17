@@ -33,3 +33,26 @@ func TestDefaultMaxRecursionDepth_Tunable(t *testing.T) {
 	require.True(t, errors.Is(evalErr, xpath3.ErrRecursionLimit),
 		"expected ErrRecursionLimit, got %v", evalErr)
 }
+
+// EvaluateReuse must enforce the same recursion limit as Evaluate.
+// NewEvalState previously failed to initialize maxRecursionDepth, so the
+// reuse path treated the limit as zero (unlimited) and never tripped.
+func TestDefaultMaxRecursionDepth_Tunable_Reuse(t *testing.T) {
+	orig := xpath3.DefaultMaxRecursionDepth
+	xpath3.DefaultMaxRecursionDepth = 8
+	t.Cleanup(func() { xpath3.DefaultMaxRecursionDepth = orig })
+
+	const n = 50
+	expr := "1" + strings.Repeat("+1", n-1)
+
+	compiled, err := xpath3.NewCompiler().Compile(expr)
+	require.NoError(t, err)
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+	state := eval.NewEvalState(nil)
+
+	_, evalErr := compiled.EvaluateReuse(t.Context(), state, nil)
+	require.Error(t, evalErr, "deeply-nested expression must trip the recursion limit on the reuse path")
+	require.True(t, errors.Is(evalErr, xpath3.ErrRecursionLimit),
+		"expected ErrRecursionLimit, got %v", evalErr)
+}
