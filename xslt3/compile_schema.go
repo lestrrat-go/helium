@@ -174,7 +174,14 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 				return fmt.Errorf("xsl:import-schema: cannot build inline schema doc: %w", err)
 			}
 			errCounter := &fatalErrorCounter{}
-			compiler := xsd.NewCompiler().ErrorHandler(errCounter)
+			// Route the inline schema's nested xs:include/xs:import/xs:redefine
+			// loads through the SAME compile-time resolver (default-deny) used by
+			// the schema-location path, instead of the xsd compiler's default
+			// os.Open. The inline schema bytes themselves are already in-memory
+			// (inlineDoc); only their nested references reach the resolver FS,
+			// rooted at the import-schema element's base URI.
+			fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
+			compiler := xsd.NewCompiler().ErrorHandler(errCounter).FS(fsys)
 			if c.baseURI != "" {
 				compiler = compiler.BaseDir(schemaCompileBaseDir(c.baseURI))
 			}

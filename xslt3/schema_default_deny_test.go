@@ -180,6 +180,94 @@ func TestImportSchemaNestedIncludeDenied(t *testing.T) {
 	require.Error(t, err, "nested xs:include must be denied when the resolver does not supply it")
 }
 
+// ddInlineMainXSL builds a stylesheet whose xsl:import-schema contains an INLINE
+// xs:schema with a nested xs:include="part.xsd". The inline schema references
+// s:rootType, which is only defined in part.xsd, so the include must resolve
+// for compilation to succeed.
+func ddInlineMainXSL() string {
+	return `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s">
+    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+               targetNamespace="http://example.com/s"
+               xmlns:s="http://example.com/s"
+               elementFormDefault="qualified">
+      <xs:include schemaLocation="part.xsd"/>
+      <xs:element name="root" type="s:rootType"/>
+    </xs:schema>
+  </xsl:import-schema>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+}
+
+// TestImportSchemaInlineNestedIncludeThroughResolver verifies that an INLINE
+// xsl:import-schema whose inline xs:schema contains a nested xs:include routes
+// that include through the compile-time URIResolver — the same default-deny FS
+// the schema-location path uses — instead of the xsd compiler's default os.Open.
+func TestImportSchemaInlineNestedIncludeThroughResolver(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const partSchemaURI = "mem:/stylesheets/part.xsd"
+
+	ctx := t.Context()
+
+	// The resolver supplies the nested part.xsd; the inline schema bytes are
+	// already in-memory. Only then does s:rootType resolve and compilation pass.
+	resolver := fileMapResolver{files: map[string]string{
+		partSchemaURI: ddPartSchemaXSD,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(ddInlineMainXSL()))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "inline schema's nested xs:include must resolve through the compile-time resolver")
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "out")
+}
+
+// TestImportSchemaInlineNestedIncludeDefaultDeny verifies that an INLINE
+// xsl:import-schema whose inline xs:schema contains a nested xs:include does NOT
+// read that include off the local filesystem when no URIResolver is configured.
+// The nested load must hit the default-deny error, not os.Open.
+func TestImportSchemaInlineNestedIncludeDefaultDeny(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+
+	ctx := t.Context()
+
+	doc, err := helium.NewParser().Parse(ctx, []byte(ddInlineMainXSL()))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().BaseURI(baseURI).Compile(ctx, doc)
+	require.Error(t, err, "inline schema's nested xs:include must be denied without a URIResolver")
+	require.Contains(t, err.Error(), "no URIResolver configured",
+		"error should explain that filesystem access is opt-in")
+}
+
+// TestImportSchemaInlineNestedIncludeDenied verifies that when a resolver is
+// configured but does NOT supply the nested include, the inline schema's
+// xs:include is denied through the resolver rather than read off disk.
+func TestImportSchemaInlineNestedIncludeDenied(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+
+	ctx := t.Context()
+
+	// Resolver has no part.xsd entry. The nested include must fail through the
+	// resolver (s:rootType stays unresolved) — it must not silently succeed by
+	// reading part.xsd from disk.
+	resolver := fileMapResolver{files: map[string]string{
+		"mem:/stylesheets/other.xsd": ddSchemaXSD,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(ddInlineMainXSL()))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.Error(t, err, "inline schema's nested xs:include must be denied when the resolver does not supply it")
+}
+
 // TestSourceSchemaLocationNestedIncludeThroughResolver verifies the runtime
 // (xsi:schemaLocation) path also routes nested xs:include loads through the
 // invocation's URIResolver instead of the xsd compiler's default os.Open.
