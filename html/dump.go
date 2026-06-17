@@ -142,6 +142,48 @@ func (d *htmlDumper) writeString(out io.Writer, s string) {
 	d.check(err)
 }
 
+// checkName verifies that an element or attribute name is safe to write into
+// an HTML tag. Names built through public DOM construction paths
+// (CreateElement, SetLiteralAttribute, ...) are not validated, so a name
+// containing characters that terminate or escape a tag — whitespace, quotes,
+// '<', '>', '=', '/', or control characters — would otherwise be written
+// verbatim and produce malformed or injected markup. When name is unsafe (or
+// empty), the first such failure is recorded as the sticky error so
+// serialization aborts before writing.
+//
+// This is intentionally permissive about characters HTML tolerates but XML
+// does not (e.g. '?' or '.' in "gentus?.?"), matching libxml2's HTML
+// serializer, which preserves such names verbatim. Only characters that can
+// break out of the tag are rejected.
+func (d *htmlDumper) checkName(kind, name string) {
+	if d.err != nil {
+		return
+	}
+	if name == "" {
+		d.check(fmt.Errorf("invalid HTML %s name: empty", kind))
+		return
+	}
+	for _, r := range name {
+		if !isUnsafeNameRune(r) {
+			continue
+		}
+		d.check(fmt.Errorf("invalid HTML %s name %q", kind, name))
+		return
+	}
+}
+
+// isUnsafeNameRune reports whether r may not appear in a serialized HTML
+// element or attribute name because it would terminate or escape the tag.
+// The set mirrors the characters HTML5 forbids in tag/attribute names plus
+// ASCII control characters and the replacement character.
+func isUnsafeNameRune(r rune) bool {
+	switch r {
+	case ' ', '\t', '\n', '\r', '\f', '"', '\'', '<', '>', '=', '/', '&', utf8.RuneError:
+		return true
+	}
+	return r < 0x20 || r == 0x7f
+}
+
 // writeBytes writes b to out, recording the first failure as the sticky
 // error. It is a no-op once an error has been recorded. A short write
 // reported with a nil error by a non-conformant io.Writer is promoted to
@@ -366,6 +408,13 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 		name = e.Name()
 	}
 
+	// Reject names that would produce malformed or injected markup (spaces,
+	// quotes, angle brackets) before writing them into the tag.
+	d.checkName("element", name)
+	if d.err != nil {
+		return d.err
+	}
+
 	// Opening tag
 	d.writeString(out, "<")
 	d.writeString(out, name)
@@ -509,6 +558,11 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 		attrName := attrNameLower
 		if d.preserveCase {
 			attrName = attr.Name()
+		}
+		// Reject names that would inject markup into the tag.
+		d.checkName("attribute", attrName)
+		if d.err != nil {
+			return d.err
 		}
 		d.writeString(out, " ")
 		d.writeString(out, attrName)
