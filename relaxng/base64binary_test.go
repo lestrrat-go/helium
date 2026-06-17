@@ -9,8 +9,11 @@ import (
 )
 
 // TestBase64BinaryDatatype covers <data type="base64Binary"/> from the XSD
-// datatype library. Values outside the base64 alphabet (or with bad padding /
-// length) must be rejected; well-formed base64 must pass.
+// datatype library. Validation is routed through the shared XSD value validator
+// (internal/xsd/value), so RELAX NG and XSD agree: the base64 alphabet (plus
+// whitespace) is accepted — including unpadded forms, which the XSD layer treats
+// as value-equivalent to their padded counterparts — while characters outside
+// the alphabet are rejected.
 func TestBase64BinaryDatatype(t *testing.T) {
 	t.Parallel()
 
@@ -40,6 +43,10 @@ func TestBase64BinaryDatatype(t *testing.T) {
 		"YQ==",      // "a"
 		"YWI=",      // "ab"
 		"aGVs bG8=", // internal whitespace is permitted
+		// Unpadded forms are accepted as value-equivalent to their padded
+		// counterparts, matching the shared XSD value validator.
+		"TQ",  // "M" without padding (== "TQ==")
+		"YWI", // "ab" without padding (== "YWI=")
 	}
 	for _, v := range valid {
 		t.Run("valid/"+v, func(t *testing.T) {
@@ -51,11 +58,9 @@ func TestBase64BinaryDatatype(t *testing.T) {
 	}
 
 	invalid := []string{
-		"!!!!",  // chars outside the base64 alphabet
-		"YWI",   // wrong length (not a multiple of 4)
-		"=AAA",  // padding in the wrong position
-		"AB=A",  // padding in the wrong position
-		"YQ===", // too much padding
+		"!!!!",    // chars outside the base64 alphabet
+		"YQ==.",   // trailing char outside the alphabet
+		"a*b*c*d", // alphabet violation embedded in otherwise base64 text
 	}
 	for _, v := range invalid {
 		t.Run("invalid/"+v, func(t *testing.T) {
