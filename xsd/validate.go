@@ -522,15 +522,15 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 
 	// Global attribute found — validate value against its effective type if
 	// known (an inline anonymous simpleType takes precedence over a named type).
+	// TypeDef.Validate handles facets, lists, and unions, not just the builtin
+	// base lexical space.
 	attrTD, ok := vc.attrUseType(globalAttr)
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
-		trimmed := strings.TrimSpace(value)
-		builtinLocal := builtinBaseLocal(attrTD)
-		if err := validateBuiltinValue(trimmed, builtinLocal); err != nil {
+		if err := attrTD.Validate(ctx, value, collectNSContext(elem)); err != nil {
 			ad := attrDisplayName(a)
 			typeName := typeDisplayName(attrTD)
-			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
+			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", strings.TrimSpace(value), typeName)
 			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
 			return err
 		}
