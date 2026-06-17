@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -18,15 +19,32 @@ import (
 type EvalState struct {
 	ec      evalContext
 	oneItem [1]Item // reusable backing for single-item results
+
+	// baseNode / baseContextItem capture the focus seeded by NewEvalState so
+	// each EvaluateReuse call starts from that base focus rather than a focus
+	// mutated by a prior call.
+	baseNode        helium.Node
+	baseContextItem Item
+
+	// explicitTime is true when the Evaluator had an explicitly configured
+	// CurrentTime. When false, EvaluateReuse refreshes the clock per call so
+	// fn:current-dateTime() does not stay frozen across reuse calls.
+	explicitTime bool
 }
 
 // SetContextItem sets the non-node context item on the eval state.
 // This is used when the context is an atomic value rather than a node
 // (e.g., sorting a sequence of atomic items).
+//
+// The item becomes the base focus, so it persists as the starting focus
+// for subsequent EvaluateReuse calls (a reuse call with a non-nil node
+// still overrides it for that call only).
 func (s *EvalState) SetContextItem(item Item) {
 	s.ec.contextItem = item
+	s.baseContextItem = item
 	if item != nil {
 		s.ec.node = nil
+		s.baseNode = nil
 	}
 }
 
@@ -49,12 +67,28 @@ func (e *Expression) EvaluateReuse(ctx context.Context, state *EvalState, node h
 	}
 
 	ec := &state.ec
-	ec.node = node
+
+	// Start from the base focus seeded by NewEvalState/SetContextItem so a
+	// prior reuse call cannot leak its focus into this one. A non-nil node
+	// overrides the base focus for this call only.
 	if node != nil {
+		ec.node = node
 		ec.contextItem = nil
+	} else {
+		ec.node = state.baseNode
+		ec.contextItem = state.baseContextItem
 	}
 	ec.depth = 0
 	*ec.opCount = 0
+
+	// When CurrentTime was not explicitly configured on the Evaluator, refresh
+	// the clock per call so fn:current-dateTime() / fn:current-date() track
+	// wall-clock time instead of staying frozen at NewEvalState construction.
+	// A user-pinned CurrentTime is preserved untouched.
+	if !state.explicitTime {
+		now := time.Now()
+		ec.currentTime = &now
+	}
 
 	// Fast path for "." — skip eval entirely, reuse backing array
 	if e.program != nil && e.program.stream.isContextItem {
@@ -128,5 +162,16 @@ func (e Evaluator) NewEvalState(node helium.Node) *EvalState {
 	// guard, same custom max-node limit, and the same complete set of copied
 	// fields (preserved ID annotations, TraceWriter, etc.).
 	s := &EvalState{ec: *e.newEvalCtx(node)}
+
+	// Capture the seeded base focus so each EvaluateReuse call can reset to it.
+	// newEvalCtx clears ec.node when a non-node context item is configured, so
+	// read both back from the freshly built context.
+	s.baseNode = s.ec.node
+	s.baseContextItem = s.ec.contextItem
+
+	// Record whether CurrentTime was explicitly configured. If so, the reuse
+	// path must keep it pinned; otherwise the reuse path refreshes per call.
+	s.explicitTime = e.cfg != nil && e.cfg.currentTime != nil
+
 	return s
 }
