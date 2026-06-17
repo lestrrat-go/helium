@@ -669,9 +669,12 @@ func (p *processor) includeText(inc *helium.Element, uri string, incBase string)
 		return err
 	}
 
-	// Handle encoding attribute
-	encName := getAttr(inc, "encoding")
-	if encName != "" {
+	// Handle encoding attribute. Distinguish a missing encoding attribute
+	// (process the bytes as UTF-8) from one that is present but names an
+	// encoding we cannot honour. A present-but-empty encoding="" is treated
+	// as an unsupported encoding rather than as absent, so the raw bytes are
+	// not silently consumed as UTF-8.
+	if encName, ok := findAttr(inc, "encoding"); ok {
 		enc := encoding.Load(encName)
 		// An unsupported requested encoding is a resource error: the raw bytes
 		// must not be silently treated as UTF-8. Returning an error here lets
@@ -884,6 +887,14 @@ func getNamespaceURI(n helium.Node) string {
 // 2. Try attribute with the other XInclude namespace URI
 // 3. Try unqualified attribute (no namespace)
 func getAttr(elem *helium.Element, name string) string {
+	val, _ := findAttr(elem, name)
+	return val
+}
+
+// findAttr performs the same 3-pass lookup as getAttr but also reports whether
+// the attribute was present. This distinguishes a missing attribute from one
+// that is present with an empty value, which getAttr alone cannot do.
+func findAttr(elem *helium.Element, name string) (string, bool) {
 	elemNS := getNamespaceURI(elem)
 	var otherNS string
 	if elemNS == lexicon.NamespaceXInclude {
@@ -897,22 +908,22 @@ func getAttr(elem *helium.Element, name string) string {
 	// Pass 1: element's own XInclude namespace
 	for _, a := range attrs {
 		if a.LocalName() == name && a.URI() == elemNS {
-			return a.Value()
+			return a.Value(), true
 		}
 	}
 	// Pass 2: the other XInclude namespace
 	for _, a := range attrs {
 		if a.LocalName() == name && a.URI() == otherNS {
-			return a.Value()
+			return a.Value(), true
 		}
 	}
 	// Pass 3: unqualified (no namespace)
 	for _, a := range attrs {
 		if a.LocalName() == name && a.URI() == "" {
-			return a.Value()
+			return a.Value(), true
 		}
 	}
-	return ""
+	return "", false
 }
 
 func resolveURI(href, base string) (string, error) {

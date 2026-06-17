@@ -422,6 +422,69 @@ func TestXIncludeFallback(t *testing.T) {
 	require.True(t, found, "fallback content not found")
 }
 
+// TestXIncludeTextEmptyEncoding verifies that a present-but-empty encoding=""
+// on a parse="text" include is treated as an unsupported encoding (a resource
+// error), not as an absent encoding that would let the raw bytes be consumed as
+// UTF-8. Without a fallback the inclusion must fail; with an xi:fallback the
+// fallback content must be used.
+func TestXIncludeTextEmptyEncoding(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no fallback errors", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="data.txt" parse="text" encoding=""/>
+		</root>`)
+
+		resolver := &stringResolver{
+			files: map[string]string{
+				"data.txt": "Hello World",
+			},
+		}
+
+		_, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), doc)
+		require.Error(t, err, "present-but-empty encoding must be an error, not silently UTF-8")
+	})
+
+	t.Run("fallback used", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="data.txt" parse="text" encoding="">
+				<xi:fallback><fallback-content/></xi:fallback>
+			</xi:include>
+		</root>`)
+
+		resolver := &stringResolver{
+			files: map[string]string{
+				"data.txt": "Hello World",
+			},
+		}
+
+		count, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		root := docElement(doc)
+		var found bool
+		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == helium.ElementNode {
+				if c.(*helium.Element).LocalName() == "fallback-content" {
+					found = true
+				}
+			}
+		}
+		require.True(t, found, "fallback content not used for empty encoding")
+	})
+}
+
 func TestXIncludeMissingNoFallback(t *testing.T) {
 	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
