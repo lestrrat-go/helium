@@ -486,8 +486,19 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		if _, ok := present[au.Name]; ok {
 			continue
 		}
-		// Insert the default/fixed value as an attribute on the element.
-		_, _ = elem.SetAttribute(au.Name.Local, defVal)
+		// Insert the default/fixed value as an attribute on the element. A
+		// qualified attribute (non-empty NS, e.g. under attributeFormDefault=
+		// "qualified") must be inserted with its namespace so later consumers
+		// such as an xs:key field "@t:a" can match it.
+		if au.Name.NS != "" {
+			ns := inScopeNamespace(elem, au.Name.NS)
+			if ns == nil {
+				ns = helium.NewNamespace("", au.Name.NS)
+			}
+			_, _ = elem.SetAttributeNS(au.Name.Local, defVal, ns)
+		} else {
+			_, _ = elem.SetAttribute(au.Name.Local, defVal)
+		}
 		// Annotate the newly inserted attribute.
 		for _, a := range elem.Attributes() {
 			if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
