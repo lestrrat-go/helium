@@ -153,3 +153,26 @@ func TestAnnotateAttrRegistersIDSubtype(t *testing.T) {
 	require.Contains(t, result, "<found>true</found>")
 	require.Contains(t, result, "<name>root</name>")
 }
+
+// TestIterateAtomicClearsNodeContext verifies that xsl:iterate over a
+// sequence of atomic items sets the context item without leaving a stale
+// node context. xsl:copy inside the body must copy the current atomic item
+// as text, not the previous source node.
+func TestIterateAtomicClearsNodeContext(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out><xsl:iterate select="'x'"><xsl:copy/></xsl:iterate></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+
+	result, err := xslt3.TransformString(t.Context(), source, ss)
+	require.NoError(t, err)
+
+	require.Contains(t, result, "<out>x</out>")
+	require.NotContains(t, result, "<doc/>")
+}
