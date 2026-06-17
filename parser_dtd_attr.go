@@ -40,6 +40,7 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 		if _, ok := names[name]; ok {
 			return nil, pctx.error(ctx, DTDDupTokenError{Name: name})
 		}
+		names[name] = struct{}{}
 
 		enumv = append(enumv, name)
 		pctx.skipBlanks(ctx)
@@ -91,6 +92,7 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 		if _, ok := names[name]; ok {
 			return nil, pctx.error(ctx, DTDDupTokenError{Name: name})
 		}
+		names[name] = struct{}{}
 
 		enumv = append(enumv, name)
 		pctx.skipBlanks(ctx)

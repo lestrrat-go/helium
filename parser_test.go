@@ -3,6 +3,7 @@ package helium_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -784,6 +785,57 @@ func TestValidateDTD(t *testing.T) {
 
 		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 		require.True(t, containsError(collector.Errors(), "unknown ID"))
+	})
+}
+
+func TestDTDDuplicateEnumerationTokens(t *testing.T) {
+	t.Parallel()
+
+	t.Run("enumeration with duplicate token", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE r [<!ATTLIST r color (red|red) "red">]>
+<r/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(input))
+
+		require.Error(t, err, "duplicate enumeration token should be rejected")
+		var dup helium.DTDDupTokenError
+		require.True(t, errors.As(err, &dup), "error should be DTDDupTokenError")
+		require.Equal(t, "red", dup.Name)
+	})
+
+	t.Run("notation with duplicate token", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE r [
+  <!NOTATION n PUBLIC "pub-n">
+  <!ATTLIST r kind NOTATION (n|n) #IMPLIED>
+]>
+<r/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(input))
+
+		require.Error(t, err, "duplicate notation token should be rejected")
+		var dup helium.DTDDupTokenError
+		require.True(t, errors.As(err, &dup), "error should be DTDDupTokenError")
+		require.Equal(t, "n", dup.Name)
+	})
+
+	t.Run("enumeration with distinct tokens", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE r [<!ATTLIST r color (red|green) "red">]>
+<r/>`
+
+		p := helium.NewParser()
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "distinct enumeration tokens should parse")
 	})
 }
 
