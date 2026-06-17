@@ -134,7 +134,9 @@ func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart
 			}
 		case valueOfPart:
 			if p.expr == nil {
-				// Compile-time error -- should not happen (caught during compilation).
+				// The select expression failed to compile; the error was
+				// already reported through the handler at compile time, so
+				// stop here rather than emitting a bogus value.
 				return string(buf), ""
 			}
 			result, err := ev.Evaluate(ctx, p.expr, node)
