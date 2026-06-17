@@ -138,6 +138,15 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     whiteSpace="collapse" makes `a b` and `a  b` collide. Raw values are retained
     for error display;
     fields whose type cannot be resolved fall back to raw-string comparison.
+  - Field type resolution (`resolveElemType`) consults the `actualElemType` map
+    populated in pass 1, so xsi:type ACTUAL types reach IDC canonicalization. Pass
+    1 annotates not only model-group children but also descendants of an
+    xs:anyType / mixed element with no content model: `validateElementContent`
+    routes that case to `annotateAnyTypeChildren`, which lax-validates each child
+    (look up global decl, resolve xsi:type, `annotateElement`, recurse) so a
+    descendant under an anyType ancestor still has its actual type recorded before
+    pass-2 IDC evaluation — otherwise a nested `<item xsi:type="itemType" n="5"/>`
+    / `n="+5"` pair would be compared lexically and wrongly accepted as unique.
 
 ### Key Data Model
 

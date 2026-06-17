@@ -9,6 +9,10 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
+// msgAbstractType is the validity-error message reported when an element's
+// effective type definition is abstract (cvc-elt / cvc-type).
+const msgAbstractType = "The type definition is abstract."
+
 type validationContext struct {
 	schema        *Schema
 	cfg           *validateConfig
@@ -221,7 +225,7 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 		td = edecl.Type // fall back to declared type
 	}
 	if td != nil && td.Abstract {
-		msg := "The type definition is abstract."
+		msg := msgAbstractType
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 		return fmt.Errorf("abstract type")
 	}
@@ -269,11 +273,78 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 			if td.ContentType == ContentTypeElementOnly {
 				return vc.validateEmptyContent(ctx, elem)
 			}
-			return nil
+			// Mixed content with no model group (xs:anyType and similar lax/open
+			// content) admits arbitrary child elements. Pass 2 IDC evaluation can
+			// still reach descendants of this subtree, so each child must be
+			// lax-annotated with its ACTUAL type (honoring xsi:type) and recursed
+			// into — otherwise resolveFieldType falls back to declared types and
+			// misses xsi:type overrides on descendants.
+			return vc.annotateAnyTypeChildren(ctx, elem)
 		}
 		return vc.validateContentModel(ctx, elem, td.ContentModel)
 	}
 	return nil
+}
+
+// annotateAnyTypeChildren lax-validates the child elements of an xs:anyType (or
+// other mixed, model-group-less) element. There is no content model to walk, so
+// children are validated like elements matched by a lax wildcard: each child's
+// global element declaration is consulted (skipped when absent), its xsi:type
+// override is resolved, the resulting ACTUAL type is recorded via annotateElement,
+// and validation recurses into the child. This populates actualElemType for every
+// descendant that pass-2 IDC resolution can inspect, so xsi:type on descendants is
+// honored during key canonicalization.
+func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *helium.Element) error {
+	var contentErr error
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		edecl := lookupElemDecl(ce, vc.schema)
+		if edecl == nil {
+			// Lax: no global declaration, so the child (and its subtree) is not
+			// schema-assessed. Still recurse so any deeper anyType descendant with
+			// a resolvable global declaration gets annotated.
+			if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
+				contentErr = err
+			}
+			continue
+		}
+		td, xsiErr := vc.resolveXsiType(ctx, ce, edecl.Type)
+		if xsiErr != nil {
+			contentErr = xsiErr
+			continue
+		}
+		if td != nil && td.Abstract {
+			msg := msgAbstractType
+			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msg)
+			contentErr = fmt.Errorf("abstract type")
+			continue
+		}
+		vc.annotateElement(ctx, ce, td)
+		if td == nil {
+			continue
+		}
+		nilled, nilErr := vc.checkXsiNil(ctx, ce)
+		if nilErr != nil {
+			contentErr = nilErr
+			continue
+		}
+		if nilled {
+			if err := vc.validateNilledElement(ctx, ce, edecl, td); err != nil {
+				contentErr = err
+			}
+			continue
+		}
+		if err := vc.validateElementContent(ctx, ce, edecl, td); err != nil {
+			contentErr = err
+		}
+	}
+	return contentErr
 }
 
 func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {

@@ -240,7 +240,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			continue
 		}
 		if td != nil && td.Abstract {
-			msg := "The type definition is abstract."
+			msg := msgAbstractType
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("abstract type")
 			continue
@@ -370,7 +370,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 			continue
 		}
 		if td != nil && td.Abstract {
-			msg := "The type definition is abstract."
+			msg := msgAbstractType
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("abstract type")
 			continue
@@ -621,7 +621,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 				continue
 			}
 			if td != nil && td.Abstract {
-				msg := "The type definition is abstract."
+				msg := msgAbstractType
 				vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 				contentErr = fmt.Errorf("abstract type")
 				continue
