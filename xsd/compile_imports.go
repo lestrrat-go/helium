@@ -94,7 +94,7 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 				continue
 			}
 
-			if err := c.loadImport(ctx, loc, ns); err != nil {
+			if err := c.loadImport(ctx, loc, ns, elem); err != nil {
 				// Depth-exceeded and baseDir-escape are security limits,
 				// not I/O hiccups; surface them as fatal compilation
 				// errors rather than demoting to an I/O warning.
@@ -416,8 +416,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	return nil
 }
 
-// loadImport loads an imported schema and merges its declarations.
-func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
+// loadImport loads an imported schema and merges its declarations. The ns
+// argument is the namespace declared on the <xs:import> element; the imported
+// schema's targetNamespace must match it (XSD src-import / libxml2 semantics):
+// when ns is present the imported schema must declare that targetNamespace, and
+// when ns is absent the imported schema must have no targetNamespace. A
+// mismatch is a fatal schema error, not an I/O warning, so importElem carries
+// the source line for the diagnostic.
+func (c *compiler) loadImport(ctx context.Context, location, ns string, importElem *helium.Element) error {
 	// Bound the import recursion. Each sub-compiler inherits this limit
 	// and tracks its own depth so namespace-cycling chains (A → B → C → A …)
 	// cannot exhaust memory / stack even when every link uses a distinct
@@ -450,6 +456,26 @@ func (c *compiler) loadImport(ctx context.Context, location, _ string) error {
 	var impFilename string
 	if c.filename != "" {
 		impFilename = schemaDisplayLoc(c.filename, location)
+	}
+
+	// The targetNamespace of the located schema must match the namespace
+	// declared on <xs:import> (XSD src-import; libxml2 rejects the mismatch
+	// rather than merging declarations from the wrong namespace). A present
+	// namespace requires that exact targetNamespace; an absent namespace
+	// requires the imported schema to have no targetNamespace. This is a
+	// fatal schema error, not an I/O warning, so it is emitted directly here
+	// and reported via a nil return (mirroring the xs:include check above).
+	impTargetNS := getAttr(impRoot, attrTargetNamespace)
+	if impTargetNS != ns {
+		displayLoc := location
+		if c.filename != "" {
+			displayLoc = schemaDisplayLoc(c.filename, location)
+		}
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, importElem.Line(),
+			importElem.LocalName(), elemImport,
+			"The namespace '"+impTargetNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."), helium.ErrorLevelFatal))
+		c.errorCount++
+		return nil
 	}
 
 	// Create a temporary compiler for the imported schema.
