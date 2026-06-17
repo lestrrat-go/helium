@@ -1,7 +1,8 @@
 package xslt3
 
 import (
-	"path/filepath"
+	"context"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,9 +11,9 @@ import (
 // part is the relative schema-location filename used across these cases.
 const part = "part.xsd"
 
-// TestResolveSchemaURI exercises the URI-aware resolution of a schema-location
-// against a base URI directly, including the "../" dot-segment case that the
-// xsd compiler's path-traversal sandbox prevents from being reached end to end.
+// TestResolveSchemaURI exercises the URI-aware resolution of a top-level
+// schema-location against a base URI directly, including the "../" dot-segment
+// case.
 func TestResolveSchemaURI(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -34,37 +35,34 @@ func TestResolveSchemaURI(t *testing.T) {
 	}
 }
 
-// TestSchemaResolverFSResolveName verifies that the FS adapter recovers the
-// canonical nested-schema URI from the (filepath-collapsed) name the xsd
-// compiler hands to Open, using the stored original base URI rather than any
-// ambiguous string repair of the collapsed form.
-func TestSchemaResolverFSResolveName(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		baseURI string
-		ref     string // relative schema-location the xsd compiler joins
-		want    string
-	}{
-		// name == filepath.Join(filepath.Dir(baseURI), ref) is how the xsd
-		// compiler forms the Open argument; resolveName must invert it.
-		{"file sibling", "file:///tmp/s/main.xsd", part, "file:///tmp/s/part.xsd"},
-		{"file subdir", "file:///tmp/s/main.xsd", "sub/part.xsd", "file:///tmp/s/sub/part.xsd"},
-		{"http sibling", "https://example.com/s/main.xsd", part, "https://example.com/s/part.xsd"},
-		{"http subdir", "https://example.com/s/main.xsd", "sub/part.xsd", "https://example.com/s/sub/part.xsd"},
+// TestSchemaResolverFSForwardsNameVerbatim verifies that the FS adapter passes
+// the name it receives straight to the byte-loader. The xsd compiler now hands
+// Open the canonical nested-schema URI (resolved URI-aware on the xsd side), so
+// the adapter must NOT rewrite it — any rewriting would corrupt an absolute
+// cross-host URI such as https://cdn.example.com/part.xsd.
+func TestSchemaResolverFSForwardsNameVerbatim(t *testing.T) {
+	for _, name := range []string{
+		"https://example.com/s/part.xsd",
+		"https://cdn.example.com/part.xsd",
+		"file:///tmp/s/part.xsd",
+		"/tmp/s/part.xsd",
+		"part.xsd",
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := schemaResolverFS{baseURI: tc.baseURI}
-			name := filepath.Join(filepath.Dir(tc.baseURI), tc.ref)
-			require.Equal(t, tc.want, s.resolveName(name))
+		t.Run(name, func(t *testing.T) {
+			var got string
+			s := schemaResolverFS{
+				ctx: context.Background(),
+				load: func(_ context.Context, uri string) ([]byte, error) {
+					got = uri
+					return []byte("<x/>"), nil
+				},
+			}
+			f, err := s.Open(name)
+			require.NoError(t, err)
+			_ = f.Close()
+			require.Equal(t, name, got, "FS adapter must forward the canonical name unchanged")
 		})
 	}
 }
 
-// TestSchemaResolverFSLocalPathVerbatim verifies that when the base URI is a
-// genuine local filesystem path (no scheme), the name is forwarded unchanged so
-// local-schema resolution and the default-deny behavior are unaffected.
-func TestSchemaResolverFSLocalPathVerbatim(t *testing.T) {
-	s := schemaResolverFS{baseURI: "/tmp/s/main.xsd"}
-	name := filepath.Join("/tmp/s", part)
-	require.Equal(t, name, s.resolveName(name))
-}
+var _ io.Closer = (*schemaResolverFile)(nil)

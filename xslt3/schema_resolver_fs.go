@@ -20,73 +20,30 @@ import (
 // would have its nested references read off the local filesystem, bypassing
 // the secure-by-default policy.
 //
-// The xsd compiler forms the name handed to Open via
-// filepath.Join(baseDir, schemaLocation), where baseDir is seeded from
-// filepath.Dir(parentSchemaURI). When the parent schema URI is an absolute
-// URL (e.g. https://example.com/s/main.xsd), filepath collapses the
-// "scheme://" authority separator down to "scheme:/", and the name reaching
-// Open is the lossy "https:/example.com/s/part.xsd". The collapsed string
-// alone is ambiguous — from "scheme:/X" you cannot tell whether the first
-// segment of X is a URI authority/host or a path component.
-//
-// To avoid that ambiguity, the adapter keeps the ORIGINAL (un-collapsed)
-// base URI and reconstructs the nested reference from it: it recovers the
-// relative schema-location as filepath.Rel(filepath.Dir(baseURI), name) —
-// undoing the join the xsd compiler performed — and resolves it against the
-// base URI with net/url ResolveReference, applying standard RFC 3986 URI
-// resolution (correct for http/https/file/ftp and for relative "../"/subdir
-// references alike). When the base URI carries no URL scheme — i.e. it is a
-// genuine local filesystem path — the name is forwarded verbatim, preserving
-// the existing local-path and default-deny behavior.
+// The xsd compiler is seeded with the parent schema URI as its BaseDir and
+// resolves nested schema-locations URI-aware (RFC 3986 for relative refs,
+// pass-through for absolute-URI refs). The name reaching Open is therefore
+// already the canonical nested URI — an absolute https/file URI, or a
+// relative reference resolved against the base — so the adapter forwards it
+// to the loader verbatim. No string repair of a filepath-collapsed name is
+// needed (or attempted): that collapsing no longer happens.
 type schemaResolverFS struct {
-	ctx     context.Context //nolint:containedctx // loader needs the request context; FS has no per-Open ctx
-	load    func(ctx context.Context, uri string) ([]byte, error)
-	baseURI string
+	ctx  context.Context //nolint:containedctx // loader needs the request context; FS has no per-Open ctx
+	load func(ctx context.Context, uri string) ([]byte, error)
 }
 
 // Open implements [fs.FS]. It loads the named schema document through the
-// configured byte-loader and returns it as an in-memory file. Any loader
-// error (including the default-deny "no URIResolver configured" case) is
-// returned as a *fs.PathError so fs.ReadFile surfaces it.
+// configured byte-loader and returns it as an in-memory file. The name is the
+// canonical nested-schema URI already resolved by the xsd compiler, so it is
+// forwarded unchanged. Any loader error (including the default-deny "no
+// URIResolver configured" case) is returned as a *fs.PathError so fs.ReadFile
+// surfaces it.
 func (s schemaResolverFS) Open(name string) (fs.File, error) {
-	uri := s.resolveName(name)
-	data, err := s.load(s.ctx, uri)
+	data, err := s.load(s.ctx, name)
 	if err != nil {
-		return nil, &fs.PathError{Op: "open", Path: uri, Err: err}
+		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
-	return &schemaResolverFile{name: uri, r: bytes.NewReader(data), size: int64(len(data))}, nil
-}
-
-// resolveName recovers the canonical URI for a nested schema reference whose
-// authority separator the xsd compiler's filepath.Join collapsed.
-//
-// name is filepath.Join(filepath.Dir(baseURI), schemaLocation). Recovering the
-// original relative schema-location is therefore filepath.Rel against
-// filepath.Dir(baseURI); resolving it against the original base URI via
-// net/url then yields the correct absolute URI under standard URI rules. This
-// works for arbitrarily nested includes because every name the xsd compiler
-// produces is a filepath.Join under the (collapsed) tree rooted at the
-// original base directory, so the recovered Rel is always the correct relative
-// reference from that base.
-//
-// If baseURI has no URL scheme (a genuine local filesystem path) or the
-// reconstruction cannot be performed, name is returned unchanged.
-func (s schemaResolverFS) resolveName(name string) string {
-	base, err := url.Parse(s.baseURI)
-	if err != nil || base.Scheme == "" {
-		// No base URI, or a local filesystem path: forward verbatim.
-		return name
-	}
-	ref, err := filepath.Rel(filepath.Dir(s.baseURI), name)
-	if err != nil {
-		return name
-	}
-	ref = filepath.ToSlash(ref)
-	refURL, err := url.Parse(ref)
-	if err != nil {
-		return name
-	}
-	return base.ResolveReference(refURL).String()
+	return &schemaResolverFile{name: name, r: bytes.NewReader(data), size: int64(len(data))}, nil
 }
 
 // resolveSchemaURI resolves a schema-location reference against a base URI.
@@ -114,6 +71,22 @@ func resolveSchemaURI(ref, baseURI string) string {
 		return filepath.Join(filepath.Dir(baseURI), ref)
 	}
 	return base.ResolveReference(refURL).String()
+}
+
+// schemaCompileBaseDir maps a base URI/path to the value passed to
+// [xsd.Compiler.BaseDir] so the xsd compiler resolves nested
+// xs:include/xs:import/xs:redefine references correctly.
+//
+// The xsd compiler is URI-aware: for a URI base it replaces the last path
+// segment via RFC 3986 resolution, so it needs the FULL schema URI; for a
+// local filesystem base it filepath.Join's, so it needs the containing
+// DIRECTORY. (A single-letter "scheme" is treated as a Windows drive letter,
+// not a URI, matching the xsd package's own detection.)
+func schemaCompileBaseDir(base string) string {
+	if u, err := url.Parse(base); err == nil && len(u.Scheme) >= 2 {
+		return base
+	}
+	return filepath.Dir(base)
 }
 
 // schemaResolverFile is a minimal read-only [fs.File] backed by an in-memory

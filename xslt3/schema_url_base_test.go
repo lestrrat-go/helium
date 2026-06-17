@@ -104,6 +104,61 @@ func TestImportSchemaNestedIncludeAbsoluteURLBase(t *testing.T) {
 	require.Contains(t, out, "out")
 }
 
+// ddMainSchemaWithAbsoluteCrossHostInclude includes a part schema by an
+// ABSOLUTE URI on a DIFFERENT host than the main schema. The xsd compiler must
+// pass this absolute schema-location to the resolver UNCHANGED — never
+// filepath.Join it onto the base (which would collapse "//" and drop the host,
+// yielding the malformed "https:/cdn.example.com/part.xsd").
+const ddMainSchemaWithAbsoluteCrossHostInclude = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/s"
+           xmlns:s="http://example.com/s"
+           elementFormDefault="qualified">
+  <xs:include schemaLocation="https://cdn.example.com/part.xsd"/>
+  <xs:element name="root" type="s:rootType"/>
+</xs:schema>`
+
+// TestImportSchemaNestedIncludeAbsoluteCrossHost verifies that an absolute
+// cross-host xs:include is requested from the resolver under its exact
+// canonical URI, not a filepath-collapsed (host-dropped) spelling.
+func TestImportSchemaNestedIncludeAbsoluteCrossHost(t *testing.T) {
+	const baseURI = "https://example.com/style/main.xsl"
+	const mainSchemaURI = "https://example.com/s/main.xsd"
+	const partSchemaURI = "https://cdn.example.com/part.xsd"
+	const collapsedURI = "https:/cdn.example.com/part.xsd"
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s" schema-location="https://example.com/s/main.xsd"/>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	resolver := &exactURIResolver{files: map[string]string{
+		mainSchemaURI: ddMainSchemaWithAbsoluteCrossHostInclude,
+		partSchemaURI: ddPartSchemaXSD,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "absolute cross-host xs:include must resolve through the resolver")
+	require.True(t, resolver.askedFor(partSchemaURI),
+		"resolver must be asked for the canonical cross-host URI %q; got %v", partSchemaURI, resolver.asked)
+	require.False(t, resolver.askedFor(collapsedURI),
+		"resolver must NOT be asked for the collapsed host-dropped URI %q; got %v", collapsedURI, resolver.asked)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "out")
+}
+
 // TestImportSchemaNestedIncludeFileURIBase verifies that a file:// base URI is
 // NOT corrupted by the round-2 string-repair (which turned file:/tmp/... into
 // file://tmp/..., reinterpreting "tmp" as a URI host). The nested xs:include

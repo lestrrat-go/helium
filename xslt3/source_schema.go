@@ -3,7 +3,6 @@ package xslt3
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -75,8 +74,8 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		// the schema's own relative xs:include/xs:import references resolve,
 		// and route those nested loads through the invocation's resolver
 		// (default-deny) instead of the xsd compiler's default os.Open.
-		fsys := schemaResolverFS{ctx: ctx, load: ec.retrieveDocumentBytes, baseURI: uri}
-		schema, err := xsd.NewCompiler().BaseDir(filepath.Dir(uri)).FS(fsys).Compile(ctx, schemaDoc)
+		fsys := schemaResolverFS{ctx: ctx, load: ec.retrieveDocumentBytes}
+		schema, err := xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys).Compile(ctx, schemaDoc)
 		if err != nil {
 			return nil, fmt.Errorf("compile source schema %q: %w", uri, err)
 		}

@@ -83,14 +83,17 @@ func (c Compiler) BaseDir(dir string) Compiler {
 // the default, which opens any path supplied to the compiler via
 // [os.Open].
 //
-// Note: the names handed to the FS are built with [filepath.Join] from
-// [Compiler.BaseDir] and the include location, so they may be absolute
-// and may use OS-specific separators on Windows. FS implementations
-// that enforce [fs.ValidPath] (notably [os.DirFS] and
-// [testing/fstest.MapFS]) will reject those names. Sandboxing schema
-// loading behind such an FS requires path normalization that is not yet
-// performed by this package; for now, supply an FS implementation that
-// accepts OS-style names.
+// Note: schema-location resolution is URI-aware. When [Compiler.BaseDir]
+// is a URI (e.g. "https://example.com/s/main.xsd" or "file:///s/main.xsd"),
+// a relative include is resolved against it with RFC 3986 semantics and an
+// absolute-URI include is passed through unchanged, so the name handed to
+// the FS is the canonical nested-schema URI. When BaseDir is a local
+// filesystem path, names are built with [filepath.Join], so they may be
+// absolute and may use OS-specific separators on Windows. FS implementations
+// that enforce [fs.ValidPath] (notably [os.DirFS] and [testing/fstest.MapFS])
+// will reject local OS-style names; for those, supply an FS implementation
+// that accepts the names this compiler produces (URI strings, or OS-style
+// paths for a local BaseDir).
 func (c Compiler) FS(fsys fs.FS) Compiler {
 	c = c.clone()
 	if fsys == nil {

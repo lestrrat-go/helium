@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 
@@ -37,8 +36,8 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// and route the schema's nested xs:include/xs:import/xs:redefine loads
 	// through the same compile-time resolver (default-deny) instead of the
 	// xsd compiler's default os.Open.
-	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes, baseURI: uri}
-	return xsd.NewCompiler().BaseDir(filepath.Dir(uri)).FS(fsys).Compile(ctx, doc)
+	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
+	return xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys).Compile(ctx, doc)
 }
 
 // loadSchemaBytes loads a nested-schema document referenced by
@@ -177,7 +176,7 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			errCounter := &fatalErrorCounter{}
 			compiler := xsd.NewCompiler().ErrorHandler(errCounter)
 			if c.baseURI != "" {
-				compiler = compiler.BaseDir(filepath.Dir(c.baseURI))
+				compiler = compiler.BaseDir(schemaCompileBaseDir(c.baseURI))
 			}
 			schema, err := compiler.Compile(ctx, inlineDoc)
 			if err != nil {
