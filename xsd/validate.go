@@ -98,16 +98,21 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 //
 //   - If either value has no valid active member, it is not a valid union value,
 //     so for fixed-comparison purposes it is treated as not-equal.
-//   - If the two active members differ, the values live in different value
-//     spaces and are not equal — e.g. memberTypes="xs:integer xs:boolean" with
-//     fixed="1" (active member xs:integer) and instance="true" (active member
-//     xs:boolean) is a mismatch even though both are valid union values.
 //   - If the active member is the same, the two values are compared in *that*
 //     member's value space by recursing through fixedValueMatches with the
 //     member type (which applies the member's own whiteSpace facet). Thus
 //     memberTypes="xs:string xs:integer" with fixed="1" resolves both sides to
 //     the xs:string member (the first member, which accepts any text), so "1"
 //     and "01" compare as strings and do NOT match.
+//   - If the active members DIFFER, the values may still be equal when both
+//     members reduce to the same comparable value-space family (e.g.
+//     memberTypes="xs:integer xs:decimal" with fixed="1.0" → active member
+//     xs:decimal, instance "1" → active member xs:integer: both reduce to the
+//     decimal value space, and 1.0 == 1, so they MUST compare equal). The shared
+//     family is determined by valueSpaceFamily, and the comparison is performed
+//     with value.Compare in that family. Cross-family pairs (xs:string vs
+//     xs:integer, xs:integer vs xs:boolean, …) have no shared comparable value
+//     space and remain unequal.
 //
 // The active member is resolved with unionActiveMember, which reuses the same
 // per-member validateValue path the normal (non-fixed) validation uses, so the
@@ -124,14 +129,57 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	if instanceMember == nil {
 		return false
 	}
-	if fixedMember != instanceMember {
-		return false
+
+	if fixedMember == instanceMember {
+		// Same active member: compare in that member's value space. A union has no
+		// whiteSpace facet of its own, so the raw values are forwarded and the
+		// member normalizes both with its own facet inside fixedValueMatches.
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS)
 	}
 
-	// Same active member: compare in that member's value space. A union has no
-	// whiteSpace facet of its own, so the raw values are forwarded and the member
-	// normalizes both with its own facet inside fixedValueMatches.
-	return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS)
+	// Different active members. They are still equal iff both reduce to the same
+	// comparable value-space family and the values are equal in that family — so
+	// xs:integer "1" equals xs:decimal "1.0". valueSpaceFamily returns the shared
+	// family only for value-comparable builtins (it excludes string-family/anyURI
+	// and QName/NOTATION, whose value spaces are not cross-member comparable).
+	fixedLocal := builtinBaseLocal(fixedMember)
+	instanceLocal := builtinBaseLocal(instanceMember)
+	fixedFamily, fok := valueSpaceFamily(fixedLocal)
+	instanceFamily, iok := valueSpaceFamily(instanceLocal)
+	if !fok || !iok || fixedFamily != instanceFamily {
+		return false
+	}
+	cmp, ok := value.Compare(instance, fixed, fixedFamily)
+	return ok && cmp == 0
+}
+
+// valueSpaceFamily maps a builtin's local name to the local name of the type
+// whose value space it shares for cross-member fixed-value comparison, returning
+// (family, true) only for value-comparable builtins. All xs:decimal-derived
+// integer types collapse to "decimal" so an xs:integer value compares equal to a
+// value-equal xs:decimal value; every other comparable primitive (boolean,
+// float, double, each date/time-family type, hexBinary, base64Binary) is its own
+// family, so cross-family pairs do not compare. String-family/anyURI and
+// QName/NOTATION are not value-comparable across members and return ("", false),
+// preserving the cross-family rejection.
+//
+// The returned family name is a key value.Compare understands, so callers can
+// pass it straight to value.Compare. Membership is gated on enumValueSpaceTypes,
+// the same allowlist the enumeration path uses, so the two value-space notions
+// stay consistent.
+func valueSpaceFamily(builtinLocal string) (string, bool) {
+	if _, ok := enumValueSpaceTypes[builtinLocal]; !ok {
+		return "", false
+	}
+	switch builtinLocal {
+	case "decimal", "integer",
+		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
+		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort",
+		"unsignedByte", "positiveInteger":
+		return "decimal", true
+	default:
+		return builtinLocal, true
+	}
 }
 
 // unionActiveMember returns the active basic member type for a value within a

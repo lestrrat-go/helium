@@ -472,6 +472,88 @@ func TestFixedValueSpaceUnionOrdered(t *testing.T) {
 	})
 }
 
+// TestFixedValueSpaceUnionSharedValueSpace exercises the case where the fixed and
+// instance values resolve to DIFFERENT active members that nonetheless live in
+// the same comparable value space (xs:integer and xs:decimal both reduce to the
+// decimal value space). Such values must compare equal in that shared space even
+// though their active members differ. Cross-family pairs (string vs integer,
+// integer vs boolean) stay unequal.
+func TestFixedValueSpaceUnionSharedValueSpace(t *testing.T) {
+	const intOrDec = `  <xs:simpleType name="intOrDec">
+    <xs:union memberTypes="xs:integer xs:decimal"/>
+  </xs:simpleType>`
+
+	t.Run("element/different members same decimal value space", func(t *testing.T) {
+		t.Parallel()
+		// fixed "1.0": xs:integer rejects it, so active member is xs:decimal.
+		// instance "1": xs:integer accepts it, so active member is xs:integer.
+		// Active members differ, but both reduce to the decimal value space and
+		// 1.0 == 1, so the constraint is satisfied.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + intOrDec + `
+  <xs:element name="root" type="intOrDec" fixed="1.0"/>
+</xs:schema>`
+		instanceXML := "<root>1</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("attribute/different members same decimal value space", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + intOrDec + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="intOrDec" fixed="1.0"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a="1"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/same value space but unequal values rejected", func(t *testing.T) {
+		t.Parallel()
+		// fixed "2.0" (active member xs:decimal) vs instance "1" (active member
+		// xs:integer): same value space, but 2.0 != 1, so rejected.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + intOrDec + `
+  <xs:element name="root" type="intOrDec" fixed="2.0"/>
+</xs:schema>`
+		instanceXML := "<root>1</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("element/cross-family string vs integer rejected", func(t *testing.T) {
+		t.Parallel()
+		// memberTypes="xs:integer xs:string": fixed "1" -> active member xs:integer
+		// (first member accepts it); instance " 1" (leading space) -> xs:integer
+		// rejects (leading space invalid for integer), so active member xs:string.
+		// integer and string are different value-space families -> rejected.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrStr">
+    <xs:union memberTypes="xs:integer xs:string"/>
+  </xs:simpleType>
+  <xs:element name="root" type="intOrStr" fixed="1"/>
+</xs:schema>`
+		instanceXML := "<root> x </root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("element/cross-family integer vs boolean rejected", func(t *testing.T) {
+		t.Parallel()
+		// Already covered by TestFixedValueSpaceUnionOrdered, restated here to guard
+		// the shared-value-space change: integer and boolean are different families.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrBool">
+    <xs:union memberTypes="xs:integer xs:boolean"/>
+  </xs:simpleType>
+  <xs:element name="root" type="intOrBool" fixed="1"/>
+</xs:schema>`
+		instanceXML := "<root>true</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+}
+
 func runFixedValueCase(t *testing.T, schemaXML, instanceXML string, wantReject bool) {
 	t.Helper()
 
