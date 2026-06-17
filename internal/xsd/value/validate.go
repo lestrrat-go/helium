@@ -197,7 +197,15 @@ func validateDateTime(value string) error {
 	if !dateTimeRegex.MatchString(value) {
 		return fmt.Errorf("invalid dateTime")
 	}
-	return validateDateComponents(value)
+	if err := validateDateComponents(value); err != nil {
+		return err
+	}
+	// The time portion follows the 'T' separator.
+	_, timePart, found := strings.Cut(value, "T")
+	if !found {
+		return fmt.Errorf("invalid dateTime")
+	}
+	return validateTimeComponents(timePart)
 }
 
 // timeRegex matches xs:time.
@@ -206,6 +214,117 @@ var timeRegex = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}(\.\d+)?` + tzSuffix + `$`
 func validateTime(value string) error {
 	if !timeRegex.MatchString(value) {
 		return fmt.Errorf("invalid time")
+	}
+	return validateTimeComponents(value)
+}
+
+// validateTimeComponents enforces the value-space ranges of the time portion
+// of xs:time / xs:dateTime: hour 00-23 (or exactly 24:00:00 with zero minutes,
+// seconds and fractional seconds), minute 00-59, second 00-59 (XSD does not
+// allow leap seconds), plus the timezone offset (±14:00, with minutes 00-59).
+// The input must already have passed the relevant lexical regex.
+func validateTimeComponents(value string) error {
+	// Split off the timezone designator, if any.
+	timeOnly := value
+	if tz, ok := splitTimezone(value); ok {
+		timeOnly = value[:len(value)-len(tz)]
+		if err := validateTimezone(tz); err != nil {
+			return err
+		}
+	}
+
+	// timeOnly is HH:MM:SS or HH:MM:SS.fff (lexical shape guaranteed by regex).
+	hourStr, rest, found := strings.Cut(timeOnly, ":")
+	if !found {
+		return fmt.Errorf("invalid time")
+	}
+	minStr, secStr, found := strings.Cut(rest, ":")
+	if !found {
+		return fmt.Errorf("invalid time")
+	}
+
+	var hour, minute, sec int
+	if _, err := fmt.Sscanf(hourStr, "%d", &hour); err != nil {
+		return fmt.Errorf("invalid time")
+	}
+	if _, err := fmt.Sscanf(minStr, "%d", &minute); err != nil {
+		return fmt.Errorf("invalid time")
+	}
+	intSecStr, fracStr, _ := strings.Cut(secStr, ".")
+	if _, err := fmt.Sscanf(intSecStr, "%d", &sec); err != nil {
+		return fmt.Errorf("invalid time")
+	}
+
+	if minute < 0 || minute > 59 {
+		return fmt.Errorf("invalid time: minute %d out of range", minute)
+	}
+	if sec < 0 || sec > 59 {
+		return fmt.Errorf("invalid time: second %d out of range", sec)
+	}
+	if hour < 0 || hour > 24 {
+		return fmt.Errorf("invalid time: hour %d out of range", hour)
+	}
+	// 24:00:00 (with zero minutes, seconds, and fractional seconds) is the only
+	// permitted use of hour 24; it denotes midnight at the end of the day.
+	if hour == 24 && (minute != 0 || sec != 0 || !isZeroFraction(fracStr)) {
+		return fmt.Errorf("invalid time: 24:00:00 is the only allowed value with hour 24")
+	}
+	return nil
+}
+
+// isZeroFraction reports whether a fractional-seconds string (the part after
+// the '.', without the dot) represents zero. An empty string means no fraction
+// was present, which is also zero.
+func isZeroFraction(frac string) bool {
+	return strings.Trim(frac, "0") == ""
+}
+
+// splitTimezone returns the trailing timezone designator (e.g. "Z", "+09:00",
+// "-05:00") and true if present, otherwise "" and false.
+func splitTimezone(value string) (string, bool) {
+	if value == "" {
+		return "", false
+	}
+	last := value[len(value)-1]
+	if last == 'Z' || last == 'z' {
+		return value[len(value)-1:], true
+	}
+	// A numeric offset is "±HH:MM" — 6 trailing chars whose 6th-from-last is a sign.
+	if len(value) >= 6 {
+		if c := value[len(value)-6]; c == '+' || c == '-' {
+			return value[len(value)-6:], true
+		}
+	}
+	return "", false
+}
+
+// validateTimezone enforces XSD timezone offset ranges: total offset within
+// ±14:00, minutes 00-59, and when hours are 14 the minutes must be 00.
+func validateTimezone(tz string) error {
+	if tz == "Z" || tz == "z" {
+		return nil
+	}
+	// tz is "±HH:MM" (lexical shape guaranteed by regex).
+	hhmm := tz[1:]
+	hourStr, minStr, found := strings.Cut(hhmm, ":")
+	if !found {
+		return fmt.Errorf("invalid timezone")
+	}
+	var hour, minute int
+	if _, err := fmt.Sscanf(hourStr, "%d", &hour); err != nil {
+		return fmt.Errorf("invalid timezone")
+	}
+	if _, err := fmt.Sscanf(minStr, "%d", &minute); err != nil {
+		return fmt.Errorf("invalid timezone")
+	}
+	if minute < 0 || minute > 59 {
+		return fmt.Errorf("invalid timezone: minute %d out of range", minute)
+	}
+	if hour < 0 || hour > 14 {
+		return fmt.Errorf("invalid timezone: hour %d out of range", hour)
+	}
+	if hour == 14 && minute != 0 {
+		return fmt.Errorf("invalid timezone: offset exceeds 14:00")
 	}
 	return nil
 }
