@@ -2,7 +2,6 @@ package xmldsig1
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -211,8 +210,7 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 				return nil, fmt.Errorf("%w: multiple SignatureValue elements", ErrInvalidSignature)
 			}
 			signatureValueSeen = true
-			text := strings.TrimSpace(textContent(elem))
-			decoded, err := base64.StdEncoding.DecodeString(text)
+			decoded, err := decodeBase64(textContent(elem))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid SignatureValue base64: %v", ErrInvalidSignature, err)
 			}
@@ -308,8 +306,7 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 			}
 			ref.digestAlgorithm = alg
 		case "DigestValue":
-			text := strings.TrimSpace(textContent(e))
-			decoded, err := base64.StdEncoding.DecodeString(text)
+			decoded, err := decodeBase64(textContent(e))
 			if err != nil {
 				return ref, fmt.Errorf("%w: invalid DigestValue base64: %v", ErrInvalidSignature, err)
 			}
