@@ -14,6 +14,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 // xsltFunctions returns the XSLT-specific functions that need to be
@@ -549,11 +550,30 @@ func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string) ([]byt
 // path from xml:base processing (e.g., /a/b). For file paths (containing a
 // dot-extension in the last segment), the directory part is extracted via
 // filepath.Dir. For directory-like paths, the path is used directly.
+//
+// Absoluteness is decided with [xsd.URIScheme] (RFC 3986), not filepath.IsAbs
+// or a "://" substring check: an absolute-URI reference may carry a scheme with
+// no "//" authority (e.g. "urn:shared", "file:/docs/d.xml") and must be returned
+// unchanged, while a relative reference against a URI base must keep the base
+// scheme/authority. Only when both base and ref are local filesystem paths is
+// filepath.Join used. Resolution of the URI cases is delegated to the shared
+// canonical [xsd.ResolveSchemaURI] helper.
 func resolveAgainstBaseURI(uri string, baseURI string) string {
 	if uri == "" || baseURI == "" {
 		return uri
 	}
-	if strings.Contains(uri, "://") || filepath.IsAbs(uri) {
+	// Absolute-URI ref, or any ref against a URI base: defer to the shared
+	// canonical resolver (RFC 3986 + OmitHost preservation). On error, fall
+	// back to the raw ref rather than producing a host-dropping filepath join.
+	if xsd.URIScheme(uri) != "" || xsd.URIScheme(baseURI) != "" {
+		resolved, err := xsd.ResolveSchemaURI(uri, baseURI)
+		if err != nil {
+			return uri
+		}
+		return resolved
+	}
+	// Both base and ref are local filesystem paths.
+	if filepath.IsAbs(uri) {
 		return uri
 	}
 	baseDir := baseURIDir(baseURI)
