@@ -11,6 +11,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 func (c *compiler) compileImport(ctx context.Context, elem *helium.Element) error {
@@ -40,10 +41,9 @@ func (c *compiler) resolveIncludeURI(_ context.Context, elem *helium.Element) (s
 		href = href[:idx]
 	}
 
-	uri := href
-	if baseURI != "" && !strings.Contains(href, "://") && !filepath.IsAbs(href) {
-		baseDir := filepath.Dir(baseURI)
-		uri = filepath.Join(baseDir, href)
+	uri, err := resolveModuleURI(href, baseURI)
+	if err != nil {
+		return "", "", err
 	}
 
 	importKey := uri
@@ -51,6 +51,58 @@ func (c *compiler) resolveIncludeURI(_ context.Context, elem *helium.Element) (s
 		importKey = uri + "#" + fragment
 	}
 	return uri, importKey, nil
+}
+
+// resolveModuleURI resolves an xsl:include / xsl:import href (with any fragment
+// already stripped) against the stylesheet base URI.
+//
+// An absolute-URI href (it carries its own scheme, e.g. "urn:shared",
+// "file:/modules/m.xsl", "mem:/m.xsl") addresses its own location and is
+// returned UNCHANGED — it must never be filepath.Join'ed onto the base, which
+// would corrupt it (e.g. "/styles/urn:shared"). A relative href against a URI
+// base is resolved with RFC 3986 semantics; against a local filesystem base it
+// keeps historical filepath.Join handling. Resolution is delegated to
+// [xsd.ResolveSchemaURI] / [xsd.URIScheme] — the single canonical URI helper
+// shared with the schema loader — so the two layers cannot drift. Windows
+// drive-letter paths (single-letter "scheme") stay filesystem paths.
+func resolveModuleURI(href, baseURI string) (string, error) {
+	if href == "" || baseURI == "" {
+		return href, nil
+	}
+	// A Windows drive-letter href ("C:/..." or "C:\\...") is a filesystem path,
+	// not a URI: its single-letter "scheme" is rejected by xsd.URIScheme, so
+	// without this branch it would fall through to ResolveSchemaURI and be
+	// lowercased / dot-segment-mangled by RFC 3986 resolution against a URI
+	// base. Address its own location verbatim. This must run BEFORE the URI
+	// branch below.
+	if isWindowsDrivePath(href) {
+		return href, nil
+	}
+	// Absolute-URI href, or any href against a URI base: defer to the shared
+	// canonical resolver (RFC 3986 + OmitHost preservation).
+	if xsd.URIScheme(href) != "" || xsd.URIScheme(baseURI) != "" {
+		return xsd.ResolveSchemaURI(href, baseURI) //nolint:wrapcheck // static error passthrough
+	}
+	// Local filesystem base (a FILE path): keep historical filepath semantics.
+	if filepath.IsAbs(href) {
+		return href, nil
+	}
+	return filepath.Join(filepath.Dir(baseURI), href), nil
+}
+
+// isWindowsDrivePath reports whether s begins with a Windows drive-letter prefix
+// ("C:/" or "C:\\"). Such paths are local filesystem paths, not URI references:
+// their single-letter "scheme" is deliberately not recognized by xsd.URIScheme,
+// so they must be handled as filesystem paths before any URI resolution.
+func isWindowsDrivePath(s string) bool {
+	if len(s) < 3 {
+		return false
+	}
+	c := s[0]
+	if (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') {
+		return false
+	}
+	return s[1] == ':' && (s[2] == '/' || s[2] == '\\')
 }
 
 // collectIncludeImports is the first phase of two-phase include processing.
@@ -434,11 +486,11 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		href = href[:idx]
 	}
 
-	// Resolve URI relative to base
-	uri := href
-	if baseURI != "" && !strings.Contains(href, "://") && !filepath.IsAbs(href) {
-		baseDir := filepath.Dir(baseURI)
-		uri = filepath.Join(baseDir, href)
+	// Resolve URI relative to base. An absolute-URI href is passed through
+	// uncorrupted; a relative href is resolved against the base.
+	uri, err := resolveModuleURI(href, baseURI)
+	if err != nil {
+		return err
 	}
 
 	// Circular import detection (use uri+fragment for uniqueness)
