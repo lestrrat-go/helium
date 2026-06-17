@@ -227,6 +227,33 @@ func TestDocVariableMergesAdjacentText(t *testing.T) {
 	}
 }
 
+// TestDocVariableTypedTemplateResultOrder verifies that the result of a typed
+// (as="...") template invoked via xsl:call-template inside a document-variable
+// body keeps document order with surrounding literal result elements, rather
+// than being appended after them.
+func TestDocVariableTypedTemplateResultOrder(t *testing.T) {
+	ctx := t.Context()
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <xsl:variable name="v"><a/><xsl:call-template name="emit"/><c/></xsl:variable>
+    <out><xsl:copy-of select="$v"/></out>
+  </xsl:template>
+  <xsl:template name="emit" as="xs:string"><xsl:sequence select="'b'"/></xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Regexp(t, `<a[^>]*/>b<c[^>]*/>`, out)
+}
+
 // TestDocVariableNestedSequenceNoPlaceholderLeak verifies that an xsl:sequence
 // nested inside an xsl:copy in a document-variable body writes into the copied
 // element directly (not via a document-level placeholder). The copied element

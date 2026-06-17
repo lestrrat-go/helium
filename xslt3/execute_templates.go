@@ -613,6 +613,19 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 	// variable evaluation), preserve atomic values directly so that
 	// their XSD type is retained for typed comparisons.
 	out := ec.currentOutput()
+
+	// In a document-constructor frame at the document node, capture the whole
+	// typed result as one ordered unit (behind a placeholder) so it keeps
+	// document order with literal result elements; otherwise the nodes would
+	// go to the DOM while atomics buffered to pendingItems, splitting the
+	// stream and losing interleaving order.
+	if out.captureItems && out.documentConstructor && out.current == out.doc {
+		if sequence.Len(checked) > 0 {
+			out.captureSequenceItems(sequence.Materialize(checked))
+		}
+		return nil
+	}
+
 	for i := range sequence.Len(checked) {
 		item := checked.Get(i)
 		switch v := item.(type) {
