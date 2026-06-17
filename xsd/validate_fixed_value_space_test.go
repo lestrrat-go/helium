@@ -187,6 +187,120 @@ func TestFixedValueSpaceList(t *testing.T) {
 	})
 }
 
+// TestFixedValueSpaceQName verifies that a fixed value of xs:QName is compared in
+// value space: each lexical QName is resolved against its own in-scope namespaces
+// (the schema's namespaces for the fixed value, the instance's for the instance
+// value) and the resolved {namespace URI, local name} pairs are compared. Two
+// different prefixes bound to the same URI must be equal; a same-prefix different
+// URI binding or a different local name must be rejected.
+func TestFixedValueSpaceQName(t *testing.T) {
+	const targetURI = "urn:example:target"
+
+	t.Run("element/prefix-differs-same-uri", func(t *testing.T) {
+		t.Parallel()
+		// Schema binds prefix s -> targetURI and fixes the QName as s:name.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+  <xs:element name="root" type="xs:QName" fixed="s:name"/>
+</xs:schema>`
+		// Instance binds a different prefix i -> the same URI; i:name resolves equal.
+		instanceXML := `<root xmlns:i="` + targetURI + `">i:name</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/different-uri", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+  <xs:element name="root" type="xs:QName" fixed="s:name"/>
+</xs:schema>`
+		// Same prefix text but bound to a different URI -> resolved QNames differ.
+		instanceXML := `<root xmlns:s="urn:example:other">s:name</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("element/different-localname", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+  <xs:element name="root" type="xs:QName" fixed="s:name"/>
+</xs:schema>`
+		instanceXML := `<root xmlns:i="` + targetURI + `">i:other</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("attribute/prefix-differs-same-uri", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:QName" fixed="s:name"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root xmlns:i="` + targetURI + `" a="i:name"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("attribute/different-uri", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:QName" fixed="s:name"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root xmlns:s="urn:example:other" a="s:name"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+}
+
+// TestFixedValueSpaceListOfUnion verifies that a fixed value of an xs:list whose
+// itemType is a union dispatches each item through the union's member value
+// spaces, so a value-equal item under any member type (e.g. integer "01" == "1")
+// satisfies the constraint while a value-distinct item is rejected.
+func TestFixedValueSpaceListOfUnion(t *testing.T) {
+	const typeDefs = `  <xs:simpleType name="intOrBool">
+    <xs:union memberTypes="xs:integer xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="unionList">
+    <xs:list itemType="intOrBool"/>
+  </xs:simpleType>`
+
+	t.Run("element/value-equal items", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="unionList" fixed="1 true"/>
+</xs:schema>`
+		// "01" is integer-equal to "1"; "1" is boolean-equal to "true".
+		instanceXML := "<root>01 1</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/item mismatch", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="unionList" fixed="1 true"/>
+</xs:schema>`
+		instanceXML := "<root>2 true</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("attribute/value-equal items", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="unionList" fixed="1 true"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a="01 1"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+}
+
 func runFixedValueCase(t *testing.T, schemaXML, instanceXML string, wantReject bool) {
 	t.Helper()
 

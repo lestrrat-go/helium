@@ -24,12 +24,18 @@ import (
 //   - For atomic types, the comparison uses the declared builtin's value space:
 //     value-comparable builtins (numeric, boolean, date/time, binary including
 //     hexBinary/base64Binary) compare via value.Compare, so "0A" == "0a" and
-//     "1" == "+1"; non-comparable (string-family/anyURI) types compare their
-//     whitespace-normalized lexical forms, so a numeric-looking string fixed
-//     value "5" does not accept "5.0".
+//     "1" == "+1"; QName/NOTATION resolve each lexical QName against its own
+//     in-scope namespaces (instanceNS for the instance, fixedNS for the schema
+//     fixed value) and compare the resolved {namespace URI, local name}, so two
+//     different prefixes bound to the same URI are equal; non-comparable
+//     (string-family/anyURI) types compare their whitespace-normalized lexical
+//     forms, so a numeric-looking string fixed value "5" does not accept "5.0".
 //
-// When td is nil the comparison falls back to raw string equality.
-func fixedValueMatches(instance, fixed string, td *TypeDef) bool {
+// instanceNS and fixedNS carry the in-scope namespace bindings for the instance
+// value and the schema fixed value respectively; they are only consulted for
+// QName/NOTATION types. When td is nil the comparison falls back to raw string
+// equality.
+func fixedValueMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
 	if td == nil {
 		return instance == fixed
 	}
@@ -40,29 +46,28 @@ func fixedValueMatches(instance, fixed string, td *TypeDef) bool {
 
 	switch resolveVariety(td) {
 	case TypeVarietyList:
-		return fixedListMatches(ni, nf, td)
+		return fixedListMatches(ni, nf, td, instanceNS, fixedNS)
 	case TypeVarietyUnion:
-		return fixedUnionMatches(ni, nf, td)
+		return fixedUnionMatches(ni, nf, td, instanceNS, fixedNS)
 	default:
-		return fixedAtomicMatches(ni, nf, builtinBaseLocal(td))
+		return fixedAtomicMatches(ni, nf, builtinBaseLocal(td), instanceNS, fixedNS)
 	}
 }
 
 // fixedListMatches compares two whitespace-normalized list values item by item
-// in the list's item-type value space.
-func fixedListMatches(instance, fixed string, td *TypeDef) bool {
+// in the list's item-type value space. Each item is dispatched through the
+// variety-aware comparator on the actual item type, so a list whose item type is
+// a union (or itself a list) is compared in the correct value space rather than
+// raw lexical text.
+func fixedListMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
 	ii := strings.Fields(instance)
 	fi := strings.Fields(fixed)
 	if len(ii) != len(fi) {
 		return false
 	}
 	itemType := resolveItemType(td)
-	itemLocal := ""
-	if itemType != nil {
-		itemLocal = builtinBaseLocal(itemType)
-	}
 	for i := range ii {
-		if !fixedAtomicMatches(ii[i], fi[i], itemLocal) {
+		if !fixedValueMatches(ii[i], fi[i], itemType, instanceNS, fixedNS) {
 			return false
 		}
 	}
@@ -72,10 +77,10 @@ func fixedListMatches(instance, fixed string, td *TypeDef) bool {
 // fixedUnionMatches accepts the instance when it is value-equal to the fixed
 // value under any member type's value space. Member values are re-normalized
 // with the member's own whiteSpace facet before comparison.
-func fixedUnionMatches(instance, fixed string, td *TypeDef) bool {
+func fixedUnionMatches(instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
 	for _, member := range resolveUnionMembers(td) {
 		ws := resolveWhiteSpace(member)
-		if fixedValueMatches(normalizeWhiteSpace(instance, ws), normalizeWhiteSpace(fixed, ws), member) {
+		if fixedValueMatches(normalizeWhiteSpace(instance, ws), normalizeWhiteSpace(fixed, ws), member, instanceNS, fixedNS) {
 			return true
 		}
 	}
@@ -83,10 +88,21 @@ func fixedUnionMatches(instance, fixed string, td *TypeDef) bool {
 }
 
 // fixedAtomicMatches compares two already whitespace-normalized atomic values in
-// the builtin type's value space. Value-comparable builtins use value.Compare
-// (covering numeric, boolean, date/time, and binary value spaces); everything
-// else falls back to exact equality of the normalized lexical forms.
-func fixedAtomicMatches(instance, fixed, builtinLocal string) bool {
+// the builtin type's value space. QName/NOTATION resolve each side's prefix
+// against its own in-scope namespaces and compare the resolved {URI, local}.
+// Other value-comparable builtins use value.Compare (covering numeric, boolean,
+// date/time, and binary value spaces); everything else falls back to exact
+// equality of the normalized lexical forms.
+func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedNS map[string]string) bool {
+	if builtinLocal == "QName" || builtinLocal == "NOTATION" {
+		iqn, ierr := resolveLexicalQName(instance, instanceNS)
+		fqn, ferr := resolveLexicalQName(fixed, fixedNS)
+		if ierr == nil && ferr == nil {
+			return iqn == fqn
+		}
+		// A prefix could not be resolved on one side; fall back to lexical.
+		return instance == fixed
+	}
 	if _, ok := enumValueSpaceTypes[builtinLocal]; ok {
 		if (builtinLocal == "float" || builtinLocal == "double") &&
 			value.IsFloatNaN(instance) && value.IsFloatNaN(fixed) {
@@ -383,7 +399,7 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// facet) rather than an unconditional TrimSpace, so value-equal lexical
 	// variants are accepted and significant whitespace stays significant.
 	if !isEmpty && edecl != nil && edecl.Fixed != nil {
-		if !fixedValueMatches(value, *edecl.Fixed, td) {
+		if !fixedValueMatches(value, *edecl.Fixed, td, collectNSContext(elem), edecl.FixedNS) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
@@ -517,7 +533,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// compare in the type's value space (applying its whitespace
 			// facet) rather than by raw string equality.
 			attrTD, tdOK := vc.attrUseType(au)
-			if au.Fixed != nil && !fixedValueMatches(a.Value(), *au.Fixed, attrTD) {
+			if au.Fixed != nil && !fixedValueMatches(a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS) {
 				ad := attrDisplayName(a)
 				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
 				vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)

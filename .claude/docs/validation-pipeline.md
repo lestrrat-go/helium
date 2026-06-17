@@ -47,13 +47,23 @@ whiteSpace facet (`resolveWhiteSpace` walks the derivation chain, so a facet
 derived on a restriction — e.g. `xs:string` restricted with
 `whiteSpace="collapse"` — is honoured, not just the builtin default). Then the
 comparison dispatches on variety (`resolveVariety`): list types split into items
-and compare item-by-item in the item type's value space (so `xs:integer` list
-fixed `1 2` accepts `01 +2`); union types accept when any member's value space
-matches; atomic types compare via `value.Compare` for the value-comparable
-builtins in `enumValueSpaceTypes` (numeric, boolean, date/time, and binary — so
-`xs:hexBinary` fixed `0A` accepts `0a` and integer fixed `1` accepts `+1`/`01`),
-falling back to normalized-lexical equality for string-family/anyURI (so a
-numeric-looking `xs:string` fixed `5` does not accept `5.0`). When `td` is nil it
+and recurse each item through the variety-aware comparator on the actual item
+type, so an `xs:integer` list fixed `1 2` accepts `01 +2` **and** a list whose
+item type is a union dispatches each item to the union's member value spaces;
+union types accept when any member's value space matches; atomic types compare
+via `value.Compare` for the value-comparable builtins in `enumValueSpaceTypes`
+(numeric, boolean, date/time, and binary — so `xs:hexBinary` fixed `0A` accepts
+`0a` and integer fixed `1` accepts `+1`/`01`), falling back to normalized-lexical
+equality for string-family/anyURI (so a numeric-looking `xs:string` fixed `5`
+does not accept `5.0`). `xs:QName`/`xs:NOTATION` fixed values are resolved in
+namespace context: each lexical QName is resolved against its own in-scope
+namespaces — the instance side via `collectNSContext(elem)`, the schema fixed
+side via the `FixedNS` map captured on the `ElementDecl`/`AttrUse` at read time
+(`collectNSContext` over the declaring schema element) — and the resolved
+`{namespace URI, local name}` pairs are compared, so two different prefixes bound
+to the same URI are equal while a same-prefix different-URI binding is not (an
+unresolved prefix on either side falls back to lexical equality). `fixedValueMatches`
+takes the instance and fixed namespace contexts as parameters. When `td` is nil it
 falls back to raw string equality.
 
 Enumeration facets are compared in value space, not raw lexical text. A value is

@@ -94,6 +94,9 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	}
 
 	decl.Default, decl.Fixed = readDefaultOrFixed(elem)
+	if decl.Fixed != nil {
+		decl.FixedNS = collectNSContext(elem)
+	}
 
 	if hasAttr(elem, attrBlock) {
 		decl.Block = parseBlockFlags(getAttr(elem, attrBlock))
@@ -195,6 +198,9 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 		}
 	}
 	au.Default, au.Fixed = readDefaultOrFixed(elem)
+	if au.Fixed != nil {
+		au.FixedNS = collectNSContext(elem)
+	}
 	return au
 }
 
@@ -333,6 +339,7 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 		}
 		if v := getAttr(elem, attrFixed); v != "" {
 			au.Fixed = &v
+			au.FixedNS = collectNSContext(elem)
 		}
 		c.attrRefs[au] = qn
 		return au
