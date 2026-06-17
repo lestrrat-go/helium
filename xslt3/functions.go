@@ -14,6 +14,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 // xsltFunctions returns the XSLT-specific functions that need to be
@@ -187,7 +188,7 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 		if ni, ok := args[1].Get(0).(xpath3.NodeItem); ok {
 			nodeBase := documentBaseURI(ni.Node)
 			if nodeBase != "" {
-				baseDir = filepath.Dir(nodeBase)
+				baseDir = documentBaseDir(nodeBase)
 			} else if !nodeHasDocumentRoot(ni.Node) {
 				// XTDE1162: second argument is an orphan node (no
 				// document root) with no base URI.
@@ -207,7 +208,7 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 		if len(args) < 2 {
 			if ni, ok := item.(xpath3.NodeItem); ok {
 				if nodeBase := documentBaseURI(ni.Node); nodeBase != "" {
-					itemBaseDir = filepath.Dir(nodeBase)
+					itemBaseDir = documentBaseDir(nodeBase)
 				} else if !nodeHasDocumentRoot(ni.Node) {
 					// XTDE1162: first argument node has no base URI
 					// and no document root (parentless text node).
@@ -315,7 +316,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 		// xml:base overrides the base URI — resolve the empty string
 		// against the effective base URI to load the target document.
 		uri = effectiveBase
-		baseDir = filepath.Dir(effectiveBase)
+		baseDir = documentBaseDir(effectiveBase)
 	}
 
 	// Strip fragment identifier before loading.
@@ -549,11 +550,30 @@ func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string) ([]byt
 // path from xml:base processing (e.g., /a/b). For file paths (containing a
 // dot-extension in the last segment), the directory part is extracted via
 // filepath.Dir. For directory-like paths, the path is used directly.
+//
+// Absoluteness is decided with [xsd.URIScheme] (RFC 3986), not filepath.IsAbs
+// or a "://" substring check: an absolute-URI reference may carry a scheme with
+// no "//" authority (e.g. "urn:shared", "file:/docs/d.xml") and must be returned
+// unchanged, while a relative reference against a URI base must keep the base
+// scheme/authority. Only when both base and ref are local filesystem paths is
+// filepath.Join used. Resolution of the URI cases is delegated to the shared
+// canonical [xsd.ResolveSchemaURI] helper.
 func resolveAgainstBaseURI(uri string, baseURI string) string {
 	if uri == "" || baseURI == "" {
 		return uri
 	}
-	if strings.Contains(uri, "://") || filepath.IsAbs(uri) {
+	// Absolute-URI ref, or any ref against a URI base: defer to the shared
+	// canonical resolver (RFC 3986 + OmitHost preservation). On error, fall
+	// back to the raw ref rather than producing a host-dropping filepath join.
+	if xsd.URIScheme(uri) != "" || xsd.URIScheme(baseURI) != "" {
+		resolved, err := xsd.ResolveSchemaURI(uri, baseURI)
+		if err != nil {
+			return uri
+		}
+		return resolved
+	}
+	// Both base and ref are local filesystem paths.
+	if filepath.IsAbs(uri) {
 		return uri
 	}
 	baseDir := baseURIDir(baseURI)
@@ -566,6 +586,30 @@ func splitURIFragment(uri string) (string, string) {
 		return uri, ""
 	}
 	return base, fragment
+}
+
+// documentBaseDir derives the base passed to resolveDocumentURI /
+// resolveAgainstBaseURI for a runtime document base such as a stylesheet or
+// node base URI.
+//
+// For a URI base (it has a scheme per [xsd.URIScheme]) the FULL base URI is
+// returned unchanged: the URI-aware resolvers delegate to [xsd.ResolveSchemaURI],
+// which performs RFC 3986 resolution and replaces the base's last path segment
+// itself. Applying filepath.Dir here would instead collapse the "//" authority
+// separator (e.g. "mem://pkg/main.xsl" -> "mem:/pkg"), dropping the host so a
+// sibling "doc.xml" wrongly resolves to "mem:/pkg/doc.xml" instead of
+// "mem://pkg/doc.xml".
+//
+// For a genuine local filesystem base, filepath.Dir is used as before so a
+// sibling reference resolves against the containing directory.
+func documentBaseDir(base string) string {
+	if base == "" {
+		return ""
+	}
+	if xsd.URIScheme(base) != "" {
+		return base
+	}
+	return filepath.Dir(base)
 }
 
 // baseURIDir extracts the directory from a base URI. If the base URI looks
@@ -597,7 +641,22 @@ func (ec *execContext) resolveDocumentURI(uri string, baseDir string) string {
 	if strings.HasPrefix(cleanURI, "file:///") {
 		return cleanURI[len("file://"):]
 	}
-	if strings.Contains(cleanURI, "://") || filepath.IsAbs(cleanURI) {
+	// Decide absoluteness with xsd.URIScheme (RFC 3986), not a "://" substring
+	// check or filepath.IsAbs: an absolute-URI ref may carry a scheme with no
+	// "//" authority (e.g. document('urn:doc'), doc('file:/x.xml')) and must be
+	// returned unchanged, while a relative ref against a URI base must keep the
+	// base scheme/authority (resolved per RFC 3986) instead of being joined as a
+	// local path. Only when both base and ref are local filesystem paths is
+	// filepath.Join used. Resolution of the URI cases is delegated to the shared
+	// canonical xsd.ResolveSchemaURI helper.
+	if xsd.URIScheme(cleanURI) != "" || (baseDir != "" && xsd.URIScheme(baseDir) != "") {
+		resolved, err := xsd.ResolveSchemaURI(cleanURI, baseDir)
+		if err != nil {
+			return cleanURI
+		}
+		return resolved
+	}
+	if filepath.IsAbs(cleanURI) {
 		return cleanURI
 	}
 	if baseDir != "" {

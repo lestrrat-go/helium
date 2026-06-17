@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 // paramKeyToClark converts an XPath map key to the Clark notation string
@@ -282,20 +282,44 @@ func (c resultDocCollector) HandleResultDocument(href string, doc *helium.Docume
 	return nil
 }
 
-// resolveRelativeURI resolves a relative reference against a base URI.
-// For URIs with a scheme (e.g. mem://pkg/main.xsl), it uses net/url
-// resolution to preserve the scheme and authority. For plain file
-// paths it falls back to filepath.Join.
+// resolveRelativeURI resolves a reference against a base URI.
+//
+// Absoluteness is decided with [xsd.URIScheme] (RFC 3986): an absolute-URI ref
+// (it carries its own scheme, e.g. "urn:shared", "file:/modules/m.xsl") is
+// returned unchanged and must never be filepath.Join'ed onto a local base
+// (which would corrupt it into "/styles/urn:shared"). A relative ref against a
+// URI base is resolved with RFC 3986 semantics (scheme/authority preserved);
+// against a local filesystem base it keeps historical filepath.Join handling.
+// Resolution of the URI cases is delegated to the shared canonical
+// [xsd.ResolveSchemaURI] helper.
 func resolveRelativeURI(base, ref string) string {
-	baseURL, err := url.Parse(base)
-	if err != nil || baseURL.Scheme == "" {
-		return filepath.Join(filepath.Dir(base), ref)
+	if xsd.URIScheme(ref) != "" || xsd.URIScheme(base) != "" {
+		resolved, err := xsd.ResolveSchemaURI(ref, base)
+		if err != nil {
+			return ref
+		}
+		return resolved
 	}
-	refURL, err := url.Parse(ref)
-	if err != nil {
-		return filepath.Join(filepath.Dir(base), ref)
+	return filepath.Join(filepath.Dir(base), ref)
+}
+
+// resolveStylesheetLocation resolves an fn:transform stylesheet-location loc
+// against the current stylesheet base URI.
+//
+// Absoluteness is decided with [xsd.URIScheme] (RFC 3986), not filepath.IsAbs:
+// when base is a URI (it has a scheme), a filepath-absolute or root-relative
+// loc such as "/inner.xsl" must be resolved against the base scheme/authority
+// (mem://pkg/main.xsl + /inner.xsl -> mem://pkg/inner.xsl) rather than passed
+// through verbatim. Only a purely-local absolute path against a local base is
+// left unchanged.
+func resolveStylesheetLocation(base, loc string) string {
+	if base == "" {
+		return loc
 	}
-	return baseURL.ResolveReference(refURL).String()
+	if xsd.URIScheme(base) != "" || !filepath.IsAbs(loc) {
+		return resolveRelativeURI(base, loc)
+	}
+	return loc
 }
 
 // newNestedCompiler creates a Compiler pre-configured with the same
@@ -434,11 +458,8 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	// Compile the stylesheet
 	var ss *Stylesheet
 	if stylesheetLoc != "" {
-		// Resolve relative to the current stylesheet base URI
-		loc := stylesheetLoc
-		if ec.stylesheet.baseURI != "" && !filepath.IsAbs(loc) {
-			loc = resolveRelativeURI(ec.stylesheet.baseURI, loc)
-		}
+		// Resolve relative to the current stylesheet base URI.
+		loc := resolveStylesheetLocation(ec.stylesheet.baseURI, stylesheetLoc)
 		var data []byte
 		baseURI := loc
 		if ec.stylesheet.uriResolver == nil {
