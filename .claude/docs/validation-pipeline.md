@@ -64,7 +64,17 @@ side via the `FixedNS` map captured on the `ElementDecl`/`AttrUse` at read time
 to the same URI are equal while a same-prefix different-URI binding is not (an
 unresolved prefix on either side falls back to lexical equality). `fixedValueMatches`
 takes the instance and fixed namespace contexts as parameters. When `td` is nil it
-falls back to raw string equality.
+falls back to raw string equality. The element fixed-value comparison uses the
+element *declaration's* type (`edecl.Type`), not an `xsi:type` actual type, so a
+declared `xs:string` (whiteSpace="preserve") fixed `abc ` keeps its trailing space
+even when the instance's `xsi:type` collapses whitespace — element content is still
+validated against the actual type. In `fixedUnionMatches`, when the fixed and
+instance values resolve to *different* active members sharing a value-space family
+(e.g. integer/decimal), each operand is whitespace-normalized with *its* active
+member's effective whiteSpace facet before `value.Compare`, so union fixed `1.0`
+accepts both `1` and ` 1 `. Global attributes matched through an `xs:anyAttribute`
+wildcard (`validateWildcardAttr`, processContents strict/lax) also enforce the
+global attribute's `Fixed`/`FixedNS` via `fixedValueMatches`.
 
 Enumeration facets are compared in value space, not raw lexical text. A value is
 a member if it lexically equals a member OR value-compares equal to one (e.g.

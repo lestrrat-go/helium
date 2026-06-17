@@ -149,7 +149,14 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	if !fok || !iok || fixedFamily != instanceFamily {
 		return false
 	}
-	cmp, ok := value.Compare(instance, fixed, fixedFamily)
+	// Normalize each operand with ITS active member's effective whiteSpace facet
+	// before comparing. value.Compare receives raw lexicals, so without this an
+	// instance " 1 " (whose active member would collapse the surrounding space)
+	// would be passed verbatim and fail the comparison even though it is
+	// value-equal to the fixed "1.0".
+	ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
+	nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
+	cmp, ok := value.Compare(ni, nf, fixedFamily)
 	return ok && cmp == 0
 }
 
@@ -510,11 +517,20 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	}
 
 	// Fixed value mismatch check (only when element has actual content).
-	// Compare in the declared type's value space (applying its whitespace
+	// Compare in the *declared* type's value space (applying its whitespace
 	// facet) rather than an unconditional TrimSpace, so value-equal lexical
-	// variants are accepted and significant whitespace stays significant.
+	// variants are accepted and significant whitespace stays significant. The
+	// fixed-value constraint is defined by the element declaration's own type,
+	// not by an xsi:type actual type that may derive a different whiteSpace
+	// facet — content is still validated against the actual td below, but the
+	// fixed comparison must use edecl.Type so e.g. a declared xs:string
+	// fixed="abc " keeps its trailing space even when xsi:type collapses.
 	if !isEmpty && edecl != nil && edecl.Fixed != nil {
-		if !fixedValueMatches(ctx, value, *edecl.Fixed, td, collectNSContext(elem), edecl.FixedNS) {
+		fixedType := edecl.Type
+		if fixedType == nil {
+			fixedType = td
+		}
+		if !fixedValueMatches(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
@@ -753,6 +769,17 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// TypeDef.Validate handles facets, lists, and unions, not just the builtin
 	// base lexical space.
 	attrTD, ok := vc.attrUseType(globalAttr)
+
+	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
+	// global fixed attribute must still satisfy its fixed value, in the declared
+	// type's value space (mirroring the non-wildcard attribute path).
+	if globalAttr.Fixed != nil && !fixedValueMatches(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS) {
+		ad := attrDisplayName(a)
+		msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *globalAttr.Fixed)
+		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+		return fmt.Errorf("fixed value constraint")
+	}
+
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
 		if err := attrTD.Validate(ctx, value, collectNSContext(elem)); err != nil {

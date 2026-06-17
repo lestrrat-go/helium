@@ -561,6 +561,94 @@ func TestFixedValueSpaceUnionSharedValueSpace(t *testing.T) {
 	})
 }
 
+// TestFixedValueSpaceXsiTypeDeclaredType verifies that the element fixed-value
+// constraint is compared in the element DECLARATION's type, not in an xsi:type
+// ACTUAL type that may derive a different whiteSpace facet. A declared
+// xs:string (whiteSpace="preserve") fixed="abc " keeps its trailing space, so an
+// instance whose xsi:type collapses whitespace and supplies content "abc" must
+// still be REJECTED against the declared string fixed value.
+func TestFixedValueSpaceXsiTypeDeclaredType(t *testing.T) {
+	t.Parallel()
+	// collapsedString derives from xs:string with whiteSpace="collapse"; it is a
+	// valid xsi:type for the declared xs:string element, but the fixed-value
+	// comparison must use the declared xs:string (preserve), not collapse.
+	schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="collapsedString">
+    <xs:restriction base="xs:string">
+      <xs:whiteSpace value="collapse"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="xs:string" fixed="` + abcLiteral + ` "/>
+</xs:schema>`
+	instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="collapsedString">` + abcLiteral + `</root>`
+	runFixedValueCase(t, schemaXML, instanceXML, true)
+}
+
+// TestFixedValueSpaceUnionWhitespaceOperand verifies that for union values whose
+// active members DIFFER but share a value-space family, each operand is
+// whitespace-normalized with ITS active member's effective whiteSpace facet
+// before the value-space comparison. union fixed="1.0" must accept the
+// whitespace-padded instance " 1 " (which collapses to "1" under its xs:integer
+// active member) just as it accepts "1".
+func TestFixedValueSpaceUnionWhitespaceOperand(t *testing.T) {
+	const intOrDec = `  <xs:simpleType name="intOrDec">
+    <xs:union memberTypes="xs:integer xs:decimal"/>
+  </xs:simpleType>`
+
+	t.Run("attribute/padded instance accepted", func(t *testing.T) {
+		t.Parallel()
+		// fixed "1.0" -> active member xs:decimal; instance " 1 " -> xs:integer
+		// (after collapse). Different members, shared decimal family, value-equal
+		// after each operand's whiteSpace collapse.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + intOrDec + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="intOrDec" fixed="1.0"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a=" 1 "/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+}
+
+// TestFixedValueSpaceWildcardGlobalFixed verifies that a global attribute matched
+// through an xs:anyAttribute wildcard (processContents="strict") still enforces
+// the global attribute's fixed value. A different value supplied via the wildcard
+// must be REJECTED.
+func TestFixedValueSpaceWildcardGlobalFixed(t *testing.T) {
+	const gattr = `  <xs:attribute name="ga" type="xs:string" fixed="locked"/>`
+
+	t.Run("wildcard match different value rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + gattr + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:anyAttribute processContents="strict"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root ga="other"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("wildcard match fixed value accepted", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + gattr + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:anyAttribute processContents="strict"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root ga="locked"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+}
+
 func runFixedValueCase(t *testing.T, schemaXML, instanceXML string, wantReject bool) {
 	t.Helper()
 
