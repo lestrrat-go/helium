@@ -90,6 +90,175 @@ func TestCommentBodyNoStraySpace(t *testing.T) {
 	require.Contains(t, out, "<!--hello-->")
 }
 
+// TestDocVariableInterleavesSequence verifies that a document-node variable
+// body preserves document order between literal result elements and
+// xsl:sequence outputs (constructed nodes and atomics interleaved).
+func TestDocVariableInterleavesSequence(t *testing.T) {
+	ctx := t.Context()
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "atomic between elements",
+			body: `<a/><xsl:sequence select="'b'"/><c/>`,
+			want: "<out><a/>b<c/></out>",
+		},
+		{
+			name: "node from sequence between elements",
+			body: `<a/><xsl:sequence select="//src"/><c/>`,
+			want: "<out><a/><src/><c/></out>",
+		},
+		{
+			// xsl:sequence select="/" yields a document node; its children
+			// (the source root element) must be spliced in document order,
+			// not the document node itself.
+			name: "document node between elements",
+			body: `<a/><xsl:sequence select="/"/><c/>`,
+			want: "<out><a/><doc><src/></doc><c/></out>",
+		},
+		{
+			name: "multiple atomics interleaved",
+			body: `<xsl:sequence select="1"/><a/><xsl:sequence select="2"/><b/><xsl:sequence select="3"/>`,
+			want: "<out>1<a/>2<b/>3</out>",
+		},
+		{
+			name: "trailing element after sequence",
+			body: `<xsl:sequence select="('x','y')"/><z/>`,
+			want: "<out>x y<z/></out>",
+		},
+		{
+			// xsl:try select also captures into the document; it must keep
+			// document order with surrounding literal result elements, not be
+			// appended after them.
+			name: "try select between elements",
+			body: `<a/><xsl:try select="'b'"><xsl:catch select="'x'"/></xsl:try><c/>`,
+			want: "<out><a/>b<c/></out>",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="v">` + tc.body + `</xsl:variable>
+    <out><xsl:copy-of select="$v"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(ctx, doc)
+			require.NoError(t, err)
+			src, _ := helium.NewParser().Parse(ctx, []byte(`<doc><src/></doc>`))
+			out, err := ss.Transform(src).Serialize(ctx)
+			require.NoError(t, err)
+			require.Contains(t, out, tc.want)
+		})
+	}
+}
+
+// TestDocVariableDocumentNodeSequenceSplicesChildren verifies the structural
+// shape of a document variable built with xsl:sequence select="/" interleaved
+// with literal elements. The document node must contribute its children (the
+// source root element) spliced in document order, so $v/node() sees three
+// nodes (a, doc, c) with the source root in the middle — not a nested document
+// node that would collapse $v/node() to two (a, c).
+func TestDocVariableDocumentNodeSequenceSplicesChildren(t *testing.T) {
+	ctx := t.Context()
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="v"><a/><xsl:sequence select="/"/><c/></xsl:variable>
+    <out count="{count($v/node())}" mid="{local-name($v/node()[2])}"/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, _ := helium.NewParser().Parse(ctx, []byte(`<doc><src/></doc>`))
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, `count="3"`)
+	require.Contains(t, out, `mid="doc"`)
+}
+
+// TestDocVariableMergesAdjacentText verifies that text produced by xsl:sequence
+// adjacent to text from xsl:text/xsl:value-of is merged into a single text node
+// in the constructed document tree (XSLT result-tree construction merges
+// adjacent text nodes), so node-level XPath sees one text node, not two.
+func TestDocVariableMergesAdjacentText(t *testing.T) {
+	ctx := t.Context()
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "sequence then text", body: `<xsl:sequence select="'a'"/><xsl:text>b</xsl:text>`},
+		{name: "text then sequence", body: `<xsl:text>a</xsl:text><xsl:sequence select="'b'"/>`},
+		{name: "text sequence text", body: `<xsl:text>a</xsl:text><xsl:sequence select="'b'"/><xsl:text>c</xsl:text>`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="v">` + tc.body + `</xsl:variable>
+    <out count="{count($v/text())}"><xsl:value-of select="string($v)"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(ctx, doc)
+			require.NoError(t, err)
+			src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+			out, err := ss.Transform(src).Serialize(ctx)
+			require.NoError(t, err)
+			require.Contains(t, out, `count="1"`)
+		})
+	}
+}
+
+// TestDocVariableNestedSequenceNoPlaceholderLeak verifies that an xsl:sequence
+// nested inside an xsl:copy in a document-variable body writes into the copied
+// element directly (not via a document-level placeholder). The copied element
+// becomes the temp tree's document element, so the placeholder capture path
+// must not fire there — otherwise the unresolved placeholder PI leaks into
+// output.
+func TestDocVariableNestedSequenceNoPlaceholderLeak(t *testing.T) {
+	ctx := t.Context()
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="v">
+      <xsl:for-each select="/doc/src">
+        <xsl:copy><xsl:sequence select="'b'"/></xsl:copy>
+      </xsl:for-each>
+    </xsl:variable>
+    <out><xsl:copy-of select="$v"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, _ := helium.NewParser().Parse(ctx, []byte(`<doc><src/></doc>`))
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "<out><src>b</src></out>")
+	require.NotContains(t, out, "helium-xsl-sequence-placeholder")
+}
+
 // TestPIBodyNoStraySpace verifies that xsl:processing-instruction body
 // does not produce a stray leading space when an empty TVT precedes text.
 func TestPIBodyNoStraySpace(t *testing.T) {

@@ -663,7 +663,7 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instru
 		tmpDoc.SetURL(baseURI)
 	}
 
-	frame := &outputFrame{doc: tmpDoc, current: tmpDoc, captureItems: true}
+	frame := &outputFrame{doc: tmpDoc, current: tmpDoc, captureItems: true, documentConstructor: true}
 	ec.outputStack = append(ec.outputStack, frame)
 
 	// Temporarily set resultDoc to the temp document so that nodes
@@ -683,11 +683,38 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instru
 	// Per XSLT spec: in document-node context (variable/param without as),
 	// node items from xsl:sequence are added as children of the document
 	// node, while atomic items are converted to text nodes and added as
-	// space-separated text.
+	// space-separated text. xsl:sequence output was marked in the DOM with
+	// placeholder PIs (see execXSLSequence); resolve each placeholder in
+	// document order so the constructed text/nodes interleave correctly with
+	// the literal result elements already built into the tree.
+	if len(frame.seqPlaceholders) > 0 {
+		// If the body produced exactly one document node (e.g. via xsl:copy
+		// or xsl:copy-of of a document) and there is no other content, use
+		// that document directly. This preserves DTD information (unparsed
+		// entities, notations) that would be lost if we atomized it.
+		if first := tmpDoc.FirstChild(); first != nil && first.NextSibling() == nil {
+			if items, ok := frame.seqPlaceholders[first]; ok && len(items) == 1 {
+				if ni, ok := items[0].(xpath3.NodeItem); ok {
+					if capturedDoc, ok := ni.Node.(*helium.Document); ok {
+						capturedDoc.SetProperties(capturedDoc.Properties() | helium.DocInternal)
+						return xpath3.ItemSlice{xpath3.NodeItem{Node: capturedDoc}}, nil
+					}
+				}
+			}
+		}
+
+		if err := ec.resolveSequencePlaceholders(tmpDoc, frame.seqPlaceholders); err != nil {
+			return nil, err
+		}
+	}
+
+	// Items captured outside xsl:sequence (e.g. xsl:copy / xsl:copy-of of a
+	// document node, or attributes) are buffered in pendingItems and appended
+	// after the DOM content, as before.
 	if len(frame.pendingItems) > 0 {
 		// If the body produced exactly one document node (e.g. via xsl:copy
 		// or xsl:copy-of of a document) and the temporary doc has no DOM
-		// children of its own, use that document directly.  This preserves
+		// children of its own, use that document directly. This preserves
 		// DTD information (unparsed entities, notations) that would be lost
 		// if we atomized the document into text.
 		if len(frame.pendingItems) == 1 && tmpDoc.FirstChild() == nil {
@@ -711,7 +738,6 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instru
 		}
 		for _, item := range frame.pendingItems {
 			if ni, ok := item.(xpath3.NodeItem); ok {
-				// Flush any accumulated text before adding the node.
 				if err := flushText(); err != nil {
 					return nil, err
 				}
@@ -725,7 +751,6 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instru
 				}
 				continue
 			}
-			// Atomic item: atomize and join with spaces.
 			if prevAtomic {
 				sb.WriteByte(' ')
 			}
@@ -758,6 +783,124 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instru
 	}
 
 	return xpath3.ItemSlice{xpath3.NodeItem{Node: tmpDoc}}, nil
+}
+
+// resolveSequencePlaceholders replaces the xsl:sequence placeholder PIs in the
+// document tree (created by execXSLSequence in document-constructor mode) with
+// the nodes/text produced by their buffered items, in document order. Atomic
+// items are converted to text and consecutive atomics — whether from the same
+// or adjacent xsl:sequence outputs — are separated by a single space, while any
+// intervening node from a literal result element resets that adjacency.
+func (ec *execContext) resolveSequencePlaceholders(tmpDoc *helium.Document, placeholders map[helium.Node]xpath3.ItemSlice) error {
+	var sb strings.Builder
+	prevAtomic := false
+
+	// makeText builds a text node from the accumulated atomic run, if any.
+	flushText := func() helium.Node {
+		if sb.Len() == 0 {
+			return nil
+		}
+		text := tmpDoc.CreateText([]byte(sb.String()))
+		sb.Reset()
+		return text
+	}
+
+	for child := tmpDoc.FirstChild(); child != nil; {
+		next := child.NextSibling()
+
+		items, isPlaceholder := placeholders[child]
+		if !isPlaceholder {
+			// A literal result node breaks the atomic adjacency run.
+			prevAtomic = false
+			child = next
+			continue
+		}
+
+		var replacement []helium.Node
+		for _, item := range items {
+			if ni, ok := item.(xpath3.NodeItem); ok {
+				if t := flushText(); t != nil {
+					replacement = append(replacement, t)
+				}
+				prevAtomic = false
+				if ni.Node.Type() == helium.DocumentNode {
+					// A document node in a sequence constructor is replaced by
+					// copies of its children, spliced in document order (mirrors
+					// the document-node branch in execXSLSequence). Copying the
+					// document node itself would nest a document inside the temp
+					// tree instead of splicing the source root element.
+					for child := ni.Node.FirstChild(); child != nil; child = child.NextSibling() {
+						copied, copyErr := helium.CopyNode(child, tmpDoc)
+						if copyErr != nil {
+							return copyErr
+						}
+						replacement = append(replacement, copied)
+					}
+					continue
+				}
+				copied, copyErr := helium.CopyNode(ni.Node, tmpDoc)
+				if copyErr != nil {
+					return copyErr
+				}
+				replacement = append(replacement, copied)
+				continue
+			}
+			// Atomic item: atomize and join consecutive atomics with a space.
+			if prevAtomic {
+				sb.WriteByte(' ')
+			}
+			av, err := xpath3.AtomizeItem(item)
+			if err != nil {
+				_, _ = fmt.Fprint(&sb, item)
+			} else {
+				s, serr := xpath3.AtomicToString(av)
+				if serr != nil {
+					_, _ = fmt.Fprint(&sb, item)
+				} else {
+					sb.WriteString(s)
+				}
+			}
+			prevAtomic = true
+		}
+
+		// If this placeholder ends an atomic run and the following sibling is
+		// not another placeholder, the run is complete: flush the text now so
+		// it is spliced in at this position.
+		if _, nextIsPlaceholder := placeholders[next]; !nextIsPlaceholder {
+			if t := flushText(); t != nil {
+				replacement = append(replacement, t)
+			}
+			prevAtomic = false
+		}
+
+		if len(replacement) == 0 {
+			helium.UnlinkNode(child.(helium.MutableNode)) //nolint:forcetypeassert
+			child = next
+			continue
+		}
+		if err := child.(helium.MutableNode).Replace(replacement...); err != nil { //nolint:forcetypeassert
+			return err
+		}
+		child = next
+	}
+
+	// XSLT result-tree construction merges adjacent text nodes into one. The
+	// Replace splices above do not merge text across the splice boundary
+	// (e.g. xsl:sequence text next to xsl:text output), so coalesce adjacent
+	// text-node siblings now.
+	for child := tmpDoc.FirstChild(); child != nil; {
+		next := child.NextSibling()
+		if child.Type() == helium.TextNode && next != nil && next.Type() == helium.TextNode {
+			if err := child.(helium.MutableNode).AppendText(next.Content()); err != nil { //nolint:forcetypeassert
+				return err
+			}
+			helium.UnlinkNode(next.(helium.MutableNode)) //nolint:forcetypeassert
+			continue
+		}
+		child = next
+	}
+
+	return nil
 }
 
 // evaluateBodyAsSequence executes instructions and captures the result as a
