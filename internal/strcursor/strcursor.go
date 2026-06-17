@@ -570,18 +570,24 @@ func (c *RuneCursor) Read(buf []byte) (int, error) {
 	mask := c.ringMask
 	for c.count > 0 && nread < len(buf) {
 		e := c.ring[c.head]
-		w := utf8.EncodeRune(buf[nread:], e.val)
-		if nread+w > len(buf) {
+		// Only encode if the whole rune fits in the remaining space;
+		// EncodeRune would otherwise write past buf and panic. Leaving
+		// the rune buffered yields a valid short read on the next call.
+		if utf8.RuneLen(e.val) > len(buf)-nread {
 			break
 		}
-		nread += w
+		nread += utf8.EncodeRune(buf[nread:], e.val)
 		c.head = (c.head + 1) & mask
 		c.count--
 	}
+	// If a rune is still buffered (either buf is full or the next rune did
+	// not fit), return a valid short read. Pulling from c.in here would
+	// reorder bytes ahead of the still-pending buffered rune.
+	if c.count > 0 || nread >= len(buf) {
+		return nread, nil
+	}
+	// Ring fully drained with room left; top up from the underlying reader.
 	if nread > 0 {
-		if nread >= len(buf) {
-			return nread, nil
-		}
 		n, err := c.in.Read(buf[nread:])
 		return nread + n, err
 	}

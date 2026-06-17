@@ -99,3 +99,56 @@ func TestUTF8CursorScanQNameBytesRejectsSecondColon(t *testing.T) {
 	require.Zero(t, n)
 	require.Equal(t, byte('a'), cur.Peek())
 }
+
+func TestRuneCursorReadShortBufferBufferedRune(t *testing.T) {
+	cur := NewRuneCursor(strings.NewReader("é"))
+	// Buffer the multibyte rune in the ring.
+	require.Equal(t, 'é', cur.Peek())
+
+	// A 1-byte destination cannot hold the 2-byte rune. Read must not panic
+	// and must not corrupt or drop the buffered rune.
+	first := make([]byte, 1)
+	n, err := cur.Read(first)
+	require.NoError(t, err)
+	require.Zero(t, n, "no full rune fits in a 1-byte buffer")
+
+	// The rune must still be deliverable on a subsequent read.
+	rest := make([]byte, 8)
+	var got []byte
+	for {
+		m, rerr := cur.Read(rest)
+		got = append(got, rest[:m]...)
+		if rerr == io.EOF {
+			break
+		}
+		require.NoError(t, rerr)
+		if m == 0 {
+			break
+		}
+	}
+	require.Equal(t, "é", string(got), "rune delivered intact across reads")
+}
+
+func TestRuneCursorReadShortBufferPartialRuneFit(t *testing.T) {
+	cur := NewRuneCursor(strings.NewReader("aé"))
+	// Buffer both runes in the ring.
+	require.Equal(t, 'a', cur.Peek())
+	require.Equal(t, 'é', cur.PeekN(2))
+
+	// A 2-byte buffer fits 'a' (1 byte) but not the following 2-byte 'é'.
+	// Read must emit only 'a' as a short read with no EOF, leaving 'é'
+	// buffered rather than reordering bytes from the underlying reader.
+	buf := make([]byte, 2)
+	n, err := cur.Read(buf)
+	require.NoError(t, err)
+	require.Equal(t, 1, n, "only the 1-byte rune fits")
+	require.Equal(t, "a", string(buf[:n]))
+
+	// The buffered 'é' is delivered intact on the next read.
+	rest := make([]byte, 8)
+	m, err := cur.Read(rest)
+	require.Equal(t, "é", string(rest[:m]))
+	if err != nil {
+		require.Equal(t, io.EOF, err)
+	}
+}
