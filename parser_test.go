@@ -169,6 +169,31 @@ func TestParseRejectsMalformedComment(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestParseRejectsDuplicateAttribute(t *testing.T) {
+	// XML 1.0 §3.1 well-formedness: a start tag may not have two
+	// attributes with the same (qualified) name. These must be rejected
+	// even when not validating.
+	reject := []string{
+		`<root a="1" a="2"/>`,
+		`<root xmlns:p="urn:x" p:a="1" p:a="2"/>`,
+	}
+	for _, input := range reject {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err, "Parse should reject duplicate attribute in %q", input)
+	}
+
+	// Distinct qualified names must still parse, including the same local
+	// name carried by different prefixes.
+	accept := []string{
+		`<root a="1" b="2"/>`,
+		`<root xmlns:p="urn:x" xmlns:q="urn:y" p:a="1" q:a="2"/>`,
+	}
+	for _, input := range accept {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "Parse should accept distinct attributes in %q", input)
+	}
+}
+
 func TestParseNamespace(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <helium:root xmlns:helium="https://github.com/lestrrat-go/helium">

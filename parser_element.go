@@ -307,6 +307,16 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			continue
 		}
 
+		// XML 1.0 §3.1: a start tag may not carry two attributes with the
+		// same qualified name. Reject before appending or invoking any
+		// SAX/DOM callback. (Namespace declarations are duplicate-checked
+		// in their own branches above and never reach here.)
+		for i := range attrs {
+			if attrs[i].localname == attname && attrs[i].prefix == aprefix {
+				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
+			}
+		}
+
 		attr := attrData{
 			localname: attname,
 			prefix:    aprefix,
