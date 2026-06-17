@@ -301,6 +301,71 @@ func TestFixedValueSpaceListOfUnion(t *testing.T) {
 	})
 }
 
+// TestFixedValueSpaceUnion verifies that a fixed value of an xs:union dispatches
+// the raw (un-normalized) instance and fixed values to each member, letting each
+// member apply its *own* whiteSpace facet. A union containing xs:string must
+// preserve significant trailing whitespace under the string member: fixed="abc "
+// must NOT accept instance "abc" even though a sibling xs:integer member would
+// collapse whitespace. A value-equal instance under any member (e.g. the integer
+// member) must still be accepted.
+func TestFixedValueSpaceUnion(t *testing.T) {
+	const typeDefs = `  <xs:simpleType name="strOrInt">
+    <xs:union memberTypes="xs:string xs:integer"/>
+  </xs:simpleType>`
+
+	t.Run("element/string member trailing space significant", func(t *testing.T) {
+		t.Parallel()
+		// fixed has a trailing space; the xs:string member preserves it, so the
+		// instance "abc" (no trailing space) is value-distinct. The xs:integer
+		// member rejects the non-integer text. The constraint must be rejected.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="strOrInt" fixed="` + abcLiteral + ` "/>
+</xs:schema>`
+		instanceXML := `<root>` + abcLiteral + `</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("element/integer member value-equal", func(t *testing.T) {
+		t.Parallel()
+		// The xs:integer member treats "01" as value-equal to "1".
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="strOrInt" fixed="1"/>
+</xs:schema>`
+		instanceXML := "<root>01</root>"
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("attribute/string member trailing space significant", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="strOrInt" fixed="` + abcLiteral + ` "/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a="` + abcLiteral + `"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("attribute/integer member value-equal", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="strOrInt" fixed="1"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root a="01"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+}
+
 func runFixedValueCase(t *testing.T, schemaXML, instanceXML string, wantReject bool) {
 	t.Helper()
 
