@@ -352,6 +352,52 @@ func TestImportSchemaXMLBaseFileURIBase(t *testing.T) {
 	require.Contains(t, out, "out")
 }
 
+// ddMainSchemaMissingType references a type ("s:rootType") that is never
+// declared (the would-be nested include is absent), so the xsd compiler cannot
+// resolve it. The compiler reports a fatal unresolved-type diagnostic and
+// installs a recovery placeholder; the file-backed xsl:import-schema path must
+// surface this as XTSE0220 rather than silently succeeding with an invalid
+// schema.
+const ddMainSchemaMissingType = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/s"
+           xmlns:s="http://example.com/s"
+           elementFormDefault="qualified">
+  <xs:element name="root" type="s:rootType"/>
+</xs:schema>`
+
+// TestImportSchemaFileBackedMissingTypeIsFatal verifies that a file-backed
+// xsl:import-schema whose schema references an undeclared type fails the
+// stylesheet compile with XTSE0220, instead of discarding the xsd compiler's
+// fatal unresolved-type diagnostic and compiling successfully with a recovery
+// placeholder.
+func TestImportSchemaFileBackedMissingTypeIsFatal(t *testing.T) {
+	const baseURI = "https://example.com/style/main.xsl"
+	const mainSchemaURI = "https://example.com/s/main.xsd"
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s" schema-location="https://example.com/s/main.xsd"/>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	resolver := &exactURIResolver{files: map[string]string{
+		mainSchemaURI: ddMainSchemaMissingType,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.Error(t, err, "file-backed import-schema with an unresolved referenced type must fail compilation")
+	require.Contains(t, err.Error(), "XTSE0220",
+		"fatal schema-construction error must surface as XTSE0220; got %v", err)
+}
+
 // ddSelfContainedSchema is a single-file schema with no nested include, used to
 // exercise top-level schema-location resolution in isolation.
 const ddSelfContainedSchema = `<?xml version="1.0"?>

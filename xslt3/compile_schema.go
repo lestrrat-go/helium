@@ -36,8 +36,30 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// and route the schema's nested xs:include/xs:import/xs:redefine loads
 	// through the same compile-time resolver (default-deny) instead of the
 	// xsd compiler's default os.Open.
+	//
+	// Install a fatalErrorCounter ErrorHandler so fatal schema-construction
+	// diagnostics (e.g. an unresolved referenced type, or a nested xs:import
+	// that fails to load) are not discarded. Without it the xsd compiler
+	// installs a recovery placeholder for the unresolved type and reports
+	// success, silently producing an invalid schema. This mirrors the
+	// inline-schema path in compileImportSchema.
+	errCounter := &fatalErrorCounter{}
 	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
-	return xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys).Compile(ctx, doc)
+	schema, err := xsd.NewCompiler().
+		ErrorHandler(errCounter).
+		BaseDir(schemaCompileBaseDir(uri)).
+		FS(fsys).
+		Compile(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+	// XTSE0220: the schema could not be constructed (e.g. an unresolved
+	// referenced type or a nested xs:import miss left a recovery placeholder).
+	if errCounter.count.Load() > 0 {
+		return nil, staticError(errCodeXTSE0220,
+			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
+	}
+	return schema, nil
 }
 
 // loadSchemaBytes loads a nested-schema document referenced by
