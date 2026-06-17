@@ -38,6 +38,13 @@ func TestFixedValueSpace(t *testing.T) {
 		{name: "boolean true vs 1", typ: xsBooleanType, fixed: "true", instance: "1"},
 		{name: "boolean value mismatch", typ: xsBooleanType, fixed: "true", instance: "0", wantReject: true},
 
+		// float — value space is IEEE-754 single precision, so 16777216 and
+		// 16777217 round to the same float32 and must be accepted; xs:double keeps
+		// them distinct as float64 and must be rejected.
+		{name: "float single-precision equal", typ: xsFloatType, fixed: "16777216", instance: "16777217"},
+		{name: "float value mismatch", typ: xsFloatType, fixed: "16777216", instance: "16777220", wantReject: true},
+		{name: "double full-precision distinct", typ: xsDoubleType, fixed: "16777216", instance: "16777217", wantReject: true},
+
 		// hexBinary — value space is the decoded octets, so case differences are
 		// not significant ("0A" == "0a"); a different byte must be rejected.
 		{name: "hexBinary case-insensitive", typ: xsHexBinaryType, fixed: "0A", instance: "0a"},

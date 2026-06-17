@@ -272,10 +272,18 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeFloat, lexicon.FloatNaN, lexicon.FloatNaN, 0, false},
 		{lexicon.TypeFloat, "1e2", "100", 0, true},
 		{lexicon.TypeFloat, "1.5E-3", "0.0015", 0, true},
+		// xs:float value space is IEEE-754 single precision: 16777216 and
+		// 16777217 round to the same float32 (2^24 and 2^24+1 are not both
+		// representable), so they are equal in the xs:float value space.
+		{lexicon.TypeFloat, "16777216", "16777217", 0, true},
+		{lexicon.TypeFloat, "16777217", "16777216", 0, true},
 
-		// double (same path as float)
+		// double (the value space is float64, so 16777216 and 16777217 remain
+		// distinct — only the float path rounds to single precision).
 		{lexicon.TypeDouble, lexicon.FloatINF, lexicon.FloatNegINF, 1, true},
 		{lexicon.TypeDouble, "1e10", "9999999999", 1, true},
+		{lexicon.TypeDouble, "16777216", "16777217", -1, true},
+		{lexicon.TypeDouble, "16777217", "16777216", 1, true},
 
 		// dateTime
 		{lexicon.TypeDateTime, testDT0, testDT0, 0, true},

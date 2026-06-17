@@ -9,6 +9,8 @@ const (
 	xsBooleanType   = "xs:boolean"
 	xsStringType    = "xs:string"
 	xsHexBinaryType = "xs:hexBinary"
+	xsFloatType     = "xs:float"
+	xsDoubleType    = "xs:double"
 
 	nanLexical = "NaN"
 	abcLiteral = "abc"

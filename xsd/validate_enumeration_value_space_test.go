@@ -36,17 +36,17 @@ func TestEnumerationValueSpace(t *testing.T) {
 		{name: "boolean non-member", baseType: xsBooleanType, enum: []string{"true"}, instance: "0", wantReject: true},
 
 		// float / double — trailing zero and exponent forms.
-		{name: "float trailing zero", baseType: "xs:float", enum: []string{"1.5"}, instance: "1.50"},
-		{name: "float exponent form", baseType: "xs:float", enum: []string{"1.5"}, instance: "1.5E0"},
-		{name: "double exponent form", baseType: "xs:double", enum: []string{"1.5"}, instance: "1.5E0"},
-		{name: "double non-member", baseType: "xs:double", enum: []string{"1.5"}, instance: "2.5", wantReject: true},
+		{name: "float trailing zero", baseType: xsFloatType, enum: []string{"1.5"}, instance: "1.50"},
+		{name: "float exponent form", baseType: xsFloatType, enum: []string{"1.5"}, instance: "1.5E0"},
+		{name: "double exponent form", baseType: xsDoubleType, enum: []string{"1.5"}, instance: "1.5E0"},
+		{name: "double non-member", baseType: xsDoubleType, enum: []string{"1.5"}, instance: "2.5", wantReject: true},
 
 		// float NaN — per XSD, NaN equals NaN for enumeration purposes; signed
 		// lexical forms (accepted by the float validator) must match too.
-		{name: "float NaN matches NaN", baseType: "xs:float", enum: []string{nanLexical}, instance: nanLexical},
-		{name: "double NaN matches NaN", baseType: "xs:double", enum: []string{nanLexical}, instance: nanLexical},
-		{name: "float signed NaN matches NaN", baseType: "xs:float", enum: []string{nanLexical}, instance: "+NaN"},
-		{name: "double signed NaN matches NaN", baseType: "xs:double", enum: []string{nanLexical}, instance: "-NaN"},
+		{name: "float NaN matches NaN", baseType: xsFloatType, enum: []string{nanLexical}, instance: nanLexical},
+		{name: "double NaN matches NaN", baseType: xsDoubleType, enum: []string{nanLexical}, instance: nanLexical},
+		{name: "float signed NaN matches NaN", baseType: xsFloatType, enum: []string{nanLexical}, instance: "+NaN"},
+		{name: "double signed NaN matches NaN", baseType: xsDoubleType, enum: []string{nanLexical}, instance: "-NaN"},
 
 		// hexBinary — value space is the decoded octets, so case differences are
 		// not significant ("0A" == "0a"); a different byte must be rejected.
