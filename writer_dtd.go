@@ -415,6 +415,13 @@ func (d *writeSession) dumpNs(out io.Writer, ns *Namespace) error {
 		return nil
 	}
 
+	// The prefix is emitted verbatim as "xmlns:"+prefix below. Reject any
+	// prefix that is not a valid NCName so a crafted prefix (whitespace,
+	// quotes, '>') cannot inject raw markup into the start tag.
+	if !d.checkNamespacePrefix(ns.prefix) {
+		return d.err
+	}
+
 	if _, err := io.WriteString(out, " "); err != nil {
 		return err
 	}

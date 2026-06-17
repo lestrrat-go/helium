@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -96,6 +97,85 @@ func (s *writeSession) check(err error) {
 	if s.err == nil && err != nil {
 		s.err = err
 	}
+}
+
+// hasXmlnsPrefix reports whether name carries the reserved "xmlns:" QName
+// prefix. Namespaces-in-XML forbids using "xmlns" as an element/attribute
+// prefix; such a name (e.g. "xmlns:root") would be serialized as a forbidden
+// prefixed name. Note this does NOT match the bare name "xmlns": that name is a
+// valid element name (<xmlns/> is well-formed) and is only reserved as an
+// attribute name, which checkAttributeName handles separately.
+func hasXmlnsPrefix(name string) bool {
+	return strings.HasPrefix(name, "xmlns:")
+}
+
+// checkElementName validates an element name about to be emitted verbatim. An
+// unvalidated name (e.g. from CreateElement) can carry whitespace, quotes, or
+// '>' that inject raw markup into the output. On failure it records a sticky
+// error (preserving any earlier one) and returns false. Shared by both the
+// generic and XHTML serialization paths so they cannot diverge.
+//
+// An element whose QName prefix is the reserved "xmlns" prefix is rejected:
+// IsValidQName only checks QName grammar, but Namespaces-in-XML forbids using
+// "xmlns" as a prefix. With an active namespace (which bypasses dumpNs) such a
+// name (e.g. "xmlns:root") could otherwise be serialized as <xmlns:root/>. The
+// bare name "xmlns" is NOT rejected: it is a valid element name (<xmlns/> is
+// well-formed XML); "xmlns" is reserved only as an attribute name.
+func (s *writeSession) checkElementName(name string) bool {
+	if hasXmlnsPrefix(name) {
+		s.check(fmt.Errorf("helium: reserved element name %q: namespace declarations must use DeclareNamespace", name))
+		return false
+	}
+	if xmlchar.IsValidQName(name) {
+		return true
+	}
+	s.check(fmt.Errorf("helium: invalid element name %q", name))
+	return false
+}
+
+// checkAttributeName validates an attribute name about to be emitted verbatim.
+// An unvalidated name can inject raw markup (extra attributes, '>') into the
+// start tag. On failure it records a sticky error and returns false.
+//
+// The reserved "xmlns" name is also rejected: a normal attribute named
+// "xmlns" (or one whose QName prefix is "xmlns", e.g. "xmlns:foo") would be
+// emitted as a namespace declaration even though it never went through
+// DeclareNamespace. Namespace declarations are stored as separate Namespace
+// nodes (nsDefs) and serialized by dumpNs; the serializer's own correct
+// xmlns output never reaches this function, so rejecting here only blocks
+// user-supplied misuse.
+func (s *writeSession) checkAttributeName(name string) bool {
+	if name == "xmlns" || hasXmlnsPrefix(name) {
+		s.check(fmt.Errorf("helium: reserved attribute name %q: namespace declarations must use DeclareNamespace", name))
+		return false
+	}
+	if xmlchar.IsValidQName(name) {
+		return true
+	}
+	s.check(fmt.Errorf("helium: invalid attribute name %q", name))
+	return false
+}
+
+// checkNamespacePrefix validates a namespace declaration prefix about to be
+// emitted as "xmlns:"+prefix. An unvalidated prefix (e.g. from
+// DeclareNamespace) can carry whitespace, quotes, or '>' that inject raw markup
+// into the start tag. The empty prefix (default namespace, xmlns="...") is
+// allowed; any non-empty prefix must be a valid NCName (no colon). The
+// reserved "xmlns" prefix is rejected: Namespaces-in-XML forbids declaring it,
+// so dumpNs must not emit xmlns:xmlns="...". The "xml" prefix is handled by
+// dumpNs before this function is called. On failure it records a sticky error
+// (preserving any earlier one) and returns false. Shared by both the generic
+// and XHTML serialization paths so they cannot diverge.
+func (s *writeSession) checkNamespacePrefix(prefix string) bool {
+	if prefix == "xmlns" {
+		s.check(fmt.Errorf("helium: reserved namespace prefix %q must not be declared", prefix))
+		return false
+	}
+	if prefix == "" || xmlchar.IsValidNCName(prefix) {
+		return true
+	}
+	s.check(fmt.Errorf("helium: invalid namespace prefix %q", prefix))
+	return false
 }
 
 // NewWriter creates a new Writer with default settings.
@@ -436,6 +516,13 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		name = n.Name()
 	}
 
+	// The element name is emitted verbatim below. checkElementName rejects
+	// names that are not well-formed XML QNames (whitespace, quotes, '>') and
+	// records a sticky error without clobbering an earlier I/O failure.
+	if !d.checkElementName(name) {
+		return d.err
+	}
+
 	d.writeString(out, "<")
 	d.writeString(out, name)
 
@@ -452,6 +539,11 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
 			g := pdebug.IPrintf("START WriteNode(fallthrough->attribute(%s))", attr.Name())
+			// The attribute name is emitted verbatim. checkAttributeName
+			// rejects names that would inject raw markup into the start tag.
+			if !d.checkAttributeName(attr.Name()) {
+				return d.err
+			}
 			d.writeString(out, " "+attr.Name()+`="`)
 			if d.err != nil {
 				return d.err
