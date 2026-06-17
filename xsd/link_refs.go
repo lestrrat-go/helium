@@ -32,6 +32,16 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				if edecl.Fixed == nil {
 					edecl.Fixed = ge.Fixed
 				}
+				// Copy the referenced declaration's substitution-group
+				// affiliation. A no-type substitution-group member leaves
+				// edecl.Type nil here; without the affiliation, effectiveDeclType
+				// cannot walk to the typed head, so xsi:nil lexical and
+				// nilled-empty checks would be silently skipped for a direct
+				// ref="member". The member's own Nillable (copied below) still
+				// governs the nilled-element check.
+				if edecl.SubstitutionGroup == (QName{}) {
+					edecl.SubstitutionGroup = ge.SubstitutionGroup
+				}
 				edecl.Nillable = ge.Nillable
 				edecl.Abstract = ge.Abstract
 				if !edecl.BlockSet {
