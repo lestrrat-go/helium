@@ -791,6 +791,60 @@ func TestXIncludeTextEncoding(t *testing.T) {
 	require.Contains(t, content, "café")
 }
 
+func TestXIncludeTextUnsupportedEncoding(t *testing.T) {
+	t.Parallel()
+	// An unsupported requested encoding must be treated as a resource error:
+	// the raw bytes must NOT be silently read as UTF-8. Use ASCII-safe data so
+	// validateXMLChars cannot mask the bug by rejecting the bytes anyway.
+	resolver := &byteResolver{
+		files: map[string][]byte{
+			"data.txt": []byte("hello"),
+		},
+	}
+
+	t.Run("no fallback errors", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="data.txt" parse="text" encoding="bogus-encoding"/>
+		</root>`)
+
+		_, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), doc)
+		require.Error(t, err)
+	})
+
+	t.Run("fallback used", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="data.txt" parse="text" encoding="bogus-encoding">
+				<xi:fallback><fallback-content/></xi:fallback>
+			</xi:include>
+		</root>`)
+
+		count, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		root := docElement(doc)
+		var found bool
+		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == helium.ElementNode {
+				if c.(*helium.Element).LocalName() == "fallback-content" {
+					found = true
+				}
+			}
+		}
+		require.True(t, found, "fallback content not found")
+	})
+}
+
 func TestXIncludeProcessTree(t *testing.T) {
 	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">

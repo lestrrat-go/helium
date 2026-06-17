@@ -673,13 +673,17 @@ func (p *processor) includeText(inc *helium.Element, uri string, incBase string)
 	encName := getAttr(inc, "encoding")
 	if encName != "" {
 		enc := encoding.Load(encName)
-		if enc != nil {
-			decoded, decErr := enc.NewDecoder().Bytes(data)
-			if decErr != nil {
-				return fmt.Errorf("xi:include: error decoding %q with encoding %q: %w", uri, encName, decErr)
-			}
-			data = decoded
+		// An unsupported requested encoding is a resource error: the raw bytes
+		// must not be silently treated as UTF-8. Returning an error here lets
+		// the caller's fallback handling apply (or fail the inclusion).
+		if enc == nil {
+			return fmt.Errorf("xi:include: unsupported encoding %q for %q", encName, uri)
 		}
+		decoded, decErr := enc.NewDecoder().Bytes(data)
+		if decErr != nil {
+			return fmt.Errorf("xi:include: error decoding %q with encoding %q: %w", uri, encName, decErr)
+		}
+		data = decoded
 	}
 
 	// Validate that text contains only valid XML characters
