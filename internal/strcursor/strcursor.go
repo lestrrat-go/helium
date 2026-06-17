@@ -594,13 +594,14 @@ func (c *RuneCursor) Read(buf []byte) (int, error) {
 
 // ByteCursor reads bytes from an io.Reader.
 type ByteCursor struct {
-	buf    []byte
-	buflen int
-	bufpos int
-	column int
-	in     io.Reader
-	line   []byte
-	lineno int
+	buf     []byte
+	buflen  int
+	bufpos  int
+	column  int
+	in      io.Reader
+	line    []byte
+	lineno  int
+	readErr error // sticky non-EOF read error returned alongside buffered data
 }
 
 func NewByteCursor(r io.Reader, nn ...int) *ByteCursor {
@@ -646,16 +647,38 @@ func (c *ByteCursor) fillBuffer(n int) error {
 
 	nread, err := c.in.Read(c.buf[remaining:])
 	c.buflen = nread + remaining
-	if nread == 0 && err != nil {
-		if remaining >= n {
-			return nil
+	if err != nil {
+		// Remember a genuine read error (anything other than a clean EOF) so
+		// it survives even when this Read also returned data (n > 0), which
+		// io.Reader explicitly permits. A truncated/corrupt stream may deliver
+		// its final bytes and the error together in a single Read; discarding
+		// the error here would let the parser accept the buffered bytes as if
+		// the stream ended cleanly.
+		if err != io.EOF && c.readErr == nil {
+			c.readErr = err
 		}
-		return err
+		if nread == 0 {
+			if remaining >= n {
+				return nil
+			}
+			return err
+		}
 	}
 	if c.buflen < n {
+		if c.readErr != nil {
+			return c.readErr
+		}
 		return errors.New("fillBuffer request exceeds available data")
 	}
 	return nil
+}
+
+// Err returns a sticky non-EOF read error encountered while filling the buffer.
+// A reader is permitted to return data together with an error on the same Read;
+// the buffered bytes are still served, but the error is surfaced here once they
+// have been consumed. It returns nil if the stream ended cleanly.
+func (c *ByteCursor) Err() error {
+	return c.readErr
 }
 
 func (c *ByteCursor) Done() bool {
