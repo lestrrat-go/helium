@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -204,6 +205,14 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		pctx.attrBuf = make([]attrData, 0, 8)
 	}
 	attrs := pctx.attrBuf[:0]
+
+	// Prefixes declared by namespace attributes on THIS start tag, used to
+	// detect same-element duplicate declarations. The empty string is the
+	// default xmlns. This is tracked independently of pushNS/nbNs because
+	// parseNsClean may skip pushing a redundant ancestor redeclaration while
+	// still having consumed a same-element declaration that a later
+	// duplicate must conflict with. Reset per element (nsDeclared[:0]).
+	nsDeclared := pctx.nsDeclaredBuf[:0]
 	for pctx.instate != psEOF {
 		pctx.skipBlanks(ctx)
 		if cur.Peek() == '>' {
@@ -227,7 +236,19 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			// during attribute value parsing (replaceEntities forced true in
 			// parseAttribute for namespace attrs), so no post-processing needed.
 
-			// parseNsClean: skip redundant namespace declarations
+			// A start tag may not carry two default namespace declarations.
+			// This is a well-formedness violation regardless of whether the
+			// URIs match and is fatal even with parseNsClean (which only
+			// suppresses redundant ancestor redeclarations, never
+			// same-element duplicates). The check uses nsDeclared, which
+			// records every same-element declaration even one the parseNsClean
+			// skip path would not push onto nsTab.
+			if slices.Contains(nsDeclared, "") {
+				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
+			}
+			nsDeclared = append(nsDeclared, "")
+
+			// parseNsClean: skip redundant ancestor redeclarations.
 			if pctx.options.IsSet(parseNsClean) && pctx.nsTab.Lookup("") == attvalue {
 				goto SkipDefaultNS
 			}
@@ -245,7 +266,6 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			continue
 		} else if aprefix == lexicon.PrefixXMLNS {
 			var u *url.URL
-			var existingURI string
 
 			// <elem xmlns:foo="...">
 			// Namespace URI entity/character references are expanded inline
@@ -277,16 +297,18 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", attname, attvalue))
 			}
 
-			// Check only the current element's bindings (top nbNs entries)
-			// to detect true duplicates. A prefix bound in an ancestor
-			// element is valid shadowing, not a duplicate.
-			existingURI = pctx.nsTab.LookupInTopN(attname, nbNs)
-			if existingURI != "" {
-				if pctx.options.IsSet(parseNsClean) && existingURI == attvalue {
-					goto SkipNS
-				}
+			// A same-element duplicate namespace declaration is a
+			// well-formedness violation and is fatal even when the URIs
+			// match and parseNsClean is set: parseNsClean only suppresses
+			// redundant ancestor redeclarations, never same-element dupes.
+			// nsDeclared records every same-element declaration, including
+			// one the parseNsClean skip path would not push onto nsTab, so a
+			// later duplicate is still caught. A prefix bound only in an
+			// ancestor is valid shadowing and is not in nsDeclared.
+			if slices.Contains(nsDeclared, attname) {
 				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
 			}
+			nsDeclared = append(nsDeclared, attname)
 			// parseNsClean: skip if an ancestor already binds this prefix
 			// to the same URI (redundant redeclaration).
 			if pctx.options.IsSet(parseNsClean) && pctx.nsTab.Lookup(attname) == attvalue {
@@ -305,6 +327,16 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			}
 			pctx.skipBlanks(ctx)
 			continue
+		}
+
+		// XML 1.0 §3.1: a start tag may not carry two attributes with the
+		// same qualified name. Reject before appending or invoking any
+		// SAX/DOM callback. (Namespace declarations are duplicate-checked
+		// in their own branches above and never reach here.)
+		for i := range attrs {
+			if attrs[i].localname == attname && attrs[i].prefix == aprefix {
+				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
+			}
 		}
 
 		attr := attrData{
@@ -382,6 +414,33 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		}
 	}
 
+	// Namespaces in XML §6.3: no element may have two attributes with the
+	// same expanded name (namespace URI + local name). Literal duplicate
+	// qualified names were already rejected during parsing; here we catch
+	// the case of distinct prefixes bound to the same namespace URI
+	// (e.g. p:a and q:a where xmlns:p and xmlns:q both map to urn:x).
+	// This is done after all namespace declarations on this start tag have
+	// been pushed, so prefixes declared after the attributes still resolve.
+	// Unprefixed attributes are in no namespace (a default xmlns does not
+	// apply to attributes) and are excluded from this check.
+	for i := range attrs {
+		if attrs[i].prefix == "" || attrs[i].prefix == lexicon.PrefixXML {
+			continue
+		}
+		iuri := pctx.lookupNamespace(attrs[i].prefix)
+		for j := i + 1; j < len(attrs); j++ {
+			if attrs[j].prefix == "" || attrs[j].prefix == lexicon.PrefixXML {
+				continue
+			}
+			if attrs[i].localname != attrs[j].localname {
+				continue
+			}
+			if iuri != "" && iuri == pctx.lookupNamespace(attrs[j].prefix) {
+				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
+			}
+		}
+	}
+
 	nsuri := pctx.lookupNamespace(prefix)
 	if prefix != "" && nsuri == "" {
 		return pctx.namespaceError(ctx, errors.New("namespace '"+prefix+"' not found"))
@@ -420,6 +479,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	pctx.pushNodeEntry(nodeEntry{local: local, prefix: prefix, uri: nsuri, qname: qname})
 	pctx.nsNrTab = append(pctx.nsNrTab, nbNs)
 	pctx.attrBuf = attrs[:0]
+	pctx.nsDeclaredBuf = nsDeclared[:0]
 
 	return nil
 }

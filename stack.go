@@ -1,8 +1,6 @@
 package helium
 
 import (
-	"slices"
-
 	"github.com/lestrrat-go/helium/internal/stack"
 )
 
@@ -76,20 +74,6 @@ func (s *nsStack) Lookup(prefix string) string {
 		return ""
 	}
 	return item.href
-}
-
-// LookupInTopN searches only the top n entries of the stack for prefix.
-// This is used to detect duplicate namespace declarations on the same
-// element without being confused by ancestor bindings (which are valid
-// prefix shadowing, not duplicates).
-func (s *nsStack) LookupInTopN(prefix string, n int) string {
-	entries := s.Peek(n)
-	for _, v := range slices.Backward(entries) {
-		if v.prefix == prefix {
-			return v.href
-		}
-	}
-	return ""
 }
 
 func (s *nodeStack) Push(e nodeEntry) {
