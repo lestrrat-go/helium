@@ -1742,7 +1742,7 @@ func validateXSDType(typeName, value string, params []*param) int {
 	case "language":
 		return 0
 	case "base64Binary":
-		return 0
+		return validateXSDBase64Binary(value)
 	case "hexBinary":
 		return validateXSDHexBinary(value)
 	default:
@@ -1937,6 +1937,53 @@ func validateXSDNMTOKENS(value string) int {
 		}
 	}
 	return 0
+}
+
+// validateXSDBase64Binary checks the lexical space of xs:base64Binary.
+// Whitespace is permitted between characters (XSD 3.2.16). After removing
+// whitespace the value must be a sequence of base64 alphabet characters whose
+// length is a multiple of 4, with padding ('=') appearing only in the final
+// quantum: zero, one ("xx==") or two ("xxx=") padding characters at the end.
+func validateXSDBase64Binary(value string) int {
+	var compact []byte
+	for i := range len(value) {
+		c := value[i]
+		switch c {
+		case ' ', '\t', '\n', '\r':
+			continue
+		}
+		compact = append(compact, c)
+	}
+	if len(compact)%4 != 0 {
+		return -1
+	}
+	pad := 0
+	for i, c := range compact {
+		if c == '=' {
+			// Padding may only appear as the last one or two characters.
+			if i < len(compact)-2 {
+				return -1
+			}
+			pad++
+			continue
+		}
+		if pad > 0 {
+			// A non-padding character after a '=' is invalid.
+			return -1
+		}
+		if !isBase64Char(c) {
+			return -1
+		}
+	}
+	if pad > 2 {
+		return -1
+	}
+	return 0
+}
+
+func isBase64Char(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+		(c >= '0' && c <= '9') || c == '+' || c == '/'
 }
 
 func validateXSDHexBinary(value string) int {
