@@ -3,7 +3,6 @@ package xpath3
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -124,85 +123,10 @@ func (r Result) StringValue() string {
 // The returned EvalState is not safe for concurrent use. The Result from
 // EvaluateReuse is only valid until the next EvaluateReuse call.
 func (e Evaluator) NewEvalState(node helium.Node) *EvalState {
-	opCount := 0
-	now := time.Now()
-	s := &EvalState{}
-	ec := &s.ec
-	cfg := e.cfg
-
-	ec.node = node
-	ec.position = 1
-	ec.size = 1
-	ec.opCount = &opCount
-	ec.docOrder = &ixpath.DocOrderCache{}
-	ec.maxNodes = maxNodeSetLength
-	ec.docCache = make(map[string]helium.Node)
-
-	// namespaces
-	ec.namespaces = cfg.namespaces
-
-	// variables
-	if cfg.variables != nil && cfg.variables.Len() > 0 {
-		ec.vars = newVariableScope(cfg.variables.toMap())
-	}
-
-	// functions
-	if cfg.functions != nil {
-		ec.functions = cfg.functions.localMap()
-		ec.fnsNS = cfg.functions.qnameMap()
-	}
-
-	// resolvers
-	ec.variableResolver = cfg.variableResolver
-	ec.functionResolver = cfg.functionResolver
-	ec.uriResolver = cfg.uriResolver
-	ec.collectionResolver = cfg.collectionResolver
-	ec.httpClient = cfg.httpClient
-
-	// limits
-	ec.opLimit = cfg.opLimit
-	ec.maxRecursionDepth = DefaultMaxRecursionDepth
-
-	// time
-	if cfg.currentTime != nil {
-		ec.currentTime = cfg.currentTime
-	} else {
-		ec.currentTime = &now
-	}
-	ec.implicitTimezone = cfg.implicitTimezone
-
-	// locale / formatting
-	ec.defaultLanguage = cfg.defaultLanguage
-	ec.defaultCollation = cfg.defaultCollation
-	if cfg.defaultDecimal != nil {
-		df := *cfg.defaultDecimal
-		ec.defaultDecimalFormat = &df
-	}
-	ec.decimalFormats = cfg.decimalFormats
-
-	// base URI
-	ec.baseURI = cfg.baseURI
-
-	// schema / typing
-	ec.typeAnnotations = cfg.typeAnnotations
-	ec.schemaDeclarations = cfg.schemaDeclarations
-	ec.strictPrefixes = cfg.strictPrefixes
-	ec.allowXML11Chars = cfg.allowXML11Chars
-
-	// dynamic focus overrides
-	if cfg.position > 0 {
-		ec.position = cfg.position
-	}
-	if cfg.size > 0 {
-		ec.size = cfg.size
-	}
-	if cfg.contextItem != nil {
-		ec.contextItem = cfg.contextItem
-		ec.node = nil
-	}
-	if cfg.docOrder != nil {
-		ec.docOrder = cfg.docOrder
-	}
-
+	// Build the evaluation context through the shared initialization path so
+	// the reuse state stays in lockstep with normal Evaluate: same nil-cfg
+	// guard, same custom max-node limit, and the same complete set of copied
+	// fields (preserved ID annotations, TraceWriter, etc.).
+	s := &EvalState{ec: *e.newEvalCtx(node)}
 	return s
 }
