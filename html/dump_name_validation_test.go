@@ -26,6 +26,57 @@ func TestWriteRejectsInvalidElementName(t *testing.T) {
 	}
 }
 
+// TestWriteRejectsMalformedElementName ensures the HTML serializer refuses to
+// write element names that libxml2 treats as malformed tag names — e.g.
+// CreateElement("a?b") or CreateElement("a&b") — rather than serializing them
+// verbatim as <a?b> / <a&b>. Element names use the stricter HTML tag-name
+// grammar; '?' and '&' (accepted in the loose ATTRIBUTE rule) are rejected
+// here.
+func TestWriteRejectsMalformedElementName(t *testing.T) {
+	for _, name := range []string{"a?b", "a&b", "a=b"} {
+		doc := helium.NewHTMLDocument()
+		root := doc.CreateElement(name)
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		out, err := html.WriteString(doc)
+		require.Error(t, err, "serializing malformed element name %q must error, got output %q", name, out)
+	}
+}
+
+// TestWriteAcceptsValidElementNames confirms the stricter element-name grammar
+// does not over-reject names the parser/suite legitimately produces: ASCII
+// tag-name characters (letters, digits, ':', '-', '_', '.').
+func TestWriteAcceptsValidElementNames(t *testing.T) {
+	for _, name := range []string{"div", "my-elem", "a.b", "x_y", "h1", "svg:rect"} {
+		doc := helium.NewHTMLDocument()
+		root := doc.CreateElement("html")
+		child := doc.CreateElement(name)
+		require.NoError(t, root.AddChild(child))
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		var buf bytes.Buffer
+		err := html.NewWriter().PreserveCase(true).Format(false).
+			DefaultDTD(false).WriteTo(&buf, doc)
+		require.NoError(t, err, "serializing valid element name %q must not error", name)
+		require.Contains(t, buf.String(), name, "got %q", buf.String())
+	}
+}
+
+// TestRoundTripLooseCharsInAttrNameNotElement proves the split: '?' and '&'
+// remain valid in ATTRIBUTE names (loose rule, libxml2 round-trip parity) even
+// though they are rejected in ELEMENT names.
+func TestRoundTripLooseCharsInAttrNameNotElement(t *testing.T) {
+	doc := helium.NewHTMLDocument()
+	root := doc.CreateElement("img")
+	require.NoError(t, root.SetBooleanAttribute("a?b"))
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	var buf bytes.Buffer
+	err := html.NewWriter().DefaultDTD(false).Format(false).WriteTo(&buf, doc)
+	require.NoError(t, err, "attribute name 'a?b' must remain valid (loose rule)")
+	require.Contains(t, buf.String(), "a?b", "got %q", buf.String())
+}
+
 // TestWriteRejectsInvalidAttributeName ensures the HTML serializer refuses to
 // write an attribute whose name is not a valid XML/HTML name, since such a
 // name (with a space or quote) would otherwise inject markup into the tag.
