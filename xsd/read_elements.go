@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -82,7 +83,7 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 		Name:      QName{Local: opts.name, NS: opts.namespace},
 		MinOccurs: opts.minOccurs,
 		MaxOccurs: opts.maxOccurs,
-		Nillable:  getAttr(elem, attrNillable) == attrValTrue,
+		Nillable:  c.readBooleanAttr(ctx, elem, attrNillable),
 	}
 
 	if opts.allowAbstract {
@@ -120,6 +121,28 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	return decl, nil
 }
 
+// readBooleanAttr reads a schema-side xs:boolean attribute (e.g. nillable),
+// applying whitespace-collapse lexical rules (true/false/1/0). An absent
+// attribute is false. An invalid lexical is reported as a schema parser error
+// and treated as false.
+func (c *compiler) readBooleanAttr(ctx context.Context, elem *helium.Element, attr string) bool {
+	if !hasAttr(elem, attr) {
+		return false
+	}
+	v := normalizeWhiteSpace(getAttr(elem, attr), "collapse")
+	switch v {
+	case "true", "1":
+		return true
+	case "false", "0":
+		return false
+	}
+	msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", v)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, elem.Line(),
+		elem.LocalName(), elemElement, attr, msg), helium.ErrorLevelFatal))
+	c.errorCount++
+	return false
+}
+
 func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, decl *ElementDecl, sourceName string) error {
 	typeRef := getAttr(elem, attrType)
 	if typeRef != "" {
@@ -153,6 +176,16 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 			}
 			decl.Type = td
 		}
+	}
+
+	// An element declaration with no explicit type, no inline type, and no
+	// substitution-group head to inherit from defaults to the built-in
+	// xs:anyType (XSD 3.3.2: {type definition} defaults to xs:anyType). This
+	// ensures xsi:nil lexical validation and nilled-empty enforcement run for
+	// no-type declarations the same as for typed ones. Substitution-group
+	// members are left untyped so they can inherit the head's type at validation.
+	if decl.Type == nil && decl.SubstitutionGroup == (QName{}) {
+		decl.Type = c.schema.types[QName{Local: "anyType", NS: lexicon.NamespaceXSD}]
 	}
 
 	return nil
