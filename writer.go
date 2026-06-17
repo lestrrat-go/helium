@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 
 	henc "github.com/lestrrat-go/helium/internal/encoding"
@@ -259,10 +260,27 @@ func hasOnlyTextChildren(n Node) bool {
 	return true
 }
 
+// isNilNode reports whether node is nil, covering both a literal nil interface
+// and a typed-nil concrete pointer wrapped in a non-nil Node interface
+// (Go's interface nil trap).
+func isNilNode(node Node) bool {
+	if node == nil {
+		return true
+	}
+	v := reflect.ValueOf(node)
+	return v.Kind() == reflect.Pointer && v.IsNil()
+}
+
 // WriteTo serializes a node (document or element) to the given writer.
 // When the node is a Document, document-level setup (encoding, XHTML
 // detection, DTD filtering) is applied automatically.
 func (d Writer) WriteTo(out io.Writer, node Node) error {
+	// Guard against a nil node — both a literal nil interface and a typed-nil
+	// concrete pointer (e.g. a (*Element)(nil) stored in a Node) — so callers
+	// get ErrNilNode instead of a panic from method calls on the nil node.
+	if isNilNode(node) {
+		return ErrNilNode
+	}
 	if doc, ok := node.(*Document); ok {
 		return d.writeDoc(out, doc)
 	}
