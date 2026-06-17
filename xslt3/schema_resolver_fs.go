@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"net/url"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -46,24 +45,55 @@ func (s schemaResolverFS) Open(name string) (fs.File, error) {
 	return &schemaResolverFile{name: name, r: bytes.NewReader(data), size: int64(len(data))}, nil
 }
 
+// uriScheme reports the scheme of s when s is an absolute URI reference (has a
+// scheme per RFC 3986, e.g. "https://...", "file:/...", "mem:/...", "urn:..."),
+// or "" otherwise. A bare local filesystem path — even an absolute one like
+// "/tmp/x" — has no scheme; a single-letter scheme is rejected so a Windows
+// drive letter ("C:\x") keeps its filepath handling. This mirrors the xsd
+// package's own uriScheme detection so the two layers agree on what counts as
+// an absolute URI.
+func uriScheme(s string) string {
+	u, err := url.Parse(s)
+	if err != nil || len(u.Scheme) < 2 {
+		return ""
+	}
+	return u.Scheme
+}
+
 // resolveSchemaURI resolves a schema-location reference against a base URI.
 //
-// When the base is an absolute URL (has a scheme), resolution follows RFC 3986
-// via net/url ResolveReference, so the result preserves the authority and
-// applies "../"/subdir semantics correctly — and crucially is NOT collapsed by
-// filepath. When the base is a local filesystem path (no scheme), or either
-// side is empty/absolute, the existing filepath-based join is used so local
-// schema resolution and the default-deny behavior are unchanged.
+// An absolute-URI ref (it has a scheme — with or without a "//" authority, e.g.
+// "https://other/x.xsd", "mem:/schemas/s.xsd", "urn:schemas:s", "file:/tmp/s")
+// addresses its own location and is returned UNCHANGED. It must never be
+// filepath.Join'ed onto a local base — doing so would produce a bogus path like
+// "/work/mem:/schemas/s.xsd" and the resolver would be asked for the wrong URI.
+//
+// When the base is an absolute URL (has a scheme), a relative ref is resolved
+// per RFC 3986 via net/url ResolveReference, so the result preserves the
+// authority and applies "../"/subdir semantics correctly — and crucially is NOT
+// collapsed by filepath. Otherwise (a local filesystem base, or an absolute
+// local path ref), the historical filepath-based join is used so local schema
+// resolution and the default-deny behavior are unchanged.
+//
+// Absolute-URI detection matches the xsd package's uriScheme semantics
+// (url.Parse + multi-character scheme), keeping the two layers consistent.
 func resolveSchemaURI(ref, baseURI string) string {
 	if ref == "" || baseURI == "" {
 		return ref
 	}
-	if strings.Contains(ref, "://") || filepath.IsAbs(ref) {
+	// Absolute-URI ref (any scheme, // or not): pass through verbatim.
+	if uriScheme(ref) != "" {
 		return ref
 	}
+	if filepath.IsAbs(ref) {
+		return ref
+	}
+	if uriScheme(baseURI) == "" {
+		// Local filesystem base: keep the historical filepath join.
+		return filepath.Join(filepath.Dir(baseURI), ref)
+	}
 	base, err := url.Parse(baseURI)
-	if err != nil || base.Scheme == "" {
-		// Local filesystem path: keep the historical filepath join.
+	if err != nil {
 		return filepath.Join(filepath.Dir(baseURI), ref)
 	}
 	refURL, err := url.Parse(ref)
@@ -83,7 +113,7 @@ func resolveSchemaURI(ref, baseURI string) string {
 // DIRECTORY. (A single-letter "scheme" is treated as a Windows drive letter,
 // not a URI, matching the xsd package's own detection.)
 func schemaCompileBaseDir(base string) string {
-	if u, err := url.Parse(base); err == nil && len(u.Scheme) >= 2 {
+	if uriScheme(base) != "" {
 		return base
 	}
 	return filepath.Dir(base)

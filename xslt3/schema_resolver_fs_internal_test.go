@@ -28,6 +28,12 @@ func TestResolveSchemaURI(t *testing.T) {
 		{"file parent", "file:///tmp/s/sub/main.xsd", "../part.xsd", "file:///tmp/s/part.xsd"},
 		{"absolute ref unchanged", "file:///tmp/s/main.xsd", "https://other/x.xsd", "https://other/x.xsd"},
 		{"empty base", "", part, part},
+		// Absolute URIs without a "//" authority (opaque or single-slash)
+		// must be passed through verbatim against a LOCAL filesystem base —
+		// never filepath-joined onto it.
+		{"mem single-slash uri, local base", "/work/main.xsl", "mem:/schemas/s.xsd", "mem:/schemas/s.xsd"},
+		{"urn opaque uri, local base", "/work/main.xsl", "urn:schemas:s", "urn:schemas:s"},
+		{"file single-slash uri, local base", "/work/main.xsl", "file:/tmp/s.xsd", "file:/tmp/s.xsd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, resolveSchemaURI(tc.ref, tc.base))

@@ -2,6 +2,7 @@ package xslt3_test
 
 import (
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -261,6 +262,114 @@ func TestImportSchemaNestedIncludeSubdirRelative(t *testing.T) {
 	out, err := ss.Transform(src).Serialize(ctx)
 	require.NoError(t, err)
 	require.Contains(t, out, "out")
+}
+
+// ddSelfContainedSchema is a single-file schema with no nested include, used to
+// exercise top-level schema-location resolution in isolation.
+const ddSelfContainedSchema = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/s"
+           xmlns:s="http://example.com/s"
+           elementFormDefault="qualified">
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+// TestImportSchemaAbsoluteOpaqueURILocalBase verifies that a compile-time
+// xsl:import-schema whose schema-location is an absolute URI WITHOUT a "//"
+// authority (opaque or single-slash: mem:/..., urn:..., file:/...) is passed to
+// the resolver VERBATIM even when the stylesheet base is a LOCAL filesystem
+// path. The buggy "://"-only detection treated these as relative and
+// filepath-joined them onto the local base (e.g. "/work/mem:/schemas/s.xsd"),
+// so the resolver was asked for the wrong URI and the load failed.
+func TestImportSchemaAbsoluteOpaqueURILocalBase(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		schemaLoc string
+	}{
+		{"mem single-slash", "mem:/schemas/s.xsd"},
+		{"urn opaque", "urn:schemas:s"},
+		{"file single-slash", "file:/tmp/s.xsd"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const baseURI = "/work/main.xsl"
+
+			mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s" schema-location="` + tc.schemaLoc + `"/>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+			ctx := t.Context()
+
+			resolver := &exactURIResolver{files: map[string]string{
+				tc.schemaLoc: ddSelfContainedSchema,
+			}}
+			doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+			require.NoError(t, err, "absolute opaque/single-slash URI schema-location must resolve through the resolver verbatim")
+			require.True(t, resolver.askedFor(tc.schemaLoc),
+				"resolver must be asked for the exact URI %q (not filepath-joined onto the local base); got %v", tc.schemaLoc, resolver.asked)
+			require.False(t, resolver.askedFor(filepath.Join("/work", tc.schemaLoc)),
+				"resolver must NOT be asked for a filepath-joined URI; got %v", resolver.asked)
+
+			src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(ctx)
+			require.NoError(t, err)
+			require.Contains(t, out, "out")
+		})
+	}
+}
+
+// TestSourceSchemaLocationAbsoluteOpaqueURILocalBase is the runtime
+// (xsi:schemaLocation) analogue: an absolute opaque/single-slash URI in the
+// source document's xsi:schemaLocation, with a LOCAL source base URI, must be
+// requested from the invocation resolver verbatim — never filepath-joined.
+func TestSourceSchemaLocationAbsoluteOpaqueURILocalBase(t *testing.T) {
+	const sourceURI = "/work/input.xml"
+	const schemaLoc = "mem:/schemas/s.xsd"
+
+	styleSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s"
+    default-validation="strict">
+  <xsl:import-schema namespace="http://example.com/s"/>
+  <xsl:template match="/">
+    <s:root>text</s:root>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	sourceSrc := `<?xml version="1.0"?>
+<root xmlns="http://example.com/s"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://example.com/s mem:/schemas/s.xsd">text</root>`
+
+	ctx := t.Context()
+
+	ssDoc, err := helium.NewParser().Parse(ctx, []byte(styleSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(ctx, ssDoc)
+	require.NoError(t, err)
+
+	resolver := &exactRuntimeURIResolver{files: map[string]string{
+		schemaLoc: ddSelfContainedSchema,
+	}}
+	src, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
+	require.NoError(t, err)
+	src.SetURL(sourceURI)
+	out, err := ss.Transform(src).URIResolver(resolver).Serialize(ctx)
+	require.NoError(t, err, "runtime absolute opaque URI schema-location over a local base must resolve through the resolver verbatim")
+	require.True(t, resolver.askedFor(schemaLoc),
+		"resolver must be asked for the exact URI %q; got %v", schemaLoc, resolver.asked)
+	require.False(t, resolver.askedFor(filepath.Join("/work", schemaLoc)),
+		"resolver must NOT be asked for a filepath-joined URI; got %v", resolver.asked)
+	require.Contains(t, out, "root")
 }
 
 // TestSourceSchemaLocationNestedIncludeAbsoluteURLBase verifies the runtime
