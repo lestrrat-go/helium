@@ -325,7 +325,7 @@ func resolveAttrBuiltinLocal(attr *helium.Attribute, host *helium.Element, hostD
 	}
 
 	if ga, ok := schema.globalAttrs[aqn]; ok {
-		if td, ok := schema.types[ga.TypeName]; ok {
+		if td := attrUseTypeDef(ga, schema); td != nil {
 			return builtinBaseLocal(td)
 		}
 	}
@@ -450,12 +450,21 @@ func attrUseType(td *TypeDef, aqn QName, schema *Schema) *TypeDef {
 			if au.Name != aqn {
 				continue
 			}
-			at, ok := schema.types[au.TypeName]
-			if !ok {
-				return nil
-			}
-			return at
+			return attrUseTypeDef(au, schema)
 		}
+	}
+	return nil
+}
+
+// attrUseTypeDef resolves the effective simple type for an attribute use,
+// mirroring validationContext.attrUseType: an inline anonymous <xs:simpleType>
+// (au.Type) takes precedence over a named type reference (au.TypeName).
+func attrUseTypeDef(au *AttrUse, schema *Schema) *TypeDef {
+	if au.Type != nil {
+		return au.Type
+	}
+	if td, ok := schema.types[au.TypeName]; ok {
+		return td
 	}
 	return nil
 }
