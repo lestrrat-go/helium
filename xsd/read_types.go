@@ -356,6 +356,13 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 		ContentType: ContentTypeSimple,
 	}
 
+	// Record source info for this type as a local (anonymous/inline) simple
+	// type. parseNamedSimpleType overwrites this with isLocal:false after the
+	// name is assigned. Recording it here ensures reportUnresolvedTypeRef can
+	// fire for unresolved base/itemType/memberTypes references inside inline
+	// simpleTypes, not just top-level named ones.
+	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: true}
+
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue

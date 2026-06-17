@@ -308,6 +308,50 @@ func TestImportSchemaNestedIncludeSubdirRelative(t *testing.T) {
 	require.Contains(t, out, "out")
 }
 
+// TestImportSchemaXMLBaseFileURIBase verifies that an xml:base attribute on the
+// xsl:import-schema element is folded into the effective base URI without
+// collapsing a canonical file:/// base to a bare local path. With base URI
+// "file:///tmp/styles/main.xsl" and xml:base="schemas/", the schema-location
+// "main.xsd" must resolve to "file:///tmp/styles/schemas/main.xsd" — not the
+// scheme-dropped "/tmp/styles/schemas/main.xsd" that helium.BuildURI produced
+// by filepath.Join'ing the file: scheme away.
+func TestImportSchemaXMLBaseFileURIBase(t *testing.T) {
+	const baseURI = "file:///tmp/styles/main.xsl"
+	const wantSchemaURI = "file:///tmp/styles/schemas/main.xsd"
+	const collapsedURI = "/tmp/styles/schemas/main.xsd"
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xml="http://www.w3.org/XML/1998/namespace"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s" schema-location="main.xsd" xml:base="schemas/"/>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	resolver := &exactURIResolver{files: map[string]string{
+		wantSchemaURI: ddSelfContainedSchema,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "xml:base folded over a file:/// base must keep the file: scheme so the resolver can serve it")
+	require.True(t, resolver.askedFor(wantSchemaURI),
+		"resolver must be asked for the canonical file:/// URI %q; got %v", wantSchemaURI, resolver.asked)
+	require.False(t, resolver.askedFor(collapsedURI),
+		"resolver must NOT be asked for the scheme-dropped local path %q; got %v", collapsedURI, resolver.asked)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "out")
+}
+
 // ddSelfContainedSchema is a single-file schema with no nested include, used to
 // exercise top-level schema-location resolution in isolation.
 const ddSelfContainedSchema = `<?xml version="1.0"?>

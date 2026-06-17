@@ -69,4 +69,44 @@ func TestUnresolvedTypeRef(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
 	})
+
+	// Inline (local) simpleTypes must also report unresolved type refs, not
+	// just top-level named simpleTypes. Before recording source info for local
+	// simple types, reportUnresolvedTypeRef returned early and these compiled
+	// silently.
+	t.Run("missing base type in inline simpleType", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="MissingBase"/>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+	})
+
+	t.Run("missing list item type in inline simpleType", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:list itemType="MissingItem"/>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+	})
+
+	t.Run("missing union member type in inline simpleType", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:union memberTypes="xs:string MissingMember"/>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+	})
 }
