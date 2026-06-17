@@ -1014,3 +1014,40 @@ func TestWriteValidationPreservesStickyIOError(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteNilNode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("WriteString interface nil", func(t *testing.T) {
+		t.Parallel()
+		s, err := helium.WriteString(nil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "nil node must return ErrNilNode")
+		require.Empty(t, s)
+	})
+
+	t.Run("Write interface nil", func(t *testing.T) {
+		t.Parallel()
+		err := helium.Write(io.Discard, nil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "nil node must return ErrNilNode")
+	})
+
+	t.Run("WriteTo interface nil", func(t *testing.T) {
+		t.Parallel()
+		err := helium.NewWriter().WriteTo(io.Discard, nil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "nil node must return ErrNilNode")
+	})
+
+	t.Run("WriteTo typed nil", func(t *testing.T) {
+		t.Parallel()
+		var typedNil *helium.Element
+		err := helium.NewWriter().WriteTo(io.Discard, typedNil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "typed-nil node must return ErrNilNode")
+	})
+
+	t.Run("WriteTo typed nil document", func(t *testing.T) {
+		t.Parallel()
+		var typedNil *helium.Document
+		err := helium.NewWriter().WriteTo(io.Discard, typedNil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "typed-nil document must return ErrNilNode")
+	})
+}
