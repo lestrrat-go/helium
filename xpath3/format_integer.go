@@ -15,9 +15,16 @@ import (
 func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 	// format-integer($value, $picture [, $lang])
 	valSeq := args[0]
-	picSeq := args[1]
 
-	// Empty sequence → empty string
+	// $picture is a required, exactly-one xs:string. Validate it before the
+	// empty-$value short-circuit so an empty or oversized picture raises
+	// XPTY0004 rather than panicking on picSeq.Get(0).
+	picture, err := coerceArgToStringRequired(args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	// Empty $value → empty string (per F&O), once $picture is known valid.
 	if seqLen(valSeq) == 0 {
 		return SingleString(""), nil
 	}
@@ -44,12 +51,6 @@ func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 	default:
 		return nil, fmt.Errorf("xpath3: internal error: expected integer value for %s, got %T", valAtom.TypeName, valAtom.Value)
 	}
-
-	picAtom, err := AtomizeItem(picSeq.Get(0))
-	if err != nil {
-		return nil, err
-	}
-	picture := picAtom.StringVal()
 
 	lang := "en"
 	if ec := getFnContext(ctx); ec != nil {
