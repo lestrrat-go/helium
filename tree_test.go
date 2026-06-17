@@ -649,3 +649,81 @@ func TestCopyDoc(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+func TestReplaceDetachesOldNode(t *testing.T) {
+	// Build <root><a/><secret/><b/></root>
+	doc := helium.NewDefaultDocument()
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+	a := doc.CreateElement("a")
+	secret := doc.CreateElement("secret")
+	b := doc.CreateElement("b")
+	require.NoError(t, root.AddChild(a))
+	require.NoError(t, root.AddChild(secret))
+	require.NoError(t, root.AddChild(b))
+
+	repl := doc.CreateElement("EncryptedData")
+	require.NoError(t, secret.Replace(repl))
+
+	// After replacement the old node must be fully detached.
+	require.Nil(t, secret.Parent(), "replaced node parent must be cleared")
+	require.Nil(t, secret.PrevSibling(), "replaced node prev must be cleared")
+	require.Nil(t, secret.NextSibling(), "replaced node next must be cleared")
+
+	// Tree must read a / EncryptedData / b.
+	require.Equal(t, a, root.FirstChild())
+	require.Equal(t, repl, a.NextSibling())
+	require.Equal(t, b, repl.NextSibling())
+	require.Equal(t, b, root.LastChild())
+
+	// A stale UnlinkNode on the old handle must NOT corrupt the tree.
+	helium.UnlinkNode(secret)
+	require.Equal(t, a, root.FirstChild())
+	require.Equal(t, repl, a.NextSibling())
+	require.Equal(t, b, repl.NextSibling())
+	require.Equal(t, b, root.LastChild())
+	require.Equal(t, repl, b.PrevSibling())
+}
+
+func TestReplaceSelf(t *testing.T) {
+	t.Run("exact self-replacement is a no-op", func(t *testing.T) {
+		// Build <root><a/><b/></root>
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.AddChild(root))
+		a := doc.CreateElement("a")
+		b := doc.CreateElement("b")
+		require.NoError(t, root.AddChild(a))
+		require.NoError(t, root.AddChild(b))
+
+		// Replacing a node with itself must leave the tree intact.
+		require.NoError(t, a.Replace(a))
+
+		require.Equal(t, root, a.Parent(), "a.Parent() must remain root")
+		require.Equal(t, b, a.NextSibling(), "a.NextSibling() must remain b")
+		require.Equal(t, a, root.FirstChild(), "root.FirstChild() must remain a")
+		require.Equal(t, b, root.LastChild())
+		require.Equal(t, a, b.PrevSibling())
+	})
+
+	t.Run("replacement list including the replaced node keeps it live", func(t *testing.T) {
+		// Build <root><a/><b/></root>
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.AddChild(root))
+		a := doc.CreateElement("a")
+		b := doc.CreateElement("b")
+		require.NoError(t, root.AddChild(a))
+		require.NoError(t, root.AddChild(b))
+
+		// Replace a with [a, c]: a stays live, c is inserted after it.
+		c := doc.CreateElement("c")
+		require.NoError(t, a.Replace(a, c))
+
+		require.Equal(t, root, a.Parent())
+		require.Equal(t, a, root.FirstChild())
+		require.Equal(t, c, a.NextSibling())
+		require.Equal(t, b, c.NextSibling())
+		require.Equal(t, b, root.LastChild())
+	})
+}

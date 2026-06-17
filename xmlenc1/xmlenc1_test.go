@@ -505,3 +505,97 @@ func findEncryptedData(t *testing.T, n helium.Node) *helium.Element {
 	}
 	return nil
 }
+
+// childNames returns the local names of the direct element children of n,
+// in document order.
+func childNames(n helium.Node) []string {
+	var names []string
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		e, ok := c.(*helium.Element)
+		if !ok {
+			continue
+		}
+		names = append(names, e.LocalName())
+	}
+	return names
+}
+
+func TestEncryptElementPreservesSiblingOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		xml    string
+		target string // local name of element to encrypt
+		want   []string
+	}{
+		{
+			name:   "middle",
+			xml:    `<root><a/><secret/><b/></root>`,
+			target: "secret",
+			want:   []string{"a", "EncryptedData", "b"},
+		},
+		{
+			name:   "first",
+			xml:    `<root><secret/><a/><b/></root>`,
+			target: "secret",
+			want:   []string{"EncryptedData", "a", "b"},
+		},
+		{
+			name:   "last",
+			xml:    `<root><a/><b/><secret/></root>`,
+			target: "secret",
+			want:   []string{"a", "b", "EncryptedData"},
+		},
+		{
+			name:   "only",
+			xml:    `<root><secret/></root>`,
+			target: "secret",
+			want:   []string{"EncryptedData"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			key := generateRSAKey(t)
+			doc := mustParseXML(t, tc.xml)
+
+			var target *helium.Element
+			for c := doc.DocumentElement().FirstChild(); c != nil; c = c.NextSibling() {
+				if e, ok := c.(*helium.Element); ok && e.LocalName() == tc.target {
+					target = e
+					break
+				}
+			}
+			require.NotNil(t, target, "target element %q not found", tc.target)
+
+			encryptor := xmlenc1.NewEncryptor().
+				BlockAlgorithm(xmlenc1.AES128CBC).
+				KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+				RecipientPublicKey(&key.PublicKey)
+
+			_, err := encryptor.EncryptElement(t.Context(), target)
+			require.NoError(t, err)
+
+			require.Equal(t, tc.want, childNames(doc.DocumentElement()))
+		})
+	}
+}
+
+func TestEncryptElementRootInPlace(t *testing.T) {
+	// Encrypting the document root element should replace it in place,
+	// leaving EncryptedData as the new document element.
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, `<secret>hidden</secret>`)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES128CBC).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+		RecipientPublicKey(&key.PublicKey)
+
+	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+	require.NotNil(t, edElem)
+
+	require.Equal(t, "EncryptedData", doc.DocumentElement().LocalName())
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.NotContains(t, xml, "hidden")
+}
