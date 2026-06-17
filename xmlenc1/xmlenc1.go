@@ -177,7 +177,7 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 	if hasKeyTransport {
 		encKeyBytes, err := encryptSessionKey(cfg.keyTransport, cfg.recipientPubKey, sessionKey, cfg.oaepDigest, cfg.oaepMGF, cfg.oaepParams)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
+			return nil, err
 		}
 		encKey = &EncryptedKey{
 			EncryptionMethod: &EncryptionMethod{
@@ -452,6 +452,9 @@ func resolveSessionKey(cfg *decryptConfig, ed *EncryptedData) ([]byte, error) {
 		}
 		return aesKeyUnwrap(cfg.keyEncryptionKey, ek.CipherValue)
 	default:
-		return nil, &UnsupportedAlgorithmError{Algorithm: alg}
+		// Classify under the decrypt path while preserving the typed
+		// error in the chain for errors.As, consistent with the
+		// decryptSessionKey wrapping above.
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Algorithm: alg})
 	}
 }
