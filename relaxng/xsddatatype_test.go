@@ -160,7 +160,10 @@ func TestXSDValueValueSpace(t *testing.T) {
 // valid lexical form for its XSD datatype is rejected even when the instance
 // text is byte-identical to that literal. The previous code returned success on
 // the lexical equality fast-path before validating either form, wrongly
-// accepting identical-but-invalid typed values.
+// accepting identical-but-invalid typed values. This must hold for both
+// value-space-comparable types (integer, date) and constrained NON-comparable
+// string-family types (NCName), the latter of which the prior fix missed
+// because its lexical gate ran only for comparable types.
 func TestXSDValueInvalidLexical(t *testing.T) {
 	t.Parallel()
 
@@ -172,6 +175,10 @@ func TestXSDValueInvalidLexical(t *testing.T) {
 	}{
 		{"integer-5.0", typeInteger, "5.0", "5.0"},
 		{"date-not-a-date", "date", "not-a-date", "not-a-date"},
+		// NCName is constrained but NOT value-space-comparable. "1foo" is an
+		// invalid NCName (leading digit), so an identical-but-invalid lexical
+		// must still be rejected.
+		{"ncname-leading-digit", "NCName", "1foo", "1foo"},
 	}
 
 	for _, tc := range cases {
@@ -188,5 +195,13 @@ func TestXSDValueInvalidLexical(t *testing.T) {
 		grammar := compileXSDValueSchema(t, typeInteger, "5")
 		require.NoError(t, validateXSDInstance(t, grammar, "+5"),
 			"valid integer +5 should value-match 5")
+	})
+
+	// A valid NCName literal must still match a byte-identical valid instance
+	// (lexical equality for a constrained non-comparable type).
+	t.Run("valid-ncname-equality", func(t *testing.T) {
+		grammar := compileXSDValueSchema(t, "NCName", "foo")
+		require.NoError(t, validateXSDInstance(t, grammar, "foo"),
+			"valid NCName foo should match literal foo")
 	})
 }
