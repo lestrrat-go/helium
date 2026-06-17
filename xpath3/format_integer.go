@@ -316,8 +316,7 @@ func int64ToCJK(n int64) string {
 
 	var parts []string
 	// Emit most-significant group first.
-	for i := len(groups) - 1; i >= 0; i-- {
-		g := groups[i]
+	for i, g := range slices.Backward(groups) {
 		if g == 0 {
 			continue
 		}
