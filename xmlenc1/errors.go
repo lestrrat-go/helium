@@ -48,3 +48,18 @@ type UnsupportedAlgorithmError struct {
 func (e *UnsupportedAlgorithmError) Error() string {
 	return fmt.Sprintf("xmlenc1: unsupported algorithm %q", e.Algorithm)
 }
+
+// KeySizeError is returned when a key (session key or key-encryption key)
+// does not match the exact length required by its declared algorithm URI.
+// It guards against algorithm/key-size confusion, e.g. declaring AES-256
+// on the wire while supplying a 16-byte key that crypto/aes would silently
+// treat as AES-128.
+type KeySizeError struct {
+	Algorithm string
+	Want      int
+	Got       int
+}
+
+func (e *KeySizeError) Error() string {
+	return fmt.Sprintf("xmlenc1: algorithm %q requires a %d-byte key, got %d bytes", e.Algorithm, e.Want, e.Got)
+}

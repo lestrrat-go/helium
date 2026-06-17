@@ -148,6 +148,13 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 		}
 	}
 
+	// Bind the declared block-algorithm URI to the session-key length so
+	// a user-supplied SessionKey cannot make us emit, e.g., an AES-256
+	// URI while actually encrypting with AES-128.
+	if err := validateKeySize(cfg.blockAlgorithm, sessionKey); err != nil {
+		return nil, err
+	}
+
 	// Serialize the plaintext.
 	var plaintext string
 	if encType == TypeElement {
@@ -182,6 +189,12 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 			CipherValue: encKeyBytes,
 		}
 	} else if hasKeyWrap {
+		// Bind the declared key-wrap URI to the KEK length so a 16-byte
+		// KEK cannot make us emit a kw-aes256 URI while wrapping with
+		// AES-128.
+		if err := validateKeySize(cfg.keyWrapAlgorithm, cfg.keyEncryptionKey); err != nil {
+			return nil, err
+		}
 		wrappedKey, err := aesKeyWrap(cfg.keyEncryptionKey, sessionKey)
 		if err != nil {
 			return nil, err
@@ -429,6 +442,13 @@ func resolveSessionKey(cfg *decryptConfig, ed *EncryptedData) ([]byte, error) {
 	case AES128KeyWrap, AES256KeyWrap:
 		if len(cfg.keyEncryptionKey) == 0 {
 			return nil, ErrMissingKey
+		}
+		// Bind the declared key-wrap URI to the KEK length so a 16-byte
+		// KEK is not silently accepted as AES-128 against a kw-aes256
+		// declaration. The unwrapped session key is in turn validated
+		// against the data-encryption algorithm in blockDecrypt.
+		if err := validateKeySize(alg, cfg.keyEncryptionKey); err != nil {
+			return nil, err
 		}
 		return aesKeyUnwrap(cfg.keyEncryptionKey, ek.CipherValue)
 	default:
