@@ -293,6 +293,12 @@ func formatCJK(n *big.Int) string {
 	return int64ToCJK(n.Int64())
 }
 
+// cjkMyriadUnits are the myriad (10^4) grouping separators, ascending.
+// Each successive unit is 10^4 times the previous: 万=10^4, 億=10^8, 兆=10^12,
+// 京=10^16. int64 maxes out below 京×10 (~9.2×10^18), so this table is sufficient
+// for every representable value.
+var cjkMyriadUnits = []string{"", "万", "億", "兆", "京"}
+
 func int64ToCJK(n int64) string {
 	if n == 0 {
 		return "〇"
@@ -301,20 +307,40 @@ func int64ToCJK(n int64) string {
 		return "負" + int64ToCJK(-n)
 	}
 
-	var parts []string
+	// Split into 4-digit (myriad) groups, least-significant first.
+	var groups []int64
+	for n > 0 {
+		groups = append(groups, n%10000)
+		n /= 10000
+	}
 
+	var parts []string
+	// Emit most-significant group first.
+	for i, g := range slices.Backward(groups) {
+		if g == 0 {
+			continue
+		}
+		parts = append(parts, cjkGroupUnder10000(g))
+		parts = append(parts, cjkMyriadUnits[i])
+	}
+
+	return strings.Join(parts, "")
+}
+
+// cjkGroupUnder10000 renders a value in 1..9999 as CJK numerals. The leading
+// "一" is omitted before 十/百/千 (e.g. 10 → 十, 100 → 百) per CJK convention.
+func cjkGroupUnder10000(n int64) string {
 	type cjkUnit struct {
 		value int64
 		char  string
 	}
 	units := []cjkUnit{
-		{100000000, "億"},
-		{10000, "万"},
 		{1000, "千"},
 		{100, "百"},
 		{10, "十"},
 	}
 
+	var parts []string
 	for _, u := range units {
 		if n >= u.value {
 			q := n / u.value

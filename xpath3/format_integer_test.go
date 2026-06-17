@@ -86,6 +86,36 @@ func TestStringArgAtomizesBeforeCardinality(t *testing.T) {
 	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
 }
 
+// CJK ideographic formatting (picture "一") must not panic for large values that
+// require a multi-digit quotient on a unit (e.g. 10億 for 1,000,000,000) and must
+// produce correct CJK numerals across magnitudes.
+func TestFormatIntegerCJK(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		value  string
+		expect string
+	}{
+		{"0", "〇"},
+		{"5", "五"},
+		{"10", "十"},
+		{"11", "十一"},
+		{"20", "二十"},
+		{"100", "百"},
+		{"1234", "千二百三十四"},
+		{"10000", "一万"},
+		{"100000000", "一億"},
+		{"1000000000", "十億"},
+		{"1234567890", "十二億三千四百五十六万七千八百九十"},
+		{"1000000000000", "一兆"},
+	}
+	for _, tc := range cases {
+		result, err := evaluate(t.Context(), nil, `format-integer(`+tc.value+`, "一")`)
+		require.NoError(t, err, tc.value)
+		require.Equal(t, tc.expect, result.StringValue(), tc.value)
+	}
+}
+
 // The atomize-first rewrite must not materialize a large sequence just to reject
 // it on cardinality — it stops at the second atomized item.
 func TestStringArgRejectsLongSequencePromptly(t *testing.T) {
