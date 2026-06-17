@@ -429,6 +429,7 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 		if xiErr != nil {
 			_, _ = fmt.Fprintf(c.stderr, "%s\n", xiErr)
+			return ExitErr
 		}
 	}
 
