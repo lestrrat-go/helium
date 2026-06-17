@@ -619,6 +619,58 @@ func TestPartialApplicationPropagatesTypedError(t *testing.T) {
 	require.Equal(t, "FORG0001", xpErr.Code)
 }
 
+// Finding (named function ref): a named function reference (f#N) to a
+// TypedFunction must coerce its arguments exactly like a direct call. A
+// TypedFunction declaring xs:double invoked via (takes-double#1)(1) must observe a
+// coerced xs:double, not the original xs:integer — mirroring takes-double(1).
+func TestNamedFunctionRefCoercesTypedParam(t *testing.T) {
+	t.Parallel()
+
+	var observed string
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(typedDoubleLib(&observed)).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`(takes-double#1)(1)`), nil)
+	require.NoError(t, err)
+
+	require.Equal(t, xpath3.TypeDouble, observed, "named-ref arg must be coerced to xs:double")
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, xpath3.TypeDouble, s)
+}
+
+// Finding (named function ref): a non-coercible argument supplied through a named
+// function reference raises XPTY0004, just like a direct call.
+func TestNamedFunctionRefRejectsNonCoercible(t *testing.T) {
+	t.Parallel()
+
+	var observed string
+	_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(typedDoubleLib(&observed)).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`(takes-double#1)(current-date())`), nil)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+}
+
+// Finding (function-lookup): fn:function-lookup resolves a TypedFunction and the
+// returned function item must coerce its arguments like a direct call — an
+// xs:integer supplied to an xs:double parameter must be observed as xs:double.
+func TestFunctionLookupCoercesTypedParam(t *testing.T) {
+	t.Parallel()
+
+	var observed string
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(typedDoubleLib(&observed)).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`function-lookup(QName("", "takes-double"), 1)(1)`), nil)
+	require.NoError(t, err)
+
+	require.Equal(t, xpath3.TypeDouble, observed, "function-lookup arg must be coerced to xs:double")
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, xpath3.TypeDouble, s)
+}
+
 // Finding 2 (round 7): a fixed (curried) argument must also be coerced — when the
 // double parameter is curried with an xs:integer literal, the body still observes
 // xs:double.
