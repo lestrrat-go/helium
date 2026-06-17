@@ -911,12 +911,24 @@ func (c *canonicalizer) effectiveBaseURI(e *helium.Element) string {
 	return base
 }
 
-// documentBaseURI returns the document's base URI as a file:// URL.
+// documentBaseURI returns the document's base URI suitable for RFC 3986
+// relative-reference resolution. If the configured base URI is already an
+// absolute URI (it has a scheme and authority, e.g. "http://example.com/..."),
+// it is preserved as-is so that xml:base fixup uses proper URI semantics. Only
+// plain filesystem paths are converted to a file:// URL.
 func (c *canonicalizer) documentBaseURI() string {
 	if c.baseURI == "" {
 		return ""
 	}
-	// Convert file path to URL for proper URI resolution
+	// An absolute URI (one with a scheme, e.g. "http://example.com/...",
+	// "file:/tmp/doc.xml", or "urn:...") must not be rewritten as a filesystem
+	// path. url.Parse treats a single-letter Windows drive prefix (e.g.
+	// "c:\dir") as a scheme, so exclude single-letter schemes to keep treating
+	// drive-letter paths as filesystem paths.
+	if u, err := url.Parse(c.baseURI); err == nil && u.IsAbs() && len(u.Scheme) > 1 {
+		return c.baseURI
+	}
+	// Convert file path to URL for proper URI resolution.
 	absPath, err := filepath.Abs(c.baseURI)
 	if err != nil {
 		return c.baseURI

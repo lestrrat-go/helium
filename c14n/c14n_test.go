@@ -368,3 +368,77 @@ func TestEmptyNamespaceURIAccepted(t *testing.T) {
 	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
 	require.NoError(t, err)
 }
+
+// collectDescendantElements returns the element nodes named `name` and all of
+// their descendant nodes within doc.
+func collectDescendantElements(t *testing.T, doc *helium.Document, name string) []helium.Node {
+	t.Helper()
+	var out []helium.Node
+	var walk func(n helium.Node, inside bool)
+	walk = func(n helium.Node, inside bool) {
+		include := inside
+		if elem, ok := helium.AsNode[*helium.Element](n); ok && elem.LocalName() == name {
+			include = true
+		}
+		if include {
+			out = append(out, n)
+		}
+		for child := range helium.Children(n) {
+			walk(child, include)
+		}
+	}
+	walk(doc, false)
+	return out
+}
+
+// TestC14N11HTTPBaseURIFixup verifies that when the configured base URI is an
+// absolute http(s) URI, C14N 1.1 xml:base fixup produces a proper relative URI
+// reference rather than a filesystem path. The root element carries xml:base
+// but is excluded from the node-set, so its base contribution must be folded
+// into the visible child's xml:base.
+func TestC14N11HTTPBaseURIFixup(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="/c/"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded).
+	nodes := collectDescendantElements(t, doc, "child")
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com/a/b/doc.xml").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// The base URI is an http URI; xml:base fixup must yield a URI reference,
+	// never a filesystem path derived from filepath.Abs.
+	require.NotContains(t, string(got), "file:", "http base URI must not be turned into a file path")
+	// root xml:base "/c/" resolved against http://example.com/a/b/doc.xml is
+	// http://example.com/c/; relative to the visible ancestor base
+	// http://example.com/a/b/doc.xml this is "../../c/".
+	require.Contains(t, string(got), `xml:base="../../c/"`, "expected URI-relative xml:base, got: %s", string(got))
+}
+
+// TestC14N11SchemeOnlyBaseURIFixup verifies the fix also covers absolute URIs
+// that carry a scheme but no // authority component (e.g. "mem:/a/b/doc.xml").
+// Such URIs must not be routed through filepath.Abs.
+func TestC14N11SchemeOnlyBaseURIFixup(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="/c/"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	nodes := collectDescendantElements(t, doc, "child")
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("mem:/a/b/doc.xml").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	require.NotContains(t, string(got), "file:", "scheme-only URI base must not become a file path")
+	// root xml:base "/c/" resolved against mem:/a/b/doc.xml is mem:/c/;
+	// relative to the ancestor base mem:/a/b/doc.xml this is "../../c/".
+	require.Contains(t, string(got), `xml:base="../../c/"`, "expected URI-relative xml:base, got: %s", string(got))
+}
