@@ -8,11 +8,14 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-// hasAttr checks whether an attribute is physically present on the element.
-// Unlike getAttr, this distinguishes absent from empty-string.
+// hasAttr checks whether an unqualified (no-namespace) schema attribute is
+// physically present on the element. Unlike getAttr, this distinguishes absent
+// from empty-string. A foreign-namespaced attribute that happens to share the
+// local name (e.g. other:fixed) is not matched, since XSD schema attributes
+// (name/type/fixed/default/minOccurs/...) are always unqualified.
 func hasAttr(elem *helium.Element, name string) bool {
 	for _, a := range elem.Attributes() {
-		if a.LocalName() == name {
+		if a.LocalName() == name && a.URI() == "" {
 			return true
 		}
 	}
@@ -142,7 +145,7 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 	}
 
 	// default and fixed are mutually exclusive.
-	if getAttr(elem, attrDefault) != "" && getAttr(elem, attrFixed) != "" {
+	if hasAttr(elem, attrDefault) && hasAttr(elem, attrFixed) {
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
 		c.errorCount++
@@ -223,7 +226,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// Report first ref-restricted attribute found (alphabetical order).
 		notAllowedWithRef := []string{attrAbstract, attrBlock, attrDefault, attrFinal, attrFixed, attrForm, attrNillable, attrSubstitutionGroup, attrType}
 		for _, attr := range notAllowedWithRef {
-			if getAttr(elem, attr) != "" {
+			if hasAttr(elem, attr) {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", attr,
 					"Only the attributes 'minOccurs', 'maxOccurs' and 'id' are allowed in addition to 'ref'."), helium.ErrorLevelFatal))
 				c.errorCount++
@@ -265,7 +268,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// Some attributes not allowed for local named elements.
 		localNotAllowed := []string{attrAbstract, attrSubstitutionGroup, attrFinal}
 		for _, attr := range localNotAllowed {
-			if getAttr(elem, attr) != "" {
+			if hasAttr(elem, attr) {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 					"The attribute '"+attr+"' is not allowed."), helium.ErrorLevelFatal))
 				c.errorCount++
@@ -280,7 +283,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		}
 
 		// default and fixed mutually exclusive.
-		if getAttr(elem, attrDefault) != "" && getAttr(elem, attrFixed) != "" {
+		if hasAttr(elem, attrDefault) && hasAttr(elem, attrFixed) {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 				"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
 			c.errorCount++
@@ -378,14 +381,14 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		}
 
 		// default and fixed are mutually exclusive.
-		if getAttr(elem, attrDefault) != "" && getAttr(elem, attrFixed) != "" {
+		if hasAttr(elem, attrDefault) && hasAttr(elem, attrFixed) {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 				"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// If default is present, use must be optional (or absent, which defaults to optional).
-		if getAttr(elem, attrDefault) != "" {
+		if hasAttr(elem, attrDefault) {
 			use := getAttr(elem, attrUse)
 			if use != "" && use != attrValOptional {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",

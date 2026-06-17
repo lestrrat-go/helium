@@ -197,6 +197,15 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 		}
 	}
 	au.Default, au.Fixed = readDefaultOrFixed(elem)
+	// Record source info so the default/fixed constraint value can be validated
+	// against the attribute's declared simple type once type refs are resolved.
+	if au.Default != nil || au.Fixed != nil {
+		c.attrUseConstraintSources[au] = attrConstraintSource{
+			line:  elem.Line(),
+			local: opts.name.Local,
+			nsMap: collectNSContext(elem),
+		}
+	}
 	return au
 }
 
