@@ -80,6 +80,8 @@ an embedded example.
 | [`sink`](sink/README.md) | Generic async event sink. | Also satisfies `helium.ErrorHandler` when `T` is `error`. |
 | [`stream`](stream/README.md) | Streaming XML writer. | Writes XML directly without building a DOM. |
 | [`xinclude`](xinclude/README.md) | XInclude processing for helium documents. | Supports recursive inclusion and custom resolvers. |
+| [`xmldsig1`](xmldsig1/README.md) | W3C XML Digital Signatures 1.1 over helium documents. | **Experimental**; API may change. |
+| [`xmlenc1`](xmlenc1/README.md) | W3C XML Encryption 1.1 over helium documents. | **Experimental**; API may change. |
 | [`xpath1`](xpath1/README.md) | XPath 1.0 compilation and evaluation. | Includes convenience helpers like `Find` and `Evaluate`. |
 | [`xpath3`](xpath3/README.md) | XPath 3.1 compilation and evaluation. | Includes a compiler, evaluator, maps, arrays, and HOFs. |
 | [`xpointer`](xpointer/README.md) | XPointer evaluation. | Supports shorthand, `element()`, and XPath-backed schemes. |
@@ -142,6 +144,7 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 # Current status
 
 * Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG, Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
+* Experimental: W3C XML Digital Signatures 1.1 (`xmldsig1`) and XML Encryption 1.1 (`xmlenc1`). These APIs may change and may move to a separate repository.
 * W3C conformance suites: ~22,250 / 22,744 QT3 tests pass for XPath 3.1; ~11,780 / 13,129 W3C tests pass for XSLT 3.0 (skips are XSLT 1.0/2.0 backwards compatibility and other out-of-scope features).
 * libxml2-compat golden tests: core XML parsing 100%, XSD 99.6%, RELAX NG 100%, Schematron 100%, C14N 87%, HTML 100%.
 * XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards compatibility modes for XSLT 1.0/2.0 are not part of the target feature set.
