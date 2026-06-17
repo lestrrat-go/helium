@@ -26,6 +26,8 @@ func generateRSAKey(t *testing.T) *rsa.PrivateKey {
 	return key
 }
 
+const elemEncryptedData = "EncryptedData"
+
 const samlAssertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_abc123" IssueInstant="2024-01-01T00:00:00Z" Version="2.0"><saml:Issuer>https://idp.example.com</saml:Issuer><saml:Subject><saml:NameID>user@example.com</saml:NameID></saml:Subject></saml:Assertion>`
 
 func TestEncryptDecryptElementRSAOAEP_AES128CBC(t *testing.T) {
@@ -45,7 +47,7 @@ func TestEncryptDecryptElementRSAOAEP_AES128CBC(t *testing.T) {
 	// Verify the document now has EncryptedData.
 	xml, err := helium.WriteString(doc)
 	require.NoError(t, err)
-	require.Contains(t, xml, "EncryptedData")
+	require.Contains(t, xml, elemEncryptedData)
 	require.NotContains(t, xml, "user@example.com")
 
 	// Decrypt. CBC requires explicit opt-in (see ErrCBCRequiresOptIn).
@@ -99,7 +101,7 @@ func TestEncryptDecryptContentRSAOAEP(t *testing.T) {
 
 	out, err := helium.WriteString(doc)
 	require.NoError(t, err)
-	require.Contains(t, out, "EncryptedData")
+	require.Contains(t, out, elemEncryptedData)
 	require.NotContains(t, out, "Secret content")
 
 	// Decrypt.
@@ -453,7 +455,7 @@ func TestEncryptUnsupportedKeyTransportErrors(t *testing.T) {
 	xml, werr := helium.WriteString(doc)
 	require.NoError(t, werr)
 	require.NotContains(t, xml, "urn:bogus")
-	require.NotContains(t, xml, "EncryptedData")
+	require.NotContains(t, xml, elemEncryptedData)
 }
 
 // TestDecryptUnsupportedKeyTransportErrors verifies that an EncryptedKey
@@ -495,7 +497,7 @@ func TestDecryptUnsupportedKeyTransportErrors(t *testing.T) {
 func findEncryptedData(t *testing.T, n helium.Node) *helium.Element {
 	t.Helper()
 	elem, ok := n.(*helium.Element)
-	if ok && elem.LocalName() == "EncryptedData" {
+	if ok && elem.LocalName() == elemEncryptedData {
 		return elem
 	}
 	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
@@ -531,25 +533,25 @@ func TestEncryptElementPreservesSiblingOrder(t *testing.T) {
 			name:   "middle",
 			xml:    `<root><a/><secret/><b/></root>`,
 			target: "secret",
-			want:   []string{"a", "EncryptedData", "b"},
+			want:   []string{"a", elemEncryptedData, "b"},
 		},
 		{
 			name:   "first",
 			xml:    `<root><secret/><a/><b/></root>`,
 			target: "secret",
-			want:   []string{"EncryptedData", "a", "b"},
+			want:   []string{elemEncryptedData, "a", "b"},
 		},
 		{
 			name:   "last",
 			xml:    `<root><a/><b/><secret/></root>`,
 			target: "secret",
-			want:   []string{"a", "b", "EncryptedData"},
+			want:   []string{"a", "b", elemEncryptedData},
 		},
 		{
 			name:   "only",
 			xml:    `<root><secret/></root>`,
 			target: "secret",
-			want:   []string{"EncryptedData"},
+			want:   []string{elemEncryptedData},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -593,7 +595,7 @@ func TestEncryptElementRootInPlace(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, edElem)
 
-	require.Equal(t, "EncryptedData", doc.DocumentElement().LocalName())
+	require.Equal(t, elemEncryptedData, doc.DocumentElement().LocalName())
 
 	xml, err := helium.WriteString(doc)
 	require.NoError(t, err)
