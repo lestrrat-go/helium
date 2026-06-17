@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func (c *compiler) resolveRefs(ctx context.Context) {
@@ -55,14 +54,21 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				continue
 			}
 			td, ok := c.schema.types[qn]
+			if !ok && qn.NS != "" {
+				// Try empty namespace as fallback — the type may come from an
+				// imported schema with no targetNamespace (mirrors the base-type
+				// ref resolution below).
+				td, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+			}
 			if !ok {
-				// Report unresolved type error for XSD built-in types that should exist.
-				if qn.NS == lexicon.NamespaceXSD {
-					if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
-						msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-						c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
-						c.errorCount++
-					}
+				// Report the unresolved element type — whether an XSD built-in
+				// that should exist or a missing user-defined type — before
+				// installing a recovery placeholder, so an invalid schema cannot
+				// silently compile and validate as if the type existed.
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
+					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
+					c.errorCount++
 				}
 				td = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 				c.schema.types[qn] = td
@@ -80,6 +86,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			base, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
 		}
 		if !ok {
+			// Report the unresolved base type before installing a recovery
+			// placeholder, so an invalid schema cannot silently compile.
+			c.reportUnresolvedTypeRef(ctx, td, qn)
 			base = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 			c.schema.types[qn] = base
 		}
@@ -90,6 +99,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	for td, qn := range c.itemTypeRefs {
 		itemTD, ok := c.schema.types[qn]
 		if !ok {
+			c.reportUnresolvedTypeRef(ctx, td, qn)
 			itemTD = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 			c.schema.types[qn] = itemTD
 		}
@@ -100,6 +110,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	for _, ref := range c.unionMemberRefs {
 		memberTD, ok := c.schema.types[ref.name]
 		if !ok {
+			c.reportUnresolvedTypeRef(ctx, ref.owner, ref.name)
 			memberTD = &TypeDef{Name: ref.name, ContentType: ContentTypeSimple}
 			c.schema.types[ref.name] = memberTD
 		}
@@ -324,6 +335,28 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// reportUnresolvedTypeRef reports a fatal schema parser error for a type
+// reference (base type, list item type, or union member type) on owner that
+// does not resolve to a type definition. The caller installs a recovery
+// placeholder only after this records the error, so an invalid schema cannot
+// silently compile and validate documents as if the missing type existed.
+func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, qn QName) {
+	if c.filename == "" {
+		return
+	}
+	src, hasSrc := c.typeDefSources[owner]
+	if !hasSrc {
+		return
+	}
+	component := owner.Name.Local
+	if component == "" || src.isLocal {
+		component = "local simple type"
+	}
+	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", component, msg), helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 // checkRestrictionAttrs validates that a restriction-derived type's attributes

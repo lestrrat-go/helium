@@ -104,16 +104,28 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			"xsl:import-schema has both schema-location attribute and inline xs:schema child")
 	}
 
+	// Compute the effective base URI for resolving this import-schema's
+	// schema-location and the nested xs:include/xs:import/xs:redefine loads of
+	// an inline schema, folding in an xml:base attribute on the
+	// xsl:import-schema element (c.baseURI already accounts for xml:base on the
+	// stylesheet root and includes). Without this, a nested import in an inline
+	// schema would resolve against the wrong directory, silently fail to load,
+	// and leave the referenced type unresolved.
+	baseURI := c.baseURI
+	if xmlBase, ok := elem.GetAttributeNS("base", lexicon.NamespaceXML); ok && xmlBase != "" {
+		baseURI = helium.BuildURI(xmlBase, c.baseURI)
+	}
+
 	if schemaLoc != "" {
 		// File-backed schema. Resolve the schema-location against the
 		// stylesheet base URI using RFC 3986 URI semantics when the base is a
 		// URL (so the authority survives and nested includes can be recovered),
 		// falling back to filepath joins for local filesystem bases.
 		uri := schemaLoc
-		if c.baseURI != "" {
-			resolved, err := resolveSchemaURI(schemaLoc, c.baseURI)
+		if baseURI != "" {
+			resolved, err := resolveSchemaURI(schemaLoc, baseURI)
 			if err != nil {
-				return fmt.Errorf("xsl:import-schema: cannot resolve schema-location %q against base %q: %w", schemaLoc, c.baseURI, err)
+				return fmt.Errorf("xsl:import-schema: cannot resolve schema-location %q against base %q: %w", schemaLoc, baseURI, err)
 			}
 			uri = resolved
 		}
@@ -186,8 +198,8 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			// rooted at the import-schema element's base URI.
 			fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
 			compiler := xsd.NewCompiler().ErrorHandler(errCounter).FS(fsys)
-			if c.baseURI != "" {
-				compiler = compiler.BaseDir(schemaCompileBaseDir(c.baseURI))
+			if baseURI != "" {
+				compiler = compiler.BaseDir(schemaCompileBaseDir(baseURI))
 			}
 			schema, err := compiler.Compile(ctx, inlineDoc)
 			if err != nil {
