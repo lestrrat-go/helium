@@ -61,6 +61,82 @@ func TestEncryptDecryptElementRSAOAEP_AES128CBC(t *testing.T) {
 	require.Contains(t, s, "user@example.com")
 }
 
+// spaceSeparateBase64 inserts an XML space every `col` characters into
+// the base64 text inside every <xenc:tag>...</xenc:tag> element. XSD
+// base64Binary permits interspersed whitespace (space/tab/CR/LF), but
+// Go's encoding/base64 only tolerates CR/LF and rejects space/tab, so
+// this exercises whitespace that the standard decoder rejects.
+func spaceSeparateBase64(xml, tag string, col int) string {
+	open := "<xenc:" + tag + ">"
+	closeTag := "</xenc:" + tag + ">"
+	var b strings.Builder
+	rest := xml
+	for {
+		i := strings.Index(rest, open)
+		if i < 0 {
+			b.WriteString(rest)
+			break
+		}
+		b.WriteString(rest[:i+len(open)])
+		rest = rest[i+len(open):]
+		j := strings.Index(rest, closeTag)
+		if j < 0 {
+			b.WriteString(rest)
+			break
+		}
+		content := rest[:j]
+		var wrapped strings.Builder
+		for k := 0; k < len(content); k += col {
+			if k > 0 {
+				wrapped.WriteByte(' ')
+			}
+			end := min(k+col, len(content))
+			wrapped.WriteString(content[k:end])
+		}
+		b.WriteString(wrapped.String())
+		rest = rest[j:]
+	}
+	return b.String()
+}
+
+// TestDecryptLineWrappedCipherValue verifies that base64 CipherValue text
+// containing interspersed XML whitespace (here, spaces) decodes
+// correctly. base64Binary in XSD permits interspersed whitespace, and
+// real producers routinely wrap base64 at fixed columns.
+func TestDecryptLineWrappedCipherValue(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+	elem := doc.DocumentElement()
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), elem)
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+
+	// Insert spaces into the base64 inside every CipherValue (both the
+	// RSA-encrypted session key and the AES-encrypted payload).
+	wrapped := spaceSeparateBase64(xml, "CipherValue", 16)
+	require.NotEqual(t, xml, wrapped, "expected spaces inserted into base64")
+
+	reDoc := mustParseXML(t, wrapped)
+	edElem := reDoc.DocumentElement()
+
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	nodes, err := decryptor.Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+
+	s, err := helium.WriteString(nodes[0])
+	require.NoError(t, err)
+	require.Contains(t, s, "user@example.com")
+}
+
 func TestEncryptDecryptElementRSAOAEP_AES256GCM(t *testing.T) {
 	key := generateRSAKey(t)
 	doc := mustParseXML(t, samlAssertion)

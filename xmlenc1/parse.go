@@ -115,8 +115,7 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 		case "MGF":
 			em.MGFAlgorithm, _ = e.GetAttribute("Algorithm")
 		case "OAEPparams":
-			text := textContent(e)
-			decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(text))
+			decoded, err := decodeBase64(textContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
 			}
@@ -134,8 +133,7 @@ func parseCipherData(elem *helium.Element) ([]byte, error) {
 			continue
 		}
 		if localName(e) == "CipherValue" {
-			text := strings.TrimSpace(textContent(e))
-			decoded, err := base64.StdEncoding.DecodeString(text)
+			decoded, err := decodeBase64(textContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
 			}
@@ -154,6 +152,22 @@ func localName(e *helium.Element) string {
 		}
 	}
 	return name
+}
+
+// decodeBase64 decodes base64 text after stripping all XML whitespace
+// (space, tab, CR, LF). XSD base64Binary permits interspersed
+// whitespace, and real-world XML Encryption/Signature producers
+// routinely line-wrap base64 at fixed columns. Go's encoding/base64
+// tolerates CR/LF but rejects space/tab, so strip them all first.
+func decodeBase64(text string) ([]byte, error) {
+	clean := strings.Map(func(r rune) rune {
+		switch r {
+		case ' ', '\t', '\r', '\n':
+			return -1
+		}
+		return r
+	}, text)
+	return base64.StdEncoding.DecodeString(clean)
 }
 
 // textContent returns the concatenated text content of an element.
