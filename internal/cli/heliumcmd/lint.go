@@ -298,6 +298,14 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 				_, _ = fmt.Fprintf(c.stderr, "%s: --encode: unsupported encoding %q\n", c.prog, cfg.encode)
 				return nil, nil
 			}
+			// US-ASCII (and its aliases) maps to the UTF-8 encoder, so the
+			// serializer would emit raw UTF-8 bytes for any character outside
+			// the ASCII range while still declaring US-ASCII. Reject it rather
+			// than produce output that does not match its declared encoding.
+			if henc.IsASCII(cfg.encode) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --encode: unsupported encoding %q\n", c.prog, cfg.encode)
+				return nil, nil
+			}
 		case "--pretty":
 			i++
 			if i >= len(args) {
@@ -336,6 +344,14 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 			}
 			files = append(files, arg)
 		}
+	}
+
+	// XPath result serialization prints node values, attributes, and namespace
+	// nodes directly and never re-encodes them, so --encode cannot be honored
+	// on that path. Reject the combination instead of silently ignoring it.
+	if cfg.encode != "" && cfg.xpathExpr != "" {
+		_, _ = fmt.Fprintf(c.stderr, "%s: --encode cannot be combined with --xpath\n", c.prog)
+		return nil, nil
 	}
 
 	return cfg, files
