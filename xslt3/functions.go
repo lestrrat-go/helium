@@ -188,7 +188,7 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 		if ni, ok := args[1].Get(0).(xpath3.NodeItem); ok {
 			nodeBase := documentBaseURI(ni.Node)
 			if nodeBase != "" {
-				baseDir = filepath.Dir(nodeBase)
+				baseDir = documentBaseDir(nodeBase)
 			} else if !nodeHasDocumentRoot(ni.Node) {
 				// XTDE1162: second argument is an orphan node (no
 				// document root) with no base URI.
@@ -208,7 +208,7 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 		if len(args) < 2 {
 			if ni, ok := item.(xpath3.NodeItem); ok {
 				if nodeBase := documentBaseURI(ni.Node); nodeBase != "" {
-					itemBaseDir = filepath.Dir(nodeBase)
+					itemBaseDir = documentBaseDir(nodeBase)
 				} else if !nodeHasDocumentRoot(ni.Node) {
 					// XTDE1162: first argument node has no base URI
 					// and no document root (parentless text node).
@@ -316,7 +316,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 		// xml:base overrides the base URI — resolve the empty string
 		// against the effective base URI to load the target document.
 		uri = effectiveBase
-		baseDir = filepath.Dir(effectiveBase)
+		baseDir = documentBaseDir(effectiveBase)
 	}
 
 	// Strip fragment identifier before loading.
@@ -586,6 +586,30 @@ func splitURIFragment(uri string) (string, string) {
 		return uri, ""
 	}
 	return base, fragment
+}
+
+// documentBaseDir derives the base passed to resolveDocumentURI /
+// resolveAgainstBaseURI for a runtime document base such as a stylesheet or
+// node base URI.
+//
+// For a URI base (it has a scheme per [xsd.URIScheme]) the FULL base URI is
+// returned unchanged: the URI-aware resolvers delegate to [xsd.ResolveSchemaURI],
+// which performs RFC 3986 resolution and replaces the base's last path segment
+// itself. Applying filepath.Dir here would instead collapse the "//" authority
+// separator (e.g. "mem://pkg/main.xsl" -> "mem:/pkg"), dropping the host so a
+// sibling "doc.xml" wrongly resolves to "mem:/pkg/doc.xml" instead of
+// "mem://pkg/doc.xml".
+//
+// For a genuine local filesystem base, filepath.Dir is used as before so a
+// sibling reference resolves against the containing directory.
+func documentBaseDir(base string) string {
+	if base == "" {
+		return ""
+	}
+	if xsd.URIScheme(base) != "" {
+		return base
+	}
+	return filepath.Dir(base)
 }
 
 // baseURIDir extracts the directory from a base URI. If the base URI looks
