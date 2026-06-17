@@ -1,0 +1,142 @@
+package xslt3_test
+
+import (
+	"io"
+	"strings"
+	"testing"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xslt3"
+	"github.com/stretchr/testify/require"
+)
+
+// runtimeFileMapResolver is an xpath3.URIResolver (method ResolveURI) serving
+// content from an in-memory map keyed by URI, with base-name fallback so the
+// test does not depend on the exact resolved-URI spelling.
+type runtimeFileMapResolver struct {
+	files map[string]string
+}
+
+func (r runtimeFileMapResolver) ResolveURI(uri string) (io.ReadCloser, error) {
+	content, ok := r.files[uri]
+	if !ok {
+		want := baseName(uri)
+		for k, v := range r.files {
+			if baseName(k) == want {
+				content, ok = v, true
+				break
+			}
+		}
+	}
+	if !ok {
+		return nil, &resolverNotFoundError{uri: uri}
+	}
+	return io.NopCloser(strings.NewReader(content)), nil
+}
+
+const ddSchemaXSD = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/s"
+           xmlns:s="http://example.com/s"
+           elementFormDefault="qualified">
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+// TestImportSchemaDefaultDeny verifies that xsl:import-schema with a
+// schema-location refuses to read the schema file when no Compiler.URIResolver
+// is configured (no implicit os.ReadFile), and loads it when one is supplied.
+func TestImportSchemaDefaultDeny(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const schemaURI = "mem:/stylesheets/s.xsd"
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s" schema-location="s.xsd"/>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	// Without a resolver: default-deny. The import-schema must not read s.xsd
+	// off the local filesystem.
+	docDeny, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().BaseURI(baseURI).Compile(ctx, docDeny)
+	require.Error(t, err, "import-schema must fail without a URIResolver")
+	require.Contains(t, err.Error(), "no URIResolver configured",
+		"error should explain that filesystem access is opt-in")
+
+	// With a resolver: success.
+	resolver := fileMapResolver{files: map[string]string{
+		schemaURI: ddSchemaXSD,
+	}}
+	docAllow, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, docAllow)
+	require.NoError(t, err, "import-schema must succeed with a URIResolver")
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "out")
+}
+
+// TestSourceSchemaLocationDefaultDeny verifies that a source document's
+// xsi:schemaLocation does not read schema files off the local filesystem at
+// runtime unless an Invocation.URIResolver permits it.
+func TestSourceSchemaLocationDefaultDeny(t *testing.T) {
+	const sourceURI = "mem://docs/input.xml"
+	const schemaURI = "mem:/docs/s.xsd"
+
+	// default-validation="strict" so source schema-location load failures
+	// surface as transform errors (otherwise they are swallowed). A
+	// namespace-only xsl:import-schema (no schema-location) satisfies the
+	// XTSE0020 requirement that strict validation imports a schema without
+	// itself needing a resolver.
+	styleSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s"
+    default-validation="strict">
+  <xsl:import-schema namespace="http://example.com/s"/>
+  <xsl:template match="/">
+    <s:root>text</s:root>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	sourceSrc := `<?xml version="1.0"?>
+<root xmlns="http://example.com/s"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://example.com/s s.xsd">text</root>`
+
+	ctx := t.Context()
+
+	ssDoc, err := helium.NewParser().Parse(ctx, []byte(styleSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(ctx, ssDoc)
+	require.NoError(t, err)
+
+	// Without a resolver: the runtime schema-location load is denied.
+	srcDeny, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
+	require.NoError(t, err)
+	srcDeny.SetURL(sourceURI)
+	_, err = ss.Transform(srcDeny).Serialize(ctx)
+	require.Error(t, err, "source schema-location must be denied without a resolver")
+	require.Contains(t, err.Error(), "no URIResolver configured")
+
+	// With a resolver: the schema loads.
+	resolver := runtimeFileMapResolver{files: map[string]string{
+		schemaURI: ddSchemaXSD,
+	}}
+	srcAllow, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
+	require.NoError(t, err)
+	srcAllow.SetURL(sourceURI)
+	out, err := ss.Transform(srcAllow).URIResolver(resolver).Serialize(ctx)
+	require.NoError(t, err, "source schema-location must load with a resolver")
+	require.Contains(t, out, "root")
+}

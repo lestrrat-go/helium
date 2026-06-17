@@ -11,7 +11,13 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
-func loadSchemasFromSchemaLocation(ctx context.Context, doc *helium.Document) ([]*xsd.Schema, error) {
+// loadSchemasFromSchemaLocation loads schemas referenced by the source
+// document's xsi:schemaLocation / xsi:noNamespaceSchemaLocation attributes.
+// Schema bytes are fetched through the transformation's configured
+// URIResolver / HTTPClient (default-deny: with nothing configured the load
+// is refused) rather than via a raw os.ReadFile, so runtime schema loads
+// obey the same secure-by-default policy as fn:doc and document().
+func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *helium.Document) ([]*xsd.Schema, error) {
 	root := doc.DocumentElement()
 	if root == nil {
 		return nil, nil
@@ -56,14 +62,20 @@ func loadSchemasFromSchemaLocation(ctx context.Context, doc *helium.Document) ([
 	}
 
 	schemas := make([]*xsd.Schema, 0, len(paths))
-	for _, path := range paths {
-		absPath := path
-		if !filepath.IsAbs(absPath) && baseURI != "" {
-			absPath = filepath.Join(filepath.Dir(baseURI), path)
-		}
-		schema, err := xsd.NewCompiler().CompileFile(ctx, absPath)
+	for _, uri := range paths {
+		data, err := ec.retrieveDocumentBytes(ctx, uri)
 		if err != nil {
-			return nil, fmt.Errorf("compile source schema %q: %w", absPath, err)
+			return nil, fmt.Errorf("load source schema %q: %w", uri, err)
+		}
+		schemaDoc, err := helium.NewParser().Parse(ctx, data)
+		if err != nil {
+			return nil, fmt.Errorf("parse source schema %q: %w", uri, err)
+		}
+		// Root the XSD compiler's base directory at the schema's location so
+		// the schema's own relative xs:include/xs:import references resolve.
+		schema, err := xsd.NewCompiler().BaseDir(filepath.Dir(uri)).Compile(ctx, schemaDoc)
+		if err != nil {
+			return nil, fmt.Errorf("compile source schema %q: %w", uri, err)
 		}
 		schemas = append(schemas, schema)
 	}

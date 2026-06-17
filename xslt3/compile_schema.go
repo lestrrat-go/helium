@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -13,6 +14,38 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
+
+// compileSchemaFromURI loads a schema document through the compiler's
+// configured URIResolver (default-deny: with no resolver, the load is
+// refused rather than falling back to os.ReadFile) and compiles it
+// in-memory. The resolver provides the same secure-by-default and
+// path-traversal sandboxing model that xsl:import/include stylesheet
+// loads use.
+func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.Schema, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if c.resolver == nil {
+		return nil, staticError(errCodeXTSE0165,
+			"cannot load schema %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
+	}
+	rc, resolveErr := c.resolver.Resolve(uri)
+	if resolveErr != nil {
+		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, resolveErr)
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read schema %q: %w", uri, err)
+	}
+	doc, err := helium.NewParser().Parse(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
+	}
+	// Preserve relative include/import resolution within the schema by
+	// rooting the XSD compiler's base directory at the schema's location.
+	return xsd.NewCompiler().BaseDir(filepath.Dir(uri)).Compile(ctx, doc)
+}
 
 // fatalErrorCounter is an error handler that counts fatal errors during schema compilation.
 type fatalErrorCounter struct {
@@ -66,7 +99,7 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			uri = filepath.Join(baseDir, schemaLoc)
 		}
 
-		schema, err := xsd.NewCompiler().CompileFile(ctx, uri)
+		schema, err := c.compileSchemaFromURI(ctx, uri)
 		if err != nil {
 			// File not found — try pre-compiled import schemas by namespace.
 			if declaredNS != "" {
