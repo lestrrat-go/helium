@@ -123,6 +123,7 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 	if typeRef != "" {
 		qn := c.resolveQName(ctx, elem, typeRef)
 		c.elemRefs[decl] = qn
+		c.markChameleonEligible(decl, elem, typeRef)
 		c.elemRefSources[decl] = elemRefSource{elemName: sourceName, line: elem.Line()}
 		return nil
 	}

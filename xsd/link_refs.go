@@ -54,10 +54,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				continue
 			}
 			td, ok := c.schema.types[qn]
-			if !ok && c.chameleonFallbackNS(qn) {
-				// Try empty namespace as fallback — the type may come from an
-				// imported schema with no targetNamespace (chameleon include).
-				td, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+			if !ok {
+				if _, eligible := c.chameleonEligible[edecl]; eligible {
+					// Try empty namespace as fallback — the type may come from an
+					// imported schema with no targetNamespace (chameleon include).
+					td, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+				}
 			}
 			if !ok {
 				// Report the unresolved element type — whether an XSD built-in
@@ -79,10 +81,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve base type references.
 	for td, qn := range c.typeRefs {
 		base, ok := c.schema.types[qn]
-		if !ok && c.chameleonFallbackNS(qn) {
-			// Try empty namespace as fallback — the type may come from an
-			// imported schema with no targetNamespace (chameleon include).
-			base, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+		if !ok {
+			if _, eligible := c.chameleonEligible[td]; eligible {
+				// Try empty namespace as fallback — the type may come from an
+				// imported schema with no targetNamespace (chameleon include).
+				base, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+			}
 		}
 		if !ok {
 			// Report the unresolved base type before installing a recovery
@@ -97,10 +101,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve list item type references.
 	for td, qn := range c.itemTypeRefs {
 		itemTD, ok := c.schema.types[qn]
-		if !ok && c.chameleonFallbackNS(qn) {
-			// Try empty namespace as fallback — the item type may come from an
-			// imported schema with no targetNamespace (chameleon include).
-			itemTD, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+		if !ok {
+			if _, eligible := c.chameleonEligible[td]; eligible {
+				// Try empty namespace as fallback — the item type may come from an
+				// imported schema with no targetNamespace (chameleon include).
+				itemTD, ok = c.schema.types[QName{Local: qn.Local, NS: ""}]
+			}
 		}
 		if !ok {
 			c.reportUnresolvedTypeRef(ctx, td, qn)
@@ -113,7 +119,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Resolve union member type references.
 	for _, ref := range c.unionMemberRefs {
 		memberTD, ok := c.schema.types[ref.name]
-		if !ok && c.chameleonFallbackNS(ref.name) {
+		if !ok && ref.chameleonEligible {
 			// Try empty namespace as fallback — the member type may come from an
 			// imported schema with no targetNamespace (chameleon include).
 			memberTD, ok = c.schema.types[QName{Local: ref.name.Local, NS: ""}]
@@ -775,24 +781,38 @@ func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
 	return false
 }
 
-// chameleonFallbackNS reports whether an unresolved type ref qn is eligible for
-// the no-targetNamespace ({}) fallback. The fallback exists for chameleon
-// includes: an imported no-targetNamespace schema contributes its unqualified
-// types as if they belonged to the including schema's target namespace, so a
-// ref that resolved to {targetNamespace}name may instead bind to the imported
-// {}name.
+// refChameleonEligible reports whether the lexical type ref at the given
+// element is eligible for the no-targetNamespace ({}) chameleon fallback. The
+// fallback exists for chameleon includes: an imported no-targetNamespace schema
+// contributes its unqualified types as if they belonged to the including
+// schema's target namespace, so a ref that resolved to {targetNamespace}name
+// may instead bind to the imported {}name.
 //
-// The fallback fires ONLY when the resolved namespace equals the schema's own
-// target namespace. This is stricter than a mere "unprefixed" test: an
-// unprefixed ref can still bind to a foreign namespace via a default-namespace
-// declaration (xmlns="..."). For example, with xmlns="http://www.w3.org/2001/
-// XMLSchema" an unprefixed type="Bad" resolves to {XMLSchema}Bad, which must
-// report unresolved in that namespace rather than silently masking to {}Bad. A
-// prefixed ref whose prefix binds to the target namespace is likewise a valid
-// chameleon reference and is allowed; a prefixed (or default-ns-bound) ref to
-// any other namespace is not.
-func (c *compiler) chameleonFallbackNS(qn QName) bool {
-	return qn.NS != "" && qn.NS == c.schema.targetNamespace
+// Eligibility is tracked from the LEXICAL ref and fires ONLY when the ref was
+// BOTH (a) unprefixed (no "prefix:" in the lexical QName) AND (b) had no
+// in-scope default namespace (no xmlns="..." covering it). In every other case
+// the ref is qualified: a prefixed ref (m:t) binds to its prefix's namespace,
+// and an unprefixed ref under a default namespace (xmlns="urn:main" -> t binds
+// to urn:main) binds to that namespace. Such qualified refs must NOT mask to
+// {}; if they do not resolve in their bound namespace, an unresolved error is
+// reported. The eligibility bit is recorded at the ref collection site (where
+// the lexical form and in-scope namespaces are available) via
+// markChameleonEligible / unionMemberRef.chameleonEligible.
+func refChameleonEligible(elem *helium.Element, ref string) bool {
+	if strings.ContainsRune(ref, ':') {
+		return false
+	}
+	// A default namespace in scope (xmlns="...") qualifies the unprefixed ref.
+	return lookupNS(elem, "") == ""
+}
+
+// markChameleonEligible records that the ref owned by owner (an *ElementDecl or
+// *TypeDef) is eligible for the no-targetNamespace ({}) fallback, based on the
+// lexical ref at elem. Call at the collection site.
+func (c *compiler) markChameleonEligible(owner any, elem *helium.Element, ref string) {
+	if refChameleonEligible(elem, ref) {
+		c.chameleonEligible[owner] = struct{}{}
+	}
 }
 
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName

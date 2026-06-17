@@ -425,3 +425,147 @@ func TestCompile_DefaultNamespaceBoundRefNoEmptyNamespaceFallback(t *testing.T) 
 		})
 	}
 }
+
+// The no-targetNamespace ({}) fallback must NOT fire for a ref that is QUALIFIED
+// to the schema's OWN target namespace — whether via a prefix bound to the TNS
+// (xmlns:m="urn:main" -> m:t) or via a default namespace equal to the TNS
+// (xmlns="urn:main" -> t). Such a ref binds to {urn:main}t; with only an
+// imported no-targetNamespace {}t available it must report a FATAL unresolved
+// {urn:main}t, NOT silently bind to {}t. A "resolved namespace == target
+// namespace" gate (the prior approach) wrongly fired the fallback here, masking
+// the explicit target-namespace ref. Eligibility must instead be tracked from
+// the LEXICAL ref: only an UNPREFIXED ref with NO in-scope default namespace is
+// eligible. Guards all four ref kinds (element type, base, list itemType, union
+// memberTypes) for both the prefixed-target and default-target forms.
+func TestCompile_QualifiedTargetNamespaceRefNoEmptyNamespaceFallback(t *testing.T) {
+	compileErrors := func(t *testing.T, fsys fstest.MapFS) string {
+		t.Helper()
+		data, err := fsys.ReadFile(importMainXSD)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		var b strings.Builder
+		for _, e := range collector.Errors() {
+			b.WriteString(e.Error())
+		}
+		return b.String()
+	}
+
+	// other.xsd has no targetNamespace and defines an unqualified type t. The
+	// main schema's own target namespace is urn:main, which contains no type t.
+	const otherNoTNS = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="t">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`
+
+	cases := []struct {
+		name string
+		main string
+	}{
+		// Prefix m bound to the schema's own target namespace urn:main: m:t binds
+		// to {urn:main}t, which is qualified and must NOT fall back to {}t.
+		{
+			name: "prefixed-target element type",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:m="urn:main" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:element name="root" type="m:t"/>
+</xs:schema>`,
+		},
+		{
+			name: "prefixed-target base type",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:m="urn:main" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="d">
+    <xs:restriction base="m:t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="d"/>
+</xs:schema>`,
+		},
+		{
+			name: "prefixed-target list itemType",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:m="urn:main" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="myList">
+    <xs:list itemType="m:t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="myList"/>
+</xs:schema>`,
+		},
+		{
+			name: "prefixed-target union memberTypes",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:m="urn:main" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="myUnion">
+    <xs:union memberTypes="xs:string m:t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="myUnion"/>
+</xs:schema>`,
+		},
+		// Default namespace equal to the schema's own target namespace urn:main:
+		// unprefixed t binds to {urn:main}t, which is qualified and must NOT fall
+		// back to {}t even though it resolves to the target namespace.
+		{
+			name: "default-target element type",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="urn:main" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:element name="root" type="t"/>
+</xs:schema>`,
+		},
+		{
+			name: "default-target base type",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="urn:main" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="d">
+    <xs:restriction base="t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="d"/>
+</xs:schema>`,
+		},
+		{
+			name: "default-target list itemType",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="urn:main" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="myList">
+    <xs:list itemType="t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="myList"/>
+</xs:schema>`,
+		},
+		{
+			name: "default-target union memberTypes",
+			main: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="urn:main" targetNamespace="urn:main">
+  <xs:import schemaLocation="other.xsd"/>
+  <xs:simpleType name="myUnion">
+    <xs:union memberTypes="xs:string t"/>
+  </xs:simpleType>
+  <xs:element name="root" type="myUnion"/>
+</xs:schema>`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fsys := fstest.MapFS{
+				importMainXSD:  &fstest.MapFile{Data: []byte(tc.main)},
+				importOtherXSD: &fstest.MapFile{Data: []byte(otherNoTNS)},
+			}
+			got := compileErrors(t, fsys)
+			require.Contains(t, got, "{urn:main}t",
+				"a ref qualified to the schema's own target namespace must report unresolved {urn:main}t, not silently fall back to {}t; got: %q", got)
+			require.Contains(t, got, "does not resolve to a(n) type definition",
+				"qualified target-namespace unresolved ref must produce a fatal unresolved-type error; got: %q", got)
+		})
+	}
+}

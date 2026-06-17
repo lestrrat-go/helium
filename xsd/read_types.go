@@ -174,6 +174,7 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 	if baseRef != "" {
 		qn := c.resolveQName(ctx, elem, baseRef)
 		c.typeRefs[td] = qn
+		c.markChameleonEligible(td, elem, baseRef)
 	}
 
 	// Parse child model groups and attributes.
@@ -234,6 +235,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 	if baseRef != "" {
 		qn := c.resolveQName(ctx, elem, baseRef)
 		c.typeRefs[td] = qn
+		c.markChameleonEligible(td, elem, baseRef)
 	}
 	// Parse child content model (if any).
 	for child := range helium.Children(elem) {
@@ -310,6 +312,7 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 			if baseRef != "" {
 				qn := c.resolveQName(ctx, ce, baseRef)
 				c.typeRefs[td] = qn
+				c.markChameleonEligible(td, ce, baseRef)
 			}
 			td.Derivation = DerivationExtension
 			c.parseSimpleContentChildren(ctx, ce, td)
@@ -318,6 +321,7 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 			if baseRef != "" {
 				qn := c.resolveQName(ctx, ce, baseRef)
 				c.typeRefs[td] = qn
+				c.markChameleonEligible(td, ce, baseRef)
 			}
 			td.Derivation = DerivationRestriction
 			c.parseSimpleContentChildren(ctx, ce, td)
@@ -377,6 +381,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 			if baseRef != "" {
 				qn := c.resolveQName(ctx, ce, baseRef)
 				c.typeRefs[td] = qn
+				c.markChameleonEligible(td, ce, baseRef)
 			} else {
 				// Look for inline <simpleType> child as the base type.
 				for gc := range helium.Children(ce) {
@@ -405,6 +410,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 			if itemRef != "" {
 				qn := c.resolveQName(ctx, ce, itemRef)
 				c.itemTypeRefs[td] = qn
+				c.markChameleonEligible(td, ce, itemRef)
 			} else {
 				// Look for inline <simpleType> child as the item type.
 				for gc := range helium.Children(ce) {
@@ -431,7 +437,11 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 			if memberTypesAttr := getAttr(ce, attrMemberTypes); memberTypesAttr != "" {
 				for ref := range strings.FieldsSeq(memberTypesAttr) {
 					qn := c.resolveQName(ctx, ce, ref)
-					c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{owner: td, name: qn})
+					c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{
+						owner:             td,
+						name:              qn,
+						chameleonEligible: refChameleonEligible(ce, ref),
+					})
 				}
 			}
 			// Parse inline <simpleType> children.
