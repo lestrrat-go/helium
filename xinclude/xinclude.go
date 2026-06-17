@@ -25,6 +25,15 @@ const (
 )
 
 // Resolver loads content from a URI.
+//
+// The processor resolves each xi:include href against the include's
+// effective base URI (honoring ancestor xml:base attributes) BEFORE
+// calling Resolve. The href argument is therefore the fully-resolved
+// location to open, and base carries the effective base URI it was
+// resolved against for informational/logging use. A Resolver MUST open
+// href directly and MUST NOT resolve href against base a second time —
+// doing so double-applies the base directory (e.g. opening
+// dir/dir/inc.xml instead of dir/inc.xml).
 type Resolver interface {
 	Resolve(href, base string) (io.ReadCloser, error)
 }
@@ -82,15 +91,18 @@ func (p Processor) Resolver(r Resolver) Processor {
 }
 
 // NewFSResolver returns a [Resolver] that opens hrefs through the given
-// [fs.FS]. Relative hrefs are resolved against the document's base URI
-// (only file:// or scheme-less bases are honored) and joined with
-// [path.Join] before being passed to fsys.Open. A nil fsys is
-// treated as the permissive default that opens any OS path verbatim.
+// [fs.FS]. The processor resolves each xi:include href against the
+// include's effective base URI before calling the resolver, so the href
+// handed to fsys.Open is already the resolved location — it is opened
+// directly and the base argument is ignored (joining it again would
+// double-apply the base directory). A nil fsys is treated as the
+// permissive default that opens any OS path verbatim.
 //
 // Names handed to fsys.Open use forward slashes and are canonicalized
-// with [path.Clean]. Relative hrefs that escape the base (e.g. "../foo")
-// leave a leading ".." in the cleaned result and will be rejected by an
-// [fs.ValidPath]-enforcing FS, giving path-traversal containment.
+// with [path.Clean]. A resolved name that escapes the FS root (e.g.
+// "../foo") leaves a leading ".." in the cleaned result and will be
+// rejected by an [fs.ValidPath]-enforcing FS, giving path-traversal
+// containment.
 //
 // Sandboxing note: when paired with [os.DirFS], [testing/fstest.MapFS],
 // or [os.OpenRoot], the document's base URI must be FS-relative — no
@@ -316,7 +328,7 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 		if resolved == "" {
 			err = fmt.Errorf("xi:include: text inclusion requires href")
 		} else {
-			err = p.includeText(inc, resolved)
+			err = p.includeText(inc, resolved, incBase)
 		}
 	default:
 		err = fmt.Errorf("xi:include: unsupported parse value %q", parse)
@@ -328,8 +340,8 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 	return nil
 }
 
-func (p *processor) includeXML(ctx context.Context, inc *helium.Element, uri string, _ string) error {
-	doc, err := p.loadXMLDoc(ctx, uri, false)
+func (p *processor) includeXML(ctx context.Context, inc *helium.Element, uri string, incBase string) error {
+	doc, err := p.loadXMLDoc(ctx, uri, incBase, false)
 	if err != nil {
 		return err
 	}
@@ -392,7 +404,7 @@ func (p *processor) includeXML(ctx context.Context, inc *helium.Element, uri str
 	return nil
 }
 
-func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Element, uri string, xptrExpr string, _ string) error {
+func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Element, uri string, xptrExpr string, incBase string) error {
 	var doc *helium.Document
 	var err error
 
@@ -401,7 +413,7 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 		// current document (via base URI) to avoid seeing nodes that were
 		// inserted by previous XInclude processing in this pass.
 		if p.baseURI != "" {
-			doc, err = p.loadXMLDoc(ctx, p.baseURI, true)
+			doc, err = p.loadXMLDoc(ctx, p.baseURI, p.baseURI, true)
 			if err != nil {
 				return err
 			}
@@ -409,7 +421,7 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 			doc = inc.OwnerDocument()
 		}
 	} else {
-		doc, err = p.loadXMLDoc(ctx, uri, true)
+		doc, err = p.loadXMLDoc(ctx, uri, incBase, true)
 		if err != nil {
 			return err
 		}
@@ -563,7 +575,7 @@ func (p *processor) mergeEntities(ctx context.Context, src, dst *helium.Document
 	merge(srcExt)
 }
 
-func (p *processor) loadXMLDoc(ctx context.Context, uri string, substituteEntities bool) (*helium.Document, error) {
+func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, substituteEntities bool) (*helium.Document, error) {
 	cacheKey := uri
 	if substituteEntities {
 		cacheKey = uri + "\x00noent"
@@ -578,7 +590,7 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, substituteEntiti
 		return p.parseXMLData(ctx, entry.data, uri, substituteEntities)
 	}
 
-	rc, err := p.resolver.Resolve(uri, p.baseURI)
+	rc, err := p.resolve(uri, base)
 	if err != nil {
 		wrapErr := fmt.Errorf("xi:include: failed to resolve %q: %w", uri, err)
 		p.docCache[cacheKey] = docCacheEntry{err: wrapErr}
@@ -602,6 +614,17 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, substituteEntiti
 	// Cache raw bytes for subsequent includes of the same URI
 	p.docCache[cacheKey] = docCacheEntry{data: data}
 	return doc, nil
+}
+
+// resolve opens an already-resolved URI through the configured Resolver.
+// uri has already been resolved against base (the include's effective base
+// URI, honoring ancestor xml:base) by processInclude/resolveURI, so it is
+// passed as the href to open while base is passed only as informational
+// context (per the Resolver contract): resolvers MUST open href directly
+// and MUST NOT resolve it against base again, which would double-apply the
+// base directory (e.g. open dir/dir/inc.xml instead of dir/inc.xml).
+func (p *processor) resolve(uri, base string) (io.ReadCloser, error) {
+	return p.resolver.Resolve(uri, base) //nolint:wrapcheck // callers wrap with the URI for context
 }
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
@@ -640,8 +663,8 @@ func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, s
 	return doc, nil
 }
 
-func (p *processor) includeText(inc *helium.Element, uri string) error {
-	data, err := p.loadText(uri)
+func (p *processor) includeText(inc *helium.Element, uri string, incBase string) error {
+	data, err := p.loadText(uri, incBase)
 	if err != nil {
 		return err
 	}
@@ -672,12 +695,12 @@ func (p *processor) includeText(inc *helium.Element, uri string) error {
 	return nil
 }
 
-func (p *processor) loadText(uri string) ([]byte, error) {
+func (p *processor) loadText(uri string, base string) ([]byte, error) {
 	if entry, ok := p.txtCache[uri]; ok {
 		return entry.data, entry.err
 	}
 
-	rc, err := p.resolver.Resolve(uri, p.baseURI)
+	rc, err := p.resolve(uri, base)
 	if err != nil {
 		wrapErr := fmt.Errorf("xi:include: failed to resolve %q: %w", uri, err)
 		p.txtCache[uri] = txtCacheEntry{err: wrapErr}
@@ -1268,25 +1291,20 @@ type denyAllFS struct{}
 
 func (denyAllFS) Open(string) (fs.File, error) { return nil, fs.ErrNotExist }
 
-func (r *fsResolver) Resolve(href, base string) (io.ReadCloser, error) {
-	// Upstream URI resolution (e.g. resolveURI) may produce OS-specific
-	// separators via filepath.Join on Windows. fs.FS requires slash-
-	// separated names, so normalize both inputs before joining.
+func (r *fsResolver) Resolve(href, _ string) (io.ReadCloser, error) {
+	// href is already fully resolved against the include's effective base
+	// by the processor (see the Resolver contract), so it is opened
+	// directly — base is intentionally ignored. Joining base here would
+	// double-apply the base directory (e.g. dir/dir/inc.xml).
+	//
+	// Upstream resolution (resolveURI) may emit OS-specific separators via
+	// filepath.Join on Windows, so normalize to slashes for fs.FS, which
+	// requires slash-separated names.
 	p := filepath.ToSlash(href)
-	if !path.IsAbs(p) && base != "" {
-		baseURL, err := url.Parse(base)
-		if err == nil && (baseURL.Scheme == "" || baseURL.Scheme == "file") {
-			basePath := filepath.ToSlash(baseURL.Path)
-			if basePath == "" {
-				basePath = filepath.ToSlash(base)
-			}
-			p = path.Join(path.Dir(basePath), p)
-		}
-	}
 	// fs.FS uses slash-separated paths; using path (not filepath) keeps
 	// names valid on Windows. path.Clean canonicalizes so a sandboxing
 	// fs.FS (os.DirFS, fstest.MapFS, os.OpenRoot) sees consistent input,
-	// and any remaining ".." prefix means the join ascended above the
-	// base and will be rejected by an fs.ValidPath-enforcing FS.
+	// and any remaining ".." prefix means the resolved name ascended above
+	// the FS root and will be rejected by an fs.ValidPath-enforcing FS.
 	return r.fsys.Open(path.Clean(p)) //nolint:wrapcheck // resolver errors propagate to caller verbatim
 }
