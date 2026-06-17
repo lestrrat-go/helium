@@ -86,3 +86,54 @@ func TestWriteAcceptsHTMLLooseName(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, strings.Contains(buf.String(), "gentus?.?"), "got %q", buf.String())
 }
+
+// TestWriteRejectsInjectedNamespacePrefix ensures the HTML serializer refuses
+// to write a namespace declaration whose prefix is unsafe. DeclareNamespace
+// accepts an arbitrary prefix, so without validation a prefix like
+// `p injected="1` would be written verbatim into the xmlns: attribute name
+// under PreserveCase(true), producing an injected attribute in the tag.
+func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
+	doc := helium.NewHTMLDocument()
+	root := doc.CreateElement("html")
+	require.NoError(t, root.DeclareNamespace(`p injected="1`, "urn:x"))
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	var buf bytes.Buffer
+	err := html.NewWriter().PreserveCase(true).Format(false).
+		DefaultDTD(false).WriteTo(&buf, doc)
+	require.Error(t, err, "serializing injected namespace prefix must error, got output %q", buf.String())
+	require.NotContains(t, buf.String(), `injected="1`, "injected markup must not be written")
+}
+
+// TestWriteRejectsInjectedAttributeNamespacePrefix covers the
+// emitAttrNSDecls path: an attribute whose namespace prefix is unsafe must
+// also be rejected rather than emitted as an xmlns: declaration.
+func TestWriteRejectsInjectedAttributeNamespacePrefix(t *testing.T) {
+	doc := helium.NewHTMLDocument()
+	root := doc.CreateElement("svg")
+	ns, err := doc.CreateNamespace(`p injected="1`, "urn:x")
+	require.NoError(t, err)
+	require.NoError(t, root.SetLiteralAttributeNS("href", "v", ns))
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	var buf bytes.Buffer
+	err = html.NewWriter().PreserveCase(true).Format(false).
+		DefaultDTD(false).WriteTo(&buf, doc)
+	require.Error(t, err, "serializing injected attribute namespace prefix must error, got output %q", buf.String())
+	require.NotContains(t, buf.String(), `injected="1`, "injected markup must not be written")
+}
+
+// TestRoundTripAmpersandInAttrName proves that '&' in an attribute name
+// round-trips through parse and serialize. The HTML parser's liberal
+// attribute-name rule accepts '&' (it does not terminate the tag), so the
+// serializer must accept it too; rejecting it would regress parity.
+func TestRoundTripAmpersandInAttrName(t *testing.T) {
+	const input = `<div a&b=v></div>`
+	doc, err := html.NewParser().SuppressImplied(true).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = html.NewWriter().DefaultDTD(false).Format(false).WriteTo(&buf, doc)
+	require.NoError(t, err, "serializing parsed `a&b` attribute name must not error")
+	require.Contains(t, buf.String(), "a&b", "attribute name with '&' should round-trip, got %q", buf.String())
+}

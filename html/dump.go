@@ -174,11 +174,14 @@ func (d *htmlDumper) checkName(kind, name string) {
 
 // isUnsafeNameRune reports whether r may not appear in a serialized HTML
 // element or attribute name because it would terminate or escape the tag.
-// The set mirrors the characters HTML5 forbids in tag/attribute names plus
-// ASCII control characters and the replacement character.
+// The set mirrors the characters that terminate an attribute name in the
+// HTML parser (see parser.parseAttrName) plus ASCII control characters and
+// the replacement character. '&' is intentionally excluded: the parser's
+// liberal attribute-name rule accepts it and it does not break out of the
+// tag, so rejecting it would regress parse/serialize round-trip parity.
 func isUnsafeNameRune(r rune) bool {
 	switch r {
-	case ' ', '\t', '\n', '\r', '\f', '"', '\'', '<', '>', '=', '/', '&', utf8.RuneError:
+	case ' ', '\t', '\n', '\r', '\f', '"', '\'', '<', '>', '=', '/', utf8.RuneError:
 		return true
 	}
 	return r < 0x20 || r == 0x7f
@@ -606,13 +609,21 @@ func (d *htmlDumper) writeNSDecl(out io.Writer, prefix, uri string) {
 		d.writeString(out, " xmlns=\"")
 		d.writeString(out, uri)
 		d.writeString(out, "\"")
-	} else {
-		d.writeString(out, " xmlns:")
-		d.writeString(out, prefix)
-		d.writeString(out, "=\"")
-		d.writeString(out, uri)
-		d.writeString(out, "\"")
+		return
 	}
+	// A non-empty prefix is written verbatim into the xmlns: attribute name,
+	// so an unsafe prefix could break out of the tag (e.g. a prefix
+	// containing a space and quote yields a separate injected attribute).
+	// Reject it the same way element/attribute names are rejected.
+	d.checkName("namespace prefix", prefix)
+	if d.err != nil {
+		return
+	}
+	d.writeString(out, " xmlns:")
+	d.writeString(out, prefix)
+	d.writeString(out, "=\"")
+	d.writeString(out, uri)
+	d.writeString(out, "\"")
 }
 
 // emitAttrNSDecls emits namespace declarations for attribute prefixes
