@@ -39,6 +39,14 @@ func TestResolveSchemaURI(t *testing.T) {
 		{"mem single-slash uri, local base", "/work/main.xsl", "mem:/schemas/s.xsd", "mem:/schemas/s.xsd"},
 		{"urn opaque uri, local base", "/work/main.xsl", "urn:schemas:s", "urn:schemas:s"},
 		{"file single-slash uri, local base", "/work/main.xsl", "file:/tmp/s.xsd", "file:/tmp/s.xsd"},
+		// No-authority single-slash URI base (OmitHost) + relative ref must
+		// preserve the "mem:/..." form, NOT gain an empty "//" authority
+		// ("mem:///...") that would miss an exact resolver keyed on "mem:/...".
+		{"mem single-slash base, relative ref", "mem:/stylesheets/main.xsl", "s.xsd", "mem:/stylesheets/s.xsd"},
+		{"mem runtime doc base, relative ref", "mem:/docs/input.xml", "s.xsd", "mem:/docs/s.xsd"},
+		// Regression: canonical empty-authority bases keep their "///".
+		{"file empty-authority base, relative ref", "file:///tmp/style/main.xsl", "s.xsd", "file:///tmp/style/s.xsd"},
+		{"https authority base, relative ref", "https://example.com/s/main.xsl", part, "https://example.com/s/part.xsd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, resolveSchemaURI(tc.ref, tc.base))

@@ -105,7 +105,19 @@ func resolveSchemaURI(ref, baseURI string) string {
 		base, baseErr := url.Parse(baseURI)
 		refURL, refErr := url.Parse(ref)
 		if baseErr == nil && refErr == nil {
-			return base.ResolveReference(refURL).String()
+			resolved := base.ResolveReference(refURL)
+			// net/url quirk: ResolveReference returns a fresh URL that does NOT
+			// carry the base's OmitHost flag. For a no-authority base like
+			// "mem:/stylesheets/main.xsl" (OmitHost=true, no "//") the resolved
+			// URL would otherwise emit an empty "//" authority — "mem:///..." —
+			// breaking exact-match resolvers keyed on "mem:/...". Re-apply
+			// OmitHost only when the base was the no-authority form AND the
+			// resolved URL has no authority, so canonical empty-authority bases
+			// like "file:///..." (OmitHost=false) keep their "///".
+			if base.OmitHost && resolved.Host == "" && resolved.User == nil {
+				resolved.OmitHost = true
+			}
+			return resolved.String()
 		}
 		// Unparseable URI base/ref: fall back to the local-base join below
 		// rather than silently dropping the ref.
