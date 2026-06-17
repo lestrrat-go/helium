@@ -166,6 +166,28 @@ is a thin greedy-max wrapper over `matchAttrTokensCounts`. `validateList` (the
 naive `validatePattern` path) delegates to `matchListContent`, so every `<list>`
 path shares these semantics.
 
+### XSD Datatype Library (`<data>` / `<value>`)
+
+When `datatypeLibrary` is the XSD datatypes namespace, `validateXSDType`
+(`<data>`) and `matchXSDValue` (`<value>`) route through the shared XSD value
+validator (`internal/xsd/value`): `ValidateBuiltin` enforces lexical/value
+spaces (date/time/duration ranges, integer subtype bounds, binary alphabets) so
+RELAX NG and XSD stay consistent. `xsdDatatypeNames` is the recognized-name
+allowlist; any name outside it is an unknown datatype and is rejected (no silent
+accept). `xs:string` keeps the local `<param>`-facet path (whiteSpace=preserve).
+For `<value>`, `matchXSDValue` first requires **both** the instance text and the
+`<value>` literal to be lexically valid via `ValidateBuiltin` for **every**
+recognized XSD datatype — this gate runs before the lexical-equality fast-path
+and the value-space branch, so an identical-but-invalid lexical is rejected for
+both comparable types (e.g. `type="integer"` with both forms `5.0`) and
+constrained non-comparable string-family types (e.g. `type="NCName"` with both
+forms `1foo`). `ValidateBuiltin` imposes no constraint on `xs:string`/`xs:anyURI`,
+so those stay effectively lexical-only. After the gate, value-space-comparable
+types in `xsdValueSpaceTypes` (numeric, boolean, date/time, binary; mirrors
+xsd's `enumValueSpaceTypes`) match by `value.Compare` value-space equality (e.g.
+integer `5`≡`+5`≡`05`, NaN≡NaN for float/double); all other recognized types
+(string-family, anyURI) match by whitespace-processed lexical equality.
+
 ### Error Suppression
 
 - `suppressDepth` counter incremented during choice branch exploration
