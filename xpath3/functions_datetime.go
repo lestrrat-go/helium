@@ -137,13 +137,15 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	// Per XPath F&O fn:dateTime($arg1 as xs:date?, $arg2 as xs:time?): the
-	// first argument must be xs:date and the second xs:time. Checking only for
-	// a time.Time payload is not enough — xs:dateTime (and other temporal
-	// types) also carry one and would be silently reinterpreted.
-	if dateA.TypeName != TypeDate {
+	// first argument must be xs:date and the second xs:time. By XSD subtype
+	// substitution this also accepts any type derived from xs:date / xs:time.
+	// Checking only for a time.Time payload is not enough — xs:dateTime (a
+	// sibling of xs:date, not a subtype) also carries one and would be silently
+	// reinterpreted; it must still be rejected.
+	if !isAtomicSubtypeOf(dateA, TypeDate) {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "first arg must be xs:date, got " + dateA.TypeName}
 	}
-	if timeA.TypeName != TypeTime {
+	if !isAtomicSubtypeOf(timeA, TypeTime) {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "second arg must be xs:time, got " + timeA.TypeName}
 	}
 	d, ok := dateA.Value.(time.Time)
