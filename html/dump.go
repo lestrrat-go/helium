@@ -163,25 +163,37 @@ func (d *htmlDumper) checkName(kind, name string) {
 		d.check(fmt.Errorf("invalid HTML %s name: empty", kind))
 		return
 	}
-	for _, r := range name {
-		if !isUnsafeNameRune(r) {
-			continue
+	// Decode rune-by-rune rather than ranging over the string: a range loop
+	// yields utf8.RuneError both for genuinely invalid bytes and for a
+	// validly-encoded U+FFFD, so we cannot tell them apart by rune alone.
+	// DecodeRuneInString returns size==1 for invalid encodings, letting us
+	// reject only the former while permitting a real U+FFFD (size==3), which
+	// the parser accepts and which does not break out of the tag.
+	for i := 0; i < len(name); {
+		r, size := utf8.DecodeRuneInString(name[i:])
+		if r == utf8.RuneError && size == 1 {
+			d.check(fmt.Errorf("invalid HTML %s name %q", kind, name))
+			return
 		}
-		d.check(fmt.Errorf("invalid HTML %s name %q", kind, name))
-		return
+		if isUnsafeNameRune(r) {
+			d.check(fmt.Errorf("invalid HTML %s name %q", kind, name))
+			return
+		}
+		i += size
 	}
 }
 
 // isUnsafeNameRune reports whether r may not appear in a serialized HTML
 // element or attribute name because it would terminate or escape the tag.
 // The set mirrors the characters that terminate an attribute name in the
-// HTML parser (see parser.parseAttrName) plus ASCII control characters and
-// the replacement character. '&' is intentionally excluded: the parser's
-// liberal attribute-name rule accepts it and it does not break out of the
-// tag, so rejecting it would regress parse/serialize round-trip parity.
+// HTML parser (see parser.parseAttrName) plus ASCII control characters.
+// '&' is intentionally excluded: the parser's liberal attribute-name rule
+// accepts it and it does not break out of the tag, so rejecting it would
+// regress parse/serialize round-trip parity. A validly-encoded U+FFFD is
+// likewise accepted; only invalid UTF-8 is rejected, by the caller.
 func isUnsafeNameRune(r rune) bool {
 	switch r {
-	case ' ', '\t', '\n', '\r', '\f', '"', '\'', '<', '>', '=', '/', utf8.RuneError:
+	case ' ', '\t', '\n', '\r', '\f', '"', '\'', '<', '>', '=', '/':
 		return true
 	}
 	return r < 0x20 || r == 0x7f

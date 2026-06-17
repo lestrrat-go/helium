@@ -137,3 +137,35 @@ func TestRoundTripAmpersandInAttrName(t *testing.T) {
 	require.NoError(t, err, "serializing parsed `a&b` attribute name must not error")
 	require.Contains(t, buf.String(), "a&b", "attribute name with '&' should round-trip, got %q", buf.String())
 }
+
+// TestRoundTripReplacementCharInAttrName proves that a validly-encoded U+FFFD
+// (REPLACEMENT CHARACTER) in an attribute name round-trips through parse and
+// serialize. The HTML parser accepts any non-terminator character, and a real
+// U+FFFD does not break out of the tag, so the serializer must accept it too.
+func TestRoundTripReplacementCharInAttrName(t *testing.T) {
+	const input = "<div a�b=v></div>"
+	doc, err := html.NewParser().SuppressImplied(true).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = html.NewWriter().DefaultDTD(false).Format(false).WriteTo(&buf, doc)
+	require.NoError(t, err, "serializing parsed U+FFFD attribute name must not error")
+	require.Contains(t, buf.String(), "a�b", "attribute name with U+FFFD should round-trip, got %q", buf.String())
+}
+
+// TestWriteRejectsInvalidUTF8InAttributeName ensures that an actually-invalid
+// UTF-8 byte sequence in a name is still rejected, distinct from a valid
+// U+FFFD. A lone 0xFF byte is not valid UTF-8 and must not be serialized.
+// PreserveCase(true) is used so the raw name reaches checkName verbatim; the
+// lowercasing path would otherwise sanitize the invalid byte into a valid
+// U+FFFD before validation.
+func TestWriteRejectsInvalidUTF8InAttributeName(t *testing.T) {
+	doc := helium.NewHTMLDocument()
+	root := doc.CreateElement("div")
+	require.NoError(t, root.SetLiteralAttribute("a\xffb", "v"))
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	var buf bytes.Buffer
+	err := html.NewWriter().PreserveCase(true).DefaultDTD(false).Format(false).WriteTo(&buf, doc)
+	require.Error(t, err, "serializing attribute name with invalid UTF-8 must error, got output %q", buf.String())
+}
