@@ -222,7 +222,11 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 	// Annotate root element with its type.
 	vc.annotateElement(ctx, elem, td)
 
-	if hasXsiNil(elem) {
+	nilled, err := vc.checkXsiNil(ctx, elem)
+	if err != nil {
+		return err
+	}
+	if nilled {
 		return vc.validateNilledElement(ctx, elem, edecl, td)
 	}
 
@@ -578,14 +582,29 @@ func isBlank(b []byte) bool {
 	return true
 }
 
-// hasXsiNil returns true if the element has xsi:nil="true".
-func hasXsiNil(elem *helium.Element) bool {
+// checkXsiNil parses the element's xsi:nil attribute as an xs:boolean (after
+// whitespace collapse). It returns whether the element is nilled ("true"/"1").
+// "false"/"0" and an absent attribute mean not-nilled. Any other lexical form
+// is an invalid xs:boolean value: a validity error is reported and a non-nil
+// error is returned so the element is not silently validated as ordinary
+// content.
+func (vc *validationContext) checkXsiNil(ctx context.Context, elem *helium.Element) (bool, error) {
 	for _, a := range elem.Attributes() {
-		if a.URI() == lexicon.NamespaceXSI && a.LocalName() == attrNil {
-			return a.Value() == "true" || a.Value() == "1"
+		if a.URI() != lexicon.NamespaceXSI || a.LocalName() != attrNil {
+			continue
 		}
+		v := normalizeWhiteSpace(a.Value(), "collapse")
+		switch v {
+		case "true", "1":
+			return true, nil
+		case "false", "0":
+			return false, nil
+		}
+		msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", v)
+		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), attrDisplayName(a), msg)
+		return false, fmt.Errorf("invalid xsi:nil value %q", a.Value())
 	}
-	return false
+	return false, nil
 }
 
 // validateNilledElement handles an element with xsi:nil="true".
