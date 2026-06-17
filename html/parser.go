@@ -766,6 +766,19 @@ func (p *parser) parseCharacters() {
 	// triggers head-close + body-open.
 	inHead := p.currentName() == elemHead
 
+	// A real U+0000 (NUL) byte is indistinguishable from EOF via Peek/PeekAt
+	// (both return 0), so the scan loops below would break with no progress and
+	// the outer parse loop would spin forever. Per HTML5 the data state treats
+	// U+0000 as a parse error and replaces it with U+FFFD. Consume the NUL and
+	// emit the replacement character, guaranteeing forward progress. EOF is
+	// distinguished by Done().
+	if !p.cur.Done() && p.cur.Peek() == 0 {
+		_ = p.cur.Advance(1)
+		p.htmlStartCharData()
+		_ = p.emitCharacters([]byte("�"))
+		return
+	}
+
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
@@ -1032,9 +1045,16 @@ func (p *parser) parseRawContent(tagName string) {
 			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
 				validEnd := false
-				switch p.cur.PeekAt(afterTag) {
-				case 0, '>', ' ', '\t', '\n', '\r':
+				switch {
+				case !p.cur.HasByteAt(afterTag):
+					// True EOF after the matched tag terminates the element.
+					// A real NUL byte (HasByteAt true, PeekAt 0) does not.
 					validEnd = true
+				default:
+					switch p.cur.PeekAt(afterTag) {
+					case '>', ' ', '\t', '\n', '\r':
+						validEnd = true
+					}
 				}
 				if validEnd {
 					if state == scriptDoubleEscaped {
@@ -1056,6 +1076,14 @@ func (p *parser) parseRawContent(tagName string) {
 				}
 			}
 		}
+		// Per HTML5 the RAWTEXT/script-data states replace U+0000 with U+FFFD.
+		// The loop already advances on every byte (so no spin), but emit the
+		// replacement character instead of a literal NUL for correctness.
+		if p.cur.Peek() == 0 {
+			content.WriteString("�")
+			_ = p.cur.Advance(1)
+			continue
+		}
 		content.WriteByte(p.cur.Peek())
 		_ = p.cur.Advance(1)
 	}
@@ -1075,14 +1103,26 @@ func (p *parser) parseRCDATAContent(tagName string) {
 		if p.cur.Peek() == '<' && p.cur.PeekAt(1) == '/' {
 			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
-				ch := p.cur.PeekAt(afterTag)
-				if ch == 0 {
+				// True EOF after the matched tag terminates the element; a real
+				// NUL byte (HasByteAt true, PeekAt 0) does not.
+				if !p.cur.HasByteAt(afterTag) {
 					return
 				}
-				if ch == '>' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+				switch p.cur.PeekAt(afterTag) {
+				case '>', ' ', '\t', '\n', '\r':
 					return
 				}
 			}
+		}
+
+		// A real U+0000 (NUL) byte reads as 0, the same sentinel used to stop
+		// the text scan below, so without this guard the scan makes no progress
+		// and the loop spins forever. Per HTML5 the RCDATA state replaces U+0000
+		// with U+FFFD. EOF is distinguished by Done() in the loop condition.
+		if p.cur.Peek() == 0 {
+			_ = p.cur.Advance(1)
+			_ = p.emitCharacters([]byte("�"))
+			continue
 		}
 
 		if p.cur.Peek() == '&' {
@@ -1112,9 +1152,16 @@ func (p *parser) parseRCDATAContent(tagName string) {
 				// tag so the cursor is guaranteed to progress.
 				validEnd := false
 				if p.cur.PeekAt(1) == '/' && p.hasPrefixFold(endTag) {
-					switch p.cur.PeekAt(len(endTag)) {
-					case 0, '>', ' ', '\t', '\n', '\r':
+					switch {
+					case !p.cur.HasByteAt(len(endTag)):
+						// True EOF after the matched tag; a real NUL does not
+						// count as a valid end-tag terminator.
 						validEnd = true
+					default:
+						switch p.cur.PeekAt(len(endTag)) {
+						case '>', ' ', '\t', '\n', '\r':
+							validEnd = true
+						}
 					}
 				}
 				if !validEnd {
@@ -1128,14 +1175,23 @@ func (p *parser) parseRCDATAContent(tagName string) {
 
 // parsePlaintext parses plaintext content — everything until EOF.
 func (p *parser) parsePlaintext() {
-	n := 0
-	for p.cur.PeekAt(n) != 0 {
-		n++
+	var content bytes.Buffer
+	for !p.cur.Done() {
+		// A real U+0000 (NUL) byte reads as 0, which the previous PeekAt-based
+		// scan treated as EOF, truncating plaintext early. Per HTML5 the
+		// PLAINTEXT state replaces U+0000 with U+FFFD; consume the rest of the
+		// input verbatim, distinguishing genuine EOF via Done().
+		b := p.cur.Peek()
+		if b == 0 {
+			content.WriteString("�")
+			_ = p.cur.Advance(1)
+			continue
+		}
+		content.WriteByte(b)
+		_ = p.cur.Advance(1)
 	}
-	if n > 0 {
-		text := p.cur.PeekString(n)
-		_ = p.cur.Advance(n)
-		p.handleSAXErr(p.sax.Characters([]byte(text)))
+	if content.Len() > 0 {
+		p.handleSAXErr(p.sax.Characters(content.Bytes()))
 	}
 }
 
