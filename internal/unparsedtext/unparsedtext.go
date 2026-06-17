@@ -471,7 +471,9 @@ func EncodingsCompatible(specified, detected string) bool {
 // FileURIResolver resolves file:// URIs and relative file paths against a
 // base directory. Resolution is confined to BaseDir: paths outside (via
 // "../" traversal or absolute paths that don't share the BaseDir prefix)
-// are refused.
+// are refused. Confinement is enforced with os.Root, so symlinks that point
+// outside BaseDir cannot be used to escape it even when the symlink itself
+// lives inside BaseDir. Symlinks that stay within BaseDir resolve normally.
 type FileURIResolver struct {
 	BaseDir string
 }
@@ -497,42 +499,66 @@ func (r *FileURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)
 	}
 
-	if err := ensureWithin(r.BaseDir, target); err != nil {
-		return nil, err
-	}
-
-	f, err := os.Open(target)
+	rel, err := containedRel(r.BaseDir, target)
 	if err != nil {
 		return nil, err
 	}
-	return f, nil
+
+	root, err := os.OpenRoot(r.BaseDir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Root.Open confines traversal to BaseDir: any path component that is a
+	// symlink resolving outside the root is rejected, closing the gap left by
+	// a purely lexical containment check.
+	f, err := root.Open(rel)
+	if err != nil {
+		_ = root.Close()
+		return nil, err
+	}
+	return &rootFile{File: f, root: root}, nil
 }
 
-// ensureWithin verifies that target is inside baseDir after symlink-free
-// path cleaning. Both arguments are resolved to absolute, cleaned forms.
-// Note that this is a path-level check; callers that must defend against
-// symlink races should supply a URIResolver that uses io/fs primitives
-// (see NewFileResolver).
-func ensureWithin(baseDir, target string) error {
+// rootFile keeps the owning os.Root alive for the lifetime of the open file
+// and closes it when the file is closed.
+type rootFile struct {
+	*os.File
+	root *os.Root
+}
+
+func (f *rootFile) Close() error {
+	err := f.File.Close()
+	if cerr := f.root.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// containedRel verifies that target is lexically inside baseDir and returns
+// the path of target relative to baseDir. The lexical check rejects "../"
+// traversal and unrelated absolute paths up front; symlink-based escapes are
+// caught separately by os.Root when the file is actually opened.
+func containedRel(baseDir, target string) (string, error) {
 	if baseDir == "" {
-		return fmt.Errorf("FileURIResolver: BaseDir is empty")
+		return "", fmt.Errorf("FileURIResolver: BaseDir is empty")
 	}
 	absBase, err := filepath.Abs(baseDir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	absTarget, err := filepath.Abs(target)
 	if err != nil {
-		return err
+		return "", err
 	}
 	rel, err := filepath.Rel(absBase, absTarget)
 	if err != nil {
-		return fmt.Errorf("path %q is outside base %q", target, baseDir)
+		return "", fmt.Errorf("path %q is outside base %q", target, baseDir)
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("path %q is outside base %q", target, baseDir)
+		return "", fmt.Errorf("path %q is outside base %q", target, baseDir)
 	}
-	return nil
+	return rel, nil
 }
 
 // NewHTTPResolver returns a URIResolver that fetches http/https URIs using

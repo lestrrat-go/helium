@@ -514,6 +514,57 @@ func TestFileURIResolverRejectsTraversal(t *testing.T) {
 	})
 }
 
+func TestFileURIResolverRejectsSymlinkEscape(t *testing.T) {
+	dir := t.TempDir()
+
+	// A file that lives OUTSIDE BaseDir, holding secret content.
+	outsideDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outsideDir, "passwd"), []byte("secret"), 0644))
+
+	// A symlink inside BaseDir that points at the outside directory. Its path
+	// string ("link/passwd") is lexically inside BaseDir, so a naive
+	// string-prefix containment check passes even though it escapes.
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(outsideDir, link); err != nil {
+		t.Skipf("symlinks unsupported on this platform: %v", err)
+	}
+
+	// A legitimate in-BaseDir file must still resolve.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "inside.txt"), []byte("ok"), 0644))
+
+	r := &unparsedtext.FileURIResolver{BaseDir: dir}
+
+	t.Run("symlink escaping base is denied", func(t *testing.T) {
+		_, err := r.ResolveURI("link/passwd")
+		require.Error(t, err)
+	})
+
+	t.Run("in-base file still resolves", func(t *testing.T) {
+		rc, err := r.ResolveURI("inside.txt")
+		require.NoError(t, err)
+		defer func() { _ = rc.Close() }()
+		data, err := io.ReadAll(rc)
+		require.NoError(t, err)
+		require.Equal(t, "ok", string(data))
+	})
+
+	t.Run("in-base symlink staying inside resolves", func(t *testing.T) {
+		// A relative symlink that points to a sibling file within BaseDir must
+		// keep working. (Absolute-target symlinks are rejected by os.Root by
+		// design, since following an absolute path bypasses the root.)
+		inLink := filepath.Join(dir, "inlink.txt")
+		if err := os.Symlink("inside.txt", inLink); err != nil {
+			t.Skipf("symlinks unsupported on this platform: %v", err)
+		}
+		rc, err := r.ResolveURI("inlink.txt")
+		require.NoError(t, err)
+		defer func() { _ = rc.Close() }()
+		data, err := io.ReadAll(rc)
+		require.NoError(t, err)
+		require.Equal(t, "ok", string(data))
+	})
+}
+
 func TestNewHTTPResolver(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("via-http-resolver"))
