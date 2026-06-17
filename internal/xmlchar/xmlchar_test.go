@@ -39,6 +39,34 @@ func TestIsValidNCName(t *testing.T) {
 	}
 }
 
+func TestIsValidQName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"foo", true},
+		{"p:foo", true},
+		{"xml:space", true},
+		{"_a:_b", true},
+		{"", false},
+		{":foo", false},
+		{"foo:", false},
+		{"p:q:r", false},
+		{"1p:foo", false},
+		{"p:1foo", false},
+		{`root injected="1"`, false},
+		{"foo bar", false},
+		{"x>y", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, xmlchar.IsValidQName(tt.input))
+		})
+	}
+}
+
 func TestIsValidPITarget(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

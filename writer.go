@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -436,6 +437,16 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		name = n.Name()
 	}
 
+	// The element name is emitted verbatim below. An unvalidated name (e.g.
+	// from CreateElement) can carry whitespace, quotes, or '>' that inject raw
+	// markup into the output. Reject names that are not well-formed XML QNames.
+	if !xmlchar.IsValidQName(name) {
+		// check() keeps the first sticky error, so an earlier I/O failure is
+		// not clobbered by this validation error.
+		d.check(fmt.Errorf("helium: invalid element name %q", name))
+		return d.err
+	}
+
 	d.writeString(out, "<")
 	d.writeString(out, name)
 
@@ -452,6 +463,12 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
 			g := pdebug.IPrintf("START WriteNode(fallthrough->attribute(%s))", attr.Name())
+			// The attribute name is emitted verbatim. An unvalidated name can
+			// inject raw markup (extra attributes, '>') into the start tag.
+			if attrName := attr.Name(); !xmlchar.IsValidQName(attrName) {
+				d.check(fmt.Errorf("helium: invalid attribute name %q", attrName))
+				return d.err
+			}
 			d.writeString(out, " "+attr.Name()+`="`)
 			if d.err != nil {
 				return d.err
