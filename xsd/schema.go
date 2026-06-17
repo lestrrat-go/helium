@@ -240,6 +240,7 @@ type FacetSet struct {
 type AttrUse struct {
 	Name       QName
 	TypeName   QName
+	Type       *TypeDef // anonymous inline <xs:simpleType>, if any
 	Required   bool
 	Prohibited bool
 	Default    *string // nil = not set

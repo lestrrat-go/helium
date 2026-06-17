@@ -160,6 +160,31 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 	au := &AttrUse{Name: opts.name}
 	if typeRef := getAttr(elem, attrType); typeRef != "" {
 		au.TypeName = c.resolveQName(ctx, elem, typeRef)
+	} else {
+		// No type attribute: look for an inline anonymous <xs:simpleType>.
+		// (type and inline simpleType are mutually exclusive, enforced by
+		// checkAttributeUse.)
+		for child := range helium.Children(elem) {
+			if child.Type() != helium.ElementNode {
+				continue
+			}
+			ce, ok := helium.AsNode[*helium.Element](child)
+			if !ok {
+				continue
+			}
+			if !isXSDElement(ce, elemSimpleType) {
+				continue
+			}
+			td, err := c.parseSimpleType(ctx, ce)
+			if err != nil {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, ce.Line(),
+					ce.LocalName(), "attribute", err.Error()), helium.ErrorLevelFatal))
+				c.errorCount++
+				break
+			}
+			au.Type = td
+			break
+		}
 	}
 	if opts.includeUse {
 		switch getAttr(elem, attrUse) {
