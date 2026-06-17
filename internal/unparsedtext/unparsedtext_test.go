@@ -667,6 +667,17 @@ func TestDecodeTextUTF16Malformed(t *testing.T) {
 		require.ErrorAs(t, err, &ue)
 		require.Equal(t, unparsedtext.ErrCodeEncoding, ue.Code)
 	})
+
+	t.Run("lone high surrogate, explicit generic utf-16 with BE BOM", func(t *testing.T) {
+		// The BOM is stripped before decoding, so generic "utf-16" must honor
+		// the BE endianness from the BOM rather than its LE default; the lone
+		// big-endian high surrogate must be rejected.
+		_, err := unparsedtext.DecodeText([]byte{0xFE, 0xFF, 0xD8, 0x00}, "utf-16")
+		require.Error(t, err)
+		var ue *unparsedtext.Error
+		require.ErrorAs(t, err, &ue)
+		require.Equal(t, unparsedtext.ErrCodeEncoding, ue.Code)
+	})
 }
 
 func TestDecodeTextUTF16ValidSurrogatePair(t *testing.T) {
@@ -693,6 +704,15 @@ func TestDecodeTextUTF16ValidSurrogatePair(t *testing.T) {
 		text, err := unparsedtext.DecodeText(buf, "")
 		require.NoError(t, err)
 		require.Equal(t, emoji, text)
+	})
+
+	t.Run("explicit generic utf-16 with BE BOM", func(t *testing.T) {
+		// FE FF BOM + big-endian 'A'. Generic "utf-16" must decode using the
+		// endianness indicated by the (now stripped) BOM, yielding "A" rather
+		// than a byte-swapped character.
+		text, err := unparsedtext.DecodeText([]byte{0xFE, 0xFF, 0x00, 0x41}, "utf-16")
+		require.NoError(t, err)
+		require.Equal(t, "A", text)
 	})
 }
 

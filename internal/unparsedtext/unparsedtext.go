@@ -356,6 +356,14 @@ func resolveEncoding(specified, detected string) string {
 		if detected != "" && !EncodingsCompatible(specified, detected) {
 			return ""
 		}
+		// The BOM has already been stripped from the data by this point, so a
+		// generic "utf-16" decoder can no longer recover the endianness and
+		// would fall back to its little-endian default. When the BOM told us
+		// the concrete endianness, prefer the detected endian-specific
+		// encoding so a big-endian payload is decoded as big-endian.
+		if detected != "" && normalizeEncodingName(specified) == "utf16" {
+			return detected
+		}
 		return specified
 	}
 	if detected != "" {
