@@ -201,13 +201,22 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     descendant under an anyType ancestor still has its actual type recorded before
     pass-2 IDC evaluation — otherwise a nested `<item xsi:type="itemType" n="5"/>`
     / `n="+5"` pair would be compared lexically and wrongly accepted as unique.
-    The same recursion runs for the lax/skip **wildcard** path: when
-    `matchWildcardParticle` (`xs:any processContents="lax"`/`skip`) matches an
-    element that has no global declaration, that element is not schema-assessed
-    but its subtree is still walked via `annotateAnyTypeChildren`, so a nested
-    global IDC host deeper under an unknown wildcard wrapper has its descendants'
-    actual types recorded before pass-2 IDC — otherwise the same
-    lexical-vs-value-space `5`/`+5` collision would be missed.
+    The same recursion runs for the **lax** wildcard path: when
+    `matchWildcardParticle` (`xs:any processContents="lax"`) matches an element
+    that has no global declaration, that element is not schema-assessed but its
+    subtree is still walked via `annotateAnyTypeChildren`, so a nested global IDC
+    host deeper under an unknown wildcard wrapper has its descendants' actual
+    types recorded before pass-2 IDC — otherwise the same lexical-vs-value-space
+    `5`/`+5` collision would be missed. The **skip** wildcard path
+    (`processContents="skip"`) is not schema-assessed at all, so it must NOT run
+    content-model validation or raise errors; instead `matchWildcardParticle`
+    walks each matched subtree with `annotateSkipChildren`, an annotation-only
+    traversal that records (via `annotateElement`) the ACTUAL type for every
+    descendant carrying a resolvable `xsi:type` — including LOCAL descendants with
+    no global declaration — using a non-reporting `resolveXsiTypeQuiet`, then
+    recurses. This is what lets a nested `<item xsi:type="itemType" n="5"/>` /
+    `n="+5"` pair under an `xs:any processContents="skip"` wrapper collide in
+    xs:integer value space rather than being wrongly accepted as unique.
 
 ### Key Data Model
 

@@ -637,60 +637,69 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 		return count, fmt.Errorf("wildcard not matched")
 	}
 
-	// Validate matched elements per processContents.
-	if wc.ProcessContents != ProcessSkip {
-		var contentErr error
+	// Skipped content is NOT schema-assessed, so no validation runs. Still walk
+	// the matched subtrees to RECORD actual types for any nested global IDC host:
+	// pass-2 IDC field canonicalization needs the descendants' xsi:type actual
+	// types, which would otherwise be missed under a skip wrapper.
+	if wc.ProcessContents == ProcessSkip {
 		for i := range count {
-			child := children[pos+i]
-			edecl := lookupElemDecl(child.elem, vc.schema)
-			if edecl == nil {
-				if wc.ProcessContents == ProcessStrict {
-					msg := "No matching global declaration available, but demanded by the strict wildcard."
-					vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
-					contentErr = fmt.Errorf("strict wildcard: no global element decl")
-				}
-				// Lax/skip: this element has no global declaration, so it is not
-				// schema-assessed. Still recurse into its subtree so any deeper
-				// descendant that DOES have a global declaration gets its ACTUAL
-				// type (honoring xsi:type) recorded via annotateElement before
-				// pass-2 IDC evaluation — otherwise a nested global IDC host's
-				// fields would be canonicalized with declared (or raw) types and
-				// xsi:type overrides on descendants would be missed.
-				if err := vc.annotateAnyTypeChildren(ctx, child.elem); err != nil {
+			vc.annotateSkipChildren(ctx, children[pos+i].elem)
+		}
+		return count, nil
+	}
+
+	// Validate matched elements per processContents (lax/strict).
+	var contentErr error
+	for i := range count {
+		child := children[pos+i]
+		edecl := lookupElemDecl(child.elem, vc.schema)
+		if edecl == nil {
+			if wc.ProcessContents == ProcessStrict {
+				msg := "No matching global declaration available, but demanded by the strict wildcard."
+				vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+				contentErr = fmt.Errorf("strict wildcard: no global element decl")
+			}
+			// Lax: this element has no global declaration, so it is not
+			// schema-assessed. Still recurse into its subtree so any deeper
+			// descendant that DOES have a global declaration gets its ACTUAL
+			// type (honoring xsi:type) recorded via annotateElement before
+			// pass-2 IDC evaluation — otherwise a nested global IDC host's
+			// fields would be canonicalized with declared (or raw) types and
+			// xsi:type overrides on descendants would be missed.
+			if err := vc.annotateAnyTypeChildren(ctx, child.elem); err != nil {
+				contentErr = err
+			}
+			continue
+		}
+		td := effectiveDeclType(edecl, vc.schema)
+		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
+		if xsiErr != nil {
+			contentErr = xsiErr
+			continue
+		}
+		if td != nil && td.Abstract {
+			msg := msgAbstractType
+			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
+			contentErr = fmt.Errorf("abstract type")
+			continue
+		}
+		// Annotate wildcard-matched element with its type.
+		vc.annotateElement(ctx, child.elem, td)
+		if td != nil {
+			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
+			if nilErr != nil {
+				contentErr = nilErr
+			} else if nilled {
+				if err := vc.validateNilledElement(ctx, child.elem, edecl, td); err != nil {
 					contentErr = err
 				}
-				continue
-			}
-			td := effectiveDeclType(edecl, vc.schema)
-			td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
-			if xsiErr != nil {
-				contentErr = xsiErr
-				continue
-			}
-			if td != nil && td.Abstract {
-				msg := msgAbstractType
-				vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
-				contentErr = fmt.Errorf("abstract type")
-				continue
-			}
-			// Annotate wildcard-matched element with its type.
-			vc.annotateElement(ctx, child.elem, td)
-			if td != nil {
-				nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
-				if nilErr != nil {
-					contentErr = nilErr
-				} else if nilled {
-					if err := vc.validateNilledElement(ctx, child.elem, edecl, td); err != nil {
-						contentErr = err
-					}
-				} else if err := vc.validateElementContent(ctx, child.elem, edecl, td); err != nil {
-					contentErr = err
-				}
+			} else if err := vc.validateElementContent(ctx, child.elem, edecl, td); err != nil {
+				contentErr = err
 			}
 		}
-		if contentErr != nil {
-			return count, contentErr
-		}
+	}
+	if contentErr != nil {
+		return count, contentErr
 	}
 
 	return count, nil

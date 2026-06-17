@@ -863,6 +863,92 @@ func TestIDCFieldLaxWildcardDescendant(t *testing.T) {
 	}
 }
 
+// TestIDCFieldSkipWildcardDescendant covers IDC field canonicalization for a
+// field reached through an `xs:any processContents="skip"` wildcard-matched
+// wrapper that has NO global element declaration. Skipped content is NOT
+// schema-assessed, so matchWildcardParticle historically returned at the matched
+// wrapper without walking its subtree — leaving the nested global IDC host `root`
+// and its `item` children with no ACTUAL type recorded. Pass-2 IDC evaluation
+// then fell back to declared/raw types and missed the xsi:type="itemType" inline
+// xs:integer @n, comparing `5` and `+5` lexically and reporting them UNIQUE. With
+// an annotation-only traversal of the skipped subtree (no validation, no errors)
+// the actual type is recorded, so `5` and `+5` canonicalize equal in xs:integer
+// value space and COLLIDE.
+func TestIDCFieldSkipWildcardDescendant(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="baseType"/>
+  <xs:complexType name="itemType">
+    <xs:complexContent>
+      <xs:extension base="baseType">
+        <xs:attribute name="n">
+          <xs:simpleType>
+            <xs:restriction base="xs:integer"/>
+          </xs:simpleType>
+        </xs:attribute>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="baseType" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="@n"/>
+    </xs:unique>
+  </xs:element>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			name: "skip-wildcard-nested xsi:type integer 5 and +5 collide",
+			instance: `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+				`<unknown><root><item xsi:type="itemType" n="5"/>` +
+				`<item xsi:type="itemType" n="+5"/></root></unknown></doc>`,
+			valid: false,
+		},
+		{
+			name: "skip-wildcard-nested xsi:type integer 5 and 6 distinct",
+			instance: `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+				`<unknown><root><item xsi:type="itemType" n="5"/>` +
+				`<item xsi:type="itemType" n="6"/></root></unknown></doc>`,
+			valid: true,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
 func compileValidator(t *testing.T, src string) xsd.Validator {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))

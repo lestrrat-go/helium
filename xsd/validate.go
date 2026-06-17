@@ -621,6 +621,35 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 	return contentErr
 }
 
+// annotateSkipChildren walks the subtree of an element matched by an
+// `xs:any processContents="skip"` wildcard purely to RECORD actual types for
+// pass-2 IDC field canonicalization. Skipped content is NOT schema-assessed, so
+// this MUST NOT impose any validation errors and MUST NOT run any content-model
+// validation: it only records, for every descendant that carries a resolvable
+// xsi:type, the ACTUAL type that override denotes (via annotateElement), then
+// recurses. A nested global IDC host's fields would otherwise be canonicalized
+// with declared (or raw) types, missing xsi:type overrides on descendants — even
+// LOCAL descendants with no global declaration — under the skipped wrapper.
+func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *helium.Element) {
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		// Resolve xsi:type WITHOUT reporting: skipped content is not assessed, so
+		// an unresolvable or non-derived xsi:type must not raise a validity error.
+		// Only an xsi:type override contributes an actual type distinct from what
+		// pass-2 can already derive from the content model, so record only that.
+		if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
+			vc.annotateElement(ctx, ce, actual)
+		}
+		vc.annotateSkipChildren(ctx, ce)
+	}
+}
+
 func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	// Simple content types must not have child elements.
 	for child := range helium.Children(elem) {
@@ -1109,6 +1138,42 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 	}
 
 	return td, nil
+}
+
+// resolveXsiTypeQuiet resolves an element's xsi:type to a schema type WITHOUT
+// reporting any validity error. It is used for skipped (`processContents="skip"`)
+// content, which is not schema-assessed: a missing or non-derived xsi:type must
+// not raise an error, it just means no actual type override is available. Returns
+// (type, true) only when the xsi:type value resolves to a known type.
+func (vc *validationContext) resolveXsiTypeQuiet(elem *helium.Element) (*TypeDef, bool) {
+	var xsiTypeVal string
+	for _, a := range elem.Attributes() {
+		if a.URI() == lexicon.NamespaceXSI && a.LocalName() == attrType {
+			xsiTypeVal = a.Value()
+			break
+		}
+	}
+	if xsiTypeVal == "" {
+		return nil, false
+	}
+
+	local := xsiTypeVal
+	var ns string
+	if prefix, rest, ok := strings.Cut(xsiTypeVal, ":"); ok {
+		local = rest
+		ns = lookupNS(elem, prefix)
+	} else {
+		ns = lookupNS(elem, "")
+	}
+
+	td, ok := vc.schema.LookupType(local, ns)
+	if !ok {
+		td, ok = vc.schema.LookupType(local, vc.schema.TargetNamespace())
+	}
+	if !ok {
+		return nil, false
+	}
+	return td, true
 }
 
 // xsdTypeName converts a TypeDef to a type name string suitable for annotations.
