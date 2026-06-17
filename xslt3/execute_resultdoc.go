@@ -50,6 +50,24 @@ func validateDocumentStructure(doc *helium.Document) error {
 	return nil
 }
 
+// moveChildren transfers every child of src into dst, preserving order. Each
+// child is unlinked from src before being added to dst so that the source
+// document's sibling/parent links do not remain attached to the moved nodes
+// (which would alias nodes across two trees and can corrupt sibling traversal).
+func moveChildren(src *helium.Document, dst *helium.Document) error {
+	var children []helium.Node
+	for child := range helium.Children(src) {
+		children = append(children, child)
+	}
+	for _, child := range children {
+		helium.UnlinkNode(child.(helium.MutableNode)) //nolint:forcetypeassert
+		if err := dst.AddChild(child); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // execDocument implements xsl:document: creates a document node wrapping
 // the result of executing the body.
 func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) error {
@@ -419,10 +437,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 				}
 			}
 			primaryFrame := ec.outputStack[0]
-			for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
-				if err := primaryFrame.doc.AddChild(child); err != nil {
-					return err
-				}
+			if err := moveChildren(tmpDoc, primaryFrame.doc); err != nil {
+				return err
 			}
 			return nil
 		}
@@ -462,12 +478,10 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 					ec.markNilled(elem)
 				}
 			}
-			// Copy validated children into the primary output.
+			// Move validated children into the primary output.
 			primaryFrame := ec.outputStack[0]
-			for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
-				if err := primaryFrame.doc.AddChild(child); err != nil {
-					return err
-				}
+			if err := moveChildren(tmpDoc, primaryFrame.doc); err != nil {
+				return err
 			}
 			return nil
 		}
