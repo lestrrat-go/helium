@@ -150,6 +150,70 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 	})
 }
 
+func TestXHTMLWriteRejectsInjectedNames(t *testing.T) {
+	t.Parallel()
+
+	// newXHTMLDoc builds a document whose internal subset is an XHTML DTD, so
+	// serialization routes through dumpXHTMLNode / dumpXHTMLAttrList rather than
+	// the generic writeNode path.
+	newXHTMLDoc := func(t *testing.T) *helium.Document {
+		t.Helper()
+		doc := helium.NewDefaultDocument()
+		_, err := doc.CreateInternalSubset(
+			"html",
+			"-//W3C//DTD XHTML 1.0 Strict//EN",
+			"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
+		)
+		require.NoError(t, err)
+		return doc
+	}
+
+	t.Run("element name injection", func(t *testing.T) {
+		t.Parallel()
+		doc := newXHTMLDoc(t)
+		root := doc.CreateElement(`html injected="1"`)
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		_, err := helium.WriteString(doc)
+		require.Error(t, err, "injected XHTML element name must not serialize")
+	})
+
+	t.Run("attribute name injection", func(t *testing.T) {
+		t.Parallel()
+		doc := newXHTMLDoc(t)
+		root := doc.CreateElement("html")
+		require.NoError(t, doc.SetDocumentElement(root))
+		_, err := root.SetAttribute(`x onmouseover`, "1")
+		require.NoError(t, err)
+
+		_, err = helium.WriteString(doc)
+		require.Error(t, err, "injected XHTML attribute name must not serialize")
+	})
+
+	t.Run("valid element name serializes", func(t *testing.T) {
+		t.Parallel()
+		doc := newXHTMLDoc(t)
+		root := doc.CreateElement("html")
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, "<html")
+	})
+
+	t.Run("valid namespaced name serializes", func(t *testing.T) {
+		t.Parallel()
+		doc := newXHTMLDoc(t)
+		root := doc.CreateElement("html")
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.SetActiveNamespace("p", "urn:example"))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, "<p:html")
+	})
+}
+
 // BenchmarkWriteNonASCII serializes a document containing many non-ASCII
 // characters with EscapeNonASCII enabled, exercising the hex char ref path.
 func BenchmarkWriteNonASCII(b *testing.B) {

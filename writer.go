@@ -99,6 +99,30 @@ func (s *writeSession) check(err error) {
 	}
 }
 
+// checkElementName validates an element name about to be emitted verbatim. An
+// unvalidated name (e.g. from CreateElement) can carry whitespace, quotes, or
+// '>' that inject raw markup into the output. On failure it records a sticky
+// error (preserving any earlier one) and returns false. Shared by both the
+// generic and XHTML serialization paths so they cannot diverge.
+func (s *writeSession) checkElementName(name string) bool {
+	if xmlchar.IsValidQName(name) {
+		return true
+	}
+	s.check(fmt.Errorf("helium: invalid element name %q", name))
+	return false
+}
+
+// checkAttributeName validates an attribute name about to be emitted verbatim.
+// An unvalidated name can inject raw markup (extra attributes, '>') into the
+// start tag. On failure it records a sticky error and returns false.
+func (s *writeSession) checkAttributeName(name string) bool {
+	if xmlchar.IsValidQName(name) {
+		return true
+	}
+	s.check(fmt.Errorf("helium: invalid attribute name %q", name))
+	return false
+}
+
 // NewWriter creates a new Writer with default settings.
 func NewWriter() Writer {
 	return Writer{}
@@ -437,13 +461,10 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		name = n.Name()
 	}
 
-	// The element name is emitted verbatim below. An unvalidated name (e.g.
-	// from CreateElement) can carry whitespace, quotes, or '>' that inject raw
-	// markup into the output. Reject names that are not well-formed XML QNames.
-	if !xmlchar.IsValidQName(name) {
-		// check() keeps the first sticky error, so an earlier I/O failure is
-		// not clobbered by this validation error.
-		d.check(fmt.Errorf("helium: invalid element name %q", name))
+	// The element name is emitted verbatim below. checkElementName rejects
+	// names that are not well-formed XML QNames (whitespace, quotes, '>') and
+	// records a sticky error without clobbering an earlier I/O failure.
+	if !d.checkElementName(name) {
 		return d.err
 	}
 
@@ -463,10 +484,9 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
 			g := pdebug.IPrintf("START WriteNode(fallthrough->attribute(%s))", attr.Name())
-			// The attribute name is emitted verbatim. An unvalidated name can
-			// inject raw markup (extra attributes, '>') into the start tag.
-			if attrName := attr.Name(); !xmlchar.IsValidQName(attrName) {
-				d.check(fmt.Errorf("helium: invalid attribute name %q", attrName))
+			// The attribute name is emitted verbatim. checkAttributeName
+			// rejects names that would inject raw markup into the start tag.
+			if !d.checkAttributeName(attr.Name()) {
 				return d.err
 			}
 			d.writeString(out, " "+attr.Name()+`="`)

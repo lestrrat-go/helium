@@ -67,6 +67,13 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 		name = n.Name()
 	}
 
+	// The element name is emitted verbatim here and on the closing tag below.
+	// Validate it just like writeNode so an injected name (e.g. from
+	// CreateElement) cannot inject raw markup through the XHTML path.
+	if !d.checkElementName(name) {
+		return d.err
+	}
+
 	d.writeString(out, "<")
 	d.writeString(out, name)
 
@@ -181,6 +188,13 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
 
 	for attr := e.properties; attr != nil; {
 		attrName := attr.Name()
+
+		// The attribute name is emitted verbatim below. Validate it just like
+		// writeNode so an injected name cannot inject raw markup. Stop on the
+		// first invalid name; the sticky error is propagated to the caller.
+		if !d.checkAttributeName(attrName) {
+			return
+		}
 
 		switch attrName {
 		case "id":
