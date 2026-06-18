@@ -330,6 +330,10 @@ func TestCompareValues(t *testing.T) {
 		// Genuinely indeterminate: ±14:00 interval straddles the bound.
 		{lexicon.TypeDateTime, "2020-01-01T00:00:00", refDateTimeZ, 0, false},
 		{lexicon.TypeDateTime, refDateTimeZ, "2020-01-01T00:00:00", 0, false},
+		// A leading '+' on the year is not a valid xs:dateTime lexical form, so it
+		// must NOT compare equal to the unsigned form (indeterminate, not 0/true).
+		{lexicon.TypeDateTime, "+2023-01-01T00:00:00", "2023-01-01T00:00:00", 0, false},
+		{lexicon.TypeDateTime, "2023-01-01T00:00:00", "+2023-01-01T00:00:00", 0, false},
 
 		// date
 		{lexicon.TypeDate, testDate0, "2023-01-16", -1, true},
@@ -343,6 +347,10 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDate, hugeDatePlus1, hugeDate, 1, true},
 		{lexicon.TypeDate, hugeDate, hugeDate, 0, true},
 		{lexicon.TypeDate, "-" + hugeDate, hugeDate, -1, true},
+		// A leading '+' on the year is not a valid xs:date lexical form, so it
+		// must NOT compare equal to the unsigned form (indeterminate, not 0/true).
+		{lexicon.TypeDate, "+2023-01-01", "2023-01-01", 0, false},
+		{lexicon.TypeDate, "2023-01-01", "+2023-01-01", 0, false},
 
 		// time
 		{lexicon.TypeTime, testT0, "11:30:00", -1, true},

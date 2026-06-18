@@ -49,3 +49,24 @@ func TestCanonicalKey(t *testing.T) {
 		key(hugeYearPlus1, "gYear"),
 		"distinct huge gYear values must not collide")
 }
+
+// TestCanonicalKeySignedYearInvalid verifies that a leading '+' on the year is
+// not accepted as a valid date/dateTime lexical form: it must NOT canonicalize
+// as valid, and must NOT produce a key equal to the unsigned form.
+func TestCanonicalKeySignedYearInvalid(t *testing.T) {
+	_ = t.Context()
+
+	plusDate, okPlusDate := value.CanonicalKey("+2023-01-01", "date")
+	require.False(t, okPlusDate, `"+2023-01-01" must not canonicalize as a valid xs:date`)
+
+	unsignedDate, okUnsignedDate := value.CanonicalKey("2023-01-01", "date")
+	require.True(t, okUnsignedDate, `"2023-01-01" must canonicalize as a valid xs:date`)
+	require.NotEqual(t, unsignedDate, plusDate, `"+2023-01-01" must not produce the same key as "2023-01-01"`)
+
+	plusDT, okPlusDT := value.CanonicalKey("+2023-01-01T00:00:00", "dateTime")
+	require.False(t, okPlusDT, `"+2023-01-01T00:00:00" must not canonicalize as a valid xs:dateTime`)
+
+	unsignedDT, okUnsignedDT := value.CanonicalKey("2023-01-01T00:00:00", "dateTime")
+	require.True(t, okUnsignedDT, `"2023-01-01T00:00:00" must canonicalize as a valid xs:dateTime`)
+	require.NotEqual(t, unsignedDT, plusDT, `"+2023-01-01T00:00:00" must not produce the same key as "2023-01-01T00:00:00"`)
+}

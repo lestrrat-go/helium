@@ -402,6 +402,18 @@ func (dt xsdDateTime) yearVal() *big.Int {
 // parseYearBig parses a year digit-string with arbitrary precision so valid
 // expanded years larger than an int compare correctly. neg negates the result.
 func parseYearBig(s string, neg bool) (*big.Int, bool) {
+	// big.Int.SetString accepts a leading sign, but the sign of an XSD year is
+	// carried exclusively by neg. Reject anything that is not ASCII digits only
+	// (including a leading '+' or '-') so malformed lexicals such as
+	// "+2023-01-01" do not compare or canonicalize as valid.
+	if s == "" {
+		return nil, false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return nil, false
+		}
+	}
 	n, ok := new(big.Int).SetString(s, 10)
 	if !ok {
 		return nil, false
