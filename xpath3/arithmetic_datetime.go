@@ -212,12 +212,14 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	// parsed PT1.1S. (xs:double/xs:float multipliers are binary-imprecise and
 	// fall through to the float path below.)
 	//
-	// Only take this path when the duration's seconds are within exact float64
-	// range; beyond 2^53 the backing d.Seconds float is already imprecise, so an
-	// "exact" rational built from it would be misleading. Such values fall
-	// through to the float path, which reports FODT0002 overflow.
+	// When d.SecRat is present the EXACT total-seconds magnitude is authoritative,
+	// so drive the arithmetic entirely from it with NO float64 2^53 cap — large
+	// whole-second durations (e.g. PT9223372036854775808S) compute exactly. Only a
+	// legacy float-only duration (no SecRat) is gated on the exact float64 range,
+	// since a rational built from an already-imprecise float would be misleading.
 	const maxExactDayTimeSecs = float64(1 << 53)
-	if dur.TypeName == TypeDayTimeDuration && math.Abs(d.Seconds) <= maxExactDayTimeSecs {
+	exactSecs := d.SecRat != nil || math.Abs(d.Seconds) <= maxExactDayTimeSecs
+	if dur.TypeName == TypeDayTimeDuration && exactSecs {
 		nRat, ok := numericToRat(num)
 		if ok {
 			secsRat := durationToRat(d, false)
@@ -233,11 +235,6 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 				absRat = new(big.Rat).Neg(resRat)
 			}
 			rsecs, frac := durationFromRatSeconds(absRat)
-			// Match the float path's overflow behavior: results beyond the exact
-			// float64 range are reported as FODT0002.
-			if math.IsInf(rsecs, 0) || rsecs > maxExactDayTimeSecs {
-				return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
-			}
 			return SingleAtomic(AtomicValue{
 				TypeName: dur.TypeName,
 				Value:    Duration{Seconds: rsecs, FracSec: frac, SecRat: absRat, Negative: negative},
@@ -429,11 +426,15 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 
 	isYM := la.TypeName == TypeYearMonthDuration
 
-	// Check for overflow: float64 cannot exactly represent seconds beyond 2^53,
-	// so large dayTimeDuration values produce imprecise results.
+	// Legacy float-only durations (no SecRat) cannot exactly represent seconds
+	// beyond 2^53, so reject them. When SecRat is present the exact magnitude is
+	// authoritative and durationToRat reads it directly, so no cap applies.
 	if !isYM {
 		const maxExactFloat64 = 1 << 53
-		if ld.Seconds > maxExactFloat64 || rd.Seconds > maxExactFloat64 {
+		if ld.SecRat == nil && ld.Seconds > maxExactFloat64 {
+			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "dayTimeDuration value too large for exact division"}
+		}
+		if rd.SecRat == nil && rd.Seconds > maxExactFloat64 {
 			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "dayTimeDuration value too large for exact division"}
 		}
 	}

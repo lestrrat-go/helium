@@ -471,16 +471,16 @@ func parseXSDDuration(s string) (Duration, error) {
 			if dotPos >= 0 {
 				return Duration{}, fmt.Errorf("invalid duration: %q", s)
 			}
-			n, err := strconv.Atoi(numStr)
-			if err != nil {
-				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
-			}
 			switch designator {
 			case 'Y':
 				if lastOrder >= 1 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
 				}
 				lastOrder = 1
+				n, err := strconv.Atoi(numStr)
+				if err != nil {
+					return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
+				}
 				if n > math.MaxInt/12 {
 					return Duration{}, fmt.Errorf("duration overflow: %sY", numStr)
 				}
@@ -490,14 +490,26 @@ func parseXSDDuration(s string) (Duration, error) {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
 				}
 				lastOrder = 2
+				n, err := strconv.Atoi(numStr)
+				if err != nil {
+					return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
+				}
 				d.Months += n
 			case 'D':
 				if lastOrder >= 3 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
 				}
 				lastOrder = 3
-				d.Seconds += float64(n) * 86400
-				addSecRat(new(big.Rat).SetInt64(int64(n)), 86400)
+				// Days feed dayTime seconds, which are tracked exactly in SecRat.
+				// Parse as a big.Int so very large day counts (beyond int64) round
+				// -trip; the float64 mirror is best-effort metadata.
+				dayInt, ok := new(big.Int).SetString(numStr, 10)
+				if !ok {
+					return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
+				}
+				dayFloat, _ := new(big.Float).SetInt(dayInt).Float64()
+				d.Seconds += dayFloat * 86400
+				addSecRat(new(big.Rat).SetInt(dayInt), 86400)
 			default:
 				return Duration{}, fmt.Errorf("invalid duration designator: %c", designator)
 			}
@@ -505,13 +517,18 @@ func parseXSDDuration(s string) (Duration, error) {
 			if designator != 'S' && dotPos >= 0 {
 				return Duration{}, fmt.Errorf("invalid duration: %q", s)
 			}
-			f, err := strconv.ParseFloat(numStr, 64)
-			if err != nil {
-				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
-			}
-			// Parse the same lexical number exactly as a rational for SecRat.
+			// Parse the same lexical number exactly as a rational for SecRat —
+			// this is the authoritative value. A very large but VALID whole-second
+			// lexical must not be rejected just because float64 cannot hold it.
 			numRat, ok := new(big.Rat).SetString(numStr)
 			if !ok {
+				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
+			}
+			// The float64 mirror is best-effort metadata. ParseFloat returns an
+			// out-of-range error along with a saturated value (±Inf); accept that
+			// value rather than rejecting the duration, since SecRat is exact.
+			f, err := strconv.ParseFloat(numStr, 64)
+			if err != nil && !errors.Is(err, strconv.ErrRange) {
 				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
 			}
 			switch designator {
