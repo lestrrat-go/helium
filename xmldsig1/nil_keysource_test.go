@@ -1,11 +1,22 @@
 package xmldsig1_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xmldsig1"
 	"github.com/stretchr/testify/require"
 )
+
+// pointerKeySource is a pointer-receiver KeySource used to construct a typed-nil
+// pointer value. A typed-nil pointer carries a concrete type, so the interface
+// is non-nil and survives a plain == nil check; ResolveKey would then be called
+// on a nil receiver.
+type pointerKeySource struct{}
+
+func (*pointerKeySource) ResolveKey(_ context.Context, _ *xmldsig1.KeyInfoData, _ string) (any, error) {
+	return nil, nil
+}
 
 // A nil KeySource must surface a typed error rather than panic on a nil
 // pointer dereference when Verify reaches ResolveKey.
@@ -40,6 +51,23 @@ func TestTypedNilKeySourceFunc(t *testing.T) {
 	doc := mustParseXML(t, nilKeySourceSigDoc)
 
 	var ks xmldsig1.KeySourceFunc // typed nil
+
+	require.NotPanics(t, func() {
+		_, err := xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, xmldsig1.ErrNoKeySource)
+	})
+}
+
+// A typed-nil POINTER KeySource (e.g. var ks *pointerKeySource;
+// NewVerifier(ks)) yields a non-nil interface whose underlying value is nil, so
+// a plain cfg.keySource == nil check misses it and ResolveKey would panic on
+// the nil receiver. verifySignature must detect this via isNilKeySource and
+// return a typed error instead.
+func TestTypedNilPointerKeySource(t *testing.T) {
+	doc := mustParseXML(t, nilKeySourceSigDoc)
+
+	var ks *pointerKeySource // typed-nil pointer
 
 	require.NotPanics(t, func() {
 		_, err := xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)

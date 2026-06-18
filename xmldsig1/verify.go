@@ -4,10 +4,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
+
+// isNilKeySource reports whether a KeySource is effectively nil. A plain
+// `cfg.keySource == nil` only catches an untyped-nil interface; a typed-nil
+// pointer (e.g. `var ks *myKeySource; NewVerifier(ks)`) yields a non-nil
+// interface whose underlying value is nil, so calling ResolveKey on it would
+// panic on the nil-receiver dereference. Detect that case reflectively for any
+// nil-capable underlying kind.
+func isNilKeySource(ks KeySource) bool {
+	if ks == nil {
+		return true
+	}
+	v := reflect.ValueOf(ks)
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Chan, reflect.Func, reflect.Slice, reflect.Interface:
+		return v.IsNil()
+	default:
+		return false
+	}
+}
 
 // parsedSignature holds the parsed structure of a ds:Signature element.
 type parsedSignature struct {
@@ -34,10 +54,11 @@ type parsedTransform struct {
 func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element) (*VerifyResult, error) {
 	// A zero-value Verifier{} constructed directly (bypassing NewVerifier) has
 	// a nil cfg, and a nil KeySource (e.g. NewVerifier(nil)) cannot resolve a
-	// key. Reject both up front so these config-controlled cases return a typed
-	// error instead of panicking on a nil dereference here or inside ResolveKey
-	// below.
-	if cfg == nil || cfg.keySource == nil {
+	// key. isNilKeySource also catches a typed-nil pointer KeySource, whose
+	// non-nil interface would otherwise slip past a plain == nil check and panic
+	// inside ResolveKey below. Reject all of these up front so config-controlled
+	// cases return a typed error instead of panicking on a nil dereference.
+	if cfg == nil || isNilKeySource(cfg.keySource) {
 		return nil, ErrNoKeySource
 	}
 
