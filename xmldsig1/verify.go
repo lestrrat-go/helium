@@ -32,6 +32,13 @@ type parsedTransform struct {
 }
 
 func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element) (*VerifyResult, error) {
+	// A nil KeySource (e.g. NewVerifier(nil)) cannot resolve a key. Reject it
+	// up front so a config-controlled nil returns a typed error instead of
+	// panicking on a nil dereference inside ResolveKey below.
+	if cfg.keySource == nil {
+		return nil, ErrNoKeySource
+	}
+
 	parsed, err := parseSignatureElement(sigElem)
 	if err != nil {
 		return nil, err

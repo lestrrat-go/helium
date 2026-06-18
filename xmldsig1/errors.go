@@ -46,6 +46,12 @@ var (
 
 	// ErrInvalidSignature is returned when the Signature element is malformed.
 	ErrInvalidSignature = errors.New("xmldsig1: invalid signature structure")
+
+	// ErrNoKeySource is returned when a Verifier was created with a nil
+	// KeySource and verification is attempted. Without a KeySource there is no
+	// way to resolve a verification key, so this is rejected before any key
+	// resolution rather than panicking on a nil dereference.
+	ErrNoKeySource = errors.New("xmldsig1: no key source configured")
 )
 
 // VerificationError provides details about which step of verification failed.
