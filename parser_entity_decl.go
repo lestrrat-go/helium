@@ -157,8 +157,17 @@ func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, er
 	// decodeEntities below only substitutes parameter-entity references; general
 	// references are left literal and never syntax-checked. Validate them here so
 	// a malformed reference (e.g. a missing semicolon) is rejected rather than
-	// silently stored. This does not expand the references.
-	if err := validateEntityValueRefs([]byte(literal)); err != nil {
+	// silently stored. This does not expand the general references.
+	//
+	// Validation runs over the PE-EXPANDED lexical stream so that a malformed
+	// general reference re-introduced through a parameter entity is still caught.
+	// For example, an external DTD with
+	//   <!ENTITY % amp "&#38;">  <!ENTITY e "%amp;broken">
+	// expands to "&broken" and must be rejected, matching libxml2/xmllint.
+	// Direct character references in the literal (e.g. "&#38;") are character
+	// data and never form a general reference with following text, so they are
+	// consumed as data; only PE replacement text re-participates in ref scanning.
+	if err := pctx.validateEntityValueRefs(ctx, []byte(literal)); err != nil {
 		return "", "", pctx.error(ctx, err)
 	}
 
@@ -175,12 +184,94 @@ func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, er
 }
 
 // validateEntityValueRefs checks that every general reference in an EntityValue
-// literal is well formed: a '&' must begin either a character reference
-// (&#...; or &#x...;) or a general-entity reference (&Name;). The references are
-// not expanded; this only enforces syntax so a malformed reference such as
-// "&broken" (missing semicolon) is rejected. Parameter-entity references (%...;)
-// are left to decodeEntities and are not examined here.
-func validateEntityValueRefs(s []byte) error {
+// is well formed: a '&' must begin either a character reference (&#...; or
+// &#x...;) or a general-entity reference (&Name;). The references are not
+// expanded; this only enforces syntax so a malformed reference such as
+// "&broken" (missing semicolon) is rejected.
+//
+// Parameter-entity references (%Name;) ARE expanded first, because their
+// replacement text can re-introduce general references (including ones that
+// only become malformed after a character reference inside the PE resolves to a
+// literal '&'). The PE-expanded buffer is then scanned for general references.
+// Character references that appear directly in the literal are character data
+// and are consumed without contributing a literal '&' to the scan.
+func (pctx *parserCtx) validateEntityValueRefs(ctx context.Context, s []byte) error {
+	expanded, err := pctx.expandEntityValueForRefCheck(ctx, s, 0)
+	if err != nil {
+		return err
+	}
+	return scanEntityValueGeneralRefs(expanded)
+}
+
+// expandEntityValueForRefCheck produces the lexical stream over which general
+// references are validated. Parameter-entity references are replaced by their
+// replacement text (recursively), and character references found inside that
+// replacement text resolve to their literal characters so a "&#38;" coming from
+// a PE becomes a literal '&' that can combine with following text to form a
+// general reference. Character references that appear directly in the literal
+// are emitted as an inert placeholder (never '&') so they remain character data.
+func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byte, depth int) ([]byte, error) {
+	if depth > 40 {
+		return nil, errors.New("entity loop (depth > 40)")
+	}
+
+	out := bufferPool.Get()
+	defer releaseBuffer(out)
+
+	for len(s) > 0 {
+		if bytes.HasPrefix(s, []byte{'&', '#'}) {
+			// Direct character reference: validate its syntax but treat the
+			// result as character data, not as a literal '&' that could form a
+			// general reference with following text.
+			r, width, err := parseStringCharRef(s)
+			if err != nil {
+				return nil, err
+			}
+			if r == '&' {
+				// Emit an inert placeholder so a direct "&#38;" does not become
+				// part of a general reference (it is character data).
+				out.WriteByte(' ')
+			} else {
+				out.WriteRune(r)
+			}
+			s = s[width:]
+			continue
+		}
+		if s[0] == '%' {
+			ent, width, err := pctx.parseStringPEReference(ctx, s)
+			if err != nil {
+				return nil, err
+			}
+			if ent != nil {
+				// Expand the PE replacement text. decodeEntitiesInternal
+				// recursively substitutes nested parameter entities and resolves
+				// character references to their literal characters, so a "&#38;"
+				// brought in by the PE becomes a literal '&' that can combine
+				// with surrounding text into a general reference. General
+				// references (&Name;) in the replacement text are left intact for
+				// the subsequent scan.
+				rep, err := pctx.decodeEntitiesInternal(ctx, ent.Content(), SubstitutePERef, depth+1)
+				if err != nil {
+					return nil, err
+				}
+				out.WriteString(rep)
+			}
+			s = s[width:]
+			continue
+		}
+		out.WriteByte(s[0])
+		s = s[1:]
+	}
+
+	res := make([]byte, out.Len())
+	copy(res, out.Bytes())
+	return res, nil
+}
+
+// scanEntityValueGeneralRefs validates that every '&' in the (PE-expanded)
+// EntityValue stream begins a well-formed character or general reference. A
+// missing semicolon or an otherwise malformed reference is rejected.
+func scanEntityValueGeneralRefs(s []byte) error {
 	for len(s) > 0 {
 		i := bytes.IndexByte(s, '&')
 		if i < 0 {
@@ -443,6 +534,16 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 		return nil, pctx.error(ctx, fmt.Errorf("external entity (URI=%s) exceeds maximum size of %d bytes", uri, externalEntityMaxBytes))
 	}
 
+	// Charge the external content to the amplification counters. Without this an
+	// external entity that is just under externalEntityMaxBytes could be
+	// referenced repeatedly to bypass the entity-expansion limits entirely (the
+	// per-reference cost would otherwise be ~0 because external entities carry no
+	// inline content). entityCheck enforces both the absolute ceiling and the
+	// amplification-ratio check against the accumulated size.
+	if err := pctx.entityCheck(nil, len(content)); err != nil {
+		return nil, pctx.error(ctx, err)
+	}
+
 	newctx := &parserCtx{}
 	if err := newctx.init(nil, bytes.NewReader(content)); err != nil {
 		return nil, err
@@ -480,6 +581,14 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	newctx.fsys = pctx.fsys
 	newctx.catalog = pctx.catalog
 	newctx.baseURI = pctx.baseURI
+	// Carry the amplification counters through the nested parse so any entity
+	// expansion performed while parsing this external entity (including further
+	// nested external entities) is charged against the same accumulated budget
+	// as the top-level document, and write the running total back on return.
+	newctx.sizeentcopy = pctx.sizeentcopy
+	newctx.inputSize = pctx.inputSize
+	newctx.maxAmpl = pctx.maxAmpl
+	defer func() { pctx.sizeentcopy = newctx.sizeentcopy }()
 	if pctx.elem != nil {
 		for _, ns := range collectInScopeNamespaces(pctx.elem) {
 			newctx.pushNS(ns.Prefix(), ns.URI())

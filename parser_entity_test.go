@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
+	"testing/fstest"
 
 	"github.com/lestrrat-go/helium"
 
@@ -16,61 +16,72 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// infiniteFile is an fs.File whose Read never returns io.EOF, simulating an
-// unbounded source such as /dev/zero. It records whether Close was called.
-type infiniteFile struct {
-	closed *atomic.Bool
+// externalEntityMaxBytes mirrors the unexported cap in parserctx.go. The size
+// guard is what this test exercises; keep the two in sync.
+const externalEntityMaxBytes int64 = 10 * 1024 * 1024 // 10 MiB
+
+// finiteFile is an fs.File that yields exactly n bytes of 'A' and then io.EOF.
+// Unlike an unbounded reader, it cannot hang or OOM if the size guard ever
+// regresses: a finite (cap+1) source still trips the cap deterministically. It
+// records whether Close was called.
+type finiteFile struct {
+	remaining int64
+	closed    *atomic.Bool
 }
 
-func (f *infiniteFile) Stat() (fs.FileInfo, error) { return nil, fs.ErrInvalid }
+func (f *finiteFile) Stat() (fs.FileInfo, error) { return nil, fs.ErrInvalid }
 
-func (f *infiniteFile) Read(p []byte) (int, error) {
-	for i := range p {
+func (f *finiteFile) Read(p []byte) (int, error) {
+	if f.remaining <= 0 {
+		return 0, io.EOF
+	}
+	n := int64(len(p))
+	if n > f.remaining {
+		n = f.remaining
+	}
+	for i := int64(0); i < n; i++ {
 		p[i] = 'A'
 	}
-	return len(p), nil
+	f.remaining -= n
+	return int(n), nil
 }
 
-func (f *infiniteFile) Close() error {
+func (f *finiteFile) Close() error {
 	f.closed.Store(true)
 	return nil
 }
 
-// infiniteFS hands out a single infiniteFile for any path, recording closure.
-type infiniteFS struct {
+// finiteFS hands out a single finiteFile of the configured size, recording
+// closure.
+type finiteFS struct {
+	size   int64
 	closed *atomic.Bool
 }
 
-func (s infiniteFS) Open(string) (fs.File, error) {
-	return &infiniteFile{closed: s.closed}, nil
+func (s finiteFS) Open(string) (fs.File, error) {
+	return &finiteFile{remaining: s.size, closed: s.closed}, nil
 }
 
-// TestExternalEntitySizeCap ensures that an external parsed entity backed by an
-// unbounded source is rejected (rather than read via io.ReadAll, which would
-// OOM) and that the resolved input is closed.
+// TestExternalEntitySizeCap ensures that an external parsed entity whose content
+// exceeds the size cap is rejected with the specific size-cap error (rather than
+// read fully via io.ReadAll), and that the resolved input is closed. The source
+// is finite (cap+1 bytes) so a regression of the guard cannot hang or OOM the
+// test; it would instead fail the specific-error assertion.
 func TestExternalEntitySizeCap(t *testing.T) {
 	t.Parallel()
 
 	const input = `<?xml version="1.0"?>
-<!DOCTYPE r [<!ENTITY x SYSTEM "zero">]><r>&x;</r>`
+<!DOCTYPE r [<!ENTITY x SYSTEM "big">]><r>&x;</r>`
 
 	var closed atomic.Bool
-	p := helium.NewParser().SubstituteEntities(true).FS(infiniteFS{closed: &closed})
+	p := helium.NewParser().
+		SubstituteEntities(true).
+		FS(finiteFS{size: externalEntityMaxBytes + 1, closed: &closed})
 
-	done := make(chan struct{})
-	var parseErr error
-	go func() {
-		defer close(done)
-		_, parseErr = p.Parse(t.Context(), []byte(input))
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(30 * time.Second):
-		t.Fatal("parsing an unbounded external entity did not terminate (no size cap)")
-	}
-
-	require.Error(t, parseErr, "unbounded external entity must be rejected")
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "oversized external entity must be rejected")
+	require.Contains(t, err.Error(), "exceeds maximum size",
+		"error must explain the size cap, got: %v", err)
 	require.True(t, closed.Load(), "resolved external entity input must be closed")
 }
 
@@ -113,6 +124,34 @@ func TestExternalEntityInputClosed(t *testing.T) {
 	require.True(t, closed.Load(), "resolved external entity input must be closed on success")
 }
 
+// TestExternalEntityAmplification ensures that the bytes read from an external
+// parsed entity are charged to the entity-expansion amplification counters. A
+// single external entity that is comfortably under the per-entity size cap must
+// not become a way to bypass the limits when referenced repeatedly: 2 MiB of
+// external text referenced ten times (20 MiB of expansion from a tiny input)
+// must trip the amplification guard.
+func TestExternalEntityAmplification(t *testing.T) {
+	t.Parallel()
+
+	big := strings.Repeat("A", 2*1024*1024) // 2 MiB, well under the 10 MiB cap
+	fsys := fstest.MapFS{"big.txt": {Data: []byte(big)}}
+
+	var refs strings.Builder
+	for i := 0; i < 10; i++ {
+		refs.WriteString("&x;")
+	}
+	input := fmt.Sprintf(`<?xml version="1.0"?>
+<!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r>%s</r>`, refs.String())
+
+	_, err := helium.NewParser().
+		SubstituteEntities(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.Error(t, err, "repeated references to a large external entity must trip the guard")
+	require.Contains(t, err.Error(), "amplification",
+		"error must explain the amplification limit, got: %v", err)
+}
+
 // TestEntityValueMalformedGeneralRef ensures that a general reference inside an
 // EntityValue is syntax-checked: a missing semicolon must be rejected even
 // though the general reference itself is not expanded.
@@ -127,15 +166,82 @@ func TestEntityValueMalformedGeneralRef(t *testing.T) {
 }
 
 // TestEntityValueValidGeneralRefLiteral ensures that a well-formed general
-// reference in an EntityValue is accepted and stored literally (not expanded).
+// reference in an EntityValue is accepted AND stored literally (not expanded):
+// the stored entity content must still contain "&amp; &good;" verbatim.
 func TestEntityValueValidGeneralRefLiteral(t *testing.T) {
 	t.Parallel()
 
 	const input = `<!DOCTYPE r [<!ENTITY e "&amp; &good;">]><r/>`
 
-	p := helium.NewParser()
-	_, err := p.Parse(t.Context(), []byte(input))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "well-formed general references in entity value must be accepted")
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetEntity("e")
+	require.True(t, ok, "entity e must be declared")
+	require.Equal(t, "&amp; &good;", string(ent.Content()),
+		"general references must be stored literally, not expanded")
+}
+
+// TestEntityValueMalformedGeneralRefViaPE ensures that a malformed general
+// reference re-introduced through a parameter-entity reference is rejected, even
+// though the parameter entity itself only contributes a character reference. The
+// EntityValue "%amp;broken" with "%amp;" -> "&#38;" -> "&" expands to "&broken",
+// which is malformed and must be rejected (matching libxml2/xmllint), whereas a
+// direct "&#38;" in an EntityValue is character data and is accepted.
+func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
+	t.Parallel()
+
+	t.Run("internal subset", func(t *testing.T) {
+		t.Parallel()
+		// helium recognizes PE references in the internal subset (more permissive
+		// than the XML WFC), which lets us drive PE expansion through a path that
+		// propagates the validation error rather than swallowing it.
+		good := `<!DOCTYPE r [<!ENTITY % p "&#38;amp;"><!ENTITY e "%p; ok">]><r/>`
+		_, errGood := helium.NewParser().Parse(t.Context(), []byte(good))
+		require.NoError(t, errGood,
+			"a well-formed reference produced via a PE must be accepted")
+
+		bad := `<!DOCTYPE r [<!ENTITY % amp "&#38;"><!ENTITY e "%amp;broken">]><r/>`
+		_, errBad := helium.NewParser().Parse(t.Context(), []byte(bad))
+		require.Error(t, errBad,
+			"a malformed reference produced via a PE must be rejected")
+		require.Contains(t, errBad.Error(), "malformed entity reference in entity value")
+	})
+
+	t.Run("external subset", func(t *testing.T) {
+		t.Parallel()
+		// External DTD repro from the issue: a PE expands to "&" which combines
+		// with following text into the malformed reference "&broken". The
+		// malformed entity (e) must not be stored, while a control entity (c)
+		// declared before it is stored, proving the parse reaches the entities and
+		// the rejection is specific to the malformed declaration.
+		//
+		// Note: the external-subset loader currently swallows the per-declaration
+		// error (tracked separately in PR #565), so this asserts at the stored-DTD
+		// level rather than on the top-level parse error.
+		fsys := fstest.MapFS{
+			"d.dtd": {Data: []byte(
+				`<!ENTITY c "control">` + "\n" +
+					`<!ENTITY % amp "&#38;">` + "\n" +
+					`<!ENTITY e "%amp;broken">`)},
+		}
+		const input = `<?xml version="1.0"?>` + "\n" +
+			`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+		doc, err := helium.NewParser().
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+
+		_, cOK := doc.GetEntity("c")
+		require.True(t, cOK, "control entity declared before the malformed one must be stored")
+
+		_, eOK := doc.GetEntity("e")
+		require.False(t, eOK, "malformed-via-PE entity must be rejected (not stored)")
+	})
 }
 
 func TestEntityAmplification(t *testing.T) {

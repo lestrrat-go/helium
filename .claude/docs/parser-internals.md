@@ -136,11 +136,12 @@ document-end gate.
    - Fixed cost: 20 bytes per ref
    - Max amplification: 5× input (disabled with RelaxLimits(true))
    - Already-checked entities use cached `expandedSize`
-3. Parse entity content if needed (`parseBalancedChunkInternal`)
+3. Parse entity content if needed (`parseBalancedChunkInternal`, or `parseExternalEntityPrivate` for external entities)
    - Recursively parse entity text
    - Seed in-scope namespaces from the surrounding element before parsing
    - Fill `ent.firstChild` (parsed nodes)
    - Mark `ent.checked = 2`, cache `ent.expandedSize`
+   - External entities: content is read through a bounded `io.LimitReader` (cap `externalEntityMaxBytes`, 10 MiB in parserctx.go) and the read bytes are charged to `sizeentcopy` via `entityCheck`, so repeated references to a near-cap external entity still trip the amplification guard; the running counters propagate into and back out of the nested parse context. `ent.expandedSize` caches the external (plus nested) size for subsequent references.
 4. Deliver to SAX
    - `replaceEntities=true`: expand inline and replay parsed node children through SAX (`StartElementNS`/`EndElementNS`, `Characters`, `CDataBlock`, `Comment`, `PI`)
    - `replaceEntities=false`: fire Reference callback only
@@ -152,6 +153,8 @@ SubstitutionType: SubstituteNone(0), SubstituteRef(1), SubstitutePERef(2), Subst
 ```
 
 Expands `&#NNN;`, `&#xHHH;`, `&name;`, `%name;` based on substitution type. Recursion capped at depth > 40.
+
+`parseEntityValue()` stores the literal with general references left unexpanded, but first validates them (`validateEntityValueRefs` in `parser_entity_decl.go`): the value is PE-expanded (parameter entities and their char refs resolved) and the resulting lexical stream is scanned so a malformed general reference re-introduced through a PE (e.g. `%amp;broken` where `%amp;`→`&#38;`→`&` yields `&broken`) is rejected. Direct char refs in the literal are character data and never form a general reference with following text.
 
 ## Tree Builder (SAX→DOM)
 
