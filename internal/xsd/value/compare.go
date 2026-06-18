@@ -230,7 +230,7 @@ func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
 	if dt.hasTZ {
 		dt = dt.normalizeToUTC()
 	}
-	return fmt.Sprintf("%d|%d|%d|%d|%d|%g|%t", dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, dt.hasTZ), true
+	return fmt.Sprintf("%s|%d|%d|%d|%d|%g|%t", dt.yearVal().String(), dt.month, dt.day, dt.hour, dt.min, dt.sec, dt.hasTZ), true
 }
 
 // CompareDecimal compares two decimal string values using math/big.Rat.
@@ -313,8 +313,9 @@ func decodeBase64Binary(s string) ([]byte, bool) {
 	}, s)
 	// Only correctly-padded base64 is a valid xs:base64Binary lexical form, so an
 	// unpadded operand (e.g. "TQ") must fail to decode and yield ok=false rather
-	// than comparing equal to its padded counterpart.
-	decoded, err := base64.StdEncoding.DecodeString(stripped)
+	// than comparing equal to its padded counterpart. Strict() additionally
+	// rejects padded forms whose unused trailing bits are non-zero (e.g. "TR==").
+	decoded, err := base64.StdEncoding.Strict().DecodeString(stripped)
 	if err != nil {
 		return nil, false
 	}
@@ -377,11 +378,38 @@ func compareFloat(a, b string, single bool) (int, bool) {
 }
 
 type xsdDateTime struct {
-	year, month, day int
-	hour, min        int
-	sec              float64
-	hasTZ            bool
-	tzMin            int
+	// year is held with arbitrary precision so that valid expanded years
+	// (e.g. 999999999999999999999999) compare correctly rather than
+	// overflowing a fixed-width int. A nil year is treated as 0 (used by the
+	// year-agnostic gMonth/gDay/gMonthDay types).
+	year       *big.Int
+	month, day int
+	hour, min  int
+	sec        float64
+	hasTZ      bool
+	tzMin      int
+}
+
+// yearVal returns the year as a *big.Int, substituting 0 for a nil year so the
+// year-agnostic g-types compare consistently.
+func (dt xsdDateTime) yearVal() *big.Int {
+	if dt.year == nil {
+		return big.NewInt(0)
+	}
+	return dt.year
+}
+
+// parseYearBig parses a year digit-string with arbitrary precision so valid
+// expanded years larger than an int compare correctly. neg negates the result.
+func parseYearBig(s string, neg bool) (*big.Int, bool) {
+	n, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		return nil, false
+	}
+	if neg {
+		n.Neg(n)
+	}
+	return n, true
 }
 
 func parseTZ(s string) (bool, int) {
@@ -424,8 +452,8 @@ func parseXSDDateTime(s string) (xsdDateTime, bool) {
 	if len(dParts) != 3 {
 		return dt, false
 	}
-	year, err := strconv.Atoi(dParts[0])
-	if err != nil {
+	year, ok := parseYearBig(dParts[0], neg)
+	if !ok {
 		return dt, false
 	}
 	month, err := strconv.Atoi(dParts[1])
@@ -435,9 +463,6 @@ func parseXSDDateTime(s string) (xsdDateTime, bool) {
 	day, err := strconv.Atoi(dParts[2])
 	if err != nil {
 		return dt, false
-	}
-	if neg {
-		year = -year
 	}
 	dt.year = year
 	dt.month = month
@@ -498,17 +523,18 @@ func parseXSDDate(s string) (xsdDateTime, bool) {
 		neg = true
 		s = s[1:]
 	}
-	// YYYY-MM-DD[TZ]
-	if len(s) < 10 || s[4] != '-' || s[7] != '-' {
+	// YYYY-MM-DD[TZ]; the year is at least 4 digits and may be an expanded
+	// (arbitrarily long) year, so locate the first dash rather than assuming it
+	// sits at offset 4.
+	if len(s) < 10 {
 		return dt, false
 	}
-	// Handle years > 4 digits.
 	dashIdx := strings.IndexByte(s, '-')
 	if dashIdx < 4 {
 		return dt, false
 	}
-	year, err := strconv.Atoi(s[:dashIdx])
-	if err != nil {
+	year, ok := parseYearBig(s[:dashIdx], neg)
+	if !ok {
 		return dt, false
 	}
 	rest := s[dashIdx+1:]
@@ -522,9 +548,6 @@ func parseXSDDate(s string) (xsdDateTime, bool) {
 	day, err := strconv.Atoi(rest[3:5])
 	if err != nil {
 		return dt, false
-	}
-	if neg {
-		year = -year
 	}
 	dt.year = year
 	dt.month = month
@@ -558,12 +581,9 @@ func parseXSDGYear(s string) (xsdDateTime, bool) {
 	if i < 4 {
 		return dt, false
 	}
-	year, err := strconv.Atoi(s[:i])
-	if err != nil {
+	year, ok := parseYearBig(s[:i], neg)
+	if !ok {
 		return dt, false
-	}
-	if neg {
-		year = -year
 	}
 	dt.year = year
 	hasTZ, tzOff := parseTZ(s[i:])
@@ -587,8 +607,8 @@ func parseXSDGYearMonth(s string) (xsdDateTime, bool) {
 	if i < 4 || i >= len(s) || s[i] != '-' {
 		return dt, false
 	}
-	year, err := strconv.Atoi(s[:i])
-	if err != nil {
+	year, ok := parseYearBig(s[:i], neg)
+	if !ok {
 		return dt, false
 	}
 	rest := s[i+1:]
@@ -598,9 +618,6 @@ func parseXSDGYearMonth(s string) (xsdDateTime, bool) {
 	month, err := strconv.Atoi(rest[:2])
 	if err != nil {
 		return dt, false
-	}
-	if neg {
-		year = -year
 	}
 	dt.year = year
 	dt.month = month
@@ -663,15 +680,17 @@ func parseXSDGMonthDay(s string) (xsdDateTime, bool) {
 	return dt, true
 }
 
-// daysInMonth returns the number of days in the given month/year.
-func daysInMonth(year, month int) int {
+// daysInMonth returns the number of days in the given month/year. The year is
+// taken with arbitrary precision so leap-year status is correct for valid
+// expanded years that overflow a fixed-width int.
+func daysInMonth(year *big.Int, month int) int {
 	switch month {
 	case 1, 3, 5, 7, 8, 10, 12:
 		return 31
 	case 4, 6, 9, 11:
 		return 30
 	case 2:
-		if (year%4 == 0 && year%100 != 0) || year%400 == 0 {
+		if isLeapYearBig(year) {
 			return 29
 		}
 		return 28
@@ -679,11 +698,31 @@ func daysInMonth(year, month int) int {
 	return 30
 }
 
+// isLeapYearBig reports whether the (possibly nil) proleptic Gregorian year is a
+// leap year: divisible by 4 and (not divisible by 100, or divisible by 400).
+func isLeapYearBig(year *big.Int) bool {
+	if year == nil {
+		year = big.NewInt(0)
+	}
+	mod := func(m int64) int64 {
+		return new(big.Int).Mod(year, big.NewInt(m)).Int64()
+	}
+	if mod(4) != 0 {
+		return false
+	}
+	if mod(100) != 0 {
+		return true
+	}
+	return mod(400) == 0
+}
+
 func (dt xsdDateTime) normalizeToUTC() xsdDateTime {
 	if !dt.hasTZ || dt.tzMin == 0 {
 		return dt
 	}
 	r := dt
+	// Copy the year so arithmetic below does not mutate the operand's *big.Int.
+	r.year = new(big.Int).Set(dt.yearVal())
 	r.min -= r.tzMin
 	r.tzMin = 0
 
@@ -712,7 +751,7 @@ func (dt xsdDateTime) normalizeToUTC() xsdDateTime {
 		r.month--
 		if r.month < 1 {
 			r.month = 12
-			r.year--
+			r.year.Sub(r.year, big.NewInt(1))
 		}
 		r.day += daysInMonth(r.year, r.month)
 	}
@@ -721,7 +760,7 @@ func (dt xsdDateTime) normalizeToUTC() xsdDateTime {
 		r.month++
 		if r.month > 12 {
 			r.month = 1
-			r.year++
+			r.year.Add(r.year, big.NewInt(1))
 		}
 	}
 
@@ -729,11 +768,8 @@ func (dt xsdDateTime) normalizeToUTC() xsdDateTime {
 }
 
 func compareDateTimeFields(a, b xsdDateTime) int {
-	if a.year != b.year {
-		if a.year < b.year {
-			return -1
-		}
-		return 1
+	if c := a.yearVal().Cmp(b.yearVal()); c != 0 {
+		return c
 	}
 	if a.month != b.month {
 		if a.month < b.month {
@@ -797,7 +833,7 @@ func compareDateTimeMixedTZ(a, b xsdDateTime) (int, bool) {
 	// a full calendar date and flows through the determinate path correctly. The
 	// only loss is a literal year-0000 dateTime, an XSD 1.1 edge case, which
 	// falls back to indeterminate rather than wrong.)
-	if a.year == 0 || b.year == 0 || a.month < 1 || b.month < 1 || a.day < 1 || b.day < 1 {
+	if a.yearVal().Sign() == 0 || b.yearVal().Sign() == 0 || a.month < 1 || b.month < 1 || a.day < 1 || b.day < 1 {
 		return 0, false
 	}
 
@@ -872,8 +908,8 @@ func compareTime(a, b string) (int, bool) {
 		return 0, false
 	}
 	// Set a reference date so TZ normalization day overflow works.
-	da.year, da.month, da.day = 2000, 1, 15
-	db.year, db.month, db.day = 2000, 1, 15
+	da.year, da.month, da.day = big.NewInt(2000), 1, 15
+	db.year, db.month, db.day = big.NewInt(2000), 1, 15
 	return compareDateTimeParsed(da, db)
 }
 

@@ -36,4 +36,16 @@ func TestCanonicalKey(t *testing.T) {
 	require.Equal(t, key("0", "double"), key("-0", "double"), "-0 and 0 must collide for xs:double")
 	require.Equal(t, key("0", "float"), key("-0", "float"), "-0 and 0 must collide for xs:float")
 	require.Equal(t, key("0.0", "double"), key("-0.0", "double"), "-0.0 and 0.0 must collide")
+
+	// Huge expanded years use arbitrary-precision year keys, so timezone-
+	// equivalent forms canonicalize to the same key (used for enumeration and
+	// fixed-value identity), while distinct huge years must not collide.
+	require.Equal(t,
+		key(hugeYearPlus1+"Z", "gYear"),
+		key(hugeYearPlus1+"+00:00", "gYear"),
+		"TZ-equivalent huge gYear values must canonicalize equal")
+	require.NotEqual(t,
+		key(hugeYear, "gYear"),
+		key(hugeYearPlus1, "gYear"),
+		"distinct huge gYear values must not collide")
 }

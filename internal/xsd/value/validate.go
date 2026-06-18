@@ -730,7 +730,9 @@ func validateBase64Binary(value string) error {
 		}
 		b.WriteRune(r)
 	}
-	if _, err := base64.StdEncoding.DecodeString(b.String()); err != nil {
+	// Strict() rejects padded forms whose unused trailing bits are non-zero
+	// (e.g. "TR==", "AAB="), which are not valid xs:base64Binary lexical forms.
+	if _, err := base64.StdEncoding.Strict().DecodeString(b.String()); err != nil {
 		return fmt.Errorf("invalid base64Binary")
 	}
 	return nil

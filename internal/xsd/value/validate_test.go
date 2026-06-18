@@ -22,6 +22,13 @@ const (
 	testAB       = "a:b"
 	testFoo      = "foo"
 
+	// Huge expanded-year fixtures: a 24-digit year exceeds an int and exercises
+	// the arbitrary-precision year comparison path.
+	hugeYear      = "999999999999999999999999"
+	hugeYearPlus1 = "1000000000000000000000000"
+	hugeDate      = hugeYear + "-01-01"
+	hugeDatePlus1 = hugeYearPlus1 + "-01-01"
+
 	typeGYear        = "gYear"
 	typeGMonth       = "gMonth"
 	typeGDay         = "gDay"
@@ -65,7 +72,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			// The huge-year cases exercise leap-year computation on expanded years
 			// that overflow a fixed-width int: ...996 is divisible by 4 (leap),
 			// ...999 is not (non-leap).
-			valid:   []string{testDate0, "2000-02-29", "2400-02-29", "2023-12-31", "-0001-01-01", "2023-01-15Z", "2023-01-15+09:00", "2023-01-15-05:00", "2023-01-15+14:00", "2023-01-15-14:00", "999999999999999999999999-01-01", "999999999999999999999996-02-29"},
+			valid:   []string{testDate0, "2000-02-29", "2400-02-29", "2023-12-31", "-0001-01-01", "2023-01-15Z", "2023-01-15+09:00", "2023-01-15-05:00", "2023-01-15+14:00", "2023-01-15-14:00", hugeDate, "999999999999999999999996-02-29"},
 			invalid: []string{"", testAbc, "2023-13-01", "2023-00-01", "2023-01-32", "2023-01-00", "2001-02-29", "2100-02-29", "2023-01-15+99:99", "2023-01-15+15:00", "2023-01-15+14:01", "999999999999999999999999-02-29"},
 		},
 		{
@@ -139,8 +146,11 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			typeName: typeBase64Binary,
 			valid:    []string{"", "SGVsbG8=", "AAAA", "AA==", "AAAA ", " AA== ", "SGVs bG8="},
 			// Form-feed is not XSD whitespace (only space/tab/CR/LF), so "TQ\f=="
-			// must be rejected rather than treated as "TQ==".
-			invalid: []string{"@@@", "SGVsbG8!", "====", "A", "A===", "AAA", "TQ\f==", "TQ"},
+			// must be rejected rather than treated as "TQ==". The "TR==", "AB==",
+			// and "AAB=" forms carry non-zero unused trailing pad bits, which are
+			// not valid xs:base64Binary lexical forms and must be rejected (strict
+			// decode).
+			invalid: []string{"@@@", "SGVsbG8!", "====", "A", "A===", "AAA", "TQ\f==", "TQ", "TR==", "AB==", "AAB="},
 		},
 		{
 			typeName: "QName",
@@ -276,6 +286,9 @@ func TestCompareValues(t *testing.T) {
 		// comparison against them is indeterminate (no RawStdEncoding fallback).
 		{typeBase64Binary, "TQ", "TQ==", 0, false},
 		{typeBase64Binary, "TQ==", "TQ", 0, false},
+		// "TR==" carries non-zero unused pad bits and is not a valid
+		// xs:base64Binary lexical form, so it must decode-fail -> indeterminate.
+		{typeBase64Binary, "TQ==", "TR==", 0, false},
 
 		// float
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, "2.0", -1, true},
@@ -323,6 +336,13 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDate, testDate0, testDate0, 0, true},
 		{lexicon.TypeDate, "2023-12-31", "2023-01-01", 1, true},
 		{lexicon.TypeDate, "2023-01-15Z", "2023-01-15+00:00", 0, true},
+		// Huge expanded years exceed an int but must still order correctly
+		// (arbitrary-precision year comparison), rather than overflowing to
+		// ok=false.
+		{lexicon.TypeDate, hugeDate, hugeDatePlus1, -1, true},
+		{lexicon.TypeDate, hugeDatePlus1, hugeDate, 1, true},
+		{lexicon.TypeDate, hugeDate, hugeDate, 0, true},
+		{lexicon.TypeDate, "-" + hugeDate, hugeDate, -1, true},
 
 		// time
 		{lexicon.TypeTime, testT0, "11:30:00", -1, true},
@@ -334,6 +354,12 @@ func TestCompareValues(t *testing.T) {
 		{typeGYear, "2023", "2024", -1, true},
 		{typeGYear, "2023", "2023", 0, true},
 		{typeGYear, "-0001", "2023", -1, true},
+		// Huge expanded years compared with arbitrary precision.
+		{typeGYear, hugeYear, hugeYearPlus1, -1, true},
+		{typeGYear, hugeYearPlus1, hugeYearPlus1, 0, true},
+		// A timezone-equivalent huge gYear compares equal (TZ normalization over
+		// an arbitrary-precision year).
+		{typeGYear, hugeYearPlus1 + "Z", hugeYearPlus1 + "+00:00", 0, true},
 
 		// gYearMonth
 		{"gYearMonth", "2023-01", "2023-02", -1, true},
