@@ -731,7 +731,7 @@ func wildcardMatches(wc *Wildcard, elemNS string) bool {
 		return elemNS != ""
 	default:
 		// Space-separated list that may include ##local, ##targetNamespace, and URIs.
-		for part := range strings.SplitSeq(ns, " ") {
+		for _, part := range splitSpace(ns) {
 			switch part {
 			case WildcardNSLocal:
 				if elemNS == "" {

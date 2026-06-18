@@ -16,15 +16,26 @@ const (
 	test1foo     = "1foo"
 	testUnderBar = "_bar"
 	testDT0      = "2023-01-15T10:30:00"
+	testDate0    = "2023-01-15"
+	testJan1     = "2023-01-01"
 	refDateTimeZ = "2020-01-01T12:00:00Z"
 	testT0       = "10:30:00"
 	testAB       = "a:b"
 	testFoo      = "foo"
 
-	typeGYear     = "gYear"
-	typeGMonth    = "gMonth"
-	typeGDay      = "gDay"
-	typeGMonthDay = "gMonthDay"
+	// Huge expanded-year fixtures: a 24-digit year exceeds an int and exercises
+	// the arbitrary-precision year comparison path.
+	hugeYear      = "999999999999999999999999"
+	hugeYearPlus1 = "1000000000000000000000000"
+	hugeDate      = hugeYear + "-01-01"
+	hugeDatePlus1 = hugeYearPlus1 + "-01-01"
+
+	typeGYear        = "gYear"
+	typeGYearMonth   = "gYearMonth"
+	typeGMonth       = "gMonth"
+	typeGDay         = "gDay"
+	typeGMonthDay    = "gMonthDay"
+	typeBase64Binary = "base64Binary"
 )
 
 func TestBuiltinTypeValidation(t *testing.T) {
@@ -46,7 +57,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		{
 			typeName: lexicon.TypeDateTime,
 			valid:    []string{testDT0, "2023-01-15T10:30:00Z", "2023-01-15T10:30:00.123", "2023-01-15T10:30:00+09:00", "2023-01-15T10:30:00-05:00", "-0001-01-01T00:00:00", "2023-01-15T23:59:59", "2024-01-01T24:00:00", "2024-01-01T00:00:00", "2024-01-01T12:00:00+14:00", "2024-01-01T12:00:00-14:00"},
-			invalid:  []string{"", "2023-01-15", testT0, "2023-01-15 10:30:00", "2023-1-15T10:30:00", "2024-01-01T99:99:99", "2024-01-01T25:00:00", "2024-01-01T12:60:00", "2024-01-01T12:00:60", "2024-01-01T24:00:01", "2024-01-01T24:30:00", "2024-01-01T12:00:00+15:00", "2024-01-01T12:00:00+14:01"},
+			invalid:  []string{"", testDate0, testT0, "2023-01-15 10:30:00", "2023-1-15T10:30:00", "2024-01-01T99:99:99", "2024-01-01T25:00:00", "2024-01-01T12:60:00", "2024-01-01T12:00:60", "2024-01-01T24:00:01", "2024-01-01T24:30:00", "2024-01-01T12:00:00+15:00", "2024-01-01T12:00:00+14:01"},
 		},
 		{
 			typeName: lexicon.TypeTime,
@@ -56,42 +67,52 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		{
 			typeName: lexicon.TypeDuration,
 			valid:    []string{testP1Y, "P1M", "P1D", "PT1H", "PT1M", "PT1S", "P1Y2M3D", "P1Y2M3DT4H5M6S", "PT1.5S", "-P1Y", "P0Y"},
-			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", testAbc},
+			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", "P1YT", "P1DT", "P1Y2MT", testAbc},
+		},
+		{
+			typeName: lexicon.TypeDate,
+			// The huge-year cases exercise leap-year computation on expanded years
+			// that overflow a fixed-width int: ...996 is divisible by 4 (leap),
+			// ...999 is not (non-leap).
+			valid:   []string{testDate0, "2000-02-29", "2400-02-29", "2023-12-31", "-0001-01-01", "2023-01-15Z", "2023-01-15+09:00", "2023-01-15-05:00", "2023-01-15+14:00", "2023-01-15-14:00", hugeDate, "999999999999999999999996-02-29"},
+			invalid: []string{"", testAbc, "2023-13-01", "2023-00-01", "2023-01-32", "2023-01-00", "2001-02-29", "2100-02-29", "2023-01-15+99:99", "2023-01-15+15:00", "2023-01-15+14:01", "999999999999999999999999-02-29"},
 		},
 		{
 			typeName: typeGYear,
 			valid:    []string{"2023", "-0001", "2023Z", "2023+09:00", "10000"},
-			invalid:  []string{"", "23", testAbc, "2023-01"},
+			invalid:  []string{"", "23", testAbc, "2023-01", "2023+99:99", "2023+15:00"},
 		},
 		{
-			typeName: "gYearMonth",
+			typeName: typeGYearMonth,
 			valid:    []string{"2023-01", "2023-12", "-0001-06", "2023-01Z", "2023-01+09:00"},
-			invalid:  []string{"", "2023", "2023-1", testAbc},
+			invalid:  []string{"", "2023", "2023-1", testAbc, "2023-13", "2023-00", "2023-01+99:99", "2023-01+15:00"},
 		},
 		{
 			typeName: typeGMonth,
 			valid:    []string{"--01", "--12", "--06Z", "--06+09:00"},
-			invalid:  []string{"", "-01", "01", testAbc},
+			invalid:  []string{"", "-01", "01", testAbc, "--13", "--00", "--06+99:99", "--06+15:00"},
 		},
 		{
 			typeName: typeGMonthDay,
-			valid:    []string{"--01-15", "--12-31", "--06-01Z", "--06-01+09:00"},
-			invalid:  []string{"", "--0115", "-01-15", testAbc},
+			valid:    []string{"--01-15", "--12-31", "--06-01Z", "--06-01+09:00", "--02-29"},
+			invalid:  []string{"", "--0115", "-01-15", testAbc, "--13-01", "--00-01", "--01-32", "--01-00", "--02-30", "--06-01+99:99", "--06-01+15:00"},
 		},
 		{
 			typeName: typeGDay,
 			valid:    []string{"---01", "---31", "---15Z", "---15+09:00"},
-			invalid:  []string{"", "--01", "01", testAbc},
+			invalid:  []string{"", "--01", "01", testAbc, "---32", "---00", "---99", "---15+99:99", "---15+15:00"},
 		},
 		{
 			typeName: "Name",
-			valid:    []string{testFoo, testUnderBar, ":baz", "a.b", "a-b", testAB, "A123"},
-			invalid:  []string{"", test1foo, ".foo", "-foo"},
+			valid:    []string{testFoo, testUnderBar, ":baz", "a.b", "a-b", testAB, "A123", "é", "naïve", "Ω"},
+			// The 0xFF byte is malformed UTF-8; ranging it would yield U+FFFD, which
+			// the Name char range admits, so it must be rejected as invalid.
+			invalid: []string{"", test1foo, ".foo", "-foo", "a b", string([]byte{0xff}), "a" + string([]byte{0xff})},
 		},
 		{
 			typeName: "NCName",
-			valid:    []string{testFoo, testUnderBar, "a.b", "a-b", "A123"},
-			invalid:  []string{"", test1foo, ".foo", "-foo", testAB, ":foo"},
+			valid:    []string{testFoo, testUnderBar, "a.b", "a-b", "A123", "é", "naïve", "Ω"},
+			invalid:  []string{"", test1foo, ".foo", "-foo", testAB, ":foo", "a b", string([]byte{0xff}), "a" + string([]byte{0xff})},
 		},
 		{
 			typeName: "ID",
@@ -110,8 +131,8 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		},
 		{
 			typeName: "NMTOKEN",
-			valid:    []string{testFoo, test1foo, ".foo", "-foo", testAB, "A.1-2:3_4"},
-			invalid:  []string{"", "foo bar", "foo\ttab"},
+			valid:    []string{testFoo, test1foo, ".foo", "-foo", testAB, "A.1-2:3_4", "café", "Ω"},
+			invalid:  []string{"", "foo bar", "foo\ttab", string([]byte{0xff}), "a" + string([]byte{0xff})},
 		},
 		{
 			typeName: "normalizedString",
@@ -119,14 +140,24 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			invalid:  []string{"has\ttab", "has\nnewline", "has\rreturn"},
 		},
 		{
+			// NBSP (U+00A0) is NOT XSD whitespace (only space/tab/CR/LF), so a
+			// token may begin, end, or contain runs of NBSP: " abc "
+			// has no leading/trailing XSD whitespace and no double ASCII space,
+			// so it is a valid xs:token. Trimming with Go's Unicode TrimSpace
+			// would wrongly strip the NBSP and reject it.
 			typeName: "token",
-			valid:    []string{"hello world", "single", ""},
+			valid:    []string{"hello world", "single", "", " abc ", "a  b"},
 			invalid:  []string{"has\ttab", "has\nnewline", " leading", "trailing ", "double  space"},
 		},
 		{
-			typeName: "base64Binary",
-			valid:    []string{"", "SGVsbG8=", "AAAA", "AA==", "A "},
-			invalid:  []string{"@@@", "SGVsbG8!"},
+			typeName: typeBase64Binary,
+			valid:    []string{"", "SGVsbG8=", "AAAA", "AA==", "AAAA ", " AA== ", "SGVs bG8="},
+			// Form-feed is not XSD whitespace (only space/tab/CR/LF), so "TQ\f=="
+			// must be rejected rather than treated as "TQ==". The "TR==", "AB==",
+			// and "AAB=" forms carry non-zero unused trailing pad bits, which are
+			// not valid xs:base64Binary lexical forms and must be rejected (strict
+			// decode).
+			invalid: []string{"@@@", "SGVsbG8!", "====", "A", "A===", "AAA", "TQ\f==", "TQ", "TR==", "AB==", "AAB="},
 		},
 		{
 			typeName: "QName",
@@ -235,9 +266,9 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDecimal, "0.5", "0.50", 0, true},
 
 		// integer (uses decimal path)
-		{"integer", "10", "20", -1, true},
-		{"integer", "100", "100", 0, true},
-		{"integer", "-5", "5", -1, true},
+		{lexicon.TypeInteger, "10", "20", -1, true},
+		{lexicon.TypeInteger, "100", "100", 0, true},
+		{lexicon.TypeInteger, "-5", "5", -1, true},
 
 		// boolean — "true"/"1" and "false"/"0" are value-equal; invalid lexicals
 		// are indeterminate.
@@ -255,9 +286,16 @@ func TestCompareValues(t *testing.T) {
 		{"hexBinary", "0G", "0A", 0, false}, // invalid hex -> indeterminate
 
 		// base64Binary — compared by decoded octets, whitespace insignificant.
-		{"base64Binary", "YWJj", "YW Jj", 0, true},
-		{"base64Binary", "YWJj", "YWJk", -1, true}, // "abc" < "abd"
-		{"base64Binary", "@@@@", "YWJj", 0, false}, // invalid -> indeterminate
+		{typeBase64Binary, "YWJj", "YW Jj", 0, true},
+		{typeBase64Binary, "YWJj", "YWJk", -1, true}, // "abc" < "abd"
+		{typeBase64Binary, "@@@@", "YWJj", 0, false}, // invalid -> indeterminate
+		// Unpadded operands are not valid base64Binary lexical forms, so a
+		// comparison against them is indeterminate (no RawStdEncoding fallback).
+		{typeBase64Binary, "TQ", "TQ==", 0, false},
+		{typeBase64Binary, "TQ==", "TQ", 0, false},
+		// "TR==" carries non-zero unused pad bits and is not a valid
+		// xs:base64Binary lexical form, so it must decode-fail -> indeterminate.
+		{typeBase64Binary, "TQ==", "TR==", 0, false},
 
 		// float
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, "2.0", -1, true},
@@ -277,6 +315,11 @@ func TestCompareValues(t *testing.T) {
 		// representable), so they are equal in the xs:float value space.
 		{lexicon.TypeFloat, "16777216", "16777217", 0, true},
 		{lexicon.TypeFloat, "16777217", "16777216", 0, true},
+		// A finite lexical whose magnitude overflows float64 maps to ±INF in the
+		// XSD 1.1 value space (ValidateBuiltin accepts it), so it compares equal to
+		// the literal INF/-INF spelling rather than being rejected as unparsable.
+		{lexicon.TypeFloat, "1e400", lexicon.FloatINF, 0, true},
+		{lexicon.TypeFloat, "-1e400", lexicon.FloatNegINF, 0, true},
 
 		// double (the value space is float64, so 16777216 and 16777217 remain
 		// distinct — only the float path rounds to single precision).
@@ -284,6 +327,9 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDouble, "1e10", "9999999999", 1, true},
 		{lexicon.TypeDouble, "16777216", "16777217", -1, true},
 		{lexicon.TypeDouble, "16777217", "16777216", 1, true},
+		// Float64-overflowing double lexicals likewise map to ±INF.
+		{lexicon.TypeDouble, "1e400", lexicon.FloatINF, 0, true},
+		{lexicon.TypeDouble, "-1e400", lexicon.FloatNegINF, 0, true},
 
 		// dateTime
 		{lexicon.TypeDateTime, testDT0, testDT0, 0, true},
@@ -299,12 +345,27 @@ func TestCompareValues(t *testing.T) {
 		// Genuinely indeterminate: ±14:00 interval straddles the bound.
 		{lexicon.TypeDateTime, "2020-01-01T00:00:00", refDateTimeZ, 0, false},
 		{lexicon.TypeDateTime, refDateTimeZ, "2020-01-01T00:00:00", 0, false},
+		// A leading '+' on the year is not a valid xs:dateTime lexical form, so it
+		// must NOT compare equal to the unsigned form (indeterminate, not 0/true).
+		{lexicon.TypeDateTime, "+2023-01-01T00:00:00", "2023-01-01T00:00:00", 0, false},
+		{lexicon.TypeDateTime, "2023-01-01T00:00:00", "+2023-01-01T00:00:00", 0, false},
 
 		// date
-		{"date", "2023-01-15", "2023-01-16", -1, true},
-		{"date", "2023-01-15", "2023-01-15", 0, true},
-		{"date", "2023-12-31", "2023-01-01", 1, true},
-		{"date", "2023-01-15Z", "2023-01-15+00:00", 0, true},
+		{lexicon.TypeDate, testDate0, "2023-01-16", -1, true},
+		{lexicon.TypeDate, testDate0, testDate0, 0, true},
+		{lexicon.TypeDate, "2023-12-31", testJan1, 1, true},
+		{lexicon.TypeDate, "2023-01-15Z", "2023-01-15+00:00", 0, true},
+		// Huge expanded years exceed an int but must still order correctly
+		// (arbitrary-precision year comparison), rather than overflowing to
+		// ok=false.
+		{lexicon.TypeDate, hugeDate, hugeDatePlus1, -1, true},
+		{lexicon.TypeDate, hugeDatePlus1, hugeDate, 1, true},
+		{lexicon.TypeDate, hugeDate, hugeDate, 0, true},
+		{lexicon.TypeDate, "-" + hugeDate, hugeDate, -1, true},
+		// A leading '+' on the year is not a valid xs:date lexical form, so it
+		// must NOT compare equal to the unsigned form (indeterminate, not 0/true).
+		{lexicon.TypeDate, "+2023-01-01", testJan1, 0, false},
+		{lexicon.TypeDate, testJan1, "+2023-01-01", 0, false},
 
 		// time
 		{lexicon.TypeTime, testT0, "11:30:00", -1, true},
@@ -316,10 +377,16 @@ func TestCompareValues(t *testing.T) {
 		{typeGYear, "2023", "2024", -1, true},
 		{typeGYear, "2023", "2023", 0, true},
 		{typeGYear, "-0001", "2023", -1, true},
+		// Huge expanded years compared with arbitrary precision.
+		{typeGYear, hugeYear, hugeYearPlus1, -1, true},
+		{typeGYear, hugeYearPlus1, hugeYearPlus1, 0, true},
+		// A timezone-equivalent huge gYear compares equal (TZ normalization over
+		// an arbitrary-precision year).
+		{typeGYear, hugeYearPlus1 + "Z", hugeYearPlus1 + "+00:00", 0, true},
 
 		// gYearMonth
-		{"gYearMonth", "2023-01", "2023-02", -1, true},
-		{"gYearMonth", "2023-06", "2023-06", 0, true},
+		{typeGYearMonth, "2023-01", "2023-02", -1, true},
+		{typeGYearMonth, "2023-06", "2023-06", 0, true},
 
 		// gMonth
 		{typeGMonth, "--01", "--02", -1, true},
@@ -341,7 +408,7 @@ func TestCompareValues(t *testing.T) {
 		// producing a wrong determinate result from normalizing a zero
 		// year/month/day field.
 		{typeGYear, "2020", "2020Z", 0, false},
-		{"gYearMonth", "2020-06", "2020-06Z", 0, false},
+		{typeGYearMonth, "2020-06", "2020-06Z", 0, false},
 		{typeGMonth, "--06", "--06Z", 0, false},
 		{typeGDay, "---15", "---15Z", 0, false},
 		{typeGMonthDay, "--06-15", "--06-15Z", 0, false},
@@ -362,6 +429,64 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDuration, "-P1Y", testP1Y, -1, true},
 		{lexicon.TypeDuration, "P1Y2M", "P1Y3M", -1, true},
 		{lexicon.TypeDuration, "P1M", "P30D", 0, false}, // indeterminate: months vs days
+
+		// Strict lexical validation gates comparison: the lenient internal date
+		// parsers used to accept these, but Compare now validates each operand
+		// against the builtin's lexical space first, so malformed input is
+		// indeterminate rather than silently comparing equal.
+		{typeGYear, "2023abc", "2023", 0, false},                    // trailing junk on a gYear
+		{typeGMonthDay, "--02-30", "--02-29", 0, false},             // Feb 30 is not a valid gMonthDay
+		{lexicon.TypeDate, "2023-02-29", "2023-02-28", 0, false},    // 2023 is not a leap year
+		{lexicon.TypeDate, "2023-01-01+99:99", testDate0, 0, false}, // timezone out of range
+		{lexicon.TypeDate, "2023-01-01Zjunk", testDate0, 0, false},  // trailing junk after Z
+		// A valid huge-year date with leap Feb 29 (the year is divisible by 4 and
+		// not by 100) still compares correctly under strict validation.
+		{lexicon.TypeDate, "999999999999999999999996-02-29", "999999999999999999999996-02-28", 1, true},
+
+		// Strict lexical validation now also gates the numeric, float and binary
+		// value-comparable types, not just date/time. A non-integer lexical, an
+		// out-of-range subtype value, a non-decimal lexical, and the wrong-case
+		// "Inf" are all indeterminate rather than silently comparing.
+		{lexicon.TypeInteger, "1.0", "1", 0, false},            // not an integer lexical
+		{"int", "2147483648", "0", 0, false},                   // out of range for xs:int
+		{"unsignedByte", "-1", "0", 0, false},                  // negative is out of range
+		{lexicon.TypeDecimal, "1/2", "0.5", 0, false},          // not a decimal lexical
+		{lexicon.TypeFloat, "Inf", lexicon.FloatINF, 0, false}, // "Inf" is not a valid float lexical
+		// NBSP-padded values are not trimmed by XSD whitespace handling, so they
+		// stay invalid and compare indeterminate.
+		{lexicon.TypeInteger, " 1 ", "1", 0, false},
+
+		// xs:dateTime/xs:time 24:00:00 is the valid end-of-day form; it lives in
+		// the same value space as 00:00:00 of the next day and must compare equal.
+		{lexicon.TypeDateTime, "2024-01-01T24:00:00", "2024-01-02T00:00:00", 0, true},
+		{lexicon.TypeTime, "24:00:00", "00:00:00", 0, true},
+
+		// Date/time lexicals are whiteSpace=collapse, so XSD-whitespace padding
+		// (space/tab/CR/LF) must be stripped before validation and parsing, exactly
+		// like the numeric/binary paths. A padded operand therefore compares equal
+		// to its trimmed form rather than being rejected.
+		{lexicon.TypeDate, " 2023-01-01 ", testJan1, 0, true},
+		{lexicon.TypeDateTime, "\t2023-01-15T10:30:00\n", testDT0, 0, true},
+		{lexicon.TypeTime, " 10:30:00 ", testT0, 0, true},
+		{typeGYear, " 2023 ", "2023", 0, true},
+		// String-family and unrecognized builtins have no numeric value-space
+		// comparison defined: Compare must NOT route them through CompareDecimal,
+		// so "5.0" vs "5" for xs:string (and an unknown builtin) is indeterminate.
+		{lexicon.TypeString, "5.0", "5", 0, false},
+		{"definitely-not-a-builtin", "5.0", "5", 0, false},
+
+		// Huge duration components must not overflow: months are parsed as big.Int
+		// and seconds as big.Rat, so a year/day count far beyond int64 range that
+		// passes ValidateBuiltin also compares correctly rather than failing to
+		// parse.
+		{lexicon.TypeDuration, "P999999999999999999999999Y", "P999999999999999999999999Y", 0, true},
+		{lexicon.TypeDuration, "P999999999999999999999998Y", "P999999999999999999999999Y", -1, true},
+		{lexicon.TypeDuration, "P99999999999999999999D", "PT8639999999999999999913600S", 0, true},
+
+		// NBSP is not XSD whitespace, so a NBSP-padded date/time operand stays
+		// lexically invalid and compares indeterminate.
+		{lexicon.TypeDate, " 2023-01-01", testJan1, 0, false},
+		{lexicon.TypeTime, "10:30:00 ", testT0, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -410,4 +535,49 @@ func TestNormalize(t *testing.T) {
 			require.Equal(t, tt.want, value.Normalize(tt.in, tt.typ))
 		})
 	}
+}
+
+// TestTimezoneUppercaseZOnly verifies that the timezone designator is the
+// uppercase 'Z' only. XSD permits "Z" but never the lowercase "z"; the latter
+// must fail lexical validation and must NOT compare or canonicalize as equal to
+// the uppercase form.
+func TestTimezoneUppercaseZOnly(t *testing.T) {
+	t.Parallel()
+
+	// Uppercase Z is a valid designator across the date/time family; lowercase z
+	// is rejected for every one of them.
+	zTypes := []struct {
+		typ      string
+		validZ   string
+		invalidz string
+	}{
+		{"date", "2023-01-01Z", "2023-01-01z"},
+		{lexicon.TypeDateTime, "2023-01-01T10:30:00Z", "2023-01-01T10:30:00z"},
+		{lexicon.TypeTime, "10:30:00Z", "10:30:00z"},
+		{typeGYear, "2023Z", "2023z"},
+		{typeGYearMonth, "2023-01Z", "2023-01z"},
+		{typeGMonth, "--06Z", "--06z"},
+		{typeGDay, "---15Z", "---15z"},
+		{typeGMonthDay, "--06-01Z", "--06-01z"},
+	}
+	for _, tt := range zTypes {
+		t.Run(tt.typ, func(t *testing.T) {
+			t.Parallel()
+			require.NoError(t, value.ValidateBuiltin(tt.validZ, tt.typ), "uppercase Z must be valid")
+			require.Error(t, value.ValidateBuiltin(tt.invalidz, tt.typ), "lowercase z must be invalid")
+		})
+	}
+
+	// Compare must treat a lowercase-z lexical as indeterminate (ok=false), not as
+	// equal to the uppercase-Z form: validation runs first and rejects "z".
+	_, ok := value.Compare("2023-01-01z", "2023-01-01Z", "date")
+	require.False(t, ok, "lowercase z must not compare as a valid date")
+
+	// CanonicalKey must reject the lowercase-z lexical (ok=false) so it never keys
+	// equal to the uppercase-Z form on the IDC path.
+	keyZ, okZ := value.CanonicalKey("2023-01-01Z", "date")
+	require.True(t, okZ, "uppercase Z must canonicalize")
+	_, okz := value.CanonicalKey("2023-01-01z", "date")
+	require.False(t, okz, "lowercase z must not canonicalize")
+	require.NotEmpty(t, keyZ)
 }

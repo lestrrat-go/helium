@@ -573,7 +573,7 @@ func wildcardNSSet(wc *Wildcard) map[string]bool {
 		s[wc.TargetNS] = true
 	default:
 		// Space-separated list of URIs, possibly including ##local and ##targetNamespace.
-		for token := range strings.FieldsSeq(wc.Namespace) {
+		for _, token := range splitSpace(wc.Namespace) {
 			switch token {
 			case WildcardNSLocal:
 				s[""] = true

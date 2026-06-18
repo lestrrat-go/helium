@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -35,8 +36,8 @@ func TestFixedValueSpace(t *testing.T) {
 		{name: "decimal value mismatch", typ: "xs:decimal", fixed: "5", instance: "6", wantReject: true},
 
 		// boolean — "true"/"1" are value-equal.
-		{name: "boolean true vs 1", typ: xsBooleanType, fixed: "true", instance: "1"},
-		{name: "boolean value mismatch", typ: xsBooleanType, fixed: "true", instance: "0", wantReject: true},
+		{name: "boolean true vs 1", typ: xsBooleanType, fixed: lexicon.ValueTrue, instance: "1"},
+		{name: "boolean value mismatch", typ: xsBooleanType, fixed: lexicon.ValueTrue, instance: "0", wantReject: true},
 
 		// float — value space is IEEE-754 single precision, so 16777216 and
 		// 16777217 round to the same float32 and must be accepted; xs:double keeps
@@ -192,6 +193,62 @@ func TestFixedValueSpaceList(t *testing.T) {
 		instanceXML := `<root a="01 +2"/>`
 		runFixedValueCase(t, schemaXML, instanceXML, false)
 	})
+}
+
+// TestFixedValueSpaceListNBSP guards the fixed-value LIST comparison against
+// using Go's Unicode strings.Fields for item separation. NBSP (U+00A0) is NOT an
+// XSD list separator, so an instance "1<NBSP>2" against an xs:int-list fixed
+// value "1 2" is a SINGLE token "1<NBSP>2" — which is not a valid xs:int and
+// must be REJECTED. Splitting on NBSP (the old behavior) would yield two valid
+// items [1, 2] that wrongly match the fixed value. The genuine XSD-space form
+// "1 2" stays accepted.
+func TestFixedValueSpaceListNBSP(t *testing.T) {
+	const typeDefs = `  <xs:simpleType name="intList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>`
+
+	t.Run("element/xsd-space accepted", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="intList" fixed="1 2"/>
+</xs:schema>`
+		instanceXML := `<root>1 2</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/nbsp-joined rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+` + typeDefs + `
+  <xs:element name="root" type="intList" fixed="1 2"/>
+</xs:schema>`
+		// "1<NBSP>2" is one token; it fails xs:int item validation, so the instance
+		// is invalid regardless of the fixed value (NBSP is not a list separator).
+		instanceXML := `<root>1` + nbsp + `2</root>`
+		runFixedValueReject(t, schemaXML, instanceXML)
+	})
+}
+
+// runFixedValueReject compiles, validates, and asserts a validation error
+// WITHOUT requiring the "fixed value constraint" message, for cases where the
+// instance is rejected by per-item lexical validation before the fixed-value
+// comparison runs.
+func runFixedValueReject(t *testing.T, schemaXML, instanceXML string) {
+	t.Helper()
+
+	schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+
+	schema, err := xsd.NewCompiler().Compile(t.Context(), schemaDOC)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+	require.NoError(t, err)
+
+	var errs string
+	err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
+	require.Error(t, err, "expected validation error, got none")
 }
 
 // TestFixedValueSpaceQName verifies that a fixed value of xs:QName is compared in

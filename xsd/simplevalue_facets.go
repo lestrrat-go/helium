@@ -3,7 +3,6 @@ package xsd
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -16,9 +15,66 @@ func compareDecimal(a, b string) int {
 	return value.CompareDecimal(a, b)
 }
 
+// orderedRangeFacetTypes is the set of builtin base types whose PRIMITIVE value
+// space is ORDERED, so the range facets (min/maxInclusive, min/maxExclusive) may
+// apply to them. Per XSD 1.1 (§4.2.x, the {ordered} fundamental facet), the
+// ordered primitives are the numeric types (decimal and its derived integers,
+// float, double) and the date/time/duration family (duration, dateTime, time,
+// date, and the gregorian g-types). Every other primitive — string-family,
+// boolean, hexBinary, base64Binary, anyURI, QName, NOTATION — is {ordered}=false,
+// so a range facet is INAPPLICABLE to it and the bound is treated as satisfied.
+//
+// value.Compare can return a deterministic total order for some of these
+// non-ordered types (boolean, hexBinary, base64Binary) purely so enumeration can
+// rely on cmp==0; that order is NOT the XSD value-space order and must never be
+// used to fire a range facet. Gating on this allowlist keeps the range facets off
+// those types regardless of what value.Compare would return.
+var orderedRangeFacetTypes = map[string]struct{}{
+	// Numeric (decimal-derived integers, plus the standalone decimal).
+	lexicon.TypeDecimal: {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
+	"long": {}, "int": {}, "short": {}, "byte": {},
+	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
+	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
+	// Floating point.
+	lexicon.TypeFloat: {}, lexicon.TypeDouble: {},
+	// Date/time/duration family (all ordered, non-numeric).
+	"dateTime": {}, "date": {}, "time": {}, "duration": {},
+	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
+}
+
+// compareForRangeFacet compares two ordered values for a range facet
+// (min/maxInclusive, min/maxExclusive) in the value space identified by
+// builtinLocal. The range facets are defined ONLY on types whose primitive value
+// space is ordered (orderedRangeFacetTypes); for every other builtin — a
+// string-family type, boolean, the binary types, anyURI, QName/NOTATION, or a
+// non-atomic (list/union) carrier with an empty/unknown local — the facet is
+// INAPPLICABLE and this returns (0, false), which the caller treats as the bound
+// being satisfied rather than coercing the value into a spurious comparison.
+//
+// For the ordered types the actual ordering is deferred to value.Compare, which
+// orders numeric and date/time/duration value spaces and itself returns ok=false
+// when an operand fails the strict lexical space. Note value.Compare also returns
+// a deterministic order for boolean and the binary types (so enumeration can use
+// cmp==0); those are NOT in orderedRangeFacetTypes, so a range facet can never
+// fire on them here.
+//
+// There is deliberately NO empty-local fallback. A genuine ordered atomic value
+// always reaches this function with its concrete ordered builtinLocal; an empty
+// builtinLocal only arises for a NON-atomic carrier (an intermediate union or a
+// list active member), which is not in an ordered value space, so the gate below
+// rejects it. This is what stops the prior empty-local decimal fallback from
+// mis-firing on a list active member of a numeric-looking union (e.g.
+// union(list(xs:int)) with minInclusive), wrongly rejecting a valid list instance.
+func compareForRangeFacet(v, bound, builtinLocal string) (int, bool) {
+	if _, ordered := orderedRangeFacetTypes[builtinLocal]; !ordered {
+		return 0, false
+	}
+	return value.Compare(v, bound, builtinLocal)
+}
+
 // checkMinInclusive compares value >= bound using type-aware comparison.
 func checkMinInclusive(v, bound, builtinLocal string) bool {
-	cmp, ok := value.Compare(v, bound, builtinLocal)
+	cmp, ok := compareForRangeFacet(v, bound, builtinLocal)
 	if !ok {
 		return true // can't compare, don't error
 	}
@@ -27,7 +83,7 @@ func checkMinInclusive(v, bound, builtinLocal string) bool {
 
 // checkMaxInclusive compares value <= bound using type-aware comparison.
 func checkMaxInclusive(v, bound, builtinLocal string) bool {
-	cmp, ok := value.Compare(v, bound, builtinLocal)
+	cmp, ok := compareForRangeFacet(v, bound, builtinLocal)
 	if !ok {
 		return true
 	}
@@ -36,7 +92,7 @@ func checkMaxInclusive(v, bound, builtinLocal string) bool {
 
 // checkMinExclusive compares value > bound using type-aware comparison.
 func checkMinExclusive(v, bound, builtinLocal string) bool {
-	cmp, ok := value.Compare(v, bound, builtinLocal)
+	cmp, ok := compareForRangeFacet(v, bound, builtinLocal)
 	if !ok {
 		return true // can't compare, don't error
 	}
@@ -45,7 +101,7 @@ func checkMinExclusive(v, bound, builtinLocal string) bool {
 
 // checkMaxExclusive compares value < bound using type-aware comparison.
 func checkMaxExclusive(v, bound, builtinLocal string) bool {
-	cmp, ok := value.Compare(v, bound, builtinLocal)
+	cmp, ok := compareForRangeFacet(v, bound, builtinLocal)
 	if !ok {
 		return true
 	}
@@ -62,12 +118,12 @@ func checkMaxExclusive(v, bound, builtinLocal string) bool {
 // their (whitespace-processed) lexical space.
 var enumValueSpaceTypes = map[string]struct{}{
 	// Numeric (decimal-derived).
-	"decimal": {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
+	lexicon.TypeDecimal: {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
 	"long": {}, "int": {}, "short": {}, "byte": {},
 	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
 	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
 	// Floating point.
-	"float": {}, "double": {},
+	lexicon.TypeFloat: {}, lexicon.TypeDouble: {},
 	// Boolean.
 	"boolean": {},
 	// Date/time/duration.
@@ -88,7 +144,7 @@ func enumerationValueEqual(v, ev, builtinLocal string) bool {
 	if _, ok := enumValueSpaceTypes[builtinLocal]; !ok {
 		return false
 	}
-	if builtinLocal == "float" || builtinLocal == "double" {
+	if builtinLocal == lexicon.TypeFloat || builtinLocal == lexicon.TypeDouble {
 		if value.IsFloatNaN(v) && value.IsFloatNaN(ev) {
 			return true
 		}
@@ -97,7 +153,7 @@ func enumerationValueEqual(v, ev, builtinLocal string) bool {
 	return ok && cmp == 0
 }
 
-func checkFacets(ctx context.Context, value string, valueNS map[string]string, fs *FacetSet, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
+func checkFacets(ctx context.Context, value string, valueNS map[string]string, fs *FacetSet, builtinLocal, whiteSpace, elemName, filename string, line int, vc *validationContext) error {
 	var anyErr error
 
 	// Enumeration.
@@ -111,7 +167,11 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 					if i < len(fs.EnumerationNS) {
 						enumNS = fs.EnumerationNS[i]
 					}
-					enumQN, enumErr := resolveLexicalQName(ev, enumNS)
+					// The enumeration literal is a value in the constrained type's
+					// value space, so it must be whitespace-normalized with the same
+					// effective whiteSpace facet the instance value already had
+					// applied before its QName is resolved.
+					enumQN, enumErr := resolveLexicalQName(normalizeWhiteSpace(ev, whiteSpace), enumNS)
 					if enumErr == nil && valueQN == enumQN {
 						found = true
 						break
@@ -123,14 +183,16 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 			// always sufficient; additionally, for value-space-comparable types
 			// (see enumValueSpaceTypes) a lexically distinct value that is
 			// value-equal to a member must also be accepted. String-family and
-			// other non-comparable types stay lexical-only.
-			found = slices.Contains(fs.Enumeration, value)
-			if !found {
-				for _, ev := range fs.Enumeration {
-					if enumerationValueEqual(value, ev, builtinLocal) {
-						found = true
-						break
-					}
+			// other non-comparable types stay lexical-only. Each enumeration
+			// literal is whitespace-normalized with the constrained type's
+			// effective whiteSpace facet first, mirroring the normalization the
+			// instance value already underwent — otherwise a token enumeration
+			// "a  b" (two spaces) would never match the collapsed instance "a b".
+			for _, ev := range fs.Enumeration {
+				nev := normalizeWhiteSpace(ev, whiteSpace)
+				if nev == value || enumerationValueEqual(value, nev, builtinLocal) {
+					found = true
+					break
 				}
 			}
 		}

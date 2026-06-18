@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -31,9 +32,9 @@ func TestEnumerationValueSpace(t *testing.T) {
 		{name: "decimal non-member", baseType: xsDecimalType, enum: []string{"5"}, instance: "6", wantReject: true},
 
 		// boolean — "true"/"1" and "false"/"0" are value-equal pairs.
-		{name: "boolean true vs 1", baseType: xsBooleanType, enum: []string{"true"}, instance: "1"},
+		{name: "boolean true vs 1", baseType: xsBooleanType, enum: []string{lexicon.ValueTrue}, instance: "1"},
 		{name: "boolean false vs 0", baseType: xsBooleanType, enum: []string{"false"}, instance: "0"},
-		{name: "boolean non-member", baseType: xsBooleanType, enum: []string{"true"}, instance: "0", wantReject: true},
+		{name: "boolean non-member", baseType: xsBooleanType, enum: []string{lexicon.ValueTrue}, instance: "0", wantReject: true},
 
 		// float / double — trailing zero and exponent forms.
 		{name: "float trailing zero", baseType: xsFloatType, enum: []string{"1.5"}, instance: "1.50"},
@@ -58,9 +59,9 @@ func TestEnumerationValueSpace(t *testing.T) {
 		// lexical form is not significant.
 		{name: "base64Binary whitespace insignificant", baseType: "xs:base64Binary", enum: []string{"YWJj"}, instance: "YW Jj"},
 		{name: "base64Binary non-member", baseType: "xs:base64Binary", enum: []string{"YWJj"}, instance: "YWJk", wantReject: true},
-		// The lexical validator (regex-only) admits unpadded forms; an unpadded
-		// instance must still value-match its padded, byte-equal member.
-		{name: "base64Binary unpadded matches padded", baseType: "xs:base64Binary", enum: []string{"TQ=="}, instance: "TQ"},
+		// A padded instance that is byte-equal to its member but written with
+		// extra whitespace must still value-match (whitespace is insignificant).
+		{name: "base64Binary padded whitespace matches", baseType: "xs:base64Binary", enum: []string{"TQ=="}, instance: "TQ =="},
 
 		// dateTime — same instant written with a different timezone form.
 		{name: "dateTime equal across timezone", baseType: "xs:dateTime",

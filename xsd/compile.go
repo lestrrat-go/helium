@@ -516,7 +516,7 @@ func parseOccurs(s string, defaultVal int) int {
 
 func registerBuiltinTypes(s *Schema) {
 	builtins := []string{
-		"string", "boolean", "decimal", "float", "double",
+		"string", "boolean", lexicon.TypeDecimal, lexicon.TypeFloat, lexicon.TypeDouble,
 		"integer", "nonPositiveInteger", "negativeInteger",
 		"long", "int", "short", "byte",
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",

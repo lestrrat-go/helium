@@ -3,7 +3,6 @@ package xsd
 import (
 	"context"
 	"slices"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -301,7 +300,7 @@ func upaWildcardNSSet(wcNS, targetNS string) map[string]bool {
 		return map[string]bool{"": true}
 	default:
 		result := make(map[string]bool)
-		for part := range strings.FieldsSeq(wcNS) {
+		for _, part := range splitSpace(wcNS) {
 			switch part {
 			case WildcardNSLocal:
 				result[""] = true
@@ -325,7 +324,7 @@ func wildcardMatchesNS(wcNS, wcTargetNS, elemNS string) bool {
 	case WildcardNSNotAbsent:
 		return elemNS != ""
 	default:
-		for part := range strings.FieldsSeq(wcNS) {
+		for _, part := range splitSpace(wcNS) {
 			switch part {
 			case WildcardNSLocal:
 				if elemNS == "" {
