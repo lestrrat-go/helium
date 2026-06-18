@@ -462,15 +462,24 @@ func (a AtomicValue) ToFloat64() float64 {
 		// schema-derived double/float (or a value constructed directly) can carry
 		// a plain float64/float32 backing value. Accept all forms so callers on
 		// the map-key path never panic.
+		var f float64
 		switch v := a.Value.(type) {
 		case *FloatValue:
-			return v.Float64()
+			f = v.Float64()
 		case float64:
-			return v
+			f = v
 		case float32:
-			return float64(v)
+			f = float64(v)
+		default:
+			return 0
 		}
-		return 0
+		if et == TypeFloat {
+			// An effective xs:float (including a schema-derived float backed by a
+			// double-precision *FloatValue or a plain float64) must be narrowed to
+			// single precision so ToFloat64/DoubleVal stay consistent with FloatVal.
+			return float64(float32(f))
+		}
+		return f
 	case TypeDecimal:
 		r, ok := a.Value.(*big.Rat)
 		if !ok {

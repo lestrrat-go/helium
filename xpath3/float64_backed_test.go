@@ -212,6 +212,63 @@ func TestFloat64BackedSchemaDerived(t *testing.T) {
 	})
 }
 
+// TestFloat64SchemaDerivedFloatNarrows verifies ToFloat64/DoubleVal narrow a
+// schema-derived xs:float (custom TypeName, BaseType xs:float) to single
+// precision for every backing form, matching FloatVal. 16777217 is the smallest
+// integer not exactly representable as float32; at single precision it rounds to
+// 16777216. Before the fix ToFloat64 returned the raw double value 16777217,
+// leaking double precision into DoubleVal, mixed comparison, and duration math.
+func TestFloat64SchemaDerivedFloatNarrows(t *testing.T) {
+	const narrowed = 16777216.0
+
+	backings := []struct {
+		name  string
+		value any
+	}{
+		{"float64", float64(16777217)},
+		{"FloatValue-double", NewDouble(16777217)},
+	}
+
+	for _, b := range backings {
+		t.Run(b.name, func(t *testing.T) {
+			a := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: b.value}
+			require.Equal(t, narrowed, a.ToFloat64())
+			require.Equal(t, narrowed, a.DoubleVal())
+			// ToFloat64 and FloatVal must agree for xs:float.
+			require.Equal(t, a.ToFloat64(), a.FloatVal().Float64())
+		})
+	}
+
+	t.Run("FloatValue-single already narrowed", func(t *testing.T) {
+		// A *FloatValue already at single precision is unaffected.
+		a := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: NewFloat(16777217)}
+		require.Equal(t, narrowed, a.ToFloat64())
+		require.Equal(t, narrowed, a.DoubleVal())
+		require.Equal(t, a.ToFloat64(), a.FloatVal().Float64())
+	})
+
+	t.Run("built-in xs:double not narrowed", func(t *testing.T) {
+		// The double path must be unaffected: 16777217 stays exact.
+		a := AtomicValue{TypeName: TypeDouble, Value: NewDouble(16777217)}
+		require.Equal(t, 16777217.0, a.ToFloat64())
+		require.Equal(t, 16777217.0, a.DoubleVal())
+	})
+}
+
+// TestDistinctValuesSchemaDerivedFloatNarrowingCollapse verifies the narrowing
+// makes a schema-derived xs:float(16777217) compare equal to the built-in
+// xs:float 16777216 via the value-space numeric key: both narrow to 16777216, so
+// distinct-values folds them. Before the fix the schema-derived value keyed on
+// the un-narrowed double 16777217 and was reported as distinct.
+func TestDistinctValuesSchemaDerivedFloatNarrowingCollapse(t *testing.T) {
+	derived := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: NewDouble(16777217)}
+	builtin := AtomicValue{TypeName: TypeFloat, Value: NewFloat(16777216)}
+	arg := ItemSlice{derived, builtin}
+	got, err := fnDistinctValues(t.Context(), []Sequence{arg})
+	require.NoError(t, err)
+	require.Equal(t, 1, seqLen(got))
+}
+
 // TestDistinctValuesSchemaDerivedDoubleDiscriminates verifies the distinct-values
 // fast key promotes via BaseType so a schema-derived my:double(2) does NOT
 // collapse with the built-in double 0e0: count(distinct-values(($d, 0e0))) == 2.
