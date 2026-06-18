@@ -452,3 +452,88 @@ func TestQNameUnboundPrefix(t *testing.T) {
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 }
+
+// TestQNameUnprefixedIgnoresDefaultNamespace verifies that an UNPREFIXED
+// xs:QName *value* resolves to NO namespace and never picks up the in-scope
+// default namespace — for either the schema's enumeration literal or the
+// instance value (unlike element/attribute names, a default namespace does not
+// bind unprefixed QName values per XSD). The schema and instance deliberately
+// declare DIFFERENT default namespaces; an enumeration of unprefixed "foo"
+// must still match an unprefixed instance "foo" because both are {no-ns}foo.
+func TestQNameUnprefixedIgnoresDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns="urn:schema-default"
+    targetNamespace="urn:tns"
+    xmlns:tns="urn:tns">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction base="xs:QName">
+        <xs:enumeration value="foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("unprefixed value matches enumeration across different default namespaces", func(t *testing.T) {
+		t.Parallel()
+		// The instance's default namespace (urn:instance-default) differs from the
+		// schema's (urn:schema-default). The root element is placed in the target
+		// namespace via a prefix so it matches the global declaration; the
+		// unprefixed QName value "foo" must resolve to {no-ns}foo on both sides
+		// (ignoring both default namespaces), so the enumeration matches.
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:q xmlns:tns="urn:tns" xmlns="urn:instance-default">foo</tns:q>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("unprefixed value does not pick up instance default namespace", func(t *testing.T) {
+		t.Parallel()
+		// A prefixed instance value bound to the instance default URI must NOT
+		// match the unprefixed {no-ns}foo enumeration.
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:q xmlns:tns="urn:tns" xmlns:d="urn:instance-default">d:foo</tns:q>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+}
+
+// TestNotationUnprefixedIgnoresDefaultNamespace mirrors the QName case for
+// xs:NOTATION: an UNPREFIXED NOTATION *value* resolves to NO namespace and must
+// not pick up the in-scope default namespace of either the schema or the
+// instance. The schema and instance declare DIFFERENT default namespaces, yet
+// an enumeration of unprefixed "jpeg" must match an unprefixed instance "jpeg".
+func TestNotationUnprefixedIgnoresDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns="urn:schema-default"
+    targetNamespace="urn:tns"
+    xmlns:tns="urn:tns">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:notation name="png" public="image/png"/>
+  <xs:element name="n">
+    <xs:simpleType>
+      <xs:restriction base="xs:NOTATION">
+        <xs:enumeration value="jpeg"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("unprefixed value matches enumeration across different default namespaces", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:n xmlns:tns="urn:tns" xmlns="urn:instance-default">jpeg</tns:n>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("unprefixed value does not pick up instance default namespace", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML,
+			`<tns:n xmlns:tns="urn:tns" xmlns:d="urn:instance-default">d:jpeg</tns:n>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+}

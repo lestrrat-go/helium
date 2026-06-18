@@ -263,7 +263,10 @@ func resolveLexicalQName(value string, ns map[string]string) (QName, error) {
 	}
 	parts := strings.SplitN(value, ":", 2)
 	if len(parts) == 1 {
-		return QName{Local: value, NS: ns[""]}, nil
+		// An unprefixed QName/NOTATION *value* does NOT pick up the in-scope
+		// default namespace (unlike element/attribute names): per XSD it
+		// resolves to no namespace. So never consult ns[""] here.
+		return QName{Local: value}, nil
 	}
 	// The "xml" prefix is predeclared (bound to the XML namespace) and never
 	// needs an explicit declaration, so it is always in scope regardless of the
