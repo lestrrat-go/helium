@@ -16,10 +16,11 @@
 //	    Label("input.xml").
 //	    Validate(ctx, doc)
 //
-// On failure, the returned error is [ErrValidationFailed]. Validate also
-// returns [ErrNilSchema] when the Validator has no compiled schema and
-// [ErrNilDocument] when the document is nil. Individual validation errors
-// are delivered to the [helium.ErrorHandler] configured via
+// When the document is invalid, the returned error is [ErrValidationFailed].
+// Validate also returns [ErrNilSchema] when the Validator has no compiled
+// schema and [ErrNilDocument] when the document is nil. A nil ctx is
+// normalized to context.Background(). Individual validation errors are
+// delivered to the [helium.ErrorHandler] configured via
 // [Validator.ErrorHandler].
 //
 // # Error Handling
