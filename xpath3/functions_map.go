@@ -37,25 +37,40 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		if seqLen(args[1]) == 0 {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:merge: options argument must be a map, got empty sequence"}
 		}
+		if seqLen(args[1]) > 1 {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:merge: options argument must be a single map"}
+		}
 		// The options map should contain "duplicates" key
 		optMap, ok := args[1].Get(0).(MapItem)
-		if ok {
-			key := AtomicValue{TypeName: TypeString, Value: "duplicates"}
-			if val, found := optMap.Get(key); found {
-				s, err := coerceArgToStringRequired(val)
-				if err != nil {
-					return nil, err
-				}
-				switch s {
-				case duplicatesUseFirst:
-					duplicates = MergeUseFirst
-				case "use-last":
-					duplicates = MergeUseLast
-				case duplicatesReject:
-					duplicates = MergeReject
-				case "combine":
-					duplicates = MergeCombine
-				}
+		if !ok {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("map:merge: options argument must be a map, got %T", args[1].Get(0))}
+		}
+		key := AtomicValue{TypeName: TypeString, Value: "duplicates"}
+		if val, found := optMap.Get(key); found {
+			// Per F&O 3.1 option conventions, the 'duplicates' value is type
+			// xs:string and is converted with the function conversion rules.
+			// So xs:string subtypes (xs:NCName, ...), xs:anyURI, xs:untypedAtomic,
+			// and a single-item array all coerce to a string. An empty, multi-item,
+			// or non-convertible value is a FOJS0005 error (not XPTY0004).
+			s, convErr := coerceDuplicatesOption(val)
+			if convErr != nil {
+				return nil, convErr
+			}
+			switch s {
+			case duplicatesUseFirst:
+				duplicates = MergeUseFirst
+			case "use-last":
+				duplicates = MergeUseLast
+			case "use-any":
+				// use-any allows the implementation to pick any value;
+				// reusing use-first behavior is conformant.
+				duplicates = MergeUseFirst
+			case duplicatesReject:
+				duplicates = MergeReject
+			case "combine":
+				duplicates = MergeCombine
+			default:
+				return nil, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: invalid value for 'duplicates' option: %q", s)}
 			}
 		}
 	}
@@ -73,6 +88,42 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	return ItemSlice{builder.Build()}, nil
+}
+
+// coerceDuplicatesOption converts the 'duplicates' option value of map:merge to
+// a string. The option is declared as xs:string, so only xs:untypedAtomic,
+// xs:string (and subtypes), and xs:anyURI (and subtypes) are accepted; any other
+// atomic type — even a custom type whose Go payload happens to be a string — is a
+// FOJS0005 error rather than being silently accepted. A single-item array still
+// flattens to its member via atomization.
+func coerceDuplicatesOption(val Sequence) (string, error) {
+	var first AtomicValue
+	count := 0
+	err := atomizeStream(val, func(av AtomicValue) (bool, error) {
+		count++
+		if count == 1 {
+			first = av
+			return true, nil
+		}
+		return false, nil
+	})
+	if err != nil {
+		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string: %s", err)}
+	}
+	if count != 1 {
+		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string, got sequence of length %d", count)}
+	}
+	av := first
+	if av.TypeName != TypeUntypedAtomic &&
+		!isAtomicSubtypeOf(av, TypeString) &&
+		!isAtomicSubtypeOf(av, TypeAnyURI) {
+		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a string, got %s", av.TypeName)}
+	}
+	s, convErr := atomicToString(av)
+	if convErr != nil {
+		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string: %s", convErr)}
+	}
+	return s, nil
 }
 
 func fnMapSize(_ context.Context, args []Sequence) (Sequence, error) {
