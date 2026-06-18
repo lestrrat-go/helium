@@ -175,6 +175,25 @@ func TestXSDateTimeStampSubtype(t *testing.T) {
 	})
 }
 
+// TestXSDateTimeStampInvalidString verifies that an invalid string lexical
+// passed to xs:dateTimeStamp reports FORG0001 naming xs:dateTimeStamp rather
+// than the xs:dateTime fallback target.
+func TestXSDateTimeStampInvalidString(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	t.Run("invalid string names xs:dateTimeStamp", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`xs:dateTimeStamp("not-a-date")`)
+		require.NoError(t, err)
+		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.Error(t, err)
+		var xerr *xpath3.XPathError
+		require.True(t, errors.As(err, &xerr), "error must be *xpath3.XPathError, got %T: %v", err, err)
+		require.Equal(t, "FORG0001", xerr.Code)
+		require.Contains(t, xerr.Error(), "xs:dateTimeStamp")
+		require.NotContains(t, xerr.Error(), "xs:dateTime\"")
+	})
+}
+
 // TestXSDateTimeStampNodeValue verifies that xs:dateTimeStamp accepts an
 // atomized node value (xs:untypedAtomic). A node whose text content is a valid
 // dateTimeStamp lexical with a timezone succeeds; a node missing the mandatory

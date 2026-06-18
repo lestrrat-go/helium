@@ -133,6 +133,11 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 			return AtomicValue{TypeName: TypeDateTime, Value: t}, nil
 		}
 	case TypeDateTimeStamp:
+		// A string source casts directly so a bad lexical reports
+		// xs:dateTimeStamp (not the xs:dateTime fallback target below).
+		if v.TypeName == TypeString {
+			return CastFromString(v.StringVal(), TypeDateTimeStamp)
+		}
 		// xs:dateTimeStamp is xs:dateTime with a required timezone
 		dt, err := CastAtomic(v, TypeDateTime)
 		if err != nil {
