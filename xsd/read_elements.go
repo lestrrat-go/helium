@@ -274,21 +274,29 @@ func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element)
 
 	// Check for duplicate global element declarations.
 	if _, exists := c.schema.elements[decl.Name]; exists {
-		qnDisplay := "'" + decl.Name.NS + "'" + decl.Name.Local
-		if decl.Name.NS != "" {
-			qnDisplay = "'{" + decl.Name.NS + "}" + decl.Name.Local + "'"
-		}
-		source := c.includeFile
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(source, elem.Line(),
-			elem.LocalName(), "element",
-			"A global element declaration "+qnDisplay+" does already exist."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.reportDuplicateComponent(ctx, elem, "element", "A global element declaration", decl.Name)
 		return nil
 	}
 
 	c.globalElemSources[decl] = elemRefSource{elemName: name, line: elem.Line()}
 	c.schema.elements[decl.Name] = decl
 	return nil
+}
+
+// reportDuplicateComponent emits the schema-parser error for a redeclared
+// global component (element, type, model group, or attribute group). component
+// is the XSD element name used in the error prefix (e.g. "element", "type");
+// kind is the descriptive phrase (e.g. "A global element declaration").
+func (c *compiler) reportDuplicateComponent(ctx context.Context, elem *helium.Element, component, kind string, name QName) {
+	qnDisplay := "'" + name.NS + "'" + name.Local
+	if name.NS != "" {
+		qnDisplay = "'{" + name.NS + "}" + name.Local + "'"
+	}
+	source := c.includeFile
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(source, elem.Line(),
+		elem.LocalName(), component,
+		kind+" "+qnDisplay+" does already exist."), helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) (*Particle, error) {

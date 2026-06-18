@@ -38,6 +38,13 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 			return err
 		}
 		qn := QName{Local: name, NS: c.schema.targetNamespace}
+		// Redefinitions intentionally replace the same-named group loaded from
+		// the redefined schema, so suppress the check while processing
+		// xs:redefine overrides.
+		if _, exists := c.schema.groups[qn]; exists && !c.inRedefine {
+			c.reportDuplicateComponent(ctx, elem, "group", "A global model group definition", qn)
+			return nil
+		}
 		c.schema.groups[qn] = mg
 		return nil
 	}
@@ -51,6 +58,13 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
+	// Redefinitions intentionally replace the same-named attribute group
+	// loaded from the redefined schema, so suppress the check while processing
+	// xs:redefine overrides.
+	if _, exists := c.schema.attrGroups[qn]; exists && !c.inRedefine {
+		c.reportDuplicateComponent(ctx, elem, "attributeGroup", "A global attribute group definition", qn)
+		return nil
+	}
 	var attrs []*AttrUse
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {

@@ -61,6 +61,11 @@ type compiler struct {
 	// so the per-compiler importedNS map does not detect the cycle.
 	importDepth    int
 	maxImportDepth int
+	// inRedefine is true while processing the override children of an
+	// xs:redefine. Redefinitions intentionally replace the same-named
+	// component loaded from the redefined schema, so the duplicate-name
+	// checks in parseNamed* must be suppressed in this context.
+	inRedefine bool
 }
 
 // defaultMaxImportDepth bounds xs:import recursion depth (not a flat

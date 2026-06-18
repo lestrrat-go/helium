@@ -276,7 +276,11 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		return err
 	}
 
-	// Phase B: Process redefine children (overrides).
+	// Phase B: Process redefine children (overrides). Redefinitions replace
+	// the same-named components loaded in Phase A, so the duplicate-name checks
+	// in parseNamed* must be suppressed for this loop.
+	c.inRedefine = true
+	defer func() { c.inRedefine = false }()
 	for child := range helium.Children(redefineElem) {
 		if child.Type() != helium.ElementNode {
 			continue
