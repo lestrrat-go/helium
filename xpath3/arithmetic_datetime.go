@@ -211,9 +211,11 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	// reports ToFloat64()==0 even when its true value is non-zero, which would
 	// otherwise spuriously trigger the division-by-zero check. numericToRat is
 	// BaseType-aware and recovers the exact value for xs:integer/xs:decimal
-	// (and their restrictions); xs:double/xs:float are binary-imprecise and
-	// return ok=false, falling through to the float path below.
-	if nRat, ok := numericToRat(num); ok {
+	// (and their restrictions). A FINITE xs:double/xs:float operand is converted
+	// to its EXACT binary rational so whole-second/whole-month durations beyond
+	// 2^53 survive the multiplication intact; only non-finite (Inf/NaN) operands
+	// fall through to the float path below, which reports the proper error.
+	if nRat, ok := numericToRatExact(num); ok {
 		if op == TokenDiv && nRat.Sign() == 0 {
 			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "division of duration by zero"}
 		}
@@ -567,6 +569,33 @@ func numericToRat(a AtomicValue) (*big.Rat, bool) {
 		return new(big.Rat).Set(r), true
 	}
 	return nil, false
+}
+
+// numericToRatExact extends numericToRat to also recover an EXACT rational from
+// a FINITE xs:double/xs:float operand. The IEEE-754 binary value is converted to
+// the exact rational it denotes (big.Rat.SetFloat64), so duration*/number math
+// can route through the exact-rational path and preserve whole-second/whole-month
+// magnitudes beyond 2^53. Non-finite operands (±Inf, NaN) have no rational value;
+// they report ok=false so the caller's float path produces the proper error.
+func numericToRatExact(a AtomicValue) (*big.Rat, bool) {
+	if r, ok := numericToRat(a); ok {
+		return r, true
+	}
+	if !a.IsNumeric() {
+		return nil, false
+	}
+	// Promote a schema-derived double/float (custom TypeName, BaseType=xs:double/
+	// xs:float) so ToFloat64 reads the underlying value rather than keying off the
+	// unknown TypeName and returning 0.
+	f := PromoteSchemaType(a).ToFloat64()
+	if math.IsInf(f, 0) || math.IsNaN(f) {
+		return nil, false
+	}
+	r := new(big.Rat).SetFloat64(f)
+	if r == nil {
+		return nil, false
+	}
+	return r, true
 }
 
 // durationFromRatSeconds splits a non-negative exact total-seconds rational

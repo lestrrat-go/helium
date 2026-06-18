@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// canonYM9007 is the canonical xs:yearMonthDuration lexical form for a total of
+// 9007199254740993 months (just past float64's 2^53 exact range).
+const canonYM9007 = "P750599937895082Y9M"
+
 // evalExprErr compiles and evaluates expr, requiring an error and returning it.
 func evalExprErr(t *testing.T, node helium.Node, expr string) error {
 	t.Helper()
@@ -340,7 +344,7 @@ func TestYearMonthDurationMulExactMonths(t *testing.T) {
 		{
 			name: "large month total times one is identity",
 			expr: `xs:yearMonthDuration("P9007199254740993M") * 1`,
-			want: "P750599937895082Y9M", // 9007199254740993 months
+			want: canonYM9007, // 9007199254740993 months
 		},
 		{
 			name: "half rounds toward positive infinity",
@@ -371,6 +375,145 @@ func TestYearMonthDurationMulExactMonths(t *testing.T) {
 	}
 }
 
+// TestDurationMulDoubleFloatExact verifies that multiplying a duration by an
+// xs:double / xs:float operand whose value is exactly 1 routes through the exact
+// rational path, so huge whole-second / whole-month magnitudes beyond 2^53 are
+// preserved instead of losing a unit through a float64 round-trip.
+func TestDurationMulDoubleFloatExact(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{
+			// Canonical dayTime form breaks the magnitude into days/hours; the
+			// point is that no second is lost (cf. the eq check below).
+			name: "dayTime times xs:double(1) keeps exact seconds",
+			expr: `xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")`,
+			want: "P104249991374DT7H36M33S",
+		},
+		{
+			name: "dayTime times xs:float(1) keeps exact seconds",
+			expr: `xs:dayTimeDuration("PT9007199254740993S") * xs:float("1")`,
+			want: "P104249991374DT7H36M33S",
+		},
+		{
+			name: "dayTime div xs:double(1) keeps exact seconds",
+			expr: `xs:dayTimeDuration("PT9007199254740993S") div xs:double("1")`,
+			want: "P104249991374DT7H36M33S",
+		},
+		{
+			name: "dayTime times xs:double(1) eq parsed original",
+			expr: `(xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")) eq xs:dayTimeDuration("PT9007199254740993S")`,
+			want: "true",
+		},
+		{
+			name: "dayTime times xs:double(1) not one second short",
+			expr: `(xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")) ne xs:dayTimeDuration("PT9007199254740992S")`,
+			want: "true",
+		},
+		{
+			name: "yearMonth times xs:double(1) keeps exact months",
+			expr: `xs:yearMonthDuration("P9007199254740993M") * xs:double("1")`,
+			want: canonYM9007, // 9007199254740993 months
+		},
+		{
+			name: "yearMonth times xs:float(1) keeps exact months",
+			expr: `xs:yearMonthDuration("P9007199254740993M") * xs:float("1")`,
+			want: canonYM9007,
+		},
+		{
+			name: "yearMonth div xs:double(1) keeps exact months",
+			expr: `xs:yearMonthDuration("P9007199254740993M") div xs:double("1")`,
+			want: canonYM9007,
+		},
+		{
+			name: "dayTime times xs:double(1) equals times 1",
+			expr: `(xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")) eq (xs:dayTimeDuration("PT9007199254740993S") * 1)`,
+			want: "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seq := evalExpr(t, doc, tt.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			got, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDurationMulNonFiniteDoubleErrors verifies that a non-finite (Inf/NaN)
+// xs:double multiplier still reports an error rather than silently producing a
+// bogus duration.
+func TestDurationMulNonFiniteDoubleErrors(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	err := evalExprErr(t, doc, `xs:dayTimeDuration("PT1S") * xs:double("INF")`)
+	require.Error(t, err)
+
+	errNaN := evalExprErr(t, doc, `xs:dayTimeDuration("PT1S") * xs:double("NaN")`)
+	require.Error(t, errNaN)
+}
+
+// TestMapKeyFloat64BackedValue verifies that a schema-derived xs:double/xs:float
+// atomic backed by a plain float64 (rather than *FloatValue) can be used as a
+// map key without panicking, and folds into the shared numeric key bucket so an
+// equal xs:double key collides with it.
+func TestMapKeyFloat64BackedValue(t *testing.T) {
+	tests := []struct {
+		name string
+		key  xpath3.AtomicValue
+	}{
+		{
+			name: "schema-derived double backed by float64",
+			key: xpath3.AtomicValue{
+				TypeName: "Q{urn:test}d",
+				BaseType: xpath3.TypeDouble,
+				Value:    float64(2),
+			},
+		},
+		{
+			name: "schema-derived float backed by float64",
+			key: xpath3.AtomicValue{
+				TypeName: "Q{urn:test}f",
+				BaseType: xpath3.TypeFloat,
+				Value:    float64(2),
+			},
+		},
+		{
+			name: "builtin double backed by float64",
+			key: xpath3.AtomicValue{
+				TypeName: xpath3.TypeDouble,
+				Value:    float64(2),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := xpath3.NewMap([]xpath3.MapEntry{
+				{Key: tt.key, Value: xpath3.SingleString("v")},
+			})
+
+			require.NotPanics(t, func() {
+				require.True(t, m.Contains(tt.key))
+			})
+
+			// An equal xs:double value folds to the same numeric key bucket.
+			equiv := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(2)}
+			got, ok := m.Get(equiv)
+			require.True(t, ok)
+			require.Equal(t, 1, got.Len())
+		})
+	}
+}
+
 // TestAvgYearMonthDurationExactMonths verifies fn:avg over yearMonthDurations
 // divides the exact month total by the count using rational arithmetic, so a
 // large average keeps full precision rather than losing a month through a
@@ -386,7 +529,7 @@ func TestAvgYearMonthDurationExactMonths(t *testing.T) {
 		{
 			name: "avg of two large equal durations",
 			expr: `avg(( xs:yearMonthDuration("P9007199254740993M"), xs:yearMonthDuration("P9007199254740993M") ))`,
-			want: "P750599937895082Y9M", // 9007199254740993 months
+			want: canonYM9007, // 9007199254740993 months
 		},
 		{
 			name: "avg rounds half toward positive infinity",
