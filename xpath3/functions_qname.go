@@ -44,20 +44,46 @@ func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
 	}), nil
 }
 
+// atomizeQNameArg atomizes a QName-accessor argument and enforces 0-or-1
+// cardinality on the ATOMIZED result, so that a single array/list item that
+// atomizes to multiple values is rejected as XPTY0004 (not FOTY0013). It
+// stops atomization early once a second atom appears. The returned bool is
+// true when the atomized sequence is empty (applicable result is the empty
+// sequence); otherwise the returned AtomicValue is the single xs:QName.
+func atomizeQNameArg(seq Sequence, fname string) (AtomicValue, bool, error) {
+	var first AtomicValue
+	count := 0
+	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+		count++
+		if count == 1 {
+			first = av
+			return true, nil
+		}
+		return false, nil
+	})
+	if err != nil {
+		return AtomicValue{}, false, err
+	}
+	if count == 0 {
+		return AtomicValue{}, true, nil
+	}
+	if count > 1 {
+		return AtomicValue{}, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: fname + " expects a single QName"}
+	}
+	first = PromoteSchemaType(first)
+	if first.TypeName != TypeQName {
+		return AtomicValue{}, false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected QName"}
+	}
+	return first, false, nil
+}
+
 func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	if seqLen(args[0]) > 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:prefix-from-QName expects a single QName"}
-	}
-	a, err := AtomizeItem(args[0].Get(0))
+	a, empty, err := atomizeQNameArg(args[0], "fn:prefix-from-QName")
 	if err != nil {
 		return nil, err
 	}
-	a = PromoteSchemaType(a)
-	if a.TypeName != TypeQName {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected QName"}
+	if empty {
+		return validNilSequence, nil
 	}
 	qv := a.QNameVal()
 	if qv.Prefix == "" {
@@ -67,37 +93,23 @@ func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	if seqLen(args[0]) > 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:local-name-from-QName expects a single QName"}
-	}
-	a, err := AtomizeItem(args[0].Get(0))
+	a, empty, err := atomizeQNameArg(args[0], "fn:local-name-from-QName")
 	if err != nil {
 		return nil, err
 	}
-	a = PromoteSchemaType(a)
-	if a.TypeName != TypeQName {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected QName"}
+	if empty {
+		return validNilSequence, nil
 	}
 	return ItemSlice{AtomicValue{TypeName: TypeNCName, Value: a.QNameVal().Local}}, nil
 }
 
 func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	if seqLen(args[0]) > 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:namespace-uri-from-QName expects a single QName"}
-	}
-	a, err := AtomizeItem(args[0].Get(0))
+	a, empty, err := atomizeQNameArg(args[0], "fn:namespace-uri-from-QName")
 	if err != nil {
 		return nil, err
 	}
-	a = PromoteSchemaType(a)
-	if a.TypeName != TypeQName {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected QName"}
+	if empty {
+		return validNilSequence, nil
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: a.QNameVal().URI}), nil
 }
@@ -107,8 +119,8 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(args[1]) == 0 {
-		return validNilSequence, nil
+	if seqLen(args[1]) != 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:namespace-uri-for-prefix expects a single element"}
 	}
 	ni, ok := args[1].Get(0).(NodeItem)
 	if !ok {
@@ -226,10 +238,7 @@ func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message strin
 }
 
 func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	if seqLen(args[0]) > 1 {
+	if seqLen(args[0]) != 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:in-scope-prefixes expects a single element"}
 	}
 	ni, ok := args[0].Get(0).(NodeItem)
