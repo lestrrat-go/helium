@@ -110,24 +110,33 @@ func TestTokenNBSPNotWhitespace(t *testing.T) {
 }
 
 // TestIDCListItemNBSPNotSeparator covers the IDC list canonical-key path: list
-// item separation there must also use XSD whitespace only, consistent with list
-// validation. The XSD-space forms "5 6" and "+5 06" collide item-by-item in
-// xs:integer value space. An NBSP-joined "5<NBSP>6" is a single token that is not
-// a valid xs:integer, so it is rejected during value validation (which runs
-// before IDC evaluation) rather than being split into two valid integers; the
-// instance is therefore invalid, proving NBSP is not treated as a separator on
-// the IDC list path either.
+// item separation there must use XSD whitespace only, consistent with list
+// validation. The itemType is xs:string so EVERY value here is content-valid — the
+// test therefore exercises only how the IDC canonical key tokenizes the list, not
+// content validation (which would otherwise reject an NBSP value earlier and mask
+// the IDC behavior).
+//
+// Two <item> values are compared by their <xs:unique> keys:
+//   - "a b"      → two XSD-space items → canonical key "a b"
+//   - "a<NBSP>b" → ONE token (NBSP is not an XSD separator) → canonical key
+//     "a<NBSP>b", which is DISTINCT from "a b".
+//
+// So no duplicate-key error must be emitted: the NBSP value is a single, distinct
+// key. If the IDC canonicalization were reverted to strings.Fields, the NBSP value
+// would split into ["a","b"] → key "a b", collide with the first item, and the
+// instance would wrongly fail with a duplicate-key-sequence error. This test thus
+// genuinely discriminates the XSD-whitespace fix.
 func TestIDCListItemNBSPNotSeparator(t *testing.T) {
 	t.Parallel()
 
 	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:simpleType name="intList">
-    <xs:list itemType="xs:integer"/>
+  <xs:simpleType name="strList">
+    <xs:list itemType="xs:string"/>
   </xs:simpleType>
   <xs:element name="root">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="item" type="intList" maxOccurs="unbounded"/>
+        <xs:element name="item" type="strList" maxOccurs="unbounded"/>
       </xs:sequence>
     </xs:complexType>
     <xs:unique name="itemKey">
@@ -143,17 +152,24 @@ func TestIDCListItemNBSPNotSeparator(t *testing.T) {
 		valid    bool
 	}{
 		{
-			// XSD-space lists collide item-by-item in integer value space.
-			name:     "xsd-space integer lists 5 6 and +5 06 collide",
-			instance: `<root><item>5 6</item><item>+5 06</item></root>`,
-			valid:    false,
+			// Two genuinely distinct two-item XSD-space lists — no duplicate, valid.
+			name:     "distinct xsd-space lists valid",
+			instance: `<root><item>a b</item><item>c d</item></root>`,
+			valid:    true,
 		},
 		{
-			// An NBSP-joined "5<NBSP>6" is a single token, not two integers, so it
-			// fails xs:integer item validation and the instance is invalid — NBSP is
-			// not split as a list separator on this path.
-			name:     "nbsp-joined list item invalid",
-			instance: `<root><item>5` + nbsp + `6</item></root>`,
+			// Two-item "a b" vs one-token "a<NBSP>b": NBSP is not a separator, so the
+			// canonical keys "a b" and "a<NBSP>b" differ — NO duplicate-key error.
+			// Under strings.Fields they would both canonicalize to "a b" and collide.
+			name:     "nbsp item distinct from xsd-space item",
+			instance: `<root><item>a b</item><item>a` + nbsp + `b</item></root>`,
+			valid:    true,
+		},
+		{
+			// Sanity: two identical "a b" two-item lists DO collide, proving the
+			// duplicate-key machinery is actually engaged on this path.
+			name:     "identical xsd-space lists collide",
+			instance: `<root><item>a b</item><item>a b</item></root>`,
 			valid:    false,
 		},
 	}

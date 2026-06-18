@@ -643,7 +643,7 @@ func parseTZ(s string) (bool, int) {
 	if s == "" {
 		return false, 0
 	}
-	if s[0] == 'Z' || s[0] == 'z' {
+	if s[0] == 'Z' {
 		return true, 0
 	}
 	if (s[0] == '+' || s[0] == '-') && len(s) >= 6 && s[3] == ':' {

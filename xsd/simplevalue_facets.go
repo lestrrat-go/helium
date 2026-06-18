@@ -22,20 +22,23 @@ func compareDecimal(a, b string) int {
 // unrecognized or non-value-comparable builtinLocal (e.g. an empty local from a
 // union/anonymous base, or a string-family type). Range facets, however, are only
 // constrained to ordered types, and a numeric value over a union(xs:integer)-style
-// base reaches here with an empty builtinLocal; for those, fall back to a decimal
-// comparison so the bound is still enforced. The fallback is gated on both operands
-// parsing as decimals, so a genuinely incomparable (non-numeric) value still yields
-// ok=false and the caller treats the facet as inapplicable.
+// base reaches here with an empty builtinLocal; only for that empty-local case do
+// we fall back to a decimal comparison so the bound is still enforced. The fallback
+// is routed through value.Compare(..., "decimal"), which trims XSD whitespace and
+// validates both operands against the decimal lexical space, so an NBSP-padded or
+// non-numeric value still yields ok=false and the caller treats the facet as
+// inapplicable. A non-empty builtinLocal that value.Compare could not compare (a
+// string-family or otherwise non-numeric type) is left indeterminate rather than
+// coerced into a numeric comparison.
 func compareForRangeFacet(v, bound, builtinLocal string) (int, bool) {
 	cmp, ok := value.Compare(v, bound, builtinLocal)
 	if ok {
 		return cmp, true
 	}
-	dec := value.CompareDecimal(v, bound)
-	if dec == -2 {
+	if builtinLocal != "" {
 		return 0, false
 	}
-	return dec, true
+	return value.Compare(v, bound, "decimal")
 }
 
 // checkMinInclusive compares value >= bound using type-aware comparison.

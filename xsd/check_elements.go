@@ -62,7 +62,11 @@ func isValidFinalDefault(v string) bool {
 	return true
 }
 
-// splitSpace splits a string on whitespace.
+// splitSpace splits a string on XSD whitespace only (space, tab, CR, LF), not the
+// wider Unicode set strings.Fields uses. It is the xsd-package splitter for
+// XSD list-valued schema attributes (block/final, the wildcard namespace list,
+// memberTypes), consistent with value.XSDFields: a token containing NBSP or other
+// Unicode whitespace stays one token instead of being silently split.
 func splitSpace(s string) []string {
 	var parts []string
 	start := -1

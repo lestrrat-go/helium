@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -459,7 +458,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 			td.Variety = TypeVarietyUnion
 			// Parse memberTypes attribute (space-separated QNames).
 			if memberTypesAttr := getAttr(ce, attrMemberTypes); memberTypesAttr != "" {
-				for ref := range strings.FieldsSeq(memberTypesAttr) {
+				for _, ref := range splitSpace(memberTypesAttr) {
 					qn := c.resolveQName(ctx, ce, ref)
 					c.unionMemberRefs = append(c.unionMemberRefs, unionMemberRef{
 						owner:             td,

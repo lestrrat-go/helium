@@ -535,3 +535,48 @@ func TestNormalize(t *testing.T) {
 		})
 	}
 }
+
+// TestTimezoneUppercaseZOnly verifies that the timezone designator is the
+// uppercase 'Z' only. XSD permits "Z" but never the lowercase "z"; the latter
+// must fail lexical validation and must NOT compare or canonicalize as equal to
+// the uppercase form.
+func TestTimezoneUppercaseZOnly(t *testing.T) {
+	t.Parallel()
+
+	// Uppercase Z is a valid designator across the date/time family; lowercase z
+	// is rejected for every one of them.
+	zTypes := []struct {
+		typ      string
+		validZ   string
+		invalidz string
+	}{
+		{"date", "2023-01-01Z", "2023-01-01z"},
+		{lexicon.TypeDateTime, "2023-01-01T10:30:00Z", "2023-01-01T10:30:00z"},
+		{lexicon.TypeTime, "10:30:00Z", "10:30:00z"},
+		{typeGYear, "2023Z", "2023z"},
+		{"gYearMonth", "2023-01Z", "2023-01z"},
+		{typeGMonth, "--06Z", "--06z"},
+		{typeGDay, "---15Z", "---15z"},
+		{typeGMonthDay, "--06-01Z", "--06-01z"},
+	}
+	for _, tt := range zTypes {
+		t.Run(tt.typ, func(t *testing.T) {
+			t.Parallel()
+			require.NoError(t, value.ValidateBuiltin(tt.validZ, tt.typ), "uppercase Z must be valid")
+			require.Error(t, value.ValidateBuiltin(tt.invalidz, tt.typ), "lowercase z must be invalid")
+		})
+	}
+
+	// Compare must treat a lowercase-z lexical as indeterminate (ok=false), not as
+	// equal to the uppercase-Z form: validation runs first and rejects "z".
+	_, ok := value.Compare("2023-01-01z", "2023-01-01Z", "date")
+	require.False(t, ok, "lowercase z must not compare as a valid date")
+
+	// CanonicalKey must reject the lowercase-z lexical (ok=false) so it never keys
+	// equal to the uppercase-Z form on the IDC path.
+	keyZ, okZ := value.CanonicalKey("2023-01-01Z", "date")
+	require.True(t, okZ, "uppercase Z must canonicalize")
+	_, okz := value.CanonicalKey("2023-01-01z", "date")
+	require.False(t, okz, "lowercase z must not canonicalize")
+	require.NotEmpty(t, keyZ)
+}

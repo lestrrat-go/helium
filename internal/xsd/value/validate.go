@@ -152,7 +152,8 @@ func validateHexBinary(value string) error {
 }
 
 // tzSuffix is the timezone suffix pattern shared by date/time types.
-const tzSuffix = `([Zz]|[+-]\d{2}:\d{2})?`
+// XSD permits only the uppercase 'Z' designator, never lowercase 'z'.
+const tzSuffix = `(Z|[+-]\d{2}:\d{2})?`
 
 // dateRegex is a basic match for xs:date: YYYY-MM-DD with optional timezone.
 var dateRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}` + tzSuffix + `$`)
@@ -293,7 +294,7 @@ func splitTimezone(value string) (string, bool) {
 		return "", false
 	}
 	last := value[len(value)-1]
-	if last == 'Z' || last == 'z' {
+	if last == 'Z' {
 		return value[len(value)-1:], true
 	}
 	// A numeric offset is "±HH:MM" — 6 trailing chars whose 6th-from-last is a
@@ -311,7 +312,7 @@ func splitTimezone(value string) (string, bool) {
 // validateTimezone enforces XSD timezone offset ranges: total offset within
 // ±14:00, minutes 00-59, and when hours are 14 the minutes must be 00.
 func validateTimezone(tz string) error {
-	if tz == "Z" || tz == "z" {
+	if tz == "Z" {
 		return nil
 	}
 	// tz is "±HH:MM" (lexical shape guaranteed by regex).
