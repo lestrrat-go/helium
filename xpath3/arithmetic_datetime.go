@@ -143,19 +143,28 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 		if rd.Negative {
 			rm = -rm
 		}
-		var resMonths int
+		// lm/rm are signed month totals. Accumulate via big.Int so a result near
+		// the int limit (e.g. summing two large yearMonthDurations) does not wrap
+		// to an invalid negative lexical; reject anything that overflows int.
+		lBig := big.NewInt(int64(lm))
+		rBig := big.NewInt(int64(rm))
+		resBig := new(big.Int)
 		if op == TokenPlus {
-			resMonths = lm + rm
+			resBig.Add(lBig, rBig)
 		} else {
-			resMonths = lm - rm
+			resBig.Sub(lBig, rBig)
 		}
-		negative := resMonths < 0
+		negative := resBig.Sign() < 0
+		absBig := resBig
 		if negative {
-			resMonths = -resMonths
+			absBig = new(big.Int).Neg(resBig)
+		}
+		if !absBig.IsInt64() || absBig.Int64() > int64(math.MaxInt) {
+			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "yearMonthDuration arithmetic overflow"}
 		}
 		return SingleAtomic(AtomicValue{
 			TypeName: typeName,
-			Value:    Duration{Months: resMonths, Negative: negative},
+			Value:    Duration{Months: int(absBig.Int64()), Negative: negative},
 		}), true, nil
 	}
 
@@ -340,6 +349,12 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 		days := new(big.Int)
 		remSecs := new(big.Int)
 		days.QuoRem(whole, big.NewInt(86400), remSecs)
+		// The day count can exceed int (e.g. P9223372036854775808D). Narrowing it
+		// would silently wrap and return the original date unchanged, so reject any
+		// value outside the int range that AddDate can consume.
+		if days.Cmp(big.NewInt(math.MaxInt)) > 0 || days.Cmp(big.NewInt(math.MinInt)) < 0 {
+			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "date/time arithmetic overflow: day count out of range"}
+		}
 		sign := 1
 		if neg {
 			sign = -1

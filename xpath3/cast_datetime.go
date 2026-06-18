@@ -388,6 +388,17 @@ func validateTimezoneInString(s string) error {
 	return nil
 }
 
+// addCheckedMonths adds two non-negative month counts, reporting ok=false on
+// int overflow. The Duration.Months field is a plain int, so a year/month total
+// that exceeds it (e.g. P768614336404564650Y11M) must be rejected BEFORE it
+// wraps to an invalid negative lexical form.
+func addCheckedMonths(a, b int) (int, bool) {
+	if b > math.MaxInt-a {
+		return 0, false
+	}
+	return a + b, true
+}
+
 // parseXSDDuration parses an XSD duration string like "P1Y2M3DT4H5M6S".
 func parseXSDDuration(s string) (Duration, error) {
 	if len(s) == 0 {
@@ -484,7 +495,11 @@ func parseXSDDuration(s string) (Duration, error) {
 				if n > math.MaxInt/12 {
 					return Duration{}, fmt.Errorf("duration overflow: %sY", numStr)
 				}
-				d.Months += n * 12
+				months, ok := addCheckedMonths(d.Months, n*12)
+				if !ok {
+					return Duration{}, fmt.Errorf("duration overflow: %sY", numStr)
+				}
+				d.Months = months
 			case 'M':
 				if lastOrder >= 2 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
@@ -494,7 +509,11 @@ func parseXSDDuration(s string) (Duration, error) {
 				if err != nil {
 					return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
 				}
-				d.Months += n
+				months, ok := addCheckedMonths(d.Months, n)
+				if !ok {
+					return Duration{}, fmt.Errorf("duration overflow: %sM", numStr)
+				}
+				d.Months = months
 			case 'D':
 				if lastOrder >= 3 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)

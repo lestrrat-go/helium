@@ -2,7 +2,6 @@ package xpath3
 
 import (
 	"context"
-	"math"
 	"math/big"
 	"time"
 
@@ -97,7 +96,10 @@ func extractDuration(seq Sequence, allowedTypes ...string) (Duration, bool, erro
 	if len(allowedTypes) > 0 {
 		matched := false
 		for _, at := range allowedTypes {
-			if isSubtypeOf(a.TypeName, at) {
+			// BaseType-aware so a schema-derived duration (whose TypeName is a
+			// user-defined type derived by restriction) still satisfies the
+			// accessor/timezone consumers via its built-in base type.
+			if isAtomicSubtypeOf(a, at) {
 				matched = true
 				break
 			}
@@ -443,7 +445,9 @@ func fnDaysFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 	if d.Negative {
 		days.Neg(days)
 	}
-	return SingleInteger(days.Int64()), nil
+	// The day count can exceed int64 (e.g. P9223372036854775808D), so return the
+	// exact big.Int rather than narrowing via Int64().
+	return SingleIntegerBig(days), nil
 }
 
 func fnHoursFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
@@ -614,21 +618,33 @@ func getTargetTimezone(ctx context.Context, args []Sequence) (*time.Location, er
 // within the allowed range (-PT14H to PT14H) and represents whole minutes.
 // Returns FODT0003 if the constraints are violated.
 func validateTimezoneOffset(d Duration) error {
-	secs := d.Seconds
-	if secs < 0 {
-		secs = -secs
+	// Use the exact SecRat-aware total-seconds rational. An offset whose seconds
+	// underflow float64 (e.g. PT0.<many zeros>1S) is still exactly nonzero here,
+	// so it is not silently accepted as UTC.
+	abs := durationToRat(d, false)
+	if abs.Sign() < 0 {
+		abs = new(big.Rat).Neg(abs)
 	}
-	if secs > 50400 { // 14 * 3600
+	if abs.Cmp(big.NewRat(50400, 1)) > 0 { // 14 * 3600
 		return &XPathError{Code: "FODT0003", Message: "timezone offset out of range (-PT14H to PT14H)"}
 	}
-	if math.Mod(secs, 60) != 0 {
+	// Whole number of minutes: the exact seconds rational must be divisible by 60.
+	rem := new(big.Rat).Quo(abs, big.NewRat(60, 1))
+	if !rem.IsInt() {
 		return &XPathError{Code: "FODT0003", Message: "timezone offset must be a whole number of minutes"}
 	}
 	return nil
 }
 
 func durationToLocation(d Duration) *time.Location {
-	offset := int(d.Seconds)
+	// Bounded by validateTimezoneOffset (|offset| <= 50400, whole minutes), so the
+	// exact seconds magnitude fits an int. Read it from the SecRat-aware rational
+	// so a sub-float64 offset is not flattened to zero.
+	abs := durationToRat(d, false)
+	if abs.Sign() < 0 {
+		abs = new(big.Rat).Neg(abs)
+	}
+	offset := int(new(big.Int).Quo(abs.Num(), abs.Denom()).Int64())
 	if d.Negative {
 		offset = -offset
 	}

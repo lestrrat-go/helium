@@ -4,9 +4,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
+
+// evalExprErr compiles and evaluates expr, requiring an error and returning it.
+func evalExprErr(t *testing.T, node helium.Node, expr string) error {
+	t.Helper()
+	compiled, err := xpath3.NewCompiler().Compile(expr)
+	require.NoError(t, err)
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, node)
+	require.Error(t, err)
+	return err
+}
 
 // TestDurationAccessorsExactSeconds verifies the *-from-duration accessors use
 // the exact SecRat-aware seconds magnitude rather than the lossy float64
@@ -162,4 +173,77 @@ func TestNonTerminatingFractionTruncated(t *testing.T) {
 	require.Equal(t, "PT0."+strings.Repeat("8", 40)+"S", got)
 	require.NotContains(t, got, "1.")
 	require.Equal(t, 1, strings.Count(got, "."))
+}
+
+// TestDaysFromDurationBigDayCount verifies days-from-duration returns the exact
+// big-int day count rather than narrowing via int64 (which would produce
+// negative garbage for a day count above int64 max).
+func TestDaysFromDurationBigDayCount(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	seq := evalExpr(t, doc, `days-from-duration(xs:dayTimeDuration("P9223372036854775808D"))`)
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
+	got, err := xpath3.AtomicToString(av)
+	require.NoError(t, err)
+	require.Equal(t, "9223372036854775808", got)
+
+	seqNeg := evalExpr(t, doc, `days-from-duration(xs:dayTimeDuration("-P9223372036854775808D"))`)
+	avNeg := seqNeg.Get(0).(xpath3.AtomicValue)
+	gotNeg, err := xpath3.AtomicToString(avNeg)
+	require.NoError(t, err)
+	require.Equal(t, "-9223372036854775808", gotNeg)
+}
+
+// TestDateTimePlusOverflowingDayCount verifies date/time + dayTimeDuration
+// reports an overflow (FODT0002) when the day count exceeds the range that
+// time.Time arithmetic can consume, instead of silently returning the original
+// date.
+func TestDateTimePlusOverflowingDayCount(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	err := evalExprErr(t, doc, `xs:dateTime("2020-01-01T00:00:00") + xs:dayTimeDuration("P9223372036854775808D")`)
+	require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+}
+
+// TestDurationYearMonthOverflowRejected verifies that a year/month total
+// exceeding the internal int representation is rejected during parsing rather
+// than wrapping to an invalid negative lexical form.
+func TestDurationYearMonthOverflowRejected(t *testing.T) {
+	_, err := xpath3.CastFromString("P768614336404564650Y11M", xpath3.TypeYearMonthDuration)
+	require.Error(t, err)
+
+	// A large-but-representable yearMonth total still parses cleanly.
+	av, err := xpath3.CastFromString("P1Y1M", xpath3.TypeYearMonthDuration)
+	require.NoError(t, err)
+	got, err := xpath3.AtomicToString(av)
+	require.NoError(t, err)
+	require.Equal(t, "P1Y1M", got)
+}
+
+// TestYearMonthDurationArithmeticOverflow verifies yearMonthDuration addition
+// and fn:sum report FODT0002 when the accumulated month total overflows int,
+// instead of wrapping to an invalid negative lexical form.
+func TestYearMonthDurationArithmeticOverflow(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	bigYM := `xs:yearMonthDuration("P768614336404564650Y")` // 9223372036854775800 months
+
+	t.Run("addition overflow", func(t *testing.T) {
+		err := evalExprErr(t, doc, bigYM+` + `+bigYM)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+	})
+
+	t.Run("sum overflow", func(t *testing.T) {
+		err := evalExprErr(t, doc, `sum(( `+bigYM+`, `+bigYM+` ))`)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+	})
+
+	t.Run("non-overflowing addition still works", func(t *testing.T) {
+		seq := evalExpr(t, doc, `xs:yearMonthDuration("P2Y3M") + xs:yearMonthDuration("P1Y2M")`)
+		av := seq.Get(0).(xpath3.AtomicValue)
+		got, err := xpath3.AtomicToString(av)
+		require.NoError(t, err)
+		require.Equal(t, "P3Y5M", got)
+	})
 }

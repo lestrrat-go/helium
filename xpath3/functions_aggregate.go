@@ -561,23 +561,30 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 		}), nil
 	}
 
-	var totalMonths int
+	// Accumulate months via big.Int so a total near the int limit does not wrap
+	// to an invalid negative lexical; reject anything that overflows int.
+	totalMonths := new(big.Int)
 	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
+		m := big.NewInt(int64(d.Months))
 		if d.Negative {
-			totalMonths -= d.Months
+			totalMonths.Sub(totalMonths, m)
 		} else {
-			totalMonths += d.Months
+			totalMonths.Add(totalMonths, m)
 		}
 	}
-	negative := totalMonths < 0
+	negative := totalMonths.Sign() < 0
+	absMonths := totalMonths
 	if negative {
-		totalMonths = -totalMonths
+		absMonths = new(big.Int).Neg(totalMonths)
+	}
+	if !absMonths.IsInt64() || absMonths.Int64() > int64(math.MaxInt) {
+		return nil, &XPathError{Code: errCodeFODT0002, Message: "yearMonthDuration sum overflow"}
 	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeYearMonthDuration,
-		Value:    Duration{Months: totalMonths, Negative: negative},
+		Value:    Duration{Months: int(absMonths.Int64()), Negative: negative},
 	}), nil
 }
 
