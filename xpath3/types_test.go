@@ -256,6 +256,28 @@ func TestMapItem(t *testing.T) {
 		require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
 	})
 
+	t.Run("non-binary fractional duration via parsing matches arithmetic seconds", func(t *testing.T) {
+		// PT0.1S is NOT binary-exact as a float64, so this case exercises the
+		// exact-rational fractional-seconds canonicalization (unlike PT1.5S).
+		parsed, err := xpath3.CastFromString("PT0.1S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		// Emulate an arithmetic-created duration that stores the fraction as an
+		// exact FracSec rational of 1/10.
+		arith := xpath3.AtomicValue{
+			TypeName: xpath3.TypeDayTimeDuration,
+			Value: xpath3.Duration{
+				Seconds: 0.1,
+				FracSec: big.NewRat(1, 10),
+			},
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: parsed, Value: xpath3.SingleString("found")},
+		})
+		v, ok := m.Get(arith)
+		require.True(t, ok)
+		require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
 	t.Run("equivalent duration keys collapse in NewMap index", func(t *testing.T) {
 		parsed, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
 		require.NoError(t, err)

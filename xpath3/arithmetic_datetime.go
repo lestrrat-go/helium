@@ -104,47 +104,58 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 	ld := la.DurationVal()
 	rd := ra.DurationVal()
 
-	// Normalize to signed values
-	lm, ls := ld.Months, ld.Seconds
-	if ld.Negative {
-		lm, ls = -lm, -ls
-	}
-	rm, rs := rd.Months, rd.Seconds
-	if rd.Negative {
-		rm, rs = -rm, -rs
-	}
-
-	var resMonths int
-	var resSecs float64
-	if op == TokenPlus {
-		resMonths = lm + rm
-		resSecs = ls + rs
-	} else {
-		resMonths = lm - rm
-		resSecs = ls - rs
-	}
-
-	// Normalize sign: both components must agree in sign
-	if resMonths > 0 && resSecs < 0 {
-		resMonths--
-		resSecs += 86400 * 30 // approximate month in seconds
-	} else if resMonths < 0 && resSecs > 0 {
-		resMonths++
-		resSecs -= 86400 * 30
-	}
-
-	negative := resMonths < 0 || (resMonths == 0 && resSecs < 0)
-	if negative {
-		resMonths = -resMonths
-		resSecs = -resSecs
-	}
-
 	// Determine result type
 	typeName := resultDurationType(la.TypeName, ra.TypeName)
 
+	// yearMonthDuration ± yearMonthDuration operates purely on the integer
+	// month component.
+	if typeName == TypeYearMonthDuration {
+		lm := ld.Months
+		if ld.Negative {
+			lm = -lm
+		}
+		rm := rd.Months
+		if rd.Negative {
+			rm = -rm
+		}
+		var resMonths int
+		if op == TokenPlus {
+			resMonths = lm + rm
+		} else {
+			resMonths = lm - rm
+		}
+		negative := resMonths < 0
+		if negative {
+			resMonths = -resMonths
+		}
+		return SingleAtomic(AtomicValue{
+			TypeName: typeName,
+			Value:    Duration{Months: resMonths, Negative: negative},
+		}), true, nil
+	}
+
+	// dayTimeDuration ± dayTimeDuration: compute the result in exact rational
+	// seconds so that fractional seconds (e.g. PT0.05S + PT0.05S) canonicalize
+	// identically to a parsed PT0.1S.
+	lRat := durationToRat(ld, false)
+	rRat := durationToRat(rd, false)
+	var resRat *big.Rat
+	if op == TokenPlus {
+		resRat = new(big.Rat).Add(lRat, rRat)
+	} else {
+		resRat = new(big.Rat).Sub(lRat, rRat)
+	}
+
+	negative := resRat.Sign() < 0
+	absRat := resRat
+	if negative {
+		absRat = new(big.Rat).Neg(resRat)
+	}
+
+	secs, frac := durationFromRatSeconds(absRat)
 	return SingleAtomic(AtomicValue{
 		TypeName: typeName,
-		Value:    Duration{Months: resMonths, Seconds: resSecs, Negative: negative},
+		Value:    Duration{Seconds: secs, FracSec: frac, Negative: negative},
 	}), true, nil
 }
 
@@ -166,6 +177,49 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 		return nil, true, &XPathError{Code: "FOCA0005", Message: "NaN in duration arithmetic"}
 	}
 
+	if op == TokenDiv && n == 0 {
+		return nil, true, &XPathError{Code: "FODT0002", Message: "division of duration by zero"}
+	}
+
+	// dayTimeDuration * / number: compute the result in exact rational seconds
+	// when the multiplier/divisor is itself an exact rational (xs:integer or
+	// xs:decimal). This makes e.g. PT11S * 0.1 canonicalize identically to a
+	// parsed PT1.1S. (xs:double/xs:float multipliers are binary-imprecise and
+	// fall through to the float path below.)
+	//
+	// Only take this path when the duration's seconds are within exact float64
+	// range; beyond 2^53 the backing d.Seconds float is already imprecise, so an
+	// "exact" rational built from it would be misleading. Such values fall
+	// through to the float path, which reports FODT0002 overflow.
+	const maxExactDayTimeSecs = float64(1 << 53)
+	if dur.TypeName == TypeDayTimeDuration && math.Abs(d.Seconds) <= maxExactDayTimeSecs {
+		nRat, ok := numericToRat(num)
+		if ok {
+			secsRat := durationToRat(d, false)
+			var resRat *big.Rat
+			if op == TokenStar {
+				resRat = new(big.Rat).Mul(secsRat, nRat)
+			} else {
+				resRat = new(big.Rat).Quo(secsRat, nRat)
+			}
+			negative := resRat.Sign() < 0
+			absRat := resRat
+			if negative {
+				absRat = new(big.Rat).Neg(resRat)
+			}
+			rsecs, frac := durationFromRatSeconds(absRat)
+			// Match the float path's overflow behavior: results beyond the exact
+			// float64 range are reported as FODT0002.
+			if math.IsInf(rsecs, 0) || rsecs > maxExactDayTimeSecs {
+				return nil, true, &XPathError{Code: "FODT0002", Message: "duration overflow"}
+			}
+			return SingleAtomic(AtomicValue{
+				TypeName: dur.TypeName,
+				Value:    Duration{Seconds: rsecs, FracSec: frac, Negative: negative},
+			}), true, nil
+		}
+	}
+
 	// Normalize duration to signed
 	months := float64(d.Months)
 	secs := d.Seconds
@@ -177,9 +231,6 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 		months *= n
 		secs *= n
 	} else {
-		if n == 0 {
-			return nil, true, &XPathError{Code: "FODT0002", Message: "division of duration by zero"}
-		}
 		months /= n
 		secs /= n
 	}
@@ -299,13 +350,32 @@ func arithmeticDateTimeDatetime(ec *evalContext, la, ra AtomicValue) (Sequence, 
 
 	totalSecs := float64(aDays-bDays)*86400 + (aSecs - bSecs)
 	negative := totalSecs < 0
+	absSecs := totalSecs
 	if negative {
-		totalSecs = -totalSecs
+		absSecs = -totalSecs
+	}
+
+	// Build the exact fractional-seconds component from the nanosecond
+	// difference so that sub-second results canonicalize as exact rationals
+	// (matching a parsed dayTimeDuration). The only sub-second contribution is
+	// the nanosecond field; all other components are whole seconds.
+	absNs := int64(ta.Nanosecond()) - int64(tb.Nanosecond())
+	if negative {
+		absNs = -absNs
+	}
+	// Normalize the nanosecond fraction into [0,1) seconds.
+	absNs %= 1e9
+	if absNs < 0 {
+		absNs += 1e9
+	}
+	var frac *big.Rat
+	if absNs != 0 {
+		frac = new(big.Rat).SetFrac(big.NewInt(absNs), big.NewInt(1e9))
 	}
 
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeDayTimeDuration,
-		Value:    Duration{Seconds: totalSecs, Negative: negative},
+		Value:    Duration{Seconds: absSecs, FracSec: frac, Negative: negative},
 	}), true, nil
 }
 
@@ -343,6 +413,47 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 
 	r := new(big.Rat).Quo(lRat, rRat)
 	return SingleDecimal(r), true, nil
+}
+
+// numericToRat returns the exact rational value of an integer- or
+// decimal-typed numeric AtomicValue. It returns ok=false for xs:double and
+// xs:float, whose backing float64 values are binary-imprecise and therefore
+// cannot be represented exactly as the intended decimal.
+func numericToRat(a AtomicValue) (*big.Rat, bool) {
+	if isIntegerDerived(a.TypeName) {
+		switch v := a.Value.(type) {
+		case int64:
+			return new(big.Rat).SetInt64(v), true
+		case *big.Int:
+			return new(big.Rat).SetInt(v), true
+		}
+		return nil, false
+	}
+	if a.TypeName == TypeDecimal {
+		r, ok := a.Value.(*big.Rat)
+		if !ok {
+			return nil, false
+		}
+		return new(big.Rat).Set(r), true
+	}
+	return nil, false
+}
+
+// durationFromRatSeconds splits a non-negative exact total-seconds rational
+// into the float64 Seconds field (whole seconds plus fractional part, kept for
+// compatibility with the rest of the Duration machinery) and an exact FracSec
+// rational holding the fractional part in [0,1). Storing the exact fraction lets
+// arithmetic-created durations canonicalize identically to parsed ones.
+func durationFromRatSeconds(secsRat *big.Rat) (float64, *big.Rat) {
+	// Whole seconds = floor(secsRat) for a non-negative value.
+	whole := new(big.Int).Quo(secsRat.Num(), secsRat.Denom())
+	frac := new(big.Rat).Sub(secsRat, new(big.Rat).SetInt(whole))
+
+	secs, _ := secsRat.Float64()
+	if frac.Sign() == 0 {
+		return secs, nil
+	}
+	return secs, frac
 }
 
 // durationToRat converts a Duration to an exact big.Rat value.

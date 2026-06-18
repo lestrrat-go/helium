@@ -41,8 +41,9 @@ type NodeItem struct {
 
 ```go
 type AtomicValue struct {
-    TypeName string  // "xs:string", "xs:integer", etc.
-    value    any     // Go native backing value
+    TypeName string // "xs:string", "xs:integer", etc.
+    Value    any    // Go native backing value
+    BaseType string // built-in base type for user-defined/derived types (drives normalization)
 }
 ```
 
