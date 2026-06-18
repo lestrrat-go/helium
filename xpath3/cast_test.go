@@ -428,6 +428,31 @@ func TestCastMalformedDateTimeStamp(t *testing.T) {
 	}
 }
 
+// TestCastToDateTimeStampMalformedSource verifies that casting a non-time.Time
+// xs:dateTime or xs:date source (AtomicValue is public and mutable) TO
+// xs:dateTimeStamp reports a structured FORG0001 error instead of panicking.
+// The dateTimeStamp target path routes such sources through TimeVal()/recursive
+// casts that assume a time.Time payload.
+func TestCastToDateTimeStampMalformedSource(t *testing.T) {
+	for _, src := range []struct {
+		name string
+		v    xpath3.AtomicValue
+	}{
+		{"non-time dateTime", xpath3.AtomicValue{TypeName: xpath3.TypeDateTime, Value: "not a time"}},
+		{"non-time date", xpath3.AtomicValue{TypeName: xpath3.TypeDate, Value: "not a time"}},
+	} {
+		t.Run(src.name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				_, err := xpath3.CastAtomic(src.v, xpath3.TypeDateTimeStamp)
+				require.Error(t, err)
+				var xerr *xpath3.XPathError
+				require.True(t, errors.As(err, &xerr), "error must be *xpath3.XPathError, got %T: %v", err, err)
+				require.Equal(t, "FORG0001", xerr.Code)
+			})
+		})
+	}
+}
+
 func mustParseDateTime(s string) any {
 	v, err := xpath3.CastFromString(s, xpath3.TypeDateTime)
 	if err != nil {

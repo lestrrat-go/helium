@@ -183,6 +183,20 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		if v.TypeName == TypeString {
 			return CastFromString(v.StringVal(), TypeDateTimeStamp)
 		}
+		// xs:dateTime and xs:date sources carry a time.Time payload, but
+		// AtomicValue is public and mutable so a caller can retag a non-time
+		// value. Validate the payload with a comma-ok assertion before any
+		// TimeVal()/recursive cast, which would otherwise panic.
+		if v.TypeName == TypeDateTime || v.TypeName == TypeDate {
+			t, ok := v.Value.(time.Time)
+			if !ok {
+				return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+			}
+			if !HasTimezone(t) {
+				return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+			}
+			return AtomicValue{TypeName: TypeDateTimeStamp, Value: t}, nil
+		}
 		// xs:dateTimeStamp is xs:dateTime with a required timezone
 		dt, err := CastAtomic(v, TypeDateTime)
 		if err != nil {
