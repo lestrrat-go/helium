@@ -73,9 +73,52 @@ func (c *compiler) checkFacetConsistency(ctx context.Context) {
 			line = src.line
 		}
 
+		c.checkFacetValueAgainstBase(ctx, td, fs, line, component)
 		c.checkFacetMutualExclusion(ctx, fs, line, component)
 		c.checkFacetSameTypeConsistency(ctx, fs, line, component)
 		c.checkFacetBaseRestriction(ctx, td, fs, line, component)
+	}
+}
+
+// checkFacetValueAgainstBase validates that each value-bearing range facet
+// (min/maxInclusive, min/maxExclusive) is itself a valid instance of the type
+// being restricted. Per XSD §3.16, a facet value must belong to the base type's
+// value space; an invalid bound (e.g. <xs:minInclusive value="abc"/> on an
+// xs:int base, or a value that overruns the base's value space) makes the schema
+// in error. Without this check the bad bound silently fell through
+// compareForRangeFacet's "can't compare" path at validation time, turning the
+// constraint into a no-op and letting any instance value through.
+func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
+	base := td.BaseType
+	if base == nil {
+		return
+	}
+
+	type rangeFacet struct {
+		name  string
+		value *string
+	}
+	for _, rf := range []rangeFacet{
+		{"minInclusive", fs.MinInclusive},
+		{"maxInclusive", fs.MaxInclusive},
+		{"minExclusive", fs.MinExclusive},
+		{"maxExclusive", fs.MaxExclusive},
+	} {
+		if rf.value == nil {
+			continue
+		}
+		// Validate the bound against the base type's value space with errors
+		// suppressed; only the pass/fail verdict matters here. A non-nil result
+		// means the bound is not a valid instance of the base type, so the
+		// restriction is in error.
+		sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
+		if validateValue(ctx, *rf.value, nil, base, "", "", 0, sub) == nil {
+			continue
+		}
+		msg := fmt.Sprintf("The value '%s' of the facet '%s' is not a valid value of the base type '%s'.",
+			*rf.value, rf.name, typeDisplayName(base))
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
+		c.errorCount++
 	}
 }
 
