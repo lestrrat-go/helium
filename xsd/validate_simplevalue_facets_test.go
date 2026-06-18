@@ -9,8 +9,8 @@ import (
 )
 
 // validateInstance compiles schemaXML and validates instanceXML against it,
-// returning the validation error and collected error text.
-func validateInstance(t *testing.T, schemaXML, instanceXML string) (error, string) {
+// returning the collected error text and the validation error.
+func validateInstance(t *testing.T, schemaXML, instanceXML string) (string, error) {
 	t.Helper()
 
 	schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
@@ -24,7 +24,7 @@ func validateInstance(t *testing.T, schemaXML, instanceXML string) (error, strin
 
 	var errs string
 	err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
-	return err, errs
+	return errs, err
 }
 
 // TestListValueFacets verifies that list-level enumeration and pattern facets
@@ -49,19 +49,19 @@ func TestListValueFacets(t *testing.T) {
 
 	t.Run("enumeration member accepted", func(t *testing.T) {
 		t.Parallel()
-		err, errs := validateInstance(t, schemaXML, `<root>1 2</root>`)
+		errs, err := validateInstance(t, schemaXML, `<root>1 2</root>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
 	t.Run("enumeration member with extra whitespace accepted", func(t *testing.T) {
 		t.Parallel()
-		err, errs := validateInstance(t, schemaXML, `<root>  9   8 7 </root>`)
+		errs, err := validateInstance(t, schemaXML, `<root>  9   8 7 </root>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
 	t.Run("enumeration non-member rejected", func(t *testing.T) {
 		t.Parallel()
-		err, errs := validateInstance(t, schemaXML, `<root>3 4</root>`)
+		errs, err := validateInstance(t, schemaXML, `<root>3 4</root>`)
 		require.Error(t, err)
 		require.Contains(t, errs, "[facet 'enumeration']")
 	})
@@ -80,10 +80,10 @@ func TestListValueFacets(t *testing.T) {
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
-		err, errs := validateInstance(t, patternSchema, `<root>foo bar</root>`)
+		errs, err := validateInstance(t, patternSchema, `<root>foo bar</root>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 
-		err, errs = validateInstance(t, patternSchema, `<root>foo 99</root>`)
+		errs, err = validateInstance(t, patternSchema, `<root>foo 99</root>`)
 		require.Error(t, err)
 		require.Contains(t, errs, "[facet 'pattern']")
 	})
@@ -111,25 +111,25 @@ func TestUnionEnumerationValueSpace(t *testing.T) {
 
 	t.Run("value-equal int accepted", func(t *testing.T) {
 		t.Parallel()
-		err, errs := validateInstance(t, schemaXML, `<root>+5</root>`)
+		errs, err := validateInstance(t, schemaXML, `<root>+5</root>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
 	t.Run("exact int member accepted", func(t *testing.T) {
 		t.Parallel()
-		err, errs := validateInstance(t, schemaXML, `<root>5</root>`)
+		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
 	t.Run("string member accepted", func(t *testing.T) {
 		t.Parallel()
-		err, errs := validateInstance(t, schemaXML, `<root>foo</root>`)
+		errs, err := validateInstance(t, schemaXML, `<root>foo</root>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
 	t.Run("non-member rejected", func(t *testing.T) {
 		t.Parallel()
-		err, errs := validateInstance(t, schemaXML, `<root>7</root>`)
+		errs, err := validateInstance(t, schemaXML, `<root>7</root>`)
 		require.Error(t, err)
 		require.Contains(t, errs, "is not a valid value")
 	})
@@ -147,19 +147,19 @@ func TestQNameUnboundPrefix(t *testing.T) {
 
 	t.Run("unbound prefix rejected", func(t *testing.T) {
 		t.Parallel()
-		err, _ := validateInstance(t, schemaXML, `<q>p:foo</q>`)
+		_, err := validateInstance(t, schemaXML, `<q>p:foo</q>`)
 		require.Error(t, err)
 	})
 
 	t.Run("bound prefix accepted", func(t *testing.T) {
 		t.Parallel()
-		err, errs := validateInstance(t, schemaXML, `<q xmlns:p="urn:p">p:foo</q>`)
+		errs, err := validateInstance(t, schemaXML, `<q xmlns:p="urn:p">p:foo</q>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 
 	t.Run("no prefix accepted", func(t *testing.T) {
 		t.Parallel()
-		err, errs := validateInstance(t, schemaXML, `<q>foo</q>`)
+		errs, err := validateInstance(t, schemaXML, `<q>foo</q>`)
 		require.NoError(t, err, "validation errors: %s", errs)
 	})
 }
