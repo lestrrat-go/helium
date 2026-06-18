@@ -1082,8 +1082,10 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		// backtracking token matcher, requiring that the whole token sequence
 		// is consumed. Without the full-consumption check, a zeroOrMore would
 		// accept any text (consuming nothing) and a oneOrMore would ignore
-		// trailing non-matching tokens.
-		tokens := strings.Fields(text)
+		// trailing non-matching tokens. Tokenization must split on XML
+		// whitespace only (#x20, #x9, #xA, #xD), not arbitrary Unicode
+		// whitespace, so a value such as "a b" stays a single token.
+		tokens := xmlFields(text)
 		if slices.Contains(v.matchAttrTokensCounts(pat, tokens), len(tokens)) {
 			return 0
 		}
@@ -1754,10 +1756,22 @@ func (v *validator) matchData(pat *pattern, text string) int {
 		case "string":
 			return 0
 		}
-		// A schema may name an XSD datatype (e.g. "integer", "NMTOKEN") without
-		// declaring the XSD datatype library; route recognized names through the
-		// shared XSD validator. Unrecognized names fall through to the failure
-		// below.
+		// Spec note: per RELAX NG, an omitted datatypeLibrary selects the EMPTY
+		// built-in library, which provides ONLY "string" and "token"; XSD
+		// datatypes strictly require datatypeLibrary
+		// "http://www.w3.org/2001/XMLSchema-datatypes". A spec-conformant
+		// processor would reject <data type="integer"/> here.
+		//
+		// We deliberately deviate for libxml2/golden compatibility: libxml2's
+		// RELAX NG engine resolves bare XSD datatype names against its built-in
+		// XSD library, and the established token-matcher unit tests (PR #451)
+		// exercise the group/choice backtracking machinery using bare
+		// <data type="integer"/> and <data type="NMTOKEN"/> schemas. Routing
+		// only RECOGNIZED XSD datatype names through the shared validator keeps
+		// those green while still validating the value (so e.g. an out-of-range
+		// integer is rejected). Crucially, a truly-unknown name such as
+		// type="bogus" is NOT in xsdDatatypeNames and falls through to the
+		// failure below, fixing the original "empty library matches anything" bug.
 		if _, ok := xsdDatatypeNames[dt.name]; ok {
 			return validateXSDType(dt.name, text, pat.params)
 		}
@@ -1809,7 +1823,10 @@ func validateXSDType(typeName, text string, params []*param) int {
 	if value.ValidateBuiltin(text, typeName) != nil {
 		return -1
 	}
-	return 0
+	// Apply the supported length facets to the whitespace-normalized value for
+	// every applicable XSD datatype, not just xs:string. The length facets are
+	// defined on the value's character count after whiteSpace processing.
+	return validateWithParams(text, params)
 }
 
 func validateWithParams(value string, params []*param) int {
@@ -1844,6 +1861,20 @@ func validateWithParams(value string, params []*param) int {
 // normalizeToken collapses whitespace and trims.
 func normalizeToken(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// isXMLSpace reports whether r is one of the four XML whitespace characters
+// (#x20, #x9, #xA, #xD). RELAX NG / XSD list tokenization is defined in terms
+// of these only, unlike strings.Fields which splits on all Unicode whitespace
+// (e.g. NBSP, which must remain part of a token).
+func isXMLSpace(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+}
+
+// xmlFields splits s into tokens on XML whitespace only, discarding empty
+// fields. It is the XML-whitespace analogue of strings.Fields.
+func xmlFields(s string) []string {
+	return strings.FieldsFunc(s, isXMLSpace)
 }
 
 // addError adds a validation error (suppressed when inside choice branches).

@@ -125,3 +125,60 @@ func TestValidateWithLengthFacets(t *testing.T) {
 		require.Error(t, err, `"abcd" violates maxLength 3`)
 	})
 }
+
+// TestLengthFacetsNonStringDatatype covers issue B: minLength/maxLength must be
+// enforced for applicable XSD datatypes beyond xs:string (e.g. xs:token), not
+// just left to lexical validation.
+func TestLengthFacetsNonStringDatatype(t *testing.T) {
+	t.Parallel()
+
+	schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0"
+    datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <data type="token">
+    <param name="maxLength">3</param>
+  </data>
+</element>`
+
+	t.Run("within maxLength", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, schema, `<a>abc</a>`)
+		require.NoError(t, err, `token "abc" meets maxLength 3`)
+	})
+
+	t.Run("exceeds maxLength", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, schema, `<a>abcd</a>`)
+		require.Error(t, err, `token "abcd" violates maxLength 3`)
+	})
+}
+
+// TestAttrRepeatXMLWhitespaceTokenize covers issue C: the attribute-repetition
+// token list must split on XML whitespace only (#x20, #x9, #xA, #xD), not all
+// Unicode whitespace. An NBSP-separated value is a single token and must not be
+// treated as two "foo" tokens.
+func TestAttrRepeatXMLWhitespaceTokenize(t *testing.T) {
+	t.Parallel()
+
+	schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute name="a">
+    <oneOrMore>
+      <value>foo</value>
+    </oneOrMore>
+  </attribute>
+</element>`
+
+	t.Run("space-separated is two tokens", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, schema, `<a a="foo foo"/>`)
+		require.NoError(t, err, `"foo foo" is two foo tokens`)
+	})
+
+	t.Run("nbsp-separated is one non-matching token", func(t *testing.T) {
+		t.Parallel()
+		// U+00A0 NO-BREAK SPACE between the two words: XML whitespace
+		// tokenization keeps this as a single token "foo foo", which does
+		// not equal the <value>foo</value>, so validation must fail.
+		err := validateWith(t, schema, "<a a=\"foo foo\"/>")
+		require.Error(t, err, "NBSP-joined value is a single token, not two foo")
+	})
+}
