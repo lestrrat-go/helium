@@ -227,6 +227,38 @@ func TestLengthFacetOctetCount(t *testing.T) {
 		err = validateWith(t, schema, `<a>Zm8=</a>`)
 		require.Error(t, err, `"Zm8=" decodes to 2 octets, violates length 3`)
 	})
+
+	// Regression for the length-facet decoder bug: a base64Binary value whose
+	// octet length is exactly 1 must satisfy <param name="length">1</param>, and
+	// the facet must never silently fall back to a rune count when decoding
+	// fails. With strict padding required by the xsd/value path, the canonical
+	// length-1 value is the padded "TQ==" (decodes to one octet, "M"); its
+	// unpadded form "TQ" is not a valid base64Binary lexical form and so must be
+	// rejected at lexical validation before the facet is even consulted.
+	t.Run("base64Binary length 1 padding", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0"
+    datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <data type="base64Binary">
+    <param name="length">1</param>
+  </data>
+</element>`
+		// Padded "TQ==" decodes to a single octet, satisfying length 1. If the
+		// facet wrongly used the rune count (4) this would fail.
+		err := validateWith(t, schema, `<a>TQ==</a>`)
+		require.NoError(t, err, `"TQ==" decodes to 1 octet, satisfies length 1`)
+
+		// Unpadded "TQ" is not a valid base64Binary lexical form under the strict
+		// xsd/value decoder, so it must fail lexical validation; it must NOT be
+		// accepted via a rune-count length of 2 either.
+		err = validateWith(t, schema, `<a>TQ</a>`)
+		require.Error(t, err, `unpadded "TQ" is not valid base64Binary`)
+
+		// "Zm9v" decodes to 3 octets ("foo"), violating length 1. This exercises
+		// the octet-count length-mismatch path for a strictly-valid value.
+		err = validateWith(t, schema, `<a>Zm9v</a>`)
+		require.Error(t, err, `"Zm9v" decodes to 3 octets, violates length 1`)
+	})
 }
 
 // TestInheritedXSDLibraryResetByEmpty covers item 4: a child datatypeLibrary=""

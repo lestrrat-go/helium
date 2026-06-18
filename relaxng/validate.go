@@ -1882,7 +1882,8 @@ func validateWithParams(value, typeName string, params []*param) int {
 			if err != nil {
 				return -1
 			}
-			if facetLength(value, typeName) != n {
+			length, ok := facetLength(value, typeName)
+			if !ok || length != n {
 				return -1
 			}
 		case "minLength":
@@ -1890,7 +1891,8 @@ func validateWithParams(value, typeName string, params []*param) int {
 			if err != nil {
 				return -1
 			}
-			if facetLength(value, typeName) < n {
+			length, ok := facetLength(value, typeName)
+			if !ok || length < n {
 				return -1
 			}
 		case "maxLength":
@@ -1898,7 +1900,8 @@ func validateWithParams(value, typeName string, params []*param) int {
 			if err != nil {
 				return -1
 			}
-			if facetLength(value, typeName) > n {
+			length, ok := facetLength(value, typeName)
+			if !ok || length > n {
 				return -1
 			}
 		}
@@ -1907,30 +1910,34 @@ func validateWithParams(value, typeName string, params []*param) int {
 }
 
 // facetLength returns the value's length in the units the length/minLength/
-// maxLength facets are defined in for the given XSD datatype:
+// maxLength facets are defined in for the given XSD datatype, and ok=true when
+// that length is well-defined:
 //   - list builtins (NMTOKENS, IDREFS, ENTITIES): the number of XML-whitespace
 //     -separated tokens (the list length).
 //   - binary builtins (hexBinary, base64Binary): the number of decoded octets.
 //   - everything else (string family, NMTOKEN, …): the number of characters
 //     (runes) in the value.
 //
-// The value is assumed to have already passed lexical validation for typeName,
-// so the binary decoders below cannot fail for a valid value; on the off chance
-// they do, the raw rune count is returned as a safe fallback.
-func facetLength(value, typeName string) int {
+// For the binary builtins the length is measured in decoded octets, so if the
+// value cannot be decoded ok=false is returned and the facet must be treated as
+// unsatisfiable: the rune count of an undecodable binary value is meaningless,
+// and falling back to it would silently compare lengths in the wrong unit. A
+// value that has passed lexical validation for typeName decodes successfully, so
+// this only guards against an undecodable value reaching the facet check.
+func facetLength(value, typeName string) (int, bool) {
 	switch typeName {
 	case "NMTOKENS", "IDREFS", "ENTITIES":
-		return len(xmlFields(value))
+		return len(xmlFields(value)), true
 	case "hexBinary":
-		if n, ok := hexBinaryOctets(value); ok {
-			return n
-		}
+		return hexBinaryOctets(value)
 	case "base64Binary":
-		if octets, ok := decodeBase64Octets(value); ok {
-			return len(octets)
+		octets, ok := decodeBase64Octets(value)
+		if !ok {
+			return 0, false
 		}
+		return len(octets), true
 	}
-	return utf8.RuneCountInString(value)
+	return utf8.RuneCountInString(value), true
 }
 
 // hexBinaryOctets returns the decoded octet count of an xs:hexBinary lexical
@@ -1947,8 +1954,13 @@ func hexBinaryOctets(s string) (int, bool) {
 	return len(s) / 2, true
 }
 
-// decodeBase64Octets decodes an xs:base64Binary lexical value to its octets.
-// XSD permits embedded whitespace, which is stripped before decoding.
+// decodeBase64Octets decodes an xs:base64Binary lexical value to its octets,
+// mirroring the strict decoder used by the xsd/value comparison path so the two
+// agree on what counts as a valid base64Binary. XSD permits embedded whitespace,
+// which is stripped first; the remainder must then be correctly padded and have
+// zero unused trailing bits (Strict()), so unpadded forms such as "TQ" or padded
+// forms with non-zero trailing bits such as "TR==" fail to decode rather than
+// yielding a bogus octet count.
 func decodeBase64Octets(s string) ([]byte, bool) {
 	stripped := strings.Map(func(r rune) rune {
 		if isXMLSpace(r) {
@@ -1956,7 +1968,7 @@ func decodeBase64Octets(s string) ([]byte, bool) {
 		}
 		return r
 	}, s)
-	decoded, err := base64.StdEncoding.DecodeString(stripped)
+	decoded, err := base64.StdEncoding.Strict().DecodeString(stripped)
 	if err != nil {
 		return nil, false
 	}
