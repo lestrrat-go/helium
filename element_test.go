@@ -500,3 +500,161 @@ func requireNoCycle(t *testing.T, n helium.Node) {
 		}
 	}
 }
+
+func TestSetTreeDocNonMutableChild(t *testing.T) {
+	t.Parallel()
+
+	// A non-MutableNode node (NamespaceNodeWrapper) inserted via AddChild,
+	// AddSibling, or Replace must not make SetTreeDoc panic on a MutableNode
+	// force-cast; instead its OwnerDocument must be retargeted at the new doc.
+	t.Run("via AddChild", func(t *testing.T) {
+		t.Parallel()
+		src := helium.NewDefaultDocument()
+		dst := helium.NewDefaultDocument()
+		root := mustCreateElement(t, src, "root")
+		ns := helium.NewNamespace("p", "urn:p")
+		wrapper := helium.NewNamespaceNodeWrapper(ns, nil)
+
+		require.NoError(t, root.AddChild(wrapper), "AddChild of a non-mutable node succeeds")
+		require.NotPanics(t, func() { root.SetTreeDoc(dst) }, "SetTreeDoc must not panic on a non-mutable child")
+		require.Equal(t, dst, wrapper.OwnerDocument(), "wrapper doc must be retargeted")
+	})
+
+	t.Run("via AddSibling", func(t *testing.T) {
+		t.Parallel()
+		src := helium.NewDefaultDocument()
+		dst := helium.NewDefaultDocument()
+		root := mustCreateElement(t, src, "root")
+		first := mustCreateElement(t, src, "first")
+		require.NoError(t, root.AddChild(first))
+
+		ns := helium.NewNamespace("p", "urn:p")
+		wrapper := helium.NewNamespaceNodeWrapper(ns, nil)
+
+		require.NoError(t, first.AddSibling(wrapper), "AddSibling of a non-mutable node succeeds")
+		require.NotPanics(t, func() { root.SetTreeDoc(dst) }, "SetTreeDoc must not panic on a non-mutable sibling")
+		require.Equal(t, dst, wrapper.OwnerDocument(), "wrapper doc must be retargeted")
+	})
+
+	t.Run("via Replace", func(t *testing.T) {
+		t.Parallel()
+		src := helium.NewDefaultDocument()
+		dst := helium.NewDefaultDocument()
+		root := mustCreateElement(t, src, "root")
+		victim := mustCreateElement(t, src, "victim")
+		require.NoError(t, root.AddChild(victim))
+
+		ns := helium.NewNamespace("p", "urn:p")
+		wrapper := helium.NewNamespaceNodeWrapper(ns, nil)
+
+		require.NoError(t, victim.Replace(wrapper), "Replace with a non-mutable node succeeds")
+		require.NotPanics(t, func() { root.SetTreeDoc(dst) }, "SetTreeDoc must not panic on a non-mutable replacement")
+		require.Equal(t, dst, wrapper.OwnerDocument(), "wrapper doc must be retargeted")
+	})
+}
+
+func TestAddChildNilOperand(t *testing.T) {
+	t.Parallel()
+
+	t.Run("literal nil", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := mustCreateElement(t, doc, "root")
+
+		err := root.AddChild(nil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "AddChild(nil) must return ErrNilNode")
+		require.Nil(t, root.FirstChild(), "tree must be untouched")
+		require.Nil(t, root.LastChild(), "tree must be untouched")
+	})
+
+	t.Run("typed nil", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := mustCreateElement(t, doc, "root")
+		var typedNil helium.Node = (*helium.Element)(nil)
+
+		err := root.AddChild(typedNil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "AddChild(typed-nil) must return ErrNilNode")
+		require.Nil(t, root.FirstChild(), "tree must be untouched")
+		require.Nil(t, root.LastChild(), "tree must be untouched")
+	})
+}
+
+func TestAddSiblingNilOperand(t *testing.T) {
+	t.Parallel()
+
+	t.Run("literal nil", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := mustCreateElement(t, doc, "root")
+		child := mustCreateElement(t, doc, "child")
+		require.NoError(t, root.AddChild(child))
+
+		err := child.AddSibling(nil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "AddSibling(nil) must return ErrNilNode")
+		require.Nil(t, child.NextSibling(), "tree must be untouched")
+		require.Equal(t, child, root.LastChild(), "tree must be untouched")
+	})
+
+	t.Run("typed nil", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := mustCreateElement(t, doc, "root")
+		child := mustCreateElement(t, doc, "child")
+		require.NoError(t, root.AddChild(child))
+		var typedNil helium.Node = (*helium.Element)(nil)
+
+		err := child.AddSibling(typedNil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "AddSibling(typed-nil) must return ErrNilNode")
+		require.Nil(t, child.NextSibling(), "tree must be untouched")
+		require.Equal(t, child, root.LastChild(), "tree must be untouched")
+	})
+}
+
+func TestReplaceNilOperand(t *testing.T) {
+	t.Parallel()
+
+	t.Run("literal nil", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := mustCreateElement(t, doc, "root")
+		victim := mustCreateElement(t, doc, "victim")
+		require.NoError(t, root.AddChild(victim))
+
+		err := victim.Replace(nil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "Replace(nil) must return ErrNilNode")
+		require.Equal(t, victim, root.FirstChild(), "tree must be untouched")
+		require.Equal(t, victim, root.LastChild(), "tree must be untouched")
+		require.Equal(t, root, victim.Parent(), "tree must be untouched")
+	})
+
+	t.Run("typed nil", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := mustCreateElement(t, doc, "root")
+		victim := mustCreateElement(t, doc, "victim")
+		require.NoError(t, root.AddChild(victim))
+		var typedNil helium.Node = (*helium.Element)(nil)
+
+		err := victim.Replace(typedNil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "Replace(typed-nil) must return ErrNilNode")
+		require.Equal(t, victim, root.FirstChild(), "tree must be untouched")
+		require.Equal(t, victim, root.LastChild(), "tree must be untouched")
+		require.Equal(t, root, victim.Parent(), "tree must be untouched")
+	})
+
+	t.Run("nil among valid operands", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := mustCreateElement(t, doc, "root")
+		victim := mustCreateElement(t, doc, "victim")
+		repl := mustCreateElement(t, doc, "repl")
+		require.NoError(t, root.AddChild(victim))
+
+		err := victim.Replace(repl, nil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "Replace with a nil operand must return ErrNilNode")
+		require.Equal(t, victim, root.FirstChild(), "tree must be untouched")
+		require.Equal(t, victim, root.LastChild(), "tree must be untouched")
+		require.Nil(t, repl.Parent(), "replacement must not have been spliced in")
+	})
+}

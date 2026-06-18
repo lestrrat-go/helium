@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/pdebug"
 )
@@ -332,6 +333,13 @@ func addChildPreflight(n MutableNode, cur Node) error {
 }
 
 func addChild(n MutableNode, cur Node) error {
+	// Reject a nil or typed-nil operand BEFORE any baseDocNode() dereference so
+	// the call returns ErrNilNode instead of panicking and leaves the tree
+	// untouched.
+	if isNilNode(cur) {
+		return ErrNilNode
+	}
+
 	pdn := n.baseDocNode()
 	cdn := cur.baseDocNode()
 
@@ -415,6 +423,13 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 }
 
 func addSibling(n MutableNode, cur Node) error {
+	// Reject a nil or typed-nil operand BEFORE any baseDocNode() dereference so
+	// the call returns ErrNilNode instead of panicking and leaves the tree
+	// untouched.
+	if isNilNode(cur) {
+		return ErrNilNode
+	}
+
 	cdn := cur.baseDocNode()
 	ndn := n.baseDocNode()
 
@@ -553,6 +568,14 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	if len(nodes) == 0 {
 		return nil
 	}
+
+	// Reject a nil or typed-nil replacement operand BEFORE any baseDocNode()
+	// dereference so the call returns ErrNilNode instead of panicking and
+	// leaves the tree untouched. Validate every operand, not just the first.
+	if slices.ContainsFunc(nodes, isNilNode) {
+		return ErrNilNode
+	}
+
 	cur := nodes[0]
 	cdn := cur.baseDocNode()
 	ndn := n.baseDocNode()
@@ -790,15 +813,24 @@ func (n *node) invalidateQName() {
 	n.qname = ""
 }
 
-func setListDoc(n MutableNode, doc *Document) {
-	if n == nil || n.Type() == NamespaceDeclNode {
+func setListDoc(n Node, doc *Document) {
+	if isNilNode(n) || n.Type() == NamespaceDeclNode {
 		return
 	}
 
-	for cur := Node(n); cur != nil; cur = cur.NextSibling() {
-		if cur.OwnerDocument() != doc {
-			cur.(MutableNode).SetTreeDoc(doc) //nolint:forcetypeassert
+	for cur := n; cur != nil; cur = cur.NextSibling() {
+		if cur.OwnerDocument() == doc {
+			continue
 		}
+		// A non-MutableNode node (e.g. NamespaceNodeWrapper) cannot recurse
+		// through SetTreeDoc; set its document directly via baseDocNode(),
+		// mirroring unlinkNode's force-cast-free approach. MutableNode nodes
+		// still go through SetTreeDoc so their children are walked too.
+		if mn, ok := cur.(MutableNode); ok {
+			mn.SetTreeDoc(doc)
+			continue
+		}
+		cur.baseDocNode().doc = doc
 	}
 }
 
@@ -816,12 +848,12 @@ func setTreeDoc(n MutableNode, doc *Document) {
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
-				setListDoc(child.(MutableNode), doc) //nolint:forcetypeassert
+				setListDoc(child, doc)
 			}
 		}
 	}
 	if child := n.FirstChild(); child != nil {
-		setListDoc(child.(MutableNode), doc) //nolint:forcetypeassert
+		setListDoc(child, doc)
 	}
 	n.SetOwnerDocument(doc)
 }
