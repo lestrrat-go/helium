@@ -591,13 +591,28 @@ func parseXSDDuration(s string) (Duration, error) {
 // (a leading "1."): with the exact-precision path that cannot occur.
 func exactFractionDigits(frac *big.Rat) string {
 	prec, exact := frac.FloatPrec()
-	if !exact {
-		// Non-terminating fraction: FloatPrec reports prec=0, so cap explicitly.
-		prec = 40
+	if exact {
+		s := frac.FloatString(prec)
+		s = strings.TrimPrefix(s, "0.")
+		return strings.TrimRight(s, "0")
 	}
-	s := frac.FloatString(prec)
-	s = strings.TrimPrefix(s, "0.")
-	return strings.TrimRight(s, "0")
+
+	// Non-terminating fraction: emit a capped number of digits via TRUNCATING
+	// long division. FloatString would ROUND, which can carry into the integer
+	// part (e.g. 0.999... → 1.0) and corrupt the formatted duration; truncation
+	// never carries, so the integer part stays 0 and no stray "." is emitted.
+	const maxDigits = 40
+	num := new(big.Int).Set(frac.Num())
+	den := frac.Denom()
+	ten := big.NewInt(10)
+	var b strings.Builder
+	q := new(big.Int)
+	for i := 0; i < maxDigits && num.Sign() != 0; i++ {
+		num.Mul(num, ten)
+		q.QuoRem(num, den, num)
+		b.WriteByte(byte('0' + q.Int64()))
+	}
+	return strings.TrimRight(b.String(), "0")
 }
 
 // formatDuration formats a Duration as an XSD duration string.

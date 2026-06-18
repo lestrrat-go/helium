@@ -300,12 +300,19 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 
 	// Normalize duration sign
 	months := d.Months
-	secs := d.Seconds
 	if d.Negative {
-		months, secs = -months, -secs
+		months = -months
 	}
 	if op == TokenMinus {
-		months, secs = -months, -secs
+		months = -months
+	}
+
+	// secsRat is the EXACT total dayTime seconds to add (signed), read from the
+	// SecRat-aware rational so a fraction arbitrarily close to a whole second is
+	// not rounded up via float64.
+	secsRat := durationToRat(d, false)
+	if op == TokenMinus {
+		secsRat = new(big.Rat).Neg(secsRat)
 	}
 
 	// Add months
@@ -313,9 +320,33 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 		t = addMonths(t, months)
 	}
 
-	// Add seconds (as time.Duration)
-	if secs != 0 {
-		t = t.Add(time.Duration(secs * float64(time.Second)))
+	// Add seconds exactly: split into whole seconds and a sub-second nanosecond
+	// remainder. Whole seconds are added as days + sub-day seconds via AddDate so
+	// large magnitudes never overflow time.Duration's int64-nanosecond range.
+	if secsRat.Sign() != 0 {
+		abs := secsRat
+		neg := false
+		if abs.Sign() < 0 {
+			abs = new(big.Rat).Neg(abs)
+			neg = true
+		}
+		whole := new(big.Int).Quo(abs.Num(), abs.Denom())
+		frac := new(big.Rat).Sub(abs, new(big.Rat).SetInt(whole))
+		// Nanosecond remainder (truncated; sub-nanosecond precision is below the
+		// representable resolution of time.Time).
+		nanoRat := new(big.Rat).Mul(frac, big.NewRat(1e9, 1))
+		nanos := new(big.Int).Quo(nanoRat.Num(), nanoRat.Denom()).Int64()
+
+		days := new(big.Int)
+		remSecs := new(big.Int)
+		days.QuoRem(whole, big.NewInt(86400), remSecs)
+		sign := 1
+		if neg {
+			sign = -1
+		}
+		t = t.AddDate(0, 0, sign*int(days.Int64()))
+		t = t.Add(time.Duration(sign) * time.Duration(remSecs.Int64()) * time.Second)
+		t = t.Add(time.Duration(sign) * time.Duration(nanos) * time.Nanosecond)
 	}
 
 	// For xs:date results, strip the time component to keep only the date

@@ -342,7 +342,10 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
 		}
-		if d.Seconds != 0 {
+		// Reject any nonzero dayTime part. SecRat carries the EXACT total dayTime
+		// seconds magnitude, so an underflowing fraction (e.g. PT0.000...1S) is
+		// detected here where the lossy float64 d.Seconds would read as 0.
+		if (d.SecRat != nil && d.SecRat.Sign() != 0) || d.Seconds != 0 {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeYearMonthDuration, Value: Duration{Months: d.Months, Negative: d.Negative}}, nil
