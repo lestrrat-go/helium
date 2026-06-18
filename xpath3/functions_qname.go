@@ -22,11 +22,11 @@ func init() {
 }
 
 func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
-	uri, err := coerceQNameString(args[0], true, true, "fn:QName namespace argument must be a string")
+	uri, err := coerceQNameString(args[0], true, "fn:QName namespace argument must be a string")
 	if err != nil {
 		return nil, err
 	}
-	qname, err := coerceQNameString(args[1], false, false, "fn:QName QName argument must be a string")
+	qname, err := coerceQNameString(args[1], false, "fn:QName QName argument must be a string")
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 	if err != nil {
 		return nil, err
 	}
-	prefix, err := coerceQNameString(args[0], true, false, "fn:namespace-uri-for-prefix prefix argument must be a string")
+	prefix, err := coerceQNameString(args[0], true, "fn:namespace-uri-for-prefix prefix argument must be a string")
 	if err != nil {
 		return nil, err
 	}
@@ -158,13 +158,16 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	// Empty $qname yields the empty sequence (after the element() check).
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	qnameStr, err := coerceQNameString(args[0], false, false, "resolve-QName: QName argument must be a string")
+	// Empty $qname yields the empty sequence (after the element() check). The
+	// argument is atomized first so that a single empty array/list item (which
+	// atomizes to the empty sequence) is treated as empty, while a literal ""
+	// remains a non-empty lexical QName reaching parseLexicalQName.
+	qnameStr, empty, err := coerceOptionalQNameString(args[0], "resolve-QName: QName argument must be a string")
 	if err != nil {
 		return nil, err
+	}
+	if empty {
+		return validNilSequence, nil
 	}
 
 	prefix, local, err := parseLexicalQName(qnameStr)
@@ -218,7 +221,27 @@ func parseLexicalQName(qname string) (string, string, error) {
 // up front) means a single array/list item that atomizes to multiple values is
 // rejected as XPTY0004 (a cardinality error), not FOTY0013. Streaming stops
 // once a second atom appears.
-func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message string) (string, error) {
+func coerceQNameString(seq Sequence, allowEmpty bool, message string) (string, error) {
+	s, empty, err := coerceOptionalQNameString(seq, message)
+	if err != nil {
+		return "", err
+	}
+	if empty {
+		if allowEmpty {
+			return "", nil
+		}
+		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
+	}
+	return s, nil
+}
+
+// coerceOptionalQNameString atomizes a QName string argument the same way as
+// coerceQNameString but distinguishes an ATOMIZED-empty result (returning the
+// empty bool) from a non-empty lexical value. A single empty array/list item
+// that atomizes to the empty sequence yields empty=true (so callers may return
+// the empty sequence), while a literal "" reaches the lexical path with
+// empty=false. Streaming stops once a second atom appears.
+func coerceOptionalQNameString(seq Sequence, message string) (string, bool, error) {
 	var first AtomicValue
 	count := 0
 	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
@@ -230,33 +253,32 @@ func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message strin
 		return false, nil
 	})
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if count == 0 {
-		if allowEmpty {
-			return "", nil
-		}
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
+		return "", true, nil
 	}
 	if count > 1 {
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
+		return "", false, &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
 	}
 
-	switch first.TypeName {
-	case TypeString, TypeUntypedAtomic:
-	case TypeAnyURI:
-		if !allowAnyURI {
-			return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
-		}
+	// Every QName-string parameter is typed xs:string?, so accept any xs:string
+	// subtype (e.g. xs:NCName), xs:untypedAtomic, and xs:anyURI (which promotes
+	// to xs:string under function conversion).
+	first = PromoteSchemaType(first)
+	switch {
+	case isAtomicSubtypeOf(first, TypeString):
+	case first.TypeName == TypeUntypedAtomic:
+	case first.TypeName == TypeAnyURI:
 	default:
-		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
+		return "", false, &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
 	}
 
 	s, ok := first.Value.(string)
 	if !ok {
-		return "", fmt.Errorf("xpath3: internal error: expected string for %s", first.TypeName)
+		return "", false, fmt.Errorf("xpath3: internal error: expected string for %s", first.TypeName)
 	}
-	return s, nil
+	return s, false, nil
 }
 
 func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {

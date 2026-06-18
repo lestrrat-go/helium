@@ -130,6 +130,49 @@ func TestQNameAccessorsArrayArgRejected(t *testing.T) {
 	}
 }
 
+// resolve-QName's $qname argument is xs:string?, so an empty sequence — or a
+// single empty array/list item that atomizes to the empty sequence — must yield
+// the empty sequence, not XPTY0004. The element() second argument is valid here.
+func TestResolveQNameEmptyQNameArgYieldsEmpty(t *testing.T) {
+	t.Parallel()
+
+	doc := mustParseXML(t, `<root xmlns:p="urn:p"><a/><b/></root>`)
+
+	cases := []string{
+		`resolve-QName((), /root)`,
+		`resolve-QName([], /root)`,
+		`resolve-QName(array{}, /root)`,
+	}
+	for _, expr := range cases {
+		t.Run(expr, func(t *testing.T) {
+			result, err := evaluate(t.Context(), doc, expr)
+			require.NoError(t, err, expr)
+			// An empty sequence surfaces as a nil Sequence.
+			require.Nil(t, result.Sequence(), expr)
+		})
+	}
+}
+
+// QName-string parameters are typed xs:string?, so function-conversion inputs
+// like xs:NCName("local") and xs:anyURI("p") (which are valid for an xs:string
+// parameter) must be accepted, not rejected as XPTY0004.
+func TestQNameStringArgAcceptsStringSubtypes(t *testing.T) {
+	t.Parallel()
+
+	doc := mustParseXML(t, `<root xmlns:p="urn:p"><a/><b/></root>`)
+
+	cases := []string{
+		`local-name-from-QName(resolve-QName(xs:NCName("local"), /root))`,
+		`namespace-uri-for-prefix(xs:anyURI("p"), /root)`,
+	}
+	for _, expr := range cases {
+		t.Run(expr, func(t *testing.T) {
+			_, err := evaluate(t.Context(), doc, expr)
+			require.NoError(t, err, expr)
+		})
+	}
+}
+
 // The string-typed argument of namespace-uri-for-prefix and resolve-QName must
 // atomize first, so a single array argument that atomizes to multiple values is
 // a cardinality error (XPTY0004), not FOTY0013. The element() second argument is
