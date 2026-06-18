@@ -112,6 +112,43 @@ func TestCastFromString(t *testing.T) {
 			},
 		},
 		{
+			// XSD 1.1: year 0000 is valid.
+			name:  "string to date year zero",
+			input: "0000-01-01", targetType: xpath3.TypeDate,
+			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
+				tv := v.TimeVal()
+				require.Equal(t, 0, tv.Year())
+				require.Equal(t, 1, int(tv.Month()))
+				require.Equal(t, 1, tv.Day())
+			},
+		},
+		{
+			// XSD 1.1: year 0000 is a leap year.
+			name:  "string to date year zero leap day",
+			input: "0000-02-29", targetType: xpath3.TypeDate,
+			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
+				tv := v.TimeVal()
+				require.Equal(t, 0, tv.Year())
+				require.Equal(t, 2, int(tv.Month()))
+				require.Equal(t, 29, tv.Day())
+			},
+		},
+		{
+			// XSD 1.1: year 0000 is valid.
+			name:  "string to dateTime year zero",
+			input: "0000-01-01T00:00:00", targetType: xpath3.TypeDateTime,
+			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
+				tv := v.TimeVal()
+				require.Equal(t, 0, tv.Year())
+				require.Equal(t, 1, int(tv.Month()))
+				require.Equal(t, 1, tv.Day())
+				require.Equal(t, 0, tv.Hour())
+			},
+		},
+		{
 			name:  "string to time",
 			input: "10:30:00", targetType: xpath3.TypeTime,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
