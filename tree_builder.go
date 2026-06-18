@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/fs"
+	"math"
 	"path/filepath"
 	"strings"
 
@@ -15,6 +15,14 @@ import (
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
+
+// MaxExternalDTDSize is the maximum number of bytes read from an external
+// DTD subset. Loading is gated by LoadExternalDTD/ValidateDTD/
+// DefaultDTDAttributes, so an unbounded read of a hostile or pathological
+// source (e.g. /dev/zero) could exhaust memory before any entity or parse
+// limits apply. The DTD is read through a strict byte cap and rejected when
+// it is exceeded.
+const MaxExternalDTDSize = 10 << 20 // 10 MiB
 
 // fileParseInput wraps an os.File as a sax.ParseInput.
 type fileParseInput struct {
@@ -400,9 +408,46 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		resolved = filepath.Join(filepath.Dir(ctx.baseURI), uri)
 	}
 
-	data, err := fs.ReadFile(ctx.fsys, resolved)
+	f, err := ctx.fsys.Open(resolved)
 	if err != nil {
 		// Silently ignore missing external DTDs
+		return nil
+	}
+
+	// fs.FileInfo.Size() is only reliable for regular files: a valid fs.FS
+	// may stream or synthesize DTD content and report a non-regular,
+	// unknown, under-reported, or over-reported size. Stat is therefore
+	// never used to reject — the authoritative cap is the actual number of
+	// bytes read below. Read through a strict byte cap, allowing one extra
+	// byte so a source that under-reports (or lies about) its size is still
+	// caught.
+	limit := ctx.maxExtDTDSize
+	if limit <= 0 {
+		limit = MaxExternalDTDSize
+	}
+	// Read one byte past the cap so a source that under-reports (or lies about)
+	// its size is still caught, but guard against overflow: int64(limit)+1
+	// wraps to a negative value for limit==math.MaxInt on 64-bit platforms,
+	// which would make io.LimitReader read zero bytes and silently skip a valid
+	// DTD.
+	limit64 := int64(limit)
+	readLimit := limit64
+	if readLimit < math.MaxInt64 {
+		readLimit++
+	}
+	data, readErr := io.ReadAll(io.LimitReader(f, readLimit))
+	// Close the file immediately once the bounded read completes, before the
+	// already-buffered DTD is parsed, so the descriptor is not held open for
+	// the lifetime of the parse.
+	f.Close()
+
+	// Enforce the cap authoritatively against the bytes actually read, before
+	// inspecting the read error: a reader that returns n>0 alongside a
+	// non-EOF error on the cap-crossing read must still be rejected.
+	if int64(len(data)) > limit64 {
+		return ErrExternalDTDTooLarge
+	}
+	if readErr != nil {
 		return nil
 	}
 

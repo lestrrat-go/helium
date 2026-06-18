@@ -8,7 +8,7 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 
 - **NewParser() → Parser** — create fluent builder for XML parsing (clone-on-write value type)
   - Flag methods: `RecoverOnError(bool)`, `SubstituteEntities(bool)`, `LoadExternalDTD(bool)`, `DefaultDTDAttributes(bool)`, `ValidateDTD(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`, `PedanticErrors(bool)`, `StripBlanks(bool)`, `ProcessXInclude(bool)`, `AllowNetwork(bool)`, `CleanNamespaces(bool)`, `MergeCDATA(bool)`, `XIncludeNodes(bool)`, `CompactTextNodes(bool)`, `FixBaseURIs(bool)`, `RelaxLimits(bool)`, `IgnoreEncoding(bool)`, `BigLineNumbers(bool)`, `BlockXXE(bool)`, `ReuseDict(bool)`, `SkipIDs(bool)`, `LenientXMLDecl(bool)`
-  - Config methods: `SAXHandler(sax.SAX2Handler)`, `BaseURI(string)`, `CharBufferSize(int)`, `MaxDepth(int)`, `Catalog(CatalogResolver)`
+  - Config methods: `SAXHandler(sax.SAX2Handler)`, `BaseURI(string)`, `CharBufferSize(int)`, `MaxDepth(int)`, `MaxExternalDTDBytes(int)`, `Catalog(CatalogResolver)`
   - Terminal methods: `Parse(ctx, []byte) → (*Document, error)`, `ParseReader(ctx, io.Reader) → (*Document, error)`, `ParseFile(ctx, string) → (*Document, error)`, `ParseInNodeContext(ctx, Node, []byte) → (Node, error)`, `NewPushParser(ctx) → *PushParser`
 - **NewWriter() → Writer** — create fluent XML writer builder
   - Writer methods: `Format(bool)`, `IndentString(string)`, `SelfCloseEmptyElements(bool)`, `XMLDeclaration(bool)`, `IncludeDTD(bool)`, `EscapeNonASCII(bool)`, `AllowPrefixUndeclarations(bool)`
@@ -22,6 +22,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - Parse flags configured via fluent methods on Parser (internal bitset, not public)
 - `ErrorHandler` interface — async error delivery during parsing
 - `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve(ctx, pubID, sysID)`, `ResolveURI(ctx, uri)`)
+- `ErrExternalDTDTooLarge` — sentinel error returned when a loaded external DTD subset exceeds the byte cap; enforced against actual bytes read, never the advisory `fs.FileInfo.Size()`
+- `MaxExternalDTDSize` — default external-DTD byte cap (10 MiB), used when `MaxExternalDTDBytes` is unset or ≤ 0
+- `Parser.MaxExternalDTDBytes(n int)` — override the external-DTD byte cap (n ≤ 0 → `MaxExternalDTDSize`)
 - `AsNode[T Node](n Node) (T, bool)` — generic safe type assertion for Node types
 - `Document.GetElementByID(id)` — O(1) via hash table, O(n) fallback
 - `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal
