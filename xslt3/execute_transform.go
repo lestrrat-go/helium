@@ -13,8 +13,9 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
-// cloneOutputDef returns a shallow copy of an OutputDef with deep-copied map
-// fields. Returns nil if src is nil.
+// cloneOutputDef returns a deep copy of an OutputDef. All pointer, slice, and
+// map fields are freshly allocated so that mutating the clone (or the original)
+// never affects the other. Returns nil if src is nil.
 func cloneOutputDef(src *OutputDef) *OutputDef {
 	if src == nil {
 		return nil
@@ -32,6 +33,22 @@ func cloneOutputDef(src *OutputDef) *OutputDef {
 	}
 	if src.SuppressIndentation != nil {
 		cp.SuppressIndentation = append([]string(nil), src.SuppressIndentation...)
+	}
+	if src.IncludeContentType != nil {
+		v := *src.IncludeContentType
+		cp.IncludeContentType = &v
+	}
+	if src.ItemSeparator != nil {
+		v := *src.ItemSeparator
+		cp.ItemSeparator = &v
+	}
+	if src.EscapeURIAttributes != nil {
+		v := *src.EscapeURIAttributes
+		cp.EscapeURIAttributes = &v
+	}
+	if src.BuildTree != nil {
+		v := *src.BuildTree
+		cp.BuildTree = &v
 	}
 	return &cp
 }
@@ -499,7 +516,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if outDef == nil {
 			outDef = &OutputDef{Method: methodXML, Encoding: lexicon.EncodingUTF8U}
 		}
-		ov := ec.primaryOutputOverrides
+		// Clone the overrides so the pointer/slice/map fields merged below are
+		// independent allocations; the terminal outDef (exposed via
+		// ResolvedOutputDef and handlers) must not alias shared override state.
+		ov := cloneOutputDef(ec.primaryOutputOverrides)
 		if ov.Method != "" {
 			outDef.Method = ov.Method
 			outDef.MethodExplicit = true

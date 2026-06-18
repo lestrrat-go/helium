@@ -187,6 +187,10 @@ func SerializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef) error
 func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charMaps ...map[rune]string) error {
 	if outDef == nil {
 		outDef = defaultOutputDef()
+	} else {
+		// Clone so html/xhtml auto-detection below never mutates the
+		// caller-supplied OutputDef (it may be shared/reused).
+		outDef = cloneOutputDef(outDef)
 	}
 
 	// XSLT 3.0 §20: When no output method is explicitly specified, auto-detect
