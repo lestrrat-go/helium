@@ -321,10 +321,11 @@ func addChildPreflight(n MutableNode, cur Node) error {
 
 	// Detach cur from its current parent/sibling chain before relinking, so a
 	// node that already lives elsewhere in a tree cannot remain in two places.
+	// unlinkNode works for every sealed node type, including non-MutableNode
+	// nodes such as NamespaceNodeWrapper, so the detach can never be silently
+	// skipped and leave stale old-parent links behind.
 	if cdn.parent != nil || cdn.prev != nil || cdn.next != nil {
-		if cmn, ok := cur.(MutableNode); ok {
-			UnlinkNode(cmn)
-		}
+		unlinkNode(cur)
 	}
 
 	return nil
@@ -403,10 +404,11 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 
 	// Detach cur from its current parent/sibling chain before relinking, so a
 	// node that already lives elsewhere in a tree cannot remain in two places.
+	// unlinkNode works for every sealed node type, including non-MutableNode
+	// nodes such as NamespaceNodeWrapper, so the detach can never be silently
+	// skipped and leave stale old-parent links behind.
 	if cdn.parent != nil || cdn.prev != nil || cdn.next != nil {
-		if cmn, ok := cur.(MutableNode); ok {
-			UnlinkNode(cmn)
-		}
+		unlinkNode(cur)
 	}
 
 	return nil
@@ -456,15 +458,27 @@ func UnlinkNode(n MutableNode) {
 	if n == nil {
 		return
 	}
+	unlinkNode(n)
+}
+
+// unlinkNode detaches any [Node] from its parent and sibling chain, operating
+// purely through baseDocNode() pointers. It works for every sealed node type,
+// including those that are NOT MutableNode (e.g. NamespaceNodeWrapper), so any
+// already-linked incoming node can be safely detached before relinking without
+// a MutableNode type assertion that would silently skip or panic.
+func unlinkNode(n Node) {
+	if n == nil {
+		return
+	}
 
 	ndn := n.baseDocNode()
 
 	if parent := ndn.parent; parent != nil {
 		pdn := parent.baseDocNode()
-		if pdn.firstChild == n {
+		if pdn.firstChild != nil && pdn.firstChild.baseDocNode() == ndn {
 			pdn.firstChild = ndn.next
 		}
-		if pdn.lastChild == n {
+		if pdn.lastChild != nil && pdn.lastChild.baseDocNode() == ndn {
 			pdn.lastChild = ndn.prev
 		}
 	}
@@ -526,7 +540,10 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		if nn.baseDocNode() == ndn {
 			continue
 		}
-		UnlinkNode(nn.(MutableNode)) //nolint:forcetypeassert
+		// unlinkNode handles every sealed node type, so a non-MutableNode
+		// replacement (e.g. NamespaceNodeWrapper) is detached safely instead of
+		// panicking on a MutableNode force-cast.
+		unlinkNode(nn)
 	}
 
 	// Capture n's following sibling AFTER detaching replacement nodes so it
@@ -549,26 +566,32 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		cdn.parent = parent
 	}
 
-	// Determine the true last replacement node
-	last := cur.(MutableNode) //nolint:forcetypeassert
+	// Determine the true last replacement node. Operate on baseDocNode() links
+	// directly rather than through MutableNode setters so a non-MutableNode
+	// replacement (e.g. NamespaceNodeWrapper) is spliced safely instead of
+	// panicking on a force-cast.
+	last := cur
+	ldn := cdn
 	for i := 1; i < len(nodes); i++ {
-		c := nodes[i].(MutableNode) //nolint:forcetypeassert
-		c.SetParent(last.Parent())
-		c.SetPrevSibling(last)
-		last.SetNextSibling(c)
+		c := nodes[i]
+		cn := c.baseDocNode()
+		cn.parent = ldn.parent
+		cn.prev = last
+		ldn.next = c
 		last = c
+		ldn = cn
 	}
 
 	// Link last replacement to whatever followed n
-	last.SetNextSibling(afterN)
+	ldn.next = afterN
 	if afterN != nil {
-		afterN.(MutableNode).SetPrevSibling(last) //nolint:forcetypeassert
+		afterN.baseDocNode().prev = last
 	}
 
 	// Update parent's lastChild if n was the last child and we added more nodes
 	if afterN == nil && len(nodes) > 1 {
 		if parent := cdn.parent; parent != nil {
-			setLastChild(parent.(MutableNode), last) //nolint:forcetypeassert
+			parent.baseDocNode().lastChild = last
 		}
 	}
 

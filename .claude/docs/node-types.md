@@ -107,6 +107,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
 - `addChild(parent, child)` — append to end of children
 - `addSibling(node, sibling)` — append to end of siblings
 - `replaceNode(old, new)` — swap in same position
-- `UnlinkNode(n)` — detach from parent and siblings
+- `UnlinkNode(n)` — detach a `MutableNode` from parent and siblings (delegates to the internal `unlinkNode(Node)`)
+- `unlinkNode(n)` — internal detach that works for ANY sealed node via `baseDocNode()`, including non-`MutableNode` nodes like `NamespaceNodeWrapper`
 
 All three insertion paths share `wouldCreateCycle(parent, cur)`: they reject inserting a node into itself or into one of its own descendants (which would put an ancestor below itself). addChild/addSibling auto-unlink an already-linked incoming node before relinking so it never lives in two places; rejection leaves the tree untouched. The shared guard + auto-unlink is factored into `addChildPreflight`/`addSiblingPreflight`. Leaf `AddChild`/`AddSibling` overrides that take a content-merge fast path (Text, Comment) run the matching preflight BEFORE merging, so `txt.AddChild(txt)`/`comment.AddChild(comment)` are rejected instead of doubling content, and an already-linked incoming leaf is unlinked from its old parent before its content is merged.
+
+The auto-unlink and `replaceNode`'s splice operate through `unlinkNode`/`baseDocNode()` links rather than `MutableNode` setters. A non-`MutableNode` operand (e.g. a public `NamespaceNodeWrapper`, which embeds `docnode` directly) is therefore detached and spliced safely: the preflights no longer silently skip the unlink (which left stale old-parent links) and `replaceNode` no longer force-casts to `MutableNode` (which could panic).
