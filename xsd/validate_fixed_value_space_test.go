@@ -273,6 +273,199 @@ func TestFixedValueSpaceQName(t *testing.T) {
 	})
 }
 
+// TestFixedValueSpaceUnionQNameCrossMember verifies that when the fixed and
+// instance values resolve to DIFFERENT QName-derived union members, the
+// fixed-value comparison still succeeds when both resolve to the SAME expanded
+// {namespace, local} name — even though the two members are distinct type
+// definitions. The union lists two xs:QName restrictions distinguished by a
+// pattern on the lexical PREFIX: member "sQName" only accepts prefix "s:",
+// member "iQName" only accepts prefix "i:". The schema fixes "s:name" (active
+// member sQName) and the instance writes "i:name" with prefix i bound to the
+// SAME URI as s (active member iQName). The expanded names match, so the
+// constraint holds; a different URI or local name must be rejected.
+func TestFixedValueSpaceUnionQNameCrossMember(t *testing.T) {
+	const targetURI = "urn:example:target"
+	const typeDefs = `  <xs:simpleType name="sQName">
+    <xs:restriction base="xs:QName">
+      <xs:pattern value="s:.*"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="iQName">
+    <xs:restriction base="xs:QName">
+      <xs:pattern value="i:.*"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sOrIQName">
+    <xs:union memberTypes="sQName iQName"/>
+  </xs:simpleType>`
+
+	t.Run("element/different-members-same-uri", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+` + typeDefs + `
+  <xs:element name="root" type="sOrIQName" fixed="s:name"/>
+</xs:schema>`
+		instanceXML := `<root xmlns:i="` + targetURI + `">i:name</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/different-members-different-uri-rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+` + typeDefs + `
+  <xs:element name="root" type="sOrIQName" fixed="s:name"/>
+</xs:schema>`
+		instanceXML := `<root xmlns:i="urn:example:other">i:name</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("element/different-members-different-localname-rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+` + typeDefs + `
+  <xs:element name="root" type="sOrIQName" fixed="s:name"/>
+</xs:schema>`
+		instanceXML := `<root xmlns:i="` + targetURI + `">i:other</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("attribute/different-members-same-uri", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+` + typeDefs + `
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="sOrIQName" fixed="s:name"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		instanceXML := `<root xmlns:i="` + targetURI + `" a="i:name"/>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+}
+
+// TestFixedValueSpaceListOfQNameCrossMember verifies the same cross-member QName
+// equality through an xs:list whose itemType is a union of two QName-derived
+// members. Each list item dispatches to its active member independently: member
+// sQName accepts only the "s:" prefix and member iQName only the "i:" prefix. The
+// schema fixes "s:a s:b" (every item active in sQName, prefix s bound in the
+// schema) and the instance writes "i:a i:b" (every item active in iQName, prefix
+// i bound in the instance to the SAME URI as s). The fixed and instance items
+// resolve to DIFFERENT members yet denote the same expanded name item-by-item, so
+// the constraint holds; a per-item URI/local mismatch is rejected.
+func TestFixedValueSpaceListOfQNameCrossMember(t *testing.T) {
+	const targetURI = "urn:example:target"
+	const typeDefs = `  <xs:simpleType name="sQName">
+    <xs:restriction base="xs:QName">
+      <xs:pattern value="s:.*"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="iQName">
+    <xs:restriction base="xs:QName">
+      <xs:pattern value="i:.*"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sOrIQName">
+    <xs:union memberTypes="sQName iQName"/>
+  </xs:simpleType>
+  <xs:simpleType name="qnameList">
+    <xs:list itemType="sOrIQName"/>
+  </xs:simpleType>`
+
+	t.Run("element/per-item-cross-member-same-uri", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+` + typeDefs + `
+  <xs:element name="root" type="qnameList" fixed="s:a s:b"/>
+</xs:schema>`
+		instanceXML := `<root xmlns:i="` + targetURI + `">i:a i:b</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/per-item-localname-mismatch-rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+` + typeDefs + `
+  <xs:element name="root" type="qnameList" fixed="s:a s:b"/>
+</xs:schema>`
+		instanceXML := `<root xmlns:i="` + targetURI + `">i:a i:c</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+
+	t.Run("element/per-item-uri-mismatch-rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="` + targetURI + `">
+` + typeDefs + `
+  <xs:element name="root" type="qnameList" fixed="s:a s:b"/>
+</xs:schema>`
+		instanceXML := `<root xmlns:i="urn:example:other">i:a i:b</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+}
+
+// TestFixedValueSpaceUnionNotationCrossMember verifies cross-member equality for
+// xs:NOTATION-derived union members, the NOTATION analogue of the QName case. Two
+// enumeration-restricted NOTATION members each accept a single enumerated literal
+// that names the SAME declared notation through a DIFFERENT prefix (both prefixes
+// p and q are bound to the notation's namespace in the schema). The schema fixes
+// "p:jpeg" (active member pNotation) and the instance writes "q:jpeg" with prefix
+// q bound to the same URI (active member qNotation). The two members differ but
+// the resolved expanded notation names match, so the constraint holds; a
+// different notation name is rejected.
+func TestFixedValueSpaceUnionNotationCrossMember(t *testing.T) {
+	const notationNS = "urn:p"
+	const typeDefs = `  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:notation name="png" public="image/png"/>
+  <xs:simpleType name="pNotation">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="p:jpeg"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="qNotation">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="q:jpeg"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pOrQNotation">
+    <xs:union memberTypes="pNotation qNotation"/>
+  </xs:simpleType>`
+
+	t.Run("element/different-members-same-notation", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="` + notationNS + `" xmlns:q="` + notationNS + `">
+` + typeDefs + `
+  <xs:element name="root" type="pOrQNotation" fixed="p:jpeg"/>
+</xs:schema>`
+		instanceXML := `<root xmlns:q="` + notationNS + `">q:jpeg</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, false)
+	})
+
+	t.Run("element/different-notation-rejected", func(t *testing.T) {
+		t.Parallel()
+		const typeDefsPng = `  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:notation name="png" public="image/png"/>
+  <xs:simpleType name="pNotation">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="p:jpeg"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="qNotation">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="q:png"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pOrQNotation">
+    <xs:union memberTypes="pNotation qNotation"/>
+  </xs:simpleType>`
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="` + notationNS + `" xmlns:q="` + notationNS + `">
+` + typeDefsPng + `
+  <xs:element name="root" type="pOrQNotation" fixed="p:jpeg"/>
+</xs:schema>`
+		instanceXML := `<root xmlns:q="` + notationNS + `">q:png</root>`
+		runFixedValueCase(t, schemaXML, instanceXML, true)
+	})
+}
+
 // TestFixedValueSpaceListOfUnion verifies that a fixed value of an xs:list whose
 // itemType is a union dispatches each item through the union's *ordered* active
 // member. For memberTypes="xs:integer xs:boolean", a value such as "1" validates

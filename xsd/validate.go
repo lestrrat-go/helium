@@ -183,10 +183,12 @@ const crossMemberValueComparisonMaxDepth = 64
 //   - Both LIST: split each value (in its own whiteSpace value space) and compare
 //     items pairwise by recursing on the two item types (which may themselves be
 //     atomic, list, or union).
-//   - Both ATOMIC: reduce each to its primitive value-space family (XSD 1.1
-//     §2.3); equal iff the families match and the values compare equal there
-//     (value.Compare for comparable families, normalized-lexical for the string
-//     family). QName/NOTATION have no shared family and remain unequal.
+//   - Both ATOMIC: if both members are QName-derived (or both NOTATION-derived),
+//     compare resolved expanded names so different prefixes bound to the same URI
+//     are equal (QName-vs-NOTATION stays unequal). Otherwise reduce each to its
+//     primitive value-space family (XSD 1.1 §2.3); equal iff the families match and
+//     the values compare equal there (value.Compare for comparable families,
+//     normalized-lexical for the string family).
 //   - Any other variety mismatch that cannot be reconciled (e.g. list vs atomic):
 //     no shared value space → unequal.
 func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string) bool {
@@ -258,6 +260,33 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 
 	fixedLocal := builtinBaseLocal(fixedMember)
 	instanceLocal := builtinBaseLocal(instanceMember)
+
+	// QName/NOTATION have no shared primitive family in primitiveValueSpaceFamily
+	// (their equality is namespace-context dependent, not a value/lexical compare),
+	// so handle them here before that fallback. When BOTH members are QName-derived
+	// (or BOTH NOTATION-derived), normalize each side with its member's effective
+	// whiteSpace facet and compare the resolved expanded names: cross-member equality
+	// holds iff both resolve to the same {namespace, local}, even when the two
+	// members bind different prefixes to the same URI. QName-vs-NOTATION stays
+	// unequal (no shared value space).
+	instanceIsQName := instanceLocal == lexicon.TypeQName
+	fixedIsQName := fixedLocal == lexicon.TypeQName
+	instanceIsNotation := instanceLocal == lexicon.TypeNotation
+	fixedIsNotation := fixedLocal == lexicon.TypeNotation
+	if (instanceIsQName && fixedIsQName) || (instanceIsNotation && fixedIsNotation) {
+		ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
+		nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
+		iqn, ierr := resolveLexicalQName(ni, instanceNS)
+		if ierr != nil {
+			return false
+		}
+		fqn, ferr := resolveLexicalQName(nf, fixedNS)
+		if ferr != nil {
+			return false
+		}
+		return iqn == fqn
+	}
+
 	fixedFamily, fComparable, fok := primitiveValueSpaceFamily(fixedLocal)
 	instanceFamily, _, iok := primitiveValueSpaceFamily(instanceLocal)
 	if !fok || !iok || fixedFamily != instanceFamily {
