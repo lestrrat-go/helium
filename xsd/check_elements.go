@@ -199,21 +199,35 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// 3. First ref-restricted attribute (alphabetical)
 		// 4. First child content error
 
-		// maxOccurs must be >= 1.
+		// maxOccurs must be a non-negative integer (or "unbounded") and >= 1.
 		if maxOcc != "" && maxOcc != attrValUnbounded {
-			maxVal := parseOccurs(maxOcc, 1)
-			if maxVal < 1 {
+			maxVal, ok := parseNonNegativeOccurs(maxOcc, true)
+			if !ok {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
+					"'"+maxOcc+"' is not a valid value of the union type 'xs:allNNI'."), helium.ErrorLevelFatal))
+				c.errorCount++
+			} else if maxVal < 1 {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
 					"The value must be greater than or equal to 1."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 		}
 
-		// minOccurs > maxOccurs check.
+		// minOccurs must be a non-negative integer.
+		if minOcc != "" {
+			if _, ok := parseNonNegativeOccurs(minOcc, false); !ok {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
+					"'"+minOcc+"' is not a valid value of the atomic type 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+		}
+
+		// minOccurs > maxOccurs check. Skip it when maxOccurs already failed the
+		// >= 1 rule (maxVal < 1); libxml2 reports only the maxOccurs error there.
 		if minOcc != "" && maxOcc != "" && maxOcc != attrValUnbounded {
-			minVal := parseOccurs(minOcc, 1)
-			maxVal := parseOccurs(maxOcc, 1)
-			if minVal > maxVal {
+			minVal, minOK := parseNonNegativeOccurs(minOcc, false)
+			maxVal, maxOK := parseNonNegativeOccurs(maxOcc, true)
+			if minOK && maxOK && maxVal != Unbounded && maxVal >= 1 && minVal > maxVal {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
 					"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
 				c.errorCount++
@@ -259,12 +273,37 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// Matches libxml2 ordering: maxOccurs, not-allowed attrs,
 		// block/final value checks, default+fixed, type/content children.
 
-		// maxOccurs must be >= 1.
+		// maxOccurs must be a non-negative integer (or "unbounded") and >= 1.
 		if maxOcc != "" && maxOcc != attrValUnbounded {
-			maxVal := parseOccurs(maxOcc, 1)
-			if maxVal < 1 {
+			maxVal, ok := parseNonNegativeOccurs(maxOcc, true)
+			if !ok {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
+					"'"+maxOcc+"' is not a valid value of the union type 'xs:allNNI'."), helium.ErrorLevelFatal))
+				c.errorCount++
+			} else if maxVal < 1 {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
 					"The value must be greater than or equal to 1."), helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+		}
+
+		// minOccurs must be a non-negative integer.
+		if minOcc != "" {
+			if _, ok := parseNonNegativeOccurs(minOcc, false); !ok {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
+					"'"+minOcc+"' is not a valid value of the atomic type 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+		}
+
+		// minOccurs > maxOccurs check. Skip it when maxOccurs already failed the
+		// >= 1 rule (maxVal < 1); libxml2 reports only the maxOccurs error there.
+		if minOcc != "" && maxOcc != "" && maxOcc != attrValUnbounded {
+			minVal, minOK := parseNonNegativeOccurs(minOcc, false)
+			maxVal, maxOK := parseNonNegativeOccurs(maxOcc, true)
+			if minOK && maxOK && maxVal != Unbounded && maxVal >= 1 && minVal > maxVal {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
+					"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 		}

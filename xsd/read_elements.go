@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -36,6 +37,77 @@ func parseParticleOccurs(elem *helium.Element) (int, int) {
 		maxOccurs = parseOccurs(v, 1)
 	}
 	return minOccurs, maxOccurs
+}
+
+// parseNonNegativeOccurs parses an occurs attribute value as a non-negative
+// integer. maxOccurs (allowMax) may additionally be the literal "unbounded",
+// represented by the Unbounded sentinel. ok is false when the lexical value is
+// not a valid non-negative integer (or "unbounded" when permitted); callers
+// report a schema error in that case rather than silently accepting a bogus
+// occurrence count.
+func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
+	if allowMax && s == attrValUnbounded {
+		return Unbounded, true
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// validateOccursAttrs validates the minOccurs/maxOccurs attributes of a
+// non-element particle (model group, group reference, wildcard). It rejects
+// negative or non-integer values and enforces minOccurs <= maxOccurs, reporting
+// libxml2-style schema parser errors via the compiler's error handler.
+//
+// xs:element particles are validated by checkLocalElement to preserve the
+// libxml2 diagnostic ordering golden tests depend on; this method deliberately
+// skips them.
+func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element) {
+	if c.filename == "" {
+		return
+	}
+
+	line := elem.Line()
+	local := elem.LocalName()
+	xsdElem := local
+
+	minSet := false
+	minVal := 1
+	if v := getAttr(elem, attrMinOccurs); v != "" {
+		n, ok := parseNonNegativeOccurs(v, false)
+		if !ok {
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMinOccurs,
+				"'"+v+"' is not a valid value of the atomic type 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
+			c.errorCount++
+		} else {
+			minSet = true
+			minVal = n
+		}
+	}
+
+	maxSet := false
+	maxVal := 1
+	if v := getAttr(elem, attrMaxOccurs); v != "" {
+		n, ok := parseNonNegativeOccurs(v, true)
+		if !ok {
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMaxOccurs,
+				"'"+v+"' is not a valid value of the union type 'xs:allNNI'."), helium.ErrorLevelFatal))
+			c.errorCount++
+		} else {
+			maxSet = true
+			maxVal = n
+		}
+	}
+
+	// minOccurs must not exceed maxOccurs (Unbounded is treated as +inf, so it
+	// can never be exceeded).
+	if minSet && maxSet && maxVal != Unbounded && minVal > maxVal {
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMinOccurs,
+			"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
 }
 
 func readDefaultOrFixed(elem *helium.Element) (*string, *string) {
@@ -366,6 +438,7 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 }
 
 func (c *compiler) parseWildcard(ctx context.Context, elem *helium.Element) *Particle {
+	c.validateOccursAttrs(ctx, elem)
 	minOcc, maxOcc := parseParticleOccurs(elem)
 	wc := c.readWildcard(ctx, elem)
 	return &Particle{
