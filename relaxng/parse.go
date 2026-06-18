@@ -808,11 +808,12 @@ func (c *compiler) parseData(ctx context.Context, node *helium.Element) *pattern
 	p := &pattern{kind: patternData, line: node.Line()}
 
 	typeName := getAttr(node, "type")
-	library := getDatatypeLibrary(node)
+	library, declared := getDatatypeLibrary(node)
 
 	p.dataType = &dataType{
-		library: library,
-		name:    typeName,
+		library:         library,
+		name:            typeName,
+		libraryDeclared: declared,
 	}
 
 	// Parse <param> and <except> children
@@ -847,17 +848,19 @@ func (c *compiler) parseValue(_ context.Context, node *helium.Element) *pattern 
 	p := &pattern{kind: patternValue, line: node.Line()}
 
 	typeName := getAttr(node, "type")
-	library := getDatatypeLibrary(node)
+	library, declared := getDatatypeLibrary(node)
 
 	if typeName == "" {
 		// Default type is "token" from the built-in library
 		typeName = "token"
 		library = ""
+		declared = false
 	}
 
 	p.dataType = &dataType{
-		library: library,
-		name:    typeName,
+		library:         library,
+		name:            typeName,
+		libraryDeclared: declared,
 	}
 	p.value = textContent(node)
 
@@ -1130,6 +1133,21 @@ func getAttrOpt(elem *helium.Element, name string) (string, bool) {
 	return strings.TrimSpace(attr.Value()), true
 }
 
+// getUnqualifiedAttrOpt returns the value and presence of an UNQUALIFIED
+// (no-namespace) attribute. RELAX NG structural attributes such as
+// datatypeLibrary are always unqualified, so a foreign-namespaced attribute
+// sharing the local name (e.g. f:datatypeLibrary) must not be mistaken for the
+// RELAX NG attribute. Foreign attributes are removed during simplification
+// (spec §§4.1, 4.3) before datatypeLibrary inheritance is computed, so they
+// must not affect the inherited library.
+func getUnqualifiedAttrOpt(elem *helium.Element, name string) (string, bool) {
+	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
+	if !ok {
+		return "", false
+	}
+	return strings.TrimSpace(attr.Value()), true
+}
+
 // getAncestorNS walks up the RNG element tree to find the ns attribute.
 // An explicit ns="" on an ancestor stops the walk (empty namespace).
 func getAncestorNS(node *helium.Element) string {
@@ -1148,26 +1166,35 @@ func getAncestorNS(node *helium.Element) string {
 }
 
 // getDatatypeLibrary walks up the tree to find the datatypeLibrary attribute.
-func getDatatypeLibrary(node *helium.Element) string {
-	// Check the element itself first
-	lib := getAttr(node, "datatypeLibrary")
-	if lib != "" {
-		return lib
+// Per RELAX NG, datatypeLibrary is inherited from the nearest ancestor that
+// carries it, but an explicit datatypeLibrary="" RESETS to the built-in
+// library even under an inherited XSD library. The walk therefore tests for
+// attribute PRESENCE (via getAttrOpt) rather than non-emptiness, so an explicit
+// empty value stops the walk and returns "" instead of leaking the inherited
+// XSD library. The second return value reports whether datatypeLibrary was
+// declared anywhere (on the element or an ancestor), so callers can tell an
+// explicit empty reset from a truly-absent library.
+func getDatatypeLibrary(node *helium.Element) (string, bool) {
+	// Check the element itself first. Only the UNQUALIFIED datatypeLibrary
+	// counts: a foreign-namespaced f:datatypeLibrary is removed during
+	// simplification and must not reset an inherited library.
+	if lib, ok := getUnqualifiedAttrOpt(node, "datatypeLibrary"); ok {
+		return lib, true
 	}
-	// Walk up parents
+	// Walk up parents, stopping at the nearest ancestor that declares the
+	// (unqualified) attribute (even if empty).
 	current := node.Parent()
 	for current != nil {
-		if elem, ok := current.(*helium.Element); ok {
-			lib = getAttr(elem, "datatypeLibrary")
-			if lib != "" {
-				return lib
-			}
-			current = elem.Parent()
-		} else {
+		elem, ok := current.(*helium.Element)
+		if !ok {
 			break
 		}
+		if lib, has := getUnqualifiedAttrOpt(elem, "datatypeLibrary"); has {
+			return lib, true
+		}
+		current = elem.Parent()
 	}
-	return ""
+	return "", false
 }
 
 // addSchemaError records a schema compilation error.

@@ -3,10 +3,14 @@ package relaxng
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -1052,8 +1056,10 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 	case patternGroup:
 		// Sequential match on tokens, backtracking across each member's
 		// consumption options so a greedy repetition or a zero-token choice
-		// branch cannot strand a later mandatory member.
-		tokens := strings.Fields(text)
+		// branch cannot strand a later mandatory member. Tokenization splits on
+		// XML whitespace only (#x20, #x9, #xA, #xD), not arbitrary Unicode
+		// whitespace, so a value such as "a b" stays a single token.
+		tokens := xmlFields(text)
 		if slices.Contains(v.groupCounts(pat.children, tokens), len(tokens)) {
 			return 0
 		}
@@ -1075,21 +1081,28 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 			return -1
 		}
 		return v.matchAttrContent(def, text, elem)
-	case patternOneOrMore:
-		content := wrapChildren(pat.children)
-		if v.matchAttrContent(content, text, elem) != 0 {
-			return -1
+	case patternOneOrMore, patternZeroOrMore:
+		// Match the repetition against the attribute's tokens via the
+		// backtracking token matcher, requiring that the whole token sequence
+		// is consumed. Without the full-consumption check, a zeroOrMore would
+		// accept any text (consuming nothing) and a oneOrMore would ignore
+		// trailing non-matching tokens. Tokenization must split on XML
+		// whitespace only (#x20, #x9, #xA, #xD), not arbitrary Unicode
+		// whitespace, so a value such as "a b" stays a single token.
+		tokens := xmlFields(text)
+		if slices.Contains(v.matchAttrTokensCounts(pat, tokens), len(tokens)) {
+			return 0
 		}
-		return 0
-	case patternZeroOrMore:
-		return 0
+		return -1
 	}
 	return 0
 }
 
 // matchListContent validates a string against a list pattern.
 func (v *validator) matchListContent(pat *pattern, text string, elem *helium.Element) int {
-	tokens := strings.Fields(text)
+	// <list> tokenization splits on XML whitespace only (#x20, #x9, #xA, #xD),
+	// not arbitrary Unicode whitespace (e.g. NBSP stays part of a token).
+	tokens := xmlFields(text)
 	// Backtrack across each member's consumption options so a greedy
 	// repetition or a zero-token choice branch cannot strand a later
 	// mandatory member.
@@ -1199,6 +1212,13 @@ func (v *validator) matchAttrTokensCounts(pat *pattern, tokens []string) []int {
 		content := wrapChildren(pat.children)
 		return v.repeatCounts(content, tokens, 0)
 	case patternGroup:
+		return v.groupCounts(pat.children, tokens)
+	case patternList:
+		// A <list> nested in a repetition (e.g. oneOrMore/zeroOrMore) consumes
+		// one full run of its children per iteration; return the set of token
+		// counts a sequential match of those children can consume so the
+		// repetition machinery can chain iterations. This mirrors the
+		// full-consumption check matchListContent performs for a standalone list.
 		return v.groupCounts(pat.children, tokens)
 	case patternText:
 		// Text in a list: consume one token (or none when empty).
@@ -1637,13 +1657,34 @@ func (v *validator) matchValue(pat *pattern, text string) int {
 
 	if pat.dataType != nil {
 		switch pat.dataType.library {
-		case "":
-			if pat.dataType.name == lexicon.TypeToken {
-				text = normalizeToken(text)
-				expected = normalizeToken(expected)
-			}
 		case lexicon.NamespaceXSDDatatypes:
 			return matchXSDValue(pat.dataType.name, text, expected)
+		case "":
+			// Empty datatypeLibrary selects the built-in RELAX NG library, which
+			// provides only "string" (lexical equality) and "token" (whiteSpace
+			// =collapse equality). Mirror matchData: recognized bare XSD type
+			// names are routed through the same XSD value path used there
+			// (documented libxml2/golden-compat deviation; see matchData and the
+			// token-matcher tests cited there); an unknown name fails rather than
+			// silently matching by raw equality.
+			switch pat.dataType.name {
+			case lexicon.TypeToken:
+				text = normalizeToken(text)
+				expected = normalizeToken(expected)
+			case "string":
+				// Lexical equality below.
+			default:
+				// Only fall back to the XSD value path when datatypeLibrary is
+				// genuinely absent; an explicit "" reset rejects bare XSD names.
+				if _, ok := xsdDatatypeNames[pat.dataType.name]; ok && !pat.dataType.libraryDeclared {
+					return matchXSDValue(pat.dataType.name, text, expected)
+				}
+				return -1
+			}
+		default:
+			// Unknown datatype library: an unsupported <value> datatype cannot be
+			// satisfied, so it must fail rather than fall through to raw equality.
+			return -1
 		}
 	}
 
@@ -1749,9 +1790,42 @@ func (v *validator) matchData(pat *pattern, text string) int {
 		case "string":
 			return 0
 		}
+		// Spec note: per RELAX NG, an omitted datatypeLibrary selects the EMPTY
+		// built-in library, which provides ONLY "string" and "token"; XSD
+		// datatypes strictly require datatypeLibrary
+		// "http://www.w3.org/2001/XMLSchema-datatypes". A spec-conformant
+		// processor would reject <data type="integer"/> here.
+		//
+		// We deliberately deviate for libxml2/golden compatibility: libxml2's
+		// RELAX NG engine resolves bare XSD datatype names against its built-in
+		// XSD library. The hand-written token-matcher unit tests rely on this:
+		// their schemas use bare <data type="integer"/> and <data type="NMTOKEN"/>
+		// with NO datatypeLibrary declared or inherited anywhere (the root is a
+		// plain <element xmlns="…relaxng…structure/1.0">, no <grammar> ancestor
+		// and no datatypeLibrary attribute). Specifically required by:
+		//   - TestTokenMatcherChoiceShadow / ...ChoiceShadowAttr (token_matcher_test.go)
+		//   - TestTokenMatcherGroupBacktrack (token_matcher_test.go, bare NMTOKEN)
+		//   - TestTokenMatcherNullableOneOrMore / ...NoExponentialBlowup
+		//     (token_matcher_review_test.go, bare integer)
+		// Verified by grepping those fixtures: removing this fallback breaks them.
+		// Routing only RECOGNIZED XSD datatype names through the shared validator
+		// keeps those green while still validating the value (so e.g. an
+		// out-of-range integer is rejected). Crucially, a truly-unknown name such
+		// as type="bogus" is NOT in xsdDatatypeNames and falls through to the
+		// failure below, fixing the original "empty library matches anything" bug.
+		//
+		// The fallback applies ONLY when datatypeLibrary is genuinely ABSENT
+		// (libraryDeclared == false). An explicit datatypeLibrary="" — including
+		// one that resets an inherited XSD library — selects the built-in library
+		// conformantly and so rejects bare XSD names like "integer".
+		if _, ok := xsdDatatypeNames[dt.name]; ok && !dt.libraryDeclared {
+			return validateXSDType(dt.name, text, pat.params)
+		}
 	}
 
-	return 0
+	// Unknown built-in datatype name or unknown library: an unsupported datatype
+	// cannot be satisfied, so it must fail rather than silently match everything.
+	return -1
 }
 
 // xsdDatatypeNames is the set of XSD datatype-library names RELAX NG recognizes.
@@ -1786,7 +1860,7 @@ func validateXSDType(typeName, text string, params []*param) int {
 	// xs:string has whiteSpace=preserve and may carry RELAX NG <param> facets
 	// (pattern, length, …); validate those locally against the preserved text.
 	if typeName == "string" {
-		return validateWithParams(text, params)
+		return validateWithParams(text, typeName, params)
 	}
 	// Apply the datatype's XSD whiteSpace facet (replace for normalizedString,
 	// collapse for everything else here) before lexical validation, so a value
@@ -1795,10 +1869,14 @@ func validateXSDType(typeName, text string, params []*param) int {
 	if value.ValidateBuiltin(text, typeName) != nil {
 		return -1
 	}
-	return 0
+	// Apply the supported length facets to the whitespace-normalized value for
+	// every applicable XSD datatype, not just xs:string. The length facets are
+	// defined on the value's length in the units fixed by the datatype (see
+	// facetLength).
+	return validateWithParams(text, typeName, params)
 }
 
-func validateWithParams(value string, params []*param) int {
+func validateWithParams(value, typeName string, params []*param) int {
 	for _, p := range params {
 		switch p.name {
 		case "pattern":
@@ -1806,18 +1884,125 @@ func validateWithParams(value string, params []*param) int {
 			if err != nil || !matched {
 				return -1
 			}
+		case "length":
+			n, err := strconv.Atoi(strings.TrimSpace(p.value))
+			if err != nil {
+				return -1
+			}
+			length, ok := facetLength(value, typeName)
+			if !ok || length != n {
+				return -1
+			}
 		case "minLength":
-			// simplified: just check length
+			n, err := strconv.Atoi(strings.TrimSpace(p.value))
+			if err != nil {
+				return -1
+			}
+			length, ok := facetLength(value, typeName)
+			if !ok || length < n {
+				return -1
+			}
 		case "maxLength":
-			// simplified: just check length
+			n, err := strconv.Atoi(strings.TrimSpace(p.value))
+			if err != nil {
+				return -1
+			}
+			length, ok := facetLength(value, typeName)
+			if !ok || length > n {
+				return -1
+			}
 		}
 	}
 	return 0
 }
 
-// normalizeToken collapses whitespace and trims.
+// facetLength returns the value's length in the units the length/minLength/
+// maxLength facets are defined in for the given XSD datatype, and ok=true when
+// that length is well-defined:
+//   - list builtins (NMTOKENS, IDREFS, ENTITIES): the number of XML-whitespace
+//     -separated tokens (the list length).
+//   - binary builtins (hexBinary, base64Binary): the number of decoded octets.
+//   - everything else (string family, NMTOKEN, …): the number of characters
+//     (runes) in the value.
+//
+// For the binary builtins the length is measured in decoded octets, so if the
+// value cannot be decoded ok=false is returned and the facet must be treated as
+// unsatisfiable: the rune count of an undecodable binary value is meaningless,
+// and falling back to it would silently compare lengths in the wrong unit. A
+// value that has passed lexical validation for typeName decodes successfully, so
+// this only guards against an undecodable value reaching the facet check.
+func facetLength(value, typeName string) (int, bool) {
+	switch typeName {
+	case "NMTOKENS", "IDREFS", "ENTITIES":
+		return len(xmlFields(value)), true
+	case "hexBinary":
+		return hexBinaryOctets(value)
+	case "base64Binary":
+		octets, ok := decodeBase64Octets(value)
+		if !ok {
+			return 0, false
+		}
+		return len(octets), true
+	}
+	return utf8.RuneCountInString(value), true
+}
+
+// hexBinaryOctets returns the decoded octet count of an xs:hexBinary lexical
+// value. Each octet is two hex digits, so for a lexically valid value this is
+// simply len/2.
+func hexBinaryOctets(s string) (int, bool) {
+	s = strings.TrimSpace(s)
+	if len(s)%2 != 0 {
+		return 0, false
+	}
+	if _, err := hex.DecodeString(s); err != nil {
+		return 0, false
+	}
+	return len(s) / 2, true
+}
+
+// decodeBase64Octets decodes an xs:base64Binary lexical value to its octets,
+// mirroring the strict decoder used by the xsd/value comparison path so the two
+// agree on what counts as a valid base64Binary. XSD permits embedded whitespace,
+// which is stripped first; the remainder must then be correctly padded and have
+// zero unused trailing bits (Strict()), so unpadded forms such as "TQ" or padded
+// forms with non-zero trailing bits such as "TR==" fail to decode rather than
+// yielding a bogus octet count.
+func decodeBase64Octets(s string) ([]byte, bool) {
+	stripped := strings.Map(func(r rune) rune {
+		if isXMLSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+	decoded, err := base64.StdEncoding.Strict().DecodeString(stripped)
+	if err != nil {
+		return nil, false
+	}
+	return decoded, true
+}
+
+// normalizeToken collapses runs of XML whitespace (#x20, #x9, #xA, #xD) into a
+// single space and trims leading/trailing XML whitespace, matching the
+// xs:token whiteSpace=collapse facet. It splits on XML whitespace only (via
+// xmlFields), not arbitrary Unicode whitespace, so NBSP is preserved within a
+// token.
 func normalizeToken(s string) string {
-	return strings.Join(strings.Fields(s), " ")
+	return strings.Join(xmlFields(s), " ")
+}
+
+// isXMLSpace reports whether r is one of the four XML whitespace characters
+// (#x20, #x9, #xA, #xD). RELAX NG / XSD list tokenization is defined in terms
+// of these only, unlike strings.Fields which splits on all Unicode whitespace
+// (e.g. NBSP, which must remain part of a token).
+func isXMLSpace(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+}
+
+// xmlFields splits s into tokens on XML whitespace only, discarding empty
+// fields. It is the XML-whitespace analogue of strings.Fields.
+func xmlFields(s string) []string {
+	return strings.FieldsFunc(s, isXMLSpace)
 }
 
 // addError adds a validation error (suppressed when inside choice branches).
