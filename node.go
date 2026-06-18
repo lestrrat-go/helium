@@ -291,6 +291,24 @@ func addChild(n MutableNode, cur Node) error {
 	pdn := n.baseDocNode()
 	cdn := cur.baseDocNode()
 
+	// Cycle guard: a node may not be inserted into itself, nor into one of
+	// its own descendants (which would make an ancestor a descendant of
+	// itself). Walk n's parent chain looking for cur. This also catches the
+	// self-insertion case when n == cur.
+	for anc := Node(n); anc != nil; anc = anc.Parent() {
+		if anc.baseDocNode() == cdn {
+			return errors.New("cannot add a node as a child of itself or one of its descendants")
+		}
+	}
+
+	// Detach cur from its current parent/sibling chain before relinking, so a
+	// node that already lives elsewhere in a tree cannot remain in two places.
+	if cdn.parent != nil || cdn.prev != nil || cdn.next != nil {
+		if cmn, ok := cur.(MutableNode); ok {
+			UnlinkNode(cmn)
+		}
+	}
+
 	l := pdn.lastChild
 	if l == nil {
 		if pdebug.Enabled {

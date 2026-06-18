@@ -81,3 +81,38 @@ func TestElementContent(t *testing.T) {
 
 	require.Equal(t, []byte("Hello World!"), e.Content())
 }
+
+func TestAddChildCycleGuard(t *testing.T) {
+	t.Parallel()
+
+	t.Run("self insertion is rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		e := mustCreateElement(t, doc, "root")
+
+		err := e.AddChild(e)
+		require.Error(t, err, "AddChild(self) must be rejected")
+		require.Nil(t, e.FirstChild(), "tree must not be corrupted")
+		require.Nil(t, e.LastChild(), "tree must not be corrupted")
+		require.Nil(t, e.Parent(), "tree must not be corrupted")
+	})
+
+	t.Run("ancestor insertion is rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := mustCreateElement(t, doc, "root")
+		mid := mustCreateElement(t, doc, "mid")
+		leaf := mustCreateElement(t, doc, "leaf")
+
+		require.NoError(t, root.AddChild(mid))
+		require.NoError(t, mid.AddChild(leaf))
+
+		err := leaf.AddChild(root)
+		require.Error(t, err, "inserting an ancestor as a descendant must be rejected")
+
+		require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
+		require.Nil(t, root.Parent(), "root must remain the tree root")
+		require.Equal(t, root, mid.Parent(), "existing tree must be intact")
+		require.Equal(t, mid, leaf.Parent(), "existing tree must be intact")
+	})
+}
