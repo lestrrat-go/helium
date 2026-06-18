@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -304,35 +305,111 @@ func TestUnionEnumerationCrossMember(t *testing.T) {
 	})
 }
 
-// TestNotationUnboundPrefix verifies that the QName-prefix-binding check also
-// applies to xs:NOTATION (C-008): an unbound prefix is rejected and a bound
-// prefix accepted, mirroring TestQNameUnboundPrefix. The schema declares the
-// required <xs:notation> elements so the type is well-formed; note that the
-// validator resolves a NOTATION value through QName prefix-binding rather than
-// requiring the value to match a declared notation name, so this exercises the
-// shared prefix-binding path on a NOTATION-derived simple type.
-func TestNotationUnboundPrefix(t *testing.T) {
+// compileSchemaErrors compiles schemaXML with a label so that schema-component
+// checks are active, and returns the collected compile error text. A non-empty
+// result means the schema was rejected at compile time.
+func compileSchemaErrors(t *testing.T, schemaXML string) string {
+	t.Helper()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	_, _ = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+	_ = collector.Close()
+
+	var b strings.Builder
+	for _, e := range collector.Errors() {
+		b.WriteString(e.Error())
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// TestNotationEnumeration exercises the bounded xs:NOTATION conformance: (a) an
+// enumeration-derived NOTATION type resolves enumeration literal prefixes through
+// the shared QName prefix-binding path, and an instance with an unbound prefix is
+// rejected while a bound one is accepted; (b) a simpleType whose base is directly
+// xs:NOTATION with no enumeration facet is rejected at compile time. Full
+// xs:NOTATION declaration-table semantics (matching enumerated names against
+// declared <xs:notation> elements) is deferred (see memory).
+func TestNotationEnumeration(t *testing.T) {
 	t.Parallel()
 
-	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+	const enumSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
   <xs:notation name="jpeg" public="image/jpeg"/>
   <xs:notation name="png" public="image/png"/>
+  <xs:simpleType name="imageNotation">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="p:jpeg"/>
+      <xs:enumeration value="p:png"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="n" type="imageNotation"/>
+</xs:schema>`
+
+	t.Run("enumeration-derived unbound prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := validateInstance(t, enumSchema, `<n>q:jpeg</n>`)
+		require.Error(t, err)
+	})
+
+	t.Run("enumeration-derived bound prefix accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, enumSchema, `<n xmlns:p="urn:p">p:jpeg</n>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("direct un-enumerated NOTATION base rejected at compile", func(t *testing.T) {
+		t.Parallel()
+		const bareSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="imageNotation">
     <xs:restriction base="xs:NOTATION"/>
   </xs:simpleType>
   <xs:element name="n" type="imageNotation"/>
 </xs:schema>`
+		errs := compileSchemaErrors(t, bareSchema)
+		require.NotEmpty(t, errs, "expected a compile error for un-enumerated NOTATION base")
+		require.Contains(t, errs, "NOTATION")
+	})
+}
 
-	t.Run("unbound prefix rejected", func(t *testing.T) {
+// TestEnumQNameUnboundPrefixCompileError verifies item 1: an enumeration literal
+// of a QName/NOTATION-restricted type whose prefix is not bound in the literal's
+// in-scope namespaces is reported as a compile-time schema error, rather than
+// silently compiling into an unsatisfiable enumeration.
+func TestEnumQNameUnboundPrefixCompileError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unbound prefix rejected at compile", func(t *testing.T) {
 		t.Parallel()
-		_, err := validateInstance(t, schemaXML, `<n>q:jpeg</n>`)
-		require.Error(t, err)
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction base="xs:QName">
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a compile error for unbound QName enumeration prefix")
+		require.Contains(t, errs, "p:foo")
 	})
 
-	t.Run("bound prefix accepted", func(t *testing.T) {
+	t.Run("bound prefix compiles cleanly", func(t *testing.T) {
 		t.Parallel()
-		errs, err := validateInstance(t, schemaXML, `<n xmlns:p="urn:p">p:jpeg</n>`)
-		require.NoError(t, err, "validation errors: %s", errs)
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction base="xs:QName">
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for bound QName enumeration prefix")
 	})
 }
 

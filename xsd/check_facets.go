@@ -77,6 +77,86 @@ func (c *compiler) checkFacetConsistency(ctx context.Context) {
 	}
 }
 
+// checkEnumQNameAndNotation runs post-resolve checks on QName/NOTATION-based
+// atomic simple types:
+//
+//   - Each enumeration facet literal of a QName/NOTATION-restricted type is
+//     resolved against the literal's captured in-scope namespaces. An unresolved
+//     prefix makes the literal an invalid QName/NOTATION and is reported as a
+//     schema error, rather than silently compiling into an unsatisfiable
+//     enumeration.
+//   - A simpleType whose base is (directly) xs:NOTATION with no enumeration facet
+//     is rejected: per XSD, xs:NOTATION may only be used as a base for a
+//     restriction that supplies an enumeration facet enumerating the permitted
+//     notation names. Full xs:NOTATION declaration-table semantics (checking each
+//     enumerated name against a declared <xs:notation>) is deferred (see memory).
+func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	type entry struct {
+		td  *TypeDef
+		src typeDefSource
+	}
+	var entries []entry
+	for td, src := range c.typeDefSources {
+		entries = append(entries, entry{td: td, src: src})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].src.line != entries[j].src.line {
+			return entries[i].src.line < entries[j].src.line
+		}
+		return entries[i].td.Name.Local < entries[j].td.Name.Local
+	})
+
+	for _, e := range entries {
+		td := e.td
+		if td.Name.NS == lexicon.NamespaceXSD {
+			continue
+		}
+		if resolveVariety(td) != TypeVarietyAtomic {
+			continue
+		}
+
+		builtinLocal := builtinBaseLocal(td)
+		if builtinLocal != lexicon.TypeQName && builtinLocal != lexicon.TypeNotation {
+			continue
+		}
+
+		component := td.Name.Local
+		if component == "" || e.src.isLocal {
+			component = "local simple type"
+		}
+
+		// Direct un-enumerated xs:NOTATION base is not a permitted derivation.
+		if builtinLocal == lexicon.TypeNotation && td.Derivation == DerivationRestriction && td.BaseType != nil &&
+			td.BaseType.Name.NS == lexicon.NamespaceXSD && td.BaseType.Name.Local == lexicon.TypeNotation {
+			if td.Facets == nil || len(td.Facets.Enumeration) == 0 {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, e.src.line, "simpleType", component,
+					"It is an error if the base type is the built-in 'NOTATION' and there is no 'enumeration' facet."), helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+		}
+
+		// Validate each enumeration literal's QName prefix binding.
+		if td.Facets == nil {
+			continue
+		}
+		for i, ev := range td.Facets.Enumeration {
+			var enumNS map[string]string
+			if i < len(td.Facets.EnumerationNS) {
+				enumNS = td.Facets.EnumerationNS[i]
+			}
+			if _, err := resolveLexicalQName(ev, enumNS); err != nil {
+				msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", ev, typeDisplayName(td))
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, e.src.line, "simpleType", component, msg), helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+		}
+	}
+}
+
 // checkFacetMutualExclusion checks that mutually exclusive facets are not
 // both specified on the same type definition.
 func (c *compiler) checkFacetMutualExclusion(ctx context.Context, fs *FacetSet, line int, component string) {

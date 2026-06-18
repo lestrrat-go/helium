@@ -203,6 +203,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Check facet consistency after refs are resolved (base types are available).
 	c.checkFacetConsistency(ctx)
 
+	// Validate QName/NOTATION enumeration literal prefixes (and the NOTATION
+	// no-enumeration rule) now that base types are resolved.
+	c.checkEnumQNameAndNotation(ctx)
+
 	// Build substitution group membership map and detect circular references.
 	for _, edecl := range c.schema.elements {
 		if edecl.SubstitutionGroup == (QName{}) {
