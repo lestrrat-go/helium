@@ -949,6 +949,154 @@ func TestIDCFieldSkipWildcardDescendant(t *testing.T) {
 	}
 }
 
+// TestIDCFieldSkipWildcardSelectedSelf covers IDC field canonicalization when a
+// PARENT IDC SELECTS the `xs:any processContents="skip"` wildcard-matched element
+// ITSELF (not a descendant of it). Skipped content is NOT schema-assessed, so the
+// matched element carries no ACTUAL type from content validation. The annotation
+// walk over the skipped subtree historically annotated only the matched element's
+// CHILDREN, never the matched element itself — so the parent IDC's field over the
+// matched element's xsi:type-introduced inline xs:integer @n fell back to the raw
+// lexical value and compared `5` and `+5` as DISTINCT. With the matched element
+// itself annotated with its xsi:type ACTUAL type, `5` and `+5` canonicalize equal
+// in xs:integer value space and COLLIDE.
+func TestIDCFieldSkipWildcardSelectedSelf(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="baseType"/>
+  <xs:complexType name="itemType">
+    <xs:complexContent>
+      <xs:extension base="baseType">
+        <xs:attribute name="n">
+          <xs:simpleType>
+            <xs:restriction base="xs:integer"/>
+          </xs:simpleType>
+        </xs:attribute>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="@n"/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			name: "parent-IDC-selected skip element xsi:type integer 5 and +5 collide",
+			instance: `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+				`<item xsi:type="itemType" n="5"/>` +
+				`<item xsi:type="itemType" n="+5"/></doc>`,
+			valid: false,
+		},
+		{
+			name: "parent-IDC-selected skip element xsi:type integer 5 and 6 distinct",
+			instance: `<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+				`<item xsi:type="itemType" n="5"/>` +
+				`<item xsi:type="itemType" n="6"/></doc>`,
+			valid: true,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
+// TestIDCFieldAnyTypeSubstitutionGroupMember covers IDC field canonicalization for
+// a NO-TYPE SUBSTITUTION-GROUP member element that is a DIRECT child of an
+// xs:anyType (open lax) element. `item` is a substitution-group member of head
+// `itemHead`, declares NO type of its own, and so inherits `itemHead`'s type (which
+// adds an inline xs:integer @n). The IDC on the xs:anyType `doc` selects those
+// `item` children. Because `doc` is xs:anyType there is no content model, so its
+// children are annotated by the lax anyType walk, which historically consulted
+// `edecl.Type` DIRECTLY — nil for a no-type member — so the member was not
+// annotated with its inherited head type and pass-2 IDC fell back to the raw
+// lexical @n, comparing `5` and `+5` as DISTINCT. Using the EFFECTIVE declared
+// type (the inherited head type) records the actual type, so `5` and `+5`
+// canonicalize equal in xs:integer value space and COLLIDE.
+func TestIDCFieldAnyTypeSubstitutionGroupMember(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="itemType">
+    <xs:attribute name="n">
+      <xs:simpleType>
+        <xs:restriction base="xs:integer"/>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+  <xs:element name="itemHead" type="itemType"/>
+  <xs:element name="item" substitutionGroup="itemHead"/>
+  <xs:element name="doc" type="xs:anyType">
+    <xs:unique name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="@n"/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			name: "anyType substitution-group member integer 5 and +5 collide",
+			instance: `<doc>` +
+				`<item n="5"/><item n="+5"/></doc>`,
+			valid: false,
+		},
+		{
+			name: "anyType substitution-group member integer 5 and 6 distinct",
+			instance: `<doc>` +
+				`<item n="5"/><item n="6"/></doc>`,
+			valid: true,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
 func compileValidator(t *testing.T, src string) xsd.Validator {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
