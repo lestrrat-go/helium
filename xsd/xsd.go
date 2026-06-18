@@ -231,13 +231,9 @@ func (v Validator) closeHandler() {
 // Individual validation errors are delivered to the ErrorHandler if one
 // is configured. Returns ErrValidationFailed when the document is invalid.
 // (libxml2: xmlSchemaValidateDoc)
-func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
-	if v.schema == nil {
-		return ErrNilSchema
-	}
-
-	if doc == nil {
-		return ErrNilDocument
+func (v Validator) Validate(ctx context.Context, doc *helium.Document) error { //nolint:contextcheck
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	cfg := v.cfg
@@ -250,8 +246,19 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 		handler = helium.NilErrorHandler{}
 	}
 
+	// Close the handler on every exit path, including the nil guards below,
+	// so a closable ErrorHandler (e.g. helium.ErrorCollector) is not leaked.
+	defer v.closeHandler()
+
+	if v.schema == nil {
+		return ErrNilSchema
+	}
+
+	if doc == nil {
+		return ErrNilDocument
+	}
+
 	valid := validateDocument(ctx, doc, v.schema, cfg, handler)
-	v.closeHandler()
 
 	if valid {
 		return nil

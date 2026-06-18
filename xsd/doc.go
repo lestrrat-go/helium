@@ -16,9 +16,11 @@
 //	    Label("input.xml").
 //	    Validate(ctx, doc)
 //
-// On failure, the returned error is [ErrValidationFailed]. Individual
-// validation errors are delivered to the [helium.ErrorHandler] configured
-// via [Validator.ErrorHandler].
+// On failure, the returned error is [ErrValidationFailed]. Validate also
+// returns [ErrNilSchema] when the Validator has no compiled schema and
+// [ErrNilDocument] when the document is nil. Individual validation errors
+// are delivered to the [helium.ErrorHandler] configured via
+// [Validator.ErrorHandler].
 //
 // # Error Handling
 //
