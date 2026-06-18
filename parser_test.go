@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
@@ -506,6 +507,67 @@ func TestParseExternalDTDSizeLimit(t *testing.T) {
 	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "oversized external DTD must produce a parse error")
+}
+
+// underReportingFS serves a single DTD file whose Stat under-reports the
+// size while Read produces far more than MaxExternalDTDSize. It also counts
+// the bytes pulled from the underlying reader so the test can assert the
+// read is bounded.
+type underReportingFS struct {
+	read *int64
+}
+
+func (fsys underReportingFS) Open(string) (fs.File, error) {
+	return &underReportingFile{read: fsys.read}, nil
+}
+
+type underReportingFile struct {
+	read *int64
+}
+
+// Stat lies: it claims a tiny size so the early precheck does not catch the
+// oversized content.
+func (f *underReportingFile) Stat() (fs.FileInfo, error) {
+	return underReportingInfo{}, nil
+}
+
+func (f *underReportingFile) Read(p []byte) (int, error) {
+	// Endless stream of spaces; the bounded read must stop it.
+	for i := range p {
+		p[i] = ' '
+	}
+	*f.read += int64(len(p))
+	return len(p), nil
+}
+
+func (f *underReportingFile) Close() error { return nil }
+
+type underReportingInfo struct{}
+
+func (underReportingInfo) Name() string       { return "huge.dtd" }
+func (underReportingInfo) Size() int64        { return 1 }
+func (underReportingInfo) Mode() fs.FileMode  { return 0 }
+func (underReportingInfo) ModTime() time.Time { return time.Time{} }
+func (underReportingInfo) IsDir() bool        { return false }
+func (underReportingInfo) Sys() any           { return nil }
+
+func TestParseExternalDTDBoundedRead(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "huge.dtd">
+<r/>`
+
+	// A source whose Stat under-reports its size must still be rejected by
+	// the bounded read, and that read must not consume more than
+	// MaxExternalDTDSize+1 bytes from the underlying reader.
+	var read int64
+	fsys := underReportingFS{read: &read}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "oversized external DTD must produce a parse error even when Stat under-reports size")
+	require.LessOrEqual(t, read, int64(helium.MaxExternalDTDSize)+1, "bounded read must not consume more than MaxExternalDTDSize+1 bytes")
 }
 
 func TestParseExternalEntityValidEncoding(t *testing.T) {

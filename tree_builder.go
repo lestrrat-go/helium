@@ -414,17 +414,13 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	}
 	defer f.Close()
 
-	// Reject non-regular sources (devices, FIFOs, directories) and oversized
-	// files up front when the size is known. This prevents an unbounded read
-	// of a pathological source such as /dev/zero from exhausting memory.
-	info, err := f.Stat()
-	if err != nil {
-		return nil
-	}
-	if !info.Mode().IsRegular() {
-		return errors.New("external DTD is not a regular file")
-	}
-	if info.Size() > MaxExternalDTDSize {
+	// Stat is advisory only: a valid fs.FS may stream or synthesize DTD
+	// content and legitimately fail Stat or report a non-regular,
+	// unknown, or under-reported size. When Stat succeeds, use the
+	// reported size as an early reject for an obviously oversized source
+	// (e.g. /dev/zero) to avoid starting the read at all. Either way the
+	// authoritative cap is enforced by the bounded read below.
+	if info, statErr := f.Stat(); statErr == nil && info.Size() > MaxExternalDTDSize {
 		return errors.New("external DTD exceeds maximum allowed size")
 	}
 
