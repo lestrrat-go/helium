@@ -233,6 +233,10 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 			au.Prohibited = true
 		}
 	}
+	c.attrUseSources[au] = attrConstraintSource{
+		line:  elem.Line(),
+		local: opts.name.Local,
+	}
 	au.Default, au.Fixed = readDefaultOrFixed(elem)
 	if au.Fixed != nil {
 		au.FixedNS = collectNSContext(elem)

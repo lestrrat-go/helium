@@ -51,6 +51,9 @@ type compiler struct {
 	// validate the constraint value against the attribute's simple type once
 	// all type references are resolved (deferred to resolveRefs).
 	attrUseConstraintSources map[*AttrUse]attrConstraintSource
+	// source info for every attribute use, used by post-resolve declaration
+	// checks (e.g. an un-enumerated xs:NOTATION typed attribute).
+	attrUseSources map[*AttrUse]attrConstraintSource
 	// error handler for reporting schema errors/warnings
 	errorHandler helium.ErrorHandler
 	errorCount   int    // count of fatal errors reported
@@ -224,6 +227,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		chameleonEligible:        make(map[any]struct{}),
 		attrRefs:                 make(map[*AttrUse]QName),
 		attrUseConstraintSources: make(map[*AttrUse]attrConstraintSource),
+		attrUseSources:           make(map[*AttrUse]attrConstraintSource),
 		importedNS:               make(map[string]string),
 		maxImportDepth:           defaultMaxImportDepth,
 	}
@@ -287,6 +291,14 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 	// Check facet consistency after refs are resolved (base types are available).
 	c.checkFacetConsistency(ctx)
+
+	// Validate QName/NOTATION enumeration literal prefixes (and the NOTATION
+	// no-enumeration rule) now that base types are resolved.
+	c.checkEnumQNameAndNotation(ctx)
+
+	// Reject element/attribute declarations whose effective type is the built-in
+	// xs:NOTATION (or NOTATION-derived) without an effective enumeration facet.
+	c.checkNotationOnDeclarations(ctx)
 
 	// Build substitution group membership map and detect circular references.
 	for _, edecl := range c.schema.elements {

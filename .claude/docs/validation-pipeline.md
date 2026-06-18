@@ -18,6 +18,7 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
    - `schema.globalAttrs` (global attributes)
 4. **Process includes/imports** — load `xs:include`/`xs:import`/`xs:redefine`, merge declarations. Nested-schema document loads go through `compileConfig.fsys` (`fs.ReadFile(c.fsys, path)`), an injectable `fs.FS` set via `Compiler.FS(...)`; it defaults to `iofs.PermissiveRoot` (`os.Open`) and is propagated to sub-compilers. `xslt3` injects a resolver-backed `fs.FS` (`schemaResolverFS`) so nested includes inside a resolver-loaded schema obey the same default-deny `URIResolver` policy as the top-level load. Schema-location resolution is **URI-aware** and lives in a **single canonical helper**, `xsd.ResolveSchemaURI(ref, base) (string, error)` (`xsd/resolve_uri.go`), shared by both the xsd nested-include path and `xslt3`'s schema loader so the two layers cannot drift. `validateSchemaPath` is a thin wrapper over it. It keys off whether `ref`/`base` carries a URI scheme (`xsd.URIScheme`, the **one** scheme-detector for both packages — multi-char scheme required so Windows drive letters and bare OS paths stay local): an **absolute-URI** `schemaLocation` (e.g. a cross-host `https://cdn.example.com/part.xsd`) is passed through **unchanged** — never `filepath.Join`ed, which would collapse `//` and drop the host; a **relative** location against a **URI base** resolves via `net/url` `ResolveReference` (RFC 3986), keeping authority intact **and re-applying the base's `OmitHost` flag** when the base had no authority (so `mem:/schemas/main.xsd` + `part.xsd` → `mem:/schemas/part.xsd`, never `mem:///schemas/part.xsd`, while canonical `file:///...` bases keep their `///`); a genuine **local** base/location keeps the historical `filepath.Join` + `..`-escape guard (the only branch that can return an error). The import sub-compiler's `baseDir` is `schemaBaseDir(path)` (the full URI for URI bases, `filepath.Dir` for local). Because resolution happens while base and raw `schemaLocation` are still separate, the name reaching the FS is the **canonical** nested URI, so `schemaResolverFS.Open` forwards it verbatim (no string repair of a collapsed name). `xslt3`'s `resolveSchemaURI` delegates the absolute-URI and URI-base cases to `xsd.ResolveSchemaURI` and only handles its own local **file**-base case (xslt3's base is a full file URI/path, not a directory); it seeds the xsd `BaseDir` via `schemaCompileBaseDir(uri)` (full URI when scheme present, `filepath.Dir` otherwise). **targetNamespace match (src-import / src-include):** `loadImport` rejects the located schema when its `targetNamespace` differs from the `namespace` declared on `<xs:import>` — a present `namespace` requires that exact TNS, an absent `namespace` requires the imported schema to have no TNS (so a schema imported as one namespace cannot silently contribute another's declarations). `loadInclude`/`loadRedefine` enforce the analogous include rule (included TNS must equal the including schema's, modulo chameleon includes with no TNS). Both raise a fatal `Schemas parser error` and stop merging that document.
 5. **Resolve references** — resolve all QName refs (types, base types, groups, attr groups, union members), build substitution group maps, detect circular substitution. After attribute type refs resolve, `checkAttrUseConstraints()` validates each attribute use's `default`/`fixed` constraint value against the attribute's declared simple type, so a retained-but-invalid constraint (e.g. `default=""` on an `xs:integer` attribute) is reported as a schema parser error rather than injected into the instance at validation time. Presence-based schema checks (`check_elements.go`) use `hasAttr`, and both `hasAttr`/`getAttr` require an **unqualified** attribute (`URI()==""`) so a foreign-namespaced `other:fixed` is not mistaken for the XSD `fixed`. When validation inserts an absent qualified attribute's default/fixed value, it is inserted **namespace-aware** (`SetAttributeNS`, reusing the in-scope prefix) so a later `xs:key` field like `@t:a` matches it.
+   After refs resolve, `checkEnumQNameAndNotation()` (`xsd/check_facets.go`) runs two QName/NOTATION compile-time checks: (a) every `enumeration` literal of a QName/NOTATION-restricted type is resolved against its captured `FacetSet.EnumerationNS` bindings — an unbound prefix makes the literal an invalid QName and is reported as a schema error rather than silently compiling into an unsatisfiable enumeration. This is **variety-aware** (`enumLiteralHasUnboundQName`): an atomic literal is checked directly, a **list** literal item-by-item against the item type, and a **union** literal against whichever member type accepts it under its bindings (a literal that only a QName/NOTATION member could carry, with an unbound prefix, is flagged). (b) A simpleType whose base is directly `xs:NOTATION` with no `enumeration` facet is rejected. `checkNotationOnDeclarations()` extends (b) to **declarations**: an element or attribute whose effective type is the built-in `xs:NOTATION` (or NOTATION-derived) without an effective enumeration facet (`hasEffectiveEnumeration` walks the base chain) is rejected — this catches `type="xs:NOTATION"` placed directly on `<xs:element>`/`<xs:attribute>`, which bypasses the simpleType-level rule. Every attribute use records its source line in `attrUseSources` (merged from import sub-compilers) so the attribute case can report with the right location. Full xs:NOTATION declaration-table semantics (matching enumerated names against declared `<xs:notation>` elements) is deferred.
 6. **Constraint checks** (when errorCount == 0):
    - `checkFinalOnTypes()` — final attribute enforcement
    - `checkFinalOnSubstGroups()` — substitution group final
@@ -71,7 +72,13 @@ element *declaration's* type (`edecl.Type`), not an `xsi:type` actual type, so a
 declared `xs:string` (whiteSpace="preserve") fixed `abc ` keeps its trailing space
 even when the instance's `xsi:type` collapses whitespace — element content is still
 validated against the actual type. In `fixedUnionMatches`, when the fixed and
-instance values resolve to *different* active members, they are value-equal iff
+instance values resolve to *different* active members, the cross-member
+comparison (`crossMemberValueEqual`) is **recursive over variety**: when both
+active members are **lists** (e.g. `memberTypes="intList decimalList"`) each value
+is split and compared item-by-item in the item types' shared value space — so the
+literal `1.0 2.0` (active in `decimalList`) accepts the instance `1 2` (active in
+`intList`); a list-vs-atomic variety mismatch has no shared value space and stays
+unequal. When both active members are **atomic** they are value-equal iff
 their members reduce to the same *primitive* value-space family
 (`primitiveValueSpaceFamily`, XSD 1.1 §2.3 — restrictions create no new values):
 all integer types → `decimal`; all xs:string-derived types
@@ -105,7 +112,20 @@ boolean, date/time, and binary builtins (`enumValueSpaceTypes`); hexBinary and
 base64Binary compare by decoded octets (so `"0A"`≡`"0a"`). String-family and
 anyURI types stay lexical-only (their value space equals their whitespace-
 processed lexical space), so a numeric-looking string enum `"5"` does not accept
-`"5.0"`.
+`"5.0"`. **List** enumeration (`checkListEnumeration`) splits both the instance and
+each enumeration member into items and compares item-by-item in the item type's
+value space via `fixedListMatches` (so `xs:list itemType="xs:int"` enum `"1 2"`
+accepts `"01 +2"`; QName item types resolve instance items against the instance's
+namespaces and each member's items against its captured `FacetSet.EnumerationNS`).
+**Union** enumeration (`checkUnionEnumeration`) resolves the active member
+INDEPENDENTLY for the instance value and for each enumeration literal, then
+compares with the same ordered-union value-family logic fixed-value comparison
+uses (`fixedUnionMatches`), recursing through list/nested-union member value
+spaces — so a literal active in a string member is not value-equal to an instance
+active in a numeric member (`memberTypes="zeroString xs:int"` enum `"0"` rejects
+`"+0"`). The union's remaining facets (pattern/length/bounds) are still checked in
+the instance active member's value space via `checkFacets` with enumeration
+suppressed.
 
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
 compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema

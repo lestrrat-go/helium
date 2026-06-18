@@ -147,18 +147,146 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 
 	// Different active members. XSD 1.1 §2.3 — restrictions do not create new
 	// values, so two values are equal iff they denote the same value in their
-	// SHARED PRIMITIVE value-space family (the primitive built-in their members
-	// reduce to). This includes string-derived members: a value active in one
-	// xs:string restriction (e.g. whiteSpace="collapse") compares equal to a value
-	// active in another xs:string-family member when both denote the same string.
-	// primitiveValueSpaceFamily reduces each member's builtin to that primitive
-	// family (e.g. all integer types → "decimal", all string-derived types →
-	// "string"). Cross-family pairs (string vs integer, integer vs boolean, …) have
-	// no shared value space and remain unequal. QName/NOTATION are excluded because
-	// their equality is namespace-context dependent, not a raw lexical/value
-	// comparison.
+	// SHARED value space. This is dispatched on each member's variety: list members
+	// compare item-by-item in their item type's value space (so an intList member
+	// and a decimalList member both denote the same sequence of decimals), and
+	// atomic members reduce to their primitive value-space family. Cross-variety
+	// pairs (a list member vs an atomic member) have no shared value space and
+	// remain unequal.
+	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS)
+}
+
+// crossMemberValueComparisonMaxDepth bounds the recursion of
+// crossMemberValueEqual so a pathological cyclic type reference (a union or list
+// type whose active member resolves back to itself) cannot loop forever. Real
+// simple-type variety lattices are shallow; this ceiling is far above any
+// legitimate nesting depth.
+const crossMemberValueComparisonMaxDepth = 64
+
+// crossMemberValueEqual reports whether two values active in DIFFERENT union
+// members denote the same value across the members' shared value space. It is
+// FULLY recursive over the entire simple-type variety lattice — atomic, list,
+// and union — so NO nesting level is dropped. A union of lists
+// (memberTypes="intList decimalList") compares the instance "1 2" (active in
+// intList) and the literal "1.0 2.0" (active in decimalList) item-by-item in
+// the decimal value space rather than value-comparing the whole multi-token
+// strings as scalars; and an item or member type that is itself a union (a
+// list-of-union, or a union-of-list-of-union) is resolved to its per-value
+// active member and recursed into, so arbitrary nesting bottoms out at atomic
+// comparison.
+//
+// Dispatch, per side's effective variety:
+//
+//   - UNION (either side): resolve THIS value's active member within the union
+//     (via fixedUnionActiveMember) and recurse on the resolved member type. A
+//     value with no valid active member has no comparable value, so unequal.
+//   - Both LIST: split each value (in its own whiteSpace value space) and compare
+//     items pairwise by recursing on the two item types (which may themselves be
+//     atomic, list, or union).
+//   - Both ATOMIC: if both members are QName-derived (or both NOTATION-derived),
+//     compare resolved expanded names so different prefixes bound to the same URI
+//     are equal (QName-vs-NOTATION stays unequal). Otherwise reduce each to its
+//     primitive value-space family (XSD 1.1 §2.3); equal iff the families match and
+//     the values compare equal there (value.Compare for comparable families,
+//     normalized-lexical for the string family).
+//   - Any other variety mismatch that cannot be reconciled (e.g. list vs atomic):
+//     no shared value space → unequal.
+func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string) bool {
+	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0)
+}
+
+func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int) bool {
+	if depth > crossMemberValueComparisonMaxDepth {
+		return false
+	}
+	if instanceMember == nil || fixedMember == nil {
+		return false
+	}
+
+	instanceVariety := resolveVariety(instanceMember)
+	fixedVariety := resolveVariety(fixedMember)
+
+	// UNION on either side: resolve the active member for THAT value and recurse
+	// on the resolved member type. This handles a list whose item type is a union,
+	// a union nested directly inside another union, and any deeper combination, so
+	// the recursion always descends to a non-union variety before comparing.
+	if instanceVariety == TypeVarietyUnion {
+		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember))
+		if active == nil {
+			return false
+		}
+		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1)
+	}
+	if fixedVariety == TypeVarietyUnion {
+		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember))
+		if active == nil {
+			return false
+		}
+		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1)
+	}
+
+	if instanceVariety == TypeVarietyList && fixedVariety == TypeVarietyList {
+		ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
+		nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
+		ii := strings.Fields(ni)
+		fi := strings.Fields(nf)
+		if len(ii) != len(fi) {
+			return false
+		}
+		instanceItem := resolveItemType(instanceMember)
+		fixedItem := resolveItemType(fixedMember)
+		if instanceItem == nil || fixedItem == nil {
+			return false
+		}
+		for i := range ii {
+			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1) {
+				return false
+			}
+		}
+		return true
+	}
+
+	if instanceVariety != TypeVarietyAtomic || fixedVariety != TypeVarietyAtomic {
+		return false
+	}
+
+	// Both atomic. When the two item/member types are the SAME (e.g. both list
+	// items are xs:integer), compare in that one type's value space directly so a
+	// QName/NOTATION item pair resolves namespaces rather than being dropped by the
+	// no-shared-family rule.
+	if instanceMember == fixedMember {
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS)
+	}
+
 	fixedLocal := builtinBaseLocal(fixedMember)
 	instanceLocal := builtinBaseLocal(instanceMember)
+
+	// QName/NOTATION have no shared primitive family in primitiveValueSpaceFamily
+	// (their equality is namespace-context dependent, not a value/lexical compare),
+	// so handle them here before that fallback. When BOTH members are QName-derived
+	// (or BOTH NOTATION-derived), normalize each side with its member's effective
+	// whiteSpace facet and compare the resolved expanded names: cross-member equality
+	// holds iff both resolve to the same {namespace, local}, even when the two
+	// members bind different prefixes to the same URI. QName-vs-NOTATION stays
+	// unequal (no shared value space).
+	instanceIsQName := instanceLocal == lexicon.TypeQName
+	fixedIsQName := fixedLocal == lexicon.TypeQName
+	instanceIsNotation := instanceLocal == lexicon.TypeNotation
+	fixedIsNotation := fixedLocal == lexicon.TypeNotation
+	if (instanceIsQName && fixedIsQName) || (instanceIsNotation && fixedIsNotation) {
+		ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
+		nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
+		iqn, ierr := resolveLexicalQName(ni, instanceNS)
+		if ierr != nil {
+			return false
+		}
+		fqn, ferr := resolveLexicalQName(nf, fixedNS)
+		if ferr != nil {
+			return false
+		}
+		return iqn == fqn
+	}
+
 	fixedFamily, fComparable, fok := primitiveValueSpaceFamily(fixedLocal)
 	instanceFamily, _, iok := primitiveValueSpaceFamily(instanceLocal)
 	if !fok || !iok || fixedFamily != instanceFamily {
