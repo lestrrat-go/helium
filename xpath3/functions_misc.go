@@ -2,7 +2,7 @@ package xpath3
 
 import (
 	"context"
-	"math"
+	"math/big"
 	"math/rand"
 	"os"
 	"sort"
@@ -193,8 +193,15 @@ func fnImplicitTimezone(ctx context.Context, _ []Sequence) (Sequence, error) {
 	} else {
 		_, offset = time.Now().Zone()
 	}
+	absOffset := offset
+	if offset < 0 {
+		absOffset = -offset
+	}
+	// Carry the exact integer-second magnitude in SecRat so the timezone-duration
+	// path is exact by construction (sign lives in Negative).
 	d := Duration{
-		Seconds: math.Abs(float64(offset)),
+		Seconds: float64(absOffset),
+		SecRat:  big.NewRat(int64(absOffset), 1),
 	}
 	if offset < 0 {
 		d.Negative = true

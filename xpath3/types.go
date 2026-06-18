@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -343,14 +344,33 @@ func (a AtomicValue) BigRat() *big.Rat {
 	return new(big.Rat)
 }
 
-// DoubleVal returns the backing float64 value (extracts from *FloatValue).
+// DoubleVal returns the backing float64 value. The backing value is normally a
+// *FloatValue, but a schema-derived or directly constructed double/float can
+// carry a plain float64/float32; route through ToFloat64 so no caller panics.
 func (a AtomicValue) DoubleVal() float64 {
-	return a.Value.(*FloatValue).Float64() //nolint:forcetypeassert
+	return a.ToFloat64()
 }
 
-// FloatVal returns the backing *FloatValue.
+// FloatVal returns the backing value as a *FloatValue. A schema-derived or
+// directly constructed double/float can carry a plain float64/float32; wrap it
+// at the precision implied by the type so callers never panic on a non-pointer
+// backing value.
 func (a AtomicValue) FloatVal() *FloatValue {
-	return a.Value.(*FloatValue) //nolint:forcetypeassert
+	// A schema-derived xs:float can be backed by a *FloatValue at double
+	// precision (e.g. NewDouble(16777217)). Honor the effective numeric type so
+	// such values are narrowed to single precision rather than returned as-is.
+	singlePrec := a.effectiveNumericType() == TypeFloat
+	if fv, ok := a.Value.(*FloatValue); ok {
+		if singlePrec {
+			return NewFloat(fv.Float64())
+		}
+		return fv
+	}
+	f := a.ToFloat64()
+	if singlePrec {
+		return NewFloat(f)
+	}
+	return NewDouble(f)
 }
 
 // BooleanVal returns the backing bool value.
@@ -405,9 +425,29 @@ func (a AtomicValue) IsNumeric() bool {
 	return false
 }
 
+// effectiveNumericType resolves the built-in numeric type that governs a value's
+// conversion: the TypeName itself when it is a recognized numeric built-in, else
+// the BaseType of a schema-derived value (custom TypeName whose BaseType names a
+// built-in numeric ancestor). This mirrors PromoteSchemaType's BaseType fallback
+// so schema-derived float/double/decimal/integer values convert correctly.
+func (a AtomicValue) effectiveNumericType() string {
+	if isIntegerDerived(a.TypeName) {
+		return a.TypeName
+	}
+	switch a.TypeName {
+	case TypeDecimal, TypeDouble, TypeFloat:
+		return a.TypeName
+	}
+	if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+		return a.BaseType
+	}
+	return a.TypeName
+}
+
 // ToFloat64 converts any numeric atomic value to float64.
 func (a AtomicValue) ToFloat64() float64 {
-	if isIntegerDerived(a.TypeName) {
+	et := a.effectiveNumericType()
+	if isIntegerDerived(et) {
 		switch v := a.Value.(type) {
 		case int64:
 			return float64(v)
@@ -417,9 +457,30 @@ func (a AtomicValue) ToFloat64() float64 {
 		}
 		return 0
 	}
-	switch a.TypeName {
+	switch et {
 	case TypeDouble, TypeFloat:
-		return a.Value.(*FloatValue).Float64() //nolint:forcetypeassert
+		// xs:double/xs:float atomics are normally backed by *FloatValue, but a
+		// schema-derived double/float (or a value constructed directly) can carry
+		// a plain float64/float32 backing value. Accept all forms so callers on
+		// the map-key path never panic.
+		var f float64
+		switch v := a.Value.(type) {
+		case *FloatValue:
+			f = v.Float64()
+		case float64:
+			f = v
+		case float32:
+			f = float64(v)
+		default:
+			return 0
+		}
+		if et == TypeFloat {
+			// An effective xs:float (including a schema-derived float backed by a
+			// double-precision *FloatValue or a plain float64) must be narrowed to
+			// single precision so ToFloat64/DoubleVal stay consistent with FloatVal.
+			return float64(float32(f))
+		}
+		return f
 	case TypeDecimal:
 		r, ok := a.Value.(*big.Rat)
 		if !ok {
@@ -488,6 +549,7 @@ type Duration struct {
 	Months   int      // total months (years*12 + months)
 	Seconds  float64  // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)
 	FracSec  *big.Rat // exact fractional seconds component (the part after decimal in 'S'), nil if integer
+	SecRat   *big.Rat // exact total dayTime seconds magnitude (>=0); authoritative when non-nil, sign carried by Negative
 	Negative bool
 }
 
@@ -541,8 +603,13 @@ func normalizeMapKey(key AtomicValue) mapKey {
 	// xs:anyURI promotes to xs:string for comparison.
 	tn := key.TypeName
 
-	// Normalize string-like types: xs:untypedAtomic and xs:anyURI promote to xs:string
-	if tn == TypeUntypedAtomic || tn == TypeAnyURI {
+	// Normalize string-like types: xs:untypedAtomic and xs:anyURI promote to
+	// xs:string, as do types derived from xs:string (e.g. xs:NCName, xs:token),
+	// so they share a key with an equal xs:string value. Schema-derived atomics
+	// can carry a custom TypeName whose BaseType is the string-like ancestor, so
+	// consult BaseType as well to fold those against an equal xs:string key.
+	if tn == TypeUntypedAtomic || tn == TypeAnyURI || isStringDerived(tn) ||
+		key.BaseType == TypeAnyURI || isStringDerived(key.BaseType) {
 		return mapKey{typeName: TypeString, value: key.Value}
 	}
 
@@ -574,7 +641,19 @@ func normalizeMapKey(key AtomicValue) mapKey {
 			}
 			return mapKey{typeName: familyNumeric, value: new(big.Rat).Set(r).RatString()}
 		}
-		f := key.ToFloat64()
+		// Remaining numerics are xs:float / xs:double (and user-defined types whose
+		// effective base is a float/double). ToFloat64 keys off TypeName only, so a
+		// schema-derived double/float (custom TypeName, BaseType=xs:double/xs:float)
+		// would collapse to 0. Promote to the built-in base type first so ToFloat64
+		// reads the underlying FloatValue exactly.
+		f := PromoteSchemaType(key).ToFloat64()
+		// xs:float keys are compared in single precision: a plain float64/float32
+		// backing (schema-derived or directly constructed) may not yet be rounded,
+		// so collapse to single precision before keying. Otherwise 16777217 and
+		// 16777216 — equal as xs:float — would land in distinct slots.
+		if key.effectiveNumericType() == TypeFloat {
+			f = float64(float32(f))
+		}
 		if math.IsNaN(f) {
 			return mapKey{typeName: familyNumeric, value: "NaN"}
 		}
@@ -585,17 +664,31 @@ func normalizeMapKey(key AtomicValue) mapKey {
 			return mapKey{typeName: familyNumeric, value: "-Inf"}
 		}
 		// Remaining numerics are xs:float / xs:double (and user-defined types whose
-		// underlying value is a float). Check if the float is an exact integer in
-		// int64 range so it matches the int64 fast path above.
-		if f == math.Trunc(f) && !math.IsInf(f, 0) && f >= math.MinInt64 && f <= math.MaxInt64 {
-			return mapKey{typeName: familyNumeric, value: int64(f)}
+		// underlying value is a float). Build an exact rational and use the int64
+		// fast path ONLY when the value is an exact integer that fits in int64.
+		// A naive "f <= math.MaxInt64" guard is unsafe: math.MaxInt64 (2^63-1)
+		// rounds UP to 2^63 as a float64, so xs:double(2^63) would pass the check
+		// and int64(f) would overflow-wrap to -2^63, colliding with xs:integer(-2^63).
+		// Routing through the rational avoids that: r.Num().IsInt64() is exact.
+		r := new(big.Rat).SetFloat64(f)
+		if r == nil {
+			// SetFloat64 returns nil for NaN/Inf; those are handled above, but
+			// guard defensively so a stray non-finite value still produces a key.
+			return mapKey{typeName: familyNumeric, value: strconv.FormatFloat(f, 'g', -1, 64)}
 		}
-		return mapKey{typeName: familyNumeric, value: new(big.Rat).SetFloat64(f).RatString()}
+		if r.IsInt() && r.Num().IsInt64() {
+			return mapKey{typeName: familyNumeric, value: r.Num().Int64()}
+		}
+		return mapKey{typeName: familyNumeric, value: r.RatString()}
 	}
 
 	// Normalize duration types: xs:duration, xs:yearMonthDuration, xs:dayTimeDuration
-	// that have equal values should be the same key
-	if tn == TypeDuration || tn == TypeYearMonthDuration || tn == TypeDayTimeDuration {
+	// that have equal values should be the same key. Schema-derived durations carry
+	// a custom TypeName whose BaseType is a built-in duration ancestor, so consult
+	// BaseType as well to fold those against an equal built-in duration key.
+	if tn == TypeDuration || tn == TypeYearMonthDuration || tn == TypeDayTimeDuration ||
+		key.BaseType == TypeDuration || key.BaseType == TypeYearMonthDuration ||
+		key.BaseType == TypeDayTimeDuration {
 		tn = TypeDuration
 	}
 
@@ -612,6 +705,22 @@ func normalizeMapKey(key AtomicValue) mapKey {
 	case QNameValue:
 		// QName equality is based on URI and local name, not prefix
 		return mapKey{typeName: tn, value: v.URI + "\x00" + v.Local}
+	case Duration:
+		// Duration holds a *big.Rat (FracSec) whose pointer breaks Go map
+		// equality, and Seconds (a float64) can carry an exact fractional part
+		// that int64() would truncate. Canonicalize to value content using the
+		// exact-rational helper: signed total months and signed EXACT total
+		// seconds (whole seconds plus the rational fraction). durationToRat
+		// folds the sign into each rational, and big.Rat normalizes -0 to 0,
+		// so -PT0S and PT0S produce the same key.
+		months := durationToRat(v, true)
+		secs := durationToRat(v, false)
+		canon := months.RatString() + "|" + secs.RatString()
+		// The Go value is unambiguously a duration, so fold every duration-derived
+		// key (built-in or schema-derived through any number of levels) to
+		// TypeDuration. This catches schema types whose BaseType is itself another
+		// custom duration type and never resolves to a built-in duration above.
+		return mapKey{typeName: TypeDuration, value: canon}
 	default:
 		return mapKey{typeName: tn, value: key.Value}
 	}

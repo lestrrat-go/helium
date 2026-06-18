@@ -229,7 +229,7 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 		if v.TypeName == TypeDuration || v.TypeName == TypeYearMonthDuration {
 			d := v.DurationVal()
-			return AtomicValue{TypeName: TypeDayTimeDuration, Value: Duration{Seconds: d.Seconds, FracSec: d.FracSec, Negative: d.Negative}}, nil
+			return AtomicValue{TypeName: TypeDayTimeDuration, Value: Duration{Seconds: d.Seconds, FracSec: d.FracSec, SecRat: d.SecRat, Negative: d.Negative}}, nil
 		}
 	case TypeYearMonthDuration:
 		if v.TypeName == TypeString {
@@ -423,13 +423,16 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if d.Months != 0 {
 			return AtomicValue{}, castError(s, targetType)
 		}
-		return AtomicValue{TypeName: TypeDayTimeDuration, Value: Duration{Seconds: d.Seconds, FracSec: d.FracSec, Negative: d.Negative}}, nil
+		return AtomicValue{TypeName: TypeDayTimeDuration, Value: Duration{Seconds: d.Seconds, FracSec: d.FracSec, SecRat: d.SecRat, Negative: d.Negative}}, nil
 	case TypeYearMonthDuration:
 		d, err := parseXSDDuration(s)
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
 		}
-		if d.Seconds != 0 {
+		// Reject any nonzero dayTime part. SecRat carries the EXACT total dayTime
+		// seconds magnitude, so an underflowing fraction (e.g. PT0.000...1S) is
+		// detected here where the lossy float64 d.Seconds would read as 0.
+		if (d.SecRat != nil && d.SecRat.Sign() != 0) || d.Seconds != 0 {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeYearMonthDuration, Value: Duration{Months: d.Months, Negative: d.Negative}}, nil

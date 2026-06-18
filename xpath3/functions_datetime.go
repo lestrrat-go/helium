@@ -2,7 +2,6 @@ package xpath3
 
 import (
 	"context"
-	"math"
 	"math/big"
 	"time"
 
@@ -97,7 +96,10 @@ func extractDuration(seq Sequence, allowedTypes ...string) (Duration, bool, erro
 	if len(allowedTypes) > 0 {
 		matched := false
 		for _, at := range allowedTypes {
-			if isSubtypeOf(a.TypeName, at) {
+			// BaseType-aware so a schema-derived duration (whose TypeName is a
+			// user-defined type derived by restriction) still satisfies the
+			// accessor/timezone consumers via its built-in base type.
+			if isAtomicSubtypeOf(a, at) {
 				matched = true
 				break
 			}
@@ -264,12 +266,14 @@ func fnTimezoneFromDateTime(_ context.Context, args []Sequence) (Sequence, error
 		return validNilSequence, nil
 	}
 	_, offset := t.Zone()
-	secs := float64(offset)
-	neg := secs < 0
+	neg := offset < 0
+	absOffset := offset
 	if neg {
-		secs = -secs
+		absOffset = -absOffset
 	}
-	d := Duration{Seconds: secs, Negative: neg}
+	// Carry the exact integer-second magnitude in SecRat so the timezone-duration
+	// path is exact by construction (sign lives in Negative).
+	d := Duration{Seconds: float64(absOffset), SecRat: big.NewRat(int64(absOffset), 1), Negative: neg}
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 
@@ -320,12 +324,14 @@ func fnTimezoneFromDate(_ context.Context, args []Sequence) (Sequence, error) {
 		return validNilSequence, nil
 	}
 	_, offset := t.Zone()
-	secs := float64(offset)
-	neg := secs < 0
+	neg := offset < 0
+	absOffset := offset
 	if neg {
-		secs = -secs
+		absOffset = -absOffset
 	}
-	d := Duration{Seconds: secs, Negative: neg}
+	// Carry the exact integer-second magnitude in SecRat so the timezone-duration
+	// path is exact by construction (sign lives in Negative).
+	d := Duration{Seconds: float64(absOffset), SecRat: big.NewRat(int64(absOffset), 1), Negative: neg}
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 
@@ -377,12 +383,14 @@ func fnTimezoneFromTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return validNilSequence, nil
 	}
 	_, offset := t.Zone()
-	secs := float64(offset)
-	neg := secs < 0
+	neg := offset < 0
+	absOffset := offset
 	if neg {
-		secs = -secs
+		absOffset = -absOffset
 	}
-	d := Duration{Seconds: secs, Negative: neg}
+	// Carry the exact integer-second magnitude in SecRat so the timezone-duration
+	// path is exact by construction (sign lives in Negative).
+	d := Duration{Seconds: float64(absOffset), SecRat: big.NewRat(int64(absOffset), 1), Negative: neg}
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 
@@ -418,6 +426,19 @@ func fnMonthsFromDuration(_ context.Context, args []Sequence) (Sequence, error) 
 	return SingleInteger(int64(months)), nil
 }
 
+// dayTimeWholeSeconds returns the floor of the absolute total dayTime seconds
+// magnitude as a big.Int, using the exact SecRat-aware durationToRat value so
+// components stay correct even for fractions arbitrarily close to a whole
+// second (where the float64 Seconds field would round up).
+func dayTimeWholeSeconds(d Duration) *big.Int {
+	total := durationToRat(d, false)
+	abs := total
+	if abs.Sign() < 0 {
+		abs = new(big.Rat).Neg(abs)
+	}
+	return new(big.Int).Quo(abs.Num(), abs.Denom())
+}
+
 func fnDaysFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 	d, ok, err := extractDuration(args[0], TypeDuration)
 	if err != nil {
@@ -426,11 +447,13 @@ func fnDaysFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 	if !ok {
 		return validNilSequence, nil
 	}
-	days := int(d.Seconds) / 86400
+	days := new(big.Int).Quo(dayTimeWholeSeconds(d), big.NewInt(86400))
 	if d.Negative {
-		days = -days
+		days.Neg(days)
 	}
-	return SingleInteger(int64(days)), nil
+	// The day count can exceed int64 (e.g. P9223372036854775808D), so return the
+	// exact big.Int rather than narrowing via Int64().
+	return SingleIntegerBig(days), nil
 }
 
 func fnHoursFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
@@ -441,11 +464,12 @@ func fnHoursFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 	if !ok {
 		return validNilSequence, nil
 	}
-	hours := (int(d.Seconds) % 86400) / 3600
+	withinDay := new(big.Int).Rem(dayTimeWholeSeconds(d), big.NewInt(86400))
+	hours := new(big.Int).Quo(withinDay, big.NewInt(3600))
 	if d.Negative {
-		hours = -hours
+		hours.Neg(hours)
 	}
-	return SingleInteger(int64(hours)), nil
+	return SingleInteger(hours.Int64()), nil
 }
 
 func fnMinutesFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
@@ -456,11 +480,12 @@ func fnMinutesFromDuration(_ context.Context, args []Sequence) (Sequence, error)
 	if !ok {
 		return validNilSequence, nil
 	}
-	minutes := (int(d.Seconds) % 3600) / 60
+	withinHour := new(big.Int).Rem(dayTimeWholeSeconds(d), big.NewInt(3600))
+	minutes := new(big.Int).Quo(withinHour, big.NewInt(60))
 	if d.Negative {
-		minutes = -minutes
+		minutes.Neg(minutes)
 	}
-	return SingleInteger(int64(minutes)), nil
+	return SingleInteger(minutes.Int64()), nil
 }
 
 func fnSecondsFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
@@ -471,13 +496,18 @@ func fnSecondsFromDuration(_ context.Context, args []Sequence) (Sequence, error)
 	if !ok {
 		return validNilSequence, nil
 	}
-	// Use exact arithmetic: integer total seconds mod 60 + exact fractional part
-	intSec := int64(d.Seconds)
-	wholeSec := intSec % 60
-	result := new(big.Rat).SetInt64(wholeSec)
-	if d.FracSec != nil {
-		result.Add(result, d.FracSec)
+	// seconds-from-duration returns an xs:decimal: the exact total seconds mod 60.
+	// durationToRat is SecRat-aware, so the fractional part is preserved exactly.
+	total := durationToRat(d, false)
+	abs := total
+	if abs.Sign() < 0 {
+		abs = new(big.Rat).Neg(abs)
 	}
+	whole := new(big.Int).Quo(abs.Num(), abs.Denom())
+	frac := new(big.Rat).Sub(abs, new(big.Rat).SetInt(whole))
+	secsInt := new(big.Int).Rem(whole, big.NewInt(60))
+	result := new(big.Rat).SetInt(secsInt)
+	result.Add(result, frac)
 	if d.Negative {
 		result.Neg(result)
 	}
@@ -594,21 +624,33 @@ func getTargetTimezone(ctx context.Context, args []Sequence) (*time.Location, er
 // within the allowed range (-PT14H to PT14H) and represents whole minutes.
 // Returns FODT0003 if the constraints are violated.
 func validateTimezoneOffset(d Duration) error {
-	secs := d.Seconds
-	if secs < 0 {
-		secs = -secs
+	// Use the exact SecRat-aware total-seconds rational. An offset whose seconds
+	// underflow float64 (e.g. PT0.<many zeros>1S) is still exactly nonzero here,
+	// so it is not silently accepted as UTC.
+	abs := durationToRat(d, false)
+	if abs.Sign() < 0 {
+		abs = new(big.Rat).Neg(abs)
 	}
-	if secs > 50400 { // 14 * 3600
+	if abs.Cmp(big.NewRat(50400, 1)) > 0 { // 14 * 3600
 		return &XPathError{Code: "FODT0003", Message: "timezone offset out of range (-PT14H to PT14H)"}
 	}
-	if math.Mod(secs, 60) != 0 {
+	// Whole number of minutes: the exact seconds rational must be divisible by 60.
+	rem := new(big.Rat).Quo(abs, big.NewRat(60, 1))
+	if !rem.IsInt() {
 		return &XPathError{Code: "FODT0003", Message: "timezone offset must be a whole number of minutes"}
 	}
 	return nil
 }
 
 func durationToLocation(d Duration) *time.Location {
-	offset := int(d.Seconds)
+	// Bounded by validateTimezoneOffset (|offset| <= 50400, whole minutes), so the
+	// exact seconds magnitude fits an int. Read it from the SecRat-aware rational
+	// so a sub-float64 offset is not flattened to zero.
+	abs := durationToRat(d, false)
+	if abs.Sign() < 0 {
+		abs = new(big.Rat).Neg(abs)
+	}
+	offset := int(new(big.Int).Quo(abs.Num(), abs.Denom()).Int64())
 	if d.Negative {
 		offset = -offset
 	}

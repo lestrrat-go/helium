@@ -41,8 +41,9 @@ type NodeItem struct {
 
 ```go
 type AtomicValue struct {
-    TypeName string  // "xs:string", "xs:integer", etc.
-    value    any     // Go native backing value
+    TypeName string // "xs:string", "xs:integer", etc.
+    Value    any    // Go native backing value
+    BaseType string // built-in base type for user-defined/derived types (drives normalization)
 }
 ```
 
@@ -105,10 +106,27 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error)
 
 Merge policies: `UseFirst`, `UseLast`, `Combine`, `Reject`.
 
-Map key normalization:
+Map key normalization (`normalizeMapKey`, value-space keys so equal values collide):
 - string/int64/float64/bool → Go map equality
-- `time.Time` → UTC-normalized RFC3339Nano string
+- string-like fold to `xs:string`: `xs:untypedAtomic`, `xs:anyURI`, and any
+  `xs:string`-derived type, including schema-derived atomics whose `BaseType` is
+  string-like (checked via `TypeName` AND `BaseType`)
+- numerics fold to one `familyNumeric` bucket via exact rational arithmetic
+  (int64 fast path; `xs:integer`/`xs:decimal`-derived use big.Int/big.Rat; float/double via big.Rat)
+- durations fold to `xs:duration` and canonicalize to signed rational months/seconds
+  (`durationToRat`): `"<months>|<seconds>"`. Covers `xs:duration`,
+  `xs:yearMonthDuration`, `xs:dayTimeDuration`, and schema-derived durations
+  (folded via `BaseType` and, since the Go value is unambiguously a `Duration`,
+  unconditionally in the `case Duration` branch). `-PT0S` == `PT0S`.
+- `time.Time` → UTC-normalized RFC3339Nano string (no-tz keys prefixed `notz:`, kept distinct from tz keys)
 - `[]byte` → hex-encoded string
+- `QNameValue` → `URI + "\x00" + Local` (prefix-independent)
+
+`NewMap` is a low-level constructor: it does NOT enforce XPath duplicate-key
+semantics (`XQDY0137`) — that is enforced by the map constructor expression
+(`eval_funcall.go`) before `NewMap`. Given value-equal duplicate keys, `NewMap`
+retains both `entries` rows (`Size()` over-counts) while the lookup `index`
+collapses them last-wins.
 
 ## ArrayItem
 

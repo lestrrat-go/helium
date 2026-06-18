@@ -179,6 +179,368 @@ func TestMapItem(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "original", again.Get(0).(xpath3.AtomicValue).StringVal())
 	})
+
+	t.Run("string-derived key matches string key", func(t *testing.T) {
+		ncKey := xpath3.AtomicValue{TypeName: xpath3.TypeNCName, Value: "a"}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: ncKey, Value: xpath3.SingleInteger(1)},
+		})
+		// Looking up with an xs:string key of equal value space must succeed.
+		v, ok := m.Get(strKey("a"))
+		require.True(t, ok)
+		require.Equal(t, int64(1), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("string and string-derived keys are equivalent", func(t *testing.T) {
+		ncKey := xpath3.AtomicValue{TypeName: xpath3.TypeNCName, Value: "a"}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: ncKey, Value: xpath3.SingleInteger(1)},
+			{Key: strKey("b"), Value: xpath3.SingleInteger(2)},
+		})
+		// xs:string("a") and xs:NCName("a") share a value-space key, so a
+		// string lookup and Contains both resolve the NCName entry.
+		require.True(t, m.Contains(strKey("a")))
+		v, ok := m.Get(strKey("a"))
+		require.True(t, ok)
+		require.Equal(t, int64(1), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("duration key lookup", func(t *testing.T) {
+		k1, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		k2, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: k1, Value: xpath3.SingleString("found")},
+		})
+		// k1 and k2 are independently parsed; their FracSec pointers differ
+		// but the value space is identical, so lookup must succeed.
+		v, ok := m.Get(k2)
+		require.True(t, ok)
+		require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("equivalent duration keys are not distinct", func(t *testing.T) {
+		k1, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		k2, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		k3, err := xpath3.CastFromString("PT2S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: k1, Value: xpath3.SingleInteger(1)},
+			{Key: k3, Value: xpath3.SingleInteger(3)},
+		})
+		// Independently parsed PT1.5S keys (differing FracSec pointers) collide.
+		require.True(t, m.Contains(k2))
+		// A distinct duration value must not collide.
+		v, ok := m.Get(k3)
+		require.True(t, ok)
+		require.Equal(t, int64(3), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("arithmetic fractional duration matches parsed", func(t *testing.T) {
+		parsed, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		// Arithmetic-created Duration carries the fraction in Seconds with a nil
+		// FracSec; it must canonicalize to the same key as the parsed PT1.5S.
+		arith := xpath3.AtomicValue{
+			TypeName: xpath3.TypeDayTimeDuration,
+			Value:    xpath3.Duration{Seconds: 1.5},
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: parsed, Value: xpath3.SingleString("found")},
+		})
+		v, ok := m.Get(arith)
+		require.True(t, ok)
+		require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("non-binary fractional duration via parsing matches arithmetic seconds", func(t *testing.T) {
+		// PT0.1S is NOT binary-exact as a float64, so this case exercises the
+		// exact-rational fractional-seconds canonicalization (unlike PT1.5S).
+		parsed, err := xpath3.CastFromString("PT0.1S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		// Emulate an arithmetic-created duration that stores the fraction as an
+		// exact FracSec rational of 1/10.
+		arith := xpath3.AtomicValue{
+			TypeName: xpath3.TypeDayTimeDuration,
+			Value: xpath3.Duration{
+				Seconds: 0.1,
+				FracSec: big.NewRat(1, 10),
+			},
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: parsed, Value: xpath3.SingleString("found")},
+		})
+		v, ok := m.Get(arith)
+		require.True(t, ok)
+		require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("equivalent duration keys collapse in NewMap index", func(t *testing.T) {
+		parsed, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		arith := xpath3.AtomicValue{
+			TypeName: xpath3.TypeDayTimeDuration,
+			Value:    xpath3.Duration{Seconds: 1.5},
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: parsed, Value: xpath3.SingleInteger(1)},
+			{Key: arith, Value: xpath3.SingleInteger(2)},
+		})
+		// NewMap is the low-level constructor and does NOT enforce XPath map
+		// duplicate-key semantics (XQDY0137); that is enforced by the map
+		// constructor expression before NewMap is reached. Here both entries
+		// share a value-space key: NewMap retains both rows (Size stays 2) but
+		// its lookup index collapses them so the last-indexed entry wins for
+		// both keys.
+		require.Equal(t, 2, m.Size())
+		v, ok := m.Get(parsed)
+		require.True(t, ok)
+		require.Equal(t, int64(2), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+		v, ok = m.Get(arith)
+		require.True(t, ok)
+		require.Equal(t, int64(2), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("distinct fractional durations are not equal", func(t *testing.T) {
+		k12, err := xpath3.CastFromString("PT1.2S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		k19, err := xpath3.CastFromString("PT1.9S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: k12, Value: xpath3.SingleInteger(12)},
+			{Key: k19, Value: xpath3.SingleInteger(19)},
+		})
+		// 1.2S and 1.9S truncate to the same whole second but are distinct values.
+		require.Equal(t, 2, m.Size())
+		v12, ok := m.Get(k12)
+		require.True(t, ok)
+		require.Equal(t, int64(12), v12.Get(0).(xpath3.AtomicValue).IntegerVal())
+		v19, ok := m.Get(k19)
+		require.True(t, ok)
+		require.Equal(t, int64(19), v19.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("negative zero duration matches positive zero", func(t *testing.T) {
+		pz, err := xpath3.CastFromString("PT0S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		nz, err := xpath3.CastFromString("-PT0S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: pz, Value: xpath3.SingleString("zero")},
+		})
+		// Duration comparison treats -PT0S and PT0S as equal, so they share a key.
+		v, ok := m.Get(nz)
+		require.True(t, ok)
+		require.Equal(t, "zero", v.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("schema-derived string atomic matches string key", func(t *testing.T) {
+		// A schema-derived atomic carries a custom TypeName whose BaseType is the
+		// string-like ancestor (here xs:NCName). It must fold against an equal
+		// xs:string key via BaseType, not just TypeName.
+		derived := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myToken",
+			BaseType: xpath3.TypeNCName,
+			Value:    "tok",
+		}
+		strKeyVal := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "tok"}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: strKeyVal, Value: xpath3.SingleInteger(7)},
+		})
+		v, ok := m.Get(derived)
+		require.True(t, ok)
+		require.Equal(t, int64(7), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("schema-derived duration key matches built-in duration", func(t *testing.T) {
+		// A schema-derived atomic carries a custom TypeName whose BaseType is a
+		// built-in duration ancestor. It must fold to xs:duration via BaseType so
+		// it shares a key with an equal built-in dayTimeDuration value.
+		builtin, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		derivedVal, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		derived := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myDTD",
+			BaseType: xpath3.TypeDayTimeDuration,
+			Value:    derivedVal.Value,
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: builtin, Value: xpath3.SingleInteger(11)},
+		})
+		v, ok := m.Get(derived)
+		require.True(t, ok)
+		require.Equal(t, int64(11), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("built-in duration key matches schema-derived duration", func(t *testing.T) {
+		// The reverse direction: a schema-derived duration is the stored key and a
+		// built-in duration is the lookup key. Both must fold to xs:duration.
+		derivedVal, err := xpath3.CastFromString("P1Y2M", xpath3.TypeYearMonthDuration)
+		require.NoError(t, err)
+		derived := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myYMD",
+			BaseType: xpath3.TypeYearMonthDuration,
+			Value:    derivedVal.Value,
+		}
+		builtin, err := xpath3.CastFromString("P1Y2M", xpath3.TypeYearMonthDuration)
+		require.NoError(t, err)
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: derived, Value: xpath3.SingleInteger(13)},
+		})
+		v, ok := m.Get(builtin)
+		require.True(t, ok)
+		require.Equal(t, int64(13), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("huge whole-second durations stay distinct map keys", func(t *testing.T) {
+		// 2^53 and 2^53+1 are consecutive whole seconds whose float64
+		// representations collapse to the same value. Storing dayTime seconds as
+		// an exact rational keeps the two keys distinct.
+		k0, err := xpath3.CastFromString("PT9007199254740992S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		k1, err := xpath3.CastFromString("PT9007199254740993S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: k0, Value: xpath3.SingleInteger(992)},
+			{Key: k1, Value: xpath3.SingleInteger(993)},
+		})
+		require.Equal(t, 2, m.Size())
+
+		// Each huge key resolves to its own value and matches a freshly re-parsed
+		// equivalent of itself.
+		reparsed0, err := xpath3.CastFromString("PT9007199254740992S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		reparsed1, err := xpath3.CastFromString("PT9007199254740993S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+
+		v0, ok := m.Get(reparsed0)
+		require.True(t, ok)
+		require.Equal(t, int64(992), v0.Get(0).(xpath3.AtomicValue).IntegerVal())
+
+		v1, ok := m.Get(reparsed1)
+		require.True(t, ok)
+		require.Equal(t, int64(993), v1.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("schema-derived double keys are distinct and do not match zero", func(t *testing.T) {
+		// A schema-derived atomic carries a custom TypeName whose BaseType is
+		// xs:double. The float map-key path must promote via BaseType before
+		// ToFloat64, otherwise the underlying FloatValue is read as 0 and every
+		// such key collapses to the same map slot.
+		two := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myDouble",
+			BaseType: xpath3.TypeDouble,
+			Value:    xpath3.NewDouble(2),
+		}
+		three := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myDouble",
+			BaseType: xpath3.TypeDouble,
+			Value:    xpath3.NewDouble(3),
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: two, Value: xpath3.SingleString("two")},
+			{Key: three, Value: xpath3.SingleString("three")},
+		})
+		// Two distinct derived-double keys must remain distinct, not collapse.
+		require.Equal(t, 2, m.Size())
+
+		v2, ok := m.Get(two)
+		require.True(t, ok)
+		require.Equal(t, "two", v2.Get(0).(xpath3.AtomicValue).StringVal())
+
+		v3, ok := m.Get(three)
+		require.True(t, ok)
+		require.Equal(t, "three", v3.Get(0).(xpath3.AtomicValue).StringVal())
+
+		// An integer 0 lookup must match neither derived-double key.
+		_, ok = m.Get(xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(0)})
+		require.False(t, ok)
+	})
+
+	t.Run("schema-derived float keys are distinct and do not match zero", func(t *testing.T) {
+		two := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myFloat",
+			BaseType: xpath3.TypeFloat,
+			Value:    xpath3.NewDouble(2),
+		}
+		three := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myFloat",
+			BaseType: xpath3.TypeFloat,
+			Value:    xpath3.NewDouble(3),
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: two, Value: xpath3.SingleString("two")},
+			{Key: three, Value: xpath3.SingleString("three")},
+		})
+		require.Equal(t, 2, m.Size())
+
+		v2, ok := m.Get(two)
+		require.True(t, ok)
+		require.Equal(t, "two", v2.Get(0).(xpath3.AtomicValue).StringVal())
+
+		v3, ok := m.Get(three)
+		require.True(t, ok)
+		require.Equal(t, "three", v3.Get(0).(xpath3.AtomicValue).StringVal())
+
+		_, ok = m.Get(xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(0)})
+		require.False(t, ok)
+	})
+
+	// 2^24 and 2^24+1 are distinct in float64/double but collapse to the same
+	// value in IEEE-754 single precision (xs:float). The map-key path must round
+	// schema-derived xs:float keys to single precision regardless of backing
+	// (float64/float32/*FloatValue), or a lookup by one would miss the other.
+	t.Run("schema-derived float keys round to single precision", func(t *testing.T) {
+		const exact = 16777216   // 2^24, exact in float32
+		const plusOne = 16777217 // 2^24+1, rounds to 2^24 in float32 but exact in float64
+
+		floatKey := func(backing any) xpath3.AtomicValue {
+			return xpath3.AtomicValue{TypeName: "Q{urn:test}myFloat", BaseType: xpath3.TypeFloat, Value: backing}
+		}
+
+		backings := []struct {
+			name       string
+			exactVal   any
+			plusOneVal any
+		}{
+			{"float64", float64(exact), float64(plusOne)},
+			{"float32", float32(exact), float32(plusOne)},
+			{"FloatValue", xpath3.NewDouble(exact), xpath3.NewDouble(plusOne)},
+		}
+
+		for _, b := range backings {
+			t.Run(b.name, func(t *testing.T) {
+				// As xs:float, exact and plusOne share a key: a map storing the
+				// exact key must resolve a lookup by plusOne.
+				m := xpath3.NewMap([]xpath3.MapEntry{
+					{Key: floatKey(b.exactVal), Value: xpath3.SingleString("found")},
+					{Key: xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "sentinel"}, Value: xpath3.SingleString("s")},
+				})
+				require.True(t, m.Contains(floatKey(b.plusOneVal)),
+					"xs:float 2^24+1 must hit the 2^24 key in single precision")
+				v, ok := m.Get(floatKey(b.plusOneVal))
+				require.True(t, ok)
+				require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
+			})
+		}
+
+		// As xs:double, the same two magnitudes remain distinct (no single-precision
+		// rounding), guarding against over-collapsing the double path.
+		dblKey := func(backing any) xpath3.AtomicValue {
+			return xpath3.AtomicValue{TypeName: "Q{urn:test}myDouble", BaseType: xpath3.TypeDouble, Value: backing}
+		}
+		md := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: dblKey(float64(exact)), Value: xpath3.SingleString("exact")},
+			{Key: xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "sentinel"}, Value: xpath3.SingleString("s")},
+		})
+		require.False(t, md.Contains(dblKey(float64(plusOne))),
+			"xs:double 2^24 and 2^24+1 must remain distinct keys")
+	})
 }
 
 func TestMergeMaps(t *testing.T) {

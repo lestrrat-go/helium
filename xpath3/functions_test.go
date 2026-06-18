@@ -400,6 +400,28 @@ func TestFnMap(t *testing.T) {
 		require.InDelta(t, 42.0, av.ToFloat64(), 0.001)
 	})
 
+	// Arithmetic-created fractional dayTimeDuration keys must canonicalize
+	// identically to parsed ones so map:get/map:contains succeed. These use
+	// NON-binary-exact fractions (0.1, 1.1) which would diverge if arithmetic
+	// stored the fraction as a binary float64 instead of an exact rational.
+	t.Run("map:get arithmetic fractional duration key (multiply)", func(t *testing.T) {
+		seq := evalExpr(t, doc, `map:get(map { xs:dayTimeDuration("PT1.1S"): "x" }, xs:dayTimeDuration("PT11S") * 0.1)`)
+		require.Equal(t, 1, seq.Len())
+		require.Equal(t, "x", seq.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("map:get arithmetic fractional duration key (add)", func(t *testing.T) {
+		seq := evalExpr(t, doc, `map:get(map { xs:dayTimeDuration("PT0.1S"): "y" }, xs:dayTimeDuration("PT0.05S") + xs:dayTimeDuration("PT0.05S"))`)
+		require.Equal(t, 1, seq.Len())
+		require.Equal(t, "y", seq.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("map:contains arithmetic fractional duration key", func(t *testing.T) {
+		seq := evalExpr(t, doc, `map:contains(map { xs:dayTimeDuration("PT1.1S"): "x" }, xs:dayTimeDuration("PT11S") * 0.1)`)
+		require.Equal(t, 1, seq.Len())
+		require.True(t, seq.Get(0).(xpath3.AtomicValue).BooleanVal())
+	})
+
 	t.Run("map:keys", func(t *testing.T) {
 		seq := evalExpr(t, doc, `map:keys(map { "a": 1, "b": 2 })`)
 		require.Equal(t, 2, seq.Len())

@@ -389,6 +389,17 @@ func validateTimezoneInString(s string) error {
 	return nil
 }
 
+// addCheckedMonths adds two non-negative month counts, reporting ok=false on
+// int overflow. The Duration.Months field is a plain int, so a year/month total
+// that exceeds it (e.g. P768614336404564650Y11M) must be rejected BEFORE it
+// wraps to an invalid negative lexical form.
+func addCheckedMonths(a, b int) (int, bool) {
+	if b > math.MaxInt-a {
+		return 0, false
+	}
+	return a + b, true
+}
+
 // parseXSDDuration parses an XSD duration string like "P1Y2M3DT4H5M6S".
 func parseXSDDuration(s string) (Duration, error) {
 	if len(s) == 0 {
@@ -413,6 +424,15 @@ func parseXSDDuration(s string) (Duration, error) {
 	sawTimeMarker := false
 	lastOrder := 0
 	used := map[byte]struct{}{}
+
+	// Accumulate the dayTime seconds magnitude EXACTLY as a rational so that
+	// large whole-second values beyond float64's 2^53 exact range (and exact
+	// fractional seconds) are preserved. d.Seconds keeps a float64 mirror for the
+	// rest of the Duration machinery; d.SecRat is the authoritative value.
+	secRat := new(big.Rat)
+	addSecRat := func(num *big.Rat, mult int64) {
+		secRat.Add(secRat, new(big.Rat).Mul(num, big.NewRat(mult, 1)))
+	}
 
 	inTime := false
 	for i < len(s) {
@@ -463,32 +483,53 @@ func parseXSDDuration(s string) (Duration, error) {
 			if dotPos >= 0 {
 				return Duration{}, fmt.Errorf("invalid duration: %q", s)
 			}
-			n, err := strconv.Atoi(numStr)
-			if err != nil {
-				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
-			}
 			switch designator {
 			case 'Y':
 				if lastOrder >= 1 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
 				}
 				lastOrder = 1
+				n, err := strconv.Atoi(numStr)
+				if err != nil {
+					return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
+				}
 				if n > math.MaxInt/12 {
 					return Duration{}, fmt.Errorf("duration overflow: %sY", numStr)
 				}
-				d.Months += n * 12
+				months, ok := addCheckedMonths(d.Months, n*12)
+				if !ok {
+					return Duration{}, fmt.Errorf("duration overflow: %sY", numStr)
+				}
+				d.Months = months
 			case 'M':
 				if lastOrder >= 2 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
 				}
 				lastOrder = 2
-				d.Months += n
+				n, err := strconv.Atoi(numStr)
+				if err != nil {
+					return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
+				}
+				months, ok := addCheckedMonths(d.Months, n)
+				if !ok {
+					return Duration{}, fmt.Errorf("duration overflow: %sM", numStr)
+				}
+				d.Months = months
 			case 'D':
 				if lastOrder >= 3 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
 				}
 				lastOrder = 3
-				d.Seconds += float64(n) * 86400
+				// Days feed dayTime seconds, which are tracked exactly in SecRat.
+				// Parse as a big.Int so very large day counts (beyond int64) round
+				// -trip; the float64 mirror is best-effort metadata.
+				dayInt, ok := new(big.Int).SetString(numStr, 10)
+				if !ok {
+					return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
+				}
+				dayFloat, _ := new(big.Float).SetInt(dayInt).Float64()
+				d.Seconds += dayFloat * 86400
+				addSecRat(new(big.Rat).SetInt(dayInt), 86400)
 			default:
 				return Duration{}, fmt.Errorf("invalid duration designator: %c", designator)
 			}
@@ -496,8 +537,18 @@ func parseXSDDuration(s string) (Duration, error) {
 			if designator != 'S' && dotPos >= 0 {
 				return Duration{}, fmt.Errorf("invalid duration: %q", s)
 			}
+			// Parse the same lexical number exactly as a rational for SecRat —
+			// this is the authoritative value. A very large but VALID whole-second
+			// lexical must not be rejected just because float64 cannot hold it.
+			numRat, ok := new(big.Rat).SetString(numStr)
+			if !ok {
+				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
+			}
+			// The float64 mirror is best-effort metadata. ParseFloat returns an
+			// out-of-range error along with a saturated value (±Inf); accept that
+			// value rather than rejecting the duration, since SecRat is exact.
 			f, err := strconv.ParseFloat(numStr, 64)
-			if err != nil {
+			if err != nil && !errors.Is(err, strconv.ErrRange) {
 				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
 			}
 			switch designator {
@@ -507,26 +558,26 @@ func parseXSDDuration(s string) (Duration, error) {
 				}
 				lastOrder = 4
 				d.Seconds += f * 3600
+				addSecRat(numRat, 3600)
 			case 'M':
 				if lastOrder >= 5 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
 				}
 				lastOrder = 5
 				d.Seconds += f * 60
+				addSecRat(numRat, 60)
 			case 'S':
 				if lastOrder >= 6 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
 				}
 				lastOrder = 6
 				d.Seconds += f
+				addSecRat(numRat, 1)
 				// Store exact fractional seconds as big.Rat to avoid float64 precision loss
 				if strings.ContainsRune(numStr, '.') {
-					r, ok := new(big.Rat).SetString(numStr)
-					if ok {
-						// Extract just the fractional part: frac = r - floor(r)
-						intPart := new(big.Int).Div(r.Num(), r.Denom())
-						d.FracSec = new(big.Rat).Sub(r, new(big.Rat).SetInt(intPart))
-					}
+					// Extract just the fractional part: frac = numRat - floor(numRat)
+					intPart := new(big.Int).Div(numRat.Num(), numRat.Denom())
+					d.FracSec = new(big.Rat).Sub(numRat, new(big.Rat).SetInt(intPart))
 				}
 			default:
 				return Duration{}, fmt.Errorf("invalid duration designator: %c", designator)
@@ -539,7 +590,49 @@ func parseXSDDuration(s string) (Duration, error) {
 		return Duration{}, fmt.Errorf("invalid duration: %q", s)
 	}
 
+	// Record the exact dayTime seconds magnitude. d.Negative carries the sign,
+	// so secRat stays non-negative here.
+	d.SecRat = secRat
+
 	return d, nil
+}
+
+// exactFractionDigits returns the digits AFTER the decimal point for a
+// fractional rational in [0,1), with NO rounding for terminating decimals.
+//
+// When FloatPrec reports the fraction is EXACT (terminating), the full exact
+// precision is used with no cap, so an exact value arbitrarily close to 1 (e.g.
+// 0.999...9 with hundreds of nines that is exactly representable) is rendered in
+// full rather than rounded UP to "1.0...". Only NON-terminating fractions are
+// capped, at which point FloatString may legitimately round; the cap value is
+// chosen far beyond any precision a real lexical form carries.
+//
+// Trailing zeros are trimmed. Callers must never see a carried integer part
+// (a leading "1."): with the exact-precision path that cannot occur.
+func exactFractionDigits(frac *big.Rat) string {
+	prec, exact := frac.FloatPrec()
+	if exact {
+		s := frac.FloatString(prec)
+		s = strings.TrimPrefix(s, "0.")
+		return strings.TrimRight(s, "0")
+	}
+
+	// Non-terminating fraction: emit a capped number of digits via TRUNCATING
+	// long division. FloatString would ROUND, which can carry into the integer
+	// part (e.g. 0.999... → 1.0) and corrupt the formatted duration; truncation
+	// never carries, so the integer part stays 0 and no stray "." is emitted.
+	const maxDigits = 40
+	num := new(big.Int).Set(frac.Num())
+	den := frac.Denom()
+	ten := big.NewInt(10)
+	var b strings.Builder
+	q := new(big.Int)
+	for i := 0; i < maxDigits && num.Sign() != 0; i++ {
+		num.Mul(num, ten)
+		q.QuoRem(num, den, num)
+		b.WriteByte(byte('0' + q.Int64()))
+	}
+	return strings.TrimRight(b.String(), "0")
 }
 
 // formatDuration formats a Duration as an XSD duration string.
@@ -547,21 +640,19 @@ func parseXSDDuration(s string) (Duration, error) {
 // yearMonthDuration → "P0M", dayTimeDuration → "PT0S", duration → "PT0S".
 func formatDuration(d Duration, typeName string) string {
 	var b strings.Builder
-	isZero := d.Months == 0 && d.Seconds == 0
+	secsZero := d.Seconds == 0
+	if d.SecRat != nil {
+		secsZero = d.SecRat.Sign() == 0
+	}
+	isZero := d.Months == 0 && secsZero
 	if d.Negative && !isZero {
 		b.WriteByte('-')
 	}
 	b.WriteByte('P')
 
 	totalMonths := d.Months
-	totalSeconds := d.Seconds
-	if d.Negative {
-		if totalMonths < 0 {
-			totalMonths = -totalMonths
-		}
-		if totalSeconds < 0 {
-			totalSeconds = -totalSeconds
-		}
+	if d.Negative && totalMonths < 0 {
+		totalMonths = -totalMonths
 	}
 
 	years := totalMonths / 12
@@ -573,34 +664,69 @@ func formatDuration(d Duration, typeName string) string {
 		fmt.Fprintf(&b, "%dM", months)
 	}
 
-	// Decompose seconds using integer arithmetic to avoid int64 overflow
-	// for very large values (totalSeconds * 1e6 can exceed MaxInt64).
-	totalWholeSeconds := int64(totalSeconds)
-	fracSeconds := totalSeconds - float64(totalWholeSeconds)
-	// Round fractional part to microseconds
-	fracMicro := int64(math.Round(fracSeconds * 1e6))
-	if fracMicro >= 1e6 {
-		totalWholeSeconds++
-		fracMicro -= 1e6
+	// Decompose the seconds magnitude. Two distinct paths:
+	//   - SecRat present: the EXACT total-seconds rational is authoritative.
+	//     Split it into a whole-second big.Int (floor) and an exact fractional
+	//     rational, bypassing all float64 rounding so a value just below a whole
+	//     second never rounds the integer part UP while still carrying a
+	//     fraction (which would emit an invalid "PT1.1.S").
+	//   - SecRat absent (legacy float path): decompose d.Seconds via integer
+	//     arithmetic and round the fraction to microseconds.
+	// totalWholeSeconds holds the whole-second count as a big.Int so values above
+	// math.MaxInt64 never wrap into malformed negative components.
+	totalWholeSeconds := new(big.Int)
+	var fracMicro int64
+	var fracRat *big.Rat
+	if d.SecRat != nil {
+		absRat := d.SecRat
+		if absRat.Sign() < 0 {
+			absRat = new(big.Rat).Neg(absRat)
+		}
+		whole := new(big.Int).Quo(absRat.Num(), absRat.Denom())
+		totalWholeSeconds.Set(whole)
+		rem := new(big.Rat).Sub(absRat, new(big.Rat).SetInt(whole))
+		if rem.Sign() != 0 {
+			fracRat = rem
+		}
+	} else {
+		totalSeconds := d.Seconds
+		if d.Negative && totalSeconds < 0 {
+			totalSeconds = -totalSeconds
+		}
+		whole := int64(totalSeconds)
+		fracSeconds := totalSeconds - float64(whole)
+		// Round fractional part to microseconds
+		fracMicro = int64(math.Round(fracSeconds * 1e6))
+		if fracMicro >= 1e6 {
+			whole++
+			fracMicro -= 1e6
+		}
+		if fracMicro < 0 {
+			fracMicro = 0
+		}
+		totalWholeSeconds.SetInt64(whole)
+		// Use FracSec for exact fractional representation if available
+		if d.FracSec != nil && d.FracSec.Sign() != 0 {
+			fracMicro = 0 // will be formatted from FracSec below
+			fracRat = d.FracSec
+		}
 	}
-	if fracMicro < 0 {
-		fracMicro = 0
-	}
-	// Use FracSec for exact fractional representation if available
-	if d.FracSec != nil && d.FracSec.Sign() != 0 {
-		fracMicro = 0 // will be formatted from FracSec below
-	}
-	days := totalWholeSeconds / 86400
-	totalWholeSeconds -= days * 86400
-	hours := totalWholeSeconds / 3600
-	totalWholeSeconds -= hours * 3600
-	mins := totalWholeSeconds / 60
-	wholeSecs := totalWholeSeconds - mins*60
 
-	hasFrac := fracMicro != 0 || (d.FracSec != nil && d.FracSec.Sign() != 0)
+	// Decompose days/hours/minutes/seconds entirely in big.Int via QuoRem so the
+	// days component can exceed int64 without overflow; the sub-day components are
+	// bounded and safely fit in int64.
+	days := new(big.Int)
+	rem := new(big.Int)
+	days.QuoRem(totalWholeSeconds, big.NewInt(86400), rem)
+	hours := rem.Int64() / 3600
+	subHour := rem.Int64() - hours*3600
+	mins := subHour / 60
+	wholeSecs := subHour - mins*60
+
+	hasFrac := fracMicro != 0 || (fracRat != nil && fracRat.Sign() != 0)
 	hasSecs := wholeSecs != 0 || hasFrac
-	if days != 0 {
-		fmt.Fprintf(&b, "%dD", days)
+	if days.Sign() != 0 {
+		fmt.Fprintf(&b, "%sD", days.String())
 	}
 	if hours != 0 || mins != 0 || hasSecs {
 		b.WriteByte('T')
@@ -611,12 +737,9 @@ func formatDuration(d Duration, typeName string) string {
 			fmt.Fprintf(&b, "%dM", mins)
 		}
 		if hasSecs {
-			if d.FracSec != nil && d.FracSec.Sign() != 0 {
+			if fracRat != nil && fracRat.Sign() != 0 {
 				// Use exact fractional representation
-				fracStr := d.FracSec.FloatString(20)
-				// Remove "0." prefix
-				fracStr = strings.TrimPrefix(fracStr, "0.")
-				fracStr = strings.TrimRight(fracStr, "0")
+				fracStr := exactFractionDigits(fracRat)
 				if fracStr == "" {
 					fmt.Fprintf(&b, "%dS", wholeSecs)
 				} else {

@@ -970,19 +970,16 @@ func compareTime(op TokenType, a, b time.Time) bool {
 }
 
 func compareDuration(op TokenType, a, b Duration) (bool, error) {
-	// Normalize: convert negative to signed months/seconds
-	aMonths, aSecs := a.Months, a.Seconds
-	if a.Negative {
-		aMonths, aSecs = -aMonths, -aSecs
-	}
-	bMonths, bSecs := b.Months, b.Seconds
-	if b.Negative {
-		bMonths, bSecs = -bMonths, -bSecs
-	}
+	// Compare via exact signed rationals — months and seconds each as their own
+	// exact value space — so consecutive huge whole seconds and near-1 fractional
+	// seconds stay distinct (no float64 epsilon collapse). durationToRat folds the
+	// Negative sign into each rational.
+	aMonthsRat := durationToRat(a, true)
+	aSecsRat := durationToRat(a, false)
+	bMonthsRat := durationToRat(b, true)
+	bSecsRat := durationToRat(b, false)
 
-	// Use epsilon comparison for seconds to handle floating-point arithmetic drift
-	const secEps = 1e-9
-	eq := aMonths == bMonths && math.Abs(aSecs-bSecs) < secEps
+	eq := aMonthsRat.Cmp(bMonthsRat) == 0 && aSecsRat.Cmp(bSecsRat) == 0
 
 	switch op {
 	case TokenEq:
@@ -991,18 +988,17 @@ func compareDuration(op TokenType, a, b Duration) (bool, error) {
 		return !eq, nil
 	case TokenLt, TokenLe, TokenGt, TokenGe:
 		// Ordering is only defined for yearMonthDuration and dayTimeDuration (not mixed)
-		if aMonths != 0 && aSecs != 0 {
+		if aMonthsRat.Sign() != 0 && aSecsRat.Sign() != 0 {
 			return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xs:duration values are not orderable"}
 		}
-		if bMonths != 0 && bSecs != 0 {
+		if bMonthsRat.Sign() != 0 && bSecsRat.Sign() != 0 {
 			return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "xs:duration values are not orderable"}
 		}
 		// Compare months-only or seconds-only
-		if aMonths != 0 || bMonths != 0 {
-			cmp := aMonths - bMonths
-			return applyCompareInt(op, cmp), nil
+		if aMonthsRat.Sign() != 0 || bMonthsRat.Sign() != 0 {
+			return applyCompareInt(op, aMonthsRat.Cmp(bMonthsRat)), nil
 		}
-		return compareFloats(op, aSecs, bSecs), nil
+		return applyCompareInt(op, aSecsRat.Cmp(bSecsRat)), nil
 	}
 	return false, nil
 }

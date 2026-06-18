@@ -1,0 +1,551 @@
+package xpath3_test
+
+import (
+	"math/big"
+	"strings"
+	"testing"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/stretchr/testify/require"
+)
+
+// canonYM9007 is the canonical xs:yearMonthDuration lexical form for a total of
+// 9007199254740993 months (just past float64's 2^53 exact range).
+const canonYM9007 = "P750599937895082Y9M"
+
+// evalExprErr compiles and evaluates expr, requiring an error and returning it.
+func evalExprErr(t *testing.T, node helium.Node, expr string) error {
+	t.Helper()
+	compiled, err := xpath3.NewCompiler().Compile(expr)
+	require.NoError(t, err)
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, node)
+	require.Error(t, err)
+	return err
+}
+
+// TestDurationAccessorsExactSeconds verifies the *-from-duration accessors use
+// the exact SecRat-aware seconds magnitude rather than the lossy float64
+// Seconds field, so a fraction arbitrarily close to a whole second does not
+// inflate the whole-second part.
+func TestDurationAccessorsExactSeconds(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{
+			name: "seconds near-one fraction stays sub-second",
+			expr: `seconds-from-duration(xs:dayTimeDuration("PT0.9999999999999999999S"))`,
+			want: "0.9999999999999999999",
+		},
+		{
+			name: "days from large duration",
+			expr: `days-from-duration(xs:dayTimeDuration("P3DT4H5M6S"))`,
+			want: "3",
+		},
+		{
+			name: "hours from large duration",
+			expr: `hours-from-duration(xs:dayTimeDuration("P3DT4H5M6S"))`,
+			want: "4",
+		},
+		{
+			name: "minutes from large duration",
+			expr: `minutes-from-duration(xs:dayTimeDuration("P3DT4H5M6S"))`,
+			want: "5",
+		},
+		{
+			name: "seconds whole with fraction",
+			expr: `seconds-from-duration(xs:dayTimeDuration("P3DT4H5M6.5S"))`,
+			want: "6.5",
+		},
+		{
+			name: "days negative",
+			expr: `days-from-duration(xs:dayTimeDuration("-P3DT4H5M6S"))`,
+			want: "-3",
+		},
+		{
+			name: "hours negative",
+			expr: `hours-from-duration(xs:dayTimeDuration("-P3DT4H5M6S"))`,
+			want: "-4",
+		},
+		{
+			name: "minutes negative",
+			expr: `minutes-from-duration(xs:dayTimeDuration("-P3DT4H5M6S"))`,
+			want: "-5",
+		},
+		{
+			name: "seconds negative fractional",
+			expr: `seconds-from-duration(xs:dayTimeDuration("-PT6.5S"))`,
+			want: "-6.5",
+		},
+		{
+			name: "seconds modulo 60",
+			expr: `seconds-from-duration(xs:dayTimeDuration("PT125S"))`,
+			want: "5",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seq := evalExpr(t, doc, tt.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			got, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDateTimePlusExactDayTimeDuration verifies date/time ± dayTimeDuration uses
+// the exact SecRat seconds, so a fractional duration just below a whole second
+// does not round the result up to the next second.
+func TestDateTimePlusExactDayTimeDuration(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{
+			name: "time plus near-one fraction stays sub-second",
+			expr: `xs:time("00:00:00") + xs:dayTimeDuration("PT0.9999999999999999999S")`,
+			want: "00:00:00.999999999",
+		},
+		{
+			name: "dateTime plus whole days",
+			expr: `xs:dateTime("2020-01-01T00:00:00") + xs:dayTimeDuration("P5D")`,
+			want: "2020-01-06T00:00:00",
+		},
+		{
+			name: "dateTime minus whole days",
+			expr: `xs:dateTime("2020-01-06T00:00:00") - xs:dayTimeDuration("P5D")`,
+			want: "2020-01-01T00:00:00",
+		},
+		{
+			name: "time minus fractional second",
+			expr: `xs:time("00:00:01") - xs:dayTimeDuration("PT0.5S")`,
+			want: "00:00:00.5",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seq := evalExpr(t, doc, tt.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			got, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestYearMonthDurationRejectsUnderflowingDayTime verifies that an
+// underflowing-but-nonzero EXACT dayTime seconds value is rejected when casting
+// to xs:yearMonthDuration, rather than being silently accepted as P0M.
+func TestYearMonthDurationRejectsUnderflowingDayTime(t *testing.T) {
+	lex := "PT0." + strings.Repeat("0", 400) + "1S"
+	_, err := xpath3.CastFromString(lex, xpath3.TypeYearMonthDuration)
+	require.Error(t, err)
+
+	// A genuine yearMonth-only lexical form still casts cleanly.
+	av, err := xpath3.CastFromString("P2Y3M", xpath3.TypeYearMonthDuration)
+	require.NoError(t, err)
+	got, err := xpath3.AtomicToString(av)
+	require.NoError(t, err)
+	require.Equal(t, "P2Y3M", got)
+}
+
+// TestNonTerminatingFractionTruncated verifies that a capped non-terminating
+// fraction is generated by TRUNCATING long division (never rounding), so the
+// integer part can never carry into an invalid "PT0.1.S".
+func TestNonTerminatingFractionTruncated(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	// 1 div 9 second = 0.111... (non-terminating). 1 minus that approaches a
+	// whole second; the truncating formatter must keep the integer part at 0.
+	seq := evalExpr(t, doc, `xs:dayTimeDuration("PT1S") - (xs:dayTimeDuration("PT1S") div 9)`)
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
+	got, err := xpath3.AtomicToString(av)
+	require.NoError(t, err)
+	// 8/9 = 0.888... truncated to 40 digits, no carry, no stray decimal point.
+	require.Equal(t, "PT0."+strings.Repeat("8", 40)+"S", got)
+	require.NotContains(t, got, "1.")
+	require.Equal(t, 1, strings.Count(got, "."))
+}
+
+// TestDaysFromDurationBigDayCount verifies days-from-duration returns the exact
+// big-int day count rather than narrowing via int64 (which would produce
+// negative garbage for a day count above int64 max).
+func TestDaysFromDurationBigDayCount(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	seq := evalExpr(t, doc, `days-from-duration(xs:dayTimeDuration("P9223372036854775808D"))`)
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
+	got, err := xpath3.AtomicToString(av)
+	require.NoError(t, err)
+	require.Equal(t, "9223372036854775808", got)
+
+	seqNeg := evalExpr(t, doc, `days-from-duration(xs:dayTimeDuration("-P9223372036854775808D"))`)
+	avNeg := seqNeg.Get(0).(xpath3.AtomicValue)
+	gotNeg, err := xpath3.AtomicToString(avNeg)
+	require.NoError(t, err)
+	require.Equal(t, "-9223372036854775808", gotNeg)
+}
+
+// TestDateTimePlusOverflowingDayCount verifies date/time + dayTimeDuration
+// reports an overflow (FODT0002) when the day count exceeds the range that
+// time.Time arithmetic can consume, instead of silently returning the original
+// date.
+func TestDateTimePlusOverflowingDayCount(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	err := evalExprErr(t, doc, `xs:dateTime("2020-01-01T00:00:00") + xs:dayTimeDuration("P9223372036854775808D")`)
+	require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+}
+
+// TestDurationYearMonthOverflowRejected verifies that a year/month total
+// exceeding the internal int representation is rejected during parsing rather
+// than wrapping to an invalid negative lexical form.
+func TestDurationYearMonthOverflowRejected(t *testing.T) {
+	_, err := xpath3.CastFromString("P768614336404564650Y11M", xpath3.TypeYearMonthDuration)
+	require.Error(t, err)
+
+	// A large-but-representable yearMonth total still parses cleanly.
+	av, err := xpath3.CastFromString("P1Y1M", xpath3.TypeYearMonthDuration)
+	require.NoError(t, err)
+	got, err := xpath3.AtomicToString(av)
+	require.NoError(t, err)
+	require.Equal(t, "P1Y1M", got)
+}
+
+// TestYearMonthDurationArithmeticOverflow verifies yearMonthDuration addition
+// and fn:sum report FODT0002 when the accumulated month total overflows int,
+// instead of wrapping to an invalid negative lexical form.
+func TestYearMonthDurationArithmeticOverflow(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	bigYM := `xs:yearMonthDuration("P768614336404564650Y")` // 9223372036854775800 months
+
+	t.Run("addition overflow", func(t *testing.T) {
+		err := evalExprErr(t, doc, bigYM+` + `+bigYM)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+	})
+
+	t.Run("sum overflow", func(t *testing.T) {
+		err := evalExprErr(t, doc, `sum(( `+bigYM+`, `+bigYM+` ))`)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+	})
+
+	t.Run("non-overflowing addition still works", func(t *testing.T) {
+		seq := evalExpr(t, doc, `xs:yearMonthDuration("P2Y3M") + xs:yearMonthDuration("P1Y2M")`)
+		av := seq.Get(0).(xpath3.AtomicValue)
+		got, err := xpath3.AtomicToString(av)
+		require.NoError(t, err)
+		require.Equal(t, "P3Y5M", got)
+	})
+}
+
+// TestDateTimeSubtractExactSeconds verifies dateTime − dateTime computes the
+// difference with EXACT integer/rational seconds rather than a rounded float64,
+// so two dateTimes that differ by a single second (even when their magnitudes
+// exceed float64's 2^53 exact range) do not collapse to the same duration.
+func TestDateTimeSubtractExactSeconds(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{
+			name: "one second apart far in the future",
+			expr: `xs:dateTime("999999999-01-01T00:00:01Z") - xs:dateTime("999999999-01-01T00:00:00Z")`,
+			want: "PT1S",
+		},
+		{
+			name: "sub-second nanosecond difference",
+			expr: `xs:dateTime("2020-01-01T00:00:01.5Z") - xs:dateTime("2020-01-01T00:00:00Z")`,
+			want: "PT1.5S",
+		},
+		{
+			name: "timezone offset accounted exactly",
+			expr: `xs:dateTime("2020-01-01T00:00:00Z") - xs:dateTime("2020-01-01T00:00:00-05:00")`,
+			want: "-PT5H",
+		},
+		{
+			name: "negative difference",
+			expr: `xs:dateTime("2020-01-01T00:00:00Z") - xs:dateTime("2020-01-01T00:00:01Z")`,
+			want: "-PT1S",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seq := evalExpr(t, doc, tt.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			got, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDayTimeDurationDivSchemaDerivedDecimal verifies that dividing a
+// dayTimeDuration by a schema-derived decimal (whose ToFloat64 reports 0)
+// resolves the divisor as an exact rational BEFORE the zero check, so a genuine
+// non-zero value does not spuriously raise division-by-zero.
+func TestDayTimeDurationDivSchemaDerivedDecimal(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	// A schema-derived xs:decimal whose backing *big.Rat is 0.5. ToFloat64 on
+	// such a value reports 0, which previously tripped the early zero check.
+	half := xpath3.AtomicValue{
+		TypeName: "Q{urn:test}myHalf",
+		BaseType: xpath3.TypeDecimal,
+		Value:    new(big.Rat).SetFrac64(1, 2),
+	}
+	dur, err := xpath3.CastFromString("PT10S", xpath3.TypeDayTimeDuration)
+	require.NoError(t, err)
+
+	vars := xpath3.NewVariables()
+	vars.Set("d", xpath3.SingleAtomic(dur))
+	vars.Set("h", xpath3.SingleAtomic(half))
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(vars)
+
+	seq := evalExprWithEval(t, eval, doc, `$d div $h`)
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
+	got, err := xpath3.AtomicToString(av)
+	require.NoError(t, err)
+	require.Equal(t, "PT20S", got)
+}
+
+// TestYearMonthDurationMulExactMonths verifies yearMonthDuration * / number
+// rounds the month total via EXACT rational arithmetic, so a large month total
+// multiplied by 1 (or any integer/decimal) keeps full precision instead of
+// rounding through float64.
+func TestYearMonthDurationMulExactMonths(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{
+			name: "large month total times one is identity",
+			expr: `xs:yearMonthDuration("P9007199254740993M") * 1`,
+			want: canonYM9007, // 9007199254740993 months
+		},
+		{
+			name: "half rounds toward positive infinity",
+			expr: `xs:yearMonthDuration("P3M") div 2`,
+			want: "P2M", // 1.5 → 2
+		},
+		{
+			name: "negative half rounds toward positive infinity",
+			expr: `xs:yearMonthDuration("-P3M") div 2`,
+			want: "-P1M", // -1.5 → -1
+		},
+		{
+			name: "decimal multiplier exact",
+			expr: `xs:yearMonthDuration("P10M") * 0.5`,
+			want: "P5M",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seq := evalExpr(t, doc, tt.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			got, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDurationMulDoubleFloatExact verifies that multiplying a duration by an
+// xs:double / xs:float operand whose value is exactly 1 routes through the exact
+// rational path, so huge whole-second / whole-month magnitudes beyond 2^53 are
+// preserved instead of losing a unit through a float64 round-trip.
+func TestDurationMulDoubleFloatExact(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{
+			// Canonical dayTime form breaks the magnitude into days/hours; the
+			// point is that no second is lost (cf. the eq check below).
+			name: "dayTime times xs:double(1) keeps exact seconds",
+			expr: `xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")`,
+			want: "P104249991374DT7H36M33S",
+		},
+		{
+			name: "dayTime times xs:float(1) keeps exact seconds",
+			expr: `xs:dayTimeDuration("PT9007199254740993S") * xs:float("1")`,
+			want: "P104249991374DT7H36M33S",
+		},
+		{
+			name: "dayTime div xs:double(1) keeps exact seconds",
+			expr: `xs:dayTimeDuration("PT9007199254740993S") div xs:double("1")`,
+			want: "P104249991374DT7H36M33S",
+		},
+		{
+			name: "dayTime times xs:double(1) eq parsed original",
+			expr: `(xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")) eq xs:dayTimeDuration("PT9007199254740993S")`,
+			want: "true",
+		},
+		{
+			name: "dayTime times xs:double(1) not one second short",
+			expr: `(xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")) ne xs:dayTimeDuration("PT9007199254740992S")`,
+			want: "true",
+		},
+		{
+			name: "yearMonth times xs:double(1) keeps exact months",
+			expr: `xs:yearMonthDuration("P9007199254740993M") * xs:double("1")`,
+			want: canonYM9007, // 9007199254740993 months
+		},
+		{
+			name: "yearMonth times xs:float(1) keeps exact months",
+			expr: `xs:yearMonthDuration("P9007199254740993M") * xs:float("1")`,
+			want: canonYM9007,
+		},
+		{
+			name: "yearMonth div xs:double(1) keeps exact months",
+			expr: `xs:yearMonthDuration("P9007199254740993M") div xs:double("1")`,
+			want: canonYM9007,
+		},
+		{
+			name: "dayTime times xs:double(1) equals times 1",
+			expr: `(xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")) eq (xs:dayTimeDuration("PT9007199254740993S") * 1)`,
+			want: "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seq := evalExpr(t, doc, tt.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			got, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDurationMulNonFiniteDoubleErrors verifies that a non-finite (Inf/NaN)
+// xs:double multiplier still reports an error rather than silently producing a
+// bogus duration.
+func TestDurationMulNonFiniteDoubleErrors(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	err := evalExprErr(t, doc, `xs:dayTimeDuration("PT1S") * xs:double("INF")`)
+	require.Error(t, err)
+
+	errNaN := evalExprErr(t, doc, `xs:dayTimeDuration("PT1S") * xs:double("NaN")`)
+	require.Error(t, errNaN)
+}
+
+// TestMapKeyFloat64BackedValue verifies that a schema-derived xs:double/xs:float
+// atomic backed by a plain float64 (rather than *FloatValue) can be used as a
+// map key without panicking, and folds into the shared numeric key bucket so an
+// equal xs:double key collides with it.
+func TestMapKeyFloat64BackedValue(t *testing.T) {
+	tests := []struct {
+		name string
+		key  xpath3.AtomicValue
+	}{
+		{
+			name: "schema-derived double backed by float64",
+			key: xpath3.AtomicValue{
+				TypeName: "Q{urn:test}d",
+				BaseType: xpath3.TypeDouble,
+				Value:    float64(2),
+			},
+		},
+		{
+			name: "schema-derived float backed by float64",
+			key: xpath3.AtomicValue{
+				TypeName: "Q{urn:test}f",
+				BaseType: xpath3.TypeFloat,
+				Value:    float64(2),
+			},
+		},
+		{
+			name: "builtin double backed by float64",
+			key: xpath3.AtomicValue{
+				TypeName: xpath3.TypeDouble,
+				Value:    float64(2),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := xpath3.NewMap([]xpath3.MapEntry{
+				{Key: tt.key, Value: xpath3.SingleString("v")},
+			})
+
+			require.NotPanics(t, func() {
+				require.True(t, m.Contains(tt.key))
+			})
+
+			// An equal xs:double value folds to the same numeric key bucket.
+			equiv := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(2)}
+			got, ok := m.Get(equiv)
+			require.True(t, ok)
+			require.Equal(t, 1, got.Len())
+		})
+	}
+}
+
+// TestAvgYearMonthDurationExactMonths verifies fn:avg over yearMonthDurations
+// divides the exact month total by the count using rational arithmetic, so a
+// large average keeps full precision rather than losing a month through a
+// float64 round-trip.
+func TestAvgYearMonthDurationExactMonths(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{
+			name: "avg of two large equal durations",
+			expr: `avg(( xs:yearMonthDuration("P9007199254740993M"), xs:yearMonthDuration("P9007199254740993M") ))`,
+			want: canonYM9007, // 9007199254740993 months
+		},
+		{
+			name: "avg rounds half toward positive infinity",
+			expr: `avg(( xs:yearMonthDuration("P1M"), xs:yearMonthDuration("P2M") ))`,
+			want: "P2M", // 1.5 → 2
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seq := evalExpr(t, doc, tt.expr)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
+			got, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

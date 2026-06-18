@@ -24,8 +24,21 @@ func fnCount(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleInteger(int64(seqLen(args[0]))), nil
 }
 
-// aggregateTypeFamily classifies an atomic type for aggregate type checking.
-func aggregateTypeFamily(typeName string) string {
+// aggregateTypeFamily classifies an atomic value for aggregate type checking.
+// A schema-derived value (e.g. a restriction of xs:dayTimeDuration) carries a
+// custom TypeName whose BaseType names the built-in ancestor; classify on the
+// effective built-in type so the duration/numeric/string families recognize it.
+func aggregateTypeFamily(a AtomicValue) string {
+	if family := aggregateTypeFamilyByName(a.TypeName); family != "" {
+		return family
+	}
+	if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+		return aggregateTypeFamilyByName(a.BaseType)
+	}
+	return ""
+}
+
+func aggregateTypeFamilyByName(typeName string) string {
 	if isIntegerDerived(typeName) {
 		return familyNumeric
 	}
@@ -85,7 +98,7 @@ func validateCollationArg(args []Sequence, idx int) error {
 }
 
 func checkSumAvgType(a AtomicValue) error {
-	family := aggregateTypeFamily(a.TypeName)
+	family := aggregateTypeFamily(a)
 	switch family {
 	case familyNumeric, familyDurationYM, familyDurationDT:
 		return nil
@@ -134,7 +147,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
 		}
-		newFamily := aggregateTypeFamily(a.TypeName)
+		newFamily := aggregateTypeFamily(a)
 		family, err = checkAggregateHomogeneity(family, newFamily)
 		if err != nil {
 			return nil, err
@@ -181,40 +194,66 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func avgDurations(seq Sequence, family string) (Sequence, error) {
+	count := seqLen(seq)
+
+	if family == familyDurationDT {
+		// Sum and divide dayTime seconds EXACTLY so large or fractional averages
+		// canonicalize precisely (matching the duration*number path).
+		totalSecs := new(big.Rat)
+		for item := range seqItems(seq) {
+			a, _ := AtomizeItem(item)
+			totalSecs.Add(totalSecs, durationToRat(a.DurationVal(), false))
+		}
+		avgSecs := new(big.Rat).Quo(totalSecs, new(big.Rat).SetInt64(int64(count)))
+		negative := avgSecs.Sign() < 0
+		absSecs := avgSecs
+		if negative {
+			absSecs = new(big.Rat).Neg(avgSecs)
+		}
+		secs, frac := durationFromRatSeconds(absSecs)
+		return SingleAtomic(AtomicValue{
+			TypeName: TypeDayTimeDuration,
+			Value:    Duration{Seconds: secs, FracSec: frac, SecRat: absSecs, Negative: negative},
+		}), nil
+	}
+
 	totalMonths := new(big.Int)
-	var totalSeconds float64
 	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		if d.Negative {
 			totalMonths.Sub(totalMonths, big.NewInt(int64(d.Months)))
-			totalSeconds -= d.Seconds
 		} else {
 			totalMonths.Add(totalMonths, big.NewInt(int64(d.Months)))
-			totalSeconds += d.Seconds
 		}
 	}
+	// fn:avg is defined as fn:sum(...) div count, so the intermediate sum must
+	// itself be a representable yearMonthDuration. Reject a month total that
+	// overflows the value space (matching op:add-yearMonthDurations) before
+	// dividing.
 	if !totalMonths.IsInt64() {
 		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
-	count := seqLen(seq)
-	// Per XPath F&O spec: months are rounded "half towards positive infinity"
-	// i.e. math.Floor(months + 0.5), matching op:divide-yearMonthDuration behavior.
-	monthsF := float64(totalMonths.Int64()) / float64(count)
-	avgMonths := int(math.Floor(monthsF + 0.5))
-	avgSeconds := totalSeconds / float64(count)
-	negative := avgMonths < 0 || avgSeconds < 0
+	// Divide the exact month total by the count using rational arithmetic so
+	// large totals (e.g. avg of two P9007199254740993M values) keep full
+	// precision instead of losing a month through a float64 round-trip. Per
+	// XPath F&O the result is rounded "half towards positive infinity", matching
+	// op:divide-yearMonthDuration behavior.
+	avgRat := new(big.Rat).SetFrac(totalMonths, big.NewInt(int64(count)))
+	rounded := ratRound(avgRat)
+	avgInt := new(big.Int).Quo(rounded.Num(), rounded.Denom())
+
+	negative := avgInt.Sign() < 0
+	absInt := avgInt
 	if negative {
-		avgMonths = -avgMonths
-		avgSeconds = -avgSeconds
+		absInt = new(big.Int).Neg(avgInt)
 	}
-	typeName := TypeYearMonthDuration
-	if family == familyDurationDT {
-		typeName = TypeDayTimeDuration
+	if !absInt.IsInt64() || absInt.Int64() > int64(math.MaxInt) {
+		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
 	return SingleAtomic(AtomicValue{
-		TypeName: typeName,
-		Value:    Duration{Months: avgMonths, Seconds: avgSeconds, Negative: negative},
+		TypeName: TypeYearMonthDuration,
+		Value:    Duration{Months: int(absInt.Int64()), Negative: negative},
 	}), nil
 }
 
@@ -245,8 +284,13 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 	if isIntegerDerived(a.TypeName) && a.TypeName != TypeInteger {
 		return AtomicValue{TypeName: TypeInteger, Value: a.Value}, nil
 	}
-	// User-defined schema types: promote based on the underlying Go value.
+	// User-defined schema types: prefer the value's built-in BaseType when it
+	// names a known XSD type (so e.g. xs:float width is preserved), otherwise
+	// promote based on the underlying Go value.
 	if !IsKnownXSDType(a.TypeName) && a.TypeName != "" {
+		if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+			return PromoteSchemaType(a), nil
+		}
 		switch a.Value.(type) {
 		case int64, *big.Int:
 			return AtomicValue{TypeName: TypeInteger, Value: a.Value}, nil
@@ -263,14 +307,18 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 
 // promoteResult promotes the result of fn:max/fn:min to the widest numeric type.
 func promoteResult(best AtomicValue, widest string) AtomicValue {
+	// Always rebuild an xs:float result through NewFloat, even when best is already
+	// typed xs:float: a schema-derived xs:float can be backed by a double-precision
+	// FloatValue that must be narrowed to single precision.
+	if widest == TypeFloat {
+		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(best.ToFloat64())}
+	}
 	if best.TypeName == widest {
 		return best
 	}
 	switch widest {
 	case TypeDouble:
 		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(best.ToFloat64())}
-	case TypeFloat:
-		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(best.ToFloat64())}
 	case TypeDecimal:
 		if isIntegerDerived(best.TypeName) {
 			if v, ok := best.Value.(int64); ok {
@@ -346,7 +394,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 				return nil, err
 			}
 		}
-		family := aggregateTypeFamily(a.TypeName)
+		family := aggregateTypeFamily(a)
 		if family == "" || family == lexicon.TypeDuration {
 			return nil, &XPathError{
 				Code:    errCodeFORG0006,
@@ -366,7 +414,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 		if err != nil {
 			return nil, err
 		}
-		newFamily := aggregateTypeFamily(a.TypeName)
+		newFamily := aggregateTypeFamily(a)
 		if newFamily == "" || newFamily == "duration" {
 			return nil, &XPathError{
 				Code:    errCodeFORG0006,
@@ -466,7 +514,7 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
 		}
-		newFamily := aggregateTypeFamily(a.TypeName)
+		newFamily := aggregateTypeFamily(a)
 		family, err = checkAggregateHomogeneity(family, newFamily)
 		if err != nil {
 			return nil, err
@@ -515,31 +563,50 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func sumDurations(seq Sequence, family string) (Sequence, error) {
-	var totalMonths int
-	var totalSeconds float64
+	if family == familyDurationDT {
+		// Accumulate dayTime seconds EXACTLY so large totals (beyond float64's
+		// 2^53 range) and fractional seconds canonicalize precisely.
+		totalSecs := new(big.Rat)
+		for item := range seqItems(seq) {
+			a, _ := AtomizeItem(item)
+			totalSecs.Add(totalSecs, durationToRat(a.DurationVal(), false))
+		}
+		negative := totalSecs.Sign() < 0
+		absSecs := totalSecs
+		if negative {
+			absSecs = new(big.Rat).Neg(totalSecs)
+		}
+		secs, frac := durationFromRatSeconds(absSecs)
+		return SingleAtomic(AtomicValue{
+			TypeName: TypeDayTimeDuration,
+			Value:    Duration{Seconds: secs, FracSec: frac, SecRat: absSecs, Negative: negative},
+		}), nil
+	}
+
+	// Accumulate months via big.Int so a total near the int limit does not wrap
+	// to an invalid negative lexical; reject anything that overflows int.
+	totalMonths := new(big.Int)
 	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
+		m := big.NewInt(int64(d.Months))
 		if d.Negative {
-			totalMonths -= d.Months
-			totalSeconds -= d.Seconds
+			totalMonths.Sub(totalMonths, m)
 		} else {
-			totalMonths += d.Months
-			totalSeconds += d.Seconds
+			totalMonths.Add(totalMonths, m)
 		}
 	}
-	negative := totalMonths < 0 || totalSeconds < 0
+	negative := totalMonths.Sign() < 0
+	absMonths := totalMonths
 	if negative {
-		totalMonths = -totalMonths
-		totalSeconds = -totalSeconds
+		absMonths = new(big.Int).Neg(totalMonths)
 	}
-	typeName := TypeYearMonthDuration
-	if family == familyDurationDT {
-		typeName = TypeDayTimeDuration
+	if !absMonths.IsInt64() || absMonths.Int64() > int64(math.MaxInt) {
+		return nil, &XPathError{Code: errCodeFODT0002, Message: "yearMonthDuration sum overflow"}
 	}
 	return SingleAtomic(AtomicValue{
-		TypeName: typeName,
-		Value:    Duration{Months: totalMonths, Seconds: totalSeconds, Negative: negative},
+		TypeName: TypeYearMonthDuration,
+		Value:    Duration{Months: int(absMonths.Int64()), Negative: negative},
 	}), nil
 }
 
@@ -651,23 +718,34 @@ const (
 )
 
 func distinctValueFastKey(a AtomicValue) (distinctGroup, string, bool) {
+	// Classify on the effective built-in type so a schema-derived value (custom
+	// TypeName whose BaseType names the built-in ancestor) shares a fast-key
+	// family with its built-in equivalent. Otherwise a schema-derived xs:NCName
+	// and an equal xs:string would land in different buckets and never collapse.
+	et := distinctEffectiveType(a)
 	switch {
-	case isStringDerived(a.TypeName):
+	case isStringDerived(et):
 		return distinctGroupString, "s:" + a.StringVal(), true
-	case a.TypeName == TypeAnyURI:
+	case et == TypeAnyURI:
 		return distinctGroupString, "s:" + stringFromAtomic(a), true
-	case a.TypeName == TypeBoolean:
+	case et == TypeBoolean:
 		return distinctGroupBoolean, "b:" + strconv.FormatBool(a.BooleanVal()), true
-	case isIntegerDerived(a.TypeName) || a.TypeName == TypeDecimal:
-		return distinctGroupDecimalInt, "n:" + toRatForCompare(a).RatString(), true
-	case a.TypeName == TypeFloat:
-		f := float32(a.ToFloat64())
+	case isIntegerDerived(et) || et == TypeDecimal:
+		// Promote via BaseType so a schema-derived integer/decimal (custom TypeName,
+		// built-in BaseType, backed by int64/*big.Int/*big.Rat) keys on its effective
+		// value rather than the un-promoted toRatForCompare producing 0.
+		return distinctGroupDecimalInt, "n:" + toRatForCompare(PromoteSchemaType(a)).RatString(), true
+	case et == TypeFloat:
+		// Promote via BaseType so a schema-derived float (custom TypeName, built-in
+		// BaseType, backed by float64/float32/*FloatValue) keys on its effective
+		// value rather than the un-promoted ToFloat64 producing 0.
+		f := float32(PromoteSchemaType(a).ToFloat64())
 		if f == 0 {
 			f = 0
 		}
 		return distinctGroupFloat, "f:" + strconv.FormatUint(uint64(math.Float32bits(f)), 16), true
-	case a.TypeName == TypeDouble:
-		f := a.ToFloat64()
+	case et == TypeDouble:
+		f := PromoteSchemaType(a).ToFloat64()
 		if f == 0 {
 			f = 0
 		}
@@ -675,6 +753,19 @@ func distinctValueFastKey(a AtomicValue) (distinctGroup, string, bool) {
 	default:
 		return distinctGroupUnknown, "", false
 	}
+}
+
+// distinctEffectiveType returns the built-in type that governs distinct-values
+// fast-key classification: the TypeName itself when it is a known built-in, or
+// the BaseType of a schema-derived value when its TypeName is not built-in.
+func distinctEffectiveType(a AtomicValue) string {
+	if a.TypeName != "" && IsKnownXSDType(a.TypeName) {
+		return a.TypeName
+	}
+	if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+		return a.BaseType
+	}
+	return a.TypeName
 }
 
 func distinctValueSeenInOtherNumericGroups(
@@ -729,9 +820,13 @@ func distinctValueEqual(a, b AtomicValue, coll *collationImpl, implicitTZ *time.
 	return ValueCompareWithImplicitTimezone(TokenEq, a, b, implicitTZ)
 }
 
-// isAtomicNaN returns true if the atomic value is a float or double NaN.
+// isAtomicNaN returns true if the atomic value is a float or double NaN. It is
+// BaseType-aware: a schema-derived float/double (custom TypeName whose BaseType
+// names the built-in ancestor) is classified on its effective numeric type so a
+// schema-derived NaN collapses with a built-in NaN.
 func isAtomicNaN(a AtomicValue) bool {
-	if a.TypeName == TypeDouble || a.TypeName == TypeFloat {
+	switch distinctEffectiveType(a) {
+	case TypeDouble, TypeFloat:
 		return a.FloatVal().IsNaN()
 	}
 	return false
