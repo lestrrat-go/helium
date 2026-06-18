@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"sort"
+	"sync"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -13,15 +14,19 @@ type docIndex struct {
 
 // DocOrderCache caches document-order positions for nodes grouped by
 // document root. Built lazily on first use and shared across an evaluation.
+//
+// A single DocOrderCache may be shared across concurrent Evaluate calls, so all
+// access to its maps is guarded by mu.
 type DocOrderCache struct {
+	mu        sync.Mutex
 	documents map[helium.Node]docIndex
 	// rootCache caches DocumentRoot results to avoid repeated parent-chain walks.
 	rootCache map[helium.Node]helium.Node
 }
 
-// cachedRoot returns the DocumentRoot for n, using the rootCache to avoid
-// repeated parent-chain walks.
-func (c *DocOrderCache) cachedRoot(n helium.Node) helium.Node {
+// cachedRootLocked returns the DocumentRoot for n, using the rootCache to
+// avoid repeated parent-chain walks. The caller must hold c.mu.
+func (c *DocOrderCache) cachedRootLocked(n helium.Node) helium.Node {
 	if c.rootCache == nil {
 		c.rootCache = make(map[helium.Node]helium.Node)
 	}
@@ -42,18 +47,25 @@ type sortKey struct {
 
 // computeSortKey returns the precomputed sort key for a node.
 func (c *DocOrderCache) computeSortKey(n helium.Node) sortKey {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.computeSortKeyLocked(n)
+}
+
+// computeSortKeyLocked is the body of computeSortKey; the caller must hold c.mu.
+func (c *DocOrderCache) computeSortKeyLocked(n helium.Node) sortKey {
 	if n.Type() == helium.NamespaceNode {
 		parent := n.Parent()
 		if parent == nil {
 			return sortKey{docOrder: -1, position: -1}
 		}
-		pk := c.computeSortKey(parent)
+		pk := c.computeSortKeyLocked(parent)
 		if pk.position < 0 {
 			return sortKey{docOrder: -1, position: -1}
 		}
 		return sortKey{docOrder: pk.docOrder, position: pk.position + 1}
 	}
-	root := c.cachedRoot(n)
+	root := c.cachedRootLocked(n)
 	index, ok := c.documents[root]
 	if !ok {
 		return sortKey{docOrder: -1, position: -1}
@@ -76,12 +88,19 @@ func (c *DocOrderCache) computeSortKey(n helium.Node) sortKey {
 // are deduplicated by {parent, prefix} in DeduplicateNodes/MergeNodeSets,
 // so duplicates from different union branches are already eliminated.
 func (c *DocOrderCache) Position(n helium.Node) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.positionLocked(n)
+}
+
+// positionLocked is the body of Position; the caller must hold c.mu.
+func (c *DocOrderCache) positionLocked(n helium.Node) int {
 	if n.Type() == helium.NamespaceNode {
 		parent := n.Parent()
 		if parent == nil {
 			return -1
 		}
-		parentPos := c.Position(parent)
+		parentPos := c.positionLocked(parent)
 		if parentPos < 0 {
 			return -1
 		}
@@ -90,7 +109,7 @@ func (c *DocOrderCache) Position(n helium.Node) int {
 		// left by stride-2 indexing in indexWalk.
 		return parentPos + 1
 	}
-	root := c.cachedRoot(n)
+	root := c.cachedRootLocked(n)
 	index, ok := c.documents[root]
 	if !ok {
 		return -1
@@ -105,6 +124,8 @@ func (c *DocOrderCache) Position(n helium.Node) int {
 // BuildFrom populates the cache by walking the tree rooted at root.
 // No-op if that root is already indexed.
 func (c *DocOrderCache) BuildFrom(root helium.Node) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	root = DocumentRoot(root)
 	if c.documents == nil {
 		c.documents = make(map[helium.Node]docIndex)
@@ -156,11 +177,13 @@ func (c *DocOrderCache) indexWalk(cur helium.Node, positions map[helium.Node]int
 // A negative result means a comes before b, a positive result means a comes
 // after b, and zero means their indexed positions are equal or unknown.
 func (c *DocOrderCache) Compare(a, b helium.Node) int {
-	ra := c.cachedRoot(a)
-	rb := c.cachedRoot(b)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ra := c.cachedRootLocked(a)
+	rb := c.cachedRootLocked(b)
 	if ra == rb {
-		pa := c.Position(a)
-		pb := c.Position(b)
+		pa := c.positionLocked(a)
+		pb := c.positionLocked(b)
 		switch {
 		case pa < pb:
 			return -1
