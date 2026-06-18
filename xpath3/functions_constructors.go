@@ -410,8 +410,6 @@ func hasValidGregorianYearDigits(y string) bool {
 	return len(y) == 4 || y[0] != '0'
 }
 
-var reDateTimeStampTZ = regexp.MustCompile(`[+-]\d{2}:\d{2}$`)
-
 func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
 		a, empty, err := atomizeConstructorArg(args[0], TypeDateTimeStamp)
@@ -421,22 +419,13 @@ func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 		if empty {
 			return nil, nil
 		}
-		// Cast to dateTime first
-		dt, err := CastAtomic(a, TypeDateTime)
+		// CastAtomic handles whitespace-trimmed string/date/dateTime inputs,
+		// same-type identity, and the mandatory-timezone rule for dateTimeStamp.
+		dts, err := CastAtomic(a, TypeDateTimeStamp)
 		if err != nil {
 			return nil, err
 		}
-		// dateTimeStamp requires a timezone — check the whitespace-collapsed
-		// lexical form so legal padded values are not rejected.
-		s, _ := atomicToString(a)
-		s = collapseWhitespace(s)
-		if !strings.HasSuffix(s, "Z") && !reDateTimeStampTZ.MatchString(s) {
-			return nil, &XPathError{
-				Code:    errCodeFORG0001,
-				Message: "xs:dateTimeStamp requires a timezone",
-			}
-		}
-		return SingleAtomic(AtomicValue{TypeName: TypeDateTimeStamp, Value: dt.Value}), nil
+		return SingleAtomic(dts), nil
 	}
 }
 

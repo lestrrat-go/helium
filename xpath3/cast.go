@@ -123,6 +123,10 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		if v.TypeName == TypeString {
 			return CastFromString(v.StringVal(), TypeDateTime)
 		}
+		if v.TypeName == TypeDateTimeStamp {
+			// xs:dateTimeStamp is a subtype of xs:dateTime
+			return AtomicValue{TypeName: TypeDateTime, Value: v.TimeVal()}, nil
+		}
 		if v.TypeName == TypeDate {
 			t := v.TimeVal()
 			return AtomicValue{TypeName: TypeDateTime, Value: t}, nil

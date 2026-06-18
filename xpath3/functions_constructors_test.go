@@ -123,3 +123,32 @@ func TestXSDateTimeStampWhitespace(t *testing.T) {
 		require.Contains(t, err.Error(), "FORG0001")
 	})
 }
+
+// TestXSDateTimeStampSubtype verifies that xs:dateTimeStamp is a subtype of
+// xs:dateTime: the constructor is idempotent for its own type, and xs:dateTime
+// accepts an xs:dateTimeStamp value (subtype substitutability).
+func TestXSDateTimeStampSubtype(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	t.Run("dateTimeStamp of dateTimeStamp is idempotent", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`xs:dateTimeStamp(xs:dateTimeStamp("2000-01-01T00:00:00Z")) eq xs:dateTimeStamp("2000-01-01T00:00:00Z")`)
+		require.NoError(t, err)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		seq := result.Sequence()
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, av.BooleanVal())
+	})
+
+	t.Run("dateTime accepts a dateTimeStamp value", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`xs:dateTime(xs:dateTimeStamp("2000-01-01T00:00:00Z")) eq xs:dateTime("2000-01-01T00:00:00Z")`)
+		require.NoError(t, err)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		seq := result.Sequence()
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, av.BooleanVal())
+	})
+}
