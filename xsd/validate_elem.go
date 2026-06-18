@@ -169,10 +169,6 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		child := children[pos+consumed]
 		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
 		if !ok {
-			// Try without namespace for unqualified declarations.
-			idx, ok = nameToIdx[QName{Local: child.name}]
-		}
-		if !ok {
 			// Unknown child in <all>.
 			expected := unseenParticleNames(mg.Particles, seen, vc.schema)
 			msg := "This element is not expected."
@@ -222,9 +218,6 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 		child := children[pos+i]
 		childQN := QName{Local: child.name, NS: child.ns}
 		idx, ok := nameToIdx[childQN]
-		if !ok {
-			idx, ok = nameToIdx[QName{Local: child.name}]
-		}
 		if !ok {
 			continue
 		}
@@ -593,9 +586,6 @@ func (vc *validationContext) tryMatchAll(_ context.Context, mg *ModelGroup, chil
 	for pos+consumed < len(children) {
 		child := children[pos+consumed]
 		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
-		if !ok {
-			idx, ok = nameToIdx[QName{Local: child.name}]
-		}
 		if !ok {
 			break
 		}
