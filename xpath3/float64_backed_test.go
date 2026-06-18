@@ -8,6 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// tnMyFloat is a schema-derived xs:float type name reused across these tests.
+const tnMyFloat = "my:float"
+
 // float64Double builds an xs:double atomic backed by a plain float64 value 2.0
 // (not a *FloatValue), as a schema-derived or directly constructed value can be.
 func float64Double() AtomicValue {
@@ -65,7 +68,7 @@ func TestFloat64BackedNoPanic(t *testing.T) {
 // fix FloatVal returned the existing *FloatValue unchanged, yielding the
 // precision-53 value 16777217.
 func TestFloatValSchemaDerivedFloatNarrows(t *testing.T) {
-	a := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: NewDouble(16777217)}
+	a := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: NewDouble(16777217)}
 	fv := a.FloatVal()
 	require.NotNil(t, fv)
 	require.Equal(t, uint(PrecisionFloat), fv.Precision())
@@ -78,7 +81,7 @@ func TestFloatValSchemaDerivedFloatNarrows(t *testing.T) {
 // xs:double of 1.6777217E7. Before the fix promoteForAggregate ignored BaseType and
 // promoted the float64-backed value to xs:double.
 func TestAggregateSchemaDerivedFloatWidth(t *testing.T) {
-	derivedFloat := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: NewDouble(16777217)}
+	derivedFloat := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: NewDouble(16777217)}
 	builtinFloat := AtomicValue{TypeName: TypeFloat, Value: NewFloat(16777216)}
 
 	check := func(t *testing.T, got Sequence) {
@@ -199,7 +202,7 @@ func TestFloat64BackedSchemaDerived(t *testing.T) {
 	t.Run("BaseType xs:float", func(t *testing.T) {
 		for _, b := range floatBackings {
 			t.Run(b.name, func(t *testing.T) {
-				a := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: b.value}
+				a := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: b.value}
 				require.Equal(t, 2.0, a.ToFloat64())
 				require.Equal(t, 2.0, a.DoubleVal())
 				fv := a.FloatVal()
@@ -231,7 +234,7 @@ func TestFloat64SchemaDerivedFloatNarrows(t *testing.T) {
 
 	for _, b := range backings {
 		t.Run(b.name, func(t *testing.T) {
-			a := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: b.value}
+			a := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: b.value}
 			require.Equal(t, narrowed, a.ToFloat64())
 			require.Equal(t, narrowed, a.DoubleVal())
 			// ToFloat64 and FloatVal must agree for xs:float.
@@ -241,7 +244,7 @@ func TestFloat64SchemaDerivedFloatNarrows(t *testing.T) {
 
 	t.Run("FloatValue-single already narrowed", func(t *testing.T) {
 		// A *FloatValue already at single precision is unaffected.
-		a := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: NewFloat(16777217)}
+		a := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: NewFloat(16777217)}
 		require.Equal(t, narrowed, a.ToFloat64())
 		require.Equal(t, narrowed, a.DoubleVal())
 		require.Equal(t, a.ToFloat64(), a.FloatVal().Float64())
@@ -261,7 +264,7 @@ func TestFloat64SchemaDerivedFloatNarrows(t *testing.T) {
 // distinct-values folds them. Before the fix the schema-derived value keyed on
 // the un-narrowed double 16777217 and was reported as distinct.
 func TestDistinctValuesSchemaDerivedFloatNarrowingCollapse(t *testing.T) {
-	derived := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: NewDouble(16777217)}
+	derived := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: NewDouble(16777217)}
 	builtin := AtomicValue{TypeName: TypeFloat, Value: NewFloat(16777216)}
 	arg := ItemSlice{derived, builtin}
 	got, err := fnDistinctValues(t.Context(), []Sequence{arg})

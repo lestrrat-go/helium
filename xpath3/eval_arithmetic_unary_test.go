@@ -49,7 +49,7 @@ func TestUnarySchemaDerivedNumeric(t *testing.T) {
 	})
 
 	t.Run("derived float", func(t *testing.T) {
-		x := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: NewFloat(2)}
+		x := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: NewFloat(2)}
 		pos := unary(t, x, false)
 		require.Equal(t, 2.0, pos.ToFloat64())
 		neg := unary(t, x, true)
