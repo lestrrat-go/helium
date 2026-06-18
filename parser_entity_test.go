@@ -20,6 +20,16 @@ import (
 // guard is what this test exercises; keep the two in sync.
 const externalEntityMaxBytes int64 = 10 * 1024 * 1024 // 10 MiB
 
+// entityAllowedExpansionBytes and entityFixedCostBytes mirror the unexported
+// amplification constants in parserctx.go (entityAllowedExpansion and
+// entityFixedCost). They let the single-reference accounting test sit exactly
+// at the boundary where charging a second fixed cost would cross the baseline.
+// Keep them in sync with parserctx.go.
+const (
+	entityAllowedExpansionBytes int64 = 1_000_000 // 1 MB baseline before ratio check
+	entityFixedCostBytes        int64 = 20        // fixed byte cost per entity reference
+)
+
 // finiteFile is an fs.File that yields exactly n bytes of 'A' and then io.EOF.
 // Unlike an unbounded reader, it cannot hang or OOM if the size guard ever
 // regresses: a finite (cap+1) source still trips the cap deterministically. It
@@ -140,42 +150,59 @@ func (s countingFS) Open(string) (fs.File, error) {
 
 // TestExternalEntityAmplification proves that an external parsed entity's bytes
 // are charged to the amplification counters on EVERY reference via the cached
-// expandedSize, not just on the first read.
+// expandedSize, not just on the first read, AND that a single reference is
+// charged the per-reference fixed cost exactly once.
 //
-// The body is deliberately sub-1 MiB so a SINGLE reference stays under the free
-// baseline and succeeds. Inert input padding makes the input large enough that
-// one expansion alone does not trip the ratio check. Only when the entity is
-// referenced REPEATEDLY does the accumulated (cached) size trip the guard —
-// which can only happen if repeated-reference accounting works. The FS Open
-// count confirms the source is read exactly once; the repeats rely on the
-// cached size.
+// The single-reference body is sized so that CORRECT accounting (one
+// entityFixedCost via entityCheck plus the raw bytes via entityCheckBytes) lands
+// just at/under the free baseline and succeeds, while a SECOND fixed cost — the
+// regression where the external content is charged via entityCheck instead of
+// entityCheckBytes — would cross the baseline and trip the amplification guard.
+// The subtest therefore fails if the accounting regresses to a double fixed cost.
+//
+// The repeated-references subtest proves the cached expandedSize is charged on
+// every reference: only when the entity is referenced many times does the
+// accumulated size trip the guard, and the FS Open count confirms the source is
+// read exactly once.
 func TestExternalEntityAmplification(t *testing.T) {
 	t.Parallel()
 
-	// 800 KiB: comfortably under the 1 MB free baseline so one reference alone
-	// never trips the ratio check.
-	body := strings.Repeat("A", 800*1024)
-	// Inert padding inside a comment so the input is "large", keeping the
-	// amplification ratio from tripping on a single expansion while contributing
-	// nothing to entity expansion.
-	padding := strings.Repeat(" ", 200*1024)
-
-	t.Run("single reference succeeds", func(t *testing.T) {
+	t.Run("single reference succeeds, fixed cost charged once", func(t *testing.T) {
 		t.Parallel()
+		// Size the body so a single reference's correct charge —
+		// len(body) bytes (entityCheckBytes) + one entityFixedCost (entityCheck)
+		// — sits just under the baseline. A regression that charged the external
+		// content through entityCheck would add a SECOND fixed cost, pushing the
+		// total over the baseline and tripping the ratio guard against this tiny
+		// input. The 10-byte slack keeps the correct total strictly under the
+		// baseline; a single extra fixed cost (20 bytes) crosses it.
+		bodyLen := entityAllowedExpansionBytes - entityFixedCostBytes - 10
+		body := strings.Repeat("A", int(bodyLen))
+
 		var opens atomic.Int64
-		input := fmt.Sprintf(`<?xml version="1.0"?>
-<!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r><!--%s-->&x;</r>`, padding)
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r>&x;</r>`
 
 		doc, err := helium.NewParser().
 			SubstituteEntities(true).
 			FS(countingFS{data: body, opens: &opens}).
 			Parse(t.Context(), []byte(input))
-		require.NoError(t, err, "a single sub-baseline external reference must succeed")
+		require.NoError(t, err,
+			"a single reference at the baseline must succeed; a second fixed cost would reject it")
 		require.NotNil(t, doc)
+		require.Equal(t, int64(1), opens.Load(), "the external source must be read exactly once")
 	})
 
 	t.Run("repeated references trip guard, source opened once", func(t *testing.T) {
 		t.Parallel()
+		// 800 KiB: comfortably under the 1 MB free baseline so one reference alone
+		// never trips the ratio check.
+		body := strings.Repeat("A", 800*1024)
+		// Inert padding inside a comment so the input is "large", keeping the
+		// amplification ratio from tripping on a single expansion while
+		// contributing nothing to entity expansion.
+		padding := strings.Repeat(" ", 200*1024)
+
 		var opens atomic.Int64
 
 		var refs strings.Builder
