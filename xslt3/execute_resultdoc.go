@@ -580,8 +580,10 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if fmtDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok {
 				allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
 				// Also propagate resolved character maps from parameter-document.
+				// Clone the compiled map so the later maps.Copy merge below never
+				// mutates the compiled format's ResolvedCharMap.
 				if len(fmtDef.ResolvedCharMap) > 0 {
-					ec.primaryResolvedCharMap = fmtDef.ResolvedCharMap
+					ec.primaryResolvedCharMap = maps.Clone(fmtDef.ResolvedCharMap)
 				}
 			}
 		}
@@ -893,7 +895,9 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		base.NormalizationForm = strings.ToUpper(strings.TrimSpace(v))
 	}
 	if len(inst.SuppressIndentation) > 0 {
-		base.SuppressIndentation = inst.SuppressIndentation
+		// Copy the slice so a derived/handler-delivered OutputDef cannot mutate
+		// the compiled instruction's SuppressIndentation backing array.
+		base.SuppressIndentation = append([]string(nil), inst.SuppressIndentation...)
 	}
 	if inst.ItemSeparatorSet {
 		if inst.ItemSeparator != nil {
@@ -908,7 +912,10 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		}
 	}
 	if inst.BuildTree != nil {
-		base.BuildTree = inst.BuildTree
+		// Copy the pointee so a derived/handler-delivered OutputDef cannot mutate
+		// the compiled instruction's BuildTree value.
+		v := *inst.BuildTree
+		base.BuildTree = &v
 	}
 	return &base, nil
 }
@@ -940,7 +947,7 @@ func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *result
 		return nil, err
 	}
 	if overrides != nil {
-		base = *overrides
+		base = *cloneOutputDef(overrides)
 	}
 	// Resolve character maps from the format and instruction.
 	var allMaps []string

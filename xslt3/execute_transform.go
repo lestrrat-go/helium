@@ -516,7 +516,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if outDef == nil {
 			outDef = &OutputDef{Method: methodXML, Encoding: lexicon.EncodingUTF8U}
 		}
-		ov := ec.primaryOutputOverrides
+		// Clone the overrides so the pointer/slice/map fields merged below are
+		// independent allocations; the terminal outDef (exposed via
+		// ResolvedOutputDef and handlers) must not alias shared override state.
+		ov := cloneOutputDef(ec.primaryOutputOverrides)
 		if ov.Method != "" {
 			outDef.Method = ov.Method
 			outDef.MethodExplicit = true
