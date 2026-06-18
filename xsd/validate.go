@@ -331,11 +331,11 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 	switch builtinLocal {
 	case lexicon.TypeQName, lexicon.TypeNotation, "":
 		return "", false, false
-	case "decimal", "integer",
+	case lexicon.TypeDecimal, "integer",
 		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort",
 		"unsignedByte", "positiveInteger":
-		return "decimal", true, true
+		return lexicon.TypeDecimal, true, true
 	case "string", "normalizedString", "token", "language",
 		"Name", "NCName", "ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES",
 		"NMTOKEN", "NMTOKENS", "anyURI":
@@ -408,7 +408,7 @@ func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedN
 		return iqn == fqn
 	}
 	if _, ok := enumValueSpaceTypes[builtinLocal]; ok {
-		if (builtinLocal == "float" || builtinLocal == "double") &&
+		if (builtinLocal == lexicon.TypeFloat || builtinLocal == lexicon.TypeDouble) &&
 			value.IsFloatNaN(instance) && value.IsFloatNaN(fixed) {
 			return true
 		}

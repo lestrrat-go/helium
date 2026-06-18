@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -35,8 +36,8 @@ func TestFixedValueSpace(t *testing.T) {
 		{name: "decimal value mismatch", typ: "xs:decimal", fixed: "5", instance: "6", wantReject: true},
 
 		// boolean — "true"/"1" are value-equal.
-		{name: "boolean true vs 1", typ: xsBooleanType, fixed: "true", instance: "1"},
-		{name: "boolean value mismatch", typ: xsBooleanType, fixed: "true", instance: "0", wantReject: true},
+		{name: "boolean true vs 1", typ: xsBooleanType, fixed: lexicon.ValueTrue, instance: "1"},
+		{name: "boolean value mismatch", typ: xsBooleanType, fixed: lexicon.ValueTrue, instance: "0", wantReject: true},
 
 		// float — value space is IEEE-754 single precision, so 16777216 and
 		// 16777217 round to the same float32 and must be accepted; xs:double keeps

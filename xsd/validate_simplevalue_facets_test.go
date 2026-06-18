@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -1066,7 +1067,7 @@ func TestUnionNonOrderedRangeFacetInapplicable(t *testing.T) {
 		// xs:boolean is not ordered: "false"/"0" are below "true"/"1" only in
 		// value.Compare's synthetic order, which the range facet must NOT use. Every
 		// valid boolean must be accepted.
-		for _, v := range []string{"false", "0", "true", "1"} {
+		for _, v := range []string{"false", "0", lexicon.ValueTrue, "1"} {
 			errs, err := validateInstance(t, schemaXML, "<root>"+v+"</root>")
 			require.NoError(t, err, "boolean %q wrongly rejected by inapplicable range facet: %s", v, errs)
 		}

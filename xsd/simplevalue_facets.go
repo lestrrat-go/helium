@@ -31,12 +31,12 @@ func compareDecimal(a, b string) int {
 // those types regardless of what value.Compare would return.
 var orderedRangeFacetTypes = map[string]struct{}{
 	// Numeric (decimal-derived integers, plus the standalone decimal).
-	"decimal": {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
+	lexicon.TypeDecimal: {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
 	"long": {}, "int": {}, "short": {}, "byte": {},
 	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
 	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
 	// Floating point.
-	"float": {}, "double": {},
+	lexicon.TypeFloat: {}, lexicon.TypeDouble: {},
 	// Date/time/duration family (all ordered, non-numeric).
 	"dateTime": {}, "date": {}, "time": {}, "duration": {},
 	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
@@ -118,12 +118,12 @@ func checkMaxExclusive(v, bound, builtinLocal string) bool {
 // their (whitespace-processed) lexical space.
 var enumValueSpaceTypes = map[string]struct{}{
 	// Numeric (decimal-derived).
-	"decimal": {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
+	lexicon.TypeDecimal: {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
 	"long": {}, "int": {}, "short": {}, "byte": {},
 	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
 	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
 	// Floating point.
-	"float": {}, "double": {},
+	lexicon.TypeFloat: {}, lexicon.TypeDouble: {},
 	// Boolean.
 	"boolean": {},
 	// Date/time/duration.
@@ -144,7 +144,7 @@ func enumerationValueEqual(v, ev, builtinLocal string) bool {
 	if _, ok := enumValueSpaceTypes[builtinLocal]; !ok {
 		return false
 	}
-	if builtinLocal == "float" || builtinLocal == "double" {
+	if builtinLocal == lexicon.TypeFloat || builtinLocal == lexicon.TypeDouble {
 		if value.IsFloatNaN(v) && value.IsFloatNaN(ev) {
 			return true
 		}
