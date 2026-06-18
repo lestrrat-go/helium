@@ -136,13 +136,22 @@ the instance active member's value space via `checkFacets` with enumeration
 suppressed. The active member for that `checkFacets` call is resolved down to its
 LEAF basic member (`fixedUnionActiveMember` descends through nested unions), so a
 nested union (`outer=union(inner)`, `inner=union(xs:string)`) resolves to the
-leaf type rather than an intermediate union. `compareForRangeFacet` carries no
-empty-`builtinLocal` decimal fallback: it defers entirely to `value.Compare`,
-which orders genuinely numeric (decimal-derived atomic) leaves and returns
-`ok=false` for string-family, non-atomic (list/union), or otherwise
-non-comparable leaves — leaving the range facet inapplicable rather than forcing
-a decimal comparison. So a numeric-looking string like `5` under `minInclusive`
-on a string or list leaf is no longer wrongly rejected.
+leaf type rather than an intermediate union. The range facets
+(`min`/`maxInclusive`, `min`/`maxExclusive`) apply ONLY to types whose primitive
+value space is ORDERED, so `compareForRangeFacet` first gates `builtinLocal` on
+the `orderedRangeFacetTypes` allowlist — the numeric leaves (decimal and derived
+integers, float, double) AND the date/time/duration family (duration, dateTime,
+time, date, and the gregorian g-types). For every NON-ordered leaf — string-family
+and anyURI, boolean, the binary types (hexBinary/base64Binary), QName/NOTATION,
+and any non-atomic list/union carrier (empty/unknown local) — it returns
+`ok=false`, leaving the range facet INAPPLICABLE rather than forcing a comparison.
+The gate matters even though `value.Compare` returns a deterministic order for
+boolean and the binary types (that order exists only so enumeration can use
+`cmp==0`; it is NOT the XSD value-space order and must never fire a range facet).
+For the ordered leaves the actual ordering is deferred to `value.Compare`. So a
+numeric-looking string/boolean like `5` under `minInclusive` on a string, boolean,
+binary, or list/union leaf is no longer wrongly rejected, and there is no
+empty-`builtinLocal` decimal fallback.
 
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
 compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema

@@ -15,25 +15,60 @@ func compareDecimal(a, b string) int {
 	return value.CompareDecimal(a, b)
 }
 
+// orderedRangeFacetTypes is the set of builtin base types whose PRIMITIVE value
+// space is ORDERED, so the range facets (min/maxInclusive, min/maxExclusive) may
+// apply to them. Per XSD 1.1 (§4.2.x, the {ordered} fundamental facet), the
+// ordered primitives are the numeric types (decimal and its derived integers,
+// float, double) and the date/time/duration family (duration, dateTime, time,
+// date, and the gregorian g-types). Every other primitive — string-family,
+// boolean, hexBinary, base64Binary, anyURI, QName, NOTATION — is {ordered}=false,
+// so a range facet is INAPPLICABLE to it and the bound is treated as satisfied.
+//
+// value.Compare can return a deterministic total order for some of these
+// non-ordered types (boolean, hexBinary, base64Binary) purely so enumeration can
+// rely on cmp==0; that order is NOT the XSD value-space order and must never be
+// used to fire a range facet. Gating on this allowlist keeps the range facets off
+// those types regardless of what value.Compare would return.
+var orderedRangeFacetTypes = map[string]struct{}{
+	// Numeric (decimal-derived integers, plus the standalone decimal).
+	"decimal": {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
+	"long": {}, "int": {}, "short": {}, "byte": {},
+	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
+	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
+	// Floating point.
+	"float": {}, "double": {},
+	// Date/time/duration family (all ordered, non-numeric).
+	"dateTime": {}, "date": {}, "time": {}, "duration": {},
+	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
+}
+
 // compareForRangeFacet compares two ordered values for a range facet
 // (min/maxInclusive, min/maxExclusive) in the value space identified by
-// builtinLocal. It defers entirely to value.Compare, which is value-aware for the
-// ordered builtins (numeric, boolean, date/time, binary) and returns ok=false for
-// anything it cannot order: a string-family type, an empty/unknown local, or a
-// non-atomic (list/union) carrier. ok=false means the range facet is inapplicable
-// to this value space, so the caller treats the bound as satisfied rather than
-// coercing the value into a spurious numeric comparison.
+// builtinLocal. The range facets are defined ONLY on types whose primitive value
+// space is ordered (orderedRangeFacetTypes); for every other builtin — a
+// string-family type, boolean, the binary types, anyURI, QName/NOTATION, or a
+// non-atomic (list/union) carrier with an empty/unknown local — the facet is
+// INAPPLICABLE and this returns (0, false), which the caller treats as the bound
+// being satisfied rather than coercing the value into a spurious comparison.
 //
-// There is deliberately NO empty-local decimal fallback here. A genuine numeric
-// atomic value always reaches this function with its concrete numeric builtinLocal
-// (every numeric atomic type has a decimal-derived XSD ancestor, so
-// builtinBaseLocal is never empty for it). An empty builtinLocal therefore only
-// arises for a NON-atomic carrier — an intermediate union or a list active member,
-// neither of which is in an ordered value space — and the range facet must not
-// apply a decimal comparison to it. The previous empty-local fallback mis-fired on
-// a list active member of a numeric-looking union (e.g. union(list(xs:int)) with
-// minInclusive), wrongly rejecting a valid list instance.
+// For the ordered types the actual ordering is deferred to value.Compare, which
+// orders numeric and date/time/duration value spaces and itself returns ok=false
+// when an operand fails the strict lexical space. Note value.Compare also returns
+// a deterministic order for boolean and the binary types (so enumeration can use
+// cmp==0); those are NOT in orderedRangeFacetTypes, so a range facet can never
+// fire on them here.
+//
+// There is deliberately NO empty-local fallback. A genuine ordered atomic value
+// always reaches this function with its concrete ordered builtinLocal; an empty
+// builtinLocal only arises for a NON-atomic carrier (an intermediate union or a
+// list active member), which is not in an ordered value space, so the gate below
+// rejects it. This is what stops the prior empty-local decimal fallback from
+// mis-firing on a list active member of a numeric-looking union (e.g.
+// union(list(xs:int)) with minInclusive), wrongly rejecting a valid list instance.
 func compareForRangeFacet(v, bound, builtinLocal string) (int, bool) {
+	if _, ordered := orderedRangeFacetTypes[builtinLocal]; !ordered {
+		return 0, false
+	}
 	return value.Compare(v, bound, builtinLocal)
 }
 

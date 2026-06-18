@@ -1027,6 +1027,154 @@ func TestUnionListRangeFacetInapplicable(t *testing.T) {
 	})
 }
 
+// TestUnionNonOrderedRangeFacetInapplicable verifies that a range facet
+// (minInclusive) on a union whose active member is a NON-ordered type does NOT
+// fire. Range facets are defined only on types whose primitive value space is
+// ORDERED (numeric and the date/time/duration family); boolean and the binary
+// types are NOT ordered, so the bound must be treated as inapplicable even though
+// value.Compare returns a deterministic total order for them (that order exists
+// only so enumeration can use cmp==0). The compiler does NOT reject such a schema
+// (probed: no compile error), so the facet IS reachable and the gate in
+// compareForRangeFacet is what keeps it from mis-firing.
+//
+// Each sub-case is a genuine discriminator: with the gate removed,
+// compareForRangeFacet would fall through to value.Compare and the asserted value
+// would be wrongly rejected (boolean false < true; base64Binary "QQ==" sorts
+// before the bound "Qg==").
+func TestUnionNonOrderedRangeFacetInapplicable(t *testing.T) {
+	t.Parallel()
+
+	t.Run("boolean union does not apply range bound", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="u">
+    <xs:union memberTypes="xs:boolean"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="u">
+        <xs:minInclusive value="1"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		// The schema compiles (the compiler does not reject range facets on a
+		// non-ordered primitive), so confirm the facet is reachable yet inapplicable.
+		require.Empty(t, compileSchemaErrors(t, schemaXML),
+			"boolean-union range facet schema is expected to compile cleanly")
+
+		// xs:boolean is not ordered: "false"/"0" are below "true"/"1" only in
+		// value.Compare's synthetic order, which the range facet must NOT use. Every
+		// valid boolean must be accepted.
+		for _, v := range []string{"false", "0", "true", "1"} {
+			errs, err := validateInstance(t, schemaXML, "<root>"+v+"</root>")
+			require.NoError(t, err, "boolean %q wrongly rejected by inapplicable range facet: %s", v, errs)
+		}
+	})
+
+	t.Run("base64Binary union does not apply range bound", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="u">
+    <xs:union memberTypes="xs:base64Binary"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="u">
+        <xs:minInclusive value="Qg=="/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		require.Empty(t, compileSchemaErrors(t, schemaXML),
+			"base64Binary-union range facet schema is expected to compile cleanly")
+
+		// "QQ==" decodes to a byte that sorts BEFORE the bound "Qg=="; with the gate
+		// removed value.Compare's byte-order total order would wrongly reject it.
+		// hexBinary/base64Binary are not ordered, so the bound is inapplicable.
+		for _, v := range []string{"QQ==", "Qg==", "Qw=="} {
+			errs, err := validateInstance(t, schemaXML, "<root>"+v+"</root>")
+			require.NoError(t, err, "base64Binary %q wrongly rejected by inapplicable range facet: %s", v, errs)
+		}
+	})
+}
+
+// TestOrderedNonNumericRangeFacet verifies the positive side of the ordered-type
+// gate: a range facet on an ORDERED but NON-numeric type (xs:date) is still
+// enforced. The date/time/duration family is ordered per XSD, so minInclusive
+// must reject an earlier date and accept the bound and a later date.
+func TestOrderedNonNumericRangeFacet(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="xs:date">
+        <xs:minInclusive value="2000-01-01"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("earlier date rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>1999-12-31</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'minInclusive']")
+	})
+
+	t.Run("bound date accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>2000-01-01</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("later date accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>2001-06-06</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+}
+
+// TestNumericUnionRangeFacetRejectsOutOfRange keeps explicit coverage that a
+// numeric union leaf still enforces a range bound after the ordered-type gate: a
+// value below minInclusive must be rejected and one at/above it accepted.
+func TestNumericUnionRangeFacetRejectsOutOfRange(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="u">
+    <xs:union memberTypes="xs:int xs:decimal"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="u">
+        <xs:minInclusive value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("below bound rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "is not a valid value")
+	})
+
+	t.Run("at bound accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>10</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("above bound accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>15</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+}
+
 // TestQNameUnboundPrefix verifies that an xs:QName value with an unbound prefix
 // is rejected (C-008). Lexical NCName form alone is not sufficient: the prefix
 // must be bound in scope.
