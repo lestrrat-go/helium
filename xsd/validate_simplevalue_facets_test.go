@@ -658,6 +658,97 @@ func TestUnionOfListsEnumerationValueSpace(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, errs, "is not a valid value")
 	})
+
+	// A list whose item type is itself a UNION (list-of-union) must still recurse
+	// through the union to resolve each item's active member before comparing it
+	// against the sibling decimal-list item. memberTypes="intList decimalList"
+	// where intList's item type is intOrBool (union of xs:int / xs:boolean): the
+	// enumeration "1.0 2.0" rejects intList (1.0 is neither int nor boolean) so it
+	// is active in decimalList, while the instance "1 2" is active in intList. Each
+	// item "1"/"2" must resolve through the union to its xs:int member and compare
+	// equal to the decimal "1.0"/"2.0" — the comparator cannot drop the union item
+	// variety. (xs:boolean, not xs:string, is used so the decimal literals do not
+	// fall back to a string member and absorb intList first.)
+	t.Run("list-of-union item recurses through the union", func(t *testing.T) {
+		t.Parallel()
+		const listOfUnionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrBool">
+    <xs:union memberTypes="xs:int xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="intList">
+    <xs:list itemType="intOrBool"/>
+  </xs:simpleType>
+  <xs:simpleType name="decimalList">
+    <xs:list itemType="xs:decimal"/>
+  </xs:simpleType>
+  <xs:simpleType name="intOrDecimalList">
+    <xs:union memberTypes="intList decimalList"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="intOrDecimalList">
+        <xs:enumeration value="1.0 2.0"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+		t.Run("value-equal list accepted", func(t *testing.T) {
+			t.Parallel()
+			errs, err := validateInstance(t, listOfUnionSchema, `<root>1 2</root>`)
+			require.NoError(t, err, "validation errors: %s", errs)
+		})
+
+		t.Run("value-distinct list rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := validateInstance(t, listOfUnionSchema, `<root>1 3</root>`)
+			require.Error(t, err)
+			require.Contains(t, errs, "is not a valid value")
+		})
+	})
+
+	// Deeper nesting: a union member that is itself a list-of-union
+	// (union-of-list-of-union). The enumeration "1.0 2.0" is active in
+	// decimalList; the instance "1 2" must descend outer union -> listOfUnion
+	// member -> per-item intOrBool union -> xs:int before comparing to the
+	// decimals, proving the recursion bottoms out at every level.
+	t.Run("union of list-of-union recurses to the bottom", func(t *testing.T) {
+		t.Parallel()
+		const deepSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrBool">
+    <xs:union memberTypes="xs:int xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="listOfUnion">
+    <xs:list itemType="intOrBool"/>
+  </xs:simpleType>
+  <xs:simpleType name="decimalList">
+    <xs:list itemType="xs:decimal"/>
+  </xs:simpleType>
+  <xs:simpleType name="deepUnion">
+    <xs:union memberTypes="listOfUnion decimalList"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="deepUnion">
+        <xs:enumeration value="1.0 2.0"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+		t.Run("value-equal list accepted", func(t *testing.T) {
+			t.Parallel()
+			errs, err := validateInstance(t, deepSchema, `<root>1 2</root>`)
+			require.NoError(t, err, "validation errors: %s", errs)
+		})
+
+		t.Run("value-distinct list rejected", func(t *testing.T) {
+			t.Parallel()
+			errs, err := validateInstance(t, deepSchema, `<root>1 3</root>`)
+			require.Error(t, err)
+			require.Contains(t, errs, "is not a valid value")
+		})
+	})
 }
 
 // TestNotationCarrierRecursive verifies item 3 (W09): the NOTATION-without-

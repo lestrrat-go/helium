@@ -156,23 +156,72 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS)
 }
 
+// crossMemberValueComparisonMaxDepth bounds the recursion of
+// crossMemberValueEqual so a pathological cyclic type reference (a union or list
+// type whose active member resolves back to itself) cannot loop forever. Real
+// simple-type variety lattices are shallow; this ceiling is far above any
+// legitimate nesting depth.
+const crossMemberValueComparisonMaxDepth = 64
+
 // crossMemberValueEqual reports whether two values active in DIFFERENT union
 // members denote the same value across the members' shared value space. It is
-// recursive over variety so a union of lists (memberTypes="intList decimalList")
-// compares the instance "1 2" (active in intList) and the literal "1.0 2.0"
-// (active in decimalList) item-by-item in the decimal value space rather than
-// trying to value-compare the whole multi-token strings as scalars.
+// FULLY recursive over the entire simple-type variety lattice — atomic, list,
+// and union — so NO nesting level is dropped. A union of lists
+// (memberTypes="intList decimalList") compares the instance "1 2" (active in
+// intList) and the literal "1.0 2.0" (active in decimalList) item-by-item in
+// the decimal value space rather than value-comparing the whole multi-token
+// strings as scalars; and an item or member type that is itself a union (a
+// list-of-union, or a union-of-list-of-union) is resolved to its per-value
+// active member and recursed into, so arbitrary nesting bottoms out at atomic
+// comparison.
 //
-//   - Both members LIST: split each value and compare items pairwise via this
-//     same routine on the two item types (so a list of unions still recurses).
-//   - Both members ATOMIC: reduce each to its primitive value-space family (XSD
-//     1.1 §2.3); equal iff the families match and the values compare equal there
+// Dispatch, per side's effective variety:
+//
+//   - UNION (either side): resolve THIS value's active member within the union
+//     (via fixedUnionActiveMember) and recurse on the resolved member type. A
+//     value with no valid active member has no comparable value, so unequal.
+//   - Both LIST: split each value (in its own whiteSpace value space) and compare
+//     items pairwise by recursing on the two item types (which may themselves be
+//     atomic, list, or union).
+//   - Both ATOMIC: reduce each to its primitive value-space family (XSD 1.1
+//     §2.3); equal iff the families match and the values compare equal there
 //     (value.Compare for comparable families, normalized-lexical for the string
 //     family). QName/NOTATION have no shared family and remain unequal.
-//   - Mismatched varieties (list vs atomic): no shared value space → unequal.
+//   - Any other variety mismatch that cannot be reconciled (e.g. list vs atomic):
+//     no shared value space → unequal.
 func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string) bool {
+	return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS, 0)
+}
+
+func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string, depth int) bool {
+	if depth > crossMemberValueComparisonMaxDepth {
+		return false
+	}
+	if instanceMember == nil || fixedMember == nil {
+		return false
+	}
+
 	instanceVariety := resolveVariety(instanceMember)
 	fixedVariety := resolveVariety(fixedMember)
+
+	// UNION on either side: resolve the active member for THAT value and recurse
+	// on the resolved member type. This handles a list whose item type is a union,
+	// a union nested directly inside another union, and any deeper combination, so
+	// the recursion always descends to a non-union variety before comparing.
+	if instanceVariety == TypeVarietyUnion {
+		active := fixedUnionActiveMember(ctx, instance, instanceNS, resolveUnionMembers(instanceMember))
+		if active == nil {
+			return false
+		}
+		return crossMemberValueEqualDepth(ctx, instance, fixed, active, fixedMember, instanceNS, fixedNS, depth+1)
+	}
+	if fixedVariety == TypeVarietyUnion {
+		active := fixedUnionActiveMember(ctx, fixed, fixedNS, resolveUnionMembers(fixedMember))
+		if active == nil {
+			return false
+		}
+		return crossMemberValueEqualDepth(ctx, instance, fixed, instanceMember, active, instanceNS, fixedNS, depth+1)
+	}
 
 	if instanceVariety == TypeVarietyList && fixedVariety == TypeVarietyList {
 		ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
@@ -188,7 +237,7 @@ func crossMemberValueEqual(ctx context.Context, instance, fixed string, instance
 			return false
 		}
 		for i := range ii {
-			if !crossMemberValueEqual(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS) {
+			if !crossMemberValueEqualDepth(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS, depth+1) {
 				return false
 			}
 		}
