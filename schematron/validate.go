@@ -54,11 +54,17 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				ruleEv := ev
 				for _, lb := range r.lets {
 					letResult, err := ruleEv.Evaluate(ctx, lb.expr, node)
-					if err == nil {
-						ruleEv = ruleEv.AdditionalVariables(map[string]any{
-							lb.name: xpathResultToValue(letResult),
-						})
+					if err != nil {
+						// A let whose expression cannot be evaluated must
+						// not be silently dropped: a later let or test that
+						// references it would then break in confusing ways.
+						// Surface the error instead of swallowing it.
+						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
+						continue
 					}
+					ruleEv = ruleEv.AdditionalVariables(map[string]any{
+						lb.name: xpathResultToValue(letResult),
+					})
 				}
 
 				for _, t := range r.tests {
