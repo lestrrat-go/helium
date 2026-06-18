@@ -286,6 +286,42 @@ func TestDistinctValuesSchemaDerivedDoubleDiscriminates(t *testing.T) {
 	require.Equal(t, 2, seqLen(got))
 }
 
+// TestEbvSchemaDerivedFloatNarrows verifies the effective-boolean-value path
+// computes magnitude from the effective-typed value, not the raw float64 backing.
+// A my:float (BaseType xs:float) backed by 1e-50 underflows to 0.0 at single
+// precision, so its EBV must be false. Before the fix ebvAtomic tested the raw
+// double 1e-50 (non-zero) and returned true. A built-in xs:double 1e-50 is NOT
+// narrowed and stays true (control), and a NaN-backed xs:float yields false.
+func TestEbvSchemaDerivedFloatNarrows(t *testing.T) {
+	t.Run("my:float 1e-50 underflows to false", func(t *testing.T) {
+		a := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: float64(1e-50)}
+		b, err := ebvAtomic(a)
+		require.NoError(t, err)
+		require.False(t, b)
+	})
+
+	t.Run("my:float 2 is true", func(t *testing.T) {
+		a := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: float64(2)}
+		b, err := ebvAtomic(a)
+		require.NoError(t, err)
+		require.True(t, b)
+	})
+
+	t.Run("built-in xs:double 1e-50 stays true", func(t *testing.T) {
+		a := AtomicValue{TypeName: TypeDouble, Value: NewDouble(1e-50)}
+		b, err := ebvAtomic(a)
+		require.NoError(t, err)
+		require.True(t, b)
+	})
+
+	t.Run("NaN-backed my:float is false", func(t *testing.T) {
+		a := AtomicValue{TypeName: tnMyFloat, BaseType: TypeFloat, Value: math.NaN()}
+		b, err := ebvAtomic(a)
+		require.NoError(t, err)
+		require.False(t, b)
+	})
+}
+
 // TestDistinctValuesSchemaDerivedNaN verifies that a schema-derived NaN (custom
 // TypeName, BaseType xs:double) is recognized as NaN and collapses with a
 // built-in double NaN per op:is-same-key (all NaN are equal). Before the fix

@@ -269,13 +269,13 @@ func ebvAtomic(v AtomicValue) (bool, error) {
 			return val.Sign() != 0, nil
 		case *big.Rat:
 			return val.Sign() != 0, nil
-		case *FloatValue:
-			f := val.Float64()
-			return f != 0 && !math.IsNaN(f), nil
-		case float64:
-			return val != 0 && !math.IsNaN(val), nil
-		case float32:
-			f := float64(val)
+		case *FloatValue, float64, float32:
+			// Compute the magnitude from the effective-typed value so a
+			// schema-derived xs:float (BaseType TypeFloat) is narrowed to single
+			// precision before the zero/NaN test: e.g. my:float backed by 1e-50
+			// underflows to 0.0 as xs:float and must yield EBV false. ToFloat64
+			// honors BaseType-driven narrowing; the xs:double path is unaffected.
+			f := v.ToFloat64()
 			return f != 0 && !math.IsNaN(f), nil
 		}
 	}
