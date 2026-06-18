@@ -16,9 +16,31 @@ func compareDecimal(a, b string) int {
 	return value.CompareDecimal(a, b)
 }
 
+// compareForRangeFacet compares two ordered values for a range facet
+// (min/maxInclusive, min/maxExclusive). It first tries value.Compare for the
+// builtin type. value.Compare is deliberately strict: it returns ok=false for an
+// unrecognized or non-value-comparable builtinLocal (e.g. an empty local from a
+// union/anonymous base, or a string-family type). Range facets, however, are only
+// constrained to ordered types, and a numeric value over a union(xs:integer)-style
+// base reaches here with an empty builtinLocal; for those, fall back to a decimal
+// comparison so the bound is still enforced. The fallback is gated on both operands
+// parsing as decimals, so a genuinely incomparable (non-numeric) value still yields
+// ok=false and the caller treats the facet as inapplicable.
+func compareForRangeFacet(v, bound, builtinLocal string) (int, bool) {
+	cmp, ok := value.Compare(v, bound, builtinLocal)
+	if ok {
+		return cmp, true
+	}
+	dec := value.CompareDecimal(v, bound)
+	if dec == -2 {
+		return 0, false
+	}
+	return dec, true
+}
+
 // checkMinInclusive compares value >= bound using type-aware comparison.
 func checkMinInclusive(v, bound, builtinLocal string) bool {
-	cmp, ok := value.Compare(v, bound, builtinLocal)
+	cmp, ok := compareForRangeFacet(v, bound, builtinLocal)
 	if !ok {
 		return true // can't compare, don't error
 	}
@@ -27,7 +49,7 @@ func checkMinInclusive(v, bound, builtinLocal string) bool {
 
 // checkMaxInclusive compares value <= bound using type-aware comparison.
 func checkMaxInclusive(v, bound, builtinLocal string) bool {
-	cmp, ok := value.Compare(v, bound, builtinLocal)
+	cmp, ok := compareForRangeFacet(v, bound, builtinLocal)
 	if !ok {
 		return true
 	}
@@ -36,7 +58,7 @@ func checkMaxInclusive(v, bound, builtinLocal string) bool {
 
 // checkMinExclusive compares value > bound using type-aware comparison.
 func checkMinExclusive(v, bound, builtinLocal string) bool {
-	cmp, ok := value.Compare(v, bound, builtinLocal)
+	cmp, ok := compareForRangeFacet(v, bound, builtinLocal)
 	if !ok {
 		return true // can't compare, don't error
 	}
@@ -45,7 +67,7 @@ func checkMinExclusive(v, bound, builtinLocal string) bool {
 
 // checkMaxExclusive compares value < bound using type-aware comparison.
 func checkMaxExclusive(v, bound, builtinLocal string) bool {
-	cmp, ok := value.Compare(v, bound, builtinLocal)
+	cmp, ok := compareForRangeFacet(v, bound, builtinLocal)
 	if !ok {
 		return true
 	}

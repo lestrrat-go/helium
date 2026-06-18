@@ -97,11 +97,11 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		return compareBase64Binary(a, b)
 	default:
 		if _, isNumeric := numericComparableTypes[builtinLocal]; !isNumeric {
-			cmp := CompareDecimal(a, b)
-			if cmp == -2 {
-				return 0, false
-			}
-			return cmp, true
+			// Any type NOT in numericComparableTypes (string-family builtins and
+			// unrecognized types) has no numeric value-space comparison defined here,
+			// so comparison is indeterminate. Routing these through CompareDecimal
+			// would wrongly treat e.g. "5.0"/"5" for xs:string as equal.
+			return 0, false
 		}
 		// Validate both operands against the strict lexical space (including the
 		// range checks for bounded integer subtypes) before comparing, so e.g.
@@ -188,11 +188,11 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		// sign to both components and emit a stable signed key consistent with
 		// compareDuration, so e.g. "P1D" and "PT24H" (both 0 months, 86400 seconds)
 		// collide while values with differing month/second components stay distinct.
-		months, seconds := d.months, d.secVal()
+		months, seconds := d.monVal(), d.secVal()
 		if d.negative {
-			months, seconds = -months, new(big.Rat).Neg(seconds)
+			months, seconds = new(big.Int).Neg(months), new(big.Rat).Neg(seconds)
 		}
-		return fmt.Sprintf("%d|%s", months, seconds.RatString()), true
+		return fmt.Sprintf("%s|%s", months.String(), seconds.RatString()), true
 	case "decimal", "integer",
 		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
@@ -1251,7 +1251,11 @@ func compareGMonthDay(a, b, builtinLocal string) (int, bool) {
 
 type xsdDuration struct {
 	negative bool
-	months   int
+	// months is the accumulated months component (years*12 + months) held as a
+	// *big.Int rather than an int so a valid lexical with a huge year/month
+	// component (e.g. "P999999999999999999999999Y") that passes ValidateBuiltin
+	// also compares and canonicalizes without overflow. A nil months is 0.
+	months *big.Int
 	// seconds is the accumulated seconds component (days/hours/minutes/seconds,
 	// including fractional seconds) held as an EXACT rational rather than a
 	// float64. This keeps two durations that differ only in trailing fractional
@@ -1267,6 +1271,14 @@ func (d xsdDuration) secVal() *big.Rat {
 		return new(big.Rat)
 	}
 	return d.seconds
+}
+
+// monVal returns the months component as a *big.Int, substituting 0 for nil.
+func (d xsdDuration) monVal() *big.Int {
+	if d.months == nil {
+		return new(big.Int)
+	}
+	return d.months
 }
 
 func parseXSDDurationValue(s string) (xsdDuration, bool) {
@@ -1308,35 +1320,42 @@ func parseXSDDurationValue(s string) (xsdDuration, bool) {
 		if d.seconds == nil {
 			d.seconds = new(big.Rat)
 		}
+		if d.months == nil {
+			d.months = new(big.Int)
+		}
 		if !inTime {
-			n, err := strconv.Atoi(numStr)
-			if err != nil {
+			// numStr for non-second designators is a plain non-negative integer
+			// (the scan admits digits and at most one '.', but '.' is only valid
+			// for seconds and is rejected here). Parse as *big.Int so huge
+			// year/month components do not overflow.
+			n, ok := new(big.Int).SetString(numStr, 10)
+			if !ok {
 				return d, false
 			}
 			switch designator {
 			case 'Y':
-				d.months += n * 12
+				d.months.Add(d.months, new(big.Int).Mul(n, big.NewInt(12)))
 			case 'M':
-				d.months += n
+				d.months.Add(d.months, n)
 			case 'D':
-				d.seconds.Add(d.seconds, new(big.Rat).SetInt64(int64(n)*86400))
+				d.seconds.Add(d.seconds, new(big.Rat).Mul(new(big.Rat).SetInt(n), big.NewRat(86400, 1)))
 			default:
 				return d, false
 			}
 		} else {
 			switch designator {
 			case 'H':
-				n, err := strconv.Atoi(numStr)
-				if err != nil {
+				n, ok := new(big.Int).SetString(numStr, 10)
+				if !ok {
 					return d, false
 				}
-				d.seconds.Add(d.seconds, new(big.Rat).SetInt64(int64(n)*3600))
+				d.seconds.Add(d.seconds, new(big.Rat).Mul(new(big.Rat).SetInt(n), big.NewRat(3600, 1)))
 			case 'M':
-				n, err := strconv.Atoi(numStr)
-				if err != nil {
+				n, ok := new(big.Int).SetString(numStr, 10)
+				if !ok {
 					return d, false
 				}
-				d.seconds.Add(d.seconds, new(big.Rat).SetInt64(int64(n)*60))
+				d.seconds.Add(d.seconds, new(big.Rat).Mul(new(big.Rat).SetInt(n), big.NewRat(60, 1)))
 			case 'S':
 				// big.Rat.SetString accepts forms the seconds field must not use,
 				// but the digit-run scan above admits only ASCII digits and a single
@@ -1366,17 +1385,17 @@ func compareDuration(a, b string) (int, bool) {
 	}
 
 	// Apply sign.
-	am, as := da.months, da.secVal()
+	am, as := da.monVal(), da.secVal()
 	if da.negative {
-		am, as = -am, new(big.Rat).Neg(as)
+		am, as = new(big.Int).Neg(am), new(big.Rat).Neg(as)
 	}
-	bm, bs := db.months, db.secVal()
+	bm, bs := db.monVal(), db.secVal()
 	if db.negative {
-		bm, bs = -bm, new(big.Rat).Neg(bs)
+		bm, bs = new(big.Int).Neg(bm), new(big.Rat).Neg(bs)
 	}
 
 	// Compare month and seconds components independently.
-	monthCmp := intCmp(am, bm)
+	monthCmp := am.Cmp(bm)
 	secCmp := as.Cmp(bs)
 
 	if monthCmp == secCmp {
@@ -1391,14 +1410,4 @@ func compareDuration(a, b string) (int, bool) {
 	}
 	// Components disagree — indeterminate.
 	return 0, false
-}
-
-func intCmp(a, b int) int {
-	if a < b {
-		return -1
-	}
-	if a > b {
-		return 1
-	}
-	return 0
 }

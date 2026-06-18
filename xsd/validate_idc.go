@@ -375,7 +375,13 @@ func canonicalAtomicKey(raw string, fieldNode helium.Node, td *TypeDef) string {
 	normalized := normalizeWhiteSpace(raw, resolveWhiteSpace(td))
 	if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
 		ns := fieldNodeNSContext(fieldNode)
-		qn, err := resolveLexicalQName(strings.TrimSpace(normalized), ns)
+		// normalized is already whitespace-processed by normalizeWhiteSpace above
+		// (QName/NOTATION have whiteSpace="collapse", so leading/trailing XSD
+		// whitespace is gone). Resolve it directly rather than re-trimming with
+		// strings.TrimSpace, which strips Unicode whitespace (e.g. NBSP) that is
+		// NOT XSD whitespace and would corrupt the canonical key — producing false
+		// duplicate/keyref diagnostics for QName values containing such characters.
+		qn, err := resolveLexicalQName(normalized, ns)
 		if err != nil {
 			return raw
 		}

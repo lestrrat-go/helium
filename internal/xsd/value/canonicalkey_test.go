@@ -201,6 +201,16 @@ func TestCanonicalKeyDuration(t *testing.T) {
 	require.True(t, okYear)
 	require.NotEqual(t, day, year, `"P1Y" (12 months) and "P1D" must not collide`)
 
+	// Huge month/day components (far beyond int64 range) are parsed as big.Int /
+	// big.Rat, so a valid huge-component duration canonicalizes and equal values
+	// collide rather than failing to parse.
+	huge, okHuge := value.CanonicalKey("P999999999999999999999999Y", "duration")
+	require.True(t, okHuge, "huge-year duration must canonicalize as valid")
+	hugeAlt, okHugeAlt := value.CanonicalKey("P999999999999999999999998Y12M", "duration")
+	require.True(t, okHugeAlt)
+	require.Equal(t, huge, hugeAlt, `"…998Y12M" equals "…999Y" in months and must collide`)
+	require.NotEqual(t, year, huge, "distinct huge duration must not collide with P1Y")
+
 	// An invalid duration must not canonicalize as valid.
 	_, okBad := value.CanonicalKey("P", "duration")
 	require.False(t, okBad, `"P" is not a valid xs:duration`)

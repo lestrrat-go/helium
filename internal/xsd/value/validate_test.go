@@ -460,6 +460,20 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDateTime, "\t2023-01-15T10:30:00\n", testDT0, 0, true},
 		{lexicon.TypeTime, " 10:30:00 ", testT0, 0, true},
 		{typeGYear, " 2023 ", "2023", 0, true},
+		// String-family and unrecognized builtins have no numeric value-space
+		// comparison defined: Compare must NOT route them through CompareDecimal,
+		// so "5.0" vs "5" for xs:string (and an unknown builtin) is indeterminate.
+		{lexicon.TypeString, "5.0", "5", 0, false},
+		{"definitely-not-a-builtin", "5.0", "5", 0, false},
+
+		// Huge duration components must not overflow: months are parsed as big.Int
+		// and seconds as big.Rat, so a year/day count far beyond int64 range that
+		// passes ValidateBuiltin also compares correctly rather than failing to
+		// parse.
+		{lexicon.TypeDuration, "P999999999999999999999999Y", "P999999999999999999999999Y", 0, true},
+		{lexicon.TypeDuration, "P999999999999999999999998Y", "P999999999999999999999999Y", -1, true},
+		{lexicon.TypeDuration, "P99999999999999999999D", "PT8639999999999999999913600S", 0, true},
+
 		// NBSP is not XSD whitespace, so a NBSP-padded date/time operand stays
 		// lexically invalid and compares indeterminate.
 		{lexicon.TypeDate, " 2023-01-01", testJan1, 0, false},
