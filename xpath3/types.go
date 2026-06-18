@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -663,12 +664,22 @@ func normalizeMapKey(key AtomicValue) mapKey {
 			return mapKey{typeName: familyNumeric, value: "-Inf"}
 		}
 		// Remaining numerics are xs:float / xs:double (and user-defined types whose
-		// underlying value is a float). Check if the float is an exact integer in
-		// int64 range so it matches the int64 fast path above.
-		if f == math.Trunc(f) && !math.IsInf(f, 0) && f >= math.MinInt64 && f <= math.MaxInt64 {
-			return mapKey{typeName: familyNumeric, value: int64(f)}
+		// underlying value is a float). Build an exact rational and use the int64
+		// fast path ONLY when the value is an exact integer that fits in int64.
+		// A naive "f <= math.MaxInt64" guard is unsafe: math.MaxInt64 (2^63-1)
+		// rounds UP to 2^63 as a float64, so xs:double(2^63) would pass the check
+		// and int64(f) would overflow-wrap to -2^63, colliding with xs:integer(-2^63).
+		// Routing through the rational avoids that: r.Num().IsInt64() is exact.
+		r := new(big.Rat).SetFloat64(f)
+		if r == nil {
+			// SetFloat64 returns nil for NaN/Inf; those are handled above, but
+			// guard defensively so a stray non-finite value still produces a key.
+			return mapKey{typeName: familyNumeric, value: strconv.FormatFloat(f, 'g', -1, 64)}
 		}
-		return mapKey{typeName: familyNumeric, value: new(big.Rat).SetFloat64(f).RatString()}
+		if r.IsInt() && r.Num().IsInt64() {
+			return mapKey{typeName: familyNumeric, value: r.Num().Int64()}
+		}
+		return mapKey{typeName: familyNumeric, value: r.RatString()}
 	}
 
 	// Normalize duration types: xs:duration, xs:yearMonthDuration, xs:dayTimeDuration

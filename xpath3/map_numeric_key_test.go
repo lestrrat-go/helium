@@ -68,4 +68,43 @@ func TestMapNumericKeyOpSameKey(t *testing.T) {
 		require.NotEqual(t, fk, ck)
 		require.NotEqual(t, dk, ck)
 	})
+
+	// Regression: xs:double(2^63) is an exact integer that exceeds int64 range.
+	// math.MaxInt64 (2^63-1) rounds UP to 2^63 as a float64, so a naive
+	// "f <= math.MaxInt64" guard let 2^63 through and int64(f) overflow-wrapped
+	// to -2^63, colliding with the xs:integer(-2^63) key. The exact-rational
+	// path must keep them distinct, while folding double(2^63) and decimal(2^63)
+	// (same value-space value) into one key.
+	t.Run("double 2^63 does not collide with integer -2^63", func(t *testing.T) {
+		const twoTo63 = "9223372036854775808"     // 2^63, out of int64 range (max is 2^63-1)
+		const negTwoTo63 = "-9223372036854775808" // -2^63, the int64 minimum
+		dblKey := key(t, twoTo63, TypeDouble)     // xs:double(2^63)
+		decKey := key(t, twoTo63, TypeDecimal)    // xs:decimal(2^63)
+		intKey := key(t, negTwoTo63, TypeInteger) // xs:integer(-2^63)
+
+		dblNK := normalizeMapKey(dblKey)
+		decNK := normalizeMapKey(decKey)
+		intNK := normalizeMapKey(intKey)
+
+		// double(2^63) and decimal(2^63) are the same value-space value: same key.
+		require.Equal(t, decNK, dblNK, "double(2^63) and decimal(2^63) must share a key")
+		// double(2^63) is a positive value; it must NOT collide with integer(-2^63).
+		require.NotEqual(t, intNK, dblNK, "double(2^63) must not collide with integer(-2^63)")
+
+		m := NewMap([]MapEntry{
+			{Key: dblKey, Value: SingleString("dbl")},
+			{Key: intKey, Value: SingleString("int")},
+		})
+		require.Equal(t, 2, m.Size(), "2^63 double and -2^63 integer are distinct keys")
+		got, ok := m.Get(dblKey)
+		require.True(t, ok)
+		require.Equal(t, "dbl", got.Get(0).(AtomicValue).StringVal())
+		got, ok = m.Get(intKey)
+		require.True(t, ok)
+		require.Equal(t, "int", got.Get(0).(AtomicValue).StringVal())
+		// decimal(2^63) keys into the double(2^63) slot, not the integer slot.
+		got, ok = m.Get(decKey)
+		require.True(t, ok)
+		require.Equal(t, "dbl", got.Get(0).(AtomicValue).StringVal())
+	})
 }
