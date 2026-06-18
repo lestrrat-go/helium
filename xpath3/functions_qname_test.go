@@ -129,3 +129,28 @@ func TestQNameAccessorsArrayArgRejected(t *testing.T) {
 		})
 	}
 }
+
+// The string-typed argument of namespace-uri-for-prefix and resolve-QName must
+// atomize first, so a single array argument that atomizes to multiple values is
+// a cardinality error (XPTY0004), not FOTY0013. The element() second argument is
+// valid here so the failure comes from the string argument's cardinality, not
+// the element check.
+func TestQNameStringArgArrayRejected(t *testing.T) {
+	t.Parallel()
+
+	doc := mustParseXML(t, `<root xmlns:p="urn:p"><a/><b/></root>`)
+
+	cases := []string{
+		`namespace-uri-for-prefix(["p","q"], /root)`,
+		`resolve-QName(["p:a","q:b"], /root)`,
+	}
+	for _, expr := range cases {
+		t.Run(expr, func(t *testing.T) {
+			_, err := evaluate(t.Context(), doc, expr)
+			require.Error(t, err, expr)
+			var xpErr *xpath3.XPathError
+			require.ErrorAs(t, err, &xpErr)
+			require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code, expr)
+		})
+	}
+}

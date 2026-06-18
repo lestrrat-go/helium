@@ -212,23 +212,37 @@ func parseLexicalQName(qname string) (string, string, error) {
 	return prefix, local, nil
 }
 
+// coerceQNameString atomizes a QName string argument with streaming and a
+// max-one cap on the ATOMIZED result, then enforces the string/anyURI/
+// untypedAtomic rules. Atomizing first (rather than checking item cardinality
+// up front) means a single array/list item that atomizes to multiple values is
+// rejected as XPTY0004 (a cardinality error), not FOTY0013. Streaming stops
+// once a second atom appears.
 func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message string) (string, error) {
-	switch seqLen(seq) {
-	case 0:
+	var first AtomicValue
+	count := 0
+	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+		count++
+		if count == 1 {
+			first = av
+			return true, nil
+		}
+		return false, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if count == 0 {
 		if allowEmpty {
 			return "", nil
 		}
 		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
-	case 1:
-	default:
+	}
+	if count > 1 {
 		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
 	}
 
-	a, err := AtomizeItem(seq.Get(0))
-	if err != nil {
-		return "", err
-	}
-	switch a.TypeName {
+	switch first.TypeName {
 	case TypeString, TypeUntypedAtomic:
 	case TypeAnyURI:
 		if !allowAnyURI {
@@ -238,9 +252,9 @@ func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message strin
 		return "", &XPathError{Code: lexicon.ErrXPTY0004, Message: message}
 	}
 
-	s, ok := a.Value.(string)
+	s, ok := first.Value.(string)
 	if !ok {
-		return "", fmt.Errorf("xpath3: internal error: expected string for %s", a.TypeName)
+		return "", fmt.Errorf("xpath3: internal error: expected string for %s", first.TypeName)
 	}
 	return s, nil
 }

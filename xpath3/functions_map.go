@@ -97,14 +97,23 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 // FOJS0005 error rather than being silently accepted. A single-item array still
 // flattens to its member via atomization.
 func coerceDuplicatesOption(val Sequence) (string, error) {
-	atoms, err := AtomizeSequence(val)
+	var first AtomicValue
+	count := 0
+	err := atomizeStream(val, func(av AtomicValue) (bool, error) {
+		count++
+		if count == 1 {
+			first = av
+			return true, nil
+		}
+		return false, nil
+	})
 	if err != nil {
 		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string: %s", err)}
 	}
-	if len(atoms) != 1 {
-		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string, got sequence of length %d", len(atoms))}
+	if count != 1 {
+		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string, got sequence of length %d", count)}
 	}
-	av := atoms[0]
+	av := first
 	if av.TypeName != TypeUntypedAtomic &&
 		!isAtomicSubtypeOf(av, TypeString) &&
 		!isAtomicSubtypeOf(av, TypeAnyURI) {
