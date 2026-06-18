@@ -433,18 +433,22 @@ func TestParseExternalEntity(t *testing.T) {
 ]>
 <doc>&ext;</doc>`
 
-	// Provide a ResolveEntity handler that returns inline content
-	s := sax.New()
-	s.SetOnResolveEntity(sax.ResolveEntityFunc(func(_ context.Context, publicID, systemID string) (sax.ParseInput, error) {
-		if systemID == "ext.xml" {
-			return newStringParseInput("<inner>hello</inner>", systemID), nil
-		}
-		return nil, sax.ErrHandlerUnspecified
-	}))
+	// The external entity is declared in the internal subset and its content is
+	// served through the configured FS, exercising the default resolution path.
+	fsys := fstest.MapFS{
+		"ext.xml": &fstest.MapFile{Data: []byte("<inner>hello</inner>")},
+	}
 
-	p := helium.NewParser().SAXHandler(s).SubstituteEntities(true)
-	_, err := p.Parse(t.Context(), []byte(input))
+	p := helium.NewParser().SubstituteEntities(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse with external entity should succeed")
+	require.NotNil(t, doc, "external entity parse should produce a document")
+
+	var buf bytes.Buffer
+	require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+	out := buf.String()
+	require.Contains(t, out, "<inner", "external entity element should be expanded into the document")
+	require.Contains(t, out, ">hello</inner>", "external entity content should be expanded into the document")
 }
 
 // stringParseInput implements sax.ParseInput for testing.

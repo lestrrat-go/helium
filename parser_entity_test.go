@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -199,6 +200,23 @@ func TestPredefinedEntityRedeclaration(t *testing.T) {
 		_, err = dtd.AddEntity("lt", enum.InternalGeneralEntity, "", "", "&#60;")
 		require.NoError(t, err)
 	})
+}
+
+func TestUndeclaredEntityFatal(t *testing.T) {
+	t.Parallel()
+
+	// An undeclared general entity reference, with no DTD/external subset
+	// and no parameter-entity references, is a fatal well-formedness error.
+	xml := `<r>&bogus;</r>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.Error(t, err, "undeclared entity with no DTD must be fatal")
+	require.Nil(t, doc, "no document should be returned on a fatal error")
+	require.ErrorIs(t, err, helium.ErrUndeclaredEntity, "error must be the undeclared-entity sentinel")
+
+	var pe helium.ErrParseError
+	require.True(t, errors.As(err, &pe), "error must be an ErrParseError")
+	require.Equal(t, helium.ErrorLevelFatal, pe.Level, "undeclared entity must be a fatal-level error")
 }
 
 func TestEntityDepthLimit(t *testing.T) {
