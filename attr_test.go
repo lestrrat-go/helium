@@ -735,3 +735,66 @@ func TestChildListAttributeReplaceRepairsChildList(t *testing.T) {
 		})
 	}
 }
+
+func TestAttributeAddSibling(t *testing.T) {
+	t.Parallel()
+
+	t.Run("property-list AddSibling keeps attributes out of child list", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		elem := doc.CreateElement("root")
+
+		// Seed a property-list attribute as the anchor.
+		_, err := elem.SetAttribute("anchor", "1")
+		require.NoError(t, err)
+		anchor, ok := elem.FindAttribute(helium.QNamePredicate("anchor"))
+		require.True(t, ok, "anchor attribute is reachable from properties")
+
+		// A free-floating attribute to splice in via the anchor.
+		moving, err := doc.CreateAttribute("moving", "2", nil)
+		require.NoError(t, err)
+
+		require.NoError(t, anchor.AddSibling(moving), "property-list AddSibling succeeds")
+
+		// Attributes are NOT children: the owner element's child pointers stay nil.
+		require.Nil(t, elem.FirstChild(), "owner firstChild remains nil")
+		require.Nil(t, elem.LastChild(), "owner lastChild remains nil")
+
+		// The moving attribute is now reachable in the property list / chain.
+		require.Equal(t, helium.Node(elem), moving.Parent(), "moving attribute parent is the owner element")
+		require.Equal(t, helium.Node(anchor), moving.PrevSibling(), "moving attribute follows the anchor")
+		require.Equal(t, helium.Node(moving), anchor.NextSibling(), "anchor next is the moving attribute")
+
+		found, ok := elem.FindAttribute(helium.QNamePredicate("moving"))
+		require.True(t, ok, "moving attribute is found via FindAttribute")
+		require.Equal(t, helium.Node(moving), helium.Node(found), "FindAttribute returns the spliced attribute")
+	})
+
+	t.Run("property-list AddSibling rejects non-attribute and leaves old tree intact", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		elem := doc.CreateElement("root")
+
+		_, err := elem.SetAttribute("anchor", "1")
+		require.NoError(t, err)
+		anchor, ok := elem.FindAttribute(helium.QNamePredicate("anchor"))
+		require.True(t, ok, "anchor attribute is reachable from properties")
+
+		// A non-MutableNode operand (NamespaceNodeWrapper) parented elsewhere.
+		owner := doc.CreateElement("owner")
+		ns := helium.NewNamespace("p", "http://example.com/p")
+		wrapper := helium.NewNamespaceNodeWrapper(ns, owner)
+
+		err = anchor.AddSibling(wrapper)
+		require.Error(t, err, "non-attribute sibling of a property attribute is rejected")
+
+		// The rejected operand's old parent link is untouched.
+		require.Equal(t, helium.Node(owner), wrapper.Parent(), "wrapper old parent is untouched")
+
+		// The anchor chain is unchanged and no child leaked in.
+		require.Nil(t, anchor.NextSibling(), "anchor has no spurious next sibling")
+		require.Nil(t, elem.FirstChild(), "owner firstChild remains nil")
+		require.Nil(t, elem.LastChild(), "owner lastChild remains nil")
+		require.Len(t, elem.Attributes(), 1, "only the anchor attribute remains")
+	})
+}

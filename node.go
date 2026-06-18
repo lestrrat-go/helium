@@ -416,6 +416,44 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 
 func addSibling(n MutableNode, cur Node) error {
 	cdn := cur.baseDocNode()
+	ndn := n.baseDocNode()
+
+	// Attribute-list semantics: attributes USUALLY live in the owning Element's
+	// properties linked list, NOT in the parent's child list. When n is such a
+	// property attribute, a new sibling must itself be an attribute and the splice
+	// must stay within the attribute chain, never touching firstChild/lastChild.
+	//
+	// But an *Attribute with an *Element parent is not guaranteed to live in that
+	// element's properties chain: public paths (elem.AddChild(attr), a generic
+	// Replace(attr)) can place it in the normal child list instead. Only use
+	// property-list logic when the anchor is genuinely reachable from
+	// ownerElem.properties; otherwise fall through to the generic child-list path.
+	if nAttr, ok := n.(*Attribute); ok {
+		if ownerElem, ok := ndn.parent.(*Element); ok && ownerElem.hasAttributeInProperties(nAttr) {
+			// Reject a non-attribute operand BEFORE the preflight unlink so a
+			// rejected call leaves cur's old tree position untouched.
+			if _, ok := cur.(*Attribute); !ok {
+				return errors.New("cannot add a non-attribute node as a sibling of an attribute")
+			}
+
+			if err := addSiblingPreflight(n, cur); err != nil {
+				return err
+			}
+
+			// Splice cur in only within the attribute sibling chain. Walk to the
+			// tail attribute and append. Never touch parent.firstChild/lastChild:
+			// attributes are not in the owner element's child list.
+			iter := Node(n)
+			for iter.NextSibling() != nil {
+				iter = iter.NextSibling()
+			}
+			idn := iter.baseDocNode()
+			idn.next = cur
+			cdn.prev = iter
+			cdn.parent = ownerElem
+			return nil
+		}
+	}
 
 	if err := addSiblingPreflight(n, cur); err != nil {
 		return err
