@@ -21,6 +21,19 @@ func TestMatchDataUnknownDatatype(t *testing.T) {
 		require.Error(t, err, `<data type="bogus"/> must not match`)
 	})
 
+	t.Run("unknown datatype library", func(t *testing.T) {
+		t.Parallel()
+		// An explicit, unrecognized datatypeLibrary on <data> must fail closed:
+		// matchData returns -1 for an unknown library rather than matching
+		// everything. This directly discriminates the <data> library path
+		// (the bogus-name case above exercises the unknown built-in NAME path).
+		schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <data type="string" datatypeLibrary="http://example.com/unknown-datatypes"/>
+</element>`
+		err := validateWith(t, schema, `<a>x</a>`)
+		require.Error(t, err, `<data> with an unknown datatypeLibrary must not match`)
+	})
+
 	t.Run("builtin token matches", func(t *testing.T) {
 		t.Parallel()
 		schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
