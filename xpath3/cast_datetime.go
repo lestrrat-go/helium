@@ -561,24 +561,25 @@ func parseXSDDuration(s string) (Duration, error) {
 }
 
 // exactFractionDigits returns the digits AFTER the decimal point for a
-// fractional rational in [0,1), with NO rounding. It uses FloatPrec to pick a
-// precision that represents the value exactly (for terminating decimals, which
-// is the only case XSD duration lexical forms produce); non-terminating
-// fractions fall back to a high fixed precision. Trailing zeros are trimmed.
+// fractional rational in [0,1), with NO rounding for terminating decimals.
 //
-// This avoids the FloatString(20) bug where a value extremely close to 1 (e.g.
-// 0.999...9 with >20 digits) rounds UP to "1.0...", which when concatenated
-// onto the whole-second count produced an invalid "PT0.1.S".
+// When FloatPrec reports the fraction is EXACT (terminating), the full exact
+// precision is used with no cap, so an exact value arbitrarily close to 1 (e.g.
+// 0.999...9 with hundreds of nines that is exactly representable) is rendered in
+// full rather than rounded UP to "1.0...". Only NON-terminating fractions are
+// capped, at which point FloatString may legitimately round; the cap value is
+// chosen far beyond any precision a real lexical form carries.
+//
+// Trailing zeros are trimmed. Callers must never see a carried integer part
+// (a leading "1."): with the exact-precision path that cannot occur.
 func exactFractionDigits(frac *big.Rat) string {
 	prec, exact := frac.FloatPrec()
-	if !exact || prec > 40 {
+	if !exact {
+		// Non-terminating fraction: FloatPrec reports prec=0, so cap explicitly.
 		prec = 40
 	}
 	s := frac.FloatString(prec)
 	s = strings.TrimPrefix(s, "0.")
-	// A value that rounded to 1.x (should not happen with exact prec) would not
-	// start with "0."; guard by stripping any leading "1." defensively.
-	s = strings.TrimPrefix(s, "1.")
 	return strings.TrimRight(s, "0")
 }
 
@@ -619,7 +620,9 @@ func formatDuration(d Duration, typeName string) string {
 	//     fraction (which would emit an invalid "PT1.1.S").
 	//   - SecRat absent (legacy float path): decompose d.Seconds via integer
 	//     arithmetic and round the fraction to microseconds.
-	var totalWholeSeconds int64
+	// totalWholeSeconds holds the whole-second count as a big.Int so values above
+	// math.MaxInt64 never wrap into malformed negative components.
+	totalWholeSeconds := new(big.Int)
 	var fracMicro int64
 	var fracRat *big.Rat
 	if d.SecRat != nil {
@@ -628,7 +631,7 @@ func formatDuration(d Duration, typeName string) string {
 			absRat = new(big.Rat).Neg(absRat)
 		}
 		whole := new(big.Int).Quo(absRat.Num(), absRat.Denom())
-		totalWholeSeconds = whole.Int64()
+		totalWholeSeconds.Set(whole)
 		rem := new(big.Rat).Sub(absRat, new(big.Rat).SetInt(whole))
 		if rem.Sign() != 0 {
 			fracRat = rem
@@ -638,17 +641,18 @@ func formatDuration(d Duration, typeName string) string {
 		if d.Negative && totalSeconds < 0 {
 			totalSeconds = -totalSeconds
 		}
-		totalWholeSeconds = int64(totalSeconds)
-		fracSeconds := totalSeconds - float64(totalWholeSeconds)
+		whole := int64(totalSeconds)
+		fracSeconds := totalSeconds - float64(whole)
 		// Round fractional part to microseconds
 		fracMicro = int64(math.Round(fracSeconds * 1e6))
 		if fracMicro >= 1e6 {
-			totalWholeSeconds++
+			whole++
 			fracMicro -= 1e6
 		}
 		if fracMicro < 0 {
 			fracMicro = 0
 		}
+		totalWholeSeconds.SetInt64(whole)
 		// Use FracSec for exact fractional representation if available
 		if d.FracSec != nil && d.FracSec.Sign() != 0 {
 			fracMicro = 0 // will be formatted from FracSec below
@@ -656,17 +660,21 @@ func formatDuration(d Duration, typeName string) string {
 		}
 	}
 
-	days := totalWholeSeconds / 86400
-	totalWholeSeconds -= days * 86400
-	hours := totalWholeSeconds / 3600
-	totalWholeSeconds -= hours * 3600
-	mins := totalWholeSeconds / 60
-	wholeSecs := totalWholeSeconds - mins*60
+	// Decompose days/hours/minutes/seconds entirely in big.Int via QuoRem so the
+	// days component can exceed int64 without overflow; the sub-day components are
+	// bounded and safely fit in int64.
+	days := new(big.Int)
+	rem := new(big.Int)
+	days.QuoRem(totalWholeSeconds, big.NewInt(86400), rem)
+	hours := rem.Int64() / 3600
+	subHour := rem.Int64() - hours*3600
+	mins := subHour / 60
+	wholeSecs := subHour - mins*60
 
 	hasFrac := fracMicro != 0 || (fracRat != nil && fracRat.Sign() != 0)
 	hasSecs := wholeSecs != 0 || hasFrac
-	if days != 0 {
-		fmt.Fprintf(&b, "%dD", days)
+	if days.Sign() != 0 {
+		fmt.Fprintf(&b, "%sD", days.String())
 	}
 	if hours != 0 || mins != 0 || hasSecs {
 		b.WriteByte('T')

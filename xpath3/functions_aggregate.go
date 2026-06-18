@@ -24,8 +24,21 @@ func fnCount(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleInteger(int64(seqLen(args[0]))), nil
 }
 
-// aggregateTypeFamily classifies an atomic type for aggregate type checking.
-func aggregateTypeFamily(typeName string) string {
+// aggregateTypeFamily classifies an atomic value for aggregate type checking.
+// A schema-derived value (e.g. a restriction of xs:dayTimeDuration) carries a
+// custom TypeName whose BaseType names the built-in ancestor; classify on the
+// effective built-in type so the duration/numeric/string families recognize it.
+func aggregateTypeFamily(a AtomicValue) string {
+	if family := aggregateTypeFamilyByName(a.TypeName); family != "" {
+		return family
+	}
+	if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+		return aggregateTypeFamilyByName(a.BaseType)
+	}
+	return ""
+}
+
+func aggregateTypeFamilyByName(typeName string) string {
 	if isIntegerDerived(typeName) {
 		return familyNumeric
 	}
@@ -85,7 +98,7 @@ func validateCollationArg(args []Sequence, idx int) error {
 }
 
 func checkSumAvgType(a AtomicValue) error {
-	family := aggregateTypeFamily(a.TypeName)
+	family := aggregateTypeFamily(a)
 	switch family {
 	case familyNumeric, familyDurationYM, familyDurationDT:
 		return nil
@@ -134,7 +147,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
 		}
-		newFamily := aggregateTypeFamily(a.TypeName)
+		newFamily := aggregateTypeFamily(a)
 		family, err = checkAggregateHomogeneity(family, newFamily)
 		if err != nil {
 			return nil, err
@@ -359,7 +372,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 				return nil, err
 			}
 		}
-		family := aggregateTypeFamily(a.TypeName)
+		family := aggregateTypeFamily(a)
 		if family == "" || family == lexicon.TypeDuration {
 			return nil, &XPathError{
 				Code:    errCodeFORG0006,
@@ -379,7 +392,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 		if err != nil {
 			return nil, err
 		}
-		newFamily := aggregateTypeFamily(a.TypeName)
+		newFamily := aggregateTypeFamily(a)
 		if newFamily == "" || newFamily == "duration" {
 			return nil, &XPathError{
 				Code:    errCodeFORG0006,
@@ -479,7 +492,7 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
 		}
-		newFamily := aggregateTypeFamily(a.TypeName)
+		newFamily := aggregateTypeFamily(a)
 		family, err = checkAggregateHomogeneity(family, newFamily)
 		if err != nil {
 			return nil, err

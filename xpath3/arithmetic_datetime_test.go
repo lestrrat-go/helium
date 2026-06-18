@@ -1,6 +1,8 @@
 package xpath3_test
 
 import (
+	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xpath3"
@@ -101,6 +103,14 @@ func TestDurationExactArithmeticFormatting(t *testing.T) {
 			expr: `xs:dayTimeDuration("PT0.9999999999999999999S") * 1`,
 			want: "PT0.9999999999999999999S",
 		},
+		{
+			// A long EXACT terminating fraction (50 nines, denominator 10^50) must
+			// be rendered in full, NOT rounded up to a whole second and stripped to
+			// "PT0S". Guards the exactFractionDigits 40-digit-cap regression.
+			name: "long exact terminating fraction is not capped",
+			expr: `xs:dayTimeDuration("PT0.99999999999999999999999999999999999999999999999999S") * 1`,
+			want: "PT0.99999999999999999999999999999999999999999999999999S",
+		},
 	}
 
 	for _, tt := range tests {
@@ -108,6 +118,46 @@ func TestDurationExactArithmeticFormatting(t *testing.T) {
 			seq := evalExpr(t, doc, tt.expr)
 			require.Equal(t, 1, seq.Len())
 			av := seq.Get(0).(xpath3.AtomicValue)
+			got, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDurationFractionFormattingPrecision verifies exactFractionDigits renders a
+// long EXACT terminating fraction in full while a true NON-terminating fraction
+// is capped (the only case that legitimately rounds).
+func TestDurationFractionFormattingPrecision(t *testing.T) {
+	tests := []struct {
+		name   string
+		secRat *big.Rat
+		want   string
+	}{
+		{
+			// 1/3 of a second is non-terminating; capped at 40 fractional digits.
+			name:   "non-terminating fraction capped at 40 digits",
+			secRat: big.NewRat(1, 3),
+			want:   "PT0.3333333333333333333333333333333333333333S",
+		},
+		{
+			// (10^60 - 1)/10^60 is exactly representable (60 nines); rendered in full.
+			name: "long exact terminating fraction rendered in full",
+			secRat: func() *big.Rat {
+				den := new(big.Int).Exp(big.NewInt(10), big.NewInt(60), nil)
+				num := new(big.Int).Sub(den, big.NewInt(1))
+				return new(big.Rat).SetFrac(num, den)
+			}(),
+			want: "PT0." + strings.Repeat("9", 60) + "S",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			av := xpath3.AtomicValue{
+				TypeName: xpath3.TypeDayTimeDuration,
+				Value:    xpath3.Duration{SecRat: tt.secRat},
+			}
 			got, err := xpath3.AtomicToString(av)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
@@ -153,4 +203,71 @@ func TestSchemaDerivedDurationArithmetic(t *testing.T) {
 	v, ok := m.Get(av)
 	require.True(t, ok)
 	require.Equal(t, int64(11), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+}
+
+// TestDurationWholeSecondOverflow guards against the regression where formatting
+// an exact whole-second magnitude above math.MaxInt64 wrapped through an int64
+// conversion and emitted malformed negative components (e.g.
+// "P-106751991167300DT-15H-30M-8S").
+func TestDurationWholeSecondOverflow(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			// 9223372036854775808 = math.MaxInt64 + 1 whole seconds.
+			name:  "whole seconds just above int64 max",
+			input: "PT9223372036854775808S",
+			want:  "P106751991167300DT15H30M8S",
+		},
+		{
+			// A far larger whole-second total still decomposes correctly in big.Int.
+			name:  "whole seconds far above int64 max",
+			input: "PT100000000000000000000S",
+			want:  "P1157407407407407DT9H46M40S",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			av, err := xpath3.CastFromString(tt.input, xpath3.TypeDayTimeDuration)
+			require.NoError(t, err)
+			got, err := xpath3.AtomicToString(av)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestSchemaDerivedDurationAggregate verifies that fn:sum and fn:avg classify a
+// schema-derived duration (custom TypeName whose BaseType is a built-in
+// duration) via its BaseType rather than rejecting it with FORG0006.
+func TestSchemaDerivedDurationAggregate(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	parsed, err := xpath3.CastFromString("PT11S", xpath3.TypeDayTimeDuration)
+	require.NoError(t, err)
+	derived := xpath3.AtomicValue{
+		TypeName: "Q{urn:test}dtd",
+		BaseType: xpath3.TypeDayTimeDuration,
+		Value:    parsed.Value,
+	}
+
+	vars := xpath3.NewVariables()
+	vars.Set("d", xpath3.SingleAtomic(derived))
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(vars)
+
+	sumSeq := evalExprWithEval(t, eval, doc, `sum(($d, $d))`)
+	require.Equal(t, 1, sumSeq.Len())
+	sumStr, err := xpath3.AtomicToString(sumSeq.Get(0).(xpath3.AtomicValue))
+	require.NoError(t, err)
+	require.Equal(t, "PT22S", sumStr)
+
+	avgSeq := evalExprWithEval(t, eval, doc, `avg(($d, $d))`)
+	require.Equal(t, 1, avgSeq.Len())
+	avgStr, err := xpath3.AtomicToString(avgSeq.Get(0).(xpath3.AtomicValue))
+	require.NoError(t, err)
+	require.Equal(t, "PT11S", avgStr)
 }
