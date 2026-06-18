@@ -634,6 +634,62 @@ func TestParseExternalDTDStatAdvisory(t *testing.T) {
 	require.NoError(t, err, "small valid DTD must load even when Stat over-reports its size")
 }
 
+func TestParseExternalDTDConfigurableLimit(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "ext.dtd">
+<r/>`
+
+	t.Run("custom small limit rejects larger DTD", func(t *testing.T) {
+		t.Parallel()
+
+		// A 2 KiB DTD must be rejected when the configured cap is 1 KiB.
+		oversized := bytes.Repeat([]byte(" "), 2<<10)
+		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: oversized}}
+
+		p := helium.NewParser().
+			LoadExternalDTD(true).
+			DefaultDTDAttributes(true).
+			MaxExternalDTDBytes(1 << 10).
+			FS(fsys)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "DTD larger than the configured cap must be rejected")
+		require.ErrorIs(t, err, helium.ErrExternalDTDTooLarge, "rejection must come from the byte-count cap")
+	})
+
+	t.Run("custom small limit allows smaller DTD", func(t *testing.T) {
+		t.Parallel()
+
+		// A DTD well under the 1 KiB cap must still load.
+		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: []byte(`<!ELEMENT r EMPTY>`)}}
+
+		p := helium.NewParser().
+			LoadExternalDTD(true).
+			DefaultDTDAttributes(true).
+			MaxExternalDTDBytes(1 << 10).
+			FS(fsys)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "DTD under the configured cap must load")
+	})
+
+	t.Run("default cap allows a normal DTD over a small custom cap", func(t *testing.T) {
+		t.Parallel()
+
+		// Without configuring a custom cap, a DTD larger than 1 KiB (but well
+		// under the 10 MiB default) must still load.
+		large := append([]byte(`<!ELEMENT r EMPTY>`), bytes.Repeat([]byte(" "), 4<<10)...)
+		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: large}}
+
+		p := helium.NewParser().
+			LoadExternalDTD(true).
+			DefaultDTDAttributes(true).
+			FS(fsys)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "DTD under the default cap must load")
+	})
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 

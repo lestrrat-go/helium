@@ -123,6 +123,7 @@ type parserCtx struct {
 	recoverErr       error             // first fatal error saved during recovery
 	elemDepth        int               // current element nesting depth
 	maxElemDepth     int               // max allowed element nesting depth (0 = unlimited)
+	maxExtDTDSize    int               // max bytes read from an external DTD subset (<= 0 = MaxExternalDTDSize)
 	currentEntityURI string            // URI of the external entity currently being replayed (for base-uri tracking)
 	nameCache        map[string]string // per-parse string interning for element/attribute names
 	charBuf          []byte            // reusable buffer for parseCharDataContent
@@ -443,6 +444,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 			ctx.loadsubset.Set(SkipIDs)
 		}
 		ctx.maxElemDepth = p.maxDepth
+		ctx.maxExtDTDSize = p.maxExtDTDSize
 	}
 	if ctx.fsys == nil {
 		ctx.fsys = iofs.PermissiveRoot{}

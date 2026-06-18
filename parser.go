@@ -43,6 +43,7 @@ type parserConfig struct {
 	catalog        CatalogResolver
 	fsys           fs.FS
 	maxDepth       int
+	maxExtDTDSize  int
 	errorHandler   ErrorHandler
 }
 
@@ -440,6 +441,19 @@ func (p Parser) CharBufferSize(size int) Parser {
 func (p Parser) MaxDepth(depth int) Parser {
 	p = p.clone()
 	p.cfg.maxDepth = depth
+	return p
+}
+
+// MaxExternalDTDBytes sets the maximum number of bytes read from an external
+// DTD subset (see [LoadExternalDTD], [ValidateDTD], [DefaultDTDAttributes]).
+// The cap is enforced against the actual number of bytes read, guarding
+// against hostile or pathological sources (e.g. /dev/zero) that could
+// otherwise exhaust memory before any entity or parse limits apply. A value
+// less than or equal to zero (the default) means [MaxExternalDTDSize] (10 MiB)
+// is used.
+func (p Parser) MaxExternalDTDBytes(n int) Parser {
+	p = p.clone()
+	p.cfg.maxExtDTDSize = n
 	return p
 }
 

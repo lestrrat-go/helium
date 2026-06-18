@@ -421,11 +421,15 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// bytes read below. Read through a strict byte cap, allowing one extra
 	// byte so a source that under-reports (or lies about) its size is still
 	// caught.
-	data, err := io.ReadAll(io.LimitReader(f, MaxExternalDTDSize+1))
+	limit := ctx.maxExtDTDSize
+	if limit <= 0 {
+		limit = MaxExternalDTDSize
+	}
+	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
 	if err != nil {
 		return nil
 	}
-	if len(data) > MaxExternalDTDSize {
+	if len(data) > limit {
 		return ErrExternalDTDTooLarge
 	}
 
