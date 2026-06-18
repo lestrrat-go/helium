@@ -426,6 +426,70 @@ func TestMapItem(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, int64(993), v1.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
+
+	t.Run("schema-derived double keys are distinct and do not match zero", func(t *testing.T) {
+		// A schema-derived atomic carries a custom TypeName whose BaseType is
+		// xs:double. The float map-key path must promote via BaseType before
+		// ToFloat64, otherwise the underlying FloatValue is read as 0 and every
+		// such key collapses to the same map slot.
+		two := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myDouble",
+			BaseType: xpath3.TypeDouble,
+			Value:    xpath3.NewDouble(2),
+		}
+		three := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myDouble",
+			BaseType: xpath3.TypeDouble,
+			Value:    xpath3.NewDouble(3),
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: two, Value: xpath3.SingleString("two")},
+			{Key: three, Value: xpath3.SingleString("three")},
+		})
+		// Two distinct derived-double keys must remain distinct, not collapse.
+		require.Equal(t, 2, m.Size())
+
+		v2, ok := m.Get(two)
+		require.True(t, ok)
+		require.Equal(t, "two", v2.Get(0).(xpath3.AtomicValue).StringVal())
+
+		v3, ok := m.Get(three)
+		require.True(t, ok)
+		require.Equal(t, "three", v3.Get(0).(xpath3.AtomicValue).StringVal())
+
+		// An integer 0 lookup must match neither derived-double key.
+		_, ok = m.Get(xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(0)})
+		require.False(t, ok)
+	})
+
+	t.Run("schema-derived float keys are distinct and do not match zero", func(t *testing.T) {
+		two := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myFloat",
+			BaseType: xpath3.TypeFloat,
+			Value:    xpath3.NewDouble(2),
+		}
+		three := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myFloat",
+			BaseType: xpath3.TypeFloat,
+			Value:    xpath3.NewDouble(3),
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: two, Value: xpath3.SingleString("two")},
+			{Key: three, Value: xpath3.SingleString("three")},
+		})
+		require.Equal(t, 2, m.Size())
+
+		v2, ok := m.Get(two)
+		require.True(t, ok)
+		require.Equal(t, "two", v2.Get(0).(xpath3.AtomicValue).StringVal())
+
+		v3, ok := m.Get(three)
+		require.True(t, ok)
+		require.Equal(t, "three", v3.Get(0).(xpath3.AtomicValue).StringVal())
+
+		_, ok = m.Get(xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(0)})
+		require.False(t, ok)
+	})
 }
 
 func TestMergeMaps(t *testing.T) {

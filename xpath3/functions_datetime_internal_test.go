@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -100,6 +101,60 @@ func TestExtractDurationSchemaDerived(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, ok)
 		require.NoError(t, validateTimezoneOffset(offset))
+	})
+}
+
+// TestTimezoneAccessorExactSecRat verifies the timezone accessors return an
+// xs:dayTimeDuration whose magnitude is carried exactly in SecRat (in addition
+// to the lossy Seconds mirror), so the duration is exact by construction.
+func TestTimezoneAccessorExactSecRat(t *testing.T) {
+	// +05:30 = 19800 seconds east of UTC.
+	posTZ := time.FixedZone("+0530", 5*3600+30*60)
+	// -08:00 = 28800 seconds west of UTC.
+	negTZ := time.FixedZone("-0800", -8*3600)
+
+	check := func(t *testing.T, seq Sequence, err error, wantSecs int64, wantNeg bool) {
+		t.Helper()
+		require.NoError(t, err)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(AtomicValue)
+		require.Equal(t, TypeDayTimeDuration, av.TypeName)
+		d := av.Value.(Duration)
+		require.NotNil(t, d.SecRat)
+		require.Equal(t, big.NewRat(wantSecs, 1).RatString(), d.SecRat.RatString())
+		require.Equal(t, wantNeg, d.Negative)
+	}
+
+	t.Run("timezone-from-dateTime positive offset", func(t *testing.T) {
+		dt := time.Date(2020, time.January, 1, 0, 0, 0, 0, posTZ)
+		seq, err := fnTimezoneFromDateTime(t.Context(), []Sequence{
+			SingleAtomic(AtomicValue{TypeName: TypeDateTime, Value: dt}),
+		})
+		check(t, seq, err, 19800, false)
+	})
+
+	t.Run("timezone-from-dateTime negative offset", func(t *testing.T) {
+		dt := time.Date(2020, time.January, 1, 0, 0, 0, 0, negTZ)
+		seq, err := fnTimezoneFromDateTime(t.Context(), []Sequence{
+			SingleAtomic(AtomicValue{TypeName: TypeDateTime, Value: dt}),
+		})
+		check(t, seq, err, 28800, true)
+	})
+
+	t.Run("timezone-from-date positive offset", func(t *testing.T) {
+		d := time.Date(2020, time.January, 1, 0, 0, 0, 0, posTZ)
+		seq, err := fnTimezoneFromDate(t.Context(), []Sequence{
+			SingleAtomic(AtomicValue{TypeName: TypeDate, Value: d}),
+		})
+		check(t, seq, err, 19800, false)
+	})
+
+	t.Run("timezone-from-time negative offset", func(t *testing.T) {
+		tm := time.Date(2020, time.January, 1, 12, 0, 0, 0, negTZ)
+		seq, err := fnTimezoneFromTime(t.Context(), []Sequence{
+			SingleAtomic(AtomicValue{TypeName: TypeTime, Value: tm}),
+		})
+		check(t, seq, err, 28800, true)
 	})
 }
 

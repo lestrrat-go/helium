@@ -266,12 +266,14 @@ func fnTimezoneFromDateTime(_ context.Context, args []Sequence) (Sequence, error
 		return validNilSequence, nil
 	}
 	_, offset := t.Zone()
-	secs := float64(offset)
-	neg := secs < 0
+	neg := offset < 0
+	absOffset := offset
 	if neg {
-		secs = -secs
+		absOffset = -absOffset
 	}
-	d := Duration{Seconds: secs, Negative: neg}
+	// Carry the exact integer-second magnitude in SecRat so the timezone-duration
+	// path is exact by construction (sign lives in Negative).
+	d := Duration{Seconds: float64(absOffset), SecRat: big.NewRat(int64(absOffset), 1), Negative: neg}
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 
@@ -322,12 +324,14 @@ func fnTimezoneFromDate(_ context.Context, args []Sequence) (Sequence, error) {
 		return validNilSequence, nil
 	}
 	_, offset := t.Zone()
-	secs := float64(offset)
-	neg := secs < 0
+	neg := offset < 0
+	absOffset := offset
 	if neg {
-		secs = -secs
+		absOffset = -absOffset
 	}
-	d := Duration{Seconds: secs, Negative: neg}
+	// Carry the exact integer-second magnitude in SecRat so the timezone-duration
+	// path is exact by construction (sign lives in Negative).
+	d := Duration{Seconds: float64(absOffset), SecRat: big.NewRat(int64(absOffset), 1), Negative: neg}
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 
@@ -379,12 +383,14 @@ func fnTimezoneFromTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return validNilSequence, nil
 	}
 	_, offset := t.Zone()
-	secs := float64(offset)
-	neg := secs < 0
+	neg := offset < 0
+	absOffset := offset
 	if neg {
-		secs = -secs
+		absOffset = -absOffset
 	}
-	d := Duration{Seconds: secs, Negative: neg}
+	// Carry the exact integer-second magnitude in SecRat so the timezone-duration
+	// path is exact by construction (sign lives in Negative).
+	d := Duration{Seconds: float64(absOffset), SecRat: big.NewRat(int64(absOffset), 1), Negative: neg}
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 

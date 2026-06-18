@@ -580,7 +580,12 @@ func normalizeMapKey(key AtomicValue) mapKey {
 			}
 			return mapKey{typeName: familyNumeric, value: new(big.Rat).Set(r).RatString()}
 		}
-		f := key.ToFloat64()
+		// Remaining numerics are xs:float / xs:double (and user-defined types whose
+		// effective base is a float/double). ToFloat64 keys off TypeName only, so a
+		// schema-derived double/float (custom TypeName, BaseType=xs:double/xs:float)
+		// would collapse to 0. Promote to the built-in base type first so ToFloat64
+		// reads the underlying FloatValue exactly.
+		f := PromoteSchemaType(key).ToFloat64()
 		if math.IsNaN(f) {
 			return mapKey{typeName: familyNumeric, value: "NaN"}
 		}
