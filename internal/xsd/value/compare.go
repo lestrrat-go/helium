@@ -17,6 +17,10 @@ import (
 // such characters stays invalid under subsequent lexical validation.
 const xsdWhitespace = " \t\r\n"
 
+// builtinTime is the xs:time builtin local name, hoisted to a constant so the
+// several switch/comparison sites that reference it share one literal.
+const builtinTime = "time"
+
 // trimXSDSpace trims only XSD whitespace from both ends of s, leaving any other
 // Unicode whitespace (e.g. NBSP) in place so it is rejected by lexical
 // validation rather than silently stripped.
@@ -32,6 +36,15 @@ func xsdFields(s string) []string {
 	return strings.FieldsFunc(s, func(r rune) bool {
 		return r == ' ' || r == '\t' || r == '\r' || r == '\n'
 	})
+}
+
+// XSDFields splits s into items on runs of XSD whitespace only (space, tab, CR,
+// LF), the exported form of xsdFields. xs:list item separation is defined over
+// XSD whitespace, so callers must use this rather than strings.Fields: a list
+// item containing NBSP (or other Unicode whitespace) stays a single token and is
+// then rejected by per-item lexical validation, instead of being silently split.
+func XSDFields(s string) []string {
+	return xsdFields(s)
 }
 
 // numericComparableTypes is the set of integer-family and decimal builtins that
@@ -64,7 +77,7 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 		return compareDateTime(a, b, builtinLocal)
 	case "date":
 		return compareDate(a, b, builtinLocal)
-	case "time":
+	case builtinTime:
 		return compareTime(a, b, builtinLocal)
 	case "gYear":
 		return compareGYear(a, b, builtinLocal)
@@ -158,6 +171,28 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		// Stable byte key so whitespace-distinct forms ("YWJj"/"YW Jj")
 		// canonicalize equal; hex of the decoded octets is a canonical encoding.
 		return hex.EncodeToString(decoded), true
+	case "duration":
+		trimmed := trimXSDSpace(s)
+		// Validate against the strict xs:duration lexical space before the lenient
+		// parseXSDDurationValue below, so CanonicalKey never canonicalizes a value
+		// the validator rejects.
+		if ValidateBuiltin(trimmed, "duration") != nil {
+			return trimmed, false
+		}
+		d, ok := parseXSDDurationValue(trimmed)
+		if !ok {
+			return trimmed, false
+		}
+		// The xs:duration value space is the (months, seconds) pair; two lexicals
+		// that compare equal via compareDuration must canonicalize equal. Apply the
+		// sign to both components and emit a stable signed key consistent with
+		// compareDuration, so e.g. "P1D" and "PT24H" (both 0 months, 86400 seconds)
+		// collide while values with differing month/second components stay distinct.
+		months, seconds := d.months, d.seconds
+		if d.negative {
+			months, seconds = -months, -seconds
+		}
+		return fmt.Sprintf("%d|%g", months, seconds), true
 	case "decimal", "integer",
 		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
@@ -328,7 +363,7 @@ func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
 		dt, ok = parseXSDDateTime(s)
 	case "date":
 		dt, ok = parseXSDDate(s)
-	case "time":
+	case builtinTime:
 		dt, ok = parseXSDTime(s)
 	case "gYear":
 		dt, ok = parseXSDGYear(s)
@@ -347,6 +382,14 @@ func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
 	// Normalize 24:00:00 to 00:00:00 of the next day so its key matches the
 	// equivalent start-of-day instant, then to UTC when timezoned.
 	dt = dt.normalizeHour24()
+	if builtinLocal == builtinTime {
+		// xs:time carries no calendar date, so assign the SAME synthetic reference
+		// date compareTime uses (2000-01-15) before UTC normalization. Otherwise a
+		// timezoned value whose UTC offset crosses midnight (e.g. "11:30:00+01:00"
+		// vs "10:30:00Z", both 10:30 UTC) would key off a zero date and differ in
+		// the day/month/year fields, missing the equality compareTime reports.
+		dt.year, dt.month, dt.day = big.NewInt(2000), 1, 15
+	}
 	if dt.hasTZ {
 		dt = dt.normalizeToUTC()
 	}
@@ -1076,6 +1119,12 @@ func compareDateTimeMixedTZ(a, b xsdDateTime) (int, bool) {
 }
 
 func compareDateTime(a, b, builtinLocal string) (int, bool) {
+	// Collapse XSD whitespace before both validation and parsing, matching the
+	// numeric/binary paths: date/time lexicals have whiteSpace="collapse", so a
+	// value padded with XSD whitespace is valid and must compare equal to its
+	// trimmed form. NBSP and other non-XSD whitespace stays in place and is
+	// rejected by ValidateBuiltin.
+	a, b = trimXSDSpace(a), trimXSDSpace(b)
 	if !validDateTimeOperands(a, b, builtinLocal) {
 		return 0, false
 	}
@@ -1088,6 +1137,7 @@ func compareDateTime(a, b, builtinLocal string) (int, bool) {
 }
 
 func compareDate(a, b, builtinLocal string) (int, bool) {
+	a, b = trimXSDSpace(a), trimXSDSpace(b)
 	if !validDateTimeOperands(a, b, builtinLocal) {
 		return 0, false
 	}
@@ -1100,6 +1150,7 @@ func compareDate(a, b, builtinLocal string) (int, bool) {
 }
 
 func compareTime(a, b, builtinLocal string) (int, bool) {
+	a, b = trimXSDSpace(a), trimXSDSpace(b)
 	if !validDateTimeOperands(a, b, builtinLocal) {
 		return 0, false
 	}
@@ -1120,6 +1171,7 @@ func compareTime(a, b, builtinLocal string) (int, bool) {
 }
 
 func compareGYear(a, b, builtinLocal string) (int, bool) {
+	a, b = trimXSDSpace(a), trimXSDSpace(b)
 	if !validDateTimeOperands(a, b, builtinLocal) {
 		return 0, false
 	}
@@ -1132,6 +1184,7 @@ func compareGYear(a, b, builtinLocal string) (int, bool) {
 }
 
 func compareGYearMonth(a, b, builtinLocal string) (int, bool) {
+	a, b = trimXSDSpace(a), trimXSDSpace(b)
 	if !validDateTimeOperands(a, b, builtinLocal) {
 		return 0, false
 	}
@@ -1144,6 +1197,7 @@ func compareGYearMonth(a, b, builtinLocal string) (int, bool) {
 }
 
 func compareGMonth(a, b, builtinLocal string) (int, bool) {
+	a, b = trimXSDSpace(a), trimXSDSpace(b)
 	if !validDateTimeOperands(a, b, builtinLocal) {
 		return 0, false
 	}
@@ -1156,6 +1210,7 @@ func compareGMonth(a, b, builtinLocal string) (int, bool) {
 }
 
 func compareGDay(a, b, builtinLocal string) (int, bool) {
+	a, b = trimXSDSpace(a), trimXSDSpace(b)
 	if !validDateTimeOperands(a, b, builtinLocal) {
 		return 0, false
 	}
@@ -1168,6 +1223,7 @@ func compareGDay(a, b, builtinLocal string) (int, bool) {
 }
 
 func compareGMonthDay(a, b, builtinLocal string) (int, bool) {
+	a, b = trimXSDSpace(a), trimXSDSpace(b)
 	if !validDateTimeOperands(a, b, builtinLocal) {
 		return 0, false
 	}

@@ -322,7 +322,11 @@ func canonicalValueKey(ctx context.Context, raw string, fieldNode helium.Node, t
 		if item == nil {
 			return raw
 		}
-		fields := strings.Fields(raw)
+		// Split list items on XSD whitespace only (space, tab, CR, LF), not the
+		// wider set strings.Fields uses: an item containing NBSP must stay one
+		// token so it canonicalizes (and validates) as the single invalid value it
+		// is, consistent with validateListValue.
+		fields := value.XSDFields(raw)
 		parts := make([]string, len(fields))
 		for i, f := range fields {
 			parts[i] = canonicalValueKey(ctx, f, fieldNode, item)

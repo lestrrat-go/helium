@@ -17,6 +17,7 @@ const (
 	testUnderBar = "_bar"
 	testDT0      = "2023-01-15T10:30:00"
 	testDate0    = "2023-01-15"
+	testJan1     = "2023-01-01"
 	refDateTimeZ = "2020-01-01T12:00:00Z"
 	testT0       = "10:30:00"
 	testAB       = "a:b"
@@ -338,7 +339,7 @@ func TestCompareValues(t *testing.T) {
 		// date
 		{lexicon.TypeDate, testDate0, "2023-01-16", -1, true},
 		{lexicon.TypeDate, testDate0, testDate0, 0, true},
-		{lexicon.TypeDate, "2023-12-31", "2023-01-01", 1, true},
+		{lexicon.TypeDate, "2023-12-31", testJan1, 1, true},
 		{lexicon.TypeDate, "2023-01-15Z", "2023-01-15+00:00", 0, true},
 		// Huge expanded years exceed an int but must still order correctly
 		// (arbitrary-precision year comparison), rather than overflowing to
@@ -349,8 +350,8 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDate, "-" + hugeDate, hugeDate, -1, true},
 		// A leading '+' on the year is not a valid xs:date lexical form, so it
 		// must NOT compare equal to the unsigned form (indeterminate, not 0/true).
-		{lexicon.TypeDate, "+2023-01-01", "2023-01-01", 0, false},
-		{lexicon.TypeDate, "2023-01-01", "+2023-01-01", 0, false},
+		{lexicon.TypeDate, "+2023-01-01", testJan1, 0, false},
+		{lexicon.TypeDate, testJan1, "+2023-01-01", 0, false},
 
 		// time
 		{lexicon.TypeTime, testT0, "11:30:00", -1, true},
@@ -445,6 +446,19 @@ func TestCompareValues(t *testing.T) {
 		// the same value space as 00:00:00 of the next day and must compare equal.
 		{lexicon.TypeDateTime, "2024-01-01T24:00:00", "2024-01-02T00:00:00", 0, true},
 		{lexicon.TypeTime, "24:00:00", "00:00:00", 0, true},
+
+		// Date/time lexicals are whiteSpace=collapse, so XSD-whitespace padding
+		// (space/tab/CR/LF) must be stripped before validation and parsing, exactly
+		// like the numeric/binary paths. A padded operand therefore compares equal
+		// to its trimmed form rather than being rejected.
+		{lexicon.TypeDate, " 2023-01-01 ", testJan1, 0, true},
+		{lexicon.TypeDateTime, "\t2023-01-15T10:30:00\n", testDT0, 0, true},
+		{lexicon.TypeTime, " 10:30:00 ", testT0, 0, true},
+		{typeGYear, " 2023 ", "2023", 0, true},
+		// NBSP is not XSD whitespace, so a NBSP-padded date/time operand stays
+		// lexically invalid and compares indeterminate.
+		{lexicon.TypeDate, " 2023-01-01", testJan1, 0, false},
+		{lexicon.TypeTime, "10:30:00 ", testT0, 0, false},
 	}
 
 	for _, tt := range tests {

@@ -178,3 +178,47 @@ func TestCanonicalKeyHour24(t *testing.T) {
 	require.True(t, okT00)
 	require.Equal(t, t00, t24, `xs:time "24:00:00" must canonicalize to "00:00:00"`)
 }
+
+// TestCanonicalKeyDuration verifies that xs:duration values equal in the value
+// space (months, seconds) canonicalize to the same key, so IDC unique/key fields
+// over xs:duration detect duplicates that differ only lexically.
+func TestCanonicalKeyDuration(t *testing.T) {
+	_ = t.Context()
+
+	day, okDay := value.CanonicalKey("P1D", "duration")
+	require.True(t, okDay, `"P1D" must canonicalize as a valid xs:duration`)
+	hours, okHours := value.CanonicalKey("PT24H", "duration")
+	require.True(t, okHours, `"PT24H" must canonicalize as a valid xs:duration`)
+	require.Equal(t, day, hours, `"P1D" and "PT24H" are value-equal and must canonicalize equal`)
+
+	// A leading-XSD-whitespace form collapses to the same key.
+	spaced, okSpaced := value.CanonicalKey("  P1D  ", "duration")
+	require.True(t, okSpaced)
+	require.Equal(t, day, spaced, "XSD-whitespace padding must not change the duration key")
+
+	// Distinct durations must not collide.
+	year, okYear := value.CanonicalKey("P1Y", "duration")
+	require.True(t, okYear)
+	require.NotEqual(t, day, year, `"P1Y" (12 months) and "P1D" must not collide`)
+
+	// An invalid duration must not canonicalize as valid.
+	_, okBad := value.CanonicalKey("P", "duration")
+	require.False(t, okBad, `"P" is not a valid xs:duration`)
+	// NBSP padding is not XSD whitespace, so it stays invalid.
+	_, okNBSP := value.CanonicalKey(" P1D", "duration")
+	require.False(t, okNBSP, "NBSP-padded duration must not canonicalize as valid")
+}
+
+// TestCanonicalKeyTimeTimezone verifies that timezoned xs:time values equal in
+// the value space canonicalize to the same key. CanonicalKey must apply the same
+// synthetic reference date compareTime uses so an offset crossing midnight does
+// not shift the date fields of the key.
+func TestCanonicalKeyTimeTimezone(t *testing.T) {
+	_ = t.Context()
+
+	plus, okPlus := value.CanonicalKey("11:30:00+01:00", "time")
+	require.True(t, okPlus)
+	utc, okUTC := value.CanonicalKey("10:30:00Z", "time")
+	require.True(t, okUTC)
+	require.Equal(t, utc, plus, `"11:30:00+01:00" and "10:30:00Z" are the same xs:time instant`)
+}

@@ -8,17 +8,17 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/internal/xsd/value"
+	valuepkg "github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
 // validateBuiltinValue validates a value against a builtin XSD type's lexical space.
 func validateBuiltinValue(v, builtinLocal string) error {
-	return value.ValidateBuiltin(v, builtinLocal)
+	return valuepkg.ValidateBuiltin(v, builtinLocal)
 }
 
 // validateQName validates a QName value.
 func validateQName(v string) error {
-	return value.ValidateBuiltin(v, "QName")
+	return valuepkg.ValidateBuiltin(v, "QName")
 }
 
 // languageRegex matches the lexical space of xs:language (RFC 3066).
@@ -298,10 +298,14 @@ func resolveVariety(td *TypeDef) TypeVariety {
 
 // validateListValue validates a space-separated list value against a list type.
 func validateListValue(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
-	// Split value into items by whitespace.
+	// Split value into items by XSD whitespace only (space, tab, CR, LF). Using
+	// strings.Fields would also split on NBSP and other Unicode whitespace,
+	// silently turning an invalid item like "1 2" into two valid tokens;
+	// value.XSDFields keeps it a single token so per-item lexical validation
+	// rejects it.
 	var items []string
 	if value != "" {
-		items = strings.Fields(value)
+		items = valuepkg.XSDFields(value)
 	}
 	itemCount := len(items)
 
