@@ -118,14 +118,18 @@ func (p Processor) Resolver(r Resolver) Processor {
 //     choice when the XInclude input is untrusted.
 //   - [testing/fstest.MapFS] is an in-memory map with no host access.
 //
-// Whichever FS you pass, the document's base URI must be FS-relative —
-// no leading slash and no file:// URL. An absolute base URI (e.g. set
-// via [Processor.BaseURI] with "/abs/path/main.xml" or
+// When using an FS that enforces [fs.ValidPath] — such as [os.DirFS],
+// [testing/fstest.MapFS], or [os.Root.FS] — the document's base URI must
+// be FS-relative: no leading slash and no file:// URL. An absolute base
+// URI (e.g. set via [Processor.BaseURI] with "/abs/path/main.xml" or
 // "file:///abs/main.xml") produces an absolute resolved name that
 // fs.ValidPath rejects with [fs.ErrInvalid], even when the href itself
 // does not escape. This is a deliberate fail-loud contract — silently
 // trimming the leading slash would re-anchor absolute paths under the FS
-// root, masking caller mistakes and risking wrong-file opens.
+// root, masking caller mistakes and risking wrong-file opens. The
+// permissive default (NewFSResolver(nil)) does not enforce fs.ValidPath
+// and instead opens any OS path verbatim, so it accepts absolute base
+// URIs.
 func NewFSResolver(fsys fs.FS) Resolver {
 	if fsys == nil {
 		fsys = iofs.PermissiveRoot{}
