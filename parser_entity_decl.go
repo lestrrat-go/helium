@@ -196,6 +196,15 @@ func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, er
 // Character references that appear directly in the literal are character data
 // and are consumed without contributing a literal '&' to the scan.
 func (pctx *parserCtx) validateEntityValueRefs(ctx context.Context, s []byte) error {
+	// The validation expansion below runs decodeEntitiesInternal, which charges
+	// the amplification counters via entityCheck. This is only a syntax check —
+	// the real PE substitution in parseEntityValue re-expands the same value and
+	// charges the counters for real. Snapshot and restore the counters so this
+	// pass is side-effect-free and the same parameter entities are not counted
+	// twice.
+	savedSize := pctx.sizeentcopy
+	defer func() { pctx.sizeentcopy = savedSize }()
+
 	expanded, err := pctx.expandEntityValueForRefCheck(ctx, s, 0)
 	if err != nil {
 		return err
@@ -538,9 +547,12 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	// external entity that is just under externalEntityMaxBytes could be
 	// referenced repeatedly to bypass the entity-expansion limits entirely (the
 	// per-reference cost would otherwise be ~0 because external entities carry no
-	// inline content). entityCheck enforces both the absolute ceiling and the
-	// amplification-ratio check against the accumulated size.
-	if err := pctx.entityCheck(nil, len(content)); err != nil {
+	// inline content). Use the byte-only charge: parseReference already paid the
+	// per-reference entityFixedCost via entityCheck, so charging entityCheck here
+	// would double-count the fixed cost. entityCheckBytes still enforces both the
+	// absolute ceiling and the amplification-ratio check against the accumulated
+	// size.
+	if err := pctx.entityCheckBytes(len(content)); err != nil {
 		return nil, pctx.error(ctx, err)
 	}
 

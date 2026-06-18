@@ -121,32 +121,80 @@ func TestExternalEntityInputClosed(t *testing.T) {
 	require.True(t, closed.Load(), "resolved external entity input must be closed on success")
 }
 
-// TestExternalEntityAmplification ensures that the bytes read from an external
-// parsed entity are charged to the entity-expansion amplification counters. A
-// single external entity that is comfortably under the per-entity size cap must
-// not become a way to bypass the limits when referenced repeatedly: 2 MiB of
-// external text referenced ten times (20 MiB of expansion from a tiny input)
-// must trip the amplification guard.
+// countingFS hands out the same byte content on every Open and records how many
+// times Open was called, so a test can prove that repeated references to one
+// external entity read the source only once (the rest hit the cached
+// expandedSize accounting).
+type countingFS struct {
+	data  string
+	opens *atomic.Int64
+}
+
+func (s countingFS) Open(string) (fs.File, error) {
+	s.opens.Add(1)
+	return &readCloserFile{
+		r:      io.NewSectionReader(strings.NewReader(s.data), 0, int64(len(s.data))),
+		closed: &atomic.Bool{},
+	}, nil
+}
+
+// TestExternalEntityAmplification proves that an external parsed entity's bytes
+// are charged to the amplification counters on EVERY reference via the cached
+// expandedSize, not just on the first read.
+//
+// The body is deliberately sub-1 MiB so a SINGLE reference stays under the free
+// baseline and succeeds. Inert input padding makes the input large enough that
+// one expansion alone does not trip the ratio check. Only when the entity is
+// referenced REPEATEDLY does the accumulated (cached) size trip the guard —
+// which can only happen if repeated-reference accounting works. The FS Open
+// count confirms the source is read exactly once; the repeats rely on the
+// cached size.
 func TestExternalEntityAmplification(t *testing.T) {
 	t.Parallel()
 
-	big := strings.Repeat("A", 2*1024*1024) // 2 MiB, well under the 10 MiB cap
-	fsys := fstest.MapFS{"big.txt": {Data: []byte(big)}}
+	// 800 KiB: comfortably under the 1 MB free baseline so one reference alone
+	// never trips the ratio check.
+	body := strings.Repeat("A", 800*1024)
+	// Inert padding inside a comment so the input is "large", keeping the
+	// amplification ratio from tripping on a single expansion while contributing
+	// nothing to entity expansion.
+	padding := strings.Repeat(" ", 200*1024)
 
-	var refs strings.Builder
-	for range 10 {
-		refs.WriteString("&x;")
-	}
-	input := fmt.Sprintf(`<?xml version="1.0"?>
-<!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r>%s</r>`, refs.String())
+	t.Run("single reference succeeds", func(t *testing.T) {
+		t.Parallel()
+		var opens atomic.Int64
+		input := fmt.Sprintf(`<?xml version="1.0"?>
+<!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r><!--%s-->&x;</r>`, padding)
 
-	_, err := helium.NewParser().
-		SubstituteEntities(true).
-		FS(fsys).
-		Parse(t.Context(), []byte(input))
-	require.Error(t, err, "repeated references to a large external entity must trip the guard")
-	require.Contains(t, err.Error(), "amplification",
-		"error must explain the amplification limit, got: %v", err)
+		doc, err := helium.NewParser().
+			SubstituteEntities(true).
+			FS(countingFS{data: body, opens: &opens}).
+			Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "a single sub-baseline external reference must succeed")
+		require.NotNil(t, doc)
+	})
+
+	t.Run("repeated references trip guard, source opened once", func(t *testing.T) {
+		t.Parallel()
+		var opens atomic.Int64
+
+		var refs strings.Builder
+		for range 10 {
+			refs.WriteString("&x;")
+		}
+		input := fmt.Sprintf(`<?xml version="1.0"?>
+<!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r><!--%s-->%s</r>`, padding, refs.String())
+
+		_, err := helium.NewParser().
+			SubstituteEntities(true).
+			FS(countingFS{data: body, opens: &opens}).
+			Parse(t.Context(), []byte(input))
+		require.Error(t, err, "repeated references to a large external entity must trip the guard")
+		require.Contains(t, err.Error(), "amplification",
+			"error must explain the amplification limit, got: %v", err)
+		require.Equal(t, int64(1), opens.Load(),
+			"the external source must be read exactly once; repeats rely on cached accounting")
+	})
 }
 
 // TestEntityValueMalformedGeneralRef ensures that a general reference inside an
@@ -226,11 +274,13 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 		const input = `<?xml version="1.0"?>` + "\n" +
 			`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
 
-		doc, err := helium.NewParser().
+		doc, _ := helium.NewParser().
 			LoadExternalDTD(true).
 			FS(fsys).
 			Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
+		// External-subset malformed-ref rejection at the top-level parse error is
+		// tracked separately (PR #565); do not assert require.NoError here, which
+		// would encode the arguably-wrong swallowing behavior.
 		require.NotNil(t, doc)
 
 		_, cOK := doc.GetEntity("c")
