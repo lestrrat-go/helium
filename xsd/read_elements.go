@@ -257,6 +257,15 @@ func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element)
 		return nil
 	}
 
+	// Check for a duplicate global element declaration BEFORE reading the decl
+	// body, so a rejected declaration records no type/element refs that would
+	// produce unrelated follow-on errors.
+	declName := QName{Local: name, NS: c.schema.targetNamespace}
+	if _, exists := c.schema.elements[declName]; exists {
+		c.reportDuplicateComponent(ctx, elem, "element", "A global element declaration", declName)
+		return nil
+	}
+
 	decl, err := c.readElementDecl(ctx, elem, elementDeclReadOptions{
 		name:                   name,
 		namespace:              c.schema.targetNamespace,
@@ -272,23 +281,32 @@ func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element)
 		return err
 	}
 
-	// Check for duplicate global element declarations.
-	if _, exists := c.schema.elements[decl.Name]; exists {
-		qnDisplay := "'" + decl.Name.NS + "'" + decl.Name.Local
-		if decl.Name.NS != "" {
-			qnDisplay = "'{" + decl.Name.NS + "}" + decl.Name.Local + "'"
-		}
-		source := c.includeFile
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(source, elem.Line(),
-			elem.LocalName(), "element",
-			"A global element declaration "+qnDisplay+" does already exist."), helium.ErrorLevelFatal))
-		c.errorCount++
-		return nil
-	}
-
 	c.globalElemSources[decl] = elemRefSource{elemName: name, line: elem.Line()}
 	c.schema.elements[decl.Name] = decl
 	return nil
+}
+
+// reportDuplicateComponent emits the schema-parser error for a redeclared
+// global component (element, type, model group, or attribute group). component
+// is the XSD element name used in the error prefix (e.g. "element", "type");
+// kind is the descriptive phrase (e.g. "A global element declaration").
+func (c *compiler) reportDuplicateComponent(ctx context.Context, elem *helium.Element, component, kind string, name QName) {
+	qnDisplay := "'" + name.NS + "'" + name.Local
+	if name.NS != "" {
+		qnDisplay = "'{" + name.NS + "}" + name.Local + "'"
+	}
+	// A duplicate inside an xs:include/xs:redefine reports against that file
+	// (c.includeFile); a top-level (main-schema) duplicate has no includeFile,
+	// so fall back to the compiler's own filename label so the diagnostic keeps
+	// its path prefix instead of starting with ":line:".
+	source := c.includeFile
+	if source == "" {
+		source = c.filename
+	}
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(source, elem.Line(),
+		elem.LocalName(), component,
+		kind+" "+qnDisplay+" does already exist."), helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) (*Particle, error) {
@@ -364,10 +382,23 @@ func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Elemen
 		return
 	}
 	// Global attributes are always in the target namespace (per spec).
+	qn := QName{Local: name, NS: c.schema.targetNamespace}
+
+	// Check for a duplicate global attribute declaration BEFORE parsing the body,
+	// so a rejected declaration records no type/constraint refs that would
+	// produce unrelated follow-on errors. xs:redefine never targets global
+	// attributes, so (mirroring the other named components) only suppress the
+	// report when processing redefine overrides.
+	if _, exists := c.schema.globalAttrs[qn]; exists && c.redefine == nil {
+		c.reportDuplicateComponent(ctx, elem, "attribute", "A global attribute declaration", qn)
+		return
+	}
+
 	au := c.readAttributeUseDecl(ctx, elem, attrUseReadOptions{
-		name: QName{Local: name, NS: c.schema.targetNamespace},
+		name: qn,
 	})
-	c.schema.globalAttrs[au.Name] = au
+
+	c.schema.globalAttrs[qn] = au
 }
 
 func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) *AttrUse {

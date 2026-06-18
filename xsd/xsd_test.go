@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -797,6 +798,556 @@ func TestRedefine(t *testing.T) {
 <code xmlns="http://example.com/ns">VeryLongCodeValue</code>`)
 		require.Error(t, err)
 	})
+
+	compileErrors := func(t *testing.T, xsdPath string) string {
+		t.Helper()
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err := xsd.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
+		require.NoError(t, err)
+		require.NoError(t, collector.Close())
+		_, errors := partitionCompileErrors(collector.Errors())
+		return errors
+	}
+
+	// Descriptive phrases used by the duplicate-component diagnostic, keyed by
+	// the redefinable component kind, shared by the exact-assertion tables below.
+	const (
+		descType      = "A global type definition"
+		descGroup     = "A global model group definition"
+		descAttrGroup = "A global attribute group definition"
+	)
+
+	t.Run("single_redefine_compiles_clean", func(t *testing.T) {
+		t.Parallel()
+		writeFile(t, "base-single.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="codeType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-single.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-single.xsd">
+    <xs:simpleType name="codeType">
+      <xs:restriction base="codeType">
+        <xs:maxLength value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="code" type="codeType"/>
+</xs:schema>`)
+
+		require.Empty(t, compileErrors(t, mainPath))
+	})
+
+	t.Run("duplicate_override_children_reported", func(t *testing.T) {
+		t.Parallel()
+		writeFile(t, "base-dup-override.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="codeType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-dup-override.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-dup-override.xsd">
+    <xs:simpleType name="codeType">
+      <xs:restriction base="codeType">
+        <xs:maxLength value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="codeType">
+      <xs:restriction base="codeType">
+        <xs:maxLength value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="code" type="codeType"/>
+</xs:schema>`)
+
+		// The second override (line 9) is the duplicate. CompileFile assigns no
+		// label, so the redefining file resolves to "(string)" — confirming the
+		// override-child diagnostic carries the redefining file's label (not the
+		// redefined base file's), with the duplicate override's line and exactly
+		// one error.
+		want := "(string):9: element simpleType: Schemas parser error : " +
+			"Element '{http://www.w3.org/2001/XMLSchema}simpleType': " +
+			"A global type definition ''codeType does already exist.\n"
+		require.Equal(t, want, compileErrors(t, mainPath))
+	})
+
+	// dupOverrideKinds covers duplicate override children for each redefinable
+	// component kind. Two override children naming the same Phase-A component
+	// must be rejected: the first consumes the Phase-A name, the second is a
+	// duplicate.
+	dupOverrideKinds := []struct {
+		name     string
+		baseFile string
+		base     string
+		mainFile string
+		main     string
+		line     int    // line of the duplicate (second) override child
+		compName string // expected component local name in the diagnostic
+		compDesc string // descriptive phrase in the diagnostic
+	}{
+		{
+			name:     "complexType",
+			line:     11,
+			compName: "ctType",
+			compDesc: descType,
+			baseFile: "base-dup-ct.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="ctType">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`,
+			mainFile: "main-dup-ct.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-dup-ct.xsd">
+    <xs:complexType name="ctType">
+      <xs:complexContent>
+        <xs:extension base="ctType">
+          <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+    <xs:complexType name="ctType">
+      <xs:complexContent>
+        <xs:extension base="ctType">
+          <xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="root" type="ctType"/>
+</xs:schema>`,
+		},
+		{
+			name:     "group",
+			line:     10,
+			compName: "grp",
+			compDesc: descGroup,
+			baseFile: "base-dup-grp.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="grp">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:group>
+</xs:schema>`,
+			mainFile: "main-dup-grp.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-dup-grp.xsd">
+    <xs:group name="grp">
+      <xs:sequence>
+        <xs:group ref="grp"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:group>
+    <xs:group name="grp">
+      <xs:sequence>
+        <xs:group ref="grp"/>
+        <xs:element name="c" type="xs:string"/>
+      </xs:sequence>
+    </xs:group>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:group ref="grp"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+		{
+			name:     "attributeGroup",
+			line:     8,
+			compName: "ag",
+			compDesc: descAttrGroup,
+			baseFile: "base-dup-ag.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="ag">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`,
+			mainFile: "main-dup-ag.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-dup-ag.xsd">
+    <xs:attributeGroup name="ag">
+      <xs:attributeGroup ref="ag"/>
+      <xs:attribute name="b" type="xs:string"/>
+    </xs:attributeGroup>
+    <xs:attributeGroup name="ag">
+      <xs:attributeGroup ref="ag"/>
+      <xs:attribute name="c" type="xs:string"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:attributeGroup ref="ag"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+	}
+
+	for _, tc := range dupOverrideKinds {
+		t.Run("duplicate_override_"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			writeFile(t, tc.baseFile, tc.base)
+			mainPath := writeFile(t, tc.mainFile, tc.main)
+			// The duplicate override child belongs to the REDEFINING (main)
+			// schema, so its diagnostic must carry that file's label, not the
+			// redefined base file's. CompileFile assigns no label, so the
+			// redefining file resolves to "(string)". Assert the exact single
+			// error: correct label, the duplicate override's line, and no
+			// follow-on diagnostics.
+			want := "(string):" + strconv.Itoa(tc.line) + ": element " + tc.name +
+				": Schemas parser error : Element '{http://www.w3.org/2001/XMLSchema}" + tc.name +
+				"': " + tc.compDesc + " ''" + tc.compName + " does already exist.\n"
+			require.Equal(t, want, compileErrors(t, mainPath))
+		})
+	}
+
+	// absentTargetKinds covers a redefine override naming a component that is
+	// ABSENT from the redefined schema (but present in the INCLUDING schema). It
+	// must be rejected: only components loaded from the redefined file (Phase A)
+	// are redefinable, not pre-existing main-schema declarations.
+	absentTargetKinds := []struct {
+		name     string
+		baseFile string
+		base     string
+		mainFile string
+		main     string
+		line     int    // line of the absent-target override child
+		compDesc string // descriptive phrase in the diagnostic
+	}{
+		{
+			name:     "simpleType",
+			line:     7,
+			compDesc: descType,
+			baseFile: "base-absent-st.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseOnly">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`,
+			mainFile: "main-absent-st.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="localOnly">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+  <xs:redefine schemaLocation="base-absent-st.xsd">
+    <xs:simpleType name="localOnly">
+      <xs:restriction base="localOnly">
+        <xs:maxLength value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="root" type="localOnly"/>
+</xs:schema>`,
+		},
+		{
+			name:     "complexType",
+			line:     7,
+			compDesc: descType,
+			baseFile: "base-absent-ct.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="baseOnly">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`,
+			mainFile: "main-absent-ct.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="localOnly">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:redefine schemaLocation="base-absent-ct.xsd">
+    <xs:complexType name="localOnly">
+      <xs:complexContent>
+        <xs:extension base="localOnly">
+          <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="root" type="localOnly"/>
+</xs:schema>`,
+		},
+		{
+			name:     "group",
+			line:     7,
+			compDesc: descGroup,
+			baseFile: "base-absent-grp.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="baseOnly">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:group>
+</xs:schema>`,
+			mainFile: "main-absent-grp.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="localOnly">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:group>
+  <xs:redefine schemaLocation="base-absent-grp.xsd">
+    <xs:group name="localOnly">
+      <xs:sequence>
+        <xs:group ref="localOnly"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:group>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:group ref="localOnly"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+		{
+			name:     "attributeGroup",
+			line:     7,
+			compDesc: descAttrGroup,
+			baseFile: "base-absent-ag.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="baseOnly">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`,
+			mainFile: "main-absent-ag.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="localOnly">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+  <xs:redefine schemaLocation="base-absent-ag.xsd">
+    <xs:attributeGroup name="localOnly">
+      <xs:attributeGroup ref="localOnly"/>
+      <xs:attribute name="b" type="xs:string"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:attributeGroup ref="localOnly"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+	}
+
+	for _, tc := range absentTargetKinds {
+		t.Run("absent_target_rejected_"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			writeFile(t, tc.baseFile, tc.base)
+			mainPath := writeFile(t, tc.mainFile, tc.main)
+			// The override targets "localOnly", a component present only in the
+			// REDEFINING (main) schema (absent from the redefined base). It must
+			// be rejected with the redefining file's label (CompileFile assigns
+			// none, so "(string)"), the override child's line, and exactly one
+			// error with no follow-on diagnostics.
+			want := "(string):" + strconv.Itoa(tc.line) + ": element " + tc.name +
+				": Schemas parser error : Element '{http://www.w3.org/2001/XMLSchema}" + tc.name +
+				"': " + tc.compDesc + " ''localOnly does already exist.\n"
+			require.Equal(t, want, compileErrors(t, mainPath))
+		})
+	}
+
+	// validSingleKinds covers a single valid redefine of each kind compiling
+	// clean — the positive counterpart to the duplicate/absent rejections.
+	validSingleKinds := []struct {
+		name     string
+		baseFile string
+		base     string
+		mainFile string
+		main     string
+	}{
+		{
+			name:     "complexType",
+			baseFile: "base-valid-ct.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="ctType">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`,
+			mainFile: "main-valid-ct.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-valid-ct.xsd">
+    <xs:complexType name="ctType">
+      <xs:complexContent>
+        <xs:extension base="ctType">
+          <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="root" type="ctType"/>
+</xs:schema>`,
+		},
+		{
+			name:     "simpleType",
+			baseFile: "base-valid-st.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="stType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`,
+			mainFile: "main-valid-st.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-valid-st.xsd">
+    <xs:simpleType name="stType">
+      <xs:restriction base="stType">
+        <xs:maxLength value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="root" type="stType"/>
+</xs:schema>`,
+		},
+		{
+			name:     "group",
+			baseFile: "base-valid-grp.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="grp">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:group>
+</xs:schema>`,
+			mainFile: "main-valid-grp.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-valid-grp.xsd">
+    <xs:group name="grp">
+      <xs:sequence>
+        <xs:group ref="grp"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:group>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:group ref="grp"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+		{
+			name:     "attributeGroup",
+			baseFile: "base-valid-ag.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="ag">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`,
+			mainFile: "main-valid-ag.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-valid-ag.xsd">
+    <xs:attributeGroup name="ag">
+      <xs:attributeGroup ref="ag"/>
+      <xs:attribute name="b" type="xs:string"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:attributeGroup ref="ag"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+	}
+
+	for _, tc := range validSingleKinds {
+		t.Run("valid_single_"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			writeFile(t, tc.baseFile, tc.base)
+			mainPath := writeFile(t, tc.mainFile, tc.main)
+			require.Empty(t, compileErrors(t, mainPath))
+		})
+	}
+
+	// crossKindRejected covers a redefine override whose component KIND differs
+	// from the Phase-A component it names. A Phase-A simpleType may only be
+	// overridden by a simpleType (and a complexType by a complexType); a
+	// cross-kind override (simpleType→complexType or complexType→simpleType) must
+	// be rejected as a single duplicate-name error with no follow-on diagnostics.
+	// The override element is on line 4 of each main schema (line 1 xml decl,
+	// line 2 xs:schema, line 3 xs:redefine, line 4 the override).
+	crossKindRejected := []struct {
+		name        string
+		baseFile    string
+		base        string
+		mainFile    string
+		main        string
+		overrideTag string // xsd element name of the rejected override
+		compDesc    string // descriptive phrase in the diagnostic
+	}{
+		{
+			name:     "simpleType_redefined_by_complexType",
+			baseFile: "base-xkind-st.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="T">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`,
+			mainFile: "main-xkind-st.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-xkind-st.xsd">
+    <xs:complexType name="T">
+      <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="root" type="T"/>
+</xs:schema>`,
+			overrideTag: "complexType",
+			compDesc:    descType,
+		},
+		{
+			name:     "complexType_redefined_by_simpleType",
+			baseFile: "base-xkind-ct.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`,
+			mainFile: "main-xkind-ct.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-xkind-ct.xsd">
+    <xs:simpleType name="T">
+      <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="root" type="T"/>
+</xs:schema>`,
+			overrideTag: "simpleType",
+			compDesc:    descType,
+		},
+	}
+
+	for _, tc := range crossKindRejected {
+		t.Run("cross_kind_rejected_"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			writeFile(t, tc.baseFile, tc.base)
+			mainPath := writeFile(t, tc.mainFile, tc.main)
+			// The override child belongs to the REDEFINING (main) schema, so its
+			// cross-kind rejection diagnostic carries that file's label, not the
+			// redefined base file's. CompileFile assigns no label, so the
+			// redefining file resolves to "(string)". The override is on line 4
+			// (line 1 xml decl, 2 xs:schema, 3 xs:redefine, 4 the override).
+			want := "(string):4: element " + tc.overrideTag +
+				": Schemas parser error : Element '{http://www.w3.org/2001/XMLSchema}" + tc.overrideTag +
+				"': " + tc.compDesc + " ''T does already exist.\n"
+			require.Equal(t, want, compileErrors(t, mainPath))
+		})
+	}
 }
 
 func TestFacetConsistency(t *testing.T) {

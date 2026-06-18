@@ -30,6 +30,11 @@ type compiler struct {
 	globalElemSources map[*ElementDecl]elemRefSource
 	// source info for type definitions, used in duplicate attribute errors
 	typeDefSources map[*TypeDef]typeDefSource
+	// typeKinds records, per registered named type QName, whether it was
+	// declared via xs:simpleType or xs:complexType. Both share schema.types,
+	// but redefine must distinguish them so a Phase-A simpleType cannot be
+	// consumed by a complexType override of the same name (and vice versa).
+	typeKinds map[QName]redefineKind
 	// unresolved item type references for list types
 	itemTypeRefs map[*TypeDef]QName
 	// unresolved union member type references
@@ -61,6 +66,85 @@ type compiler struct {
 	// so the per-compiler importedNS map does not detect the cycle.
 	importDepth    int
 	maxImportDepth int
+	// redefine is non-nil while processing the override children of an
+	// xs:redefine. It scopes the duplicate-name suppression to the specific
+	// (kind, name) components actually loaded by the redefined schema, each
+	// consumable exactly once, instead of suppressing the check globally.
+	redefine *redefineState
+}
+
+// redefineKind identifies the component category a redefine override targets.
+type redefineKind int
+
+const (
+	// redefineKindSimpleType and redefineKindComplexType are tracked
+	// separately so a Phase-A simpleType cannot be consumed by a complexType
+	// override of the same name (or vice versa). They share the same
+	// schema.types map but are distinct redefine targets.
+	redefineKindSimpleType redefineKind = iota
+	redefineKindComplexType
+	redefineKindGroup
+	redefineKindAttrGroup
+)
+
+// redefineState scopes duplicate-name suppression during an xs:redefine
+// override loop. phaseAKeys records, per kind, the QNames loaded from the
+// redefined schema (Phase A); each may be replaced by exactly one override.
+// seen records, per kind, the override QNames already consumed so a repeated
+// override of the same name is reported as a duplicate.
+type redefineState struct {
+	phaseAKeys map[redefineKind]map[QName]struct{}
+	seen       map[redefineKind]map[QName]struct{}
+}
+
+// allowsRedefine reports whether an override of the given (kind, name) may
+// replace an existing same-named component. It returns true only the first
+// time a name loaded in Phase A is overridden; a name not loaded in Phase A
+// or a repeated override returns false so the caller reports a duplicate.
+func (c *compiler) allowsRedefine(kind redefineKind, qn QName) bool {
+	if c.redefine == nil {
+		return false
+	}
+	if _, ok := c.redefine.phaseAKeys[kind][qn]; !ok {
+		return false
+	}
+	if _, seen := c.redefine.seen[kind][qn]; seen {
+		return false
+	}
+	if c.redefine.seen[kind] == nil {
+		c.redefine.seen[kind] = make(map[QName]struct{})
+	}
+	c.redefine.seen[kind][qn] = struct{}{}
+	return true
+}
+
+// consumeRedefineTarget validates a redefine override's (kind, name) against
+// the Phase-A key set and consumes it, BEFORE the override child is parsed and
+// regardless of whether the name currently exists in the schema map. It reports
+// a duplicate (and returns false) when the target was not loaded in Phase A or
+// has already been consumed by an earlier override; otherwise it marks the name
+// consumed and returns true so the caller may parse the override. This closes
+// the gap where allowsRedefine only ran under the existing-name branch, letting
+// an override of a name ABSENT from the redefined schema be accepted silently.
+func (c *compiler) consumeRedefineTarget(ctx context.Context, elem *helium.Element, kind redefineKind, qn QName, component, kindDesc string) bool {
+	if c.allowsRedefine(kind, qn) {
+		return true
+	}
+	c.reportDuplicateComponent(ctx, elem, component, kindDesc, qn)
+	return false
+}
+
+// redefineConsumed reports whether the override of (kind, name) was already
+// validated and consumed by the redefine override loop (consumeRedefineTarget).
+// The named-component parsers consult it so a pre-authorized override does not
+// re-trigger their own duplicate-name report, while a non-redefine duplicate
+// (c.redefine == nil, or a name the loop did not consume) still reports.
+func (c *compiler) redefineConsumed(kind redefineKind, qn QName) bool {
+	if c.redefine == nil {
+		return false
+	}
+	_, ok := c.redefine.seen[kind][qn]
+	return ok
 }
 
 // defaultMaxImportDepth bounds xs:import recursion depth (not a flat
@@ -135,6 +219,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
+		typeKinds:                make(map[QName]redefineKind),
 		itemTypeRefs:             make(map[*TypeDef]QName),
 		chameleonEligible:        make(map[any]struct{}),
 		attrRefs:                 make(map[*AttrUse]QName),

@@ -13,6 +13,17 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 		return fmt.Errorf("xsd: named group missing name")
 	}
 
+	qn := QName{Local: name, NS: c.schema.targetNamespace}
+
+	// Check for a duplicate model group BEFORE parsing the compositor body, so a
+	// rejected component records no group references that would produce unrelated
+	// follow-on errors. An xs:redefine override that was validated and consumed
+	// by the redefine loop is pre-authorized and skips the report.
+	if _, exists := c.schema.groups[qn]; exists && !c.redefineConsumed(redefineKindGroup, qn) {
+		c.reportDuplicateComponent(ctx, elem, "group", "A global model group definition", qn)
+		return nil
+	}
+
 	// A named group has exactly one child compositor (sequence, choice, or all).
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -37,7 +48,6 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 		if err != nil {
 			return err
 		}
-		qn := QName{Local: name, NS: c.schema.targetNamespace}
 		c.schema.groups[qn] = mg
 		return nil
 	}
@@ -51,6 +61,12 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
+	// An xs:redefine override that was validated and consumed by the redefine
+	// loop is pre-authorized and skips the report.
+	if _, exists := c.schema.attrGroups[qn]; exists && !c.redefineConsumed(redefineKindAttrGroup, qn) {
+		c.reportDuplicateComponent(ctx, elem, "attributeGroup", "A global attribute group definition", qn)
+		return nil
+	}
 	var attrs []*AttrUse
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
