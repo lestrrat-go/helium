@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -544,8 +543,11 @@ func normalizeMapKey(key AtomicValue) mapKey {
 
 	// Normalize string-like types: xs:untypedAtomic and xs:anyURI promote to
 	// xs:string, as do types derived from xs:string (e.g. xs:NCName, xs:token),
-	// so they share a key with an equal xs:string value.
-	if tn == TypeUntypedAtomic || tn == TypeAnyURI || isStringDerived(tn) {
+	// so they share a key with an equal xs:string value. Schema-derived atomics
+	// can carry a custom TypeName whose BaseType is the string-like ancestor, so
+	// consult BaseType as well to fold those against an equal xs:string key.
+	if tn == TypeUntypedAtomic || tn == TypeAnyURI || isStringDerived(tn) ||
+		key.BaseType == TypeAnyURI || isStringDerived(key.BaseType) {
 		return mapKey{typeName: TypeString, value: key.Value}
 	}
 
@@ -617,14 +619,15 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		return mapKey{typeName: tn, value: v.URI + "\x00" + v.Local}
 	case Duration:
 		// Duration holds a *big.Rat (FracSec) whose pointer breaks Go map
-		// equality. Canonicalize to value content: sign, months, and exact
-		// total seconds (whole seconds plus the rational fraction).
-		sec := new(big.Rat).SetInt64(int64(v.Seconds))
-		if v.FracSec != nil {
-			sec.Add(sec, v.FracSec)
-		}
-		canon := strconv.FormatBool(v.Negative) + "|" +
-			strconv.Itoa(v.Months) + "|" + sec.RatString()
+		// equality, and Seconds (a float64) can carry an exact fractional part
+		// that int64() would truncate. Canonicalize to value content using the
+		// exact-rational helper: signed total months and signed EXACT total
+		// seconds (whole seconds plus the rational fraction). durationToRat
+		// folds the sign into each rational, and big.Rat normalizes -0 to 0,
+		// so -PT0S and PT0S produce the same key.
+		months := durationToRat(v, true)
+		secs := durationToRat(v, false)
+		canon := months.RatString() + "|" + secs.RatString()
 		return mapKey{typeName: tn, value: canon}
 	default:
 		return mapKey{typeName: tn, value: key.Value}
