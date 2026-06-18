@@ -18,6 +18,13 @@ import (
 // ErrorHandler configured on the Validator.
 var ErrValidationFailed = errors.New("xsd: validation failed")
 
+// ErrNilSchema is returned by Validate when the Validator has no compiled
+// schema (for example, after NewValidator(nil)).
+var ErrNilSchema = errors.New("xsd: nil schema")
+
+// ErrNilDocument is returned by Validate when the document to validate is nil.
+var ErrNilDocument = errors.New("xsd: nil document")
+
 type compileConfig struct {
 	label        string // label for error messages (e.g. source filename)
 	baseDir      string // base directory for resolving relative includes
@@ -221,10 +228,18 @@ func (v Validator) closeHandler() {
 }
 
 // Validate validates a document against the compiled schema.
-// Individual validation errors are delivered to the ErrorHandler if one
-// is configured. Returns ErrValidationFailed when the document is invalid.
+//
+// It returns ErrNilSchema when the Validator has no compiled schema,
+// ErrNilDocument when doc is nil, and ErrValidationFailed when the document
+// is invalid; it returns nil when the document is valid. Individual
+// validation errors are delivered to the ErrorHandler if one is configured.
+// A nil ctx is normalized to context.Background().
 // (libxml2: xmlSchemaValidateDoc)
-func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
+func (v Validator) Validate(ctx context.Context, doc *helium.Document) error { //nolint:contextcheck
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	cfg := v.cfg
 	if cfg == nil {
 		cfg = &validateConfig{}
@@ -235,8 +250,19 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 		handler = helium.NilErrorHandler{}
 	}
 
+	// Close the handler on every exit path, including the nil guards below,
+	// so a closable ErrorHandler (e.g. helium.ErrorCollector) is not leaked.
+	defer v.closeHandler()
+
+	if v.schema == nil {
+		return ErrNilSchema
+	}
+
+	if doc == nil {
+		return ErrNilDocument
+	}
+
 	valid := validateDocument(ctx, doc, v.schema, cfg, handler)
-	v.closeHandler()
 
 	if valid {
 		return nil
