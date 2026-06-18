@@ -1133,6 +1133,21 @@ func getAttrOpt(elem *helium.Element, name string) (string, bool) {
 	return strings.TrimSpace(attr.Value()), true
 }
 
+// getUnqualifiedAttrOpt returns the value and presence of an UNQUALIFIED
+// (no-namespace) attribute. RELAX NG structural attributes such as
+// datatypeLibrary are always unqualified, so a foreign-namespaced attribute
+// sharing the local name (e.g. f:datatypeLibrary) must not be mistaken for the
+// RELAX NG attribute. Foreign attributes are removed during simplification
+// (spec §§4.1, 4.3) before datatypeLibrary inheritance is computed, so they
+// must not affect the inherited library.
+func getUnqualifiedAttrOpt(elem *helium.Element, name string) (string, bool) {
+	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
+	if !ok {
+		return "", false
+	}
+	return strings.TrimSpace(attr.Value()), true
+}
+
 // getAncestorNS walks up the RNG element tree to find the ns attribute.
 // An explicit ns="" on an ancestor stops the walk (empty namespace).
 func getAncestorNS(node *helium.Element) string {
@@ -1160,19 +1175,21 @@ func getAncestorNS(node *helium.Element) string {
 // declared anywhere (on the element or an ancestor), so callers can tell an
 // explicit empty reset from a truly-absent library.
 func getDatatypeLibrary(node *helium.Element) (string, bool) {
-	// Check the element itself first.
-	if lib, ok := getAttrOpt(node, "datatypeLibrary"); ok {
+	// Check the element itself first. Only the UNQUALIFIED datatypeLibrary
+	// counts: a foreign-namespaced f:datatypeLibrary is removed during
+	// simplification and must not reset an inherited library.
+	if lib, ok := getUnqualifiedAttrOpt(node, "datatypeLibrary"); ok {
 		return lib, true
 	}
 	// Walk up parents, stopping at the nearest ancestor that declares the
-	// attribute (even if empty).
+	// (unqualified) attribute (even if empty).
 	current := node.Parent()
 	for current != nil {
 		elem, ok := current.(*helium.Element)
 		if !ok {
 			break
 		}
-		if lib, has := getAttrOpt(elem, "datatypeLibrary"); has {
+		if lib, has := getUnqualifiedAttrOpt(elem, "datatypeLibrary"); has {
 			return lib, true
 		}
 		current = elem.Parent()

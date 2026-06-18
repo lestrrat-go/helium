@@ -152,6 +152,51 @@ func TestLengthFacetsNonStringDatatype(t *testing.T) {
 	})
 }
 
+// TestForeignDatatypeLibraryIgnored covers a namespace bug: a foreign-namespaced
+// f:datatypeLibrary attribute must NOT be mistaken for the RELAX NG
+// datatypeLibrary attribute. Foreign attributes are removed during
+// simplification (spec §§4.1, 4.3) before datatypeLibrary inheritance is
+// computed, so a foreign f:datatypeLibrary="" must not reset an inherited XSD
+// library. A genuine unqualified datatypeLibrary="" still resets to the
+// built-in library.
+func TestForeignDatatypeLibraryIgnored(t *testing.T) {
+	t.Parallel()
+
+	const xsdLib = "http://www.w3.org/2001/XMLSchema-datatypes"
+
+	t.Run("foreign datatypeLibrary is ignored", func(t *testing.T) {
+		t.Parallel()
+		// The grammar declares the XSD library. The foreign f:datatypeLibrary=""
+		// on the <data> element must be ignored, so type="integer" still
+		// resolves against the inherited XSD library and validates an integer.
+		schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0"
+    xmlns:f="urn:example:foreign"
+    datatypeLibrary="` + xsdLib + `">
+  <data type="integer" f:datatypeLibrary=""/>
+</element>`
+
+		err := validateWith(t, schema, `<a>42</a>`)
+		require.NoError(t, err, `foreign f:datatypeLibrary="" must not reset the inherited XSD library; integer must validate`)
+
+		err = validateWith(t, schema, `<a>notanint</a>`)
+		require.Error(t, err, `non-integer must still be rejected under the inherited XSD library`)
+	})
+
+	t.Run("unqualified datatypeLibrary empty resets to builtin", func(t *testing.T) {
+		t.Parallel()
+		// A genuine unqualified datatypeLibrary="" resets to the built-in
+		// library, where "integer" is not a recognized datatype, so the bare
+		// integer value must be rejected.
+		schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0"
+    datatypeLibrary="` + xsdLib + `">
+  <data type="integer" datatypeLibrary=""/>
+</element>`
+
+		err := validateWith(t, schema, `<a>42</a>`)
+		require.Error(t, err, `unqualified datatypeLibrary="" resets to the built-in library where "integer" is unknown`)
+	})
+}
+
 // TestAttrRepeatXMLWhitespaceTokenize covers issue C: the attribute-repetition
 // token list must split on XML whitespace only (#x20, #x9, #xA, #xD), not all
 // Unicode whitespace. An NBSP-separated value is a single token and must not be
