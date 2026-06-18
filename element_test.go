@@ -19,6 +19,12 @@ func mustCreateText(t *testing.T, doc *helium.Document, text []byte) *helium.Tex
 	return n
 }
 
+func mustCreateComment(t *testing.T, doc *helium.Document, text []byte) *helium.Comment {
+	t.Helper()
+	n := doc.CreateComment(text)
+	return n
+}
+
 func TestElementTree(t *testing.T) {
 	t.Parallel()
 	doc := helium.NewDefaultDocument()
@@ -288,6 +294,119 @@ func TestTextAddSiblingMergeUnlinks(t *testing.T) {
 
 	requireNoCycle(t, dst)
 	requireNoCycle(t, src)
+}
+
+func TestTextAddChildSelfRejected(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	root := mustCreateElement(t, doc, "root")
+	txt := mustCreateText(t, doc, []byte("hello"))
+	require.NoError(t, root.AddChild(txt))
+
+	// Self-merge must be rejected by the shared guard, not silently double the
+	// text content via the text-merge fast path.
+	err := txt.AddChild(txt)
+	require.Error(t, err, "Text.AddChild(self) must be rejected")
+	require.EqualError(t, err, "cannot add a node as a child of itself or one of its descendants")
+
+	require.Equal(t, []byte("hello"), txt.Content(), "content must not be doubled")
+	require.Nil(t, txt.FirstChild(), "text must not gain a child")
+	require.Equal(t, txt, root.FirstChild(), "tree must not be corrupted")
+
+	requireNoCycle(t, root)
+}
+
+func TestTextAddChildMergeUnlinks(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	dst := mustCreateElement(t, doc, "dst")
+	src := mustCreateElement(t, doc, "src")
+	target := mustCreateText(t, doc, []byte("foo"))
+	incoming := mustCreateText(t, doc, []byte("bar"))
+
+	require.NoError(t, dst.AddChild(target), "target starts under dst")
+	require.NoError(t, src.AddChild(incoming), "incoming starts under src")
+
+	// Merging an already-linked text node via AddChild must auto-unlink it from
+	// src before merging its content into target.
+	require.NoError(t, target.AddChild(incoming), "text merge succeeds")
+
+	require.Equal(t, []byte("foobar"), target.Content(), "content merged")
+	require.Nil(t, src.FirstChild(), "incoming detached from src")
+	require.Nil(t, src.LastChild(), "incoming detached from src")
+	require.Nil(t, incoming.Parent(), "incoming has no stale parent")
+	require.Nil(t, incoming.PrevSibling(), "incoming has no stale prev")
+	require.Nil(t, incoming.NextSibling(), "incoming has no stale next")
+
+	requireNoCycle(t, dst)
+	requireNoCycle(t, src)
+}
+
+func TestCommentAddChildSelfRejected(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	root := mustCreateElement(t, doc, "root")
+	comment := mustCreateComment(t, doc, []byte("note"))
+	require.NoError(t, root.AddChild(comment))
+
+	// Self-merge must be rejected by the shared guard, not silently double the
+	// comment content via the comment-merge fast path.
+	err := comment.AddChild(comment)
+	require.Error(t, err, "Comment.AddChild(self) must be rejected")
+	require.EqualError(t, err, "cannot add a node as a child of itself or one of its descendants")
+
+	require.Equal(t, []byte("note"), comment.Content(), "content must not be doubled")
+	require.Nil(t, comment.FirstChild(), "comment must not gain a child")
+	require.Equal(t, comment, root.FirstChild(), "tree must not be corrupted")
+
+	requireNoCycle(t, root)
+}
+
+func TestCommentAddChildMergeUnlinks(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	dst := mustCreateElement(t, doc, "dst")
+	src := mustCreateElement(t, doc, "src")
+	target := mustCreateComment(t, doc, []byte("foo"))
+	incoming := mustCreateComment(t, doc, []byte("bar"))
+
+	require.NoError(t, dst.AddChild(target), "target starts under dst")
+	require.NoError(t, src.AddChild(incoming), "incoming starts under src")
+
+	// Merging an already-linked comment node via AddChild must auto-unlink it
+	// from src before merging its content into target.
+	require.NoError(t, target.AddChild(incoming), "comment merge succeeds")
+
+	require.Equal(t, []byte("foobar"), target.Content(), "content merged")
+	require.Nil(t, src.FirstChild(), "incoming detached from src")
+	require.Nil(t, src.LastChild(), "incoming detached from src")
+	require.Nil(t, incoming.Parent(), "incoming has no stale parent")
+	require.Nil(t, incoming.PrevSibling(), "incoming has no stale prev")
+	require.Nil(t, incoming.NextSibling(), "incoming has no stale next")
+
+	requireNoCycle(t, dst)
+	requireNoCycle(t, src)
+}
+
+func TestCDATAAddChildRejected(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	cdata := doc.CreateCDATASection([]byte("payload"))
+
+	// CDATASection has no content-merge path; AddChild is always rejected and
+	// must never corrupt the node, including for a self-insertion.
+	err := cdata.AddChild(cdata)
+	require.Error(t, err, "CDATASection.AddChild must be rejected")
+
+	require.Equal(t, []byte("payload"), cdata.Content(), "content must be untouched")
+	require.Nil(t, cdata.FirstChild(), "cdata must not gain a child")
+
+	requireNoCycle(t, cdata)
 }
 
 func TestReplaceWithLinkedNode(t *testing.T) {

@@ -302,8 +302,14 @@ func wouldCreateCycle(parent, cur Node) bool {
 	return false
 }
 
-func addChild(n MutableNode, cur Node) error {
-	pdn := n.baseDocNode()
+// addChildPreflight runs the shared self/cycle guard and auto-unlink that every
+// AddChild path must perform before relinking. It returns a non-nil error when
+// the operation must be rejected; on success cur is detached from any previous
+// position and safe to splice in. Leaf AddChild overrides (Text, Comment, ...)
+// reuse this so their content-merge fast paths cannot bypass the guard: a node
+// must not be merged into itself, and an already-linked incoming node must be
+// unlinked from its old parent first.
+func addChildPreflight(n MutableNode, cur Node) error {
 	cdn := cur.baseDocNode()
 
 	// Cycle guard: a node may not be inserted into itself, nor into one of
@@ -319,6 +325,17 @@ func addChild(n MutableNode, cur Node) error {
 		if cmn, ok := cur.(MutableNode); ok {
 			UnlinkNode(cmn)
 		}
+	}
+
+	return nil
+}
+
+func addChild(n MutableNode, cur Node) error {
+	pdn := n.baseDocNode()
+	cdn := cur.baseDocNode()
+
+	if err := addChildPreflight(n, cur); err != nil {
+		return err
 	}
 
 	l := pdn.lastChild

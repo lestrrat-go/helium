@@ -55,7 +55,14 @@ func newComment(b []byte) *Comment {
 }
 
 func (n *Comment) AddChild(cur Node) error {
+	// Run the shared self/cycle guard and auto-unlink BEFORE the comment-merge
+	// fast path. Otherwise comment.AddChild(comment) would double its own
+	// content, and merging an already-linked comment node would copy its
+	// content while leaving it linked under its old parent.
 	if t, ok := cur.(*Comment); ok {
+		if err := addChildPreflight(n, cur); err != nil {
+			return err
+		}
 		return n.AppendText(t.content)
 	}
 	return ErrInvalidOperation
@@ -172,7 +179,14 @@ func newText(b []byte) *Text {
 }
 
 func (n *Text) AddChild(cur Node) error {
+	// Run the shared self/cycle guard and auto-unlink BEFORE the text-merge
+	// fast path. Otherwise txt.AddChild(txt) would double its own content, and
+	// merging an already-linked text node would copy its content while leaving
+	// it linked under its old parent.
 	if t, ok := cur.(*Text); ok {
+		if err := addChildPreflight(n, cur); err != nil {
+			return err
+		}
 		return n.AppendText(t.content)
 	}
 	return ErrInvalidOperation
