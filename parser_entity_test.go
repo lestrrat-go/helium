@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -208,8 +209,14 @@ func TestUndeclaredEntityFatal(t *testing.T) {
 	// and no parameter-entity references, is a fatal well-formedness error.
 	xml := `<r>&bogus;</r>`
 
-	_, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 	require.Error(t, err, "undeclared entity with no DTD must be fatal")
+	require.Nil(t, doc, "no document should be returned on a fatal error")
+	require.ErrorIs(t, err, helium.ErrUndeclaredEntity, "error must be the undeclared-entity sentinel")
+
+	var pe helium.ErrParseError
+	require.True(t, errors.As(err, &pe), "error must be an ErrParseError")
+	require.Equal(t, helium.ErrorLevelFatal, pe.Level, "undeclared entity must be a fatal-level error")
 }
 
 func TestEntityDepthLimit(t *testing.T) {
