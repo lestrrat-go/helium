@@ -24,15 +24,8 @@ type DocOrderCache struct {
 	rootCache map[helium.Node]helium.Node
 }
 
-// cachedRoot returns the DocumentRoot for n, using the rootCache to avoid
-// repeated parent-chain walks.
-func (c *DocOrderCache) cachedRoot(n helium.Node) helium.Node {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.cachedRootLocked(n)
-}
-
-// cachedRootLocked is the body of cachedRoot; the caller must hold c.mu.
+// cachedRootLocked returns the DocumentRoot for n, using the rootCache to
+// avoid repeated parent-chain walks. The caller must hold c.mu.
 func (c *DocOrderCache) cachedRootLocked(n helium.Node) helium.Node {
 	if c.rootCache == nil {
 		c.rootCache = make(map[helium.Node]helium.Node)

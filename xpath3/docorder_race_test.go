@@ -10,7 +10,7 @@ import (
 
 // A single DocOrderCache shared across concurrent Evaluate calls must not race
 // on its internal maps. Run under `go test -race` to catch concurrent map
-// writes in BuildFrom/computeSortKey/cachedRoot.
+// writes in BuildFrom/computeSortKey/cachedRootLocked.
 func TestDocOrderCache_ConcurrentEvaluate(t *testing.T) {
 	const xml = `<root>
 		<a><b/><c/></a>
@@ -32,10 +32,10 @@ func TestDocOrderCache_ConcurrentEvaluate(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 	errs := make([]error, goroutines)
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		go func(idx int) {
 			defer wg.Done()
-			for j := 0; j < 50; j++ {
+			for range 50 {
 				_, evalErr := eval.Evaluate(t.Context(), compiled, doc)
 				if evalErr != nil {
 					errs[idx] = evalErr
