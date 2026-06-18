@@ -78,10 +78,7 @@ func splitXSDYear(s string) (int, string, error) {
 	if neg {
 		year = -year
 	}
-	// Year 0000 is not supported; reject with FODT0001.
-	if year == 0 {
-		return 0, "", &XPathError{Code: errCodeFODT0001, Message: "year zero is not supported"}
-	}
+	// XSD 1.1: year 0000 is valid (and is a leap year), so it is accepted here.
 	// Reject years outside Go's time.Time representable range.
 	// time.Date wraps silently for extreme years; cap at ±999,999,999.
 	if year > 999_999_999 || year < -999_999_999 {
