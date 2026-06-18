@@ -983,7 +983,7 @@ func featureSupported(feature string) bool {
 
 func yearComponentValueSupported(value string) bool {
 	switch value {
-	case "support negative year", "support year above 9999":
+	case "support negative year", "support year above 9999", "support year zero":
 		return true
 	}
 	return false
