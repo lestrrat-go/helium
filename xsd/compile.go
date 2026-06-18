@@ -108,6 +108,35 @@ func (c *compiler) allowsRedefine(kind redefineKind, qn QName) bool {
 	return true
 }
 
+// consumeRedefineTarget validates a redefine override's (kind, name) against
+// the Phase-A key set and consumes it, BEFORE the override child is parsed and
+// regardless of whether the name currently exists in the schema map. It reports
+// a duplicate (and returns false) when the target was not loaded in Phase A or
+// has already been consumed by an earlier override; otherwise it marks the name
+// consumed and returns true so the caller may parse the override. This closes
+// the gap where allowsRedefine only ran under the existing-name branch, letting
+// an override of a name ABSENT from the redefined schema be accepted silently.
+func (c *compiler) consumeRedefineTarget(ctx context.Context, elem *helium.Element, kind redefineKind, qn QName, component, kindDesc string) bool {
+	if c.allowsRedefine(kind, qn) {
+		return true
+	}
+	c.reportDuplicateComponent(ctx, elem, component, kindDesc, qn)
+	return false
+}
+
+// redefineConsumed reports whether the override of (kind, name) was already
+// validated and consumed by the redefine override loop (consumeRedefineTarget).
+// The named-component parsers consult it so a pre-authorized override does not
+// re-trigger their own duplicate-name report, while a non-redefine duplicate
+// (c.redefine == nil, or a name the loop did not consume) still reports.
+func (c *compiler) redefineConsumed(kind redefineKind, qn QName) bool {
+	if c.redefine == nil {
+		return false
+	}
+	_, ok := c.redefine.seen[kind][qn]
+	return ok
+}
+
 // defaultMaxImportDepth bounds xs:import recursion depth (not a flat
 // import count), so a modest value is enough to terminate adversarial
 // namespace-cycling chains while leaving generous headroom for real

@@ -860,6 +860,359 @@ func TestRedefine(t *testing.T) {
 
 		require.Contains(t, compileErrors(t, mainPath), "does already exist")
 	})
+
+	// dupOverrideKinds covers duplicate override children for each redefinable
+	// component kind. Two override children naming the same Phase-A component
+	// must be rejected: the first consumes the Phase-A name, the second is a
+	// duplicate.
+	dupOverrideKinds := []struct {
+		name     string
+		baseFile string
+		base     string
+		mainFile string
+		main     string
+	}{
+		{
+			name:     "complexType",
+			baseFile: "base-dup-ct.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="ctType">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`,
+			mainFile: "main-dup-ct.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-dup-ct.xsd">
+    <xs:complexType name="ctType">
+      <xs:complexContent>
+        <xs:extension base="ctType">
+          <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+    <xs:complexType name="ctType">
+      <xs:complexContent>
+        <xs:extension base="ctType">
+          <xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="root" type="ctType"/>
+</xs:schema>`,
+		},
+		{
+			name:     "group",
+			baseFile: "base-dup-grp.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="grp">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:group>
+</xs:schema>`,
+			mainFile: "main-dup-grp.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-dup-grp.xsd">
+    <xs:group name="grp">
+      <xs:sequence>
+        <xs:group ref="grp"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:group>
+    <xs:group name="grp">
+      <xs:sequence>
+        <xs:group ref="grp"/>
+        <xs:element name="c" type="xs:string"/>
+      </xs:sequence>
+    </xs:group>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:group ref="grp"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+		{
+			name:     "attributeGroup",
+			baseFile: "base-dup-ag.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="ag">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`,
+			mainFile: "main-dup-ag.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-dup-ag.xsd">
+    <xs:attributeGroup name="ag">
+      <xs:attributeGroup ref="ag"/>
+      <xs:attribute name="b" type="xs:string"/>
+    </xs:attributeGroup>
+    <xs:attributeGroup name="ag">
+      <xs:attributeGroup ref="ag"/>
+      <xs:attribute name="c" type="xs:string"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:attributeGroup ref="ag"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+	}
+
+	for _, tc := range dupOverrideKinds {
+		t.Run("duplicate_override_"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			writeFile(t, tc.baseFile, tc.base)
+			mainPath := writeFile(t, tc.mainFile, tc.main)
+			require.Contains(t, compileErrors(t, mainPath), "does already exist")
+		})
+	}
+
+	// absentTargetKinds covers a redefine override naming a component that is
+	// ABSENT from the redefined schema (but present in the INCLUDING schema). It
+	// must be rejected: only components loaded from the redefined file (Phase A)
+	// are redefinable, not pre-existing main-schema declarations.
+	absentTargetKinds := []struct {
+		name     string
+		baseFile string
+		base     string
+		mainFile string
+		main     string
+	}{
+		{
+			name:     "simpleType",
+			baseFile: "base-absent-st.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseOnly">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`,
+			mainFile: "main-absent-st.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="localOnly">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+  <xs:redefine schemaLocation="base-absent-st.xsd">
+    <xs:simpleType name="localOnly">
+      <xs:restriction base="localOnly">
+        <xs:maxLength value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="root" type="localOnly"/>
+</xs:schema>`,
+		},
+		{
+			name:     "complexType",
+			baseFile: "base-absent-ct.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="baseOnly">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`,
+			mainFile: "main-absent-ct.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="localOnly">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:redefine schemaLocation="base-absent-ct.xsd">
+    <xs:complexType name="localOnly">
+      <xs:complexContent>
+        <xs:extension base="localOnly">
+          <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="root" type="localOnly"/>
+</xs:schema>`,
+		},
+		{
+			name:     "group",
+			baseFile: "base-absent-grp.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="baseOnly">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:group>
+</xs:schema>`,
+			mainFile: "main-absent-grp.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="localOnly">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:group>
+  <xs:redefine schemaLocation="base-absent-grp.xsd">
+    <xs:group name="localOnly">
+      <xs:sequence>
+        <xs:group ref="localOnly"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:group>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:group ref="localOnly"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+		{
+			name:     "attributeGroup",
+			baseFile: "base-absent-ag.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="baseOnly">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`,
+			mainFile: "main-absent-ag.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="localOnly">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+  <xs:redefine schemaLocation="base-absent-ag.xsd">
+    <xs:attributeGroup name="localOnly">
+      <xs:attributeGroup ref="localOnly"/>
+      <xs:attribute name="b" type="xs:string"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:attributeGroup ref="localOnly"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+	}
+
+	for _, tc := range absentTargetKinds {
+		t.Run("absent_target_rejected_"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			writeFile(t, tc.baseFile, tc.base)
+			mainPath := writeFile(t, tc.mainFile, tc.main)
+			require.Contains(t, compileErrors(t, mainPath), "does already exist")
+		})
+	}
+
+	// validSingleKinds covers a single valid redefine of each kind compiling
+	// clean — the positive counterpart to the duplicate/absent rejections.
+	validSingleKinds := []struct {
+		name     string
+		baseFile string
+		base     string
+		mainFile string
+		main     string
+	}{
+		{
+			name:     "complexType",
+			baseFile: "base-valid-ct.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="ctType">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`,
+			mainFile: "main-valid-ct.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-valid-ct.xsd">
+    <xs:complexType name="ctType">
+      <xs:complexContent>
+        <xs:extension base="ctType">
+          <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="root" type="ctType"/>
+</xs:schema>`,
+		},
+		{
+			name:     "simpleType",
+			baseFile: "base-valid-st.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="stType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`,
+			mainFile: "main-valid-st.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-valid-st.xsd">
+    <xs:simpleType name="stType">
+      <xs:restriction base="stType">
+        <xs:maxLength value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="root" type="stType"/>
+</xs:schema>`,
+		},
+		{
+			name:     "group",
+			baseFile: "base-valid-grp.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="grp">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:group>
+</xs:schema>`,
+			mainFile: "main-valid-grp.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-valid-grp.xsd">
+    <xs:group name="grp">
+      <xs:sequence>
+        <xs:group ref="grp"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:group>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:group ref="grp"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+		{
+			name:     "attributeGroup",
+			baseFile: "base-valid-ag.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="ag">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`,
+			mainFile: "main-valid-ag.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-valid-ag.xsd">
+    <xs:attributeGroup name="ag">
+      <xs:attributeGroup ref="ag"/>
+      <xs:attribute name="b" type="xs:string"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType><xs:attributeGroup ref="ag"/></xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+	}
+
+	for _, tc := range validSingleKinds {
+		t.Run("valid_single_"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			writeFile(t, tc.baseFile, tc.base)
+			mainPath := writeFile(t, tc.mainFile, tc.main)
+			require.Empty(t, compileErrors(t, mainPath))
+		})
+	}
 }
 
 func TestFacetConsistency(t *testing.T) {

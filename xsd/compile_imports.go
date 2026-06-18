@@ -205,6 +205,29 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	return err
 }
 
+// snapshotKeys captures the current key set of a component map so a later
+// delta (newKeysSince) can isolate the keys added between two points.
+func snapshotKeys[V any](m map[QName]V) map[QName]struct{} {
+	keys := make(map[QName]struct{}, len(m))
+	for qn := range m {
+		keys[qn] = struct{}{}
+	}
+	return keys
+}
+
+// newKeysSince returns the keys present in m but absent from before, i.e. the
+// components added since the snapshot was taken.
+func newKeysSince[V any](m map[QName]V, before map[QName]struct{}) map[QName]struct{} {
+	added := make(map[QName]struct{})
+	for qn := range m {
+		if _, existed := before[qn]; existed {
+			continue
+		}
+		added[qn] = struct{}{}
+	}
+	return added
+}
+
 // loadRedefine loads a schema via xs:redefine and processes override children.
 // It works like xs:include (merging original declarations) but then applies
 // redefinitions for complexType, simpleType, group, and attributeGroup children.
@@ -266,6 +289,15 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
 
+	// Snapshot the component-name sets per kind BEFORE Phase A. The including
+	// (main) schema's root declarations are already registered at this point,
+	// so taking the snapshot after Phase A would wrongly treat pre-existing
+	// main-schema components as redefinable. Only names ACTUALLY loaded from the
+	// redefined schema (afterKeys - beforeKeys) may be overridden.
+	beforeTypes := snapshotKeys(c.schema.types)
+	beforeGroups := snapshotKeys(c.schema.groups)
+	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
+
 	// Parse the included schema's declarations into the current compiler.
 	if err := c.parseSchemaChildren(ctx, incRoot); err != nil {
 		c.schema.elemFormQualified = savedElemForm
@@ -277,24 +309,16 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	}
 
 	// Phase B: Process redefine children (overrides). Each override may replace
-	// the same-named component loaded in Phase A exactly once. Snapshot the
-	// Phase-A keys per kind so the duplicate-name checks are suppressed only for
-	// those specific names, consumed once each — not globally. An override that
-	// targets a name not loaded in Phase A, or repeats a name, is reported as a
-	// duplicate.
+	// the same-named component loaded in Phase A exactly once. Compute the
+	// Phase-A keys per kind as (afterKeys - beforeKeys) so the duplicate-name
+	// checks are suppressed only for the components actually loaded by the
+	// redefined schema, consumed once each — not globally and not for
+	// pre-existing main-schema components. An override that targets a name not
+	// loaded in Phase A, or repeats a name, is reported as a duplicate.
 	phaseAKeys := map[redefineKind]map[QName]struct{}{
-		redefineKindType:      make(map[QName]struct{}, len(c.schema.types)),
-		redefineKindGroup:     make(map[QName]struct{}, len(c.schema.groups)),
-		redefineKindAttrGroup: make(map[QName]struct{}, len(c.schema.attrGroups)),
-	}
-	for qn := range c.schema.types {
-		phaseAKeys[redefineKindType][qn] = struct{}{}
-	}
-	for qn := range c.schema.groups {
-		phaseAKeys[redefineKindGroup][qn] = struct{}{}
-	}
-	for qn := range c.schema.attrGroups {
-		phaseAKeys[redefineKindAttrGroup][qn] = struct{}{}
+		redefineKindType:      newKeysSince(c.schema.types, beforeTypes),
+		redefineKindGroup:     newKeysSince(c.schema.groups, beforeGroups),
+		redefineKindAttrGroup: newKeysSince(c.schema.attrGroups, beforeAttrGroups),
 	}
 	c.redefine = &redefineState{
 		phaseAKeys: phaseAKeys,
@@ -318,6 +342,12 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
+			// Validate and consume the override target before any parse side
+			// effects: it must name a type loaded from the redefined schema
+			// (Phase A) and may be overridden only once.
+			if !c.consumeRedefineTarget(ctx, elem, redefineKindType, qn, "complexType", "A global type definition") {
+				continue
+			}
 			origType := c.schema.types[qn]
 			if err := c.parseNamedComplexType(ctx, elem); err != nil {
 				c.schema.elemFormQualified = savedElemForm
@@ -344,6 +374,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
+			if !c.consumeRedefineTarget(ctx, elem, redefineKindType, qn, "simpleType", "A global type definition") {
+				continue
+			}
 			origType := c.schema.types[qn]
 			if err := c.parseNamedSimpleType(ctx, elem); err != nil {
 				c.schema.elemFormQualified = savedElemForm
@@ -367,6 +400,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
+			if !c.consumeRedefineTarget(ctx, elem, redefineKindGroup, qn, "group", "A global model group definition") {
+				continue
+			}
 			origGroup := c.schema.groups[qn]
 			// Snapshot existing groupRefs keys.
 			existingRefs := make(map[*ModelGroup]bool, len(c.groupRefs))
@@ -403,9 +439,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 			// This case writes c.schema.attrGroups directly (bypassing
 			// parseNamedAttributeGroup), so enforce the redefine duplicate rule
 			// here: the override must target a Phase-A attribute group and may
-			// consume it only once.
-			if _, exists := c.schema.attrGroups[qn]; exists && !c.allowsRedefine(redefineKindAttrGroup, qn) {
-				c.reportDuplicateComponent(ctx, elem, "attributeGroup", "A global attribute group definition", qn)
+			// consume it only once. A target absent from Phase A or repeated is
+			// reported and skipped.
+			if !c.consumeRedefineTarget(ctx, elem, redefineKindAttrGroup, qn, "attributeGroup", "A global attribute group definition") {
 				continue
 			}
 			origAttrs := c.schema.attrGroups[qn]

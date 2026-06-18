@@ -38,9 +38,9 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 			return err
 		}
 		qn := QName{Local: name, NS: c.schema.targetNamespace}
-		// An xs:redefine override may replace the same-named group loaded from
-		// the redefined schema exactly once.
-		if _, exists := c.schema.groups[qn]; exists && !c.allowsRedefine(redefineKindGroup, qn) {
+		// An xs:redefine override that was validated and consumed by the redefine
+		// loop is pre-authorized and skips the report.
+		if _, exists := c.schema.groups[qn]; exists && !c.redefineConsumed(redefineKindGroup, qn) {
 			c.reportDuplicateComponent(ctx, elem, "group", "A global model group definition", qn)
 			return nil
 		}
@@ -57,9 +57,9 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
-	// An xs:redefine override may replace the same-named attribute group
-	// loaded from the redefined schema exactly once.
-	if _, exists := c.schema.attrGroups[qn]; exists && !c.allowsRedefine(redefineKindAttrGroup, qn) {
+	// An xs:redefine override that was validated and consumed by the redefine
+	// loop is pre-authorized and skips the report.
+	if _, exists := c.schema.attrGroups[qn]; exists && !c.redefineConsumed(redefineKindAttrGroup, qn) {
 		c.reportDuplicateComponent(ctx, elem, "attributeGroup", "A global attribute group definition", qn)
 		return nil
 	}
