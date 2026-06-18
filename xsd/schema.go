@@ -171,6 +171,7 @@ type IDConstraint struct {
 	Fields     []string          // XPath field expressions
 	Refer      string            // for keyref: the name of the referenced key/unique
 	Namespaces map[string]string // prefix → URI from the schema document (for XPath evaluation)
+	Line       int               // source line of the constraint element (for error reporting)
 
 	SelectorExpr *xpath1.Expression   // pre-compiled selector XPath
 	FieldExprs   []*xpath1.Expression // pre-compiled field XPaths (parallel to Fields)

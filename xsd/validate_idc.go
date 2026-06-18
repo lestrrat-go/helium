@@ -45,6 +45,14 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 		ev := xpath1.NewEvaluator().AdditionalNamespaces(idc.Namespaces)
 		table, err := vc.evaluateIDC(ctx, ev, elem, edecl, idc)
 		if err != nil {
+			// A selector/field XPath that fails to compile or evaluate must NOT be
+			// swallowed: doing so silently disables the constraint and lets an
+			// otherwise-invalid document validate. Report it as a validity error.
+			// (Malformed XPaths are also rejected at schema compile time, so this
+			// path normally fires only on a genuine evaluation failure.)
+			msg := fmt.Sprintf("Failed to evaluate identity-constraint '%s': %s", idc.Name, err)
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+			lastErr = err
 			continue
 		}
 		tables[idc.Name] = table

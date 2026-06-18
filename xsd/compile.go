@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"sort"
 	"strconv"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
@@ -327,7 +328,65 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		c.checkFinalOnSubstGroups(ctx)
 	}
 
+	// Resolve every xs:keyref/@refer against the schema-wide registry of
+	// key/unique constraints. An unresolved refer must be a fatal schema error:
+	// otherwise the keyref is silently skipped at validation time and referential
+	// integrity is never enforced.
+	c.checkKeyRefRefers(ctx)
+
 	return c.schema, nil
+}
+
+// checkKeyRefRefers verifies that every xs:keyref/@refer names a key or unique
+// identity-constraint that exists somewhere in the schema. The XSD scope rules
+// place all identity-constraint names in a single symbol space, so a keyref may
+// refer to a key/unique declared on a different element; the prior per-host
+// resolution missed those and any typo'd or missing refer silently disabled the
+// keyref. A failure here is reported as a fatal schema parser error.
+func (c *compiler) checkKeyRefRefers(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	// Build the set of all declared key/unique constraint local names.
+	keyNames := make(map[string]struct{})
+	for _, edecl := range c.schema.elements {
+		for _, idc := range edecl.IDCs {
+			if idc.Kind == IDCKey || idc.Kind == IDCUnique {
+				keyNames[idc.Name] = struct{}{}
+			}
+		}
+	}
+
+	for _, edecl := range c.schema.elements {
+		for _, idc := range edecl.IDCs {
+			if idc.Kind != IDCKeyRef {
+				continue
+			}
+			// Resolve a possibly-qualified refer to its local part, matching the
+			// validation-time lookup which compares on local name.
+			referLocal := idc.Refer
+			if i := strings.IndexByte(referLocal, ':'); i >= 0 {
+				referLocal = referLocal[i+1:]
+			}
+			if referLocal == "" {
+				msg := fmt.Sprintf("The keyref identity-constraint '%s' has no 'refer' attribute naming a key or unique.", idc.Name)
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(
+					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
+					helium.ErrorLevelFatal))
+				c.errorCount++
+				continue
+			}
+			if _, ok := keyNames[referLocal]; ok {
+				continue
+			}
+			msg := fmt.Sprintf("The keyref identity-constraint '%s' references the unknown key or unique '%s'.", idc.Name, idc.Refer)
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(
+				schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
+				helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+	}
 }
 
 // parseSchemaChildren parses the children of an xs:schema element.

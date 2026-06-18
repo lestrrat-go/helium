@@ -167,6 +167,8 @@ engine, which RE2 cannot. A pattern that is not a valid XSD regular expression i
 reported as a schema parser error (`The value '…' is not a valid regular
 expression.`); its `compiledPatterns` entry stays nil and is skipped at validation.
 
+**Compile-time IDC checks:** a malformed `xs:selector`/`xs:field` `@xpath` is a fatal schema parser error (`parseIDConstraint` → `reportIDCXPathError`) rather than a silently-dropped `xpath1.Compile` failure that would disable the whole constraint. After all elements are parsed, `checkKeyRefRefers` (in `compileSchema`) resolves every `xs:keyref/@refer` against a schema-wide set of key/unique constraint names (identity-constraint names share one symbol space, so a keyref may refer to a key/unique on a different element) and raises a fatal error for an unknown/empty refer. At validation time, an IDC whose selector/field XPath fails to evaluate is reported as a validity error (`Failed to evaluate identity-constraint '…'`), not swallowed.
+
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):
   1. Evaluate selector XPath → node set
