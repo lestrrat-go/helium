@@ -341,6 +341,12 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		seen:       make(map[redefineKind]map[QName]struct{}),
 	}
 	defer func() { c.redefine = nil }()
+
+	// The override children below come from the REDEFINING (main) schema, not
+	// the redefined (base) schema loaded in Phase A. Restore c.includeFile to
+	// the redefining file's label so duplicate-override diagnostics report the
+	// correct source file and line; Phase A above needed the base label.
+	c.includeFile = savedIncludeFile
 	for child := range helium.Children(redefineElem) {
 		if child.Type() != helium.ElementNode {
 			continue

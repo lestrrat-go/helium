@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -803,10 +804,18 @@ func TestRedefine(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err := xsd.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
 		require.NoError(t, err)
-		_ = collector.Close()
+		require.NoError(t, collector.Close())
 		_, errors := partitionCompileErrors(collector.Errors())
 		return errors
 	}
+
+	// Descriptive phrases used by the duplicate-component diagnostic, keyed by
+	// the redefinable component kind, shared by the exact-assertion tables below.
+	const (
+		descType      = "A global type definition"
+		descGroup     = "A global model group definition"
+		descAttrGroup = "A global attribute group definition"
+	)
 
 	t.Run("single_redefine_compiles_clean", func(t *testing.T) {
 		t.Parallel()
@@ -858,7 +867,15 @@ func TestRedefine(t *testing.T) {
   <xs:element name="code" type="codeType"/>
 </xs:schema>`)
 
-		require.Contains(t, compileErrors(t, mainPath), "does already exist")
+		// The second override (line 9) is the duplicate. CompileFile assigns no
+		// label, so the redefining file resolves to "(string)" — confirming the
+		// override-child diagnostic carries the redefining file's label (not the
+		// redefined base file's), with the duplicate override's line and exactly
+		// one error.
+		want := "(string):9: element simpleType: Schemas parser error : " +
+			"Element '{http://www.w3.org/2001/XMLSchema}simpleType': " +
+			"A global type definition ''codeType does already exist.\n"
+		require.Equal(t, want, compileErrors(t, mainPath))
 	})
 
 	// dupOverrideKinds covers duplicate override children for each redefinable
@@ -871,9 +888,15 @@ func TestRedefine(t *testing.T) {
 		base     string
 		mainFile string
 		main     string
+		line     int    // line of the duplicate (second) override child
+		compName string // expected component local name in the diagnostic
+		compDesc string // descriptive phrase in the diagnostic
 	}{
 		{
 			name:     "complexType",
+			line:     11,
+			compName: "ctType",
+			compDesc: descType,
 			baseFile: "base-dup-ct.xsd",
 			base: `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -905,6 +928,9 @@ func TestRedefine(t *testing.T) {
 		},
 		{
 			name:     "group",
+			line:     10,
+			compName: "grp",
+			compDesc: descGroup,
 			baseFile: "base-dup-grp.xsd",
 			base: `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -936,6 +962,9 @@ func TestRedefine(t *testing.T) {
 		},
 		{
 			name:     "attributeGroup",
+			line:     8,
+			compName: "ag",
+			compDesc: descAttrGroup,
 			baseFile: "base-dup-ag.xsd",
 			base: `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -968,7 +997,16 @@ func TestRedefine(t *testing.T) {
 			t.Parallel()
 			writeFile(t, tc.baseFile, tc.base)
 			mainPath := writeFile(t, tc.mainFile, tc.main)
-			require.Contains(t, compileErrors(t, mainPath), "does already exist")
+			// The duplicate override child belongs to the REDEFINING (main)
+			// schema, so its diagnostic must carry that file's label, not the
+			// redefined base file's. CompileFile assigns no label, so the
+			// redefining file resolves to "(string)". Assert the exact single
+			// error: correct label, the duplicate override's line, and no
+			// follow-on diagnostics.
+			want := "(string):" + strconv.Itoa(tc.line) + ": element " + tc.name +
+				": Schemas parser error : Element '{http://www.w3.org/2001/XMLSchema}" + tc.name +
+				"': " + tc.compDesc + " ''" + tc.compName + " does already exist.\n"
+			require.Equal(t, want, compileErrors(t, mainPath))
 		})
 	}
 
@@ -982,9 +1020,13 @@ func TestRedefine(t *testing.T) {
 		base     string
 		mainFile string
 		main     string
+		line     int    // line of the absent-target override child
+		compDesc string // descriptive phrase in the diagnostic
 	}{
 		{
 			name:     "simpleType",
+			line:     7,
+			compDesc: descType,
 			baseFile: "base-absent-st.xsd",
 			base: `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -1010,6 +1052,8 @@ func TestRedefine(t *testing.T) {
 		},
 		{
 			name:     "complexType",
+			line:     7,
+			compDesc: descType,
 			baseFile: "base-absent-ct.xsd",
 			base: `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -1037,6 +1081,8 @@ func TestRedefine(t *testing.T) {
 		},
 		{
 			name:     "group",
+			line:     7,
+			compDesc: descGroup,
 			baseFile: "base-absent-grp.xsd",
 			base: `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -1065,6 +1111,8 @@ func TestRedefine(t *testing.T) {
 		},
 		{
 			name:     "attributeGroup",
+			line:     7,
+			compDesc: descAttrGroup,
 			baseFile: "base-absent-ag.xsd",
 			base: `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -1096,7 +1144,15 @@ func TestRedefine(t *testing.T) {
 			t.Parallel()
 			writeFile(t, tc.baseFile, tc.base)
 			mainPath := writeFile(t, tc.mainFile, tc.main)
-			require.Contains(t, compileErrors(t, mainPath), "does already exist")
+			// The override targets "localOnly", a component present only in the
+			// REDEFINING (main) schema (absent from the redefined base). It must
+			// be rejected with the redefining file's label (CompileFile assigns
+			// none, so "(string)"), the override child's line, and exactly one
+			// error with no follow-on diagnostics.
+			want := "(string):" + strconv.Itoa(tc.line) + ": element " + tc.name +
+				": Schemas parser error : Element '{http://www.w3.org/2001/XMLSchema}" + tc.name +
+				"': " + tc.compDesc + " ''localOnly does already exist.\n"
+			require.Equal(t, want, compileErrors(t, mainPath))
 		})
 	}
 
@@ -1250,7 +1306,7 @@ func TestRedefine(t *testing.T) {
   <xs:element name="root" type="T"/>
 </xs:schema>`,
 			overrideTag: "complexType",
-			compDesc:    "A global type definition",
+			compDesc:    descType,
 		},
 		{
 			name:     "complexType_redefined_by_simpleType",
@@ -1272,7 +1328,7 @@ func TestRedefine(t *testing.T) {
   <xs:element name="root" type="T"/>
 </xs:schema>`,
 			overrideTag: "simpleType",
-			compDesc:    "A global type definition",
+			compDesc:    descType,
 		},
 	}
 
@@ -1281,11 +1337,12 @@ func TestRedefine(t *testing.T) {
 			t.Parallel()
 			writeFile(t, tc.baseFile, tc.base)
 			mainPath := writeFile(t, tc.mainFile, tc.main)
-			// The diagnostic file label is the redefined schema's resolved
-			// location (schemaDisplayLoc). CompileFile labels the main schema by
-			// its basename, so Dir is "." and the location resolves to the bare
-			// base-schema file name.
-			want := tc.baseFile + ":4: element " + tc.overrideTag +
+			// The override child belongs to the REDEFINING (main) schema, so its
+			// cross-kind rejection diagnostic carries that file's label, not the
+			// redefined base file's. CompileFile assigns no label, so the
+			// redefining file resolves to "(string)". The override is on line 4
+			// (line 1 xml decl, 2 xs:schema, 3 xs:redefine, 4 the override).
+			want := "(string):4: element " + tc.overrideTag +
 				": Schemas parser error : Element '{http://www.w3.org/2001/XMLSchema}" + tc.overrideTag +
 				"': " + tc.compDesc + " ''T does already exist.\n"
 			require.Equal(t, want, compileErrors(t, mainPath))
