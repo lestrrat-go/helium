@@ -599,8 +599,12 @@ func normalizeMapKey(key AtomicValue) mapKey {
 	}
 
 	// Normalize duration types: xs:duration, xs:yearMonthDuration, xs:dayTimeDuration
-	// that have equal values should be the same key
-	if tn == TypeDuration || tn == TypeYearMonthDuration || tn == TypeDayTimeDuration {
+	// that have equal values should be the same key. Schema-derived durations carry
+	// a custom TypeName whose BaseType is a built-in duration ancestor, so consult
+	// BaseType as well to fold those against an equal built-in duration key.
+	if tn == TypeDuration || tn == TypeYearMonthDuration || tn == TypeDayTimeDuration ||
+		key.BaseType == TypeDuration || key.BaseType == TypeYearMonthDuration ||
+		key.BaseType == TypeDayTimeDuration {
 		tn = TypeDuration
 	}
 
@@ -628,7 +632,11 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		months := durationToRat(v, true)
 		secs := durationToRat(v, false)
 		canon := months.RatString() + "|" + secs.RatString()
-		return mapKey{typeName: tn, value: canon}
+		// The Go value is unambiguously a duration, so fold every duration-derived
+		// key (built-in or schema-derived through any number of levels) to
+		// TypeDuration. This catches schema types whose BaseType is itself another
+		// custom duration type and never resolves to a built-in duration above.
+		return mapKey{typeName: TypeDuration, value: canon}
 	default:
 		return mapKey{typeName: tn, value: key.Value}
 	}

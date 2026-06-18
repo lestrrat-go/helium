@@ -256,7 +256,7 @@ func TestMapItem(t *testing.T) {
 		require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
 	})
 
-	t.Run("arithmetic fractional duration dedups in constructor", func(t *testing.T) {
+	t.Run("equivalent duration keys collapse in NewMap index", func(t *testing.T) {
 		parsed, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
 		require.NoError(t, err)
 		arith := xpath3.AtomicValue{
@@ -267,8 +267,13 @@ func TestMapItem(t *testing.T) {
 			{Key: parsed, Value: xpath3.SingleInteger(1)},
 			{Key: arith, Value: xpath3.SingleInteger(2)},
 		})
-		// Both keys share a value-space key, so the later entry is indexed for
-		// both and a lookup with either key resolves to it.
+		// NewMap is the low-level constructor and does NOT enforce XPath map
+		// duplicate-key semantics (XQDY0137); that is enforced by the map
+		// constructor expression before NewMap is reached. Here both entries
+		// share a value-space key: NewMap retains both rows (Size stays 2) but
+		// its lookup index collapses them so the last-indexed entry wins for
+		// both keys.
+		require.Equal(t, 2, m.Size())
 		v, ok := m.Get(parsed)
 		require.True(t, ok)
 		require.Equal(t, int64(2), v.Get(0).(xpath3.AtomicValue).IntegerVal())
@@ -326,6 +331,47 @@ func TestMapItem(t *testing.T) {
 		v, ok := m.Get(derived)
 		require.True(t, ok)
 		require.Equal(t, int64(7), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("schema-derived duration key matches built-in duration", func(t *testing.T) {
+		// A schema-derived atomic carries a custom TypeName whose BaseType is a
+		// built-in duration ancestor. It must fold to xs:duration via BaseType so
+		// it shares a key with an equal built-in dayTimeDuration value.
+		builtin, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		derivedVal, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		derived := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myDTD",
+			BaseType: xpath3.TypeDayTimeDuration,
+			Value:    derivedVal.Value,
+		}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: builtin, Value: xpath3.SingleInteger(11)},
+		})
+		v, ok := m.Get(derived)
+		require.True(t, ok)
+		require.Equal(t, int64(11), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("built-in duration key matches schema-derived duration", func(t *testing.T) {
+		// The reverse direction: a schema-derived duration is the stored key and a
+		// built-in duration is the lookup key. Both must fold to xs:duration.
+		derivedVal, err := xpath3.CastFromString("P1Y2M", xpath3.TypeYearMonthDuration)
+		require.NoError(t, err)
+		derived := xpath3.AtomicValue{
+			TypeName: "Q{urn:test}myYMD",
+			BaseType: xpath3.TypeYearMonthDuration,
+			Value:    derivedVal.Value,
+		}
+		builtin, err := xpath3.CastFromString("P1Y2M", xpath3.TypeYearMonthDuration)
+		require.NoError(t, err)
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: derived, Value: xpath3.SingleInteger(13)},
+		})
+		v, ok := m.Get(builtin)
+		require.True(t, ok)
+		require.Equal(t, int64(13), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
 }
 
