@@ -96,6 +96,12 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		if ent.checked == 0 {
 			ent.checked = 2
 		}
+		// Cache only the expansion bytes, never the per-reference fixed cost:
+		// entityCheck adds entityFixedCost on top of expandedSize for every
+		// reference. sizeBefore is captured after this reference's own
+		// entityCheck (which already paid the fixed cost), and external content
+		// is charged via entityCheckBytes (no fixed cost), so the delta here is
+		// pure bytes.
 		ent.expandedSize = pctx.sizeentcopy - sizeBefore + int64(len(ent.content))
 		ent.MarkChecked()
 
@@ -714,6 +720,19 @@ func (ctx *parserCtx) entityCheck(ent sax.Entity, size int) error {
 		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, entityFixedCost)
 	}
 
+	return ctx.entityCheckLimits()
+}
+
+// entityCheckBytes charges raw expansion bytes to the amplification counters
+// WITHOUT adding entityFixedCost. The per-reference fixed cost is charged once
+// in parseReference (via entityCheck); external content read by
+// parseExternalEntityPrivate must not pay it a second time.
+func (ctx *parserCtx) entityCheckBytes(size int) error {
+	ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, int64(size))
+	return ctx.entityCheckLimits()
+}
+
+func (ctx *parserCtx) entityCheckLimits() error {
 	// Absolute ceiling: enforced even when RelaxLimits disables the
 	// amplification-ratio check. A document opting into "relaxed limits"
 	// is asserting that legitimate large entities are OK, not that

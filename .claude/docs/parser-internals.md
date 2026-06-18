@@ -131,16 +131,25 @@ document-end gate.
    - Check predefined (lt, gt, amp, apos, quot)
    - SAX `GetEntity()` callback
    - Document entity table lookup
-2. `entityCheck(ent, size, replacement)` — amplification guard
+2. `entityCheck(ent, size)` — amplification guard
    - Baseline: 1MB free
-   - Fixed cost: 20 bytes per ref
+   - Fixed cost: 20 bytes per ref (charged once per reference)
    - Max amplification: 5× input (disabled with RelaxLimits(true))
    - Already-checked entities use cached `expandedSize`
-3. Parse entity content if needed (`parseBalancedChunkInternal`)
+   - Raw-byte variant `entityCheckBytes(size)` charges expansion bytes WITHOUT the fixed cost, used for external content already charged the fixed cost by `parseReference`
+3. Parse entity content if needed (`parseBalancedChunkInternal`, or `parseExternalEntityPrivate` for external entities)
    - Recursively parse entity text
    - Seed in-scope namespaces from the surrounding element before parsing
    - Fill `ent.firstChild` (parsed nodes)
    - Mark `ent.checked = 2`, cache `ent.expandedSize`
+   - External entities: content is read through a bounded `io.LimitReader` (cap `externalEntityMaxBytes`, 10 MiB in parserctx.go) and the read bytes are charged to `sizeentcopy` via `entityCheckBytes` (raw bytes only, NOT `entityCheck`): `parseReference` already paid the fixed per-reference cost (`entityFixedCost`) for this reference, so charging it again here would double-count it. Repeated references to a near-cap external entity still trip the amplification guard; the running counters propagate into and back out of the nested parse context. `ent.expandedSize` caches the external (plus nested) size for subsequent references.
+
+### External Input Bounds & Lifetime
+
+All bytes pulled from the filesystem (`ctx.fsys`) are byte-capped and the opened `fs.File` is closed promptly, never held open for the lifetime of the parse:
+
+- **External parsed entities** (`parseExternalEntityPrivate` in `parser_entity_decl.go`): capped at `externalEntityMaxBytes` (10 MiB); content over the cap is rejected with an "exceeds maximum size" error. The resolved input is closed once the bounded read completes.
+- **External DTD subset** (`TreeBuilder.ExternalSubset` in `tree_builder.go`): read through `io.LimitReader` with cap `ctx.maxExtDTDSize` (defaults to `MaxExternalDTDSize`); the read is bounded one byte past the cap so a source that under-reports its size is still caught, and the cap is enforced authoritatively against the bytes actually read (Stat size is advisory only). The file is `Close()`d immediately after the bounded read, before the buffered DTD is parsed.
 4. Deliver to SAX
    - `replaceEntities=true`: expand inline and replay parsed node children through SAX (`StartElementNS`/`EndElementNS`, `Characters`, `CDataBlock`, `Comment`, `PI`)
    - `replaceEntities=false`: fire Reference callback only
@@ -152,6 +161,8 @@ SubstitutionType: SubstituteNone(0), SubstituteRef(1), SubstitutePERef(2), Subst
 ```
 
 Expands `&#NNN;`, `&#xHHH;`, `&name;`, `%name;` based on substitution type. Recursion capped at depth > 40.
+
+`parseEntityValue()` stores the literal with general references left unexpanded, but first validates them (`validateEntityValueRefs` in `parser_entity_decl.go`): the value is PE-expanded (parameter entities and their char refs resolved) and the resulting lexical stream is scanned so a malformed general reference re-introduced through a PE (e.g. `%amp;broken` where `%amp;`→`&#38;`→`&` yields `&broken`) is rejected. Direct char refs in the literal are character data and never form a general reference with following text.
 
 ## Tree Builder (SAX→DOM)
 

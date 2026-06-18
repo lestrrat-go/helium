@@ -58,6 +58,12 @@ const (
 	// for any realistic XML workload but blocks the unbounded billion-laughs
 	// path that a hostile document could otherwise exploit.
 	entityHardCeiling int64 = 1_000_000_000 // 1 GB absolute cap, survives RelaxLimits
+	// externalEntityMaxBytes caps the number of bytes read from a single
+	// external parsed entity. Without it, a resolver returning an unbounded
+	// source (e.g. SYSTEM "/dev/zero") would be read via io.ReadAll and exhaust
+	// memory. 10 MiB is generous for any realistic external entity while
+	// blocking the unbounded-read denial-of-service path.
+	externalEntityMaxBytes int64 = 10 * 1024 * 1024 // 10 MiB
 )
 
 const (
