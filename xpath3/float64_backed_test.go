@@ -58,6 +58,52 @@ func TestFloat64BackedNoPanic(t *testing.T) {
 	})
 }
 
+// TestFloatValSchemaDerivedFloatNarrows verifies FloatVal narrows a schema-derived
+// xs:float to single precision even when the backing value is an existing
+// double-precision *FloatValue. 16777217 is the smallest integer not exactly
+// representable as float32; at single precision it rounds to 16777216. Before the
+// fix FloatVal returned the existing *FloatValue unchanged, yielding the
+// precision-53 value 16777217.
+func TestFloatValSchemaDerivedFloatNarrows(t *testing.T) {
+	a := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: NewDouble(16777217)}
+	fv := a.FloatVal()
+	require.NotNil(t, fv)
+	require.Equal(t, uint(PrecisionFloat), fv.Precision())
+	require.Equal(t, 16777216.0, fv.Float64())
+}
+
+// TestAggregateSchemaDerivedFloatWidth verifies fn:max/fn:min preserve xs:float
+// width for a schema-derived xs:float operand. max(($x, xs:float("16777216")))
+// with $x = my:float(16777217) must return an xs:float of 1.6777216E7, not an
+// xs:double of 1.6777217E7. Before the fix promoteForAggregate ignored BaseType and
+// promoted the float64-backed value to xs:double.
+func TestAggregateSchemaDerivedFloatWidth(t *testing.T) {
+	derivedFloat := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: NewDouble(16777217)}
+	builtinFloat := AtomicValue{TypeName: TypeFloat, Value: NewFloat(16777216)}
+
+	check := func(t *testing.T, got Sequence) {
+		t.Helper()
+		require.Equal(t, 1, seqLen(got))
+		av, ok := got.(ItemSlice)[0].(AtomicValue)
+		require.True(t, ok)
+		require.Equal(t, TypeFloat, av.TypeName, "must preserve xs:float width")
+		require.Equal(t, uint(PrecisionFloat), av.FloatVal().Precision())
+		require.Equal(t, 16777216.0, av.ToFloat64())
+	}
+
+	t.Run("max", func(t *testing.T) {
+		got, err := fnMax(t.Context(), []Sequence{ItemSlice{derivedFloat, builtinFloat}})
+		require.NoError(t, err)
+		check(t, got)
+	})
+
+	t.Run("min", func(t *testing.T) {
+		got, err := fnMin(t.Context(), []Sequence{ItemSlice{derivedFloat, builtinFloat}})
+		require.NoError(t, err)
+		check(t, got)
+	})
+}
+
 // TestDistinctValuesSchemaDerivedCollapse verifies that distinct-values folds a
 // schema-derived value with its built-in equivalent via the BaseType-aware fast
 // key, rather than keying solely on TypeName.

@@ -284,8 +284,13 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 	if isIntegerDerived(a.TypeName) && a.TypeName != TypeInteger {
 		return AtomicValue{TypeName: TypeInteger, Value: a.Value}, nil
 	}
-	// User-defined schema types: promote based on the underlying Go value.
+	// User-defined schema types: prefer the value's built-in BaseType when it
+	// names a known XSD type (so e.g. xs:float width is preserved), otherwise
+	// promote based on the underlying Go value.
 	if !IsKnownXSDType(a.TypeName) && a.TypeName != "" {
+		if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+			return PromoteSchemaType(a), nil
+		}
 		switch a.Value.(type) {
 		case int64, *big.Int:
 			return AtomicValue{TypeName: TypeInteger, Value: a.Value}, nil
@@ -302,14 +307,18 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 
 // promoteResult promotes the result of fn:max/fn:min to the widest numeric type.
 func promoteResult(best AtomicValue, widest string) AtomicValue {
+	// Always rebuild an xs:float result through NewFloat, even when best is already
+	// typed xs:float: a schema-derived xs:float can be backed by a double-precision
+	// FloatValue that must be narrowed to single precision.
+	if widest == TypeFloat {
+		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(best.ToFloat64())}
+	}
 	if best.TypeName == widest {
 		return best
 	}
 	switch widest {
 	case TypeDouble:
 		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(best.ToFloat64())}
-	case TypeFloat:
-		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(best.ToFloat64())}
 	case TypeDecimal:
 		if isIntegerDerived(best.TypeName) {
 			if v, ok := best.Value.(int64); ok {

@@ -355,11 +355,18 @@ func (a AtomicValue) DoubleVal() float64 {
 // at the precision implied by the type so callers never panic on a non-pointer
 // backing value.
 func (a AtomicValue) FloatVal() *FloatValue {
+	// A schema-derived xs:float can be backed by a *FloatValue at double
+	// precision (e.g. NewDouble(16777217)). Honor the effective numeric type so
+	// such values are narrowed to single precision rather than returned as-is.
+	singlePrec := a.effectiveNumericType() == TypeFloat
 	if fv, ok := a.Value.(*FloatValue); ok {
+		if singlePrec {
+			return NewFloat(fv.Float64())
+		}
 		return fv
 	}
 	f := a.ToFloat64()
-	if a.effectiveNumericType() == TypeFloat {
+	if singlePrec {
 		return NewFloat(f)
 	}
 	return NewDouble(f)

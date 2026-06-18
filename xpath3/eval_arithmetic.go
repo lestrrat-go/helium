@@ -353,6 +353,10 @@ func evalUnaryExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 		}
 		a = castVal
 	}
+	// Promote schema-derived numerics (custom TypeName with a built-in numeric
+	// BaseType) to their built-in base so the unary type check and negation
+	// below operate on a recognized numeric type.
+	a = PromoteSchemaType(a)
 	if !e.Negate {
 		// Unary plus: type check only, return value unchanged
 		if !isSubtypeOf(a.TypeName, TypeDecimal) && a.TypeName != TypeFloat && a.TypeName != TypeDouble {
