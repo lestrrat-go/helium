@@ -441,20 +441,35 @@ func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 }
 
 func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, error) {
-	if seqLen(seq) == 0 {
+	// Atomize FIRST, then enforce singleton cardinality on the atomized result.
+	// An argument may be an array that flattens to zero, one, or many atomic
+	// values; cardinality must be judged on the atomized count, not the raw
+	// sequence length. We stop after the second atom so a >1 case raises
+	// XPTY0004 here rather than letting a later member's atomization error
+	// (e.g. FOTY0013 from a map) surface instead.
+	var first AtomicValue
+	var count int
+	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
+		count++
+		if count == 1 {
+			first = av
+			return true, nil
+		}
+		return false, nil
+	})
+	if err != nil {
+		return AtomicValue{}, false, err
+	}
+	if count == 0 {
 		return AtomicValue{}, true, nil
 	}
-	if seq.Len() > 1 {
+	if count > 1 {
 		return AtomicValue{}, false, &XPathError{
 			Code:    lexicon.ErrXPTY0004,
 			Message: fmt.Sprintf("%s constructor requires a singleton argument", typeName),
 		}
 	}
-	a, err := AtomizeItem(seq.Get(0))
-	if err != nil {
-		return AtomicValue{}, false, err
-	}
-	return a, false, nil
+	return first, false, nil
 }
 
 func fnXSError(_ context.Context, args []Sequence) (Sequence, error) {

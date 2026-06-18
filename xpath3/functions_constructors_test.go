@@ -1,11 +1,26 @@
 package xpath3_test
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
+
+// requireXPathErrorCode evaluates expr and asserts it fails with a structured
+// XPathError whose Code is exactly want.
+func requireXPathErrorCode(t *testing.T, doc helium.Node, expr, want string) {
+	t.Helper()
+	compiled, err := xpath3.NewCompiler().Compile(expr)
+	require.NoError(t, err)
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+	require.Error(t, err)
+	var xerr *xpath3.XPathError
+	require.True(t, errors.As(err, &xerr), "error must be *xpath3.XPathError, got %T: %v", err, err)
+	require.Equal(t, want, xerr.Code)
+}
 
 // TestXSTokenListCardinality verifies that the list constructors
 // xs:NMTOKENS / xs:IDREFS / xs:ENTITIES enforce a single atomized
@@ -29,6 +44,31 @@ func TestXSTokenListCardinality(t *testing.T) {
 		}
 	})
 
+	t.Run("array atomizing to multiple values rejected", func(t *testing.T) {
+		// An array argument that ATOMIZES to more than one value must be
+		// rejected with XPTY0004 (a cardinality error), not FOTY0013.
+		for _, expr := range []string{
+			`xs:NMTOKENS(["a", "b"])`,
+			`xs:IDREFS(["a", "b"])`,
+			`xs:ENTITIES(["a", "b"])`,
+		} {
+			t.Run(expr, func(t *testing.T) {
+				requireXPathErrorCode(t, doc, expr, "XPTY0004")
+			})
+		}
+	})
+
+	t.Run("empty array returns empty (not an error)", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`count(xs:NMTOKENS([]))`)
+		require.NoError(t, err)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		seq := result.Sequence()
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.Equal(t, int64(0), av.IntegerVal())
+	})
+
 	t.Run("single whitespace-separated arg splits into tokens", func(t *testing.T) {
 		compiled, err := xpath3.NewCompiler().Compile(`count(xs:NMTOKENS("a b c")) eq 3`)
 		require.NoError(t, err)
@@ -39,6 +79,23 @@ func TestXSTokenListCardinality(t *testing.T) {
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.BooleanVal())
 	})
+}
+
+// TestXSScalarConstructorArrayCardinality verifies that scalar constructors,
+// which share atomizeConstructorArg with the list constructors, reject an
+// array argument that atomizes to more than one value with XPTY0004 rather
+// than FOTY0013.
+func TestXSScalarConstructorArrayCardinality(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	for _, expr := range []string{
+		`xs:string(["a", "b"])`,
+		`xs:dateTimeStamp(["2000-01-01T00:00:00Z", "2001-01-01T00:00:00Z"])`,
+	} {
+		t.Run(expr, func(t *testing.T) {
+			requireXPathErrorCode(t, doc, expr, "XPTY0004")
+		})
+	}
 }
 
 // TestXSDateTimeStampWhitespace verifies that xs:dateTimeStamp accepts a
