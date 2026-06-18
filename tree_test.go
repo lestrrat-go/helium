@@ -38,6 +38,44 @@ func TestDocumentElement(t *testing.T) {
 	})
 }
 
+func TestSetDocumentElement(t *testing.T) {
+	t.Run("literal nil returns ErrNilNode", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		err := doc.SetDocumentElement(nil)
+		require.ErrorIs(t, err, helium.ErrNilNode)
+	})
+
+	t.Run("typed nil returns ErrNilNode without panic", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		var root *helium.Element
+		err := doc.SetDocumentElement(root)
+		require.ErrorIs(t, err, helium.ErrNilNode)
+	})
+
+	t.Run("document self-insertion is rejected and leaves doc untouched", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		err := doc.SetDocumentElement(doc)
+		require.Error(t, err)
+		require.Nil(t, doc.Parent(), "rejected insertion must not link the candidate")
+		requireNoCycle(t, doc)
+	})
+
+	t.Run("replace document element with existing descendant", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.AddChild(root))
+
+		child := doc.CreateElement("child")
+		require.NoError(t, root.AddChild(child))
+
+		require.NoError(t, doc.SetDocumentElement(child))
+		require.Equal(t, helium.Node(child), doc.DocumentElement())
+		require.Nil(t, root.Parent())
+		requireNoCycle(t, doc)
+		requireNoCycle(t, child)
+	})
+}
+
 func TestUnlinkNode(t *testing.T) {
 	t.Run("unlink middle child", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()

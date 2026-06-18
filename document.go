@@ -227,11 +227,19 @@ func (d *Document) SetDocumentElement(root MutableNode) error {
 		return nil
 	}
 
-	if root == nil || root.Type() == NamespaceDeclNode {
+	// Reject a nil or typed-nil operand BEFORE any root.Type() dereference so the
+	// call returns ErrNilNode instead of panicking.
+	if isNilNode(root) {
+		return ErrNilNode
+	}
+
+	if root.Type() == NamespaceDeclNode {
 		return nil
 	}
 
-	root.SetParent(d)
+	// Do NOT link root to d here. Let AddChild/Replace perform the linking AFTER
+	// their cycle/self preflight so a rejected insertion leaves the candidate and
+	// the tree untouched.
 	var old Node
 	for old = d.firstChild; old != nil; old = old.NextSibling() {
 		if old.Type() == ElementNode {

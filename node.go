@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/pdebug"
 )
@@ -287,9 +288,64 @@ func (n docnode) LastChild() Node {
 	return n.lastChild
 }
 
+// wouldCreateCycle reports whether installing cur under parent would create a
+// cycle. That happens when cur is the parent itself or an ancestor of the
+// parent: making it a descendant would put a node below itself. Walking
+// parent's ancestor chain (inclusive of parent) and looking for cur covers
+// both cases, including the self-insertion case when cur == parent.
+func wouldCreateCycle(parent, cur Node) bool {
+	cdn := cur.baseDocNode()
+	for anc := parent; anc != nil; anc = anc.Parent() {
+		if anc.baseDocNode() == cdn {
+			return true
+		}
+	}
+	return false
+}
+
+// addChildPreflight runs the shared self/cycle guard and auto-unlink that every
+// AddChild path must perform before relinking. It returns a non-nil error when
+// the operation must be rejected; on success cur is detached from any previous
+// position and safe to splice in. Leaf AddChild overrides (Text, Comment, ...)
+// reuse this so their content-merge fast paths cannot bypass the guard: a node
+// must not be merged into itself, and an already-linked incoming node must be
+// unlinked from its old parent first.
+func addChildPreflight(n MutableNode, cur Node) error {
+	cdn := cur.baseDocNode()
+
+	// Cycle guard: a node may not be inserted into itself, nor into one of
+	// its own descendants (which would make an ancestor a descendant of
+	// itself). This also catches the self-insertion case when n == cur.
+	if wouldCreateCycle(n, cur) {
+		return errors.New("cannot add a node as a child of itself or one of its descendants")
+	}
+
+	// Detach cur from its current parent/sibling chain before relinking, so a
+	// node that already lives elsewhere in a tree cannot remain in two places.
+	// unlinkNode works for every sealed node type, including non-MutableNode
+	// nodes such as NamespaceNodeWrapper, so the detach can never be silently
+	// skipped and leave stale old-parent links behind.
+	if cdn.parent != nil || cdn.prev != nil || cdn.next != nil {
+		unlinkNode(cur)
+	}
+
+	return nil
+}
+
 func addChild(n MutableNode, cur Node) error {
+	// Reject a nil or typed-nil operand BEFORE any baseDocNode() dereference so
+	// the call returns ErrNilNode instead of panicking and leaves the tree
+	// untouched.
+	if isNilNode(cur) {
+		return ErrNilNode
+	}
+
 	pdn := n.baseDocNode()
 	cdn := cur.baseDocNode()
+
+	if err := addChildPreflight(n, cur); err != nil {
+		return err
+	}
 
 	l := pdn.lastChild
 	if l == nil {
@@ -338,8 +394,86 @@ func (n docnode) PrevSibling() Node {
 	return n.prev
 }
 
-func addSibling(n MutableNode, cur Node) error {
+// addSiblingPreflight runs the shared self/cycle guard and auto-unlink that
+// every AddSibling path must perform before relinking. It returns a non-nil
+// error when the operation must be rejected; on success cur is detached from
+// any previous position and safe to splice in. Text.AddSibling reuses this so
+// its text-merge fast path cannot bypass the guard.
+func addSiblingPreflight(n MutableNode, cur Node) error {
 	cdn := cur.baseDocNode()
+
+	// Cycle guard: a sibling of n is installed under n's parent, so the same
+	// self/ancestor rule that protects addChild applies here against the
+	// effective insertion parent. This also rejects cur == n (a node cannot be
+	// its own sibling) since n is its parent's child.
+	if cur.baseDocNode() == n.baseDocNode() || wouldCreateCycle(n.Parent(), cur) {
+		return errors.New("cannot add a node as a sibling of itself or one of its descendants")
+	}
+
+	// Detach cur from its current parent/sibling chain before relinking, so a
+	// node that already lives elsewhere in a tree cannot remain in two places.
+	// unlinkNode works for every sealed node type, including non-MutableNode
+	// nodes such as NamespaceNodeWrapper, so the detach can never be silently
+	// skipped and leave stale old-parent links behind.
+	if cdn.parent != nil || cdn.prev != nil || cdn.next != nil {
+		unlinkNode(cur)
+	}
+
+	return nil
+}
+
+func addSibling(n MutableNode, cur Node) error {
+	// Reject a nil or typed-nil operand BEFORE any baseDocNode() dereference so
+	// the call returns ErrNilNode instead of panicking and leaves the tree
+	// untouched.
+	if isNilNode(cur) {
+		return ErrNilNode
+	}
+
+	cdn := cur.baseDocNode()
+	ndn := n.baseDocNode()
+
+	// Attribute-list semantics: attributes USUALLY live in the owning Element's
+	// properties linked list, NOT in the parent's child list. When n is such a
+	// property attribute, a new sibling must itself be an attribute and the splice
+	// must stay within the attribute chain, never touching firstChild/lastChild.
+	//
+	// But an *Attribute with an *Element parent is not guaranteed to live in that
+	// element's properties chain: public paths (elem.AddChild(attr), a generic
+	// Replace(attr)) can place it in the normal child list instead. Only use
+	// property-list logic when the anchor is genuinely reachable from
+	// ownerElem.properties; otherwise fall through to the generic child-list path.
+	if nAttr, ok := n.(*Attribute); ok {
+		if ownerElem, ok := ndn.parent.(*Element); ok && ownerElem.hasAttributeInProperties(nAttr) {
+			// Reject a non-attribute operand BEFORE the preflight unlink so a
+			// rejected call leaves cur's old tree position untouched.
+			if _, ok := cur.(*Attribute); !ok {
+				return errors.New("cannot add a non-attribute node as a sibling of an attribute")
+			}
+
+			if err := addSiblingPreflight(n, cur); err != nil {
+				return err
+			}
+
+			// Splice cur in only within the attribute sibling chain. Walk to the
+			// tail attribute and append. Never touch parent.firstChild/lastChild:
+			// attributes are not in the owner element's child list.
+			iter := Node(n)
+			for iter.NextSibling() != nil {
+				iter = iter.NextSibling()
+			}
+			idn := iter.baseDocNode()
+			idn.next = cur
+			cdn.prev = iter
+			cdn.parent = ownerElem
+			return nil
+		}
+	}
+
+	if err := addSiblingPreflight(n, cur); err != nil {
+		return err
+	}
+
 	iter := Node(n)
 	for iter != nil {
 		if iter.NextSibling() == nil {
@@ -377,15 +511,43 @@ func UnlinkNode(n MutableNode) {
 	if n == nil {
 		return
 	}
+	unlinkNode(n)
+}
+
+// unlinkNode detaches any [Node] from its parent and sibling chain, operating
+// purely through baseDocNode() pointers. It works for every sealed node type,
+// including those that are NOT MutableNode (e.g. NamespaceNodeWrapper), so any
+// already-linked incoming node can be safely detached before relinking without
+// a MutableNode type assertion that would silently skip or panic.
+func unlinkNode(n Node) {
+	if n == nil {
+		return
+	}
 
 	ndn := n.baseDocNode()
 
+	// Attributes are USUALLY stored in the owning Element's properties linked
+	// list, NOT in the parent's child list. Detach via spliceOutAttribute so the
+	// Element.properties head is repaired and the attribute sibling chain is
+	// patched, without ever touching the parent's firstChild/lastChild. But an
+	// attribute with an *Element parent is not guaranteed to be a property:
+	// public paths (elem.AddChild(attr), a generic Replace(attr)) can place it in
+	// the normal child list instead. Confirm it is actually reachable from
+	// elem.properties before using property-list logic; otherwise fall through to
+	// the generic child-list unlink below.
+	if attr, ok := n.(*Attribute); ok {
+		if elem, ok := ndn.parent.(*Element); ok && elem.hasAttributeInProperties(attr) {
+			elem.spliceOutAttribute(attr)
+			return
+		}
+	}
+
 	if parent := ndn.parent; parent != nil {
 		pdn := parent.baseDocNode()
-		if pdn.firstChild == n {
+		if pdn.firstChild != nil && pdn.firstChild.baseDocNode() == ndn {
 			pdn.firstChild = ndn.next
 		}
-		if pdn.lastChild == n {
+		if pdn.lastChild != nil && pdn.lastChild.baseDocNode() == ndn {
 			pdn.lastChild = ndn.prev
 		}
 	}
@@ -406,9 +568,72 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	if len(nodes) == 0 {
 		return nil
 	}
+
+	// Reject a nil or typed-nil replacement operand BEFORE any baseDocNode()
+	// dereference so the call returns ErrNilNode instead of panicking and
+	// leaves the tree untouched. Validate every operand, not just the first.
+	if slices.ContainsFunc(nodes, isNilNode) {
+		return ErrNilNode
+	}
+
 	cur := nodes[0]
 	cdn := cur.baseDocNode()
 	ndn := n.baseDocNode()
+
+	// Attribute-list semantics: attributes USUALLY live in the owning Element's
+	// properties linked list, NOT in the parent's child list. When n is such a
+	// property attribute, every replacement must itself be an attribute, and the
+	// Element.properties head must be repaired instead of firstChild/lastChild.
+	// Reject a mixed/non-attribute replacement before any unlink/splice so a
+	// rejected call leaves the tree untouched.
+	//
+	// But an *Attribute with an *Element parent is not guaranteed to live in that
+	// element's properties chain: public paths (elem.AddChild(attr), a generic
+	// Replace(attr)) can place it in the normal child list instead. Only use
+	// property-list logic when the attribute is genuinely reachable from
+	// ownerElem.properties; otherwise fall back to the generic child-list splice
+	// so firstChild/lastChild are repaired.
+	nAttr, nIsAttr := n.(*Attribute)
+	ownerElem, _ := ndn.parent.(*Element)
+	attrList := nIsAttr && ownerElem != nil && ownerElem.hasAttributeInProperties(nAttr)
+	if attrList {
+		for _, nn := range nodes {
+			if nn.baseDocNode() == ndn {
+				continue
+			}
+			if _, ok := nn.(*Attribute); !ok {
+				return errors.New("cannot replace an attribute with a non-attribute node")
+			}
+		}
+	}
+
+	// Duplicate-operand guard: the same node cannot appear twice among the
+	// replacements. Splicing it into two positions of the new sibling chain
+	// would corrupt its prev/next links (e.g. b.prev == b). Reject before any
+	// unlink/splice so a rejected call leaves the tree untouched.
+	seen := make(map[*docnode]struct{}, len(nodes))
+	for _, nn := range nodes {
+		dn := nn.baseDocNode()
+		if _, dup := seen[dn]; dup {
+			return errors.New("cannot replace a node with duplicate replacement operands")
+		}
+		seen[dn] = struct{}{}
+	}
+
+	// Cycle guard: each replacement node takes n's place under n's parent, so
+	// installing the parent (or any ancestor of it) below itself would create a
+	// cycle. Reject before any unlink/splice so a rejected call leaves the tree
+	// untouched. n itself is exempt: when n is among the replacements it stays
+	// live in place (handled below as replacedIsInserted).
+	parent := ndn.parent
+	for _, nn := range nodes {
+		if nn.baseDocNode() == ndn {
+			continue
+		}
+		if wouldCreateCycle(parent, nn) {
+			return errors.New("cannot replace a node with one of its own ancestors")
+		}
+	}
 
 	// A replacement node may already be linked into the tree (e.g. replacing a
 	// node with its own sibling). Detach every replacement node from its current
@@ -419,7 +644,10 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		if nn.baseDocNode() == ndn {
 			continue
 		}
-		UnlinkNode(nn.(MutableNode)) //nolint:forcetypeassert
+		// unlinkNode handles every sealed node type, so a non-MutableNode
+		// replacement (e.g. NamespaceNodeWrapper) is detached safely instead of
+		// panicking on a MutableNode force-cast.
+		unlinkNode(nn)
 	}
 
 	// Capture n's following sibling AFTER detaching replacement nodes so it
@@ -431,37 +659,57 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		cdn.prev = ndn.prev
 		ndn.prev.baseDocNode().next = cur
 	}
-	if parent := ndn.parent; parent != nil {
-		pdn := parent.baseDocNode()
-		if pdn.firstChild == n {
-			pdn.firstChild = cur
+	if parent != nil {
+		if attrList {
+			// n is the owner Element's first attribute when properties points at
+			// it; move the head to the first replacement attribute. Never touch
+			// firstChild/lastChild: attributes are not in the child list. cur is
+			// guaranteed an *Attribute here: the attribute-only check above rejected
+			// any non-attribute replacement when n is an attribute.
+			if curAttr, ok := cur.(*Attribute); ok && ownerElem.properties == n {
+				ownerElem.properties = curAttr
+			}
 		}
-		if pdn.lastChild == n {
-			pdn.lastChild = cur
+		if !attrList {
+			pdn := parent.baseDocNode()
+			if pdn.firstChild == n {
+				pdn.firstChild = cur
+			}
+			if pdn.lastChild == n {
+				pdn.lastChild = cur
+			}
 		}
 		cdn.parent = parent
 	}
 
-	// Determine the true last replacement node
-	last := cur.(MutableNode) //nolint:forcetypeassert
+	// Determine the true last replacement node. Operate on baseDocNode() links
+	// directly rather than through MutableNode setters so a non-MutableNode
+	// replacement (e.g. NamespaceNodeWrapper) is spliced safely instead of
+	// panicking on a force-cast.
+	last := cur
+	ldn := cdn
 	for i := 1; i < len(nodes); i++ {
-		c := nodes[i].(MutableNode) //nolint:forcetypeassert
-		c.SetParent(last.Parent())
-		c.SetPrevSibling(last)
-		last.SetNextSibling(c)
+		c := nodes[i]
+		cn := c.baseDocNode()
+		cn.parent = ldn.parent
+		cn.prev = last
+		ldn.next = c
 		last = c
+		ldn = cn
 	}
 
 	// Link last replacement to whatever followed n
-	last.SetNextSibling(afterN)
+	ldn.next = afterN
 	if afterN != nil {
-		afterN.(MutableNode).SetPrevSibling(last) //nolint:forcetypeassert
+		afterN.baseDocNode().prev = last
 	}
 
-	// Update parent's lastChild if n was the last child and we added more nodes
-	if afterN == nil && len(nodes) > 1 {
+	// Update parent's lastChild if n was the last child and we added more nodes.
+	// Skip for the attribute-list case: attributes are not in the child list, so
+	// the parent's lastChild must never be retargeted at an attribute.
+	if !attrList && afterN == nil && len(nodes) > 1 {
 		if parent := cdn.parent; parent != nil {
-			setLastChild(parent.(MutableNode), last) //nolint:forcetypeassert
+			parent.baseDocNode().lastChild = last
 		}
 	}
 
@@ -565,15 +813,24 @@ func (n *node) invalidateQName() {
 	n.qname = ""
 }
 
-func setListDoc(n MutableNode, doc *Document) {
-	if n == nil || n.Type() == NamespaceDeclNode {
+func setListDoc(n Node, doc *Document) {
+	if isNilNode(n) || n.Type() == NamespaceDeclNode {
 		return
 	}
 
-	for cur := Node(n); cur != nil; cur = cur.NextSibling() {
-		if cur.OwnerDocument() != doc {
-			cur.(MutableNode).SetTreeDoc(doc) //nolint:forcetypeassert
+	for cur := n; cur != nil; cur = cur.NextSibling() {
+		if cur.OwnerDocument() == doc {
+			continue
 		}
+		// A non-MutableNode node (e.g. NamespaceNodeWrapper) cannot recurse
+		// through SetTreeDoc; set its document directly via baseDocNode(),
+		// mirroring unlinkNode's force-cast-free approach. MutableNode nodes
+		// still go through SetTreeDoc so their children are walked too.
+		if mn, ok := cur.(MutableNode); ok {
+			mn.SetTreeDoc(doc)
+			continue
+		}
+		cur.baseDocNode().doc = doc
 	}
 }
 
@@ -591,12 +848,12 @@ func setTreeDoc(n MutableNode, doc *Document) {
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
-				setListDoc(child.(MutableNode), doc) //nolint:forcetypeassert
+				setListDoc(child, doc)
 			}
 		}
 	}
 	if child := n.FirstChild(); child != nil {
-		setListDoc(child.(MutableNode), doc) //nolint:forcetypeassert
+		setListDoc(child, doc)
 	}
 	n.SetOwnerDocument(doc)
 }
