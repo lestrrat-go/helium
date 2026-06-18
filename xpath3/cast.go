@@ -47,6 +47,21 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 	}
 
+	// xs:dateTimeStamp carries a mandatory-timezone invariant. AtomicValue is
+	// public and mutable, so a caller can retag a no-timezone xs:dateTime as
+	// TypeDateTimeStamp; enforce the invariant before the identity fast path
+	// rather than trusting the type tag.
+	if targetType == TypeDateTimeStamp && v.TypeName == TypeDateTimeStamp {
+		t, ok := v.Value.(time.Time)
+		if !ok {
+			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: "xs:dateTimeStamp requires a timezone"}
+		}
+		if !HasTimezone(t) {
+			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: "xs:dateTimeStamp requires a timezone"}
+		}
+		return v, nil
+	}
+
 	if v.TypeName == targetType {
 		return v, nil
 	}

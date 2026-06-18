@@ -58,6 +58,43 @@ func TestXSTokenListCardinality(t *testing.T) {
 		}
 	})
 
+	t.Run("non-atomizable later item surfaces FOTY0013", func(t *testing.T) {
+		// A map cannot be atomized (FOTY0013). The whole argument is atomized
+		// FIRST, so the un-atomizable item must surface its error even when it
+		// appears after the second member — it must NOT be masked by the
+		// XPTY0004 cardinality error.
+		for _, expr := range []string{
+			`xs:NMTOKENS(["a", "b", map{"x":"y"}])`,
+			`xs:IDREFS(["a", "b", map{"x":"y"}])`,
+			`xs:ENTITIES(["a", "b", map{"x":"y"}])`,
+		} {
+			t.Run(expr, func(t *testing.T) {
+				requireXPathErrorCode(t, doc, expr, "FOTY0013")
+			})
+		}
+	})
+
+	t.Run("cardinality error names the list type", func(t *testing.T) {
+		// The XPTY0004 message must name the list type (e.g. xs:NMTOKENS),
+		// not the per-token item type (xs:NMTOKEN).
+		for _, tc := range []struct {
+			expr     string
+			listType string
+		}{
+			{`xs:NMTOKENS(("a", "b"))`, "xs:NMTOKENS"},
+			{`xs:IDREFS(("a", "b"))`, "xs:IDREFS"},
+			{`xs:ENTITIES(("a", "b"))`, "xs:ENTITIES"},
+		} {
+			t.Run(tc.expr, func(t *testing.T) {
+				compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+				require.NoError(t, err)
+				_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.listType)
+			})
+		}
+	})
+
 	t.Run("empty array returns empty (not an error)", func(t *testing.T) {
 		compiled, err := xpath3.NewCompiler().Compile(`count(xs:NMTOKENS([]))`)
 		require.NoError(t, err)

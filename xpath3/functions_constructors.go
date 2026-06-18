@@ -87,9 +87,9 @@ func init() {
 	}
 
 	// List types — split by whitespace, produce sequence of item type values
-	registerNS(NSXS, "NMTOKENS", 1, 1, makeXSTokenList(TypeNMTOKEN, reNMTOKEN))
-	registerNS(NSXS, "IDREFS", 1, 1, makeXSTokenList(TypeIDREF, reNCName))
-	registerNS(NSXS, "ENTITIES", 1, 1, makeXSTokenList(TypeENTITY, reNCName))
+	registerNS(NSXS, "NMTOKENS", 1, 1, makeXSTokenList(TypeNMTOKENS, TypeNMTOKEN, reNMTOKEN))
+	registerNS(NSXS, "IDREFS", 1, 1, makeXSTokenList(TypeIDREFS, TypeIDREF, reNCName))
+	registerNS(NSXS, "ENTITIES", 1, 1, makeXSTokenList(TypeENTITIES, TypeENTITY, reNCName))
 
 	// Gregorian date part types
 	for _, entry := range []struct {
@@ -222,9 +222,11 @@ func makeXSStringRestriction(typeName string, validate *regexp.Regexp) func(cont
 }
 
 // makeXSTokenList returns a constructor for xs:NMTOKENS or xs:IDREFS (whitespace-separated list).
-func makeXSTokenList(itemType string, tokenRe *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
+// listType (e.g. xs:NMTOKENS) drives the cardinality/type error message; itemType
+// (e.g. xs:NMTOKEN) drives per-token validation and result construction.
+func makeXSTokenList(listType, itemType string, tokenRe *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		a, empty, err := atomizeConstructorArg(args[0], itemType)
+		a, empty, err := atomizeConstructorArg(args[0], listType)
 		if err != nil {
 			return nil, err
 		}
@@ -430,21 +432,22 @@ func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 }
 
 func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, error) {
-	// Atomize FIRST, then enforce singleton cardinality on the atomized result.
-	// An argument may be an array that flattens to zero, one, or many atomic
-	// values; cardinality must be judged on the atomized count, not the raw
-	// sequence length. We stop after the second atom so a >1 case raises
-	// XPTY0004 here rather than letting a later member's atomization error
-	// (e.g. FOTY0013 from a map) surface instead.
+	// Atomize the whole argument FIRST, then enforce singleton cardinality on
+	// the atomized result. An argument may be an array that flattens to zero,
+	// one, or many atomic values; cardinality must be judged on the atomized
+	// count, not the raw sequence length. Per function-conversion semantics, an
+	// item that cannot be atomized (a map/function → FOTY0013) must surface that
+	// error even when it appears after the second atom, so we atomize to
+	// completion rather than short-circuiting; XPTY0004 cardinality applies only
+	// when atomization succeeds and yields more than one atom.
 	var first AtomicValue
 	var count int
 	err := atomizeStream(seq, func(av AtomicValue) (bool, error) {
 		count++
 		if count == 1 {
 			first = av
-			return true, nil
 		}
-		return false, nil
+		return true, nil
 	})
 	if err != nil {
 		return AtomicValue{}, false, err
