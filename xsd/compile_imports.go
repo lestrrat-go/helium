@@ -315,10 +315,26 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// redefined schema, consumed once each — not globally and not for
 	// pre-existing main-schema components. An override that targets a name not
 	// loaded in Phase A, or repeats a name, is reported as a duplicate.
+	// Split the newly-loaded type keys by declared kind so a Phase-A simpleType
+	// is only redefinable by a simpleType override (and likewise for complex).
+	newTypes := newKeysSince(c.schema.types, beforeTypes)
+	phaseASimpleTypes := make(map[QName]struct{})
+	phaseAComplexTypes := make(map[QName]struct{})
+	for qn := range newTypes {
+		switch c.typeKinds[qn] {
+		case redefineKindComplexType:
+			phaseAComplexTypes[qn] = struct{}{}
+		default:
+			// simpleType (and builtin/anySimpleType fallbacks) are treated as
+			// simple; only an xs:simpleType override may consume them.
+			phaseASimpleTypes[qn] = struct{}{}
+		}
+	}
 	phaseAKeys := map[redefineKind]map[QName]struct{}{
-		redefineKindType:      newKeysSince(c.schema.types, beforeTypes),
-		redefineKindGroup:     newKeysSince(c.schema.groups, beforeGroups),
-		redefineKindAttrGroup: newKeysSince(c.schema.attrGroups, beforeAttrGroups),
+		redefineKindSimpleType:  phaseASimpleTypes,
+		redefineKindComplexType: phaseAComplexTypes,
+		redefineKindGroup:       newKeysSince(c.schema.groups, beforeGroups),
+		redefineKindAttrGroup:   newKeysSince(c.schema.attrGroups, beforeAttrGroups),
 	}
 	c.redefine = &redefineState{
 		phaseAKeys: phaseAKeys,
@@ -345,7 +361,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 			// Validate and consume the override target before any parse side
 			// effects: it must name a type loaded from the redefined schema
 			// (Phase A) and may be overridden only once.
-			if !c.consumeRedefineTarget(ctx, elem, redefineKindType, qn, "complexType", "A global type definition") {
+			if !c.consumeRedefineTarget(ctx, elem, redefineKindComplexType, qn, "complexType", "A global type definition") {
 				continue
 			}
 			origType := c.schema.types[qn]
@@ -374,7 +390,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
-			if !c.consumeRedefineTarget(ctx, elem, redefineKindType, qn, "simpleType", "A global type definition") {
+			if !c.consumeRedefineTarget(ctx, elem, redefineKindSimpleType, qn, "simpleType", "A global type definition") {
 				continue
 			}
 			origType := c.schema.types[qn]
@@ -565,6 +581,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
+		typeKinds:                make(map[QName]redefineKind),
 		itemTypeRefs:             make(map[*TypeDef]QName),
 		chameleonEligible:        make(map[any]struct{}),
 		attrRefs:                 make(map[*AttrUse]QName),

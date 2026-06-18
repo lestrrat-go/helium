@@ -30,6 +30,11 @@ type compiler struct {
 	globalElemSources map[*ElementDecl]elemRefSource
 	// source info for type definitions, used in duplicate attribute errors
 	typeDefSources map[*TypeDef]typeDefSource
+	// typeKinds records, per registered named type QName, whether it was
+	// declared via xs:simpleType or xs:complexType. Both share schema.types,
+	// but redefine must distinguish them so a Phase-A simpleType cannot be
+	// consumed by a complexType override of the same name (and vice versa).
+	typeKinds map[QName]redefineKind
 	// unresolved item type references for list types
 	itemTypeRefs map[*TypeDef]QName
 	// unresolved union member type references
@@ -72,7 +77,12 @@ type compiler struct {
 type redefineKind int
 
 const (
-	redefineKindType redefineKind = iota
+	// redefineKindSimpleType and redefineKindComplexType are tracked
+	// separately so a Phase-A simpleType cannot be consumed by a complexType
+	// override of the same name (or vice versa). They share the same
+	// schema.types map but are distinct redefine targets.
+	redefineKindSimpleType redefineKind = iota
+	redefineKindComplexType
 	redefineKindGroup
 	redefineKindAttrGroup
 )
@@ -209,6 +219,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
+		typeKinds:                make(map[QName]redefineKind),
 		itemTypeRefs:             make(map[*TypeDef]QName),
 		chameleonEligible:        make(map[any]struct{}),
 		attrRefs:                 make(map[*AttrUse]QName),

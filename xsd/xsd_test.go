@@ -1213,6 +1213,84 @@ func TestRedefine(t *testing.T) {
 			require.Empty(t, compileErrors(t, mainPath))
 		})
 	}
+
+	// crossKindRejected covers a redefine override whose component KIND differs
+	// from the Phase-A component it names. A Phase-A simpleType may only be
+	// overridden by a simpleType (and a complexType by a complexType); a
+	// cross-kind override (simpleType→complexType or complexType→simpleType) must
+	// be rejected as a single duplicate-name error with no follow-on diagnostics.
+	// The override element is on line 4 of each main schema (line 1 xml decl,
+	// line 2 xs:schema, line 3 xs:redefine, line 4 the override).
+	crossKindRejected := []struct {
+		name        string
+		baseFile    string
+		base        string
+		mainFile    string
+		main        string
+		overrideTag string // xsd element name of the rejected override
+		compDesc    string // descriptive phrase in the diagnostic
+	}{
+		{
+			name:     "simpleType_redefined_by_complexType",
+			baseFile: "base-xkind-st.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="T">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`,
+			mainFile: "main-xkind-st.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-xkind-st.xsd">
+    <xs:complexType name="T">
+      <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="root" type="T"/>
+</xs:schema>`,
+			overrideTag: "complexType",
+			compDesc:    "A global type definition",
+		},
+		{
+			name:     "complexType_redefined_by_simpleType",
+			baseFile: "base-xkind-ct.xsd",
+			base: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+</xs:schema>`,
+			mainFile: "main-xkind-ct.xsd",
+			main: `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-xkind-ct.xsd">
+    <xs:simpleType name="T">
+      <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="root" type="T"/>
+</xs:schema>`,
+			overrideTag: "simpleType",
+			compDesc:    "A global type definition",
+		},
+	}
+
+	for _, tc := range crossKindRejected {
+		t.Run("cross_kind_rejected_"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			writeFile(t, tc.baseFile, tc.base)
+			mainPath := writeFile(t, tc.mainFile, tc.main)
+			// The diagnostic file label is the redefined schema's resolved
+			// location (schemaDisplayLoc). CompileFile labels the main schema by
+			// its basename, so Dir is "." and the location resolves to the bare
+			// base-schema file name.
+			want := tc.baseFile + ":4: element " + tc.overrideTag +
+				": Schemas parser error : Element '{http://www.w3.org/2001/XMLSchema}" + tc.overrideTag +
+				"': " + tc.compDesc + " ''T does already exist.\n"
+			require.Equal(t, want, compileErrors(t, mainPath))
+		})
+	}
 }
 
 func TestFacetConsistency(t *testing.T) {

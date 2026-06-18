@@ -257,6 +257,15 @@ func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element)
 		return nil
 	}
 
+	// Check for a duplicate global element declaration BEFORE reading the decl
+	// body, so a rejected declaration records no type/element refs that would
+	// produce unrelated follow-on errors.
+	declName := QName{Local: name, NS: c.schema.targetNamespace}
+	if _, exists := c.schema.elements[declName]; exists {
+		c.reportDuplicateComponent(ctx, elem, "element", "A global element declaration", declName)
+		return nil
+	}
+
 	decl, err := c.readElementDecl(ctx, elem, elementDeclReadOptions{
 		name:                   name,
 		namespace:              c.schema.targetNamespace,
@@ -270,12 +279,6 @@ func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element)
 	})
 	if err != nil {
 		return err
-	}
-
-	// Check for duplicate global element declarations.
-	if _, exists := c.schema.elements[decl.Name]; exists {
-		c.reportDuplicateComponent(ctx, elem, "element", "A global element declaration", decl.Name)
-		return nil
 	}
 
 	c.globalElemSources[decl] = elemRefSource{elemName: name, line: elem.Line()}
@@ -292,7 +295,14 @@ func (c *compiler) reportDuplicateComponent(ctx context.Context, elem *helium.El
 	if name.NS != "" {
 		qnDisplay = "'{" + name.NS + "}" + name.Local + "'"
 	}
+	// A duplicate inside an xs:include/xs:redefine reports against that file
+	// (c.includeFile); a top-level (main-schema) duplicate has no includeFile,
+	// so fall back to the compiler's own filename label so the diagnostic keeps
+	// its path prefix instead of starting with ":line:".
 	source := c.includeFile
+	if source == "" {
+		source = c.filename
+	}
 	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(source, elem.Line(),
 		elem.LocalName(), component,
 		kind+" "+qnDisplay+" does already exist."), helium.ErrorLevelFatal))
@@ -372,19 +382,23 @@ func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Elemen
 		return
 	}
 	// Global attributes are always in the target namespace (per spec).
-	au := c.readAttributeUseDecl(ctx, elem, attrUseReadOptions{
-		name: QName{Local: name, NS: c.schema.targetNamespace},
-	})
+	qn := QName{Local: name, NS: c.schema.targetNamespace}
 
-	// Check for a duplicate global attribute declaration. xs:redefine never
-	// targets global attributes, so (mirroring the other named components) only
-	// suppress the report when processing redefine overrides.
-	if _, exists := c.schema.globalAttrs[au.Name]; exists && c.redefine == nil {
-		c.reportDuplicateComponent(ctx, elem, "attribute", "A global attribute declaration", au.Name)
+	// Check for a duplicate global attribute declaration BEFORE parsing the body,
+	// so a rejected declaration records no type/constraint refs that would
+	// produce unrelated follow-on errors. xs:redefine never targets global
+	// attributes, so (mirroring the other named components) only suppress the
+	// report when processing redefine overrides.
+	if _, exists := c.schema.globalAttrs[qn]; exists && c.redefine == nil {
+		c.reportDuplicateComponent(ctx, elem, "attribute", "A global attribute declaration", qn)
 		return
 	}
 
-	c.schema.globalAttrs[au.Name] = au
+	au := c.readAttributeUseDecl(ctx, elem, attrUseReadOptions{
+		name: qn,
+	})
+
+	c.schema.globalAttrs[qn] = au
 }
 
 func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) *AttrUse {

@@ -17,20 +17,23 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 		return fmt.Errorf("xsd: named complexType missing name")
 	}
 
+	qn := QName{Local: name, NS: c.schema.targetNamespace}
+
+	// Check for a duplicate global type BEFORE parsing the body, so a rejected
+	// component leaves no stale refs/state behind that would produce unrelated
+	// follow-on errors. An xs:redefine override that was validated and consumed
+	// by the redefine loop is pre-authorized and skips the report.
+	if _, exists := c.schema.types[qn]; exists && !c.redefineConsumed(redefineKindComplexType, qn) {
+		c.reportDuplicateComponent(ctx, elem, "complexType", "A global type definition", qn)
+		return nil
+	}
+
 	td, err := c.parseComplexType(ctx, elem)
 	if err != nil {
 		return err
 	}
-	td.Name = QName{Local: name, NS: c.schema.targetNamespace}
+	td.Name = qn
 	td.Abstract = getAttr(elem, attrAbstract) == attrValTrue
-
-	// Check for a duplicate global type. An xs:redefine override that was
-	// validated and consumed by the redefine loop is pre-authorized and skips
-	// the report.
-	if _, exists := c.schema.types[td.Name]; exists && !c.redefineConsumed(redefineKindType, td.Name) {
-		c.reportDuplicateComponent(ctx, elem, "complexType", "A global type definition", td.Name)
-		return nil
-	}
 
 	// Parse final attribute with schema default.
 	if hasAttr(elem, attrFinal) {
@@ -41,6 +44,7 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 	}
 
 	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
+	c.typeKinds[td.Name] = redefineKindComplexType
 	c.schema.types[td.Name] = td
 	return nil
 }
@@ -51,19 +55,22 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 		return fmt.Errorf("xsd: named simpleType missing name")
 	}
 
+	qn := QName{Local: name, NS: c.schema.targetNamespace}
+
+	// Check for a duplicate global type BEFORE parsing the body, so a rejected
+	// component leaves no stale refs/state behind that would produce unrelated
+	// follow-on errors. An xs:redefine override that was validated and consumed
+	// by the redefine loop is pre-authorized and skips the report.
+	if _, exists := c.schema.types[qn]; exists && !c.redefineConsumed(redefineKindSimpleType, qn) {
+		c.reportDuplicateComponent(ctx, elem, "simpleType", "A global type definition", qn)
+		return nil
+	}
+
 	td, err := c.parseSimpleType(ctx, elem)
 	if err != nil {
 		return err
 	}
-	td.Name = QName{Local: name, NS: c.schema.targetNamespace}
-
-	// Check for a duplicate global type. An xs:redefine override that was
-	// validated and consumed by the redefine loop is pre-authorized and skips
-	// the report.
-	if _, exists := c.schema.types[td.Name]; exists && !c.redefineConsumed(redefineKindType, td.Name) {
-		c.reportDuplicateComponent(ctx, elem, "simpleType", "A global type definition", td.Name)
-		return nil
-	}
+	td.Name = qn
 
 	// Parse final attribute with schema default.
 	if hasAttr(elem, attrFinal) {
@@ -74,6 +81,7 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 	}
 
 	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
+	c.typeKinds[td.Name] = redefineKindSimpleType
 	c.schema.types[td.Name] = td
 	return nil
 }
