@@ -368,7 +368,12 @@ func (n docnode) PrevSibling() Node {
 	return n.prev
 }
 
-func addSibling(n MutableNode, cur Node) error {
+// addSiblingPreflight runs the shared self/cycle guard and auto-unlink that
+// every AddSibling path must perform before relinking. It returns a non-nil
+// error when the operation must be rejected; on success cur is detached from
+// any previous position and safe to splice in. Text.AddSibling reuses this so
+// its text-merge fast path cannot bypass the guard.
+func addSiblingPreflight(n MutableNode, cur Node) error {
 	cdn := cur.baseDocNode()
 
 	// Cycle guard: a sibling of n is installed under n's parent, so the same
@@ -385,6 +390,16 @@ func addSibling(n MutableNode, cur Node) error {
 		if cmn, ok := cur.(MutableNode); ok {
 			UnlinkNode(cmn)
 		}
+	}
+
+	return nil
+}
+
+func addSibling(n MutableNode, cur Node) error {
+	cdn := cur.baseDocNode()
+
+	if err := addSiblingPreflight(n, cur); err != nil {
+		return err
 	}
 
 	iter := Node(n)
@@ -456,6 +471,19 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	cur := nodes[0]
 	cdn := cur.baseDocNode()
 	ndn := n.baseDocNode()
+
+	// Duplicate-operand guard: the same node cannot appear twice among the
+	// replacements. Splicing it into two positions of the new sibling chain
+	// would corrupt its prev/next links (e.g. b.prev == b). Reject before any
+	// unlink/splice so a rejected call leaves the tree untouched.
+	seen := make(map[*docnode]struct{}, len(nodes))
+	for _, nn := range nodes {
+		dn := nn.baseDocNode()
+		if _, dup := seen[dn]; dup {
+			return errors.New("cannot replace a node with duplicate replacement operands")
+		}
+		seen[dn] = struct{}{}
+	}
 
 	// Cycle guard: each replacement node takes n's place under n's parent, so
 	// installing the parent (or any ancestor of it) below itself would create a

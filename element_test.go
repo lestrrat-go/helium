@@ -92,6 +92,7 @@ func TestAddChildCycleGuard(t *testing.T) {
 
 		err := e.AddChild(e)
 		require.Error(t, err, "AddChild(self) must be rejected")
+		require.EqualError(t, err, "cannot add a node as a child of itself or one of its descendants")
 		require.Nil(t, e.FirstChild(), "tree must not be corrupted")
 		require.Nil(t, e.LastChild(), "tree must not be corrupted")
 		require.Nil(t, e.Parent(), "tree must not be corrupted")
@@ -195,21 +196,188 @@ func TestReplaceCycleGuard(t *testing.T) {
 	requireNoCycle(t, root)
 }
 
-// requireNoCycle verifies the subtree rooted at n is acyclic. It walks n's
-// parent chain (bounded) to confirm n is not its own ancestor, then serializes
-// the subtree: a cyclic child chain would make serialization recurse forever,
-// so a bounded successful serialize confirms the descendants form a finite tree.
+func TestAddSiblingSelfRejected(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	root := mustCreateElement(t, doc, "root")
+	child := mustCreateElement(t, doc, "child")
+	require.NoError(t, root.AddChild(child))
+
+	err := child.AddSibling(child)
+	require.Error(t, err, "AddSibling(self) must be rejected")
+	require.EqualError(t, err, "cannot add a node as a sibling of itself or one of its descendants")
+
+	require.Equal(t, child, root.FirstChild(), "tree must not be corrupted")
+	require.Equal(t, child, root.LastChild(), "tree must not be corrupted")
+	require.Nil(t, child.NextSibling(), "child must not gain a sibling")
+	require.Nil(t, child.PrevSibling(), "child must not gain a sibling")
+
+	requireNoCycle(t, root)
+}
+
+func TestAddSiblingAutoUnlink(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	a := mustCreateElement(t, doc, "a")
+	b := mustCreateElement(t, doc, "b")
+	anchor := mustCreateElement(t, doc, "anchor")
+	moving := mustCreateElement(t, doc, "moving")
+
+	require.NoError(t, a.AddChild(moving), "moving starts under a")
+	require.NoError(t, b.AddChild(anchor), "anchor starts under b")
+
+	// anchor.AddSibling(moving) is a legal move: the auto-unlink preflight must
+	// detach moving from a before splicing it after anchor under b.
+	require.NoError(t, anchor.AddSibling(moving), "moving anchor's sibling succeeds")
+
+	require.Equal(t, b, moving.Parent(), "moving parent is now b")
+	require.Equal(t, moving, anchor.NextSibling(), "moving follows anchor")
+	require.Equal(t, anchor, moving.PrevSibling(), "anchor precedes moving")
+	require.Equal(t, moving, b.LastChild(), "b lastChild is moving")
+	require.Nil(t, a.FirstChild(), "a no longer holds moving")
+	require.Nil(t, a.LastChild(), "a no longer holds moving")
+
+	requireNoCycle(t, b)
+}
+
+func TestTextAddSiblingSelfRejected(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	root := mustCreateElement(t, doc, "root")
+	txt := mustCreateText(t, doc, []byte("hello"))
+	require.NoError(t, root.AddChild(txt))
+
+	// Self-merge must be rejected by the shared guard, not silently double the
+	// text content via the text-merge fast path.
+	err := txt.AddSibling(txt)
+	require.Error(t, err, "Text.AddSibling(self) must be rejected")
+	require.EqualError(t, err, "cannot add a node as a sibling of itself or one of its descendants")
+
+	require.Equal(t, []byte("hello"), txt.Content(), "content must not be doubled")
+	require.Nil(t, txt.NextSibling(), "text must not gain a sibling")
+	require.Nil(t, txt.PrevSibling(), "text must not gain a sibling")
+
+	requireNoCycle(t, root)
+}
+
+func TestTextAddSiblingMergeUnlinks(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	dst := mustCreateElement(t, doc, "dst")
+	src := mustCreateElement(t, doc, "src")
+	target := mustCreateText(t, doc, []byte("foo"))
+	incoming := mustCreateText(t, doc, []byte("bar"))
+
+	require.NoError(t, dst.AddChild(target), "target starts under dst")
+	require.NoError(t, src.AddChild(incoming), "incoming starts under src")
+
+	// Merging an already-linked text node must auto-unlink it from src before
+	// merging its content into target, leaving no dangling link under src.
+	require.NoError(t, target.AddSibling(incoming), "text merge succeeds")
+
+	require.Equal(t, []byte("foobar"), target.Content(), "content merged")
+	require.Nil(t, src.FirstChild(), "incoming detached from src")
+	require.Nil(t, src.LastChild(), "incoming detached from src")
+	require.Nil(t, incoming.Parent(), "incoming has no stale parent")
+	require.Nil(t, incoming.PrevSibling(), "incoming has no stale prev")
+	require.Nil(t, incoming.NextSibling(), "incoming has no stale next")
+
+	requireNoCycle(t, dst)
+	requireNoCycle(t, src)
+}
+
+func TestReplaceWithLinkedNode(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	root := mustCreateElement(t, doc, "root")
+	a := mustCreateElement(t, doc, "a")
+	b := mustCreateElement(t, doc, "b")
+
+	require.NoError(t, root.AddChild(a))
+	require.NoError(t, root.AddChild(b))
+
+	// Replacing a with its own already-linked sibling b is legal: b must be
+	// detached from its current position before taking a's place.
+	require.NoError(t, a.Replace(b), "replacing a with linked sibling b succeeds")
+
+	require.Equal(t, b, root.FirstChild(), "b took a's position")
+	require.Equal(t, b, root.LastChild(), "b is the only child")
+	require.Equal(t, root, b.Parent(), "b parent is root")
+	require.Nil(t, b.NextSibling(), "b has no stale next")
+	require.Nil(t, b.PrevSibling(), "b has no stale prev")
+	require.Nil(t, a.Parent(), "replaced node a is detached")
+	require.Nil(t, a.NextSibling(), "replaced node a is detached")
+	require.Nil(t, a.PrevSibling(), "replaced node a is detached")
+
+	requireNoCycle(t, root)
+}
+
+func TestReplaceDuplicateOperandRejected(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	root := mustCreateElement(t, doc, "root")
+	a := mustCreateElement(t, doc, "a")
+	b := mustCreateElement(t, doc, "b")
+
+	require.NoError(t, root.AddChild(a))
+	require.NoError(t, root.AddChild(b))
+
+	// a.Replace(b, b) names the same node twice; splicing it into two positions
+	// would corrupt its sibling links. It must be rejected before any mutation.
+	err := a.Replace(b, b)
+	require.Error(t, err, "duplicate replacement operands must be rejected")
+	require.EqualError(t, err, "cannot replace a node with duplicate replacement operands")
+
+	require.Equal(t, a, root.FirstChild(), "tree must be untouched")
+	require.Equal(t, b, root.LastChild(), "tree must be untouched")
+	require.Equal(t, b, a.NextSibling(), "a still precedes b")
+	require.Equal(t, a, b.PrevSibling(), "b still follows a (no self-link)")
+	require.Nil(t, b.NextSibling(), "b must not self-link")
+
+	requireNoCycle(t, root)
+}
+
+// requireNoCycle verifies the subtree rooted at n is acyclic using a bounded
+// traversal with a visited-node-identity set. It first walks n's parent chain
+// (bounded) to confirm n is not its own ancestor, then performs a bounded
+// depth-first walk over the descendants and sibling chains, failing if any node
+// is visited twice (a cycle) or if the bound is exceeded. Unlike a serialize-
+// based detector, this never hangs on a cyclic tree.
 func requireNoCycle(t *testing.T, n helium.Node) {
 	t.Helper()
 
-	const limit = 1000
+	const limit = 10000
+
 	steps := 0
 	for anc := n.Parent(); anc != nil; anc = anc.Parent() {
-		require.NotEqual(t, n, anc, "node must not be its own ancestor")
+		require.NotSame(t, n, anc, "node must not be its own ancestor")
 		steps++
 		require.Less(t, steps, limit, "parent chain must be finite")
 	}
 
-	_, err := helium.WriteString(n)
-	require.NoError(t, err, "serializing an acyclic subtree must succeed")
+	visited := make(map[helium.Node]struct{})
+	stack := []helium.Node{n}
+	for len(stack) > 0 {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		_, dup := visited[cur]
+		require.False(t, dup, "subtree must not revisit a node (cycle detected)")
+		visited[cur] = struct{}{}
+
+		require.Less(t, len(visited), limit, "subtree must be finite")
+
+		siblings := 0
+		for child := cur.FirstChild(); child != nil; child = child.NextSibling() {
+			stack = append(stack, child)
+			siblings++
+			require.Less(t, siblings, limit, "sibling chain must be finite")
+		}
+	}
 }

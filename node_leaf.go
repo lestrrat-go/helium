@@ -197,6 +197,13 @@ func (n *Text) AddSibling(cur Node) error {
 		g := pdebug.IPrintf("START Text.AddSibling '%s'", cur.Content())
 		defer g.IRelease("END Text.AddSibling")
 	}
+	// Run the shared self/cycle guard and auto-unlink BEFORE the text-merge
+	// fast path. Otherwise t.AddSibling(t) would double its own content, and
+	// merging an already-linked text node would copy its content while leaving
+	// it linked under its old parent.
+	if err := addSiblingPreflight(n, cur); err != nil {
+		return err
+	}
 	if cur.Type() == TextNode {
 		return n.AppendText(cur.Content())
 	}
