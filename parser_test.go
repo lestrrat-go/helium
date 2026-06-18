@@ -491,6 +491,23 @@ func TestParseExternalEntityMalformedEncoding(t *testing.T) {
 	require.Error(t, err, "malformed UTF-16 external entity must fail rather than inserting U+FFFD")
 }
 
+func TestParseExternalDTDSizeLimit(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "huge.dtd">
+<r/>`
+
+	// An oversized external DTD must be rejected with a parse error rather
+	// than being read whole into memory (potential OOM/hang).
+	oversized := bytes.Repeat([]byte(" "), helium.MaxExternalDTDSize+1)
+	fsys := fstest.MapFS{"huge.dtd": &fstest.MapFile{Data: oversized}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "oversized external DTD must produce a parse error")
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 

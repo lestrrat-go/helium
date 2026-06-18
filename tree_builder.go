@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -15,6 +14,14 @@ import (
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
+
+// MaxExternalDTDSize is the maximum number of bytes read from an external
+// DTD subset. Loading is gated by LoadExternalDTD/ValidateDTD/
+// DefaultDTDAttributes, so an unbounded read of a hostile or pathological
+// source (e.g. /dev/zero) could exhaust memory before any entity or parse
+// limits apply. The DTD is read through a strict byte cap and rejected when
+// it is exceeded.
+const MaxExternalDTDSize = 10 << 20 // 10 MiB
 
 // fileParseInput wraps an os.File as a sax.ParseInput.
 type fileParseInput struct {
@@ -400,10 +407,35 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		resolved = filepath.Join(filepath.Dir(ctx.baseURI), uri)
 	}
 
-	data, err := fs.ReadFile(ctx.fsys, resolved)
+	f, err := ctx.fsys.Open(resolved)
 	if err != nil {
 		// Silently ignore missing external DTDs
 		return nil
+	}
+	defer f.Close()
+
+	// Reject non-regular sources (devices, FIFOs, directories) and oversized
+	// files up front when the size is known. This prevents an unbounded read
+	// of a pathological source such as /dev/zero from exhausting memory.
+	info, err := f.Stat()
+	if err != nil {
+		return nil
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("external DTD is not a regular file")
+	}
+	if info.Size() > MaxExternalDTDSize {
+		return errors.New("external DTD exceeds maximum allowed size")
+	}
+
+	// Read through a strict byte cap. Allow one extra byte so a source that
+	// under-reports (or lies about) its size is still caught here.
+	data, err := io.ReadAll(io.LimitReader(f, MaxExternalDTDSize+1))
+	if err != nil {
+		return nil
+	}
+	if len(data) > MaxExternalDTDSize {
+		return errors.New("external DTD exceeds maximum allowed size")
 	}
 
 	doc := ctx.doc
