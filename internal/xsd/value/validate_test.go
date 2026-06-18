@@ -139,8 +139,13 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			invalid:  []string{"has\ttab", "has\nnewline", "has\rreturn"},
 		},
 		{
+			// NBSP (U+00A0) is NOT XSD whitespace (only space/tab/CR/LF), so a
+			// token may begin, end, or contain runs of NBSP: " abc "
+			// has no leading/trailing XSD whitespace and no double ASCII space,
+			// so it is a valid xs:token. Trimming with Go's Unicode TrimSpace
+			// would wrongly strip the NBSP and reject it.
 			typeName: "token",
-			valid:    []string{"hello world", "single", ""},
+			valid:    []string{"hello world", "single", "", " abc ", "a  b"},
 			invalid:  []string{"has\ttab", "has\nnewline", " leading", "trailing ", "double  space"},
 		},
 		{

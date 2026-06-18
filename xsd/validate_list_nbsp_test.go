@@ -64,6 +64,51 @@ func TestListItemNBSPNotSeparator(t *testing.T) {
 	}
 }
 
+// TestTokenNBSPNotWhitespace covers schema-defined xs:token validation: NBSP
+// (U+00A0) is NOT XSD whitespace, so a value " abc " whose only padding is NBSP
+// has no leading/trailing XSD whitespace and no double ASCII space — it is a
+// valid xs:token. Trimming with Go's Unicode strings.TrimSpace (which treats
+// NBSP as space) would wrongly reject it.
+func TestTokenNBSPNotWhitespace(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:token"/>
+</xs:schema>`
+
+	cases := []struct {
+		name     string
+		instance string
+		valid    bool
+	}{
+		{
+			// NBSP-only padding survives xs:token's collapse facet (NBSP is not XSD
+			// whitespace), leaving a token "<NBSP>abc<NBSP>" with no leading/trailing
+			// XSD whitespace and no double ASCII space, so it is a valid xs:token.
+			name:     "nbsp-padded token valid",
+			instance: `<root>` + nbsp + `abc` + nbsp + `</root>`,
+			valid:    true,
+		},
+	}
+
+	v := compileValidator(t, schema)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.instance))
+			require.NoError(t, err)
+
+			var errs string
+			err = validateWithOutput(t, v, doc, &errs)
+			if tc.valid {
+				require.NoError(t, err, "expected valid, got errors: %s", errs)
+				return
+			}
+			require.Error(t, err, "expected validation error")
+		})
+	}
+}
+
 // TestIDCListItemNBSPNotSeparator covers the IDC list canonical-key path: list
 // item separation there must also use XSD whitespace only, consistent with list
 // validation. The XSD-space forms "5 6" and "+5 06" collide item-by-item in

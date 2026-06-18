@@ -77,8 +77,8 @@ func fixedValueMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 // a union (or itself a list) is compared in the correct value space rather than
 // raw lexical text.
 func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
-	ii := strings.Fields(instance)
-	fi := strings.Fields(fixed)
+	ii := value.XSDFields(instance)
+	fi := value.XSDFields(fixed)
 	if len(ii) != len(fi) {
 		return false
 	}

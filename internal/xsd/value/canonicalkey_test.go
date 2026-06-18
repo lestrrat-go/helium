@@ -222,3 +222,60 @@ func TestCanonicalKeyTimeTimezone(t *testing.T) {
 	require.True(t, okUTC)
 	require.Equal(t, utc, plus, `"11:30:00+01:00" and "10:30:00Z" are the same xs:time instant`)
 }
+
+// TestCanonicalKeyFractionalPrecision verifies that fractional seconds are
+// preserved EXACTLY: two distinct valid lexicals differing only in trailing
+// fractional precision must NOT collide. Holding seconds as a float64 rounded
+// both to the same bits and produced identical keys; an exact rational keeps
+// them distinct.
+func TestCanonicalKeyFractionalPrecision(t *testing.T) {
+	_ = t.Context()
+
+	const lo = "0.1"
+	const hi = "0.1000000000000000000000000000000000001"
+
+	durLo, okDurLo := value.CanonicalKey("PT"+lo+"S", "duration")
+	require.True(t, okDurLo)
+	durHi, okDurHi := value.CanonicalKey("PT"+hi+"S", "duration")
+	require.True(t, okDurHi)
+	require.NotEqual(t, durLo, durHi, "durations differing in trailing fractional seconds must not collide")
+
+	timeLo, okTimeLo := value.CanonicalKey("10:30:0"+lo, "time")
+	require.True(t, okTimeLo)
+	timeHi, okTimeHi := value.CanonicalKey("10:30:0"+hi, "time")
+	require.True(t, okTimeHi)
+	require.NotEqual(t, timeLo, timeHi, "xs:time values differing in trailing fractional seconds must not collide")
+
+	dtLo, okDTLo := value.CanonicalKey("2023-01-15T10:30:0"+lo, "dateTime")
+	require.True(t, okDTLo)
+	dtHi, okDTHi := value.CanonicalKey("2023-01-15T10:30:0"+hi, "dateTime")
+	require.True(t, okDTHi)
+	require.NotEqual(t, dtLo, dtHi, "xs:dateTime values differing in trailing fractional seconds must not collide")
+
+	// Equal-but-differently-spelled fractions must still collide (value identity).
+	dtEqA, _ := value.CanonicalKey("2023-01-15T10:30:00.10", "dateTime")
+	dtEqB, _ := value.CanonicalKey("2023-01-15T10:30:00.1", "dateTime")
+	require.Equal(t, dtEqA, dtEqB, "0.10 and 0.1 fractional seconds are the same value and must collide")
+}
+
+// TestCompareFractionalPrecision verifies the same exact-precision guarantee
+// through the public Compare API for durations and fractional-second date/time
+// types: distinct values must compare non-equal.
+func TestCompareFractionalPrecision(t *testing.T) {
+	_ = t.Context()
+
+	const lo = "0.1"
+	const hi = "0.1000000000000000000000000000000000001"
+
+	durCmp, okDur := value.Compare("PT"+lo+"S", "PT"+hi+"S", "duration")
+	require.True(t, okDur)
+	require.NotEqual(t, 0, durCmp, "durations differing in trailing fractional seconds must not compare equal")
+
+	timeCmp, okTime := value.Compare("10:30:0"+lo, "10:30:0"+hi, "time")
+	require.True(t, okTime)
+	require.Equal(t, -1, timeCmp, "lower fractional second must compare less for xs:time")
+
+	dtCmp, okDT := value.Compare("2023-01-15T10:30:0"+lo, "2023-01-15T10:30:0"+hi, "dateTime")
+	require.True(t, okDT)
+	require.Equal(t, -1, dtCmp, "lower fractional second must compare less for xs:dateTime")
+}

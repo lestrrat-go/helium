@@ -188,11 +188,11 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		// sign to both components and emit a stable signed key consistent with
 		// compareDuration, so e.g. "P1D" and "PT24H" (both 0 months, 86400 seconds)
 		// collide while values with differing month/second components stay distinct.
-		months, seconds := d.months, d.seconds
+		months, seconds := d.months, d.secVal()
 		if d.negative {
-			months, seconds = -months, -seconds
+			months, seconds = -months, new(big.Rat).Neg(seconds)
 		}
-		return fmt.Sprintf("%d|%g", months, seconds), true
+		return fmt.Sprintf("%d|%s", months, seconds.RatString()), true
 	case "decimal", "integer",
 		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
@@ -393,7 +393,7 @@ func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
 	if dt.hasTZ {
 		dt = dt.normalizeToUTC()
 	}
-	return fmt.Sprintf("%s|%d|%d|%d|%d|%g|%t", dt.yearVal().String(), dt.month, dt.day, dt.hour, dt.min, dt.sec, dt.hasTZ), true
+	return fmt.Sprintf("%s|%d|%d|%d|%d|%s|%t", dt.yearVal().String(), dt.month, dt.day, dt.hour, dt.min, dt.secVal().RatString(), dt.hasTZ), true
 }
 
 // CompareDecimal compares two decimal string values using math/big.Rat.
@@ -566,9 +566,24 @@ type xsdDateTime struct {
 	year       *big.Int
 	month, day int
 	hour, min  int
-	sec        float64
-	hasTZ      bool
-	tzMin      int
+	// sec holds the seconds component (including any fractional digits) as an
+	// EXACT rational rather than a float64, so that two distinct valid lexicals
+	// that differ only in trailing fractional precision (e.g. "00.1" vs
+	// "00.1000000000000000000000000000000000001") stay distinct in both Compare
+	// and CanonicalKey instead of colliding through float rounding. A nil sec is
+	// treated as 0 (the year-agnostic g-types never set it).
+	sec   *big.Rat
+	hasTZ bool
+	tzMin int
+}
+
+// secVal returns the seconds component as a *big.Rat, substituting 0 for a nil
+// sec so the date-only and year-agnostic g-types compare consistently.
+func (dt xsdDateTime) secVal() *big.Rat {
+	if dt.sec == nil {
+		return new(big.Rat)
+	}
+	return dt.sec
 }
 
 // yearVal returns the year as a *big.Int, substituting 0 for a nil year so the
@@ -668,14 +683,14 @@ func parseXSDDateTime(s string) (xsdDateTime, bool) {
 	return dt, true
 }
 
-func parseTimeFields(s string) (int, int, float64, string, bool) {
+func parseTimeFields(s string) (int, int, *big.Rat, string, bool) {
 	if len(s) < 8 || s[2] != ':' || s[5] != ':' {
-		return 0, 0, 0, "", false
+		return 0, 0, nil, "", false
 	}
 	hh, err1 := strconv.Atoi(s[0:2])
 	mm, err2 := strconv.Atoi(s[3:5])
 	if err1 != nil || err2 != nil {
-		return 0, 0, 0, "", false
+		return 0, 0, nil, "", false
 	}
 	// Seconds may have fractional part.
 	rest := s[6:]
@@ -688,9 +703,14 @@ func parseTimeFields(s string) (int, int, float64, string, bool) {
 			break
 		}
 	}
-	sec, err := strconv.ParseFloat(rest[:secEnd], 64)
-	if err != nil {
-		return 0, 0, 0, "", false
+	// big.Rat.SetString accepts a leading sign and various forms the seconds
+	// field must not use, so the digit-run scan above (which only admits ASCII
+	// digits and a single '.') has already restricted the repertoire. Parse the
+	// remaining decimal as an exact rational to preserve full fractional
+	// precision.
+	sec, ok := new(big.Rat).SetString(rest[:secEnd])
+	if !ok {
+		return 0, 0, nil, "", false
 	}
 	return hh, mm, sec, rest[secEnd:], true
 }
@@ -1026,13 +1046,7 @@ func compareDateTimeFields(a, b xsdDateTime) int {
 		}
 		return 1
 	}
-	if a.sec < b.sec {
-		return -1
-	}
-	if a.sec > b.sec {
-		return 1
-	}
-	return 0
+	return a.secVal().Cmp(b.secVal())
 }
 
 func compareDateTimeParsed(a, b xsdDateTime) (int, bool) {
@@ -1238,7 +1252,21 @@ func compareGMonthDay(a, b, builtinLocal string) (int, bool) {
 type xsdDuration struct {
 	negative bool
 	months   int
-	seconds  float64
+	// seconds is the accumulated seconds component (days/hours/minutes/seconds,
+	// including fractional seconds) held as an EXACT rational rather than a
+	// float64. This keeps two durations that differ only in trailing fractional
+	// precision (e.g. "PT0.1S" vs "PT0.1000000000000000000000000000000000001S")
+	// distinct in both Compare and CanonicalKey instead of colliding through
+	// float rounding. A nil seconds is treated as 0.
+	seconds *big.Rat
+}
+
+// secVal returns the seconds component as a *big.Rat, substituting 0 for nil.
+func (d xsdDuration) secVal() *big.Rat {
+	if d.seconds == nil {
+		return new(big.Rat)
+	}
+	return d.seconds
 }
 
 func parseXSDDurationValue(s string) (xsdDuration, bool) {
@@ -1277,6 +1305,9 @@ func parseXSDDurationValue(s string) (xsdDuration, bool) {
 		designator := s[numEnd]
 		s = s[numEnd+1:]
 
+		if d.seconds == nil {
+			d.seconds = new(big.Rat)
+		}
 		if !inTime {
 			n, err := strconv.Atoi(numStr)
 			if err != nil {
@@ -1288,7 +1319,7 @@ func parseXSDDurationValue(s string) (xsdDuration, bool) {
 			case 'M':
 				d.months += n
 			case 'D':
-				d.seconds += float64(n) * 86400
+				d.seconds.Add(d.seconds, new(big.Rat).SetInt64(int64(n)*86400))
 			default:
 				return d, false
 			}
@@ -1299,19 +1330,23 @@ func parseXSDDurationValue(s string) (xsdDuration, bool) {
 				if err != nil {
 					return d, false
 				}
-				d.seconds += float64(n) * 3600
+				d.seconds.Add(d.seconds, new(big.Rat).SetInt64(int64(n)*3600))
 			case 'M':
 				n, err := strconv.Atoi(numStr)
 				if err != nil {
 					return d, false
 				}
-				d.seconds += float64(n) * 60
+				d.seconds.Add(d.seconds, new(big.Rat).SetInt64(int64(n)*60))
 			case 'S':
-				f, err := strconv.ParseFloat(numStr, 64)
-				if err != nil {
+				// big.Rat.SetString accepts forms the seconds field must not use,
+				// but the digit-run scan above admits only ASCII digits and a single
+				// '.', so numStr is a plain non-negative decimal. Parse it exactly to
+				// preserve full fractional precision.
+				f, ok := new(big.Rat).SetString(numStr)
+				if !ok {
 					return d, false
 				}
-				d.seconds += f
+				d.seconds.Add(d.seconds, f)
 			default:
 				return d, false
 			}
@@ -1331,18 +1366,18 @@ func compareDuration(a, b string) (int, bool) {
 	}
 
 	// Apply sign.
-	am, as := da.months, da.seconds
+	am, as := da.months, da.secVal()
 	if da.negative {
-		am, as = -am, -as
+		am, as = -am, new(big.Rat).Neg(as)
 	}
-	bm, bs := db.months, db.seconds
+	bm, bs := db.months, db.secVal()
 	if db.negative {
-		bm, bs = -bm, -bs
+		bm, bs = -bm, new(big.Rat).Neg(bs)
 	}
 
 	// Compare month and seconds components independently.
 	monthCmp := intCmp(am, bm)
-	secCmp := floatCmp(as, bs)
+	secCmp := as.Cmp(bs)
 
 	if monthCmp == secCmp {
 		return monthCmp, true
@@ -1359,16 +1394,6 @@ func compareDuration(a, b string) (int, bool) {
 }
 
 func intCmp(a, b int) int {
-	if a < b {
-		return -1
-	}
-	if a > b {
-		return 1
-	}
-	return 0
-}
-
-func floatCmp(a, b float64) int {
 	if a < b {
 		return -1
 	}

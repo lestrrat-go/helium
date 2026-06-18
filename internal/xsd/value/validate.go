@@ -686,7 +686,7 @@ func validateToken(value string) error {
 	if strings.ContainsAny(value, "\t\n\r") {
 		return fmt.Errorf("invalid token")
 	}
-	if value != strings.TrimSpace(value) {
+	if value != trimXSDSpace(value) {
 		return fmt.Errorf("invalid token")
 	}
 	if strings.Contains(value, "  ") {
