@@ -115,7 +115,8 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		if v.TypeName == TypeString {
 			return CastFromString(v.StringVal(), TypeDate)
 		}
-		if v.TypeName == TypeDateTime {
+		// xs:dateTimeStamp is a subtype of xs:dateTime, so it casts to xs:date too.
+		if v.TypeName == TypeDateTime || v.TypeName == TypeDateTimeStamp {
 			t := v.TimeVal()
 			return AtomicValue{TypeName: TypeDate, Value: time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())}, nil
 		}
@@ -146,7 +147,8 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		if v.TypeName == TypeString {
 			return CastFromString(v.StringVal(), TypeTime)
 		}
-		if v.TypeName == TypeDateTime {
+		// xs:dateTimeStamp is a subtype of xs:dateTime, so it casts to xs:time too.
+		if v.TypeName == TypeDateTime || v.TypeName == TypeDateTimeStamp {
 			t := v.TimeVal()
 			loc := t.Location()
 			if !HasTimezone(t) {
@@ -316,6 +318,20 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeDateTime, Value: t}, nil
+	case TypeDateTimeStamp:
+		// xs:dateTimeStamp is xs:dateTime with a mandatory timezone.
+		t, err := parseXSDDateTime(s)
+		if err != nil {
+			var xe *XPathError
+			if errors.As(err, &xe) {
+				return AtomicValue{}, xe
+			}
+			return AtomicValue{}, castError(s, targetType)
+		}
+		if !HasTimezone(t) {
+			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: "xs:dateTimeStamp requires a timezone"}
+		}
+		return AtomicValue{TypeName: TypeDateTimeStamp, Value: t}, nil
 	case TypeTime:
 		t, err := parseXSDTime(s)
 		if err != nil {

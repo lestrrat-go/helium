@@ -151,4 +151,49 @@ func TestXSDateTimeStampSubtype(t *testing.T) {
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.BooleanVal())
 	})
+
+	t.Run("date accepts a dateTimeStamp value", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`xs:date(xs:dateTimeStamp("2000-01-01T00:00:00Z")) eq xs:date("2000-01-01Z")`)
+		require.NoError(t, err)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		seq := result.Sequence()
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, av.BooleanVal())
+	})
+
+	t.Run("time accepts a dateTimeStamp value", func(t *testing.T) {
+		compiled, err := xpath3.NewCompiler().Compile(`xs:time(xs:dateTimeStamp("2000-01-01T00:00:00Z")) eq xs:time("00:00:00Z")`)
+		require.NoError(t, err)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		seq := result.Sequence()
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, av.BooleanVal())
+	})
+}
+
+// TestXSDateTimeStampNodeValue verifies that xs:dateTimeStamp accepts an
+// atomized node value (xs:untypedAtomic). A node whose text content is a valid
+// dateTimeStamp lexical with a timezone succeeds; a node missing the mandatory
+// timezone fails with FORG0001.
+func TestXSDateTimeStampNodeValue(t *testing.T) {
+	t.Run("node value with timezone accepted", func(t *testing.T) {
+		doc := mustParseXML(t, "<root>2000-01-01T00:00:00Z</root>")
+		compiled, err := xpath3.NewCompiler().Compile(`xs:dateTimeStamp(/root) eq xs:dateTimeStamp("2000-01-01T00:00:00Z")`)
+		require.NoError(t, err)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+		require.NoError(t, err)
+		seq := result.Sequence()
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
+		require.True(t, av.BooleanVal())
+	})
+
+	t.Run("node value without timezone rejected", func(t *testing.T) {
+		doc := mustParseXML(t, "<root>2000-01-01T00:00:00</root>")
+		requireXPathErrorCode(t, doc, `xs:dateTimeStamp(/root)`, "FORG0001")
+	})
 }
