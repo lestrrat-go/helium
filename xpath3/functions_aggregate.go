@@ -724,13 +724,16 @@ func distinctValueFastKey(a AtomicValue) (distinctGroup, string, bool) {
 	case isIntegerDerived(et) || et == TypeDecimal:
 		return distinctGroupDecimalInt, "n:" + toRatForCompare(a).RatString(), true
 	case et == TypeFloat:
-		f := float32(a.ToFloat64())
+		// Promote via BaseType so a schema-derived float (custom TypeName, built-in
+		// BaseType, backed by float64/float32/*FloatValue) keys on its effective
+		// value rather than the un-promoted ToFloat64 producing 0.
+		f := float32(PromoteSchemaType(a).ToFloat64())
 		if f == 0 {
 			f = 0
 		}
 		return distinctGroupFloat, "f:" + strconv.FormatUint(uint64(math.Float32bits(f)), 16), true
 	case et == TypeDouble:
-		f := a.ToFloat64()
+		f := PromoteSchemaType(a).ToFloat64()
 		if f == 0 {
 			f = 0
 		}
@@ -805,9 +808,13 @@ func distinctValueEqual(a, b AtomicValue, coll *collationImpl, implicitTZ *time.
 	return ValueCompareWithImplicitTimezone(TokenEq, a, b, implicitTZ)
 }
 
-// isAtomicNaN returns true if the atomic value is a float or double NaN.
+// isAtomicNaN returns true if the atomic value is a float or double NaN. It is
+// BaseType-aware: a schema-derived float/double (custom TypeName whose BaseType
+// names the built-in ancestor) is classified on its effective numeric type so a
+// schema-derived NaN collapses with a built-in NaN.
 func isAtomicNaN(a AtomicValue) bool {
-	if a.TypeName == TypeDouble || a.TypeName == TypeFloat {
+	switch distinctEffectiveType(a) {
+	case TypeDouble, TypeFloat:
 		return a.FloatVal().IsNaN()
 	}
 	return false

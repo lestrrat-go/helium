@@ -359,7 +359,7 @@ func (a AtomicValue) FloatVal() *FloatValue {
 		return fv
 	}
 	f := a.ToFloat64()
-	if a.TypeName == TypeFloat {
+	if a.effectiveNumericType() == TypeFloat {
 		return NewFloat(f)
 	}
 	return NewDouble(f)
@@ -417,9 +417,29 @@ func (a AtomicValue) IsNumeric() bool {
 	return false
 }
 
+// effectiveNumericType resolves the built-in numeric type that governs a value's
+// conversion: the TypeName itself when it is a recognized numeric built-in, else
+// the BaseType of a schema-derived value (custom TypeName whose BaseType names a
+// built-in numeric ancestor). This mirrors PromoteSchemaType's BaseType fallback
+// so schema-derived float/double/decimal/integer values convert correctly.
+func (a AtomicValue) effectiveNumericType() string {
+	if isIntegerDerived(a.TypeName) {
+		return a.TypeName
+	}
+	switch a.TypeName {
+	case TypeDecimal, TypeDouble, TypeFloat:
+		return a.TypeName
+	}
+	if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+		return a.BaseType
+	}
+	return a.TypeName
+}
+
 // ToFloat64 converts any numeric atomic value to float64.
 func (a AtomicValue) ToFloat64() float64 {
-	if isIntegerDerived(a.TypeName) {
+	et := a.effectiveNumericType()
+	if isIntegerDerived(et) {
 		switch v := a.Value.(type) {
 		case int64:
 			return float64(v)
@@ -429,7 +449,7 @@ func (a AtomicValue) ToFloat64() float64 {
 		}
 		return 0
 	}
-	switch a.TypeName {
+	switch et {
 	case TypeDouble, TypeFloat:
 		// xs:double/xs:float atomics are normally backed by *FloatValue, but a
 		// schema-derived double/float (or a value constructed directly) can carry

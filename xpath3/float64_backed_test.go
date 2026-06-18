@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"math"
 	"math/big"
 	"testing"
 
@@ -78,4 +79,83 @@ func TestDistinctValuesSchemaDerivedCollapse(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, seqLen(got))
 	})
+}
+
+// TestFloat64BackedSchemaDerived verifies the numeric accessors resolve the
+// effective numeric type from BaseType for schema-derived float/double atomics
+// (custom TypeName, built-in BaseType) backed by float64, float32, or
+// *FloatValue. Before the fix ToFloat64 was TypeName-only and returned 0 for
+// these, cascading into DoubleVal/FloatVal returning 0.
+func TestFloat64BackedSchemaDerived(t *testing.T) {
+	type backing struct {
+		name  string
+		value interface{}
+	}
+	doubleBackings := []backing{
+		{"float64", float64(2)},
+		{"float32", float32(2)},
+		{"FloatValue", NewDouble(2)},
+	}
+	floatBackings := []backing{
+		{"float64", float64(2)},
+		{"float32", float32(2)},
+		{"FloatValue", NewFloat(2)},
+	}
+
+	t.Run("BaseType xs:double", func(t *testing.T) {
+		for _, b := range doubleBackings {
+			t.Run(b.name, func(t *testing.T) {
+				a := AtomicValue{TypeName: "my:double", BaseType: TypeDouble, Value: b.value}
+				require.Equal(t, 2.0, a.ToFloat64())
+				require.Equal(t, 2.0, a.DoubleVal())
+				fv := a.FloatVal()
+				require.NotNil(t, fv)
+				require.Equal(t, 2.0, fv.Float64())
+				require.Equal(t, uint(PrecisionDouble), fv.Precision())
+			})
+		}
+	})
+
+	t.Run("BaseType xs:float", func(t *testing.T) {
+		for _, b := range floatBackings {
+			t.Run(b.name, func(t *testing.T) {
+				a := AtomicValue{TypeName: "my:float", BaseType: TypeFloat, Value: b.value}
+				require.Equal(t, 2.0, a.ToFloat64())
+				require.Equal(t, 2.0, a.DoubleVal())
+				fv := a.FloatVal()
+				require.NotNil(t, fv)
+				require.Equal(t, 2.0, fv.Float64())
+				// xs:float base must yield single-precision.
+				require.Equal(t, uint(PrecisionFloat), fv.Precision())
+			})
+		}
+	})
+}
+
+// TestDistinctValuesSchemaDerivedDoubleDiscriminates verifies the distinct-values
+// fast key promotes via BaseType so a schema-derived my:double(2) does NOT
+// collapse with the built-in double 0e0: count(distinct-values(($d, 0e0))) == 2.
+// Before the fix the fast key keyed both on the un-promoted ToFloat64() == 0 and
+// reported a single distinct value.
+func TestDistinctValuesSchemaDerivedDoubleDiscriminates(t *testing.T) {
+	d := AtomicValue{TypeName: "my:double", BaseType: TypeDouble, Value: float64(2)}
+	zero := AtomicValue{TypeName: TypeDouble, Value: NewDouble(0)}
+	arg := ItemSlice{d, zero}
+	got, err := fnDistinctValues(t.Context(), []Sequence{arg})
+	require.NoError(t, err)
+	require.Equal(t, 2, seqLen(got))
+}
+
+// TestDistinctValuesSchemaDerivedNaN verifies that a schema-derived NaN (custom
+// TypeName, BaseType xs:double) is recognized as NaN and collapses with a
+// built-in double NaN per op:is-same-key (all NaN are equal). Before the fix
+// isAtomicNaN was TypeName-only, so the schema-derived NaN escaped the NaN
+// branch and was reported as distinct.
+func TestDistinctValuesSchemaDerivedNaN(t *testing.T) {
+	derivedNaN := AtomicValue{TypeName: "my:double", BaseType: TypeDouble, Value: NewDouble(math.NaN())}
+	builtinNaN := AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}
+	arg := ItemSlice{derivedNaN, builtinNaN}
+	got, err := fnDistinctValues(t.Context(), []Sequence{arg})
+	require.NoError(t, err)
+	require.Equal(t, 1, seqLen(got))
 }
