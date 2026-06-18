@@ -181,40 +181,53 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func avgDurations(seq Sequence, family string) (Sequence, error) {
+	count := seqLen(seq)
+
+	if family == familyDurationDT {
+		// Sum and divide dayTime seconds EXACTLY so large or fractional averages
+		// canonicalize precisely (matching the duration*number path).
+		totalSecs := new(big.Rat)
+		for item := range seqItems(seq) {
+			a, _ := AtomizeItem(item)
+			totalSecs.Add(totalSecs, durationToRat(a.DurationVal(), false))
+		}
+		avgSecs := new(big.Rat).Quo(totalSecs, new(big.Rat).SetInt64(int64(count)))
+		negative := avgSecs.Sign() < 0
+		absSecs := avgSecs
+		if negative {
+			absSecs = new(big.Rat).Neg(avgSecs)
+		}
+		secs, frac := durationFromRatSeconds(absSecs)
+		return SingleAtomic(AtomicValue{
+			TypeName: TypeDayTimeDuration,
+			Value:    Duration{Seconds: secs, FracSec: frac, SecRat: absSecs, Negative: negative},
+		}), nil
+	}
+
 	totalMonths := new(big.Int)
-	var totalSeconds float64
 	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		if d.Negative {
 			totalMonths.Sub(totalMonths, big.NewInt(int64(d.Months)))
-			totalSeconds -= d.Seconds
 		} else {
 			totalMonths.Add(totalMonths, big.NewInt(int64(d.Months)))
-			totalSeconds += d.Seconds
 		}
 	}
 	if !totalMonths.IsInt64() {
 		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
-	count := seqLen(seq)
 	// Per XPath F&O spec: months are rounded "half towards positive infinity"
 	// i.e. math.Floor(months + 0.5), matching op:divide-yearMonthDuration behavior.
 	monthsF := float64(totalMonths.Int64()) / float64(count)
 	avgMonths := int(math.Floor(monthsF + 0.5))
-	avgSeconds := totalSeconds / float64(count)
-	negative := avgMonths < 0 || avgSeconds < 0
+	negative := avgMonths < 0
 	if negative {
 		avgMonths = -avgMonths
-		avgSeconds = -avgSeconds
-	}
-	typeName := TypeYearMonthDuration
-	if family == familyDurationDT {
-		typeName = TypeDayTimeDuration
 	}
 	return SingleAtomic(AtomicValue{
-		TypeName: typeName,
-		Value:    Duration{Months: avgMonths, Seconds: avgSeconds, Negative: negative},
+		TypeName: TypeYearMonthDuration,
+		Value:    Duration{Months: avgMonths, Negative: negative},
 	}), nil
 }
 
@@ -515,31 +528,43 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func sumDurations(seq Sequence, family string) (Sequence, error) {
+	if family == familyDurationDT {
+		// Accumulate dayTime seconds EXACTLY so large totals (beyond float64's
+		// 2^53 range) and fractional seconds canonicalize precisely.
+		totalSecs := new(big.Rat)
+		for item := range seqItems(seq) {
+			a, _ := AtomizeItem(item)
+			totalSecs.Add(totalSecs, durationToRat(a.DurationVal(), false))
+		}
+		negative := totalSecs.Sign() < 0
+		absSecs := totalSecs
+		if negative {
+			absSecs = new(big.Rat).Neg(totalSecs)
+		}
+		secs, frac := durationFromRatSeconds(absSecs)
+		return SingleAtomic(AtomicValue{
+			TypeName: TypeDayTimeDuration,
+			Value:    Duration{Seconds: secs, FracSec: frac, SecRat: absSecs, Negative: negative},
+		}), nil
+	}
+
 	var totalMonths int
-	var totalSeconds float64
 	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		if d.Negative {
 			totalMonths -= d.Months
-			totalSeconds -= d.Seconds
 		} else {
 			totalMonths += d.Months
-			totalSeconds += d.Seconds
 		}
 	}
-	negative := totalMonths < 0 || totalSeconds < 0
+	negative := totalMonths < 0
 	if negative {
 		totalMonths = -totalMonths
-		totalSeconds = -totalSeconds
-	}
-	typeName := TypeYearMonthDuration
-	if family == familyDurationDT {
-		typeName = TypeDayTimeDuration
 	}
 	return SingleAtomic(AtomicValue{
-		TypeName: typeName,
-		Value:    Duration{Months: totalMonths, Seconds: totalSeconds, Negative: negative},
+		TypeName: TypeYearMonthDuration,
+		Value:    Duration{Months: totalMonths, Negative: negative},
 	}), nil
 }
 

@@ -488,6 +488,7 @@ type Duration struct {
 	Months   int      // total months (years*12 + months)
 	Seconds  float64  // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)
 	FracSec  *big.Rat // exact fractional seconds component (the part after decimal in 'S'), nil if integer
+	SecRat   *big.Rat // exact total dayTime seconds magnitude (>=0); authoritative when non-nil, sign carried by Negative
 	Negative bool
 }
 

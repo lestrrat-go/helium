@@ -395,6 +395,37 @@ func TestMapItem(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, int64(13), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
+
+	t.Run("huge whole-second durations stay distinct map keys", func(t *testing.T) {
+		// 2^53 and 2^53+1 are consecutive whole seconds whose float64
+		// representations collapse to the same value. Storing dayTime seconds as
+		// an exact rational keeps the two keys distinct.
+		k0, err := xpath3.CastFromString("PT9007199254740992S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		k1, err := xpath3.CastFromString("PT9007199254740993S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: k0, Value: xpath3.SingleInteger(992)},
+			{Key: k1, Value: xpath3.SingleInteger(993)},
+		})
+		require.Equal(t, 2, m.Size())
+
+		// Each huge key resolves to its own value and matches a freshly re-parsed
+		// equivalent of itself.
+		reparsed0, err := xpath3.CastFromString("PT9007199254740992S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		reparsed1, err := xpath3.CastFromString("PT9007199254740993S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+
+		v0, ok := m.Get(reparsed0)
+		require.True(t, ok)
+		require.Equal(t, int64(992), v0.Get(0).(xpath3.AtomicValue).IntegerVal())
+
+		v1, ok := m.Get(reparsed1)
+		require.True(t, ok)
+		require.Equal(t, int64(993), v1.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
 }
 
 func TestMergeMaps(t *testing.T) {

@@ -16,6 +16,20 @@ func isDateTimeType(typeName string) bool {
 	return typeName == TypeDate || typeName == TypeDateTime || typeName == TypeTime
 }
 
+// arithmeticType returns the built-in type that drives date/time/duration
+// arithmetic for an AtomicValue. A schema-derived value (e.g. a restriction of
+// xs:dayTimeDuration) carries a custom TypeName whose BaseType names the
+// built-in ancestor; arithmetic must treat it as that built-in type.
+func arithmeticType(a AtomicValue) string {
+	if isDurationType(a.TypeName) || isDateTimeType(a.TypeName) {
+		return a.TypeName
+	}
+	if isDurationType(a.BaseType) || isDateTimeType(a.BaseType) {
+		return a.BaseType
+	}
+	return a.TypeName
+}
+
 // julianDayNumber computes a continuous day count for a Gregorian calendar date,
 // using the standard Julian Day Number algorithm. Works for negative years.
 func julianDayNumber(year, month, day int) int64 {
@@ -30,6 +44,17 @@ func julianDayNumber(year, month, day int) int64 {
 // Returns (result, handled, error). If handled is false, the caller should fall through
 // to numeric arithmetic.
 func evalDateTimeArithmetic(ec *evalContext, op TokenType, la, ra AtomicValue) (Sequence, bool, error) {
+	// Promote schema-derived duration/date/time operands to their built-in base
+	// type BEFORE classifying, so a restriction of e.g. xs:dayTimeDuration is
+	// recognized as a duration and the result carries the built-in type. The
+	// promotion only rewrites TypeName; the backing Go value is unchanged.
+	if at := arithmeticType(la); at != la.TypeName {
+		la.TypeName = at
+	}
+	if at := arithmeticType(ra); at != ra.TypeName {
+		ra.TypeName = at
+	}
+
 	lDur := isDurationType(la.TypeName)
 	rDur := isDurationType(ra.TypeName)
 	lDT := isDateTimeType(la.TypeName)
@@ -155,7 +180,7 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 	secs, frac := durationFromRatSeconds(absRat)
 	return SingleAtomic(AtomicValue{
 		TypeName: typeName,
-		Value:    Duration{Seconds: secs, FracSec: frac, Negative: negative},
+		Value:    Duration{Seconds: secs, FracSec: frac, SecRat: absRat, Negative: negative},
 	}), true, nil
 }
 
@@ -215,7 +240,7 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 			}
 			return SingleAtomic(AtomicValue{
 				TypeName: dur.TypeName,
-				Value:    Duration{Seconds: rsecs, FracSec: frac, Negative: negative},
+				Value:    Duration{Seconds: rsecs, FracSec: frac, SecRat: absRat, Negative: negative},
 			}), true, nil
 		}
 	}
@@ -373,9 +398,18 @@ func arithmeticDateTimeDatetime(ec *evalContext, la, ra AtomicValue) (Sequence, 
 		frac = new(big.Rat).SetFrac(big.NewInt(absNs), big.NewInt(1e9))
 	}
 
+	// Build the exact total-seconds magnitude: the whole-second part of absSecs
+	// (which carries no sub-second component beyond nanoseconds, already captured
+	// in frac) plus the exact fractional rational.
+	wholeSecs := math.Round(absSecs - math.Mod(absSecs, 1))
+	secRat := new(big.Rat).SetInt64(int64(wholeSecs))
+	if frac != nil {
+		secRat.Add(secRat, frac)
+	}
+
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeDayTimeDuration,
-		Value:    Duration{Seconds: absSecs, FracSec: frac, Negative: negative},
+		Value:    Duration{Seconds: absSecs, FracSec: frac, SecRat: secRat, Negative: negative},
 	}), true, nil
 }
 
@@ -420,7 +454,18 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 // xs:float, whose backing float64 values are binary-imprecise and therefore
 // cannot be represented exactly as the intended decimal.
 func numericToRat(a AtomicValue) (*big.Rat, bool) {
-	if isIntegerDerived(a.TypeName) {
+	// Resolve the effective numeric type. A schema-derived numeric (e.g. a
+	// restriction of xs:decimal or xs:integer) carries a custom TypeName whose
+	// BaseType names the built-in ancestor; consult BaseType so its exact value
+	// is preserved instead of falling through to the imprecise float path.
+	tn := a.TypeName
+	if !isIntegerDerived(tn) && tn != TypeDecimal {
+		if isIntegerDerived(a.BaseType) || a.BaseType == TypeDecimal {
+			tn = a.BaseType
+		}
+	}
+
+	if isIntegerDerived(tn) {
 		switch v := a.Value.(type) {
 		case int64:
 			return new(big.Rat).SetInt64(v), true
@@ -429,7 +474,7 @@ func numericToRat(a AtomicValue) (*big.Rat, bool) {
 		}
 		return nil, false
 	}
-	if a.TypeName == TypeDecimal {
+	if tn == TypeDecimal {
 		r, ok := a.Value.(*big.Rat)
 		if !ok {
 			return nil, false
@@ -462,6 +507,11 @@ func durationToRat(d Duration, isYM bool) *big.Rat {
 	var r *big.Rat
 	if isYM {
 		r = new(big.Rat).SetInt64(int64(d.Months))
+	} else if d.SecRat != nil {
+		// SecRat holds the EXACT total dayTime seconds magnitude (>=0). Prefer it
+		// over the lossy float64 Seconds field so that values beyond 2^53 (e.g.
+		// PT9007199254740992S vs PT9007199254740993S) stay distinct.
+		r = new(big.Rat).Set(d.SecRat)
 	} else {
 		// d.Seconds is the total seconds INCLUDING any fractional part, while
 		// d.FracSec (when set) holds the exact fractional component in [0,1).
