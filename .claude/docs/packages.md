@@ -22,6 +22,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - Parse flags configured via fluent methods on Parser (internal bitset, not public)
 - `ErrorHandler` interface — async error delivery during parsing
 - `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve(ctx, pubID, sysID)`, `ResolveURI(ctx, uri)`)
+- `ErrExternalDTDTooLarge` — sentinel error returned when a loaded external DTD subset exceeds the byte cap; enforced against actual bytes read, never the advisory `fs.FileInfo.Size()`
+- `MaxExternalDTDSize` — default external-DTD byte cap (10 MiB), used when `MaxExternalDTDBytes` is unset or ≤ 0
+- `Parser.MaxExternalDTDBytes(n int)` — override the external-DTD byte cap (n ≤ 0 → `MaxExternalDTDSize`)
 - `AsNode[T Node](n Node) (T, bool)` — generic safe type assertion for Node types
 - `Document.GetElementByID(id)` — O(1) via hash table, O(n) fallback
 - `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal

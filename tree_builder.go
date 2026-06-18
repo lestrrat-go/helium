@@ -412,7 +412,6 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		// Silently ignore missing external DTDs
 		return nil
 	}
-	defer f.Close()
 
 	// fs.FileInfo.Size() is only reliable for regular files: a valid fs.FS
 	// may stream or synthesize DTD content and report a non-regular,
@@ -425,12 +424,20 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	if limit <= 0 {
 		limit = MaxExternalDTDSize
 	}
-	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
-	if err != nil {
-		return nil
-	}
+	data, readErr := io.ReadAll(io.LimitReader(f, int64(limit)+1))
+	// Close the file immediately once the bounded read completes, before the
+	// already-buffered DTD is parsed, so the descriptor is not held open for
+	// the lifetime of the parse.
+	f.Close()
+
+	// Enforce the cap authoritatively against the bytes actually read, before
+	// inspecting the read error: a reader that returns n>0 alongside a
+	// non-EOF error on the cap-crossing read must still be rejected.
 	if len(data) > limit {
 		return ErrExternalDTDTooLarge
+	}
+	if readErr != nil {
+		return nil
 	}
 
 	doc := ctx.doc

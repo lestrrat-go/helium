@@ -167,6 +167,7 @@ Expands `&#NNN;`, `&#xHHH;`, `&name;`, `%name;` based on substitution type. Recu
 - `InternalSubset` → create internal DTD
 - `ExternalSubset` → load external DTD, parse declarations
   - Temporarily switches parser `baseURI` to the resolved DTD path while parsing the subset so entity system IDs resolve relative to the DTD file
+  - Bounded read: the DTD is read through `io.LimitReader(f, limit+1)` where `limit` is `ctx.maxExtDTDSize` (set by `Parser.MaxExternalDTDBytes`) or `MaxExternalDTDSize` (10 MiB) when unset/≤0. `fs.FileInfo.Size()` is advisory only — never used to accept or reject — because a valid `fs.FS` may stream, synthesize, under-report, or over-report size; the cap is enforced against actual bytes read. If `len(data) > limit` the load returns `ErrExternalDTDTooLarge`. The size cap is checked BEFORE the read error, so a reader that returns `n>0` with a non-EOF error on the cap-crossing read is still rejected; any other (non-cap) read error is silently ignored. The file is closed immediately after the bounded read, before the buffered DTD is parsed.
 - `GetEntity`/`GetParameterEntity` → lookup in document entity table
 
 ### Parent Selection

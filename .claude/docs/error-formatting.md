@@ -10,6 +10,7 @@ All error formatting matches libxml2 output for golden test compatibility.
 - **`ErrorDomain`** — `ErrorDomainParser`, `ErrorDomainNamespace`
 - **`ErrorLeveler`** interface — optional interface for errors to report their `ErrorLevel()`; default is `ErrorLevelWarning`
 - **`NewLeveledError(msg, level)`** — factory creating error implementing `ErrorLeveler`
+- **`ErrExternalDTDTooLarge`** (`errors.go`) — sentinel returned from the `ExternalSubset` bounded read when a loaded external DTD subset exceeds the byte cap (`MaxExternalDTDBytes` or default `MaxExternalDTDSize`, 10 MiB). Enforced against actual bytes read, never the advisory `fs.FileInfo.Size()`, and checked before any read error; match with `errors.Is`
 
 ### ErrParseError (root package, `errors.go`)
 
