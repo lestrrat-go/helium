@@ -240,8 +240,8 @@ func makeXSTokenList(listType, itemType string, tokenRe *regexp.Regexp) func(con
 		s = strings.TrimSpace(s)
 		if s == "" {
 			return nil, &XPathError{
-				Code:    "FORG0001",
-				Message: fmt.Sprintf("cannot cast empty string to %s", itemType),
+				Code:    errCodeFORG0001,
+				Message: fmt.Sprintf("cannot cast empty string to %s", listType),
 			}
 		}
 		tokens := strings.Fields(s)

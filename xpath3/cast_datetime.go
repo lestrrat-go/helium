@@ -17,6 +17,9 @@ func castToGType(v AtomicValue, targetType string, format func(time.Time) string
 	switch v.TypeName {
 	case TypeDateTime, TypeDateTimeStamp, TypeDate:
 		// xs:dateTimeStamp is a subtype of xs:dateTime.
+		if err := validateDateTimeStampSource(v); err != nil {
+			return AtomicValue{}, err
+		}
 		return AtomicValue{TypeName: targetType, Value: format(v.TimeVal())}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), targetType)

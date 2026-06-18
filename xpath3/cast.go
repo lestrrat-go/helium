@@ -12,6 +12,10 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
+// msgDateTimeStampTimezone is the FORG0001 message for an xs:dateTimeStamp
+// value that is missing its mandatory timezone.
+const msgDateTimeStampTimezone = "xs:dateTimeStamp requires a timezone"
+
 // isIntegerDerived returns true if the type is xs:integer or one of its derived types.
 func isIntegerDerived(typeName string) bool {
 	switch typeName {
@@ -38,6 +42,26 @@ func isAbstractCastTarget(typeName string) bool {
 		typeName == TypeNOTATION
 }
 
+// validateDateTimeStampSource enforces the xs:dateTimeStamp invariant on a
+// source value before it is cast to a date/time subtype. AtomicValue is public
+// and mutable, so a caller can retag a no-timezone or non-time value as
+// TypeDateTimeStamp; the subtype cast paths call TimeVal() unconditionally and
+// would panic on such a value. Validate the source is a time.Time carrying a
+// timezone, rejecting otherwise with a structured FORG0001 error.
+func validateDateTimeStampSource(v AtomicValue) error {
+	if v.TypeName != TypeDateTimeStamp {
+		return nil
+	}
+	t, ok := v.Value.(time.Time)
+	if !ok {
+		return &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+	}
+	if !HasTimezone(t) {
+		return &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+	}
+	return nil
+}
+
 // CastAtomic casts an AtomicValue to the target type.
 func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 	if isAbstractCastTarget(targetType) {
@@ -54,10 +78,10 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 	if targetType == TypeDateTimeStamp && v.TypeName == TypeDateTimeStamp {
 		t, ok := v.Value.(time.Time)
 		if !ok {
-			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: "xs:dateTimeStamp requires a timezone"}
+			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
 		}
 		if !HasTimezone(t) {
-			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: "xs:dateTimeStamp requires a timezone"}
+			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
 		}
 		return v, nil
 	}
@@ -132,6 +156,9 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 		// xs:dateTimeStamp is a subtype of xs:dateTime, so it casts to xs:date too.
 		if v.TypeName == TypeDateTime || v.TypeName == TypeDateTimeStamp {
+			if err := validateDateTimeStampSource(v); err != nil {
+				return AtomicValue{}, err
+			}
 			t := v.TimeVal()
 			return AtomicValue{TypeName: TypeDate, Value: time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())}, nil
 		}
@@ -141,6 +168,9 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 		if v.TypeName == TypeDateTimeStamp {
 			// xs:dateTimeStamp is a subtype of xs:dateTime
+			if err := validateDateTimeStampSource(v); err != nil {
+				return AtomicValue{}, err
+			}
 			return AtomicValue{TypeName: TypeDateTime, Value: v.TimeVal()}, nil
 		}
 		if v.TypeName == TypeDate {
@@ -159,7 +189,7 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, err
 		}
 		if !HasTimezone(dt.TimeVal()) {
-			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: "xs:dateTimeStamp requires a timezone"}
+			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
 		}
 		dt.TypeName = TypeDateTimeStamp
 		return dt, nil
@@ -169,6 +199,9 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 		// xs:dateTimeStamp is a subtype of xs:dateTime, so it casts to xs:time too.
 		if v.TypeName == TypeDateTime || v.TypeName == TypeDateTimeStamp {
+			if err := validateDateTimeStampSource(v); err != nil {
+				return AtomicValue{}, err
+			}
 			t := v.TimeVal()
 			loc := t.Location()
 			if !HasTimezone(t) {
@@ -349,7 +382,7 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		if !HasTimezone(t) {
-			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: "xs:dateTimeStamp requires a timezone"}
+			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
 		}
 		return AtomicValue{TypeName: TypeDateTimeStamp, Value: t}, nil
 	case TypeTime:

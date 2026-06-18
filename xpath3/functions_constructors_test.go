@@ -95,6 +95,28 @@ func TestXSTokenListCardinality(t *testing.T) {
 		}
 	})
 
+	t.Run("empty string error names the list type", func(t *testing.T) {
+		// An empty lexical list (e.g. xs:NMTOKENS("")) is a cast failure whose
+		// message must name the LIST type (xs:NMTOKENS), not the per-token item
+		// type (xs:NMTOKEN).
+		for _, tc := range []struct {
+			expr     string
+			listType string
+		}{
+			{`xs:NMTOKENS("")`, "xs:NMTOKENS"},
+			{`xs:IDREFS("")`, "xs:IDREFS"},
+			{`xs:ENTITIES("")`, "xs:ENTITIES"},
+		} {
+			t.Run(tc.expr, func(t *testing.T) {
+				compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+				require.NoError(t, err)
+				_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.listType)
+			})
+		}
+	})
+
 	t.Run("empty array returns empty (not an error)", func(t *testing.T) {
 		compiled, err := xpath3.NewCompiler().Compile(`count(xs:NMTOKENS([]))`)
 		require.NoError(t, err)
