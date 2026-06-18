@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"path/filepath"
 	"strings"
 
@@ -424,7 +425,17 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	if limit <= 0 {
 		limit = MaxExternalDTDSize
 	}
-	data, readErr := io.ReadAll(io.LimitReader(f, int64(limit)+1))
+	// Read one byte past the cap so a source that under-reports (or lies about)
+	// its size is still caught, but guard against overflow: int64(limit)+1
+	// wraps to a negative value for limit==math.MaxInt on 64-bit platforms,
+	// which would make io.LimitReader read zero bytes and silently skip a valid
+	// DTD.
+	limit64 := int64(limit)
+	readLimit := limit64
+	if readLimit < math.MaxInt64 {
+		readLimit++
+	}
+	data, readErr := io.ReadAll(io.LimitReader(f, readLimit))
 	// Close the file immediately once the bounded read completes, before the
 	// already-buffered DTD is parsed, so the descriptor is not held open for
 	// the lifetime of the parse.
@@ -433,7 +444,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// Enforce the cap authoritatively against the bytes actually read, before
 	// inspecting the read error: a reader that returns n>0 alongside a
 	// non-EOF error on the cap-crossing read must still be rejected.
-	if len(data) > limit {
+	if int64(len(data)) > limit64 {
 		return ErrExternalDTDTooLarge
 	}
 	if readErr != nil {

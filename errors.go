@@ -41,8 +41,9 @@ var (
 	ErrDuplicateAttribute = errors.New("duplicate attribute")
 	ErrEntityBoundary     = errors.New("entity boundary violation")
 	// ErrExternalDTDTooLarge is returned when an external DTD subset exceeds
-	// MaxExternalDTDSize bytes. The cap is enforced against the actual number
-	// of bytes read, not any advisory Stat size.
+	// the configured byte cap (set via Parser.MaxExternalDTDBytes), or
+	// MaxExternalDTDSize when no cap is configured. The cap is enforced
+	// against the actual number of bytes read, not any advisory Stat size.
 	ErrExternalDTDTooLarge = errors.New("external DTD exceeds maximum allowed size")
 	errParserStopped       = errors.New("parser stopped")
 	errNoCursor            = errors.New("parser has no input")

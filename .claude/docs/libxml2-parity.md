@@ -73,7 +73,7 @@ These affect multiple packages (especially C14N test skips):
 
 1. **Duplicate namespace declarations** — helium rejects, libxml2 uses last. Affects 7 C14N tests.
 2. **Entity refs in single-quoted attributes** — not expanded. Affects 3 C14N tests.
-3. **External entity resolution** — limited; requires explicit config. External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. `BlockXXE(true)` blocks all.
+3. **External entity resolution** — limited; requires explicit config. External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. `BlockXXE(true)` blocks all. External DTD subsets are read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset exceeding the cap is rejected with `ErrExternalDTDTooLarge`.
 
 ## Feature Status
 
@@ -146,6 +146,7 @@ These affect multiple packages (especially C14N test skips):
 | BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks |
 | SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |
 | LenientXMLDecl(bool) | *(helium extension)* | ✅ | Relaxed XML decl attribute order |
+| MaxExternalDTDBytes(int) | *(helium extension)* | ✅ | Byte cap for external DTD subset reads; ≤0 → `MaxExternalDTDSize` (10 MiB). Enforced against actual bytes read; over-cap → `ErrExternalDTDTooLarge` |
 | CompactTextNodes(bool) | XML_PARSE_COMPACT | no-op | Go memory model |
 | BigLineNumbers(bool) | XML_PARSE_BIG_LINES | no-op | Go ints are 64-bit |
 | *(dropped)* | XML_PARSE_NOUNZIP | no-op | No decompression support |

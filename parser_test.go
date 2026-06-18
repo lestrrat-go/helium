@@ -576,16 +576,25 @@ func TestParseExternalDTDBoundedRead(t *testing.T) {
 }
 
 // errReadingFS serves a DTD whose Read returns a full buffer of bytes (taking
-// the running total past MaxExternalDTDSize+1) together with a NON-EOF error
-// on the cap-crossing read. The cap must be enforced against the bytes that
-// were returned, before the read error is inspected, so the size-cap error
-// still fires.
-type errReadingFS struct{}
+// the running total past the configured cap) together with a NON-EOF error on
+// the cap-crossing read. The cap must be enforced against the bytes that were
+// returned, before the read error is inspected, so the size-cap error still
+// fires. A small cap is used so the bounded read does not pull megabytes; the
+// fake records whether the simulated read error was actually returned so the
+// test can prove the error path was exercised.
+type errReadingFS struct {
+	cap        int
+	hitReadErr *bool
+}
 
-func (errReadingFS) Open(string) (fs.File, error) { return &errReadingFile{}, nil }
+func (fsys errReadingFS) Open(string) (fs.File, error) {
+	return &errReadingFile{cap: fsys.cap, hitReadErr: fsys.hitReadErr}, nil
+}
 
 type errReadingFile struct {
-	read int64
+	cap        int
+	read       int64
+	hitReadErr *bool
 }
 
 func (f *errReadingFile) Stat() (fs.FileInfo, error) { return underReportingInfo{}, nil }
@@ -595,10 +604,11 @@ func (f *errReadingFile) Read(p []byte) (int, error) {
 		p[i] = ' '
 	}
 	f.read += int64(len(p))
-	// Once enough bytes have been handed out to cross the cap, return the
+	// Once enough bytes have been handed out to reach the cap, return the
 	// filled buffer alongside a non-EOF error. A reader that handled the
 	// error before checking the byte count would escape the cap.
-	if f.read > int64(helium.MaxExternalDTDSize)+1 {
+	if f.read >= int64(f.cap) {
+		*f.hitReadErr = true
 		return len(p), errors.New("simulated transport failure")
 	}
 	return len(p), nil
@@ -613,10 +623,17 @@ func TestParseExternalDTDReadErrorStillCapped(t *testing.T) {
 <!DOCTYPE r SYSTEM "huge.dtd">
 <r/>`
 
-	// The cap-crossing read returns n>0 plus a non-EOF error. The size cap
-	// must still fire: the returned bytes already exceed MaxExternalDTDSize.
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(errReadingFS{})
+	// Use a small cap so the bounded read does not pull a 10 MiB stream. The
+	// cap-crossing read returns n>0 plus a non-EOF error. The size cap must
+	// still fire: the returned bytes already exceed the configured cap.
+	const smallCap = 4096
+	var hitReadErr bool
+	fsys := errReadingFS{cap: smallCap, hitReadErr: &hitReadErr}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).
+		MaxExternalDTDBytes(smallCap).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
+	require.True(t, hitReadErr, "the simulated non-EOF read error must actually be returned by the fake")
 	require.Error(t, err, "oversized external DTD must produce a parse error even when the read also errors")
 	require.ErrorIs(t, err, helium.ErrExternalDTDTooLarge, "size cap must be enforced before the read error is handled")
 }
