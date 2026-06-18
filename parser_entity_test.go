@@ -512,6 +512,36 @@ func TestEntityValueRefValidationIsSideEffectFree(t *testing.T) {
 		"the stored value is the single PE expansion, not a doubled one")
 }
 
+// TestDirectPEReferenceAmplification exercises the direct parameter-entity
+// replacement path in parsePEReference: a large PE declared in the internal DTD
+// subset and referenced directly (%p;) as markup many times. Each reference
+// decodes the replacement text and pushes it as new input; the PE's OWN expanded
+// size must be charged to the amplification counters on every use, otherwise a
+// small DTD can drive unbounded expansion past the limit. Each PE expands to a
+// large comment (valid DTD markup), so the only growth is the replacement text
+// itself — no nested entity refs (which decodeEntities already charges) are
+// involved, isolating the direct-PE charge being verified here.
+func TestDirectPEReferenceAmplification(t *testing.T) {
+	t.Parallel()
+
+	// ~100 KiB per expansion, referenced 200 times → ~20 MB of expansion from a
+	// ~100 KiB subset. This crosses the 1 MiB baseline and trips the
+	// amplification ratio guard relative to the tiny main document.
+	big := strings.Repeat("A", 100_000)
+	pe := "<!-- " + big + " -->"
+	refs := strings.Repeat("%p;\n", 200)
+	xml := `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r [` + "\n" +
+		`<!ENTITY % p "` + pe + `">` + "\n" +
+		refs +
+		`]>` + "\n" + `<r/>`
+
+	_, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.Error(t, err, "repeated direct PE expansion must trip the entity-expansion limit")
+	require.Contains(t, err.Error(), "amplification",
+		"error must explain the amplification limit, got: %v", err)
+}
+
 func TestEntityAmplification(t *testing.T) {
 	t.Parallel()
 

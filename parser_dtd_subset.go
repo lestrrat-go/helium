@@ -396,6 +396,15 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 				pdebug.Printf("Decoded parameter entity content: %s", decodedContent)
 			}
 
+			// Charge this PE's OWN expanded replacement size before pushing it
+			// as new input. Nested entity references inside the replacement are
+			// already charged by decodeEntities; without this the PE's direct
+			// expansion is free, so a small DTD that references a large PE many
+			// times could drive unbounded expansion past the amplification limit.
+			if err := pctx.entityCheck(entity, len(decodedContent)); err != nil {
+				return pctx.error(ctx, err)
+			}
+
 			pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader([]byte(decodedContent))))
 		}
 	}
