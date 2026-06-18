@@ -409,7 +409,7 @@ func parseYearBig(s string, neg bool) (*big.Int, bool) {
 	if s == "" {
 		return nil, false
 	}
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] < '0' || s[i] > '9' {
 			return nil, false
 		}
