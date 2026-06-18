@@ -115,4 +115,101 @@ func TestAddChildCycleGuard(t *testing.T) {
 		require.Equal(t, root, mid.Parent(), "existing tree must be intact")
 		require.Equal(t, mid, leaf.Parent(), "existing tree must be intact")
 	})
+
+	t.Run("legal reparent move succeeds", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		a := mustCreateElement(t, doc, "a")
+		b := mustCreateElement(t, doc, "b")
+		leaf := mustCreateElement(t, doc, "leaf")
+
+		require.NoError(t, a.AddChild(leaf), "leaf starts under a")
+		require.Equal(t, a, leaf.Parent(), "leaf parent is a")
+		require.Equal(t, leaf, a.FirstChild(), "a firstChild is leaf")
+
+		// Move leaf from a to b. The auto-unlink branch must detach leaf from a
+		// before relinking it under b, leaving both subtrees consistent.
+		require.NoError(t, b.AddChild(leaf), "reparenting leaf to b succeeds")
+
+		require.Equal(t, b, leaf.Parent(), "leaf parent is now b")
+		require.Equal(t, leaf, b.FirstChild(), "b firstChild is leaf")
+		require.Equal(t, leaf, b.LastChild(), "b lastChild is leaf")
+		require.Nil(t, a.FirstChild(), "a no longer has leaf as firstChild")
+		require.Nil(t, a.LastChild(), "a no longer has leaf as lastChild")
+		require.Nil(t, leaf.PrevSibling(), "leaf has no stale prev sibling")
+		require.Nil(t, leaf.NextSibling(), "leaf has no stale next sibling")
+
+		requireNoCycle(t, b)
+	})
+}
+
+func TestAddSiblingCycleGuard(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	root := mustCreateElement(t, doc, "root")
+	mid := mustCreateElement(t, doc, "mid")
+	leaf := mustCreateElement(t, doc, "leaf")
+
+	require.NoError(t, root.AddChild(mid))
+	require.NoError(t, mid.AddChild(leaf))
+
+	// leaf.AddSibling(root) would install root under mid (leaf's parent) while
+	// root is leaf's own ancestor, creating a cycle.
+	err := leaf.AddSibling(root)
+	require.Error(t, err, "adding an ancestor as a sibling must be rejected")
+	require.EqualError(t, err, "cannot add a node as a sibling of itself or one of its descendants")
+
+	require.Nil(t, root.Parent(), "root must remain the tree root")
+	require.Equal(t, root, mid.Parent(), "existing tree must be intact")
+	require.Equal(t, mid, leaf.Parent(), "existing tree must be intact")
+	require.Nil(t, leaf.NextSibling(), "leaf must not gain a sibling")
+	require.Equal(t, leaf, mid.LastChild(), "mid lastChild unchanged")
+
+	requireNoCycle(t, root)
+}
+
+func TestReplaceCycleGuard(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	root := mustCreateElement(t, doc, "root")
+	mid := mustCreateElement(t, doc, "mid")
+	leaf := mustCreateElement(t, doc, "leaf")
+
+	require.NoError(t, root.AddChild(mid))
+	require.NoError(t, mid.AddChild(leaf))
+
+	// leaf.Replace(root) would splice root into leaf's position under mid while
+	// root is mid's own ancestor, creating a cycle.
+	err := leaf.Replace(root)
+	require.Error(t, err, "replacing a node with one of its ancestors must be rejected")
+	require.EqualError(t, err, "cannot replace a node with one of its own ancestors")
+
+	require.Nil(t, root.Parent(), "root must remain the tree root")
+	require.Equal(t, root, mid.Parent(), "existing tree must be intact")
+	require.Equal(t, mid, leaf.Parent(), "existing tree must be intact")
+	require.Equal(t, leaf, mid.FirstChild(), "leaf must remain mid's child")
+	require.Equal(t, leaf, mid.LastChild(), "leaf must remain mid's child")
+
+	requireNoCycle(t, root)
+}
+
+// requireNoCycle verifies the subtree rooted at n is acyclic. It walks n's
+// parent chain (bounded) to confirm n is not its own ancestor, then serializes
+// the subtree: a cyclic child chain would make serialization recurse forever,
+// so a bounded successful serialize confirms the descendants form a finite tree.
+func requireNoCycle(t *testing.T, n helium.Node) {
+	t.Helper()
+
+	const limit = 1000
+	steps := 0
+	for anc := n.Parent(); anc != nil; anc = anc.Parent() {
+		require.NotEqual(t, n, anc, "node must not be its own ancestor")
+		steps++
+		require.Less(t, steps, limit, "parent chain must be finite")
+	}
+
+	_, err := helium.WriteString(n)
+	require.NoError(t, err, "serializing an acyclic subtree must succeed")
 }

@@ -108,3 +108,5 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
 - `addSibling(node, sibling)` — append to end of siblings
 - `replaceNode(old, new)` — swap in same position
 - `UnlinkNode(n)` — detach from parent and siblings
+
+All three insertion paths share `wouldCreateCycle(parent, cur)`: they reject inserting a node into itself or into one of its own descendants (which would put an ancestor below itself). addChild/addSibling auto-unlink an already-linked incoming node before relinking so it never lives in two places; rejection leaves the tree untouched.

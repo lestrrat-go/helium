@@ -287,18 +287,30 @@ func (n docnode) LastChild() Node {
 	return n.lastChild
 }
 
+// wouldCreateCycle reports whether installing cur under parent would create a
+// cycle. That happens when cur is the parent itself or an ancestor of the
+// parent: making it a descendant would put a node below itself. Walking
+// parent's ancestor chain (inclusive of parent) and looking for cur covers
+// both cases, including the self-insertion case when cur == parent.
+func wouldCreateCycle(parent, cur Node) bool {
+	cdn := cur.baseDocNode()
+	for anc := parent; anc != nil; anc = anc.Parent() {
+		if anc.baseDocNode() == cdn {
+			return true
+		}
+	}
+	return false
+}
+
 func addChild(n MutableNode, cur Node) error {
 	pdn := n.baseDocNode()
 	cdn := cur.baseDocNode()
 
 	// Cycle guard: a node may not be inserted into itself, nor into one of
 	// its own descendants (which would make an ancestor a descendant of
-	// itself). Walk n's parent chain looking for cur. This also catches the
-	// self-insertion case when n == cur.
-	for anc := Node(n); anc != nil; anc = anc.Parent() {
-		if anc.baseDocNode() == cdn {
-			return errors.New("cannot add a node as a child of itself or one of its descendants")
-		}
+	// itself). This also catches the self-insertion case when n == cur.
+	if wouldCreateCycle(n, cur) {
+		return errors.New("cannot add a node as a child of itself or one of its descendants")
 	}
 
 	// Detach cur from its current parent/sibling chain before relinking, so a
@@ -358,6 +370,23 @@ func (n docnode) PrevSibling() Node {
 
 func addSibling(n MutableNode, cur Node) error {
 	cdn := cur.baseDocNode()
+
+	// Cycle guard: a sibling of n is installed under n's parent, so the same
+	// self/ancestor rule that protects addChild applies here against the
+	// effective insertion parent. This also rejects cur == n (a node cannot be
+	// its own sibling) since n is its parent's child.
+	if cur.baseDocNode() == n.baseDocNode() || wouldCreateCycle(n.Parent(), cur) {
+		return errors.New("cannot add a node as a sibling of itself or one of its descendants")
+	}
+
+	// Detach cur from its current parent/sibling chain before relinking, so a
+	// node that already lives elsewhere in a tree cannot remain in two places.
+	if cdn.parent != nil || cdn.prev != nil || cdn.next != nil {
+		if cmn, ok := cur.(MutableNode); ok {
+			UnlinkNode(cmn)
+		}
+	}
+
 	iter := Node(n)
 	for iter != nil {
 		if iter.NextSibling() == nil {
@@ -428,6 +457,21 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	cdn := cur.baseDocNode()
 	ndn := n.baseDocNode()
 
+	// Cycle guard: each replacement node takes n's place under n's parent, so
+	// installing the parent (or any ancestor of it) below itself would create a
+	// cycle. Reject before any unlink/splice so a rejected call leaves the tree
+	// untouched. n itself is exempt: when n is among the replacements it stays
+	// live in place (handled below as replacedIsInserted).
+	parent := ndn.parent
+	for _, nn := range nodes {
+		if nn.baseDocNode() == ndn {
+			continue
+		}
+		if wouldCreateCycle(parent, nn) {
+			return errors.New("cannot replace a node with one of its own ancestors")
+		}
+	}
+
 	// A replacement node may already be linked into the tree (e.g. replacing a
 	// node with its own sibling). Detach every replacement node from its current
 	// position before splicing so it cannot remain in n's neighbor chain and
@@ -449,7 +493,7 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		cdn.prev = ndn.prev
 		ndn.prev.baseDocNode().next = cur
 	}
-	if parent := ndn.parent; parent != nil {
+	if parent != nil {
 		pdn := parent.baseDocNode()
 		if pdn.firstChild == n {
 			pdn.firstChild = cur
