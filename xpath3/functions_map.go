@@ -47,9 +47,21 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		key := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 		if val, found := optMap.Get(key); found {
-			s, err := coerceArgToStringRequired(val)
-			if err != nil {
-				return nil, err
+			// Per F&O 3.1, an empty, multi-item, non-string, or unknown
+			// 'duplicates' value is a FOJS0005 error (not XPTY0004).
+			if seqLen(val) != 1 {
+				return nil, &XPathError{Code: errCodeFOJS0005, Message: "map:merge: 'duplicates' option must be a single string"}
+			}
+			av, ok := val.Get(0).(AtomicValue)
+			if !ok {
+				return nil, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a string, got %T", val.Get(0))}
+			}
+			if av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic {
+				return nil, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a string, got %s", av.TypeName)}
+			}
+			s, ok := av.Value.(string)
+			if !ok {
+				return nil, &XPathError{Code: errCodeFOJS0005, Message: "map:merge: 'duplicates' option must be a string"}
 			}
 			switch s {
 			case duplicatesUseFirst:

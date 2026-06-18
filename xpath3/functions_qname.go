@@ -137,13 +137,8 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 }
 
 func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
-	if seqLen(args[0]) == 0 {
-		return validNilSequence, nil
-	}
-	qnameStr, err := coerceQNameString(args[0], false, false, "resolve-QName: QName argument must be a string")
-	if err != nil {
-		return nil, err
-	}
+	// The element() second argument is required and must be exactly one
+	// element() regardless of whether $qname is empty, so validate it FIRST.
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: element argument is empty"}
 	}
@@ -157,6 +152,15 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 	elem, ok := ni.Node.(*helium.Element)
 	if !ok {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: expected element node"}
+	}
+
+	// Empty $qname yields the empty sequence (after the element() check).
+	if seqLen(args[0]) == 0 {
+		return validNilSequence, nil
+	}
+	qnameStr, err := coerceQNameString(args[0], false, false, "resolve-QName: QName argument must be a string")
+	if err != nil {
+		return nil, err
 	}
 
 	prefix, local, err := parseLexicalQName(qnameStr)

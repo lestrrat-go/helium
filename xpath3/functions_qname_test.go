@@ -58,6 +58,30 @@ func TestQNameElementArgRequiresSingleton(t *testing.T) {
 	}
 }
 
+// resolve-QName's second argument is a REQUIRED singleton element(). An empty,
+// multi-element, or non-element second argument must raise XPTY0004 even when
+// the first ($qname) argument is the empty sequence.
+func TestResolveQNameElementArgValidatedFirst(t *testing.T) {
+	t.Parallel()
+
+	doc := mustParseXML(t, `<root xmlns:p="urn:p"><a/><b/></root>`)
+
+	cases := []string{
+		`resolve-QName((), ())`,
+		`resolve-QName((), //root/*)`,
+		`resolve-QName((), "x")`,
+	}
+	for _, expr := range cases {
+		t.Run(expr, func(t *testing.T) {
+			_, err := evaluate(t.Context(), doc, expr)
+			require.Error(t, err, expr)
+			var xpErr *xpath3.XPathError
+			require.ErrorAs(t, err, &xpErr)
+			require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code, expr)
+		})
+	}
+}
+
 // A single array/list argument that atomizes to multiple values must raise
 // XPTY0004 (a cardinality error), not FOTY0013. The accessors must atomize
 // the argument first and then enforce 0-or-1 cardinality on the result.

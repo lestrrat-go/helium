@@ -539,7 +539,11 @@ func TestPublicStringArgsRejectMultiItemSequence(t *testing.T) {
 		{"array-sort", `array:sort([2, 1], ("http://www.w3.org/2005/xpath-functions/collation/codepoint", "dup"))`},
 		{"distinct-values-collation", `distinct-values((1, 2), ("http://www.w3.org/2005/xpath-functions/collation/codepoint", "dup"))`},
 		{"format-number", `format-number(1, "0", ("fmt", "other"))`},
-		{"map-merge", `map:merge((map{"a": 1}), map{"duplicates": ("use-first", "reject")})`},
+		// NOTE: map:merge's "duplicates" option is intentionally absent here. A
+		// multi-item (or empty/non-string/unknown) "duplicates" value is a
+		// FOJS0005 error per F&O 3.1, not the generic XPTY0004 string-cardinality
+		// error this test covers. That behavior is asserted in
+		// TestMapMergeRejectsInvalidDuplicates (functions_map_test.go).
 		{"error-description", `error((), ("a", "b"))`},
 		{"trace-label", `trace(1, ("a", "b"))`},
 	}

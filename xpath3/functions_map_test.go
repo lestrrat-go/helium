@@ -54,16 +54,26 @@ func TestMapMergeAcceptsDuplicatesOptions(t *testing.T) {
 }
 
 // An invalid "duplicates" option value must raise FOJS0005 rather than being
-// silently accepted.
+// silently accepted. Per F&O 3.1 this covers empty, multi-item, non-string,
+// and unknown values alike.
 func TestMapMergeRejectsInvalidDuplicates(t *testing.T) {
 	t.Parallel()
 
 	doc := mustParseXML(t, "<root/>")
 
-	expr := `map:merge((map{"a": 1}), map{"duplicates": "bogus"})`
-	_, err := evaluate(t.Context(), doc, expr)
-	require.Error(t, err, expr)
-	var xpErr *xpath3.XPathError
-	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FOJS0005", xpErr.Code, expr)
+	cases := []string{
+		`map:merge((map{"a": 1}), map{"duplicates": "bogus"})`,
+		`map:merge((map{"a": 1}), map{"duplicates": 42})`,
+		`map:merge((map{"a": 1}), map{"duplicates": ()})`,
+		`map:merge((map{"a": 1}), map{"duplicates": ("use-first", "use-last")})`,
+	}
+	for _, expr := range cases {
+		t.Run(expr, func(t *testing.T) {
+			_, err := evaluate(t.Context(), doc, expr)
+			require.Error(t, err, expr)
+			var xpErr *xpath3.XPathError
+			require.ErrorAs(t, err, &xpErr)
+			require.Equal(t, "FOJS0005", xpErr.Code, expr)
+		})
+	}
 }
