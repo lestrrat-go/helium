@@ -413,7 +413,9 @@ func isLeapYearStr(year string) bool {
 	return mod(year, 400) == 0
 }
 
-// durationRegex matches xs:duration.
+// durationRegex matches xs:duration. When the time designator 'T' is present it
+// must be followed by at least one of H/M/S; a dangling 'T' (e.g. "P1YT") is
+// rejected by requiring at least one time component within the T group.
 var durationRegex = regexp.MustCompile(`^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$`)
 
 func validateDuration(value string) error {
@@ -428,6 +430,12 @@ func validateDuration(value string) error {
 	s = s[1:] // remove 'P'
 	if s == "" || s == "T" {
 		return fmt.Errorf("invalid duration")
+	}
+	// A time designator 'T' must be followed by at least one H/M/S component.
+	if _, after, ok := strings.Cut(s, "T"); ok {
+		if !strings.ContainsAny(after, "HMS") {
+			return fmt.Errorf("invalid duration")
+		}
 	}
 	return nil
 }

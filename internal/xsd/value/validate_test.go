@@ -66,7 +66,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		{
 			typeName: lexicon.TypeDuration,
 			valid:    []string{testP1Y, "P1M", "P1D", "PT1H", "PT1M", "PT1S", "P1Y2M3D", "P1Y2M3DT4H5M6S", "PT1.5S", "-P1Y", "P0Y"},
-			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", testAbc},
+			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", "P1YT", "P1DT", "P1Y2MT", testAbc},
 		},
 		{
 			typeName: lexicon.TypeDate,

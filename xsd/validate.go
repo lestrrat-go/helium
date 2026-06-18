@@ -662,7 +662,11 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 		if td.ContentType == ContentTypeElementOnly {
 			for child := range helium.Children(elem) {
 				if child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode {
-					if strings.TrimSpace(string(child.Content())) != "" {
+					// Use XSD/XML whitespace (space, tab, CR, LF) only: characters
+					// like NBSP (U+00A0) are NOT ignorable in element-only content,
+					// so strings.TrimSpace (which strips all Unicode space) must not
+					// be used here.
+					if !isBlank(child.Content()) {
 						msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
 						vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 						return fmt.Errorf("text content in element-only type")
@@ -1249,6 +1253,16 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 		return declaredType, nil
 	}
 
+	// xsi:type is an xs:QName, whose whiteSpace facet is "collapse": normalize
+	// the raw attribute value before parsing so leading/trailing/internal
+	// whitespace (e.g. " t:foo ") does not defeat QName resolution.
+	xsiTypeVal = normalizeWhiteSpace(xsiTypeVal, "collapse")
+	if err := validateQName(xsiTypeVal); err != nil {
+		msg := fmt.Sprintf("The value '%s' of the xsi:type attribute does not resolve to a type definition.", xsiTypeVal)
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+		return nil, fmt.Errorf("xsi:type not a valid QName")
+	}
+
 	// Parse QName value: may be "prefix:local" or just "local".
 	local := xsiTypeVal
 	var ns string
@@ -1296,6 +1310,15 @@ func (vc *validationContext) resolveXsiTypeQuiet(elem *helium.Element) (*TypeDef
 		}
 	}
 	if xsiTypeVal == "" {
+		return nil, false
+	}
+
+	// xsi:type is an xs:QName (whiteSpace=collapse): normalize before parsing so
+	// surrounding whitespace does not defeat resolution. Errors are not reported
+	// here (skipped content is not assessed); an invalid QName simply yields no
+	// actual type override.
+	xsiTypeVal = normalizeWhiteSpace(xsiTypeVal, "collapse")
+	if err := validateQName(xsiTypeVal); err != nil {
 		return nil, false
 	}
 
