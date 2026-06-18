@@ -179,6 +179,65 @@ func TestMapItem(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "original", again.Get(0).(xpath3.AtomicValue).StringVal())
 	})
+
+	t.Run("string-derived key matches string key", func(t *testing.T) {
+		ncKey := xpath3.AtomicValue{TypeName: xpath3.TypeNCName, Value: "a"}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: ncKey, Value: xpath3.SingleInteger(1)},
+		})
+		// Looking up with an xs:string key of equal value space must succeed.
+		v, ok := m.Get(strKey("a"))
+		require.True(t, ok)
+		require.Equal(t, int64(1), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("string and string-derived keys are equivalent", func(t *testing.T) {
+		ncKey := xpath3.AtomicValue{TypeName: xpath3.TypeNCName, Value: "a"}
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: ncKey, Value: xpath3.SingleInteger(1)},
+			{Key: strKey("b"), Value: xpath3.SingleInteger(2)},
+		})
+		// xs:string("a") and xs:NCName("a") share a value-space key, so a
+		// string lookup and Contains both resolve the NCName entry.
+		require.True(t, m.Contains(strKey("a")))
+		v, ok := m.Get(strKey("a"))
+		require.True(t, ok)
+		require.Equal(t, int64(1), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("duration key lookup", func(t *testing.T) {
+		k1, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		k2, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: k1, Value: xpath3.SingleString("found")},
+		})
+		// k1 and k2 are independently parsed; their FracSec pointers differ
+		// but the value space is identical, so lookup must succeed.
+		v, ok := m.Get(k2)
+		require.True(t, ok)
+		require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("equivalent duration keys are not distinct", func(t *testing.T) {
+		k1, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		k2, err := xpath3.CastFromString("PT1.5S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		k3, err := xpath3.CastFromString("PT2S", xpath3.TypeDayTimeDuration)
+		require.NoError(t, err)
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: k1, Value: xpath3.SingleInteger(1)},
+			{Key: k3, Value: xpath3.SingleInteger(3)},
+		})
+		// Independently parsed PT1.5S keys (differing FracSec pointers) collide.
+		require.True(t, m.Contains(k2))
+		// A distinct duration value must not collide.
+		v, ok := m.Get(k3)
+		require.True(t, ok)
+		require.Equal(t, int64(3), v.Get(0).(xpath3.AtomicValue).IntegerVal())
+	})
 }
 
 func TestMergeMaps(t *testing.T) {

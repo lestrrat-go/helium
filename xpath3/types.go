@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -541,8 +542,10 @@ func normalizeMapKey(key AtomicValue) mapKey {
 	// xs:anyURI promotes to xs:string for comparison.
 	tn := key.TypeName
 
-	// Normalize string-like types: xs:untypedAtomic and xs:anyURI promote to xs:string
-	if tn == TypeUntypedAtomic || tn == TypeAnyURI {
+	// Normalize string-like types: xs:untypedAtomic and xs:anyURI promote to
+	// xs:string, as do types derived from xs:string (e.g. xs:NCName, xs:token),
+	// so they share a key with an equal xs:string value.
+	if tn == TypeUntypedAtomic || tn == TypeAnyURI || isStringDerived(tn) {
 		return mapKey{typeName: TypeString, value: key.Value}
 	}
 
@@ -612,6 +615,17 @@ func normalizeMapKey(key AtomicValue) mapKey {
 	case QNameValue:
 		// QName equality is based on URI and local name, not prefix
 		return mapKey{typeName: tn, value: v.URI + "\x00" + v.Local}
+	case Duration:
+		// Duration holds a *big.Rat (FracSec) whose pointer breaks Go map
+		// equality. Canonicalize to value content: sign, months, and exact
+		// total seconds (whole seconds plus the rational fraction).
+		sec := new(big.Rat).SetInt64(int64(v.Seconds))
+		if v.FracSec != nil {
+			sec.Add(sec, v.FracSec)
+		}
+		canon := strconv.FormatBool(v.Negative) + "|" +
+			strconv.Itoa(v.Months) + "|" + sec.RatString()
+		return mapKey{typeName: tn, value: canon}
 	default:
 		return mapKey{typeName: tn, value: key.Value}
 	}
