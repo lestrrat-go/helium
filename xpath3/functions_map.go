@@ -47,21 +47,14 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		key := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 		if val, found := optMap.Get(key); found {
-			// Per F&O 3.1, an empty, multi-item, non-string, or unknown
-			// 'duplicates' value is a FOJS0005 error (not XPTY0004).
-			if seqLen(val) != 1 {
-				return nil, &XPathError{Code: errCodeFOJS0005, Message: "map:merge: 'duplicates' option must be a single string"}
-			}
-			av, ok := val.Get(0).(AtomicValue)
-			if !ok {
-				return nil, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a string, got %T", val.Get(0))}
-			}
-			if av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic {
-				return nil, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a string, got %s", av.TypeName)}
-			}
-			s, ok := av.Value.(string)
-			if !ok {
-				return nil, &XPathError{Code: errCodeFOJS0005, Message: "map:merge: 'duplicates' option must be a string"}
+			// Per F&O 3.1 option conventions, the 'duplicates' value is type
+			// xs:string and is converted with the function conversion rules.
+			// So xs:string subtypes (xs:NCName, ...), xs:anyURI, xs:untypedAtomic,
+			// and a single-item array all coerce to a string. An empty, multi-item,
+			// or non-convertible value is a FOJS0005 error (not XPTY0004).
+			s, convErr := coerceArgToStringRequired(val)
+			if convErr != nil {
+				return nil, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string: %s", convErr)}
 			}
 			switch s {
 			case duplicatesUseFirst:

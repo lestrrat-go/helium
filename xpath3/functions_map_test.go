@@ -44,6 +44,14 @@ func TestMapMergeAcceptsDuplicatesOptions(t *testing.T) {
 		`map:merge((map{"a": 1}, map{"a": 2}), map{"duplicates": "use-last"})`,
 		`map:merge((map{"a": 1}, map{"a": 2}), map{"duplicates": "use-any"})`,
 		`map:merge((map{"a": 1}, map{"a": 2}), map{"duplicates": "combine"})`,
+		// Per F&O 3.1 option conventions the value is converted with the
+		// function conversion rules, so xs:string subtypes, xs:anyURI, and a
+		// single-item array all coerce to the string policy.
+		`map:merge((map{"a": 1}, map{"a": 2}), map{"duplicates": xs:NCName("use-last")})`,
+		`map:merge((map{"a": 1}, map{"a": 2}), map{"duplicates": xs:anyURI("use-first")})`,
+		`map:merge((map{"a": 1}, map{"a": 2}), map{"duplicates": ["combine"]})`,
+		// reject with no duplicate keys succeeds.
+		`map:merge((map{"a": 1}, map{"b": 2}), map{"duplicates": "reject"})`,
 	}
 	for _, expr := range cases {
 		t.Run(expr, func(t *testing.T) {
@@ -51,6 +59,21 @@ func TestMapMergeAcceptsDuplicatesOptions(t *testing.T) {
 			require.NoError(t, err, expr)
 		})
 	}
+}
+
+// The "reject" duplicates policy raises FOJS0003 when an actual duplicate key
+// is encountered.
+func TestMapMergeRejectDuplicateKey(t *testing.T) {
+	t.Parallel()
+
+	doc := mustParseXML(t, "<root/>")
+
+	expr := `map:merge((map{"a": 1}, map{"a": 2}), map{"duplicates": "reject"})`
+	_, err := evaluate(t.Context(), doc, expr)
+	require.Error(t, err, expr)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "FOJS0003", xpErr.Code, expr)
 }
 
 // An invalid "duplicates" option value must raise FOJS0005 rather than being
