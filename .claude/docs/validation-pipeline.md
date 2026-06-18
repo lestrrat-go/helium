@@ -101,13 +101,21 @@ value space rather than rejecting. Global attributes matched through an `xs:anyA
 wildcard (`validateWildcardAttr`, processContents strict/lax) also enforce the
 global attribute's `Fixed`/`FixedNS` via `fixedValueMatches`.
 
-Enumeration facets are compared in value space, not raw lexical text. A value is
-a member if it lexically equals a member OR value-compares equal to one (e.g.
+Enumeration facets are compared in value space, not raw lexical text. Each
+enumeration *literal* is first whitespace-normalized with the constrained type's
+effective whiteSpace facet (`checkFacets` takes the `whiteSpace` mode resolved by
+`resolveWhiteSpace(td)` in `validateFacets`), mirroring the normalization the
+instance value already underwent — so an `xs:token` enumeration `"a  b"` (two
+spaces) collapses to `a b` and matches the instance `a b`. A value is a member if
+it lexically equals a normalized member OR value-compares equal to one (e.g.
 decimal `5.0`≡`5`, boolean `1`≡`true`, float `1.50`≡`1.5`, equal dateTimes in
 different timezones). For float/double, NaN equals NaN for enumeration (but
 remains incomparable for min/max ordering). QName/NOTATION enumeration resolves
 both instance and facet lexical QNames against their respective in-scope
-namespaces. Value-space comparison is restricted to an allowlist of numeric,
+namespaces; the facet literal is whitespace-normalized before its prefix is
+resolved (both at validation time and in the compile-time `checkEnumQNameAndNotation`
+prefix-binding check), so a literal like `" p:a "` is not falsely rejected as an
+invalid QName. Value-space comparison is restricted to an allowlist of numeric,
 boolean, date/time, and binary builtins (`enumValueSpaceTypes`); hexBinary and
 base64Binary compare by decoded octets (so `"0A"`≡`"0a"`). String-family and
 anyURI types stay lexical-only (their value space equals their whitespace-
@@ -125,7 +133,15 @@ spaces — so a literal active in a string member is not value-equal to an insta
 active in a numeric member (`memberTypes="zeroString xs:int"` enum `"0"` rejects
 `"+0"`). The union's remaining facets (pattern/length/bounds) are still checked in
 the instance active member's value space via `checkFacets` with enumeration
-suppressed.
+suppressed. The active member for that `checkFacets` call is resolved down to its
+LEAF basic member (`fixedUnionActiveMember` descends through nested unions), so a
+nested union (`outer=union(inner)`, `inner=union(xs:string)`) supplies the leaf's
+builtin local (`string`) rather than an intermediate union's empty local —
+otherwise an empty `builtinLocal` would mis-trigger `compareForRangeFacet`'s
+decimal range fallback on a string leaf and wrongly reject a numeric-looking
+string like `5` under `minInclusive`. `compareForRangeFacet` only falls back to a
+decimal comparison for a genuinely numeric (decimal-parseable) value; a string
+leaf leaves the range facet inapplicable.
 
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
 compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema

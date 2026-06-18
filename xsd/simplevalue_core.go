@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 
-	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	valuepkg "github.com/lestrrat-go/helium/internal/xsd/value"
 )
@@ -186,9 +185,18 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 			return enumErr
 		}
 
+		// Resolve the active member down to its LEAF basic (atomic) member —
+		// descending through any nested unions — so the non-enumeration facets
+		// (pattern/length/bounds) are evaluated with the leaf's builtin local, not
+		// an intermediate union's empty local. A nested-union leaf (e.g.
+		// outer=union(inner), inner=union(xs:string)) otherwise reaches checkFacets
+		// with an empty builtinLocal and would mis-trigger the decimal range-facet
+		// fallback on a string leaf.
 		memberLocal := ""
-		if active := unionActiveMemberNS(ctx, value, valueNS, cur); active != nil {
+		memberWS := resolveWhiteSpace(cur)
+		if active := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(cur)); active != nil {
 			memberLocal = builtinBaseLocal(active)
+			memberWS = resolveWhiteSpace(active)
 		}
 		// Suppress the enumeration facet here — it was checked above in union value
 		// space; the remaining facets (pattern, length, bounds) are evaluated in the
@@ -197,7 +205,7 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 		nonEnum.Enumeration = nil
 		nonEnum.EnumerationNS = nil
 		vc.suppressDepth++
-		err := checkFacets(ctx, trimmed, valueNS, &nonEnum, memberLocal, elemName, filename, line, vc)
+		err := checkFacets(ctx, trimmed, valueNS, &nonEnum, memberLocal, memberWS, elemName, filename, line, vc)
 		vc.suppressDepth--
 		if err != nil {
 			typeName := unionTypeDisplayName(td)
@@ -251,26 +259,6 @@ func checkUnionEnumeration(ctx context.Context, value string, valueNS map[string
 	msg := fmt.Sprintf("[facet 'enumeration'] The value '%s' is not an element of the set {%s}.", value, set)
 	vc.reportValidityError(ctx, filename, line, elemName, msg)
 	return fmt.Errorf("enumeration")
-}
-
-// unionActiveMemberNS returns the union member type that accepts value under the
-// given namespace context, resolving prefixes (for QName/NOTATION members) from
-// valueNS. It mirrors unionActiveMember but threads an in-scope namespace map
-// directly rather than a DOM node. Returns nil when no member accepts the value.
-func unionActiveMemberNS(ctx context.Context, value string, valueNS map[string]string, td *TypeDef) *TypeDef {
-	for _, m := range resolveUnionMembers(td) {
-		if m == nil {
-			continue
-		}
-		sub := &validationContext{
-			errorHandler:  helium.NilErrorHandler{},
-			suppressDepth: 1,
-		}
-		if validateValue(ctx, value, valueNS, m, "", "", 0, sub) == nil {
-			return m
-		}
-	}
-	return nil
 }
 
 // unionTypeDisplayName returns the display name for a union type error message.
@@ -488,10 +476,11 @@ func checkListPattern(ctx context.Context, value string, fs *FacetSet, elemName,
 func validateFacets(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
 	// Collect all facets along the type chain (most derived first).
 	var anyErr error
+	ws := resolveWhiteSpace(td)
 	cur := td
 	for cur != nil {
 		if cur.Facets != nil {
-			if err := checkFacets(ctx, value, valueNS, cur.Facets, builtinLocal, elemName, filename, line, vc); err != nil {
+			if err := checkFacets(ctx, value, valueNS, cur.Facets, builtinLocal, ws, elemName, filename, line, vc); err != nil {
 				anyErr = err
 			}
 		}

@@ -211,7 +211,12 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 		if builtinBaseLocal(td) != lexicon.TypeQName && builtinBaseLocal(td) != lexicon.TypeNotation {
 			return false
 		}
-		_, err := resolveLexicalQName(ev, enumNS)
+		// The enumeration literal is a value in the constrained type's value space,
+		// so apply the type's effective whiteSpace facet (QName/NOTATION collapse)
+		// before resolving its prefix — otherwise a literal like " p:a " (with
+		// surrounding spaces) would be reported as an invalid QName at compile time
+		// even though its collapsed form "p:a" is a perfectly valid bound QName.
+		_, err := resolveLexicalQName(normalizeWhiteSpace(ev, resolveWhiteSpace(td)), enumNS)
 		return err != nil
 	}
 }

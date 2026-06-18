@@ -1076,3 +1076,164 @@ func TestNotationUnprefixedIgnoresDefaultNamespace(t *testing.T) {
 		require.Contains(t, errs, "[facet 'enumeration']")
 	})
 }
+
+// TestEnumerationLiteralWhitespaceNormalized verifies that an enumeration facet
+// literal is whitespace-normalized with the constrained type's effective
+// whiteSpace facet BEFORE it is compared against the (already normalized)
+// instance value. xs:token collapses internal runs of whitespace, so an
+// enumeration literal "a  b" (two spaces) denotes the value "a b" and must match
+// an instance "a b" — a raw lexical compare of the un-normalized literal would
+// wrongly reject it.
+func TestEnumerationLiteralWhitespaceNormalized(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="xs:token">
+        <xs:enumeration value="a  b"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("token enumeration with collapsible literal accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>a b</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("token enumeration non-member still rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>a c</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+}
+
+// TestEnumQNameLiteralWhitespaceNormalized verifies the QName side of the same
+// normalization rule. An xs:QName enumeration literal " p:a " (surrounding
+// spaces) is a value in the QName value space (whiteSpace=collapse), so its
+// collapsed form "p:a" is a valid bound QName: it must NOT be reported as an
+// invalid QName at compile time, and it must match the instance "p:a".
+func TestEnumQNameLiteralWhitespaceNormalized(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction base="xs:QName">
+        <xs:enumeration value=" p:a "/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("surrounding-space QName literal compiles cleanly", func(t *testing.T) {
+		t.Parallel()
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for whitespace-padded QName enumeration literal: %s", errs)
+	})
+
+	t.Run("surrounding-space QName literal matches instance", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<q xmlns:p="urn:p">p:a</q>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("non-member QName rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<q xmlns:p="urn:p">p:b</q>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+}
+
+// TestNestedUnionRangeFacetLeaf verifies that a range facet (minInclusive)
+// applied over a nested union resolves the active member down to its LEAF basic
+// member before deciding whether a numeric decimal comparison applies. With
+// outer=union(inner) and inner=union(xs:string), a minInclusive="10" restriction
+// must NOT coerce a numeric-looking string leaf into a decimal range comparison:
+// the instance "5" must not be wrongly rejected (the bound is inapplicable to a
+// string value space). A parallel numeric union — both flat and nested over
+// xs:integer — must still enforce the bound, so "5" fails and "15" passes.
+func TestNestedUnionRangeFacetLeaf(t *testing.T) {
+	t.Parallel()
+
+	t.Run("string-leaf nested union does not apply decimal range", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="inner">
+    <xs:union memberTypes="xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="outer">
+    <xs:union memberTypes="inner"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="outer">
+        <xs:minInclusive value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+		// "5" is a valid xs:string; the minInclusive bound is inapplicable to a
+		// string value space, so it must NOT be rejected (the bug rejected it via a
+		// spurious decimal comparison triggered by the empty intermediate-union
+		// builtin local).
+		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+
+		// A non-numeric string remains a valid string value (range inapplicable).
+		errs, err = validateInstance(t, schemaXML, `<root>abc</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("flat numeric union enforces minInclusive", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="numUnion">
+    <xs:union memberTypes="xs:integer"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="numUnion">
+        <xs:minInclusive value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "is not a valid value")
+
+		errs, err = validateInstance(t, schemaXML, `<root>15</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("nested numeric union enforces minInclusive", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="inner">
+    <xs:union memberTypes="xs:integer"/>
+  </xs:simpleType>
+  <xs:simpleType name="outer">
+    <xs:union memberTypes="inner"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="outer">
+        <xs:minInclusive value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "is not a valid value")
+
+		errs, err = validateInstance(t, schemaXML, `<root>15</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+}

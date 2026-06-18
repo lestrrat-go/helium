@@ -3,7 +3,6 @@ package xsd
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -19,17 +18,16 @@ func compareDecimal(a, b string) int {
 // compareForRangeFacet compares two ordered values for a range facet
 // (min/maxInclusive, min/maxExclusive). It first tries value.Compare for the
 // builtin type. value.Compare is deliberately strict: it returns ok=false for an
-// unrecognized or non-value-comparable builtinLocal (e.g. an empty local from a
-// union/anonymous base, or a string-family type). Range facets, however, are only
-// constrained to ordered types, and a numeric value over a union(xs:integer)-style
-// base reaches here with an empty builtinLocal; only for that empty-local case do
-// we fall back to a decimal comparison so the bound is still enforced. The fallback
-// is routed through value.Compare(..., "decimal"), which trims XSD whitespace and
-// validates both operands against the decimal lexical space, so an NBSP-padded or
-// non-numeric value still yields ok=false and the caller treats the facet as
-// inapplicable. A non-empty builtinLocal that value.Compare could not compare (a
-// string-family or otherwise non-numeric type) is left indeterminate rather than
-// coerced into a numeric comparison.
+// unrecognized or non-value-comparable builtinLocal (e.g. an empty local from an
+// anonymous numeric base, or a string-family type). Range facets, however, are
+// only meaningful on ordered (numeric/date-time) types. For the empty-local case
+// — a numeric value over an anonymous/empty base that lost its builtin name — we
+// fall back to a decimal comparison ONLY when BOTH operands genuinely parse as
+// decimals (so the leaf is in the numeric value space); a non-numeric value (e.g.
+// a string leaf) yields ok=false and the caller treats the facet as inapplicable
+// rather than coercing it into a spurious numeric comparison. A non-empty
+// builtinLocal that value.Compare could not compare (a string-family or otherwise
+// non-numeric type) is likewise left indeterminate.
 func compareForRangeFacet(v, bound, builtinLocal string) (int, bool) {
 	cmp, ok := value.Compare(v, bound, builtinLocal)
 	if ok {
@@ -38,6 +36,10 @@ func compareForRangeFacet(v, bound, builtinLocal string) (int, bool) {
 	if builtinLocal != "" {
 		return 0, false
 	}
+	// Empty builtin local: only enforce the bound when the value is genuinely in
+	// the decimal value space. value.Compare(..., "decimal") trims XSD whitespace
+	// and validates both operands against the decimal lexical space, returning
+	// ok=false for a non-numeric leaf so the range facet stays inapplicable.
 	return value.Compare(v, bound, "decimal")
 }
 
@@ -122,7 +124,7 @@ func enumerationValueEqual(v, ev, builtinLocal string) bool {
 	return ok && cmp == 0
 }
 
-func checkFacets(ctx context.Context, value string, valueNS map[string]string, fs *FacetSet, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
+func checkFacets(ctx context.Context, value string, valueNS map[string]string, fs *FacetSet, builtinLocal, whiteSpace, elemName, filename string, line int, vc *validationContext) error {
 	var anyErr error
 
 	// Enumeration.
@@ -136,7 +138,11 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 					if i < len(fs.EnumerationNS) {
 						enumNS = fs.EnumerationNS[i]
 					}
-					enumQN, enumErr := resolveLexicalQName(ev, enumNS)
+					// The enumeration literal is a value in the constrained type's
+					// value space, so it must be whitespace-normalized with the same
+					// effective whiteSpace facet the instance value already had
+					// applied before its QName is resolved.
+					enumQN, enumErr := resolveLexicalQName(normalizeWhiteSpace(ev, whiteSpace), enumNS)
 					if enumErr == nil && valueQN == enumQN {
 						found = true
 						break
@@ -148,14 +154,16 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 			// always sufficient; additionally, for value-space-comparable types
 			// (see enumValueSpaceTypes) a lexically distinct value that is
 			// value-equal to a member must also be accepted. String-family and
-			// other non-comparable types stay lexical-only.
-			found = slices.Contains(fs.Enumeration, value)
-			if !found {
-				for _, ev := range fs.Enumeration {
-					if enumerationValueEqual(value, ev, builtinLocal) {
-						found = true
-						break
-					}
+			// other non-comparable types stay lexical-only. Each enumeration
+			// literal is whitespace-normalized with the constrained type's
+			// effective whiteSpace facet first, mirroring the normalization the
+			// instance value already underwent — otherwise a token enumeration
+			// "a  b" (two spaces) would never match the collapsed instance "a b".
+			for _, ev := range fs.Enumeration {
+				nev := normalizeWhiteSpace(ev, whiteSpace)
+				if nev == value || enumerationValueEqual(value, nev, builtinLocal) {
+					found = true
+					break
 				}
 			}
 		}
