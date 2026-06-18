@@ -24,54 +24,51 @@ func baseFacets(td *TypeDef) *FacetSet {
 	return nil
 }
 
-// checkFacetConsistency validates facet constraints for all named types.
-// It checks same-type mutual exclusion, same-type consistency, and
-// base-type restriction narrowing rules.
+// checkFacetConsistency validates facet constraints for every facet-bearing
+// simple type — named globals AND inline/anonymous (local) simple types. It
+// iterates c.typeDefSources rather than c.schema.types so that inline simple
+// types on elements/attributes (which never enter the named-type table) are
+// checked too; otherwise an invalid bound on an anonymous type would slip
+// through checkFacetValueAgainstBase and become the very no-op this guards
+// against. It checks the facet-value-against-base bound, same-type mutual
+// exclusion, same-type consistency, and base-type restriction narrowing rules.
 func (c *compiler) checkFacetConsistency(ctx context.Context) {
 	if c.filename == "" {
 		return
 	}
 
-	// Collect and sort types by name for deterministic error ordering.
+	// Collect and sort facet-bearing simple types by source line (then local
+	// name) for deterministic error ordering.
 	type facetEntry struct {
-		qn QName
-		td *TypeDef
+		td  *TypeDef
+		src typeDefSource
 	}
 	var entries []facetEntry
-	for qn, td := range c.schema.types {
+	for td, src := range c.typeDefSources {
 		if td.Facets == nil {
 			continue
 		}
-		if qn.NS == lexicon.NamespaceXSD {
+		if td.Name.NS == lexicon.NamespaceXSD {
 			continue
 		}
-		entries = append(entries, facetEntry{qn: qn, td: td})
+		entries = append(entries, facetEntry{td: td, src: src})
 	}
 	sort.Slice(entries, func(i, j int) bool {
-		si, oki := c.typeDefSources[entries[i].td]
-		sj, okj := c.typeDefSources[entries[j].td]
-		if oki && okj {
-			return si.line < sj.line
+		if entries[i].src.line != entries[j].src.line {
+			return entries[i].src.line < entries[j].src.line
 		}
-		if oki != okj {
-			return oki
-		}
-		return entries[i].qn.Local < entries[j].qn.Local
+		return entries[i].td.Name.Local < entries[j].td.Name.Local
 	})
 
 	for _, entry := range entries {
 		td := entry.td
 		fs := td.Facets
 
-		src, hasSrc := c.typeDefSources[td]
 		component := td.Name.Local
-		if component == "" {
+		if component == "" || entry.src.isLocal {
 			component = "local simple type"
 		}
-		line := 0
-		if hasSrc {
-			line = src.line
-		}
+		line := entry.src.line
 
 		c.checkFacetValueAgainstBase(ctx, td, fs, line, component)
 		c.checkFacetMutualExclusion(ctx, fs, line, component)

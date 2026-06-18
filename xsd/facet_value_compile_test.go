@@ -97,6 +97,40 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
 	})
 
+	t.Run("inline element simpleType with bad bound", func(t *testing.T) {
+		t.Parallel()
+		// An anonymous simpleType on an element never enters the named-type
+		// table, so the bound check must reach it via the type-def source map.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="xs:int">
+        <xs:minInclusive value="abc"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+	})
+
+	t.Run("inline attribute simpleType with bad bound", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="n">
+        <xs:simpleType>
+          <xs:restriction base="xs:int">
+            <xs:maxInclusive value="xyz"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+	})
+
 	t.Run("valid numeric bound still compiles", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
