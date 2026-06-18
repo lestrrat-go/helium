@@ -106,9 +106,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
 ### Tree Operations
 - `addChild(parent, child)` — append to end of children
 - `addSibling(node, sibling)` — append to end of siblings
-- `replaceNode(old, new)` — swap in same position
+- `replaceNode(old, new)` — swap in same position. Attribute-aware: replacing an `Attribute` updates the owning `Element.properties` head/chain (NOT `firstChild`/`lastChild`), and an attribute may only be replaced by attribute node(s) (non-attribute replacement is rejected)
 - `UnlinkNode(n)` — detach a `MutableNode` from parent and siblings (delegates to the internal `unlinkNode(Node)`)
-- `unlinkNode(n)` — internal detach that works for ANY sealed node via `baseDocNode()`, including non-`MutableNode` nodes like `NamespaceNodeWrapper`
+- `unlinkNode(n)` — internal detach that works for ANY sealed node via `baseDocNode()`, including non-`MutableNode` nodes like `NamespaceNodeWrapper`. Attribute-aware: an `Attribute` under an `*Element` is detached via `spliceOutAttribute`, repairing `Element.properties`
 
 All three insertion paths share `wouldCreateCycle(parent, cur)`: they reject inserting a node into itself or into one of its own descendants (which would put an ancestor below itself). addChild/addSibling auto-unlink an already-linked incoming node before relinking so it never lives in two places; rejection leaves the tree untouched. The shared guard + auto-unlink is factored into `addChildPreflight`/`addSiblingPreflight`. Leaf `AddChild`/`AddSibling` overrides that take a content-merge fast path (Text, Comment) run the matching preflight BEFORE merging, so `txt.AddChild(txt)`/`comment.AddChild(comment)` are rejected instead of doubling content, and an already-linked incoming leaf is unlinked from its old parent before its content is merged.
 

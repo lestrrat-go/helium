@@ -385,3 +385,166 @@ func TestForEachAttribute(t *testing.T) {
 	})
 	require.Equal(t, expected[:2], stopped)
 }
+
+// buildAttrElement creates an element carrying attributes a, b, c (in that
+// order) and returns the element together with its three attribute nodes.
+func buildAttrElement(t *testing.T, doc *helium.Document) (*helium.Element, *helium.Attribute, *helium.Attribute, *helium.Attribute) {
+	t.Helper()
+	e := doc.CreateElement("root")
+	_, err := e.SetAttribute("a", "1")
+	require.NoError(t, err, "set attribute a")
+	_, err = e.SetAttribute("b", "2")
+	require.NoError(t, err, "set attribute b")
+	_, err = e.SetAttribute("c", "3")
+	require.NoError(t, err, "set attribute c")
+	attrs := e.Attributes()
+	require.Len(t, attrs, 3, "element starts with three attributes")
+	return e, attrs[0], attrs[1], attrs[2]
+}
+
+func attrNames(e *helium.Element) []string {
+	var names []string
+	for _, a := range e.Attributes() {
+		names = append(names, a.Name())
+	}
+	return names
+}
+
+// TestAttributeReplaceInPropertyList verifies that replacing an attribute via
+// Attribute.Replace updates the owning element's property list (head and sibling
+// chain), not the child list. The replacement must be reachable via
+// FindAttribute and report the element as its parent, while the replaced node is
+// detached.
+func TestAttributeReplaceInPropertyList(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		// pick selects which of the three attributes (a, b, c) to replace.
+		pick func(a, b, c *helium.Attribute) *helium.Attribute
+		want []string
+	}{
+		{
+			name: "first",
+			pick: func(a, b, c *helium.Attribute) *helium.Attribute { return a },
+			want: []string{"z", "b", "c"},
+		},
+		{
+			name: "middle",
+			pick: func(a, b, c *helium.Attribute) *helium.Attribute { return b },
+			want: []string{"a", "z", "c"},
+		},
+		{
+			name: "last",
+			pick: func(a, b, c *helium.Attribute) *helium.Attribute { return c },
+			want: []string{"a", "b", "z"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := helium.NewDefaultDocument()
+			e, a, b, c := buildAttrElement(t, doc)
+			target := tc.pick(a, b, c)
+
+			repl, err := doc.CreateAttribute("z", "9", nil)
+			require.NoError(t, err, "create replacement attribute")
+
+			require.NoError(t, target.Replace(repl), "replace attribute succeeds")
+
+			require.Equal(t, tc.want, attrNames(e), "property list order is updated")
+
+			got, ok := e.FindAttribute(helium.QNamePredicate("z"))
+			require.True(t, ok, "replacement is findable via FindAttribute")
+			require.Same(t, repl, got, "FindAttribute returns the replacement node")
+			require.Equal(t, helium.Node(e), got.Parent(), "replacement parent is the element")
+
+			_, ok = e.FindAttribute(helium.QNamePredicate(target.Name()))
+			require.False(t, ok, "replaced attribute no longer in property list")
+			require.Nil(t, target.Parent(), "replaced attribute is detached")
+			require.Nil(t, target.PrevSibling(), "replaced attribute has no stale prev")
+			require.Nil(t, target.NextSibling(), "replaced attribute has no stale next")
+		})
+	}
+}
+
+// TestAttributeReplaceRejectsNonAttribute verifies that an attribute may only be
+// replaced by attribute nodes; a non-attribute replacement is rejected and the
+// property list is left untouched.
+func TestAttributeReplaceRejectsNonAttribute(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	e, a, _, _ := buildAttrElement(t, doc)
+
+	txt := doc.CreateText([]byte("nope"))
+	err := a.Replace(txt)
+	require.Error(t, err, "replacing an attribute with a text node must be rejected")
+	require.EqualError(t, err, "cannot replace an attribute with a non-attribute node")
+
+	require.Equal(t, []string{"a", "b", "c"}, attrNames(e), "property list is untouched")
+	require.Equal(t, helium.Node(e), a.Parent(), "attribute still belongs to the element")
+	require.Nil(t, txt.Parent(), "text node was not linked in")
+}
+
+// TestAttributeAddSiblingMoveRepairsPropertyList verifies that moving an
+// attribute via AddSibling (which auto-unlinks it from its old element first)
+// repairs the source element's property list. Previously the unlink only fixed
+// firstChild/lastChild, leaving Element.properties pointing at the reparented
+// attribute so FindAttribute could return a node whose Parent() no longer
+// matched.
+func TestAttributeAddSiblingMoveRepairsPropertyList(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		// pick selects which source attribute (a, b, c) to move.
+		pick func(a, b, c *helium.Attribute) *helium.Attribute
+		want []string
+	}{
+		{
+			name: "first",
+			pick: func(a, b, c *helium.Attribute) *helium.Attribute { return a },
+			want: []string{"b", "c"},
+		},
+		{
+			name: "middle",
+			pick: func(a, b, c *helium.Attribute) *helium.Attribute { return b },
+			want: []string{"a", "c"},
+		},
+		{
+			name: "last",
+			pick: func(a, b, c *helium.Attribute) *helium.Attribute { return c },
+			want: []string{"a", "b"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := helium.NewDefaultDocument()
+			src, a, b, c := buildAttrElement(t, doc)
+			moving := tc.pick(a, b, c)
+			movingName := moving.Name()
+
+			dst := doc.CreateElement("dst")
+			_, err := dst.SetAttribute("anchor", "0")
+			require.NoError(t, err, "create anchor attribute on dst")
+			anchor, ok := dst.FindAttribute(helium.QNamePredicate("anchor"))
+			require.True(t, ok, "anchor attribute is present on dst")
+
+			// Moving the attribute as anchor's sibling must auto-unlink it from src
+			// and repair src's property list head/chain.
+			require.NoError(t, anchor.AddSibling(moving), "moving attribute as sibling succeeds")
+
+			require.Equal(t, tc.want, attrNames(src), "source property list no longer holds the moved attribute")
+			_, found := src.FindAttribute(helium.QNamePredicate(movingName))
+			require.False(t, found, "moved attribute is no longer findable on src")
+
+			require.Equal(t, helium.Node(dst), moving.Parent(), "moved attribute parent is dst")
+			require.Equal(t, moving, anchor.NextSibling(), "moved attribute follows the anchor")
+			require.Equal(t, helium.Node(anchor), moving.PrevSibling(), "anchor precedes the moved attribute")
+		})
+	}
+}

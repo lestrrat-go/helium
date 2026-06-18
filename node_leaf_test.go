@@ -233,6 +233,89 @@ func TestLeafAddSiblingGuards(t *testing.T) {
 	}
 }
 
+const errReplaceCycle = "cannot replace a node with one of its own ancestors"
+
+// TestLeafReplaceGuards exercises every leaf-type Replace override (Text,
+// Comment, CDATASection, ProcessingInstruction, EntityRef). Each override
+// delegates to replaceNode, so this confirms the override exists and is wired to
+// the shared ancestor-rejection guard and to the linked / non-MutableNode
+// replacement splice.
+func TestLeafReplaceGuards(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range leafCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("ancestor replacement is rejected", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				mid := mustCreateElement(t, doc, "mid")
+				leaf := tc.new(t, doc)
+				require.NoError(t, root.AddChild(mid), "mid starts under root")
+				require.NoError(t, mid.AddChild(leaf), "leaf starts under mid")
+
+				// Replacing leaf with mid (its parent/ancestor) would splice an
+				// ancestor below itself, creating a cycle.
+				err := leaf.Replace(mid)
+				require.Error(t, err, "replacing leaf with an ancestor must be rejected")
+				require.EqualError(t, err, errReplaceCycle)
+
+				require.Equal(t, helium.Node(leaf), mid.FirstChild(), "leaf stays under mid")
+				require.Equal(t, helium.Node(mid), leaf.Parent(), "leaf parent stays mid")
+				requireNoCycle(t, root)
+			})
+
+			t.Run("legal already-linked replacement splices in", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				leaf := tc.new(t, doc)
+				incoming := mustCreateElement(t, doc, "incoming")
+				require.NoError(t, root.AddChild(leaf), "leaf starts under root")
+
+				src := mustCreateElement(t, doc, "src")
+				require.NoError(t, src.AddChild(incoming), "incoming starts under src")
+
+				// incoming is already linked under src; replacing leaf with it must
+				// detach it from src and splice it into leaf's position under root.
+				require.NoError(t, leaf.Replace(incoming), "linked replacement succeeds")
+
+				require.Equal(t, helium.Node(incoming), root.FirstChild(), "incoming took leaf's position")
+				require.Equal(t, helium.Node(incoming), root.LastChild(), "incoming is the only child")
+				require.Equal(t, helium.Node(root), incoming.Parent(), "incoming parent is root")
+				require.Nil(t, src.FirstChild(), "src no longer holds incoming")
+				require.Nil(t, leaf.Parent(), "replaced leaf is detached")
+				require.Nil(t, leaf.NextSibling(), "replaced leaf has no stale next")
+				require.Nil(t, leaf.PrevSibling(), "replaced leaf has no stale prev")
+				requireNoCycle(t, root)
+				requireNoCycle(t, src)
+			})
+
+			t.Run("non-mutable replacement splices in", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				leaf := tc.new(t, doc)
+				require.NoError(t, root.AddChild(leaf), "leaf starts under root")
+
+				ns := helium.NewNamespace("p", "urn:example")
+				nsw := helium.NewNamespaceNodeWrapper(ns, nil)
+
+				// A non-MutableNode replacement must not panic on a force-cast and
+				// must take leaf's position under root.
+				require.NoError(t, leaf.Replace(nsw), "non-mutable replacement succeeds")
+
+				require.Equal(t, helium.Node(nsw), root.FirstChild(), "wrapper took leaf's position")
+				require.Equal(t, helium.Node(root), nsw.Parent(), "wrapper parent is root")
+				require.Nil(t, leaf.Parent(), "replaced leaf is detached")
+				requireNoCycle(t, root)
+			})
+		})
+	}
+}
+
 // TestTextAddSiblingNonTextFallback covers Text.AddSibling's non-text fallback
 // path (the `return addSibling(n, cur)` branch). Moving an already-linked
 // non-text node via text.AddSibling must auto-unlink it from its old parent and

@@ -473,6 +473,17 @@ func unlinkNode(n Node) {
 
 	ndn := n.baseDocNode()
 
+	// Attributes are NOT stored in the parent's child list; they live in the
+	// owning Element's properties linked list. Detach via spliceOutAttribute so
+	// the Element.properties head is repaired and the attribute sibling chain is
+	// patched, without ever touching the parent's firstChild/lastChild.
+	if attr, ok := n.(*Attribute); ok {
+		if elem, ok := ndn.parent.(*Element); ok {
+			elem.spliceOutAttribute(attr)
+			return
+		}
+	}
+
 	if parent := ndn.parent; parent != nil {
 		pdn := parent.baseDocNode()
 		if pdn.firstChild != nil && pdn.firstChild.baseDocNode() == ndn {
@@ -502,6 +513,26 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	cur := nodes[0]
 	cdn := cur.baseDocNode()
 	ndn := n.baseDocNode()
+
+	// Attribute-list semantics: attributes live in the owning Element's
+	// properties linked list, NOT in the parent's child list. When n is an
+	// attribute under an Element, every replacement must itself be an attribute,
+	// and the Element.properties head must be repaired instead of
+	// firstChild/lastChild. Reject a mixed/non-attribute replacement before any
+	// unlink/splice so a rejected call leaves the tree untouched.
+	_, nIsAttr := n.(*Attribute)
+	ownerElem, _ := ndn.parent.(*Element)
+	attrList := nIsAttr && ownerElem != nil
+	if nIsAttr {
+		for _, nn := range nodes {
+			if nn.baseDocNode() == ndn {
+				continue
+			}
+			if _, ok := nn.(*Attribute); !ok {
+				return errors.New("cannot replace an attribute with a non-attribute node")
+			}
+		}
+	}
 
 	// Duplicate-operand guard: the same node cannot appear twice among the
 	// replacements. Splicing it into two positions of the new sibling chain
@@ -556,12 +587,24 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		ndn.prev.baseDocNode().next = cur
 	}
 	if parent != nil {
-		pdn := parent.baseDocNode()
-		if pdn.firstChild == n {
-			pdn.firstChild = cur
+		if attrList {
+			// n is the owner Element's first attribute when properties points at
+			// it; move the head to the first replacement attribute. Never touch
+			// firstChild/lastChild: attributes are not in the child list. cur is
+			// guaranteed an *Attribute here: the attribute-only check above rejected
+			// any non-attribute replacement when n is an attribute.
+			if curAttr, ok := cur.(*Attribute); ok && ownerElem.properties == n {
+				ownerElem.properties = curAttr
+			}
 		}
-		if pdn.lastChild == n {
-			pdn.lastChild = cur
+		if !attrList {
+			pdn := parent.baseDocNode()
+			if pdn.firstChild == n {
+				pdn.firstChild = cur
+			}
+			if pdn.lastChild == n {
+				pdn.lastChild = cur
+			}
 		}
 		cdn.parent = parent
 	}
@@ -588,8 +631,10 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		afterN.baseDocNode().prev = last
 	}
 
-	// Update parent's lastChild if n was the last child and we added more nodes
-	if afterN == nil && len(nodes) > 1 {
+	// Update parent's lastChild if n was the last child and we added more nodes.
+	// Skip for the attribute-list case: attributes are not in the child list, so
+	// the parent's lastChild must never be retargeted at an attribute.
+	if !attrList && afterN == nil && len(nodes) > 1 {
 		if parent := cdn.parent; parent != nil {
 			parent.baseDocNode().lastChild = last
 		}
