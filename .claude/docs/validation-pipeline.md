@@ -140,15 +140,83 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
     first node.
   - XPath uses namespace context from schema, not instance
   - Key comparison is value-space aware (XSD 3.11.4): each field value is
-    canonicalized via its declared simple type (`resolveFieldBuiltinLocal` →
-    `value.CanonicalKey`) before map-key use, so `5`/`+5`/`05` collide for
-    xs:integer. Attribute-field type resolution (`attrUseTypeDef`) mirrors the
+    canonicalized via its resolved simple type (`resolveFieldType` →
+    `canonicalFieldKey`/`canonicalValueKey`) before map-key use, so
+    `5`/`+5`/`05` collide for xs:integer. Field-type resolution first consults
+    the actual `*TypeDef` recorded for each element during pass-1 content
+    validation (`validationContext.actualElemType`, populated by
+    `annotateElement`), so an IDC field whose type is contributed by an
+    `xsi:type` actual type is canonicalized in the correct value space; it falls
+    back to descending the declared content model only when the actual type is
+    unknown. Attribute-field type resolution (`attrUseTypeDef`) mirrors the
     content validator's `validationContext.attrUseType`: an inline anonymous
     `<xs:simpleType>` (`au.Type`) is preferred over the named `au.TypeName`
-    reference, for both complex-type attribute uses and global attributes, so
-    keys on inline-typed attributes canonicalize too. Raw values are retained
-    for error display; fields whose type cannot be resolved fall back to
-    raw-string comparison.
+    reference, for both complex-type attribute uses and global attributes.
+    Canonicalization is full-type aware via per-variety dispatch: QName/NOTATION
+    fields resolve the lexical prefix against the field node's in-scope
+    namespaces to a `{uri,local}` Clark-name key (so `p:a`/`q:a` bound to the
+    same URI collide, different URIs stay distinct), list fields canonicalize
+    each item in the item type's value space (so `5 6`/`+5 06` collide for
+    itemType="xs:integer"), and union fields resolve the **active member** the
+    same way `validateUnionValue` does — the first **direct** member type
+    (declaration order) the value **fully validates against** (lexical space AND
+    that member's facets AND, for a nested-union member, the union wrapper's own
+    facets and member resolution, via `typeAcceptsValue` → `validateValue`, not
+    lexical space alone). Members are **not** pre-flattened to leaves: each direct
+    member (`resolveUnionMembers`) is validated as-is, so a nested-union member
+    whose wrapper restriction rejects the value by facet is correctly skipped
+    (flattening to the bare leaf would drop that wrapper facet and falsely accept
+    the value). Once the active member is chosen, the value is canonicalized in
+    THAT member's space by **recursing** through `canonicalValueKey`
+    (`unionActiveMember` → `canonicalValueKey`), so a **list** member canonicalizes
+    item-by-item and a nested-**union** member resolves its own active member;
+    an atomic member reaches `canonicalAtomicKey`, where value-comparable members
+    use `value.CanonicalKey` and lexical-only members (xs:string family, anyURI)
+    use the whitespace-processed lexical value. So memberTypes="xs:string
+    xs:integer" keeps `5` and `+5` distinct (active member xs:string), while
+    "xs:integer xs:string" collapses them; memberTypes="intList xs:string" (intList
+    = xs:list itemType="xs:integer") collapses `5 6` and `+5 06`; and a member
+    whose facets reject the value (e.g. an xs:integer restriction with
+    maxInclusive="0" fed `5`) is skipped so the value falls through to the next
+    member, exactly as the validator does. `typeAcceptsValue` (and thus
+    active-member selection) threads `fieldNodeNSContext(fieldNode)` as the value's
+    namespace context, so a union member with a QName/NOTATION-valued facet (e.g.
+    an enumeration of prefixed names) resolves its prefixes against the same
+    bindings as the instance value. Variety dispatch in `canonicalValueKey` and the
+    list/union member resolution use the same base-chain helpers the validator
+    uses (`resolveVariety`, `resolveItemType`, `resolveUnionMembers`), so a
+    restriction over an inline list/union (which keeps `Variety==Atomic` on the
+    derived type) is still canonicalized in the correct variety. `canonicalAtomicKey`
+    first whitespace-processes the value per the resolved type's effective
+    whiteSpace facet (`resolveWhiteSpace`), so a restriction of xs:string with
+    whiteSpace="collapse" makes `a b` and `a  b` collide. Raw values are retained
+    for error display;
+    fields whose type cannot be resolved fall back to raw-string comparison.
+  - Field type resolution (`resolveElemType`) consults the `actualElemType` map
+    populated in pass 1, so xsi:type ACTUAL types reach IDC canonicalization. Pass
+    1 annotates not only model-group children but also descendants of an
+    xs:anyType / mixed element with no content model: `validateElementContent`
+    routes that case to `annotateAnyTypeChildren`, which lax-validates each child
+    (look up global decl, resolve xsi:type, `annotateElement`, recurse) so a
+    descendant under an anyType ancestor still has its actual type recorded before
+    pass-2 IDC evaluation — otherwise a nested `<item xsi:type="itemType" n="5"/>`
+    / `n="+5"` pair would be compared lexically and wrongly accepted as unique.
+    The same recursion runs for the **lax** wildcard path: when
+    `matchWildcardParticle` (`xs:any processContents="lax"`) matches an element
+    that has no global declaration, that element is not schema-assessed but its
+    subtree is still walked via `annotateAnyTypeChildren`, so a nested global IDC
+    host deeper under an unknown wildcard wrapper has its descendants' actual
+    types recorded before pass-2 IDC — otherwise the same lexical-vs-value-space
+    `5`/`+5` collision would be missed. The **skip** wildcard path
+    (`processContents="skip"`) is not schema-assessed at all, so it must NOT run
+    content-model validation or raise errors; instead `matchWildcardParticle`
+    walks each matched subtree with `annotateSkipChildren`, an annotation-only
+    traversal that records (via `annotateElement`) the ACTUAL type for every
+    descendant carrying a resolvable `xsi:type` — including LOCAL descendants with
+    no global declaration — using a non-reporting `resolveXsiTypeQuiet`, then
+    recurses. This is what lets a nested `<item xsi:type="itemType" n="5"/>` /
+    `n="+5"` pair under an `xs:any processContents="skip"` wrapper collide in
+    xs:integer value space rather than being wrongly accepted as unique.
 
 ### Key Data Model
 

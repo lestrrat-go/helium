@@ -10,6 +10,10 @@ import (
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
+// msgAbstractType is the validity-error message reported when an element's
+// effective type definition is abstract (cvc-elt / cvc-type).
+const msgAbstractType = "The type definition is abstract."
+
 // fixedValueMatches reports whether an instance value satisfies a fixed value
 // constraint whose declared simple type is td. The comparison is performed in
 // the type's value space (XSD 1.1 §3.16, cvc-au/cvc-elt fixed-value rules):
@@ -118,18 +122,18 @@ func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, 
 //     lexical forms. Cross-family pairs (xs:string vs xs:integer, xs:integer vs
 //     xs:boolean, …) have no shared value space and remain unequal.
 //
-// The active member is resolved with unionActiveMember, which reuses the same
-// per-member validateValue path the normal (non-fixed) validation uses, so the
-// fixed-comparison and ordinary-validation notions of "active member" stay
+// The active member is resolved with fixedUnionActiveMember, which reuses the
+// same per-member validateValue path the normal (non-fixed) validation uses, so
+// the fixed-comparison and ordinary-validation notions of "active member" stay
 // consistent.
 func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string) bool {
 	members := resolveUnionMembers(td)
 
-	fixedMember := unionActiveMember(ctx, fixed, fixedNS, members)
+	fixedMember := fixedUnionActiveMember(ctx, fixed, fixedNS, members)
 	if fixedMember == nil {
 		return false
 	}
-	instanceMember := unionActiveMember(ctx, instance, instanceNS, members)
+	instanceMember := fixedUnionActiveMember(ctx, instance, instanceNS, members)
 	if instanceMember == nil {
 		return false
 	}
@@ -197,7 +201,7 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 // primitive family for this path.
 func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 	switch builtinLocal {
-	case "QName", "NOTATION", "":
+	case lexicon.TypeQName, lexicon.TypeNotation, "":
 		return "", false, false
 	case "decimal", "integer",
 		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
@@ -220,8 +224,8 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 	}
 }
 
-// unionActiveMember returns the active BASIC (atomic) member type for a value
-// within a union: the first member (in declaration order) the value fully
+// fixedUnionActiveMember returns the active BASIC (atomic) member type for a
+// value within a union: the first member (in declaration order) the value fully
 // validates against, descending through nested unions to the basic member that
 // actually accepts the value. It reuses the validateValue path so the validity
 // criteria match the main validation engine exactly (facets, list items, nested
@@ -234,7 +238,7 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 // (e.g. xs:integer), not the union TypeDef, so valueSpaceFamily can reduce it to
 // the comparable family (decimal) and compare it against a sibling decimal
 // member's value.
-func unionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef) *TypeDef {
+func fixedUnionActiveMember(ctx context.Context, value string, valueNS map[string]string, members []*TypeDef) *TypeDef {
 	for _, member := range members {
 		vc := &validationContext{
 			errorHandler:  helium.NilErrorHandler{},
@@ -247,7 +251,7 @@ func unionActiveMember(ctx context.Context, value string, valueNS map[string]str
 		// the active basic member within it; the validateValue success above
 		// guarantees at least one nested member accepts the value.
 		if resolveVariety(member) == TypeVarietyUnion {
-			if basic := unionActiveMember(ctx, value, valueNS, resolveUnionMembers(member)); basic != nil {
+			if basic := fixedUnionActiveMember(ctx, value, valueNS, resolveUnionMembers(member)); basic != nil {
 				return basic
 			}
 		}
@@ -263,7 +267,7 @@ func unionActiveMember(ctx context.Context, value string, valueNS map[string]str
 // date/time, and binary value spaces); everything else falls back to exact
 // equality of the normalized lexical forms.
 func fixedAtomicMatches(instance, fixed, builtinLocal string, instanceNS, fixedNS map[string]string) bool {
-	if builtinLocal == "QName" || builtinLocal == "NOTATION" {
+	if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
 		iqn, ierr := resolveLexicalQName(instance, instanceNS)
 		fqn, ferr := resolveLexicalQName(fixed, fixedNS)
 		// A prefix that cannot be resolved makes the QName/NOTATION itself invalid;
@@ -293,14 +297,21 @@ type validationContext struct {
 	filename      string
 	errorHandler  helium.ErrorHandler
 	suppressDepth int
+	// actualElemType records the ACTUAL *TypeDef determined for each element
+	// during pass-1 content validation, including any xsi:type override. Pass-2
+	// identity-constraint field resolution consults this before falling back to
+	// descending the declared content model, so an IDC field whose type is
+	// contributed by xsi:type is canonicalized in the correct value space.
+	actualElemType map[*helium.Element]*TypeDef
 }
 
 func newValidationContext(schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext {
 	return &validationContext{
-		schema:       schema,
-		cfg:          cfg,
-		filename:     filename,
-		errorHandler: handler,
+		schema:         schema,
+		cfg:            cfg,
+		filename:       filename,
+		errorHandler:   handler,
+		actualElemType: make(map[*helium.Element]*TypeDef),
 	}
 }
 
@@ -488,7 +499,7 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 		td = declType // fall back to declared type
 	}
 	if td != nil && td.Abstract {
-		msg := "The type definition is abstract."
+		msg := msgAbstractType
 		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 		return fmt.Errorf("abstract type")
 	}
@@ -536,11 +547,107 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 			if td.ContentType == ContentTypeElementOnly {
 				return vc.validateEmptyContent(ctx, elem)
 			}
-			return nil
+			// Mixed content with no model group (xs:anyType and similar lax/open
+			// content) admits arbitrary child elements. Pass 2 IDC evaluation can
+			// still reach descendants of this subtree, so each child must be
+			// lax-annotated with its ACTUAL type (honoring xsi:type) and recursed
+			// into — otherwise resolveFieldType falls back to declared types and
+			// misses xsi:type overrides on descendants.
+			return vc.annotateAnyTypeChildren(ctx, elem)
 		}
 		return vc.validateContentModel(ctx, elem, td.ContentModel)
 	}
 	return nil
+}
+
+// annotateAnyTypeChildren lax-validates the child elements of an xs:anyType (or
+// other mixed, model-group-less) element. There is no content model to walk, so
+// children are validated like elements matched by a lax wildcard: each child's
+// global element declaration is consulted (skipped when absent), its xsi:type
+// override is resolved, the resulting ACTUAL type is recorded via annotateElement,
+// and validation recurses into the child. This populates actualElemType for every
+// descendant that pass-2 IDC resolution can inspect, so xsi:type on descendants is
+// honored during key canonicalization.
+func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *helium.Element) error {
+	var contentErr error
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		edecl := lookupElemDecl(ce, vc.schema)
+		if edecl == nil {
+			// Lax: no global declaration, so the child (and its subtree) is not
+			// schema-assessed. Still recurse so any deeper anyType descendant with
+			// a resolvable global declaration gets annotated.
+			if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
+				contentErr = err
+			}
+			continue
+		}
+		td, xsiErr := vc.resolveXsiType(ctx, ce, edecl.Type)
+		if xsiErr != nil {
+			contentErr = xsiErr
+			continue
+		}
+		if td != nil && td.Abstract {
+			msg := msgAbstractType
+			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msg)
+			contentErr = fmt.Errorf("abstract type")
+			continue
+		}
+		vc.annotateElement(ctx, ce, td)
+		if td == nil {
+			continue
+		}
+		nilled, nilErr := vc.checkXsiNil(ctx, ce)
+		if nilErr != nil {
+			contentErr = nilErr
+			continue
+		}
+		if nilled {
+			if err := vc.validateNilledElement(ctx, ce, edecl, td); err != nil {
+				contentErr = err
+			}
+			continue
+		}
+		if err := vc.validateElementContent(ctx, ce, edecl, td); err != nil {
+			contentErr = err
+		}
+	}
+	return contentErr
+}
+
+// annotateSkipChildren walks the subtree of an element matched by an
+// `xs:any processContents="skip"` wildcard purely to RECORD actual types for
+// pass-2 IDC field canonicalization. Skipped content is NOT schema-assessed, so
+// this MUST NOT impose any validation errors and MUST NOT run any content-model
+// validation: it only records, for every descendant that carries a resolvable
+// xsi:type, the ACTUAL type that override denotes (via annotateElement), then
+// recurses. A nested global IDC host's fields would otherwise be canonicalized
+// with declared (or raw) types, missing xsi:type overrides on descendants — even
+// LOCAL descendants with no global declaration — under the skipped wrapper.
+func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *helium.Element) {
+	for child := range helium.Children(elem) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		// Resolve xsi:type WITHOUT reporting: skipped content is not assessed, so
+		// an unresolvable or non-derived xsi:type must not raise a validity error.
+		// Only an xsi:type override contributes an actual type distinct from what
+		// pass-2 can already derive from the content model, so record only that.
+		if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
+			vc.annotateElement(ctx, ce, actual)
+		}
+		vc.annotateSkipChildren(ctx, ce)
+	}
 }
 
 func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
@@ -1033,6 +1140,42 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 	return td, nil
 }
 
+// resolveXsiTypeQuiet resolves an element's xsi:type to a schema type WITHOUT
+// reporting any validity error. It is used for skipped (`processContents="skip"`)
+// content, which is not schema-assessed: a missing or non-derived xsi:type must
+// not raise an error, it just means no actual type override is available. Returns
+// (type, true) only when the xsi:type value resolves to a known type.
+func (vc *validationContext) resolveXsiTypeQuiet(elem *helium.Element) (*TypeDef, bool) {
+	var xsiTypeVal string
+	for _, a := range elem.Attributes() {
+		if a.URI() == lexicon.NamespaceXSI && a.LocalName() == attrType {
+			xsiTypeVal = a.Value()
+			break
+		}
+	}
+	if xsiTypeVal == "" {
+		return nil, false
+	}
+
+	local := xsiTypeVal
+	var ns string
+	if prefix, rest, ok := strings.Cut(xsiTypeVal, ":"); ok {
+		local = rest
+		ns = lookupNS(elem, prefix)
+	} else {
+		ns = lookupNS(elem, "")
+	}
+
+	td, ok := vc.schema.LookupType(local, ns)
+	if !ok {
+		td, ok = vc.schema.LookupType(local, vc.schema.TargetNamespace())
+	}
+	if !ok {
+		return nil, false
+	}
+	return td, true
+}
+
 // xsdTypeName converts a TypeDef to a type name string suitable for annotations.
 // For anonymous types (no name), it walks up the base type chain to find the
 // nearest named ancestor type, since XPath type checks need a concrete type name.
@@ -1071,6 +1214,11 @@ func xsdTypeName(td *TypeDef) string {
 
 // annotateElement records a type annotation for an element node.
 func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Element, td *TypeDef) {
+	// Always record the actual *TypeDef (post-xsi:type) for pass-2 IDC field
+	// type resolution, independent of the optional user-facing annotations map.
+	if vc.actualElemType != nil && td != nil {
+		vc.actualElemType[elem] = td
+	}
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}

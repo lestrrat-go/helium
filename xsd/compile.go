@@ -429,7 +429,7 @@ func registerBuiltinTypes(s *Schema) {
 		"date", "dateTime", "time", "duration",
 		"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",
 		"hexBinary", "base64Binary",
-		"anyURI", "QName", "NOTATION",
+		"anyURI", lexicon.TypeQName, lexicon.TypeNotation,
 		"anyType", "anySimpleType",
 	}
 	for _, name := range builtins {
