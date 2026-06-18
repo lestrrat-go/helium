@@ -311,7 +311,7 @@ Generic channel-based async event sink.
 - **New[T](ctx, Handler[T], ...Option) → *Sink[T]**
 - **Sink.Handle(ctx, T)** — async send (blocks if buffer full)
 - **Sink.Close()** — drain and stop
-- WithBufferSize(n) — default 256
+- WithBufferSize(n) — default 256; negative values clamped to 0 (unbuffered)
 - Nil-safe: Handle() on nil *Sink is no-op
 - When T=error, satisfies helium.ErrorHandler
 - Files: `sink.go`

@@ -71,6 +71,31 @@ func TestSinkCloseMultipleTimes(t *testing.T) {
 	require.NoError(t, s.Close())
 }
 
+func TestSinkNegativeBufferSizeDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	var mu sync.Mutex
+	var got []int
+
+	var s *sink.Sink[int]
+	require.NotPanics(t, func() {
+		s = sink.New[int](ctx, sink.HandlerFunc[int](func(_ context.Context, v int) {
+			mu.Lock()
+			got = append(got, v)
+			mu.Unlock()
+		}), sink.WithBufferSize(-1))
+	})
+
+	s.Handle(ctx, 1)
+	s.Handle(ctx, 2)
+	require.NoError(t, s.Close())
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []int{1, 2}, got)
+}
+
 func TestSinkCloseWhileHandleBlockedUnblocksHandle(t *testing.T) {
 	t.Parallel()
 
