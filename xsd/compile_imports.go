@@ -276,11 +276,31 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		return err
 	}
 
-	// Phase B: Process redefine children (overrides). Redefinitions replace
-	// the same-named components loaded in Phase A, so the duplicate-name checks
-	// in parseNamed* must be suppressed for this loop.
-	c.inRedefine = true
-	defer func() { c.inRedefine = false }()
+	// Phase B: Process redefine children (overrides). Each override may replace
+	// the same-named component loaded in Phase A exactly once. Snapshot the
+	// Phase-A keys per kind so the duplicate-name checks are suppressed only for
+	// those specific names, consumed once each — not globally. An override that
+	// targets a name not loaded in Phase A, or repeats a name, is reported as a
+	// duplicate.
+	phaseAKeys := map[redefineKind]map[QName]struct{}{
+		redefineKindType:      make(map[QName]struct{}, len(c.schema.types)),
+		redefineKindGroup:     make(map[QName]struct{}, len(c.schema.groups)),
+		redefineKindAttrGroup: make(map[QName]struct{}, len(c.schema.attrGroups)),
+	}
+	for qn := range c.schema.types {
+		phaseAKeys[redefineKindType][qn] = struct{}{}
+	}
+	for qn := range c.schema.groups {
+		phaseAKeys[redefineKindGroup][qn] = struct{}{}
+	}
+	for qn := range c.schema.attrGroups {
+		phaseAKeys[redefineKindAttrGroup][qn] = struct{}{}
+	}
+	c.redefine = &redefineState{
+		phaseAKeys: phaseAKeys,
+		seen:       make(map[redefineKind]map[QName]struct{}),
+	}
+	defer func() { c.redefine = nil }()
 	for child := range helium.Children(redefineElem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -380,6 +400,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				continue
 			}
 			qn := QName{Local: name, NS: c.schema.targetNamespace}
+			// This case writes c.schema.attrGroups directly (bypassing
+			// parseNamedAttributeGroup), so enforce the redefine duplicate rule
+			// here: the override must target a Phase-A attribute group and may
+			// consume it only once.
+			if _, exists := c.schema.attrGroups[qn]; exists && !c.allowsRedefine(redefineKindAttrGroup, qn) {
+				c.reportDuplicateComponent(ctx, elem, "attributeGroup", "A global attribute group definition", qn)
+				continue
+			}
 			origAttrs := c.schema.attrGroups[qn]
 			// Build the new attribute list manually, expanding self-references
 			// inline. parseNamedAttributeGroup only collects xs:attribute children

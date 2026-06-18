@@ -797,6 +797,69 @@ func TestRedefine(t *testing.T) {
 <code xmlns="http://example.com/ns">VeryLongCodeValue</code>`)
 		require.Error(t, err)
 	})
+
+	compileErrors := func(t *testing.T, xsdPath string) string {
+		t.Helper()
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err := xsd.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
+		require.NoError(t, err)
+		_ = collector.Close()
+		_, errors := partitionCompileErrors(collector.Errors())
+		return errors
+	}
+
+	t.Run("single_redefine_compiles_clean", func(t *testing.T) {
+		t.Parallel()
+		writeFile(t, "base-single.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="codeType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-single.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-single.xsd">
+    <xs:simpleType name="codeType">
+      <xs:restriction base="codeType">
+        <xs:maxLength value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="code" type="codeType"/>
+</xs:schema>`)
+
+		require.Empty(t, compileErrors(t, mainPath))
+	})
+
+	t.Run("duplicate_override_children_reported", func(t *testing.T) {
+		t.Parallel()
+		writeFile(t, "base-dup-override.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="codeType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-dup-override.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-dup-override.xsd">
+    <xs:simpleType name="codeType">
+      <xs:restriction base="codeType">
+        <xs:maxLength value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="codeType">
+      <xs:restriction base="codeType">
+        <xs:maxLength value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="code" type="codeType"/>
+</xs:schema>`)
+
+		require.Contains(t, compileErrors(t, mainPath), "does already exist")
+	})
 }
 
 func TestFacetConsistency(t *testing.T) {

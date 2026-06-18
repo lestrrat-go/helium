@@ -61,11 +61,51 @@ type compiler struct {
 	// so the per-compiler importedNS map does not detect the cycle.
 	importDepth    int
 	maxImportDepth int
-	// inRedefine is true while processing the override children of an
-	// xs:redefine. Redefinitions intentionally replace the same-named
-	// component loaded from the redefined schema, so the duplicate-name
-	// checks in parseNamed* must be suppressed in this context.
-	inRedefine bool
+	// redefine is non-nil while processing the override children of an
+	// xs:redefine. It scopes the duplicate-name suppression to the specific
+	// (kind, name) components actually loaded by the redefined schema, each
+	// consumable exactly once, instead of suppressing the check globally.
+	redefine *redefineState
+}
+
+// redefineKind identifies the component category a redefine override targets.
+type redefineKind int
+
+const (
+	redefineKindType redefineKind = iota
+	redefineKindGroup
+	redefineKindAttrGroup
+)
+
+// redefineState scopes duplicate-name suppression during an xs:redefine
+// override loop. phaseAKeys records, per kind, the QNames loaded from the
+// redefined schema (Phase A); each may be replaced by exactly one override.
+// seen records, per kind, the override QNames already consumed so a repeated
+// override of the same name is reported as a duplicate.
+type redefineState struct {
+	phaseAKeys map[redefineKind]map[QName]struct{}
+	seen       map[redefineKind]map[QName]struct{}
+}
+
+// allowsRedefine reports whether an override of the given (kind, name) may
+// replace an existing same-named component. It returns true only the first
+// time a name loaded in Phase A is overridden; a name not loaded in Phase A
+// or a repeated override returns false so the caller reports a duplicate.
+func (c *compiler) allowsRedefine(kind redefineKind, qn QName) bool {
+	if c.redefine == nil {
+		return false
+	}
+	if _, ok := c.redefine.phaseAKeys[kind][qn]; !ok {
+		return false
+	}
+	if _, seen := c.redefine.seen[kind][qn]; seen {
+		return false
+	}
+	if c.redefine.seen[kind] == nil {
+		c.redefine.seen[kind] = make(map[QName]struct{})
+	}
+	c.redefine.seen[kind][qn] = struct{}{}
+	return true
 }
 
 // defaultMaxImportDepth bounds xs:import recursion depth (not a flat

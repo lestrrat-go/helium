@@ -375,6 +375,15 @@ func (c *compiler) parseGlobalAttribute(ctx context.Context, elem *helium.Elemen
 	au := c.readAttributeUseDecl(ctx, elem, attrUseReadOptions{
 		name: QName{Local: name, NS: c.schema.targetNamespace},
 	})
+
+	// Check for a duplicate global attribute declaration. xs:redefine never
+	// targets global attributes, so (mirroring the other named components) only
+	// suppress the report when processing redefine overrides.
+	if _, exists := c.schema.globalAttrs[au.Name]; exists && c.redefine == nil {
+		c.reportDuplicateComponent(ctx, elem, "attribute", "A global attribute declaration", au.Name)
+		return
+	}
+
 	c.schema.globalAttrs[au.Name] = au
 }
 

@@ -24,10 +24,9 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 	td.Name = QName{Local: name, NS: c.schema.targetNamespace}
 	td.Abstract = getAttr(elem, attrAbstract) == attrValTrue
 
-	// Check for a duplicate global type. Redefinitions intentionally replace
-	// the same-named type loaded from the redefined schema, so suppress the
-	// check while processing xs:redefine overrides.
-	if _, exists := c.schema.types[td.Name]; exists && !c.inRedefine {
+	// Check for a duplicate global type. An xs:redefine override may replace
+	// the same-named type loaded from the redefined schema exactly once.
+	if _, exists := c.schema.types[td.Name]; exists && !c.allowsRedefine(redefineKindType, td.Name) {
 		c.reportDuplicateComponent(ctx, elem, "complexType", "A global type definition", td.Name)
 		return nil
 	}
@@ -57,10 +56,9 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 	}
 	td.Name = QName{Local: name, NS: c.schema.targetNamespace}
 
-	// Check for a duplicate global type. Redefinitions intentionally replace
-	// the same-named type loaded from the redefined schema, so suppress the
-	// check while processing xs:redefine overrides.
-	if _, exists := c.schema.types[td.Name]; exists && !c.inRedefine {
+	// Check for a duplicate global type. An xs:redefine override may replace
+	// the same-named type loaded from the redefined schema exactly once.
+	if _, exists := c.schema.types[td.Name]; exists && !c.allowsRedefine(redefineKindType, td.Name) {
 		c.reportDuplicateComponent(ctx, elem, "simpleType", "A global type definition", td.Name)
 		return nil
 	}

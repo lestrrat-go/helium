@@ -83,4 +83,13 @@ func TestDuplicateNamedComponent(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
 	})
+
+	t.Run("duplicate global attribute", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="A" type="xs:string"/>
+  <xs:attribute name="A" type="xs:int"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+	})
 }
