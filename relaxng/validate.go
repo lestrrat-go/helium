@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -1075,14 +1077,17 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 			return -1
 		}
 		return v.matchAttrContent(def, text, elem)
-	case patternOneOrMore:
-		content := wrapChildren(pat.children)
-		if v.matchAttrContent(content, text, elem) != 0 {
-			return -1
+	case patternOneOrMore, patternZeroOrMore:
+		// Match the repetition against the attribute's tokens via the
+		// backtracking token matcher, requiring that the whole token sequence
+		// is consumed. Without the full-consumption check, a zeroOrMore would
+		// accept any text (consuming nothing) and a oneOrMore would ignore
+		// trailing non-matching tokens.
+		tokens := strings.Fields(text)
+		if slices.Contains(v.matchAttrTokensCounts(pat, tokens), len(tokens)) {
+			return 0
 		}
-		return 0
-	case patternZeroOrMore:
-		return 0
+		return -1
 	}
 	return 0
 }
@@ -1749,9 +1754,18 @@ func (v *validator) matchData(pat *pattern, text string) int {
 		case "string":
 			return 0
 		}
+		// A schema may name an XSD datatype (e.g. "integer", "NMTOKEN") without
+		// declaring the XSD datatype library; route recognized names through the
+		// shared XSD validator. Unrecognized names fall through to the failure
+		// below.
+		if _, ok := xsdDatatypeNames[dt.name]; ok {
+			return validateXSDType(dt.name, text, pat.params)
+		}
 	}
 
-	return 0
+	// Unknown built-in datatype name or unknown library: an unsupported datatype
+	// cannot be satisfied, so it must fail rather than silently match everything.
+	return -1
 }
 
 // xsdDatatypeNames is the set of XSD datatype-library names RELAX NG recognizes.
@@ -1807,9 +1821,21 @@ func validateWithParams(value string, params []*param) int {
 				return -1
 			}
 		case "minLength":
-			// simplified: just check length
+			n, err := strconv.Atoi(strings.TrimSpace(p.value))
+			if err != nil {
+				return -1
+			}
+			if utf8.RuneCountInString(value) < n {
+				return -1
+			}
 		case "maxLength":
-			// simplified: just check length
+			n, err := strconv.Atoi(strings.TrimSpace(p.value))
+			if err != nil {
+				return -1
+			}
+			if utf8.RuneCountInString(value) > n {
+				return -1
+			}
 		}
 	}
 	return 0
