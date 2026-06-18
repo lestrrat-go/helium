@@ -135,13 +135,14 @@ active in a numeric member (`memberTypes="zeroString xs:int"` enum `"0"` rejects
 the instance active member's value space via `checkFacets` with enumeration
 suppressed. The active member for that `checkFacets` call is resolved down to its
 LEAF basic member (`fixedUnionActiveMember` descends through nested unions), so a
-nested union (`outer=union(inner)`, `inner=union(xs:string)`) supplies the leaf's
-builtin local (`string`) rather than an intermediate union's empty local —
-otherwise an empty `builtinLocal` would mis-trigger `compareForRangeFacet`'s
-decimal range fallback on a string leaf and wrongly reject a numeric-looking
-string like `5` under `minInclusive`. `compareForRangeFacet` only falls back to a
-decimal comparison for a genuinely numeric (decimal-parseable) value; a string
-leaf leaves the range facet inapplicable.
+nested union (`outer=union(inner)`, `inner=union(xs:string)`) resolves to the
+leaf type rather than an intermediate union. `compareForRangeFacet` carries no
+empty-`builtinLocal` decimal fallback: it defers entirely to `value.Compare`,
+which orders genuinely numeric (decimal-derived atomic) leaves and returns
+`ok=false` for string-family, non-atomic (list/union), or otherwise
+non-comparable leaves — leaving the range facet inapplicable rather than forcing
+a decimal comparison. So a numeric-looking string like `5` under `minInclusive`
+on a string or list leaf is no longer wrongly rejected.
 
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
 compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema
