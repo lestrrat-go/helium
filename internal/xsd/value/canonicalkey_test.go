@@ -50,6 +50,48 @@ func TestCanonicalKey(t *testing.T) {
 		"distinct huge gYear values must not collide")
 }
 
+// TestCanonicalKeyFloatOverflowINF verifies that a finite lexical value that
+// overflows to infinity at the target precision (e.g. "1e40" rounds to +Inf in
+// xs:float) produces the XSD-canonical "INF"/"-INF" key, identical to the key
+// for the literal "INF"/"-INF" spelling. Otherwise IDC unique/key fields would
+// miss duplicates that are value-equal but spelled differently (Compare reports
+// them equal while their keys differ).
+func TestCanonicalKeyFloatOverflowINF(t *testing.T) {
+	_ = t.Context()
+
+	inf, okINF := value.CanonicalKey("INF", "float")
+	require.True(t, okINF, `"INF" must canonicalize as a valid xs:float`)
+	over, okOver := value.CanonicalKey("1e40", "float")
+	require.True(t, okOver, `"1e40" must canonicalize as a valid xs:float`)
+	require.Equal(t, inf, over, `"1e40" overflows to +Inf in float32 and must share the "INF" key`)
+
+	negINF, okNegINF := value.CanonicalKey("-INF", "float")
+	require.True(t, okNegINF, `"-INF" must canonicalize as a valid xs:float`)
+	negOver, okNegOver := value.CanonicalKey("-1e40", "float")
+	require.True(t, okNegOver, `"-1e40" must canonicalize as a valid xs:float`)
+	require.Equal(t, negINF, negOver, `"-1e40" overflows to -Inf in float32 and must share the "-INF" key`)
+
+	// And the public Compare path must agree they are equal.
+	cmp, okCmp := value.Compare("1e40", "INF", "float")
+	require.True(t, okCmp)
+	require.Equal(t, 0, cmp, `"1e40" and "INF" must compare equal for xs:float`)
+
+	negCmp, okNegCmp := value.Compare("-1e40", "-INF", "float")
+	require.True(t, okNegCmp)
+	require.Equal(t, 0, negCmp, `"-1e40" and "-INF" must compare equal for xs:float`)
+
+	// As xs:double, 1e40 is finite, so it must NOT collide with INF.
+	infD, _ := value.CanonicalKey("INF", "double")
+	overD, okOverD := value.CanonicalKey("1e40", "double")
+	require.True(t, okOverD)
+	require.NotEqual(t, infD, overD, `"1e40" is finite as xs:double and must not share the "INF" key`)
+
+	negINFD, _ := value.CanonicalKey("-INF", "double")
+	negOverD, okNegOverD := value.CanonicalKey("-1e40", "double")
+	require.True(t, okNegOverD)
+	require.NotEqual(t, negINFD, negOverD, `"-1e40" is finite as xs:double and must not share the "-INF" key`)
+}
+
 // TestCanonicalKeySignedYearInvalid verifies that a leading '+' on the year is
 // not accepted as a valid date/dateTime lexical form: it must NOT canonicalize
 // as valid, and must NOT produce a key equal to the unsigned form.

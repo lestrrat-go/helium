@@ -257,6 +257,17 @@ func canonicalFloatKey(s string, bitSize int) (string, bool) {
 	if bitSize == 32 {
 		f = float64(float32(f)) // round to xs:float precision
 	}
+	// A finite lexical value can overflow to infinity at the target precision
+	// (e.g. "1e40" rounds to +Inf in xs:float). Re-check after rounding so the
+	// key matches the XSD-canonical "INF"/"-INF" form rather than Go's
+	// strconv.FormatFloat output ("+Inf"/"-Inf"), keeping equal values' keys
+	// consistent with the literal INF/-INF spellings above.
+	if math.IsInf(f, 1) {
+		return "INF", true
+	}
+	if math.IsInf(f, -1) {
+		return "-INF", true
+	}
 	if f == 0 {
 		f = 0 // normalize -0 to +0; they are equal in the value space
 	}
