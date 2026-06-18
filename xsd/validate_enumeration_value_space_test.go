@@ -58,9 +58,9 @@ func TestEnumerationValueSpace(t *testing.T) {
 		// lexical form is not significant.
 		{name: "base64Binary whitespace insignificant", baseType: "xs:base64Binary", enum: []string{"YWJj"}, instance: "YW Jj"},
 		{name: "base64Binary non-member", baseType: "xs:base64Binary", enum: []string{"YWJj"}, instance: "YWJk", wantReject: true},
-		// The lexical validator (regex-only) admits unpadded forms; an unpadded
-		// instance must still value-match its padded, byte-equal member.
-		{name: "base64Binary unpadded matches padded", baseType: "xs:base64Binary", enum: []string{"TQ=="}, instance: "TQ"},
+		// A padded instance that is byte-equal to its member but written with
+		// extra whitespace must still value-match (whitespace is insignificant).
+		{name: "base64Binary padded whitespace matches", baseType: "xs:base64Binary", enum: []string{"TQ=="}, instance: "TQ =="},
 
 		// dateTime — same instant written with a different timezone form.
 		{name: "dateTime equal across timezone", baseType: "xs:dateTime",

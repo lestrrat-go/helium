@@ -1,10 +1,12 @@
 package value
 
 import (
+	"encoding/base64"
 	"fmt"
 	"math/big"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // ValidateBuiltin validates a value against a builtin XSD type's lexical space.
@@ -159,6 +161,11 @@ func validateDate(value string) error {
 	if !dateRegex.MatchString(value) {
 		return fmt.Errorf("invalid date")
 	}
+	if tz, ok := splitTimezone(value); ok {
+		if err := validateTimezone(tz); err != nil {
+			return err
+		}
+	}
 	return validateDateComponents(value)
 }
 
@@ -289,9 +296,12 @@ func splitTimezone(value string) (string, bool) {
 	if last == 'Z' || last == 'z' {
 		return value[len(value)-1:], true
 	}
-	// A numeric offset is "±HH:MM" — 6 trailing chars whose 6th-from-last is a sign.
+	// A numeric offset is "±HH:MM" — 6 trailing chars whose 6th-from-last is a
+	// sign and whose 3rd-from-last is the ':' separator. The colon check is
+	// what distinguishes a real offset from the '-' that separates date fields
+	// (e.g. the "-05-20" tail of "1996-05-20").
 	if len(value) >= 6 {
-		if c := value[len(value)-6]; c == '+' || c == '-' {
+		if c := value[len(value)-6]; (c == '+' || c == '-') && value[len(value)-3] == ':' {
 			return value[len(value)-6:], true
 		}
 	}
@@ -340,7 +350,7 @@ func validateDateComponents(value string) error {
 	}
 	// Find year-month-day fields: YYYY-MM-DD...
 	// Year is variable-length (4+ digits), so find second '-' after first.
-	_, rest, found := strings.Cut(s, "-")
+	yearStr, rest, found := strings.Cut(s, "-")
 	if !found {
 		return fmt.Errorf("invalid date")
 	}
@@ -354,7 +364,10 @@ func validateDateComponents(value string) error {
 	}
 	dayStr = dayStr[:2]
 
-	var month, day int
+	var year, month, day int
+	if _, err := fmt.Sscanf(yearStr, "%d", &year); err != nil {
+		return fmt.Errorf("invalid date")
+	}
 	if _, err := fmt.Sscanf(monthStr, "%d", &month); err != nil {
 		return fmt.Errorf("invalid date")
 	}
@@ -365,14 +378,30 @@ func validateDateComponents(value string) error {
 	if month < 1 || month > 12 {
 		return fmt.Errorf("invalid date: month %d out of range", month)
 	}
-	// Maximum days per month (February gets 29 for simplicity; the XML Schema
-	// spec allows Feb 29 in every year, or rather doesn't restrict by year for
-	// the xs:date datatype — but it does require valid Gregorian days).
-	maxDays := [13]int{0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	// Maximum days per month. February's length depends on whether the year is
+	// a leap year in the proleptic Gregorian calendar.
+	maxDays := [13]int{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	if month == 2 && isLeapYear(year) {
+		maxDays[2] = 29
+	}
 	if day < 1 || day > maxDays[month] {
 		return fmt.Errorf("invalid date: day %d out of range for month %d", day, month)
 	}
 	return nil
+}
+
+// isLeapYear reports whether the given (non-negative) Gregorian year is a leap
+// year. The year value here is the absolute magnitude parsed from the lexical
+// form; leap-year status is symmetric for the BCE side of the proleptic
+// Gregorian calendar as used by XSD.
+func isLeapYear(year int) bool {
+	if year%400 == 0 {
+		return true
+	}
+	if year%100 == 0 {
+		return false
+	}
+	return year%4 == 0
 }
 
 // durationRegex matches xs:duration.
@@ -401,6 +430,47 @@ func validateGYear(value string) error {
 	if !gYearRegex.MatchString(value) {
 		return fmt.Errorf("invalid gYear")
 	}
+	if _, err := stripAndCheckTimezone(value); err != nil {
+		return err
+	}
+	return nil
+}
+
+// stripAndCheckTimezone removes any trailing timezone designator from value,
+// validating its range, and returns the remaining (timezone-free) body. The
+// input is assumed to have already passed its lexical regex.
+func stripAndCheckTimezone(value string) (string, error) {
+	tz, ok := splitTimezone(value)
+	if !ok {
+		return value, nil
+	}
+	if err := validateTimezone(tz); err != nil {
+		return "", err
+	}
+	return value[:len(value)-len(tz)], nil
+}
+
+// gMonthRange checks that a two-digit month string is within 1-12.
+func gMonthRange(s, typeName string) error {
+	var month int
+	if _, err := fmt.Sscanf(s, "%d", &month); err != nil {
+		return fmt.Errorf("invalid %s", typeName)
+	}
+	if month < 1 || month > 12 {
+		return fmt.Errorf("invalid %s: month %d out of range", typeName, month)
+	}
+	return nil
+}
+
+// gDayRange checks that a two-digit day string is within 1-31.
+func gDayRange(s, typeName string) error {
+	var day int
+	if _, err := fmt.Sscanf(s, "%d", &day); err != nil {
+		return fmt.Errorf("invalid %s", typeName)
+	}
+	if day < 1 || day > 31 {
+		return fmt.Errorf("invalid %s: day %d out of range", typeName, day)
+	}
 	return nil
 }
 
@@ -411,7 +481,12 @@ func validateGYearMonth(value string) error {
 	if !gYearMonthRegex.MatchString(value) {
 		return fmt.Errorf("invalid gYearMonth")
 	}
-	return nil
+	body, err := stripAndCheckTimezone(value)
+	if err != nil {
+		return err
+	}
+	// body is "[-]YYYY...-MM": the month is the last two characters.
+	return gMonthRange(body[len(body)-2:], "gYearMonth")
 }
 
 // gMonthRegex matches xs:gMonth.
@@ -421,7 +496,12 @@ func validateGMonth(value string) error {
 	if !gMonthRegex.MatchString(value) {
 		return fmt.Errorf("invalid gMonth")
 	}
-	return nil
+	body, err := stripAndCheckTimezone(value)
+	if err != nil {
+		return err
+	}
+	// body is "--MM".
+	return gMonthRange(body[2:4], "gMonth")
 }
 
 // gDayRegex matches xs:gDay.
@@ -431,7 +511,12 @@ func validateGDay(value string) error {
 	if !gDayRegex.MatchString(value) {
 		return fmt.Errorf("invalid gDay")
 	}
-	return nil
+	body, err := stripAndCheckTimezone(value)
+	if err != nil {
+		return err
+	}
+	// body is "---DD".
+	return gDayRange(body[3:5], "gDay")
 }
 
 // gMonthDayRegex matches xs:gMonthDay.
@@ -441,34 +526,132 @@ func validateGMonthDay(value string) error {
 	if !gMonthDayRegex.MatchString(value) {
 		return fmt.Errorf("invalid gMonthDay")
 	}
+	body, err := stripAndCheckTimezone(value)
+	if err != nil {
+		return err
+	}
+	// body is "--MM-DD".
+	if err := gMonthRange(body[2:4], "gMonthDay"); err != nil {
+		return err
+	}
+	if err := gDayRange(body[5:7], "gMonthDay"); err != nil {
+		return err
+	}
+	// Reject month/day combinations that never occur (e.g. --02-30, --04-31).
+	var month, day int
+	if _, err := fmt.Sscanf(body[2:4], "%d", &month); err != nil {
+		return fmt.Errorf("invalid gMonthDay")
+	}
+	if _, err := fmt.Sscanf(body[5:7], "%d", &day); err != nil {
+		return fmt.Errorf("invalid gMonthDay")
+	}
+	// gMonthDay is year-agnostic, so February permits its maximal length (29).
+	maxDays := [13]int{0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	if day > maxDays[month] {
+		return fmt.Errorf("invalid gMonthDay: day %d out of range for month %d", day, month)
+	}
 	return nil
 }
 
-// ncNameRegex matches XML NCName: letter or underscore, then name chars (no colon).
-var ncNameRegex = regexp.MustCompile(`^[a-zA-Z_][\w.-]*$`)
+// isNameStartChar reports whether r is a valid XML 1.0 NameStartChar.
+// (https://www.w3.org/TR/xml/#NT-NameStartChar) The colon is handled by the
+// caller, since NCName forbids it while Name allows it.
+func isNameStartChar(r rune) bool {
+	switch {
+	case r == '_':
+		return true
+	case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z':
+		return true
+	case r >= 0xC0 && r <= 0xD6, r >= 0xD8 && r <= 0xF6, r >= 0xF8 && r <= 0x2FF:
+		return true
+	case r >= 0x370 && r <= 0x37D, r >= 0x37F && r <= 0x1FFF:
+		return true
+	case r >= 0x200C && r <= 0x200D, r >= 0x2070 && r <= 0x218F:
+		return true
+	case r >= 0x2C00 && r <= 0x2FEF, r >= 0x3001 && r <= 0xD7FF:
+		return true
+	case r >= 0xF900 && r <= 0xFDCF, r >= 0xFDF0 && r <= 0xFFFD:
+		return true
+	case r >= 0x10000 && r <= 0xEFFFF:
+		return true
+	}
+	return false
+}
+
+// isNameChar reports whether r is a valid XML 1.0 NameChar (excluding the
+// colon, which the caller decides on per type).
+// (https://www.w3.org/TR/xml/#NT-NameChar)
+func isNameChar(r rune) bool {
+	switch {
+	case isNameStartChar(r):
+		return true
+	case r == '-', r == '.':
+		return true
+	case r >= '0' && r <= '9':
+		return true
+	case r == 0xB7:
+		return true
+	case r >= 0x0300 && r <= 0x036F:
+		return true
+	case r >= 0x203F && r <= 0x2040:
+		return true
+	}
+	return false
+}
+
+// isXMLName reports whether value is a valid XML Name (or NCName when
+// allowColon is false), per the XML 1.0 NameStartChar/NameChar productions.
+func isXMLName(value string, allowColon bool) bool {
+	if value == "" {
+		return false
+	}
+	for i, r := range value {
+		colon := r == ':'
+		if i == 0 {
+			if (colon && allowColon) || isNameStartChar(r) {
+				continue
+			}
+			return false
+		}
+		if (colon && allowColon) || isNameChar(r) {
+			continue
+		}
+		return false
+	}
+	return true
+}
 
 func validateNCName(value string) error {
-	if !ncNameRegex.MatchString(value) {
+	if !isXMLName(value, false) {
 		return fmt.Errorf("invalid NCName")
 	}
 	return nil
 }
 
-// nameRegex matches XML Name: like NCName but allows colon.
-var nameRegex = regexp.MustCompile(`^[a-zA-Z_:][\w.:-]*$`)
-
 func validateName(value string) error {
-	if !nameRegex.MatchString(value) {
+	if !isXMLName(value, true) {
 		return fmt.Errorf("invalid Name")
 	}
 	return nil
 }
 
-// nmtokenRegex matches XML NMTOKEN: one or more name characters.
-var nmtokenRegex = regexp.MustCompile(`^[\w.:-]+$`)
+// isNMTOKEN reports whether value is a valid XML Nmtoken: one or more NameChar
+// (colon allowed).
+func isNMTOKEN(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r == ':' || isNameChar(r) {
+			continue
+		}
+		return false
+	}
+	return true
+}
 
 func validateNMTOKEN(value string) error {
-	if !nmtokenRegex.MatchString(value) {
+	if !isNMTOKEN(value) {
 		return fmt.Errorf("invalid NMTOKEN")
 	}
 	return nil
@@ -508,11 +691,26 @@ func validateQName(value string) error {
 	return nil
 }
 
-// base64Regex matches the lexical space of xs:base64Binary.
+// base64Regex restricts the character repertoire of xs:base64Binary; the
+// grammar (correct quad/padding structure) is enforced by attempting a decode.
 var base64Regex = regexp.MustCompile(`^[A-Za-z0-9+/=\s]*$`)
 
 func validateBase64Binary(value string) error {
 	if !base64Regex.MatchString(value) {
+		return fmt.Errorf("invalid base64Binary")
+	}
+	// xs:base64Binary has whiteSpace=collapse and permits whitespace between
+	// characters; strip all whitespace then enforce the grammar via a strict
+	// (length/padding-aware) decode. This rejects malformed input such as
+	// "====", a lone "A", or "AAA" that the character regex alone would pass.
+	var b strings.Builder
+	for _, r := range value {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	if _, err := base64.StdEncoding.DecodeString(b.String()); err != nil {
 		return fmt.Errorf("invalid base64Binary")
 	}
 	return nil

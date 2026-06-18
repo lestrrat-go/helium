@@ -59,39 +59,44 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			invalid:  []string{"", "P", "PT", "1Y", "-P", "-PT", testAbc},
 		},
 		{
+			typeName: "date",
+			valid:    []string{"2023-01-15", "2000-02-29", "2400-02-29", "2023-12-31", "-0001-01-01", "2023-01-15Z", "2023-01-15+09:00", "2023-01-15-05:00", "2023-01-15+14:00", "2023-01-15-14:00"},
+			invalid:  []string{"", testAbc, "2023-13-01", "2023-00-01", "2023-01-32", "2023-01-00", "2001-02-29", "2100-02-29", "2023-01-15+99:99", "2023-01-15+15:00", "2023-01-15+14:01"},
+		},
+		{
 			typeName: typeGYear,
 			valid:    []string{"2023", "-0001", "2023Z", "2023+09:00", "10000"},
-			invalid:  []string{"", "23", testAbc, "2023-01"},
+			invalid:  []string{"", "23", testAbc, "2023-01", "2023+99:99", "2023+15:00"},
 		},
 		{
 			typeName: "gYearMonth",
 			valid:    []string{"2023-01", "2023-12", "-0001-06", "2023-01Z", "2023-01+09:00"},
-			invalid:  []string{"", "2023", "2023-1", testAbc},
+			invalid:  []string{"", "2023", "2023-1", testAbc, "2023-13", "2023-00", "2023-01+99:99", "2023-01+15:00"},
 		},
 		{
 			typeName: typeGMonth,
 			valid:    []string{"--01", "--12", "--06Z", "--06+09:00"},
-			invalid:  []string{"", "-01", "01", testAbc},
+			invalid:  []string{"", "-01", "01", testAbc, "--13", "--00", "--06+99:99", "--06+15:00"},
 		},
 		{
 			typeName: typeGMonthDay,
-			valid:    []string{"--01-15", "--12-31", "--06-01Z", "--06-01+09:00"},
-			invalid:  []string{"", "--0115", "-01-15", testAbc},
+			valid:    []string{"--01-15", "--12-31", "--06-01Z", "--06-01+09:00", "--02-29"},
+			invalid:  []string{"", "--0115", "-01-15", testAbc, "--13-01", "--00-01", "--01-32", "--01-00", "--02-30", "--06-01+99:99", "--06-01+15:00"},
 		},
 		{
 			typeName: typeGDay,
 			valid:    []string{"---01", "---31", "---15Z", "---15+09:00"},
-			invalid:  []string{"", "--01", "01", testAbc},
+			invalid:  []string{"", "--01", "01", testAbc, "---32", "---00", "---99", "---15+99:99", "---15+15:00"},
 		},
 		{
 			typeName: "Name",
-			valid:    []string{testFoo, testUnderBar, ":baz", "a.b", "a-b", testAB, "A123"},
-			invalid:  []string{"", test1foo, ".foo", "-foo"},
+			valid:    []string{testFoo, testUnderBar, ":baz", "a.b", "a-b", testAB, "A123", "é", "naïve", "Ω"},
+			invalid:  []string{"", test1foo, ".foo", "-foo", "a b"},
 		},
 		{
 			typeName: "NCName",
-			valid:    []string{testFoo, testUnderBar, "a.b", "a-b", "A123"},
-			invalid:  []string{"", test1foo, ".foo", "-foo", testAB, ":foo"},
+			valid:    []string{testFoo, testUnderBar, "a.b", "a-b", "A123", "é", "naïve", "Ω"},
+			invalid:  []string{"", test1foo, ".foo", "-foo", testAB, ":foo", "a b"},
 		},
 		{
 			typeName: "ID",
@@ -110,7 +115,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		},
 		{
 			typeName: "NMTOKEN",
-			valid:    []string{testFoo, test1foo, ".foo", "-foo", testAB, "A.1-2:3_4"},
+			valid:    []string{testFoo, test1foo, ".foo", "-foo", testAB, "A.1-2:3_4", "café", "Ω"},
 			invalid:  []string{"", "foo bar", "foo\ttab"},
 		},
 		{
@@ -125,8 +130,8 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		},
 		{
 			typeName: "base64Binary",
-			valid:    []string{"", "SGVsbG8=", "AAAA", "AA==", "A "},
-			invalid:  []string{"@@@", "SGVsbG8!"},
+			valid:    []string{"", "SGVsbG8=", "AAAA", "AA==", "AAAA ", " AA== ", "SGVs bG8="},
+			invalid:  []string{"@@@", "SGVsbG8!", "====", "A", "A===", "AAA"},
 		},
 		{
 			typeName: "QName",
