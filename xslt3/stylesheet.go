@@ -155,7 +155,7 @@ func (s *Stylesheet) DefaultOutputDef() *OutputDef {
 	if s == nil {
 		return nil
 	}
-	return s.outputs[""]
+	return cloneOutputDef(s.outputs[""])
 }
 
 // defaultItemSeparator returns the item-separator from the default output

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -93,21 +94,51 @@ type invocationConfig struct {
 	traceWriter         io.Writer
 	globalContextSelect string // XPath for global context item (evaluated post-strip-space)
 
-	// resolvedOutputDef is set after executeTransform completes.
-	// It contains the effective output definition for the primary result,
-	// including runtime overrides from xsl:result-document.
-	resolvedOutputDef *OutputDef
+	// resolved holds the effective output definition for the primary result
+	// after a terminal method (Do/Serialize/WriteTo) completes. It is stored
+	// behind a pointer with its own mutex so that concurrent terminal-method
+	// calls on the same Invocation value (which share this *invocationConfig)
+	// do not race when recording/reading the resolved output def.
+	resolved *resolvedOutputState
+}
+
+// resolvedOutputState guards the effective output definition recorded by a
+// terminal method. The mutex lives behind a pointer so copying
+// invocationConfig (in clone) never copies a lock.
+type resolvedOutputState struct {
+	mu  sync.Mutex
+	def *OutputDef
+}
+
+// store records the resolved primary output def. It deep-clones so the stored
+// snapshot is independent of the per-call transformConfig.
+func (r *resolvedOutputState) store(def *OutputDef) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.def = cloneOutputDef(def)
+}
+
+// snapshot returns an independent clone of the recorded output def, or nil if
+// no terminal method has recorded one yet.
+func (r *resolvedOutputState) snapshot() *OutputDef {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return cloneOutputDef(r.def)
 }
 
 func newInvocation(ss *Stylesheet, kind invocationKind) Invocation {
-	return Invocation{cfg: &invocationConfig{ss: ss, kind: kind}}
+	return Invocation{cfg: &invocationConfig{ss: ss, kind: kind, resolved: &resolvedOutputState{}}}
 }
 
 func (inv Invocation) clone() Invocation {
 	if inv.cfg == nil {
-		return Invocation{cfg: &invocationConfig{}}
+		return Invocation{cfg: &invocationConfig{resolved: &resolvedOutputState{}}}
 	}
 	cp := *inv.cfg
+	// A cloned invocation is a distinct invocation; give it its own resolved
+	// slot so recording a terminal result on the clone never writes through
+	// to the source invocation's shared state.
+	cp.resolved = &resolvedOutputState{}
 	return Invocation{cfg: &cp}
 }
 
@@ -317,7 +348,7 @@ func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 	}
 	tcfg := inv.toTransformConfig()
 	doc, err := executeTransform(ctx, inv.cfg.source, inv.cfg.ss, tcfg)
-	inv.cfg.resolvedOutputDef = tcfg.resolvedOutputDef
+	inv.cfg.resolved.store(tcfg.resolvedOutputDef)
 	return doc, err
 }
 
@@ -326,7 +357,12 @@ func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 // It includes runtime overrides from xsl:result-document targeting the
 // primary output. Returns nil if no terminal method has been called yet.
 func (inv Invocation) ResolvedOutputDef() *OutputDef {
-	return inv.cfg.resolvedOutputDef
+	if inv.cfg == nil || inv.cfg.resolved == nil {
+		return nil
+	}
+	// Return an independent snapshot so callers cannot mutate shared state and
+	// so concurrent terminal-method calls remain safe.
+	return inv.cfg.resolved.snapshot()
 }
 
 // Serialize executes the transformation and returns the serialized result.
@@ -347,7 +383,7 @@ func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
 	}
 	tcfg := inv.toTransformConfig()
 	resultDoc, err := executeTransform(ctx, inv.cfg.source, inv.cfg.ss, tcfg)
-	inv.cfg.resolvedOutputDef = tcfg.resolvedOutputDef
+	inv.cfg.resolved.store(tcfg.resolvedOutputDef)
 	if err != nil {
 		return err
 	}

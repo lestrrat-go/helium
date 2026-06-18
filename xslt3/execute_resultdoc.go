@@ -739,16 +739,16 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 	var base OutputDef
 	paramDocOD := ec.getParamDocOutputDef(inst)
 	if paramDocOD != nil {
-		base = *paramDocOD
+		base = *cloneOutputDef(paramDocOD)
 	}
 	// Named format overrides parameter-document.
 	if effectiveFormat != "" {
 		if fmtDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok {
-			base = *fmtDef
+			base = *cloneOutputDef(fmtDef)
 		}
 	} else if paramDocOD == nil {
 		if defDef, ok := ec.effectiveOutputs()[""]; ok {
-			base = *defDef
+			base = *cloneOutputDef(defDef)
 		}
 	}
 
@@ -919,12 +919,12 @@ func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *result
 	var base OutputDef
 	// Start with parameter-document defaults (lowest priority).
 	if pd := ec.getParamDocOutputDef(inst); pd != nil {
-		base = *pd
+		base = *cloneOutputDef(pd)
 	}
 	// Named format overrides parameter-document.
 	if formatName != "" {
 		if fmtDef, ok := ec.effectiveOutputs()[formatName]; ok {
-			base = *fmtDef
+			base = *cloneOutputDef(fmtDef)
 		}
 	}
 	if base.Method == "" && method != "" {
