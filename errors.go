@@ -40,8 +40,12 @@ var (
 	ErrInvalidOperation   = errors.New("operation cannot be performed")
 	ErrDuplicateAttribute = errors.New("duplicate attribute")
 	ErrEntityBoundary     = errors.New("entity boundary violation")
-	errParserStopped      = errors.New("parser stopped")
-	errNoCursor           = errors.New("parser has no input")
+	// ErrExternalDTDTooLarge is returned when an external DTD subset exceeds
+	// MaxExternalDTDSize bytes. The cap is enforced against the actual number
+	// of bytes read, not any advisory Stat size.
+	ErrExternalDTDTooLarge = errors.New("external DTD exceeds maximum allowed size")
+	errParserStopped       = errors.New("parser stopped")
+	errNoCursor            = errors.New("parser has no input")
 )
 
 // DTDDupTokenError is returned when a DTD attribute enumeration contains

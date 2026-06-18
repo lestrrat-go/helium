@@ -567,7 +567,71 @@ func TestParseExternalDTDBoundedRead(t *testing.T) {
 	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "oversized external DTD must produce a parse error even when Stat under-reports size")
-	require.LessOrEqual(t, read, int64(helium.MaxExternalDTDSize)+1, "bounded read must not consume more than MaxExternalDTDSize+1 bytes")
+	require.ErrorIs(t, err, helium.ErrExternalDTDTooLarge, "rejection must come from the byte-count cap")
+	// The bounded read must consume exactly MaxExternalDTDSize+1 bytes: enough
+	// to prove the cap was exceeded, but no more. An implementation that
+	// rejected before reading (e.g. trusting an advisory Stat) would leave
+	// read==0 and fail the lower bound; one without a cap would overrun it.
+	require.Equal(t, int64(helium.MaxExternalDTDSize)+1, read, "bounded read must consume exactly MaxExternalDTDSize+1 bytes")
+}
+
+// overReportingFS serves a single small, valid DTD whose Stat over-reports the
+// size as MaxExternalDTDSize+1. The actual content is well under the cap, so
+// the parse must succeed: this proves Stat is advisory and never used to
+// reject.
+type overReportingFS struct {
+	data []byte
+}
+
+func (fsys overReportingFS) Open(string) (fs.File, error) {
+	return &overReportingFile{data: fsys.data}, nil
+}
+
+type overReportingFile struct {
+	data []byte
+	off  int
+}
+
+// Stat lies the other way: it claims a size above the cap even though Read
+// yields only a few valid bytes.
+func (f *overReportingFile) Stat() (fs.FileInfo, error) {
+	return overReportingInfo{}, nil
+}
+
+func (f *overReportingFile) Read(p []byte) (int, error) {
+	if f.off >= len(f.data) {
+		return 0, io.EOF
+	}
+	n := copy(p, f.data[f.off:])
+	f.off += n
+	return n, nil
+}
+
+func (f *overReportingFile) Close() error { return nil }
+
+type overReportingInfo struct{}
+
+func (overReportingInfo) Name() string       { return "small.dtd" }
+func (overReportingInfo) Size() int64        { return helium.MaxExternalDTDSize + 1 }
+func (overReportingInfo) Mode() fs.FileMode  { return 0 }
+func (overReportingInfo) ModTime() time.Time { return time.Time{} }
+func (overReportingInfo) IsDir() bool        { return false }
+func (overReportingInfo) Sys() any           { return nil }
+
+func TestParseExternalDTDStatAdvisory(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "small.dtd">
+<r/>`
+
+	// A small, valid DTD whose Stat over-reports its size must still load:
+	// the cap is enforced against actual bytes read, not the advisory Stat.
+	fsys := overReportingFS{data: []byte(`<!ELEMENT r EMPTY>`)}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "small valid DTD must load even when Stat over-reports its size")
 }
 
 func TestParseExternalEntityValidEncoding(t *testing.T) {

@@ -414,24 +414,19 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	}
 	defer f.Close()
 
-	// Stat is advisory only: a valid fs.FS may stream or synthesize DTD
-	// content and legitimately fail Stat or report a non-regular,
-	// unknown, or under-reported size. When Stat succeeds, use the
-	// reported size as an early reject for an obviously oversized source
-	// (e.g. /dev/zero) to avoid starting the read at all. Either way the
-	// authoritative cap is enforced by the bounded read below.
-	if info, statErr := f.Stat(); statErr == nil && info.Size() > MaxExternalDTDSize {
-		return errors.New("external DTD exceeds maximum allowed size")
-	}
-
-	// Read through a strict byte cap. Allow one extra byte so a source that
-	// under-reports (or lies about) its size is still caught here.
+	// fs.FileInfo.Size() is only reliable for regular files: a valid fs.FS
+	// may stream or synthesize DTD content and report a non-regular,
+	// unknown, under-reported, or over-reported size. Stat is therefore
+	// never used to reject — the authoritative cap is the actual number of
+	// bytes read below. Read through a strict byte cap, allowing one extra
+	// byte so a source that under-reports (or lies about) its size is still
+	// caught.
 	data, err := io.ReadAll(io.LimitReader(f, MaxExternalDTDSize+1))
 	if err != nil {
 		return nil
 	}
 	if len(data) > MaxExternalDTDSize {
-		return errors.New("external DTD exceeds maximum allowed size")
+		return ErrExternalDTDTooLarge
 	}
 
 	doc := ctx.doc
