@@ -227,20 +227,33 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 			totalMonths.Add(totalMonths, big.NewInt(int64(d.Months)))
 		}
 	}
+	// fn:avg is defined as fn:sum(...) div count, so the intermediate sum must
+	// itself be a representable yearMonthDuration. Reject a month total that
+	// overflows the value space (matching op:add-yearMonthDurations) before
+	// dividing.
 	if !totalMonths.IsInt64() {
 		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
-	// Per XPath F&O spec: months are rounded "half towards positive infinity"
-	// i.e. math.Floor(months + 0.5), matching op:divide-yearMonthDuration behavior.
-	monthsF := float64(totalMonths.Int64()) / float64(count)
-	avgMonths := int(math.Floor(monthsF + 0.5))
-	negative := avgMonths < 0
+	// Divide the exact month total by the count using rational arithmetic so
+	// large totals (e.g. avg of two P9007199254740993M values) keep full
+	// precision instead of losing a month through a float64 round-trip. Per
+	// XPath F&O the result is rounded "half towards positive infinity", matching
+	// op:divide-yearMonthDuration behavior.
+	avgRat := new(big.Rat).SetFrac(totalMonths, big.NewInt(int64(count)))
+	rounded := ratRound(avgRat)
+	avgInt := new(big.Int).Quo(rounded.Num(), rounded.Denom())
+
+	negative := avgInt.Sign() < 0
+	absInt := avgInt
 	if negative {
-		avgMonths = -avgMonths
+		absInt = new(big.Int).Neg(avgInt)
+	}
+	if !absInt.IsInt64() || absInt.Int64() > int64(math.MaxInt) {
+		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeYearMonthDuration,
-		Value:    Duration{Months: avgMonths, Negative: negative},
+		Value:    Duration{Months: int(absInt.Int64()), Negative: negative},
 	}), nil
 }
 
