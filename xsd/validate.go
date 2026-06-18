@@ -228,8 +228,8 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 	if instanceVariety == TypeVarietyList && fixedVariety == TypeVarietyList {
 		ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
 		nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
-		ii := strings.Fields(ni)
-		fi := strings.Fields(nf)
+		ii := value.XSDFields(ni)
+		fi := value.XSDFields(nf)
 		if len(ii) != len(fi) {
 			return false
 		}

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
 // baseFacets returns the FacetSet from the nearest base type in the chain.
@@ -175,7 +175,7 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 			return false
 		}
 		itemVariety := resolveVariety(itemType)
-		for item := range strings.FieldsSeq(ev) {
+		for _, item := range value.XSDFields(ev) {
 			if c.enumLiteralHasUnboundQName(ctx, item, enumNS, itemType, itemVariety) {
 				return true
 			}
