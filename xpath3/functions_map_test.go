@@ -100,3 +100,34 @@ func TestMapMergeRejectsInvalidDuplicates(t *testing.T) {
 		})
 	}
 }
+
+// A "duplicates" value that is a custom atomic whose Go payload is a string but
+// whose BaseType is NOT string-derived must still raise FOJS0005. The option is
+// declared as xs:string, so a non-string-based atom is not convertible even when
+// its underlying Go representation happens to be a string.
+func TestMapMergeRejectsNonStringBasedDuplicates(t *testing.T) {
+	t.Parallel()
+
+	doc := mustParseXML(t, "<root/>")
+
+	compiled, err := xpath3.NewCompiler().Compile(
+		`map:merge((map{"a": 1}), map{"duplicates": $dup})`)
+	require.NoError(t, err)
+
+	// A user-defined atomic derived from xs:integer that carries a Go string
+	// payload. The pre-fix coercion accepted any atom with a string payload.
+	dup := xpath3.AtomicValue{
+		TypeName: "Q{urn:x}strishInt",
+		Value:    "use-last",
+		BaseType: xpath3.TypeInteger,
+	}
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+			"dup": xpath3.ItemSlice{dup},
+		})).
+		Evaluate(t.Context(), compiled, doc)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "FOJS0005", xpErr.Code)
+}

@@ -58,6 +58,30 @@ func TestQNameElementArgRequiresSingleton(t *testing.T) {
 	}
 }
 
+// namespace-uri-for-prefix must validate its required singleton element()
+// (args[1]) BEFORE coercing the prefix (args[0]). An invalid element() arg with
+// an array-typed prefix must raise XPTY0004 (from the element check), not
+// FOTY0013 (which array atomization of the prefix would otherwise raise first).
+func TestNamespaceURIForPrefixElementArgValidatedFirst(t *testing.T) {
+	t.Parallel()
+
+	doc := mustParseXML(t, `<root xmlns:p="urn:p"><a/><b/></root>`)
+
+	cases := []string{
+		`namespace-uri-for-prefix(["p","q"], ())`,
+		`namespace-uri-for-prefix(["p","q"], //root/*)`,
+	}
+	for _, expr := range cases {
+		t.Run(expr, func(t *testing.T) {
+			_, err := evaluate(t.Context(), doc, expr)
+			require.Error(t, err, expr)
+			var xpErr *xpath3.XPathError
+			require.ErrorAs(t, err, &xpErr)
+			require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code, expr)
+		})
+	}
+}
+
 // resolve-QName's second argument is a REQUIRED singleton element(). An empty,
 // multi-element, or non-element second argument must raise XPTY0004 even when
 // the first ($qname) argument is the empty sequence.

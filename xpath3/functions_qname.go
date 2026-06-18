@@ -115,20 +115,15 @@ func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, erro
 }
 
 func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, error) {
-	prefix, err := coerceQNameString(args[0], true, false, "fn:namespace-uri-for-prefix prefix argument must be a string")
+	// The element() second argument is required and must be exactly one
+	// element() regardless of the first argument, so validate it FIRST.
+	elem, err := requireSingleElement(args[1], "fn:namespace-uri-for-prefix")
 	if err != nil {
 		return nil, err
 	}
-	if seqLen(args[1]) != 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:namespace-uri-for-prefix expects a single element"}
-	}
-	ni, ok := args[1].Get(0).(NodeItem)
-	if !ok {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected element node"}
-	}
-	elem, ok := ni.Node.(*helium.Element)
-	if !ok {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "expected element node"}
+	prefix, err := coerceQNameString(args[0], true, false, "fn:namespace-uri-for-prefix prefix argument must be a string")
+	if err != nil {
+		return nil, err
 	}
 	if ns := helium.LookupNSByPrefix(elem, prefix); ns != nil {
 		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: ns.URI()}), nil
@@ -136,22 +131,31 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 	return validNilSequence, nil
 }
 
-func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
-	// The element() second argument is required and must be exactly one
-	// element() regardless of whether $qname is empty, so validate it FIRST.
-	if seqLen(args[1]) == 0 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: element argument is empty"}
+// requireSingleElement validates a required element() argument: it must be
+// exactly one node and that node must be a *helium.Element. This is validated
+// before any sibling argument is coerced so an invalid element() arg yields
+// XPTY0004 rather than an error from atomizing the other argument.
+func requireSingleElement(seq Sequence, fname string) (*helium.Element, error) {
+	if seqLen(seq) != 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fname + ": expects a single element"}
 	}
-	if seqLen(args[1]) > 1 {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: expects a single element"}
-	}
-	ni, ok := args[1].Get(0).(NodeItem)
+	ni, ok := seq.Get(0).(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: expected element node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fname + ": expected element node"}
 	}
 	elem, ok := ni.Node.(*helium.Element)
 	if !ok {
-		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: expected element node"}
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fname + ": expected element node"}
+	}
+	return elem, nil
+}
+
+func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
+	// The element() second argument is required and must be exactly one
+	// element() regardless of whether $qname is empty, so validate it FIRST.
+	elem, err := requireSingleElement(args[1], "resolve-QName")
+	if err != nil {
+		return nil, err
 	}
 
 	// Empty $qname yields the empty sequence (after the element() check).
