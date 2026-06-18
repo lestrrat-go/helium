@@ -141,7 +141,7 @@ document-end gate.
    - Seed in-scope namespaces from the surrounding element before parsing
    - Fill `ent.firstChild` (parsed nodes)
    - Mark `ent.checked = 2`, cache `ent.expandedSize`
-   - External entities: content is read through a bounded `io.LimitReader` (cap `externalEntityMaxBytes`, 10 MiB in parserctx.go) and the read bytes are charged to `sizeentcopy` via `entityCheck`, so repeated references to a near-cap external entity still trip the amplification guard; the running counters propagate into and back out of the nested parse context. `ent.expandedSize` caches the external (plus nested) size for subsequent references.
+   - External entities: content is read through a bounded `io.LimitReader` (cap `externalEntityMaxBytes`, 10 MiB in parserctx.go) and the read bytes are charged to `sizeentcopy` via `entityCheckBytes` (raw bytes only, NOT `entityCheck`): `parseReference` already paid the fixed per-reference cost (`entityFixedCost`) for this reference, so charging it again here would double-count it. Repeated references to a near-cap external entity still trip the amplification guard; the running counters propagate into and back out of the nested parse context. `ent.expandedSize` caches the external (plus nested) size for subsequent references.
 4. Deliver to SAX
    - `replaceEntities=true`: expand inline and replay parsed node children through SAX (`StartElementNS`/`EndElementNS`, `Characters`, `CDataBlock`, `Comment`, `PI`)
    - `replaceEntities=false`: fire Reference callback only

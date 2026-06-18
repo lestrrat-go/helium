@@ -275,6 +275,26 @@ func TestEntityValueDirectCharRefAccepted(t *testing.T) {
 		require.Equal(t, "&amp;", string(ent.Content()),
 			"general references must be stored literally, not expanded")
 	})
+
+	t.Run("direct ampersand char ref is inert", func(t *testing.T) {
+		t.Parallel()
+		// A direct "&#38;" is character data: it resolves to a literal '&' in
+		// the stored value but does NOT combine with the following NameChars
+		// into a synthesized general reference. The reference-validation pass
+		// must therefore treat the direct char ref as inert and accept the
+		// declaration, unlike "&broken" written directly (a malformed ref) or a
+		// '&' re-introduced through a parameter entity.
+		const input = `<!DOCTYPE r [<!ENTITY e "&#38;broken">]><r/>`
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.NoError(t, err,
+			"a direct &#38; must be inert and not synthesize a malformed &broken ref")
+		require.NotNil(t, doc)
+
+		ent, ok := doc.GetEntity("e")
+		require.True(t, ok, "entity e must be declared")
+		require.Equal(t, "&broken", string(ent.Content()),
+			"direct char refs are resolved in the stored value (&#38; -> &), not expanded as a general ref")
+	})
 }
 
 // TestEntityValueValidGeneralRefLiteral ensures that a well-formed general
@@ -356,6 +376,51 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 		_, eOK := doc.GetEntity("e")
 		require.False(t, eOK, "malformed-via-PE entity must be rejected (not stored)")
 	})
+}
+
+// TestEntityValueRefValidationIsSideEffectFree proves that the reference
+// validation in parseEntityValue does NOT perturb the entity-amplification
+// accounting. validateEntityValueRefs PE-expands the literal to scan for
+// malformed general references, and the real PE substitution that follows
+// expands the same literal again. Each expansion charges the amplification
+// counters; validateEntityValueRefs must snapshot and restore sizeentcopy so
+// the same parameter entity is not charged twice.
+//
+// The repro is an external DTD that declares a parameter entity just under the
+// 1 MiB baseline and a general entity referencing it via %p;. A single charge
+// stays under the baseline (no ratio check); a double charge crosses the
+// baseline and trips the amplification-ratio guard against the tiny main-
+// document input, which would reject the declaration. The entity therefore
+// being stored successfully is what proves the validation pass is side-effect
+// free.
+func TestEntityValueRefValidationIsSideEffectFree(t *testing.T) {
+	t.Parallel()
+
+	// Just under the 1 MiB amplification baseline (entityAllowedExpansion):
+	// one expansion stays below it, a double charge crosses it.
+	big := strings.Repeat("A", 1_000_000-100)
+	dtd := `<!ENTITY c "control">` + "\n" +
+		`<!ENTITY % p "` + big + `">` + "\n" +
+		`<!ENTITY e "%p;">`
+	fsys := fstest.MapFS{"d.dtd": {Data: []byte(dtd)}}
+	input := `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "a near-baseline parameter entity must not trip the amplification guard")
+	require.NotNil(t, doc)
+
+	_, cOK := doc.GetEntity("c")
+	require.True(t, cOK, "control entity must be stored, proving the external DTD was loaded")
+
+	ent, eOK := doc.GetEntity("e")
+	require.True(t, eOK,
+		"a PE-expanding entity just under the baseline must be stored; double-charging would reject it")
+	require.Equal(t, len(big), len(ent.Content()),
+		"the stored value is the single PE expansion, not a doubled one")
 }
 
 func TestEntityAmplification(t *testing.T) {
