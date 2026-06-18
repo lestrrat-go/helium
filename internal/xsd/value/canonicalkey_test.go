@@ -70,3 +70,29 @@ func TestCanonicalKeySignedYearInvalid(t *testing.T) {
 	require.True(t, okUnsignedDT, `"2023-01-01T00:00:00" must canonicalize as a valid xs:dateTime`)
 	require.NotEqual(t, unsignedDT, plusDT, `"+2023-01-01T00:00:00" must not produce the same key as "2023-01-01T00:00:00"`)
 }
+
+// TestCanonicalKeyStrictDateValidation verifies that CanonicalKey validates the
+// value against the strict lexical space before canonicalizing, so malformed
+// date/time inputs (bad timezone, trailing junk, out-of-range fields) yield
+// ok=false rather than being silently canonicalized by the lenient internal
+// parsers.
+func TestCanonicalKeyStrictDateValidation(t *testing.T) {
+	_ = t.Context()
+
+	_, okBadTZ := value.CanonicalKey("2023-01-01+99:99", "date")
+	require.False(t, okBadTZ, `"2023-01-01+99:99" has an out-of-range timezone and must not canonicalize`)
+
+	_, okJunkTZ := value.CanonicalKey("2023-01-01Zjunk", "date")
+	require.False(t, okJunkTZ, `"2023-01-01Zjunk" has trailing junk after Z and must not canonicalize`)
+
+	_, okLeap := value.CanonicalKey("2023-02-29", "date")
+	require.False(t, okLeap, `"2023-02-29" is not a leap year and must not canonicalize`)
+
+	_, okMonthDay := value.CanonicalKey("--02-30", "gMonthDay")
+	require.False(t, okMonthDay, `"--02-30" is not a valid gMonthDay and must not canonicalize`)
+
+	// A valid huge-year date (leap year, Feb 29) still canonicalizes correctly
+	// and is not regressed by the strict pre-validation.
+	_, okHuge := value.CanonicalKey("999999999999999999999996-02-29", "date")
+	require.True(t, okHuge, `valid huge-year leap date must still canonicalize`)
+}

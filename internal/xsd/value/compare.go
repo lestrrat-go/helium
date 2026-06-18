@@ -23,21 +23,21 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 	case "double":
 		return compareFloat(a, b, false)
 	case "dateTime":
-		return compareDateTime(a, b)
+		return compareDateTime(a, b, builtinLocal)
 	case "date":
-		return compareDate(a, b)
+		return compareDate(a, b, builtinLocal)
 	case "time":
-		return compareTime(a, b)
+		return compareTime(a, b, builtinLocal)
 	case "gYear":
-		return compareGYear(a, b)
+		return compareGYear(a, b, builtinLocal)
 	case "gYearMonth":
-		return compareGYearMonth(a, b)
+		return compareGYearMonth(a, b, builtinLocal)
 	case "gMonth":
-		return compareGMonth(a, b)
+		return compareGMonth(a, b, builtinLocal)
 	case "gDay":
-		return compareGDay(a, b)
+		return compareGDay(a, b, builtinLocal)
 	case "gMonthDay":
-		return compareGMonthDay(a, b)
+		return compareGMonthDay(a, b, builtinLocal)
 	case "duration":
 		return compareDuration(a, b)
 	case "hexBinary":
@@ -203,7 +203,27 @@ func Normalize(s, builtinLocal string) string {
 	}
 }
 
+// validDateTimeOperands reports whether both date/time/g* lexicals pass the
+// strict lexical space (ValidateBuiltin) for builtinLocal. The parseXSD*
+// parsers used by the compareX functions are deliberately lenient (they skip
+// leap-year, month/day range and timezone-range checks and accept trailing
+// junk), so the compareX functions call this first to guarantee Compare never
+// accepts a value the validation path rejects.
+func validDateTimeOperands(a, b, builtinLocal string) bool {
+	if ValidateBuiltin(a, builtinLocal) != nil {
+		return false
+	}
+	return ValidateBuiltin(b, builtinLocal) == nil
+}
+
 func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
+	// Reject values the strict lexical validator rejects before the lenient
+	// parseXSD* parsing below, so CanonicalKey never canonicalizes a date/time
+	// value that ValidateBuiltin would reject (bad timezone, out-of-range
+	// month/day, leap-day, trailing junk).
+	if ValidateBuiltin(s, builtinLocal) != nil {
+		return s, false
+	}
 	var dt xsdDateTime
 	var ok bool
 	switch builtinLocal {
@@ -895,7 +915,10 @@ func compareDateTimeMixedTZ(a, b xsdDateTime) (int, bool) {
 	return 0, false
 }
 
-func compareDateTime(a, b string) (int, bool) {
+func compareDateTime(a, b, builtinLocal string) (int, bool) {
+	if !validDateTimeOperands(a, b, builtinLocal) {
+		return 0, false
+	}
 	da, ok1 := parseXSDDateTime(a)
 	db, ok2 := parseXSDDateTime(b)
 	if !ok1 || !ok2 {
@@ -904,7 +927,10 @@ func compareDateTime(a, b string) (int, bool) {
 	return compareDateTimeParsed(da, db)
 }
 
-func compareDate(a, b string) (int, bool) {
+func compareDate(a, b, builtinLocal string) (int, bool) {
+	if !validDateTimeOperands(a, b, builtinLocal) {
+		return 0, false
+	}
 	da, ok1 := parseXSDDate(a)
 	db, ok2 := parseXSDDate(b)
 	if !ok1 || !ok2 {
@@ -913,7 +939,10 @@ func compareDate(a, b string) (int, bool) {
 	return compareDateTimeParsed(da, db)
 }
 
-func compareTime(a, b string) (int, bool) {
+func compareTime(a, b, builtinLocal string) (int, bool) {
+	if !validDateTimeOperands(a, b, builtinLocal) {
+		return 0, false
+	}
 	da, ok1 := parseXSDTime(a)
 	db, ok2 := parseXSDTime(b)
 	if !ok1 || !ok2 {
@@ -925,7 +954,10 @@ func compareTime(a, b string) (int, bool) {
 	return compareDateTimeParsed(da, db)
 }
 
-func compareGYear(a, b string) (int, bool) {
+func compareGYear(a, b, builtinLocal string) (int, bool) {
+	if !validDateTimeOperands(a, b, builtinLocal) {
+		return 0, false
+	}
 	da, ok1 := parseXSDGYear(a)
 	db, ok2 := parseXSDGYear(b)
 	if !ok1 || !ok2 {
@@ -934,7 +966,10 @@ func compareGYear(a, b string) (int, bool) {
 	return compareDateTimeParsed(da, db)
 }
 
-func compareGYearMonth(a, b string) (int, bool) {
+func compareGYearMonth(a, b, builtinLocal string) (int, bool) {
+	if !validDateTimeOperands(a, b, builtinLocal) {
+		return 0, false
+	}
 	da, ok1 := parseXSDGYearMonth(a)
 	db, ok2 := parseXSDGYearMonth(b)
 	if !ok1 || !ok2 {
@@ -943,7 +978,10 @@ func compareGYearMonth(a, b string) (int, bool) {
 	return compareDateTimeParsed(da, db)
 }
 
-func compareGMonth(a, b string) (int, bool) {
+func compareGMonth(a, b, builtinLocal string) (int, bool) {
+	if !validDateTimeOperands(a, b, builtinLocal) {
+		return 0, false
+	}
 	da, ok1 := parseXSDGMonth(a)
 	db, ok2 := parseXSDGMonth(b)
 	if !ok1 || !ok2 {
@@ -952,7 +990,10 @@ func compareGMonth(a, b string) (int, bool) {
 	return compareDateTimeParsed(da, db)
 }
 
-func compareGDay(a, b string) (int, bool) {
+func compareGDay(a, b, builtinLocal string) (int, bool) {
+	if !validDateTimeOperands(a, b, builtinLocal) {
+		return 0, false
+	}
 	da, ok1 := parseXSDGDay(a)
 	db, ok2 := parseXSDGDay(b)
 	if !ok1 || !ok2 {
@@ -961,7 +1002,10 @@ func compareGDay(a, b string) (int, bool) {
 	return compareDateTimeParsed(da, db)
 }
 
-func compareGMonthDay(a, b string) (int, bool) {
+func compareGMonthDay(a, b, builtinLocal string) (int, bool) {
+	if !validDateTimeOperands(a, b, builtinLocal) {
+		return 0, false
+	}
 	da, ok1 := parseXSDGMonthDay(a)
 	db, ok2 := parseXSDGMonthDay(b)
 	if !ok1 || !ok2 {

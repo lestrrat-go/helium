@@ -414,6 +414,19 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDuration, "-P1Y", testP1Y, -1, true},
 		{lexicon.TypeDuration, "P1Y2M", "P1Y3M", -1, true},
 		{lexicon.TypeDuration, "P1M", "P30D", 0, false}, // indeterminate: months vs days
+
+		// Strict lexical validation gates comparison: the lenient internal date
+		// parsers used to accept these, but Compare now validates each operand
+		// against the builtin's lexical space first, so malformed input is
+		// indeterminate rather than silently comparing equal.
+		{typeGYear, "2023abc", "2023", 0, false},                    // trailing junk on a gYear
+		{typeGMonthDay, "--02-30", "--02-29", 0, false},             // Feb 30 is not a valid gMonthDay
+		{lexicon.TypeDate, "2023-02-29", "2023-02-28", 0, false},    // 2023 is not a leap year
+		{lexicon.TypeDate, "2023-01-01+99:99", testDate0, 0, false}, // timezone out of range
+		{lexicon.TypeDate, "2023-01-01Zjunk", testDate0, 0, false},  // trailing junk after Z
+		// A valid huge-year date with leap Feb 29 (the year is divisible by 4 and
+		// not by 100) still compares correctly under strict validation.
+		{lexicon.TypeDate, "999999999999999999999996-02-29", "999999999999999999999996-02-28", 1, true},
 	}
 
 	for _, tt := range tests {
