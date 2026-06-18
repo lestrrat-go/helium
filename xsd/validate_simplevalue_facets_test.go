@@ -279,6 +279,94 @@ func TestUnionEnumerationCrossMember(t *testing.T) {
 	})
 }
 
+// TestQNamePredeclaredXMLPrefix verifies that the predeclared "xml" prefix is
+// always in scope for xs:QName values without an explicit namespace declaration.
+// The prefix-binding check must special-case "xml" (bound to the XML namespace);
+// otherwise a value like "xml:lang" is wrongly rejected as unbound. Coverage spans
+// a plain QName, a QName list item, and a QName enumeration member.
+func TestQNamePredeclaredXMLPrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("plain qname xml prefix accepted", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="q" type="xs:QName"/>
+</xs:schema>`
+		errs, err := validateInstance(t, schemaXML, `<q>xml:lang</q>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("qname list xml prefix item accepted", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="qnameList">
+    <xs:list itemType="xs:QName"/>
+  </xs:simpleType>
+  <xs:element name="root" type="qnameList"/>
+</xs:schema>`
+		errs, err := validateInstance(t, schemaXML, `<root>xml:lang xml:space</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("qname enumeration xml prefix member accepted", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xml="http://www.w3.org/XML/1998/namespace">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction base="xs:QName">
+        <xs:enumeration value="xml:lang"/>
+        <xs:enumeration value="xml:space"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs, err := validateInstance(t, schemaXML, `<q>xml:lang</q>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+
+		errs, err = validateInstance(t, schemaXML, `<q>xml:base</q>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+}
+
+// TestDerivedUnionRestrictionInheritsFacets verifies that a restriction derived
+// from an already-enumerated union inherits the base union's facets even when it
+// adds none of its own. With onlyFive = restriction(intOrString, enumeration="5")
+// and derivedOnlyFive = restriction(onlyFive) (no new facets), an instance "7"
+// must be rejected — validateUnionValue must walk the restriction base chain.
+func TestDerivedUnionRestrictionInheritsFacets(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrString">
+    <xs:union memberTypes="xs:int xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="onlyFive">
+    <xs:restriction base="intOrString">
+      <xs:enumeration value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="derivedOnlyFive">
+    <xs:restriction base="onlyFive"/>
+  </xs:simpleType>
+  <xs:element name="root" type="derivedOnlyFive"/>
+</xs:schema>`
+
+	t.Run("inherited enumeration member accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("inherited enumeration non-member rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>7</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "is not a valid value")
+	})
+}
+
 // TestQNameUnboundPrefix verifies that an xs:QName value with an unbound prefix
 // is rejected (C-008). Lexical NCName form alone is not sufficient: the prefix
 // must be bound in scope.

@@ -265,6 +265,12 @@ func resolveLexicalQName(value string, ns map[string]string) (QName, error) {
 	if len(parts) == 1 {
 		return QName{Local: value, NS: ns[""]}, nil
 	}
+	// The "xml" prefix is predeclared (bound to the XML namespace) and never
+	// needs an explicit declaration, so it is always in scope regardless of the
+	// instance's collected namespace context.
+	if parts[0] == "xml" {
+		return QName{Local: parts[1], NS: lexicon.NamespaceXML}, nil
+	}
 	uri, ok := ns[parts[0]]
 	if !ok {
 		return QName{}, fmt.Errorf("undeclared prefix %q", parts[0])

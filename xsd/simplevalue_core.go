@@ -165,9 +165,19 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 	// even though both look numeric. Non-enumeration facets still compare in the
 	// instance's active-member value space via checkFacets.
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
-	if td.Facets != nil {
+
+	// Walk the restriction base chain and apply each step's facets. A restriction
+	// derived from an already-enumerated union (with no new facets of its own)
+	// must still honor the base union's facets, so the enumeration and the
+	// non-enumeration facets are checked for every step that carries a FacetSet,
+	// each resolved in that step's own union member context.
+	for cur := td; cur != nil; cur = cur.BaseType {
+		if cur.Facets == nil {
+			continue
+		}
+
 		vc.suppressDepth++
-		enumErr := checkUnionEnumeration(ctx, value, valueNS, td, elemName, filename, line, vc)
+		enumErr := checkUnionEnumeration(ctx, value, valueNS, cur, elemName, filename, line, vc)
 		vc.suppressDepth--
 		if enumErr != nil {
 			typeName := unionTypeDisplayName(td)
@@ -177,13 +187,13 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 		}
 
 		memberLocal := ""
-		if active := unionActiveMemberNS(ctx, value, valueNS, td); active != nil {
+		if active := unionActiveMemberNS(ctx, value, valueNS, cur); active != nil {
 			memberLocal = builtinBaseLocal(active)
 		}
 		// Suppress the enumeration facet here — it was checked above in union value
 		// space; the remaining facets (pattern, length, bounds) are evaluated in the
 		// instance member's value space.
-		nonEnum := *td.Facets
+		nonEnum := *cur.Facets
 		nonEnum.Enumeration = nil
 		nonEnum.EnumerationNS = nil
 		vc.suppressDepth++
