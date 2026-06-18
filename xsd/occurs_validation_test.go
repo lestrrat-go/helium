@@ -126,6 +126,27 @@ func TestOccursValidation(t *testing.T) {
 		require.Contains(t, compileErrors(t, schemaXML), wantNonNegInt)
 	})
 
+	// A group reference can also appear directly under xs:complexType (without an
+	// enclosing compositor). That branch lives in read_types.go rather than
+	// read_particles.go and formerly used the non-validating occurs parser, so a
+	// negative minOccurs was silently accepted while xmllint rejects it.
+	t.Run("rejects on direct group reference under complexType", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g">
+    <xs:sequence>
+      <xs:element name="child" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:group ref="g" minOccurs="-1"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML), wantNonNegInt)
+	})
+
 	// Valid occurs forms must still compile cleanly, including unbounded and
 	// minOccurs=0 (optional) and maxOccurs=0 (prohibited particle).
 	t.Run("accepts valid occurs", func(t *testing.T) {
