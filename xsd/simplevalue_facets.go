@@ -16,31 +16,25 @@ func compareDecimal(a, b string) int {
 }
 
 // compareForRangeFacet compares two ordered values for a range facet
-// (min/maxInclusive, min/maxExclusive). It first tries value.Compare for the
-// builtin type. value.Compare is deliberately strict: it returns ok=false for an
-// unrecognized or non-value-comparable builtinLocal (e.g. an empty local from an
-// anonymous numeric base, or a string-family type). Range facets, however, are
-// only meaningful on ordered (numeric/date-time) types. For the empty-local case
-// — a numeric value over an anonymous/empty base that lost its builtin name — we
-// fall back to a decimal comparison ONLY when BOTH operands genuinely parse as
-// decimals (so the leaf is in the numeric value space); a non-numeric value (e.g.
-// a string leaf) yields ok=false and the caller treats the facet as inapplicable
-// rather than coercing it into a spurious numeric comparison. A non-empty
-// builtinLocal that value.Compare could not compare (a string-family or otherwise
-// non-numeric type) is likewise left indeterminate.
+// (min/maxInclusive, min/maxExclusive) in the value space identified by
+// builtinLocal. It defers entirely to value.Compare, which is value-aware for the
+// ordered builtins (numeric, boolean, date/time, binary) and returns ok=false for
+// anything it cannot order: a string-family type, an empty/unknown local, or a
+// non-atomic (list/union) carrier. ok=false means the range facet is inapplicable
+// to this value space, so the caller treats the bound as satisfied rather than
+// coercing the value into a spurious numeric comparison.
+//
+// There is deliberately NO empty-local decimal fallback here. A genuine numeric
+// atomic value always reaches this function with its concrete numeric builtinLocal
+// (every numeric atomic type has a decimal-derived XSD ancestor, so
+// builtinBaseLocal is never empty for it). An empty builtinLocal therefore only
+// arises for a NON-atomic carrier — an intermediate union or a list active member,
+// neither of which is in an ordered value space — and the range facet must not
+// apply a decimal comparison to it. The previous empty-local fallback mis-fired on
+// a list active member of a numeric-looking union (e.g. union(list(xs:int)) with
+// minInclusive), wrongly rejecting a valid list instance.
 func compareForRangeFacet(v, bound, builtinLocal string) (int, bool) {
-	cmp, ok := value.Compare(v, bound, builtinLocal)
-	if ok {
-		return cmp, true
-	}
-	if builtinLocal != "" {
-		return 0, false
-	}
-	// Empty builtin local: only enforce the bound when the value is genuinely in
-	// the decimal value space. value.Compare(..., "decimal") trims XSD whitespace
-	// and validates both operands against the decimal lexical space, returning
-	// ok=false for a non-numeric leaf so the range facet stays inapplicable.
-	return value.Compare(v, bound, "decimal")
+	return value.Compare(v, bound, builtinLocal)
 }
 
 // checkMinInclusive compares value >= bound using type-aware comparison.

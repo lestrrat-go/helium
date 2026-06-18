@@ -963,6 +963,70 @@ func TestDerivedUnionRestrictionInheritsFacets(t *testing.T) {
 	})
 }
 
+// TestUnionListRangeFacetInapplicable verifies that a numeric range facet
+// (minInclusive) on a union whose active member is itself a LIST does NOT apply a
+// decimal comparison to the list value. Range facets are only meaningful on
+// ordered (atomic numeric/date-time) value spaces; a list variety has no such
+// ordering, so the bound must be treated as inapplicable. With u =
+// union(intList) and a minInclusive="10" restriction, the instance "5" is a valid
+// single-item xs:int list and must NOT be rejected by the range facet — the prior
+// empty-builtin-local decimal fallback wrongly rejected it. A parallel numeric
+// union (atomic xs:int leaf) must still enforce the bound, so "5" fails and "15"
+// passes.
+func TestUnionListRangeFacetInapplicable(t *testing.T) {
+	t.Parallel()
+
+	t.Run("list active member does not apply decimal range", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="intList"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="u">
+        <xs:minInclusive value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		// "5" is a valid one-item xs:int list; minInclusive is inapplicable to a
+		// list value space, so it must be accepted.
+		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+
+		// A multi-item list well below the bound is likewise accepted — the range
+		// facet never fires for the list variety.
+		errs, err = validateInstance(t, schemaXML, `<root>1 2 3</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("atomic numeric union still enforces minInclusive", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="u">
+    <xs:union memberTypes="xs:int"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="u">
+        <xs:minInclusive value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "is not a valid value")
+
+		errs, err = validateInstance(t, schemaXML, `<root>15</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+}
+
 // TestQNameUnboundPrefix verifies that an xs:QName value with an unbound prefix
 // is rejected (C-008). Lexical NCName form alone is not sufficient: the prefix
 // must be bound in scope.
