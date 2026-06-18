@@ -117,6 +117,28 @@ func TestXSTokenListCardinality(t *testing.T) {
 		}
 	})
 
+	t.Run("invalid token error names the list type", func(t *testing.T) {
+		// A token that fails per-item validation (e.g. a malformed NMTOKEN)
+		// is a cast failure whose message must name the LIST type
+		// (xs:NMTOKENS), not the per-token item type (xs:NMTOKEN).
+		for _, tc := range []struct {
+			expr     string
+			listType string
+		}{
+			{`xs:NMTOKENS("a ;")`, "xs:NMTOKENS"},
+			{`xs:IDREFS("1")`, "xs:IDREFS"},
+			{`xs:ENTITIES("1")`, "xs:ENTITIES"},
+		} {
+			t.Run(tc.expr, func(t *testing.T) {
+				compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+				require.NoError(t, err)
+				_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.listType)
+			})
+		}
+	})
+
 	t.Run("empty array returns empty (not an error)", func(t *testing.T) {
 		compiled, err := xpath3.NewCompiler().Compile(`count(xs:NMTOKENS([]))`)
 		require.NoError(t, err)

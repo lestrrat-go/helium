@@ -250,7 +250,7 @@ func makeXSTokenList(listType, itemType string, tokenRe *regexp.Regexp) func(con
 			if !tokenRe.MatchString(tok) {
 				return nil, &XPathError{
 					Code:    errCodeFORG0001,
-					Message: fmt.Sprintf("invalid token %q in %s", tok, itemType),
+					Message: fmt.Sprintf("invalid token %q in %s", tok, listType),
 				}
 			}
 			result[i] = AtomicValue{TypeName: itemType, Value: tok}
