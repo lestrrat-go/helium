@@ -1213,6 +1213,13 @@ func (v *validator) matchAttrTokensCounts(pat *pattern, tokens []string) []int {
 		return v.repeatCounts(content, tokens, 0)
 	case patternGroup:
 		return v.groupCounts(pat.children, tokens)
+	case patternList:
+		// A <list> nested in a repetition (e.g. oneOrMore/zeroOrMore) consumes
+		// one full run of its children per iteration; return the set of token
+		// counts a sequential match of those children can consume so the
+		// repetition machinery can chain iterations. This mirrors the
+		// full-consumption check matchListContent performs for a standalone list.
+		return v.groupCounts(pat.children, tokens)
 	case patternText:
 		// Text in a list: consume one token (or none when empty).
 		if len(tokens) > 0 {

@@ -118,3 +118,64 @@ func TestTokenMatcherChoiceShadowAttr(t *testing.T) {
 		require.Error(t, err, `attribute "1 2 3" should be rejected`)
 	})
 }
+
+// TestTokenMatcherListInRepetitionAttr covers a <list> nested inside a
+// repetition in an attribute (matchAttrTokensCounts patternList case). Each
+// repetition iteration consumes one full run of the list's children; the
+// repetition machinery chains those runs. Without the patternList case the
+// list match returns no counts and every such attribute is wrongly rejected.
+func TestTokenMatcherListInRepetitionAttr(t *testing.T) {
+	t.Parallel()
+
+	oneOrMore := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute name="v">
+    <oneOrMore>
+      <list>
+        <value>foo</value>
+        <value>bar</value>
+      </list>
+    </oneOrMore>
+  </attribute>
+</element>`
+
+	t.Run("oneOrMore single occurrence", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, oneOrMore, `<a v="foo bar"/>`)
+		require.NoError(t, err, `"foo bar" should validate as one list occurrence`)
+	})
+
+	t.Run("oneOrMore two occurrences", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, oneOrMore, `<a v="foo bar foo bar"/>`)
+		require.NoError(t, err, `"foo bar foo bar" should validate as two list occurrences`)
+	})
+
+	t.Run("oneOrMore incomplete list", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, oneOrMore, `<a v="foo"/>`)
+		require.Error(t, err, `"foo" is an incomplete list and should be rejected`)
+	})
+
+	t.Run("oneOrMore wrong second token", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, oneOrMore, `<a v="foo baz"/>`)
+		require.Error(t, err, `"foo baz" has a wrong second token and should be rejected`)
+	})
+
+	zeroOrMore := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute name="v">
+    <zeroOrMore>
+      <list>
+        <value>foo</value>
+        <value>bar</value>
+      </list>
+    </zeroOrMore>
+  </attribute>
+</element>`
+
+	t.Run("zeroOrMore empty", func(t *testing.T) {
+		t.Parallel()
+		err := validateWith(t, zeroOrMore, `<a v=""/>`)
+		require.NoError(t, err, `empty attribute should validate against zeroOrMore-of-list`)
+	})
+}
