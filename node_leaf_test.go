@@ -316,6 +316,102 @@ func TestLeafReplaceGuards(t *testing.T) {
 	}
 }
 
+// TestLeafFastPathNilOperand verifies that the leaf-node AddChild/AddSibling
+// overrides which run a content-merge fast path (Text.AddChild, Text.AddSibling,
+// Comment.AddChild) reject a nil operand with ErrNilNode instead of panicking,
+// and leave the linked leaf untouched. Both a literal nil interface and a
+// matching typed-nil concrete pointer (Go's interface nil trap) are exercised,
+// since the overrides run a type assertion / debug log / preflight before the
+// guard would otherwise be reached.
+func TestLeafFastPathNilOperand(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		// op runs the override under test against the supplied operand.
+		op func(leaf helium.MutableNode, cur helium.Node) error
+		// typedNil returns a matching typed-nil operand wrapped in a non-nil Node
+		// interface, to exercise the same fast path's interface-nil trap.
+		typedNil func() helium.Node
+		// newLeaf builds the linked leaf that receives the call.
+		newLeaf leafCtor
+	}{
+		{
+			name: "Text.AddChild",
+			op:   func(leaf helium.MutableNode, cur helium.Node) error { return leaf.AddChild(cur) },
+			typedNil: func() helium.Node {
+				var tn *helium.Text
+				return tn
+			},
+			newLeaf: func(t *testing.T, doc *helium.Document) helium.MutableNode {
+				return mustCreateText(t, doc, []byte("x"))
+			},
+		},
+		{
+			name: "Text.AddSibling",
+			op:   func(leaf helium.MutableNode, cur helium.Node) error { return leaf.AddSibling(cur) },
+			typedNil: func() helium.Node {
+				var tn *helium.Text
+				return tn
+			},
+			newLeaf: func(t *testing.T, doc *helium.Document) helium.MutableNode {
+				return mustCreateText(t, doc, []byte("x"))
+			},
+		},
+		{
+			name: "Comment.AddChild",
+			op:   func(leaf helium.MutableNode, cur helium.Node) error { return leaf.AddChild(cur) },
+			typedNil: func() helium.Node {
+				var cn *helium.Comment
+				return cn
+			},
+			newLeaf: func(t *testing.T, doc *helium.Document) helium.MutableNode {
+				return mustCreateComment(t, doc, []byte("x"))
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("literal nil", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				leaf := tc.newLeaf(t, doc)
+				require.NoError(t, root.AddChild(leaf), "leaf starts under root")
+
+				err := tc.op(leaf, nil)
+				require.ErrorIs(t, err, helium.ErrNilNode, "literal nil operand must return ErrNilNode")
+
+				require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
+				require.Nil(t, leaf.NextSibling(), "leaf must not gain a sibling")
+				require.Equal(t, helium.Node(leaf), root.FirstChild(), "tree must not be corrupted")
+				require.Equal(t, helium.Node(root), leaf.Parent(), "leaf parent must stay root")
+				requireNoCycle(t, root)
+			})
+
+			t.Run("typed nil", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				leaf := tc.newLeaf(t, doc)
+				require.NoError(t, root.AddChild(leaf), "leaf starts under root")
+
+				err := tc.op(leaf, tc.typedNil())
+				require.ErrorIs(t, err, helium.ErrNilNode, "typed-nil operand must return ErrNilNode")
+
+				require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
+				require.Nil(t, leaf.NextSibling(), "leaf must not gain a sibling")
+				require.Equal(t, helium.Node(leaf), root.FirstChild(), "tree must not be corrupted")
+				require.Equal(t, helium.Node(root), leaf.Parent(), "leaf parent must stay root")
+				requireNoCycle(t, root)
+			})
+		})
+	}
+}
+
 // TestTextAddSiblingNonTextFallback covers Text.AddSibling's non-text fallback
 // path (the `return addSibling(n, cur)` branch). Moving an already-linked
 // non-text node via text.AddSibling must auto-unlink it from its old parent and

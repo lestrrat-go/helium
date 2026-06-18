@@ -55,6 +55,12 @@ func newComment(b []byte) *Comment {
 }
 
 func (n *Comment) AddChild(cur Node) error {
+	// Reject a nil or typed-nil operand BEFORE the type assertion / comment-merge
+	// fast path so the call returns ErrNilNode instead of panicking and leaves
+	// the tree untouched.
+	if isNilNode(cur) {
+		return ErrNilNode
+	}
 	// Run the shared self/cycle guard and auto-unlink BEFORE the comment-merge
 	// fast path. Otherwise comment.AddChild(comment) would double its own
 	// content, and merging an already-linked comment node would copy its
@@ -179,6 +185,12 @@ func newText(b []byte) *Text {
 }
 
 func (n *Text) AddChild(cur Node) error {
+	// Reject a nil or typed-nil operand BEFORE the type assertion / text-merge
+	// fast path so the call returns ErrNilNode instead of panicking and leaves
+	// the tree untouched.
+	if isNilNode(cur) {
+		return ErrNilNode
+	}
 	// Run the shared self/cycle guard and auto-unlink BEFORE the text-merge
 	// fast path. Otherwise txt.AddChild(txt) would double its own content, and
 	// merging an already-linked text node would copy its content while leaving
@@ -207,6 +219,12 @@ func (n *Text) AppendText(b []byte) error {
 }
 
 func (n *Text) AddSibling(cur Node) error {
+	// Reject a nil or typed-nil operand BEFORE the debug log (which dereferences
+	// cur) and the text-merge fast path so the call returns ErrNilNode instead of
+	// panicking and leaves the tree untouched.
+	if isNilNode(cur) {
+		return ErrNilNode
+	}
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Text.AddSibling '%s'", cur.Content())
 		defer g.IRelease("END Text.AddSibling")
