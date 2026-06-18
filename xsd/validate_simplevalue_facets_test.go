@@ -277,6 +277,63 @@ func TestUnionEnumerationCrossMember(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, errs, "is not a valid value")
 	})
+
+	// Positive cross-member case: the enumeration literal and the instance value
+	// resolve to DIFFERENT active members yet are value-equal across the
+	// ordered-union value family, so the instance must be ACCEPTED. With
+	// memberTypes="xs:int xs:decimal" the literal "1.0" is active in xs:decimal
+	// (not a valid xs:int) while the instance "1" is active in xs:int; their value
+	// spaces overlap, so 1 == 1.0 and the value matches. A naive implementation
+	// that rejected every differing active member would wrongly fail this.
+	t.Run("cross-member value-equal accepted", func(t *testing.T) {
+		t.Parallel()
+		const xsd = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intOrDecimal">
+    <xs:union memberTypes="xs:int xs:decimal"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="intOrDecimal">
+        <xs:enumeration value="1.0"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs, err := validateInstance(t, xsd, `<root>1</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+}
+
+// TestNotationUnboundPrefix verifies that the QName-prefix-binding check also
+// applies to xs:NOTATION (C-008): an unbound prefix is rejected and a bound
+// prefix accepted, mirroring TestQNameUnboundPrefix. The schema declares the
+// required <xs:notation> elements so the type is well-formed; note that the
+// validator resolves a NOTATION value through QName prefix-binding rather than
+// requiring the value to match a declared notation name, so this exercises the
+// shared prefix-binding path on a NOTATION-derived simple type.
+func TestNotationUnboundPrefix(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:notation name="png" public="image/png"/>
+  <xs:simpleType name="imageNotation">
+    <xs:restriction base="xs:NOTATION"/>
+  </xs:simpleType>
+  <xs:element name="n" type="imageNotation"/>
+</xs:schema>`
+
+	t.Run("unbound prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := validateInstance(t, schemaXML, `<n>q:jpeg</n>`)
+		require.Error(t, err)
+	})
+
+	t.Run("bound prefix accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<n xmlns:p="urn:p">p:jpeg</n>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
 }
 
 // TestQNamePredeclaredXMLPrefix verifies that the predeclared "xml" prefix is
