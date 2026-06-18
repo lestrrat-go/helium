@@ -56,10 +56,16 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 				duplicates = MergeUseFirst
 			case "use-last":
 				duplicates = MergeUseLast
+			case "use-any":
+				// use-any allows the implementation to pick any value;
+				// reusing use-first behavior is conformant.
+				duplicates = MergeUseFirst
 			case duplicatesReject:
 				duplicates = MergeReject
 			case "combine":
 				duplicates = MergeCombine
+			default:
+				return nil, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: invalid value for 'duplicates' option: %q", s)}
 			}
 		}
 	}
