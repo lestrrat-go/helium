@@ -50,6 +50,13 @@ type pattern struct {
 type dataType struct {
 	library string // datatype library URI
 	name    string // type name (e.g. "integer", "string")
+	// libraryDeclared records whether datatypeLibrary was explicitly present on
+	// this element or an ancestor (even as ""). It distinguishes a truly-absent
+	// library (no datatypeLibrary anywhere) from an explicit datatypeLibrary=""
+	// reset under an inherited library. Only the absent case enables the
+	// libxml2-compat bare-XSD-name fallback in matchData/matchValue; an explicit
+	// "" reset selects the built-in library and rejects bare XSD names.
+	libraryDeclared bool
 }
 
 // param is a facet parameter for data patterns.

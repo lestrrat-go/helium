@@ -356,6 +356,27 @@ xsd's `enumValueSpaceTypes`) match by `value.Compare` value-space equality (e.g.
 integer `5`≡`+5`≡`05`, NaN≡NaN for float/double); all other recognized types
 (string-family, anyURI) match by whitespace-processed lexical equality.
 
+**Empty / absent `datatypeLibrary`.** The empty built-in library provides only
+`string` and `token`. For libxml2/golden compat, `matchData`/`matchValue` fall
+back to the XSD value path for a recognized bare XSD name (e.g. `<data
+type="integer"/>`) **only when `datatypeLibrary` is genuinely absent** —
+`dataType.libraryDeclared == false`. An explicit `datatypeLibrary=""` (including
+one that resets an inherited XSD library) selects the built-in library and
+rejects bare XSD names. `getDatatypeLibrary` returns `(value, declared)`,
+testing attribute presence (`getAttrOpt`) up the ancestor walk so an explicit
+`""` stops the walk instead of leaking the inherited library. Unknown
+names/libraries fail rather than matching by raw equality.
+
+**Length facets.** `validateWithParams(value, typeName, params)` enforces exact
+`length` as well as `minLength`/`maxLength`, computing length by datatype via
+`facetLength`: rune count for string-family types, XML-whitespace token COUNT
+for XSD list builtins (`NMTOKENS`/`IDREFS`/`ENTITIES`), and decoded OCTET count
+for binary (`hexBinary`/`base64Binary`).
+
+**Tokenization.** All `<list>`, attribute `<group>`/repetition, and
+`<value type="token">` token splitting uses `xmlFields` (XML whitespace #x20,
+#x9, #xA, #xD only) — never `strings.Fields` — so NBSP stays part of a token.
+
 ### Error Suppression
 
 - `suppressDepth` counter incremented during choice branch exploration
