@@ -473,12 +473,17 @@ func unlinkNode(n Node) {
 
 	ndn := n.baseDocNode()
 
-	// Attributes are NOT stored in the parent's child list; they live in the
-	// owning Element's properties linked list. Detach via spliceOutAttribute so
-	// the Element.properties head is repaired and the attribute sibling chain is
-	// patched, without ever touching the parent's firstChild/lastChild.
+	// Attributes are USUALLY stored in the owning Element's properties linked
+	// list, NOT in the parent's child list. Detach via spliceOutAttribute so the
+	// Element.properties head is repaired and the attribute sibling chain is
+	// patched, without ever touching the parent's firstChild/lastChild. But an
+	// attribute with an *Element parent is not guaranteed to be a property:
+	// public paths (elem.AddChild(attr), a generic Replace(attr)) can place it in
+	// the normal child list instead. Confirm it is actually reachable from
+	// elem.properties before using property-list logic; otherwise fall through to
+	// the generic child-list unlink below.
 	if attr, ok := n.(*Attribute); ok {
-		if elem, ok := ndn.parent.(*Element); ok {
+		if elem, ok := ndn.parent.(*Element); ok && elem.hasAttributeInProperties(attr) {
 			elem.spliceOutAttribute(attr)
 			return
 		}
@@ -514,16 +519,23 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	cdn := cur.baseDocNode()
 	ndn := n.baseDocNode()
 
-	// Attribute-list semantics: attributes live in the owning Element's
-	// properties linked list, NOT in the parent's child list. When n is an
-	// attribute under an Element, every replacement must itself be an attribute,
-	// and the Element.properties head must be repaired instead of
-	// firstChild/lastChild. Reject a mixed/non-attribute replacement before any
-	// unlink/splice so a rejected call leaves the tree untouched.
-	_, nIsAttr := n.(*Attribute)
+	// Attribute-list semantics: attributes USUALLY live in the owning Element's
+	// properties linked list, NOT in the parent's child list. When n is such a
+	// property attribute, every replacement must itself be an attribute, and the
+	// Element.properties head must be repaired instead of firstChild/lastChild.
+	// Reject a mixed/non-attribute replacement before any unlink/splice so a
+	// rejected call leaves the tree untouched.
+	//
+	// But an *Attribute with an *Element parent is not guaranteed to live in that
+	// element's properties chain: public paths (elem.AddChild(attr), a generic
+	// Replace(attr)) can place it in the normal child list instead. Only use
+	// property-list logic when the attribute is genuinely reachable from
+	// ownerElem.properties; otherwise fall back to the generic child-list splice
+	// so firstChild/lastChild are repaired.
+	nAttr, nIsAttr := n.(*Attribute)
 	ownerElem, _ := ndn.parent.(*Element)
-	attrList := nIsAttr && ownerElem != nil
-	if nIsAttr {
+	attrList := nIsAttr && ownerElem != nil && ownerElem.hasAttributeInProperties(nAttr)
+	if attrList {
 		for _, nn := range nodes {
 			if nn.baseDocNode() == ndn {
 				continue

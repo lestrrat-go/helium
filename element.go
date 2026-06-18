@@ -291,6 +291,22 @@ func (n *Element) RemoveAttributeNS(localName, nsURI string) bool {
 	return true
 }
 
+// hasAttributeInProperties reports whether p is reachable from this element's
+// properties linked list by identity. An *Attribute whose parent is an *Element
+// is not guaranteed to live in that element's properties chain: public paths
+// such as elem.AddChild(attr) or a generic Replace(attr) can instead place the
+// attribute in the normal child list. Property-list splicing must only be used
+// when the attribute is genuinely a property; otherwise firstChild/lastChild
+// would be left stale.
+func (n *Element) hasAttributeInProperties(p *Attribute) bool {
+	for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
+		if attr == p {
+			return true
+		}
+	}
+	return false
+}
+
 // spliceOutAttribute removes an attribute from the element's property linked list.
 func (n *Element) spliceOutAttribute(p *Attribute) {
 	pdn := p.baseDocNode()
