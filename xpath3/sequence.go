@@ -272,6 +272,11 @@ func ebvAtomic(v AtomicValue) (bool, error) {
 		case *FloatValue:
 			f := val.Float64()
 			return f != 0 && !math.IsNaN(f), nil
+		case float64:
+			return val != 0 && !math.IsNaN(val), nil
+		case float32:
+			f := float64(val)
+			return f != 0 && !math.IsNaN(f), nil
 		}
 	}
 	return false, &XPathError{

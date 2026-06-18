@@ -343,14 +343,26 @@ func (a AtomicValue) BigRat() *big.Rat {
 	return new(big.Rat)
 }
 
-// DoubleVal returns the backing float64 value (extracts from *FloatValue).
+// DoubleVal returns the backing float64 value. The backing value is normally a
+// *FloatValue, but a schema-derived or directly constructed double/float can
+// carry a plain float64/float32; route through ToFloat64 so no caller panics.
 func (a AtomicValue) DoubleVal() float64 {
-	return a.Value.(*FloatValue).Float64() //nolint:forcetypeassert
+	return a.ToFloat64()
 }
 
-// FloatVal returns the backing *FloatValue.
+// FloatVal returns the backing value as a *FloatValue. A schema-derived or
+// directly constructed double/float can carry a plain float64/float32; wrap it
+// at the precision implied by the type so callers never panic on a non-pointer
+// backing value.
 func (a AtomicValue) FloatVal() *FloatValue {
-	return a.Value.(*FloatValue) //nolint:forcetypeassert
+	if fv, ok := a.Value.(*FloatValue); ok {
+		return fv
+	}
+	f := a.ToFloat64()
+	if a.TypeName == TypeFloat {
+		return NewFloat(f)
+	}
+	return NewDouble(f)
 }
 
 // BooleanVal returns the backing bool value.

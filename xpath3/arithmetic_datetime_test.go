@@ -418,3 +418,41 @@ func TestSchemaDerivedDurationAggregate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "PT11S", avgStr)
 }
+
+// TestDateTimeAddDateOverflow guards against time.AddDate silently wrapping for
+// day/month magnitudes near math.MaxInt: such operands must report FODT0002
+// rather than returning a wrapped (or unchanged) date.
+func TestDateTimeAddDateOverflow(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	overflowExprs := []struct {
+		name string
+		expr string
+	}{
+		{
+			name: "max-int day duration",
+			expr: `xs:dateTime("2020-01-01T00:00:00") + xs:dayTimeDuration("P9223372036854775807D")`,
+		},
+		{
+			name: "min-int day duration",
+			expr: `xs:dateTime("2020-01-01T00:00:00") - xs:dayTimeDuration("P9223372036854775807D")`,
+		},
+		{
+			name: "huge year-month duration",
+			expr: `xs:dateTime("2020-01-01T00:00:00") + xs:yearMonthDuration("P768614336404564650Y")`,
+		},
+	}
+
+	for _, tt := range overflowExprs {
+		t.Run(tt.name, func(t *testing.T) {
+			err := evalExprErr(t, doc, tt.expr)
+			require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+		})
+	}
+
+	// A large-but-representable duration must still succeed (no over-rejection).
+	t.Run("large representable day duration", func(t *testing.T) {
+		seq := evalExpr(t, doc, `xs:dateTime("2020-01-01T00:00:00") + xs:dayTimeDuration("P3650000D")`)
+		require.Equal(t, 1, seq.Len())
+	})
+}

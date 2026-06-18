@@ -158,6 +158,39 @@ func TestTimezoneAccessorExactSecRat(t *testing.T) {
 	})
 }
 
+// TestImplicitTimezoneExactSecRat verifies fn:implicit-timezone() returns an
+// xs:dayTimeDuration whose magnitude is carried exactly in SecRat, satisfying
+// the exact timezone-duration invariant.
+func TestImplicitTimezoneExactSecRat(t *testing.T) {
+	now := time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("positive offset", func(t *testing.T) {
+		tz := time.FixedZone("+0530", 5*3600+30*60)
+		ec := &evalContext{currentTime: &now, implicitTimezone: tz}
+		ctx := withFnContext(t.Context(), ec)
+		seq, err := fnImplicitTimezone(ctx, nil)
+		require.NoError(t, err)
+		require.Equal(t, 1, seq.Len())
+		d := seq.Get(0).(AtomicValue).Value.(Duration)
+		require.NotNil(t, d.SecRat)
+		require.Equal(t, big.NewRat(19800, 1).RatString(), d.SecRat.RatString())
+		require.False(t, d.Negative)
+	})
+
+	t.Run("negative offset", func(t *testing.T) {
+		tz := time.FixedZone("-0800", -8*3600)
+		ec := &evalContext{currentTime: &now, implicitTimezone: tz}
+		ctx := withFnContext(t.Context(), ec)
+		seq, err := fnImplicitTimezone(ctx, nil)
+		require.NoError(t, err)
+		require.Equal(t, 1, seq.Len())
+		d := seq.Get(0).(AtomicValue).Value.(Duration)
+		require.NotNil(t, d.SecRat)
+		require.Equal(t, big.NewRat(28800, 1).RatString(), d.SecRat.RatString())
+		require.True(t, d.Negative)
+	})
+}
+
 // TestValidateTimezoneOffsetUnderflow verifies that a nonzero offset whose
 // seconds underflow float64 (and therefore round to exactly 0.0 in d.Seconds)
 // is still rejected via the exact SecRat-aware rational, rather than being

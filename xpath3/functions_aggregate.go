@@ -709,22 +709,27 @@ const (
 )
 
 func distinctValueFastKey(a AtomicValue) (distinctGroup, string, bool) {
+	// Classify on the effective built-in type so a schema-derived value (custom
+	// TypeName whose BaseType names the built-in ancestor) shares a fast-key
+	// family with its built-in equivalent. Otherwise a schema-derived xs:NCName
+	// and an equal xs:string would land in different buckets and never collapse.
+	et := distinctEffectiveType(a)
 	switch {
-	case isStringDerived(a.TypeName):
+	case isStringDerived(et):
 		return distinctGroupString, "s:" + a.StringVal(), true
-	case a.TypeName == TypeAnyURI:
+	case et == TypeAnyURI:
 		return distinctGroupString, "s:" + stringFromAtomic(a), true
-	case a.TypeName == TypeBoolean:
+	case et == TypeBoolean:
 		return distinctGroupBoolean, "b:" + strconv.FormatBool(a.BooleanVal()), true
-	case isIntegerDerived(a.TypeName) || a.TypeName == TypeDecimal:
+	case isIntegerDerived(et) || et == TypeDecimal:
 		return distinctGroupDecimalInt, "n:" + toRatForCompare(a).RatString(), true
-	case a.TypeName == TypeFloat:
+	case et == TypeFloat:
 		f := float32(a.ToFloat64())
 		if f == 0 {
 			f = 0
 		}
 		return distinctGroupFloat, "f:" + strconv.FormatUint(uint64(math.Float32bits(f)), 16), true
-	case a.TypeName == TypeDouble:
+	case et == TypeDouble:
 		f := a.ToFloat64()
 		if f == 0 {
 			f = 0
@@ -733,6 +738,19 @@ func distinctValueFastKey(a AtomicValue) (distinctGroup, string, bool) {
 	default:
 		return distinctGroupUnknown, "", false
 	}
+}
+
+// distinctEffectiveType returns the built-in type that governs distinct-values
+// fast-key classification: the TypeName itself when it is a known built-in, or
+// the BaseType of a schema-derived value when its TypeName is not built-in.
+func distinctEffectiveType(a AtomicValue) string {
+	if a.TypeName != "" && IsKnownXSDType(a.TypeName) {
+		return a.TypeName
+	}
+	if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+		return a.BaseType
+	}
+	return a.TypeName
 }
 
 func distinctValueSeenInOtherNumericGroups(

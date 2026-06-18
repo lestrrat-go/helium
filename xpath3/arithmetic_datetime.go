@@ -8,6 +8,21 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
+// Conservative magnitude bounds for time.AddDate operands. time.Time can
+// represent years up to roughly ±2.9e11, but time.AddDate adds days/months as
+// plain ints whose internal normalization silently wraps for magnitudes near
+// math.MaxInt (e.g. AddDate(0,0,1<<60) returns the original date unchanged). We
+// bound day/month operands to ~1e11 years' worth, which stays comfortably inside
+// the representable range and well clear of any wrap; anything larger is a
+// genuine FODT0002 overflow.
+const (
+	maxSafeAddDateMonths = int64(1200000000000) // ~1e11 years in months
+)
+
+// maxSafeAddDateDays is ~1e11 years in days (365.25 * 1e11), as a *big.Int since
+// the day count is computed in big.Int.
+var maxSafeAddDateDays = big.NewInt(36525000000000)
+
 func isDurationType(typeName string) bool {
 	return typeName == TypeDuration || typeName == TypeYearMonthDuration || typeName == TypeDayTimeDuration
 }
@@ -377,6 +392,12 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 
 	// Add months
 	if months != 0 {
+		// time.AddDate computes the result via int month arithmetic that silently
+		// wraps for magnitudes near math.MaxInt, so reject month magnitudes beyond a
+		// conservative bound that keeps the result within representable years.
+		if int64(months) > maxSafeAddDateMonths || int64(months) < -maxSafeAddDateMonths {
+			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "date/time arithmetic overflow: month count out of range"}
+		}
 		t = addMonths(t, months)
 	}
 
@@ -400,10 +421,12 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 		days := new(big.Int)
 		remSecs := new(big.Int)
 		days.QuoRem(whole, big.NewInt(86400), remSecs)
-		// The day count can exceed int (e.g. P9223372036854775808D). Narrowing it
-		// would silently wrap and return the original date unchanged, so reject any
-		// value outside the int range that AddDate can consume.
-		if days.Cmp(big.NewInt(math.MaxInt)) > 0 || days.Cmp(big.NewInt(math.MinInt)) < 0 {
+		// The day count can exceed int (e.g. P9223372036854775808D). Even within the
+		// int range, time.AddDate computes the result via int day arithmetic that
+		// silently wraps for magnitudes near math.MaxInt (e.g. 2^60 days returns the
+		// original date unchanged). Reject any day magnitude beyond a conservative
+		// bound that keeps the result well within time.Time's representable years.
+		if days.CmpAbs(maxSafeAddDateDays) > 0 {
 			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "date/time arithmetic overflow: day count out of range"}
 		}
 		sign := 1
