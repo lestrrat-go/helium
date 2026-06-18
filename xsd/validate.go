@@ -581,14 +581,20 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 		edecl := lookupElemDecl(ce, vc.schema)
 		if edecl == nil {
 			// Lax: no global declaration, so the child (and its subtree) is not
-			// schema-assessed. Still recurse so any deeper anyType descendant with
-			// a resolvable global declaration gets annotated.
+			// schema-assessed. Still record its own xsi:type ACTUAL type — a parent
+			// IDC selecting this element directly must canonicalize an
+			// xsi:type-introduced field in that type's value space — then recurse so
+			// any deeper anyType descendant with a resolvable global declaration gets
+			// annotated.
+			if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
+				vc.annotateElement(ctx, ce, actual)
+			}
 			if err := vc.annotateAnyTypeChildren(ctx, ce); err != nil {
 				contentErr = err
 			}
 			continue
 		}
-		td, xsiErr := vc.resolveXsiType(ctx, ce, edecl.Type)
+		td, xsiErr := vc.resolveXsiType(ctx, ce, effectiveDeclType(edecl, vc.schema))
 		if xsiErr != nil {
 			contentErr = xsiErr
 			continue
@@ -630,7 +636,15 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 // recurses. A nested global IDC host's fields would otherwise be canonicalized
 // with declared (or raw) types, missing xsi:type overrides on descendants — even
 // LOCAL descendants with no global declaration — under the skipped wrapper.
+//
+// The matched element ITSELF is annotated too: a PARENT IDC that selects this
+// skip-wildcard-matched element directly must see its xsi:type ACTUAL type, so an
+// xsi:type-introduced field (e.g. an inline xs:integer attribute) is canonicalized
+// in the actual type's value space rather than compared lexically.
 func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *helium.Element) {
+	if actual, ok := vc.resolveXsiTypeQuiet(elem); ok {
+		vc.annotateElement(ctx, elem, actual)
+	}
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
