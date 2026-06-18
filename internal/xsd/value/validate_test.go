@@ -31,6 +31,7 @@ const (
 	hugeDatePlus1 = hugeYearPlus1 + "-01-01"
 
 	typeGYear        = "gYear"
+	typeGYearMonth   = "gYearMonth"
 	typeGMonth       = "gMonth"
 	typeGDay         = "gDay"
 	typeGMonthDay    = "gMonthDay"
@@ -82,7 +83,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			invalid:  []string{"", "23", testAbc, "2023-01", "2023+99:99", "2023+15:00"},
 		},
 		{
-			typeName: "gYearMonth",
+			typeName: typeGYearMonth,
 			valid:    []string{"2023-01", "2023-12", "-0001-06", "2023-01Z", "2023-01+09:00"},
 			invalid:  []string{"", "2023", "2023-1", testAbc, "2023-13", "2023-00", "2023-01+99:99", "2023-01+15:00"},
 		},
@@ -384,8 +385,8 @@ func TestCompareValues(t *testing.T) {
 		{typeGYear, hugeYearPlus1 + "Z", hugeYearPlus1 + "+00:00", 0, true},
 
 		// gYearMonth
-		{"gYearMonth", "2023-01", "2023-02", -1, true},
-		{"gYearMonth", "2023-06", "2023-06", 0, true},
+		{typeGYearMonth, "2023-01", "2023-02", -1, true},
+		{typeGYearMonth, "2023-06", "2023-06", 0, true},
 
 		// gMonth
 		{typeGMonth, "--01", "--02", -1, true},
@@ -407,7 +408,7 @@ func TestCompareValues(t *testing.T) {
 		// producing a wrong determinate result from normalizing a zero
 		// year/month/day field.
 		{typeGYear, "2020", "2020Z", 0, false},
-		{"gYearMonth", "2020-06", "2020-06Z", 0, false},
+		{typeGYearMonth, "2020-06", "2020-06Z", 0, false},
 		{typeGMonth, "--06", "--06Z", 0, false},
 		{typeGDay, "---15", "---15Z", 0, false},
 		{typeGMonthDay, "--06-15", "--06-15Z", 0, false},
@@ -554,7 +555,7 @@ func TestTimezoneUppercaseZOnly(t *testing.T) {
 		{lexicon.TypeDateTime, "2023-01-01T10:30:00Z", "2023-01-01T10:30:00z"},
 		{lexicon.TypeTime, "10:30:00Z", "10:30:00z"},
 		{typeGYear, "2023Z", "2023z"},
-		{"gYearMonth", "2023-01Z", "2023-01z"},
+		{typeGYearMonth, "2023-01Z", "2023-01z"},
 		{typeGMonth, "--06Z", "--06z"},
 		{typeGDay, "---15Z", "---15z"},
 		{typeGMonthDay, "--06-01Z", "--06-01z"},
