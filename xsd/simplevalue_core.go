@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
@@ -117,6 +118,18 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 		return err
 	}
 
+	// For QName/NOTATION the lexical space only enforces NCName form; the value
+	// is invalid unless any prefix is bound in scope. resolveLexicalQName
+	// reports an error for an unbound prefix.
+	if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
+		if _, err := resolveLexicalQName(trimmed, valueNS); err != nil {
+			typeName := typeDisplayName(td)
+			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
+			return err
+		}
+	}
+
 	// Validate facets along the type chain.
 	return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
 }
@@ -141,10 +154,21 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 	// First, check restriction facets on the union type itself (e.g., enumeration).
 	// If the type has facets and the value doesn't match them, that's the error.
 	// Suppress the per-facet error; report a union-level error instead.
+	//
+	// Enumeration on a union is defined in the value space of the active member
+	// type (the member that accepts the value), not purely lexically. Resolve
+	// that member's builtin base type so checkFacets compares enumeration in the
+	// correct value space — e.g. a union of xs:int with enumeration "5" accepts
+	// "+5". When no member accepts the value the per-member loop below reports
+	// the failure, so an empty builtinLocal here is harmless.
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 	if td.Facets != nil {
+		memberLocal := ""
+		if active := unionActiveMemberNS(ctx, value, valueNS, td); active != nil {
+			memberLocal = builtinBaseLocal(active)
+		}
 		vc.suppressDepth++
-		err := checkFacets(ctx, trimmed, valueNS, td.Facets, "", elemName, filename, line, vc)
+		err := checkFacets(ctx, trimmed, valueNS, td.Facets, memberLocal, elemName, filename, line, vc)
 		vc.suppressDepth--
 		if err != nil {
 			typeName := unionTypeDisplayName(td)
@@ -171,6 +195,26 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 	msg := fmt.Sprintf("'%s' is not a valid value of the %s.", value, typeName)
 	vc.reportValidityError(ctx, filename, line, elemName, msg)
 	return fmt.Errorf("union validation failed")
+}
+
+// unionActiveMemberNS returns the union member type that accepts value under the
+// given namespace context, resolving prefixes (for QName/NOTATION members) from
+// valueNS. It mirrors unionActiveMember but threads an in-scope namespace map
+// directly rather than a DOM node. Returns nil when no member accepts the value.
+func unionActiveMemberNS(ctx context.Context, value string, valueNS map[string]string, td *TypeDef) *TypeDef {
+	for _, m := range resolveUnionMembers(td) {
+		if m == nil {
+			continue
+		}
+		sub := &validationContext{
+			errorHandler:  helium.NilErrorHandler{},
+			suppressDepth: 1,
+		}
+		if validateValue(ctx, value, valueNS, m, "", "", 0, sub) == nil {
+			return m
+		}
+	}
+	return nil
 }
 
 // unionTypeDisplayName returns the display name for a union type error message.
@@ -227,6 +271,23 @@ func validateListValue(ctx context.Context, value string, td *TypeDef, elemName,
 			}
 		}
 		cur = cur.BaseType
+	}
+
+	// Apply the value-level facets — enumeration and pattern — to the
+	// whitespace-collapsed whole-list value, walking the base chain. The list's
+	// length facets are interpreted as item counts above; checkFacets would
+	// instead measure character length, so enumeration and pattern are applied
+	// here on their own rather than via the generic checkFacets path.
+	for cur := td; cur != nil; cur = cur.BaseType {
+		if cur.Facets == nil {
+			continue
+		}
+		if err := checkListEnumeration(ctx, value, cur.Facets, elemName, filename, line, vc); err != nil {
+			facetErr = err
+		}
+		if err := checkListPattern(ctx, value, cur.Facets, elemName, filename, line, vc); err != nil {
+			facetErr = err
+		}
 	}
 
 	if facetErr != nil {
@@ -301,6 +362,56 @@ func typeDisplayName(td *TypeDef) string {
 		return "xs:" + td.Name.Local
 	}
 	return td.Name.Local
+}
+
+// checkListEnumeration enforces the enumeration facet on the whitespace-collapsed
+// whole-list value. List enumeration values are themselves space-separated lists,
+// so both the instance value and each member are collapsed before comparison.
+func checkListEnumeration(ctx context.Context, value string, fs *FacetSet, elemName, filename string, line int, vc *validationContext) error {
+	if len(fs.Enumeration) == 0 {
+		return nil
+	}
+	collapsed := collapseSpaces(value)
+	for _, ev := range fs.Enumeration {
+		if collapseSpaces(ev) == collapsed {
+			return nil
+		}
+	}
+	set := "'" + strings.Join(fs.Enumeration, "', '") + "'"
+	msg := fmt.Sprintf("[facet 'enumeration'] The value '%s' is not an element of the set {%s}.", value, set)
+	vc.reportValidityError(ctx, filename, line, elemName, msg)
+	return fmt.Errorf("enumeration")
+}
+
+// checkListPattern enforces the pattern facet on the whole-list value. Multiple
+// patterns in the same restriction step are ORed, matching checkFacets.
+func checkListPattern(ctx context.Context, value string, fs *FacetSet, elemName, filename string, line int, vc *validationContext) error {
+	if len(fs.Patterns) == 0 {
+		return nil
+	}
+	matched := false
+	anyValid := false
+	for _, re := range fs.compiledPatterns {
+		if re == nil {
+			continue
+		}
+		anyValid = true
+		if re.MatchString(value) {
+			matched = true
+			break
+		}
+	}
+	if !anyValid || matched {
+		return nil
+	}
+	var msg string
+	if len(fs.Patterns) == 1 {
+		msg = fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the pattern '%s'.", value, fs.Patterns[0])
+	} else {
+		msg = fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the patterns '%s'.", value, strings.Join(fs.Patterns, "', '"))
+	}
+	vc.reportValidityError(ctx, filename, line, elemName, msg)
+	return fmt.Errorf("pattern")
 }
 
 // validateFacets checks all applicable facets for a type and its ancestors.
