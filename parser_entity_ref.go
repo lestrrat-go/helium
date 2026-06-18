@@ -654,7 +654,7 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 	}
 
 	if ent == nil {
-		if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && pctx.hasPERefs) {
+		if pctx.standalone == StandaloneExplicitYes || (!pctx.hasExternalSubset && !pctx.hasPERefs) {
 			return nil, pctx.error(ctx, ErrUndeclaredEntity)
 		}
 		if err := pctx.warning(ctx, "Entity '%s' not defined", name); err != nil {

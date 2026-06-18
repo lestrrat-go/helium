@@ -201,6 +201,17 @@ func TestPredefinedEntityRedeclaration(t *testing.T) {
 	})
 }
 
+func TestUndeclaredEntityFatal(t *testing.T) {
+	t.Parallel()
+
+	// An undeclared general entity reference, with no DTD/external subset
+	// and no parameter-entity references, is a fatal well-formedness error.
+	xml := `<r>&bogus;</r>`
+
+	_, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.Error(t, err, "undeclared entity with no DTD must be fatal")
+}
+
 func TestEntityDepthLimit(t *testing.T) {
 	// Build deeply nested entity references (depth > 40).
 	var dtd strings.Builder
