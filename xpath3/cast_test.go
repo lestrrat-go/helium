@@ -401,6 +401,10 @@ func TestCastMalformedDateTimeStamp(t *testing.T) {
 		xpath3.TypeDate,
 		xpath3.TypeTime,
 		xpath3.TypeGYear,
+		xpath3.TypeGYearMonth,
+		xpath3.TypeGMonth,
+		xpath3.TypeGMonthDay,
+		xpath3.TypeGDay,
 	}
 
 	for _, src := range []struct {
