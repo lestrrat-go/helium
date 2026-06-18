@@ -501,6 +501,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		chameleonEligible:        make(map[any]struct{}),
 		attrRefs:                 make(map[*AttrUse]QName),
 		attrUseConstraintSources: make(map[*AttrUse]attrConstraintSource),
+		attrUseSources:           make(map[*AttrUse]attrConstraintSource),
 		filename:                 impFilename,
 		importedNS:               make(map[string]string),
 		importDepth:              c.importDepth + 1,
@@ -598,6 +599,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
 	maps.Copy(c.attrRefs, impC.attrRefs)
 	maps.Copy(c.attrUseConstraintSources, impC.attrUseConstraintSources)
+	maps.Copy(c.attrUseSources, impC.attrUseSources)
 
 	return nil
 }

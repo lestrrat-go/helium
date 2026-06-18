@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -115,22 +116,17 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 		if td.Name.NS == lexicon.NamespaceXSD {
 			continue
 		}
-		if resolveVariety(td) != TypeVarietyAtomic {
-			continue
-		}
-
-		builtinLocal := builtinBaseLocal(td)
-		if builtinLocal != lexicon.TypeQName && builtinLocal != lexicon.TypeNotation {
-			continue
-		}
 
 		component := td.Name.Local
 		if component == "" || e.src.isLocal {
 			component = "local simple type"
 		}
 
+		variety := resolveVariety(td)
+
 		// Direct un-enumerated xs:NOTATION base is not a permitted derivation.
-		if builtinLocal == lexicon.TypeNotation && td.Derivation == DerivationRestriction && td.BaseType != nil &&
+		if variety == TypeVarietyAtomic && builtinBaseLocal(td) == lexicon.TypeNotation &&
+			td.Derivation == DerivationRestriction && td.BaseType != nil &&
 			td.BaseType.Name.NS == lexicon.NamespaceXSD && td.BaseType.Name.Local == lexicon.TypeNotation {
 			if td.Facets == nil || len(td.Facets.Enumeration) == 0 {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, e.src.line, "simpleType", component,
@@ -139,7 +135,10 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 			}
 		}
 
-		// Validate each enumeration literal's QName prefix binding.
+		// Validate each enumeration literal's QName/NOTATION prefix binding,
+		// variety-aware against the restriction base: an atomic QName/NOTATION
+		// literal is validated directly, a list literal item-by-item against the
+		// item type, and a union literal against whichever member type accepts it.
 		if td.Facets == nil {
 			continue
 		}
@@ -148,12 +147,159 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 			if i < len(td.Facets.EnumerationNS) {
 				enumNS = td.Facets.EnumerationNS[i]
 			}
-			if _, err := resolveLexicalQName(ev, enumNS); err != nil {
+			if c.enumLiteralHasUnboundQName(ctx, ev, enumNS, td, variety) {
 				msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", ev, typeDisplayName(td))
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, e.src.line, "simpleType", component, msg), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 		}
+	}
+}
+
+// enumLiteralHasUnboundQName reports whether the enumeration literal ev has a
+// QName/NOTATION component whose prefix is not bound in enumNS, dispatched on the
+// restriction base's effective variety:
+//
+//   - atomic: the whole literal is a QName/NOTATION value (checked only when the
+//     base resolves to builtin xs:QName/xs:NOTATION).
+//   - list: each whitespace-separated item is validated against the item type.
+//   - union: the literal must validate against some member type under enumNS; if
+//     the only members that could carry it are QName/NOTATION and its prefix is
+//     unbound, the literal is unsatisfiable and is flagged.
+func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, enumNS map[string]string, td *TypeDef, variety TypeVariety) bool {
+	switch variety {
+	case TypeVarietyList:
+		itemType := resolveItemType(td)
+		if itemType == nil {
+			return false
+		}
+		itemVariety := resolveVariety(itemType)
+		for item := range strings.FieldsSeq(ev) {
+			if c.enumLiteralHasUnboundQName(ctx, item, enumNS, itemType, itemVariety) {
+				return true
+			}
+		}
+		return false
+	case TypeVarietyUnion:
+		members := resolveUnionMembers(td)
+		hasQNameMember := false
+		for _, member := range members {
+			if member == nil {
+				continue
+			}
+			if resolveVariety(member) == TypeVarietyAtomic {
+				bl := builtinBaseLocal(member)
+				if bl == lexicon.TypeQName || bl == lexicon.TypeNotation {
+					hasQNameMember = true
+				}
+			}
+			// The literal is satisfiable (and thus not flagged) as soon as some
+			// member accepts it under the literal's own namespace bindings. A
+			// QName/NOTATION member accepts it only with a bound prefix, so a
+			// successful match means the prefix is bound.
+			sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
+			if validateValue(ctx, ev, enumNS, member, "", "", 0, sub) == nil {
+				return false
+			}
+		}
+		// No member accepts the literal. Only treat this as a prefix-binding
+		// failure when a QName/NOTATION member exists (otherwise the literal is
+		// invalid for some other reason, not flagged by this check).
+		return hasQNameMember
+	default:
+		if builtinBaseLocal(td) != lexicon.TypeQName && builtinBaseLocal(td) != lexicon.TypeNotation {
+			return false
+		}
+		_, err := resolveLexicalQName(ev, enumNS)
+		return err != nil
+	}
+}
+
+// hasEffectiveEnumeration reports whether td or any of its base types along the
+// restriction chain carries an enumeration facet.
+func hasEffectiveEnumeration(td *TypeDef) bool {
+	for cur := td; cur != nil; cur = cur.BaseType {
+		if cur.Facets != nil && len(cur.Facets.Enumeration) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// checkNotationOnDeclarations rejects an element or attribute declaration whose
+// effective type is the built-in xs:NOTATION (or NOTATION-derived) without an
+// effective enumeration facet. Per XSD, xs:NOTATION may only be used in a
+// derivation that supplies an enumeration of the permitted notation names; a
+// declaration that types content directly as xs:NOTATION (e.g.
+// type="xs:NOTATION") bypasses the simpleType-level restriction rule, so it is
+// caught here after all type references are resolved. Full xs:NOTATION
+// declaration-table semantics are deferred (see memory).
+func (c *compiler) checkNotationOnDeclarations(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	// Elements: every element decl carrying a type= ref is tracked in
+	// elemRefSources, which is exactly the type="xs:NOTATION" case.
+	type elemEntry struct {
+		decl *ElementDecl
+		src  elemRefSource
+	}
+	var elemEntries []elemEntry
+	for decl, src := range c.elemRefSources {
+		elemEntries = append(elemEntries, elemEntry{decl: decl, src: src})
+	}
+	sort.Slice(elemEntries, func(i, j int) bool {
+		if elemEntries[i].src.line != elemEntries[j].src.line {
+			return elemEntries[i].src.line < elemEntries[j].src.line
+		}
+		return elemEntries[i].decl.Name.Local < elemEntries[j].decl.Name.Local
+	})
+	for _, e := range elemEntries {
+		td := e.decl.Type
+		if td == nil {
+			continue
+		}
+		if builtinBaseLocal(td) != lexicon.TypeNotation {
+			continue
+		}
+		if hasEffectiveEnumeration(td) {
+			continue
+		}
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, e.src.line, e.src.elemName, elemElement,
+			"It is an error if the type definition is the built-in 'NOTATION' and there is no 'enumeration' facet."), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+
+	// Attributes: every attribute use is tracked in attrUseSources.
+	type attrEntry struct {
+		au  *AttrUse
+		src attrConstraintSource
+	}
+	var attrEntries []attrEntry
+	for au, src := range c.attrUseSources {
+		attrEntries = append(attrEntries, attrEntry{au: au, src: src})
+	}
+	sort.Slice(attrEntries, func(i, j int) bool {
+		if attrEntries[i].src.line != attrEntries[j].src.line {
+			return attrEntries[i].src.line < attrEntries[j].src.line
+		}
+		return attrEntries[i].src.local < attrEntries[j].src.local
+	})
+	for _, a := range attrEntries {
+		td := attrUseTypeDef(a.au, c.schema)
+		if td == nil {
+			continue
+		}
+		if builtinBaseLocal(td) != lexicon.TypeNotation {
+			continue
+		}
+		if hasEffectiveEnumeration(td) {
+			continue
+		}
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, a.src.line, a.src.local, elemAttribute,
+			"It is an error if the type definition is the built-in 'NOTATION' and there is no 'enumeration' facet."), helium.ErrorLevelFatal))
+		c.errorCount++
 	}
 }
 

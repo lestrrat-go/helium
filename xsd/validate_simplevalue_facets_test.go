@@ -413,6 +413,161 @@ func TestEnumQNameUnboundPrefixCompileError(t *testing.T) {
 	})
 }
 
+// TestEnumQNameUnboundPrefixVarietyAware verifies item 1: the enumeration-literal
+// QName/NOTATION prefix validation is variety-aware. A list whose item type is
+// xs:QName and a union with an xs:QName member must each reject an enumeration
+// literal whose prefix is unbound, recursing through the list item type and
+// resolving the union member the literal belongs to. A bound prefix compiles
+// cleanly through both varieties.
+func TestEnumQNameUnboundPrefixVarietyAware(t *testing.T) {
+	t.Parallel()
+
+	t.Run("list itemType=QName unbound prefix rejected at compile", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:list itemType="xs:QName"/>
+        </xs:simpleType>
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a compile error for unbound QName list enumeration prefix")
+		require.Contains(t, errs, "p:foo")
+	})
+
+	t.Run("list itemType=QName bound prefix compiles cleanly", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:list itemType="xs:QName"/>
+        </xs:simpleType>
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for bound QName list enumeration prefix")
+	})
+
+	t.Run("union memberTypes QName int unbound prefix rejected at compile", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="xs:QName xs:int"/>
+        </xs:simpleType>
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a compile error for unbound QName union enumeration prefix")
+		require.Contains(t, errs, "p:foo")
+	})
+
+	t.Run("union memberTypes QName int bound prefix compiles cleanly", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="xs:QName xs:int"/>
+        </xs:simpleType>
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for bound QName union enumeration prefix")
+	})
+
+	t.Run("union int member literal compiles cleanly", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="xs:QName xs:int"/>
+        </xs:simpleType>
+        <xs:enumeration value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for an int union enumeration literal")
+	})
+}
+
+// TestNotationTypeOnDeclaration verifies item 2: typing an element or attribute
+// directly as xs:NOTATION (no enumeration facet) is rejected at compile time,
+// mirroring the simpleType-level rule that xs:NOTATION may only be used in a
+// derivation that supplies an enumeration of permitted notation names. An
+// enumeration-derived NOTATION type used the same way compiles cleanly.
+func TestNotationTypeOnDeclaration(t *testing.T) {
+	t.Parallel()
+
+	t.Run("element type=NOTATION rejected at compile", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="n" type="xs:NOTATION"/>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a compile error for element type=xs:NOTATION")
+		require.Contains(t, errs, "NOTATION")
+	})
+
+	t.Run("attribute type=NOTATION rejected at compile", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:NOTATION"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a compile error for attribute type=xs:NOTATION")
+		require.Contains(t, errs, "NOTATION")
+	})
+
+	t.Run("element typed via enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:simpleType name="imageNotation">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="p:jpeg"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="n" type="imageNotation"/>
+  <xs:element name="e">
+    <xs:complexType>
+      <xs:attribute name="a" type="imageNotation"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for an enumeration-derived NOTATION type: %s", errs)
+	})
+}
+
 // TestQNamePredeclaredXMLPrefix verifies that the predeclared "xml" prefix is
 // always in scope for xs:QName values without an explicit namespace declaration.
 // The prefix-binding check must special-case "xml" (bound to the XML namespace);
