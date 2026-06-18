@@ -218,7 +218,10 @@ func (pctx *parserCtx) validateEntityValueRefs(ctx context.Context, s []byte) er
 // replacement text resolve to their literal characters so a "&#38;" coming from
 // a PE becomes a literal '&' that can combine with following text to form a
 // general reference. Character references that appear directly in the literal
-// are emitted as an inert placeholder (never '&') so they remain character data.
+// are ALWAYS emitted as an inert placeholder (a space, never '&', a NameChar, or
+// ';') so they remain character data and can never combine with surrounding text
+// into a "&Name;". Only parameter-entity replacement text re-enters
+// general-reference scanning.
 func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byte, depth int) ([]byte, error) {
 	if depth > 40 {
 		return nil, errors.New("entity loop (depth > 40)")
@@ -230,19 +233,22 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 	for len(s) > 0 {
 		if bytes.HasPrefix(s, []byte{'&', '#'}) {
 			// Direct character reference: validate its syntax but treat the
-			// result as character data, not as a literal '&' that could form a
-			// general reference with following text.
-			r, width, err := parseStringCharRef(s)
+			// result as character data, not as a character that could form a
+			// general reference with surrounding text.
+			_, width, err := parseStringCharRef(s)
 			if err != nil {
 				return nil, err
 			}
-			if r == '&' {
-				// Emit an inert placeholder so a direct "&#38;" does not become
-				// part of a general reference (it is character data).
-				out.WriteByte(' ')
-			} else {
-				out.WriteRune(r)
-			}
+			// Emit an inert placeholder for EVERY direct character reference so
+			// it can never combine with surrounding text into a "&Name;". A
+			// space is neither '&', a NameChar, nor ';', so it cannot be part of
+			// any reference. This is required not only for "&#38;" (which would
+			// resolve to a literal '&') but for any char ref: e.g. "&&#97;;"
+			// must stay malformed (a bare '&' followed by character data) rather
+			// than synthesize "&a;", and "&a&#59;" must not synthesize a
+			// trailing ';' to complete "&a;". Only PARAMETER-ENTITY replacement
+			// text is allowed to re-enter general-reference scanning.
+			out.WriteByte(' ')
 			s = s[width:]
 			continue
 		}

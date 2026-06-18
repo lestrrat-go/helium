@@ -210,6 +210,73 @@ func TestEntityValueMalformedGeneralRef(t *testing.T) {
 	require.Error(t, err, "malformed general reference in entity value must be rejected")
 }
 
+// TestEntityValueDirectCharRefMalformedGeneralRef ensures that a DIRECT
+// character reference adjacent to a bare '&' or a name does not synthesize a
+// well-formed general reference. A direct char ref is character data; it must
+// never combine with surrounding text to manufacture a "&Name;". Both repros
+// would be wrongly accepted if direct char refs were resolved into the
+// validation stream rather than treated as inert character data.
+func TestEntityValueDirectCharRefMalformedGeneralRef(t *testing.T) {
+	t.Parallel()
+
+	t.Run("char ref completes a bare ampersand name", func(t *testing.T) {
+		t.Parallel()
+		// "&&#97;;" must NOT be read as "&a;": the first '&' is a bare ampersand
+		// (malformed) and "&#97;" is character data.
+		const input = `<!DOCTYPE r [<!ENTITY e "&&#97;;">]><r/>`
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err,
+			"a char ref must not complete a bare '&' into a general reference")
+	})
+
+	t.Run("char ref supplies a trailing semicolon", func(t *testing.T) {
+		t.Parallel()
+		// "&a&#59;" must NOT be read as "&a;": the trailing ';' is character data
+		// (&#59;), not the terminator of a general reference.
+		const input = `<!DOCTYPE r [<!ENTITY e "&a&#59;">]><r/>`
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err,
+			"a char ref must not supply the ';' that completes a general reference")
+	})
+}
+
+// TestEntityValueDirectCharRefAccepted ensures that a legitimately valid
+// EntityValue containing a direct character reference is still accepted and
+// stored literally (not expanded). The inert-placeholder treatment in the
+// reference-validation pass must not reject valid char refs.
+func TestEntityValueDirectCharRefAccepted(t *testing.T) {
+	t.Parallel()
+
+	t.Run("standalone char ref", func(t *testing.T) {
+		t.Parallel()
+		const input = `<!DOCTYPE r [<!ENTITY e "x&#97;y">]><r/>`
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "a standalone direct char ref must be accepted")
+		require.NotNil(t, doc)
+
+		ent, ok := doc.GetEntity("e")
+		require.True(t, ok, "entity e must be declared")
+		// A direct character reference is character data: it is resolved to its
+		// character in the stored value ("&#97;" -> "a"), unlike a general
+		// reference such as "&amp;" which is stored verbatim.
+		require.Equal(t, "xay", string(ent.Content()),
+			"direct char refs are character data, resolved in the stored value")
+	})
+
+	t.Run("predefined amp entity", func(t *testing.T) {
+		t.Parallel()
+		const input = `<!DOCTYPE r [<!ENTITY e "&amp;">]><r/>`
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "a well-formed &amp; must be accepted")
+		require.NotNil(t, doc)
+
+		ent, ok := doc.GetEntity("e")
+		require.True(t, ok, "entity e must be declared")
+		require.Equal(t, "&amp;", string(ent.Content()),
+			"general references must be stored literally, not expanded")
+	})
+}
+
 // TestEntityValueValidGeneralRefLiteral ensures that a well-formed general
 // reference in an EntityValue is accepted AND stored literally (not expanded):
 // the stored entity content must still contain "&amp; &good;" verbatim.
