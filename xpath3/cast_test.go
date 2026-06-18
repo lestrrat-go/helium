@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"errors"
 	"math"
 	"math/big"
 	"testing"
@@ -328,6 +329,40 @@ func TestCastAtomic(t *testing.T) {
 		_, err := xpath3.CastAtomic(v, xpath3.TypeBoolean)
 		require.Error(t, err)
 	})
+
+	// AtomicValue is public and mutable, so a caller can retag a no-timezone
+	// xs:dateTime as xs:dateTimeStamp. CastAtomic to xs:dateTimeStamp must
+	// enforce the mandatory-timezone invariant even on the same-type fast path.
+	t.Run("dateTimeStamp identity enforces timezone", func(t *testing.T) {
+		t.Run("missing timezone rejected", func(t *testing.T) {
+			v := xpath3.AtomicValue{TypeName: xpath3.TypeDateTimeStamp, Value: mustParseDateTime("2024-03-15T10:30:00")}
+			_, err := xpath3.CastAtomic(v, xpath3.TypeDateTimeStamp)
+			require.Error(t, err)
+			require.Equal(t, "FORG0001", castErrorCode(t, err))
+		})
+
+		t.Run("with timezone accepted", func(t *testing.T) {
+			v := xpath3.AtomicValue{TypeName: xpath3.TypeDateTimeStamp, Value: mustParseDateTime("2024-03-15T10:30:00Z")}
+			result, err := xpath3.CastAtomic(v, xpath3.TypeDateTimeStamp)
+			require.NoError(t, err)
+			require.Equal(t, v, result)
+		})
+
+		t.Run("non-time value rejected", func(t *testing.T) {
+			v := xpath3.AtomicValue{TypeName: xpath3.TypeDateTimeStamp, Value: "not-a-time"}
+			_, err := xpath3.CastAtomic(v, xpath3.TypeDateTimeStamp)
+			require.Error(t, err)
+			require.Equal(t, "FORG0001", castErrorCode(t, err))
+		})
+	})
+}
+
+// castErrorCode extracts the structured XPathError code from a CastAtomic error.
+func castErrorCode(t *testing.T, err error) string {
+	t.Helper()
+	var xerr *xpath3.XPathError
+	require.True(t, errors.As(err, &xerr), "error must be *xpath3.XPathError, got %T: %v", err, err)
+	return xerr.Code
 }
 
 func TestAtomicToString(t *testing.T) {
@@ -379,6 +414,78 @@ func TestDurationParsing(t *testing.T) {
 			require.Equal(t, tc.months, d.Months)
 			require.InDelta(t, tc.seconds, d.Seconds, 0.001)
 			require.Equal(t, tc.neg, d.Negative)
+		})
+	}
+}
+
+// TestCastMalformedDateTimeStamp verifies that casting a malformed or retagged
+// xs:dateTimeStamp (AtomicValue is public and mutable) to a date/time subtype
+// reports a structured FORG0001 error instead of panicking. The subtype paths
+// call TimeVal() unconditionally, so a non-time.Time or no-timezone value must
+// be rejected up front.
+func TestCastMalformedDateTimeStamp(t *testing.T) {
+	// Source #1: TypeDateTimeStamp tag over a non-time.Time value.
+	notTime := xpath3.AtomicValue{TypeName: xpath3.TypeDateTimeStamp, Value: "not a time"}
+
+	// Source #2: TypeDateTimeStamp tag over a no-timezone time.Time, which
+	// violates the mandatory-timezone invariant.
+	noTZ, err := xpath3.CastFromString("2000-01-01T00:00:00", xpath3.TypeDateTime)
+	require.NoError(t, err)
+	noTZStamp := xpath3.AtomicValue{TypeName: xpath3.TypeDateTimeStamp, Value: noTZ.Value}
+
+	targets := []string{
+		xpath3.TypeDateTime,
+		xpath3.TypeDate,
+		xpath3.TypeTime,
+		xpath3.TypeGYear,
+		xpath3.TypeGYearMonth,
+		xpath3.TypeGMonth,
+		xpath3.TypeGMonthDay,
+		xpath3.TypeGDay,
+	}
+
+	for _, src := range []struct {
+		name string
+		v    xpath3.AtomicValue
+	}{
+		{"non-time value", notTime},
+		{"no-timezone value", noTZStamp},
+	} {
+		for _, target := range targets {
+			t.Run(src.name+" to "+target, func(t *testing.T) {
+				require.NotPanics(t, func() {
+					_, err := xpath3.CastAtomic(src.v, target)
+					require.Error(t, err)
+					var xerr *xpath3.XPathError
+					require.True(t, errors.As(err, &xerr), "error must be *xpath3.XPathError, got %T: %v", err, err)
+					require.Equal(t, "FORG0001", xerr.Code)
+				})
+			})
+		}
+	}
+}
+
+// TestCastToDateTimeStampMalformedSource verifies that casting a non-time.Time
+// xs:dateTime or xs:date source (AtomicValue is public and mutable) TO
+// xs:dateTimeStamp reports a structured FORG0001 error instead of panicking.
+// The dateTimeStamp target path routes such sources through TimeVal()/recursive
+// casts that assume a time.Time payload.
+func TestCastToDateTimeStampMalformedSource(t *testing.T) {
+	for _, src := range []struct {
+		name string
+		v    xpath3.AtomicValue
+	}{
+		{"non-time dateTime", xpath3.AtomicValue{TypeName: xpath3.TypeDateTime, Value: "not a time"}},
+		{"non-time date", xpath3.AtomicValue{TypeName: xpath3.TypeDate, Value: "not a time"}},
+	} {
+		t.Run(src.name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				_, err := xpath3.CastAtomic(src.v, xpath3.TypeDateTimeStamp)
+				require.Error(t, err)
+				var xerr *xpath3.XPathError
+				require.True(t, errors.As(err, &xerr), "error must be *xpath3.XPathError, got %T: %v", err, err)
+				require.Equal(t, "FORG0001", xerr.Code)
+			})
 		})
 	}
 }

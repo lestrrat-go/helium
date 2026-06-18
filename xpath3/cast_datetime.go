@@ -15,7 +15,11 @@ import (
 // castToGType casts a date/dateTime value to a Gregorian partial type.
 func castToGType(v AtomicValue, targetType string, format func(time.Time) string) (AtomicValue, error) {
 	switch v.TypeName {
-	case TypeDateTime, TypeDate:
+	case TypeDateTime, TypeDateTimeStamp, TypeDate:
+		// xs:dateTimeStamp is a subtype of xs:dateTime.
+		if err := validateDateTimeStampSource(v); err != nil {
+			return AtomicValue{}, err
+		}
 		return AtomicValue{TypeName: targetType, Value: format(v.TimeVal())}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), targetType)
