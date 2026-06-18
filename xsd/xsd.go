@@ -18,6 +18,13 @@ import (
 // ErrorHandler configured on the Validator.
 var ErrValidationFailed = errors.New("xsd: validation failed")
 
+// ErrNilSchema is returned by Validate when the Validator has no compiled
+// schema (for example, after NewValidator(nil)).
+var ErrNilSchema = errors.New("xsd: nil schema")
+
+// ErrNilDocument is returned by Validate when the document to validate is nil.
+var ErrNilDocument = errors.New("xsd: nil document")
+
 type compileConfig struct {
 	label        string // label for error messages (e.g. source filename)
 	baseDir      string // base directory for resolving relative includes
@@ -225,6 +232,14 @@ func (v Validator) closeHandler() {
 // is configured. Returns ErrValidationFailed when the document is invalid.
 // (libxml2: xmlSchemaValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
+	if v.schema == nil {
+		return ErrNilSchema
+	}
+
+	if doc == nil {
+		return ErrNilDocument
+	}
+
 	cfg := v.cfg
 	if cfg == nil {
 		cfg = &validateConfig{}

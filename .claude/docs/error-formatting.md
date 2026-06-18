@@ -142,6 +142,7 @@ Unwraps to `Cause` via `Unwrap()`.
 All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder` accumulation.
 
 - `Validate()` returns `ErrValidationFailed` on failure; individual errors go to `ErrorHandler`
+- `Validate()` returns `ErrNilSchema` (Validator has no compiled schema) or `ErrNilDocument` (doc is nil) before touching the document, instead of panicking
 - Errors sent to the handler are `*xsd.ValidationError` (extractable via `errors.As`) wrapped with an `ErrorLeveler` for transport. `ValidationError` fields: `Filename`, `Line`, `Element`, `AttributeName` (empty for element-level errors), `Message`.
 - `reportValidityError` / `reportValidityErrorAttr` on `validationContext` check `suppressDepth > 0` to suppress errors during union member trials
 
