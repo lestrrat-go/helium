@@ -224,12 +224,12 @@ func makeXSStringRestriction(typeName string, validate *regexp.Regexp) func(cont
 // makeXSTokenList returns a constructor for xs:NMTOKENS or xs:IDREFS (whitespace-separated list).
 func makeXSTokenList(itemType string, tokenRe *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		if seqLen(args[0]) == 0 {
-			return nil, nil
-		}
-		a, err := AtomizeItem(args[0].Get(0))
+		a, empty, err := atomizeConstructorArg(args[0], itemType)
 		if err != nil {
 			return nil, err
+		}
+		if empty {
+			return nil, nil
 		}
 		s, err := atomicToString(a)
 		if err != nil {
@@ -426,8 +426,10 @@ func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		// dateTimeStamp requires a timezone — check the string representation
+		// dateTimeStamp requires a timezone — check the whitespace-collapsed
+		// lexical form so legal padded values are not rejected.
 		s, _ := atomicToString(a)
+		s = collapseWhitespace(s)
 		if !strings.HasSuffix(s, "Z") && !reDateTimeStampTZ.MatchString(s) {
 			return nil, &XPathError{
 				Code:    errCodeFORG0001,
