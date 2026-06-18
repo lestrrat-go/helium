@@ -123,8 +123,11 @@ func (p Processor) Resolver(r Resolver) Processor {
 // be FS-relative: no leading slash and no file:// URL. An absolute base
 // URI (e.g. set via [Processor.BaseURI] with "/abs/path/main.xml" or
 // "file:///abs/main.xml") produces an absolute resolved name that
-// fs.ValidPath rejects with [fs.ErrInvalid], even when the href itself
-// does not escape. This is a deliberate fail-loud contract — silently
+// fs.ValidPath rejects, so the open fails, even when the href itself
+// does not escape. The exact error is FS-implementation-specific
+// ([os.DirFS] and [os.Root.FS] report [fs.ErrInvalid], while
+// [testing/fstest.MapFS] reports [fs.ErrNotExist]). This is a
+// deliberate fail-loud contract — silently
 // trimming the leading slash would re-anchor absolute paths under the FS
 // root, masking caller mistakes and risking wrong-file opens. The
 // permissive default (NewFSResolver(nil)) does not enforce fs.ValidPath
