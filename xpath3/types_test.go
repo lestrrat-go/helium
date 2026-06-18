@@ -490,6 +490,57 @@ func TestMapItem(t *testing.T) {
 		_, ok = m.Get(xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(0)})
 		require.False(t, ok)
 	})
+
+	// 2^24 and 2^24+1 are distinct in float64/double but collapse to the same
+	// value in IEEE-754 single precision (xs:float). The map-key path must round
+	// schema-derived xs:float keys to single precision regardless of backing
+	// (float64/float32/*FloatValue), or a lookup by one would miss the other.
+	t.Run("schema-derived float keys round to single precision", func(t *testing.T) {
+		const exact = 16777216   // 2^24, exact in float32
+		const plusOne = 16777217 // 2^24+1, rounds to 2^24 in float32 but exact in float64
+
+		floatKey := func(backing any) xpath3.AtomicValue {
+			return xpath3.AtomicValue{TypeName: "Q{urn:test}myFloat", BaseType: xpath3.TypeFloat, Value: backing}
+		}
+
+		backings := []struct {
+			name       string
+			exactVal   any
+			plusOneVal any
+		}{
+			{"float64", float64(exact), float64(plusOne)},
+			{"float32", float32(exact), float32(plusOne)},
+			{"FloatValue", xpath3.NewDouble(exact), xpath3.NewDouble(plusOne)},
+		}
+
+		for _, b := range backings {
+			t.Run(b.name, func(t *testing.T) {
+				// As xs:float, exact and plusOne share a key: a map storing the
+				// exact key must resolve a lookup by plusOne.
+				m := xpath3.NewMap([]xpath3.MapEntry{
+					{Key: floatKey(b.exactVal), Value: xpath3.SingleString("found")},
+					{Key: xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "sentinel"}, Value: xpath3.SingleString("s")},
+				})
+				require.True(t, m.Contains(floatKey(b.plusOneVal)),
+					"xs:float 2^24+1 must hit the 2^24 key in single precision")
+				v, ok := m.Get(floatKey(b.plusOneVal))
+				require.True(t, ok)
+				require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
+			})
+		}
+
+		// As xs:double, the same two magnitudes remain distinct (no single-precision
+		// rounding), guarding against over-collapsing the double path.
+		dblKey := func(backing any) xpath3.AtomicValue {
+			return xpath3.AtomicValue{TypeName: "Q{urn:test}myDouble", BaseType: xpath3.TypeDouble, Value: backing}
+		}
+		md := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: dblKey(float64(exact)), Value: xpath3.SingleString("exact")},
+			{Key: xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "sentinel"}, Value: xpath3.SingleString("s")},
+		})
+		require.False(t, md.Contains(dblKey(float64(plusOne))),
+			"xs:double 2^24 and 2^24+1 must remain distinct keys")
+	})
 }
 
 func TestMergeMaps(t *testing.T) {

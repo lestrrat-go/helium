@@ -630,6 +630,13 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		// would collapse to 0. Promote to the built-in base type first so ToFloat64
 		// reads the underlying FloatValue exactly.
 		f := PromoteSchemaType(key).ToFloat64()
+		// xs:float keys are compared in single precision: a plain float64/float32
+		// backing (schema-derived or directly constructed) may not yet be rounded,
+		// so collapse to single precision before keying. Otherwise 16777217 and
+		// 16777216 — equal as xs:float — would land in distinct slots.
+		if key.effectiveNumericType() == TypeFloat {
+			f = float64(float32(f))
+		}
 		if math.IsNaN(f) {
 			return mapKey{typeName: familyNumeric, value: "NaN"}
 		}

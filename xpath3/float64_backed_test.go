@@ -81,6 +81,40 @@ func TestDistinctValuesSchemaDerivedCollapse(t *testing.T) {
 	})
 }
 
+// TestDistinctValuesSchemaDerivedIntegerDiscriminates verifies the distinct-values
+// fast key promotes via BaseType so two DIFFERENT schema-derived integers do NOT
+// collapse to a single key. Before the fix the integer fast key passed the
+// un-promoted value to toRatForCompare, which only recognizes built-in integer
+// TypeNames and converted every custom-typed integer to 0 — so a custom-typed 1
+// and 2 both keyed as 0 and distinct-values reported a single item.
+func TestDistinctValuesSchemaDerivedIntegerDiscriminates(t *testing.T) {
+	derivedInt := func(v any) AtomicValue {
+		return AtomicValue{TypeName: "my:int", BaseType: TypeInteger, Value: v}
+	}
+
+	t.Run("int64-backed", func(t *testing.T) {
+		arg := ItemSlice{derivedInt(int64(1)), derivedInt(int64(2))}
+		got, err := fnDistinctValues(t.Context(), []Sequence{arg})
+		require.NoError(t, err)
+		require.Equal(t, 2, seqLen(got))
+	})
+
+	t.Run("big.Int-backed", func(t *testing.T) {
+		arg := ItemSlice{derivedInt(big.NewInt(1)), derivedInt(big.NewInt(2))}
+		got, err := fnDistinctValues(t.Context(), []Sequence{arg})
+		require.NoError(t, err)
+		require.Equal(t, 2, seqLen(got))
+	})
+
+	t.Run("collapses with built-in integer", func(t *testing.T) {
+		plain := AtomicValue{TypeName: TypeInteger, Value: int64(1)}
+		arg := ItemSlice{derivedInt(int64(1)), plain}
+		got, err := fnDistinctValues(t.Context(), []Sequence{arg})
+		require.NoError(t, err)
+		require.Equal(t, 1, seqLen(got))
+	})
+}
+
 // TestFloat64BackedSchemaDerived verifies the numeric accessors resolve the
 // effective numeric type from BaseType for schema-derived float/double atomics
 // (custom TypeName, built-in BaseType) backed by float64, float32, or

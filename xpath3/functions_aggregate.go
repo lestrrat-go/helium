@@ -722,7 +722,10 @@ func distinctValueFastKey(a AtomicValue) (distinctGroup, string, bool) {
 	case et == TypeBoolean:
 		return distinctGroupBoolean, "b:" + strconv.FormatBool(a.BooleanVal()), true
 	case isIntegerDerived(et) || et == TypeDecimal:
-		return distinctGroupDecimalInt, "n:" + toRatForCompare(a).RatString(), true
+		// Promote via BaseType so a schema-derived integer/decimal (custom TypeName,
+		// built-in BaseType, backed by int64/*big.Int/*big.Rat) keys on its effective
+		// value rather than the un-promoted toRatForCompare producing 0.
+		return distinctGroupDecimalInt, "n:" + toRatForCompare(PromoteSchemaType(a)).RatString(), true
 	case et == TypeFloat:
 		// Promote via BaseType so a schema-derived float (custom TypeName, built-in
 		// BaseType, backed by float64/float32/*FloatValue) keys on its effective
