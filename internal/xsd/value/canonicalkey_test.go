@@ -92,6 +92,38 @@ func TestCanonicalKeyFloatOverflowINF(t *testing.T) {
 	require.NotEqual(t, negINFD, negOverD, `"-1e40" is finite as xs:double and must not share the "-INF" key`)
 }
 
+// TestCanonicalKeyFloat64OverflowINF verifies that a lexical whose magnitude
+// overflows float64 itself (e.g. "1e400") is still a valid xs:float/xs:double
+// value that maps to ±INF, not rejected. strconv.ParseFloat reports such inputs
+// with ErrRange and a ±Inf result; ValidateBuiltin already accepts them, so
+// CanonicalKey and Compare must agree they equal the literal INF/-INF spelling
+// for both precisions.
+func TestCanonicalKeyFloat64OverflowINF(t *testing.T) {
+	_ = t.Context()
+
+	for _, typ := range []string{"float", "double"} {
+		inf, okINF := value.CanonicalKey("INF", typ)
+		require.True(t, okINF, `"INF" must canonicalize as a valid xs:%s`, typ)
+		over, okOver := value.CanonicalKey("1e400", typ)
+		require.True(t, okOver, `"1e400" must canonicalize as a valid xs:%s`, typ)
+		require.Equal(t, inf, over, `"1e400" overflows float64 to +Inf and must share the "INF" key for xs:%s`, typ)
+
+		negINF, okNegINF := value.CanonicalKey("-INF", typ)
+		require.True(t, okNegINF, `"-INF" must canonicalize as a valid xs:%s`, typ)
+		negOver, okNegOver := value.CanonicalKey("-1e400", typ)
+		require.True(t, okNegOver, `"-1e400" must canonicalize as a valid xs:%s`, typ)
+		require.Equal(t, negINF, negOver, `"-1e400" overflows float64 to -Inf and must share the "-INF" key for xs:%s`, typ)
+
+		cmp, okCmp := value.Compare("1e400", "INF", typ)
+		require.True(t, okCmp)
+		require.Equal(t, 0, cmp, `"1e400" and "INF" must compare equal for xs:%s`, typ)
+
+		negCmp, okNegCmp := value.Compare("-1e400", "-INF", typ)
+		require.True(t, okNegCmp)
+		require.Equal(t, 0, negCmp, `"-1e400" and "-INF" must compare equal for xs:%s`, typ)
+	}
+}
+
 // TestCanonicalKeySignedYearInvalid verifies that a leading '+' on the year is
 // not accepted as a valid date/dateTime lexical form: it must NOT canonicalize
 // as valid, and must NOT produce a key equal to the unsigned form.

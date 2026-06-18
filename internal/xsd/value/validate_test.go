@@ -314,6 +314,11 @@ func TestCompareValues(t *testing.T) {
 		// representable), so they are equal in the xs:float value space.
 		{lexicon.TypeFloat, "16777216", "16777217", 0, true},
 		{lexicon.TypeFloat, "16777217", "16777216", 0, true},
+		// A finite lexical whose magnitude overflows float64 maps to ±INF in the
+		// XSD 1.1 value space (ValidateBuiltin accepts it), so it compares equal to
+		// the literal INF/-INF spelling rather than being rejected as unparsable.
+		{lexicon.TypeFloat, "1e400", lexicon.FloatINF, 0, true},
+		{lexicon.TypeFloat, "-1e400", lexicon.FloatNegINF, 0, true},
 
 		// double (the value space is float64, so 16777216 and 16777217 remain
 		// distinct — only the float path rounds to single precision).
@@ -321,6 +326,9 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDouble, "1e10", "9999999999", 1, true},
 		{lexicon.TypeDouble, "16777216", "16777217", -1, true},
 		{lexicon.TypeDouble, "16777217", "16777216", 1, true},
+		// Float64-overflowing double lexicals likewise map to ±INF.
+		{lexicon.TypeDouble, "1e400", lexicon.FloatINF, 0, true},
+		{lexicon.TypeDouble, "-1e400", lexicon.FloatNegINF, 0, true},
 
 		// dateTime
 		{lexicon.TypeDateTime, testDT0, testDT0, 0, true},

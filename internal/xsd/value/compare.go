@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -518,6 +519,13 @@ func parseXSDFloat(s string) (float64, bool) {
 		return math.NaN(), true
 	}
 	f, err := strconv.ParseFloat(s, 64)
+	// XSD 1.1 maps a float/double lexical whose magnitude overflows the value
+	// space to ±INF, and ValidateBuiltin accepts such lexicals (e.g. "1e400").
+	// strconv.ParseFloat signals this with ErrRange and returns ±Inf as the
+	// result, so honor that infinity rather than rejecting the value.
+	if errors.Is(err, strconv.ErrRange) && math.IsInf(f, 0) {
+		return f, true
+	}
 	if err != nil {
 		return 0, false
 	}
