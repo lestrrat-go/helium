@@ -178,7 +178,7 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	}
 
 	if op == TokenDiv && n == 0 {
-		return nil, true, &XPathError{Code: "FODT0002", Message: "division of duration by zero"}
+		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "division of duration by zero"}
 	}
 
 	// dayTimeDuration * / number: compute the result in exact rational seconds
@@ -211,7 +211,7 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 			// Match the float path's overflow behavior: results beyond the exact
 			// float64 range are reported as FODT0002.
 			if math.IsInf(rsecs, 0) || rsecs > maxExactDayTimeSecs {
-				return nil, true, &XPathError{Code: "FODT0002", Message: "duration overflow"}
+				return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 			}
 			return SingleAtomic(AtomicValue{
 				TypeName: dur.TypeName,
@@ -236,14 +236,14 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	}
 
 	if math.IsInf(months, 0) || math.IsInf(secs, 0) {
-		return nil, true, &XPathError{Code: "FODT0002", Message: "duration overflow"}
+		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
 	// Detect precision loss for very large values
 	const maxExactFloat64 = 1 << 53
 	absSecs := math.Abs(secs)
 	absMonths := math.Abs(months)
 	if absSecs > maxExactFloat64 || absMonths > maxExactFloat64 {
-		return nil, true, &XPathError{Code: "FODT0002", Message: "duration overflow"}
+		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
 
 	// Per XPath F&O spec: months are rounded "half towards positive infinity"
@@ -400,7 +400,7 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 	if !isYM {
 		const maxExactFloat64 = 1 << 53
 		if ld.Seconds > maxExactFloat64 || rd.Seconds > maxExactFloat64 {
-			return nil, true, &XPathError{Code: "FODT0002", Message: "dayTimeDuration value too large for exact division"}
+			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "dayTimeDuration value too large for exact division"}
 		}
 	}
 
