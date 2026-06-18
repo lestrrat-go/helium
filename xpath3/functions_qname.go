@@ -48,6 +48,9 @@ func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
 	}
+	if seqLen(args[0]) > 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:prefix-from-QName expects a single QName"}
+	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
@@ -67,6 +70,9 @@ func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) 
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
 	}
+	if seqLen(args[0]) > 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:local-name-from-QName expects a single QName"}
+	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
@@ -81,6 +87,9 @@ func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) 
 func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
+	}
+	if seqLen(args[0]) > 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:namespace-uri-from-QName expects a single QName"}
 	}
 	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
@@ -125,6 +134,9 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: element argument is empty"}
+	}
+	if seqLen(args[1]) > 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "resolve-QName: expects a single element"}
 	}
 	ni, ok := args[1].Get(0).(NodeItem)
 	if !ok {
@@ -216,6 +228,9 @@ func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message strin
 func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
 		return validNilSequence, nil
+	}
+	if seqLen(args[0]) > 1 {
+		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:in-scope-prefixes expects a single element"}
 	}
 	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {

@@ -37,25 +37,29 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		if seqLen(args[1]) == 0 {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:merge: options argument must be a map, got empty sequence"}
 		}
+		if seqLen(args[1]) > 1 {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:merge: options argument must be a single map"}
+		}
 		// The options map should contain "duplicates" key
 		optMap, ok := args[1].Get(0).(MapItem)
-		if ok {
-			key := AtomicValue{TypeName: TypeString, Value: "duplicates"}
-			if val, found := optMap.Get(key); found {
-				s, err := coerceArgToStringRequired(val)
-				if err != nil {
-					return nil, err
-				}
-				switch s {
-				case duplicatesUseFirst:
-					duplicates = MergeUseFirst
-				case "use-last":
-					duplicates = MergeUseLast
-				case duplicatesReject:
-					duplicates = MergeReject
-				case "combine":
-					duplicates = MergeCombine
-				}
+		if !ok {
+			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("map:merge: options argument must be a map, got %T", args[1].Get(0))}
+		}
+		key := AtomicValue{TypeName: TypeString, Value: "duplicates"}
+		if val, found := optMap.Get(key); found {
+			s, err := coerceArgToStringRequired(val)
+			if err != nil {
+				return nil, err
+			}
+			switch s {
+			case duplicatesUseFirst:
+				duplicates = MergeUseFirst
+			case "use-last":
+				duplicates = MergeUseLast
+			case duplicatesReject:
+				duplicates = MergeReject
+			case "combine":
+				duplicates = MergeCombine
 			}
 		}
 	}
