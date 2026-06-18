@@ -89,7 +89,7 @@ func TestDistinctValuesSchemaDerivedCollapse(t *testing.T) {
 func TestFloat64BackedSchemaDerived(t *testing.T) {
 	type backing struct {
 		name  string
-		value interface{}
+		value any
 	}
 	doubleBackings := []backing{
 		{"float64", float64(2)},
