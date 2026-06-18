@@ -35,11 +35,8 @@ func (f *finiteFile) Read(p []byte) (int, error) {
 	if f.remaining <= 0 {
 		return 0, io.EOF
 	}
-	n := int64(len(p))
-	if n > f.remaining {
-		n = f.remaining
-	}
-	for i := int64(0); i < n; i++ {
+	n := min(int64(len(p)), f.remaining)
+	for i := range n {
 		p[i] = 'A'
 	}
 	f.remaining -= n
@@ -137,7 +134,7 @@ func TestExternalEntityAmplification(t *testing.T) {
 	fsys := fstest.MapFS{"big.txt": {Data: []byte(big)}}
 
 	var refs strings.Builder
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		refs.WriteString("&x;")
 	}
 	input := fmt.Sprintf(`<?xml version="1.0"?>
