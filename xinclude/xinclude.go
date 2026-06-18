@@ -99,20 +99,33 @@ func (p Processor) Resolver(r Resolver) Processor {
 // permissive default that opens any OS path verbatim.
 //
 // Names handed to fsys.Open use forward slashes and are canonicalized
-// with [path.Clean]. A resolved name that escapes the FS root (e.g.
-// "../foo") leaves a leading ".." in the cleaned result and will be
-// rejected by an [fs.ValidPath]-enforcing FS, giving path-traversal
-// containment.
+// with [path.Clean]. A resolved name that escapes the FS root via ".."
+// (e.g. "../foo") leaves a leading ".." in the cleaned result and will
+// be rejected by an [fs.ValidPath]-enforcing FS, blocking that form of
+// path traversal.
 //
-// Sandboxing note: when paired with [os.DirFS], [testing/fstest.MapFS],
-// or [os.OpenRoot], the document's base URI must be FS-relative — no
-// leading slash and no file:// URL. An absolute base URI (e.g. set via
-// [Processor.BaseURI] with "/abs/path/main.xml" or "file:///abs/main.xml")
-// produces an absolute resolved name that fs.ValidPath rejects with
-// [fs.ErrInvalid], even when the href itself does not escape. This is a
-// deliberate fail-loud contract — silently trimming the leading slash
-// would re-anchor absolute paths under the FS root, masking caller
-// mistakes and risking wrong-file opens.
+// Confinement note: rejecting ".." is NOT a complete sandbox. The level
+// of confinement is entirely determined by the fsys you pass:
+//
+//   - [os.DirFS] is NOT confined. It rejects "../" names per
+//     [fs.ValidPath], but it does NOT prevent a symlink inside the root
+//     from pointing outside it: if "root/link.txt" is a symlink to
+//     "../secret.txt", an xi:include with parse="text" can read that
+//     file. Do not treat os.DirFS as a security boundary for untrusted
+//     input.
+//   - [os.OpenRoot] / [os.Root.FS] (Go 1.24+) IS confined: it refuses to
+//     traverse symlinks that escape the root, so it is the appropriate
+//     choice when the XInclude input is untrusted.
+//   - [testing/fstest.MapFS] is an in-memory map with no host access.
+//
+// Whichever FS you pass, the document's base URI must be FS-relative —
+// no leading slash and no file:// URL. An absolute base URI (e.g. set
+// via [Processor.BaseURI] with "/abs/path/main.xml" or
+// "file:///abs/main.xml") produces an absolute resolved name that
+// fs.ValidPath rejects with [fs.ErrInvalid], even when the href itself
+// does not escape. This is a deliberate fail-loud contract — silently
+// trimming the leading slash would re-anchor absolute paths under the FS
+// root, masking caller mistakes and risking wrong-file opens.
 func NewFSResolver(fsys fs.FS) Resolver {
 	if fsys == nil {
 		fsys = iofs.PermissiveRoot{}
@@ -1284,11 +1297,13 @@ func (r *fsResolver) FS() fs.FS { return r.fsys }
 // normalizingFS adapts an [fs.FS] so it tolerates the OS-native, possibly
 // absolute names the helium parser builds via [filepath.Join]/BuildURI for
 // external entities and DTDs. It converts separators to forward slashes and
-// canonicalizes with [path.Clean] before delegating to the wrapped FS, so a
-// sandbox (os.DirFS, fstest.MapFS, os.OpenRoot) that already accepts XInclude
+// canonicalizes with [path.Clean] before delegating to the wrapped FS, so an
+// FS (os.DirFS, fstest.MapFS, os.OpenRoot) that already accepts XInclude
 // hrefs sees the document's own external references in the same shape. A
-// remaining ".." prefix still surfaces to the wrapped FS, preserving
-// path-traversal containment.
+// remaining ".." prefix still surfaces to the wrapped FS, preserving the
+// ".."-rejection backstop. Confinement against escaping symlinks is the
+// wrapped FS's responsibility — os.DirFS does not provide it (see
+// [NewFSResolver]).
 type normalizingFS struct {
 	fsys fs.FS
 }
@@ -1317,9 +1332,12 @@ func (r *fsResolver) Resolve(href, _ string) (io.ReadCloser, error) {
 	// requires slash-separated names.
 	p := filepath.ToSlash(href)
 	// fs.FS uses slash-separated paths; using path (not filepath) keeps
-	// names valid on Windows. path.Clean canonicalizes so a sandboxing
+	// names valid on Windows. path.Clean canonicalizes so the configured
 	// fs.FS (os.DirFS, fstest.MapFS, os.OpenRoot) sees consistent input,
 	// and any remaining ".." prefix means the resolved name ascended above
 	// the FS root and will be rejected by an fs.ValidPath-enforcing FS.
+	// Note this only blocks ".." traversal; symlink confinement depends on
+	// the FS (os.DirFS follows escaping symlinks, os.OpenRoot does not) —
+	// see [NewFSResolver].
 	return r.fsys.Open(path.Clean(p)) //nolint:wrapcheck // resolver errors propagate to caller verbatim
 }
