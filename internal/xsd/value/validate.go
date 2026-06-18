@@ -742,7 +742,11 @@ func validateSpaceSeparatedList(value string, validateItem func(string) error) e
 	if value == "" {
 		return fmt.Errorf("empty list")
 	}
-	items := strings.Fields(value)
+	// Split on XSD whitespace only (space, tab, CR, LF). strings.Fields would
+	// also split on NBSP and other Unicode whitespace, so a token containing
+	// NBSP would be wrongly broken into valid pieces; XSD-only splitting keeps
+	// it as one token that per-item validation then rejects.
+	items := xsdFields(value)
 	if len(items) == 0 {
 		return fmt.Errorf("empty list")
 	}

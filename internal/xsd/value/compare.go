@@ -11,9 +11,47 @@ import (
 	"strings"
 )
 
+// xsdWhitespace is the set of XSD whitespace characters (#x20 space, #x9 tab,
+// #xD carriage return, #xA newline). Unlike Go's unicode.IsSpace this excludes
+// NBSP (U+00A0) and other Unicode whitespace, so an invalid value padded with
+// such characters stays invalid under subsequent lexical validation.
+const xsdWhitespace = " \t\r\n"
+
+// trimXSDSpace trims only XSD whitespace from both ends of s, leaving any other
+// Unicode whitespace (e.g. NBSP) in place so it is rejected by lexical
+// validation rather than silently stripped.
+func trimXSDSpace(s string) string {
+	return strings.Trim(s, xsdWhitespace)
+}
+
+// xsdFields splits s on runs of XSD whitespace only (space, tab, CR, LF),
+// unlike strings.Fields which also splits on NBSP and other Unicode whitespace.
+// A token containing NBSP therefore stays a single token (and remains invalid
+// under per-item lexical validation) instead of being silently split.
+func xsdFields(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\r' || r == '\n'
+	})
+}
+
+// numericComparableTypes is the set of integer-family and decimal builtins that
+// Compare and CanonicalKey treat as value-comparable via math/big.Rat after
+// strict lexical validation (including range checks for the bounded subtypes).
+var numericComparableTypes = map[string]struct{}{
+	"decimal": {}, "integer": {},
+	"nonPositiveInteger": {}, "negativeInteger": {}, "long": {}, "int": {},
+	"short": {}, "byte": {},
+	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
+	"unsignedShort": {}, "unsignedByte": {},
+	"positiveInteger": {},
+}
+
 // Compare dispatches to type-specific comparison.
 // Returns (cmp, ok) where cmp is -1/0/+1 and ok is false when comparison
-// is undefined (NaN, incomparable durations, parse failures).
+// is undefined (NaN, incomparable durations, parse failures, or — for every
+// recognized value-comparable type — either operand failing the strict lexical
+// space defined by ValidateBuiltin). Validation runs before any lenient parsing
+// so Compare never accepts a value that the validation path would reject.
 func Compare(a, b, builtinLocal string) (int, bool) {
 	switch builtinLocal {
 	case "boolean":
@@ -45,12 +83,34 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 	case "base64Binary":
 		return compareBase64Binary(a, b)
 	default:
-		cmp := CompareDecimal(a, b)
+		if _, isNumeric := numericComparableTypes[builtinLocal]; !isNumeric {
+			cmp := CompareDecimal(a, b)
+			if cmp == -2 {
+				return 0, false
+			}
+			return cmp, true
+		}
+		// Validate both operands against the strict lexical space (including the
+		// range checks for bounded integer subtypes) before comparing, so e.g.
+		// "1.0"/integer, "2147483648"/int and "1/2"/decimal are indeterminate.
+		if !validBuiltinOperands(a, b, builtinLocal) {
+			return 0, false
+		}
+		cmp := CompareDecimal(trimXSDSpace(a), trimXSDSpace(b))
 		if cmp == -2 {
 			return 0, false
 		}
 		return cmp, true
 	}
+}
+
+// validBuiltinOperands reports whether both lexicals pass the strict lexical
+// space (ValidateBuiltin) for builtinLocal, after trimming XSD whitespace only.
+func validBuiltinOperands(a, b, builtinLocal string) bool {
+	if ValidateBuiltin(trimXSDSpace(a), builtinLocal) != nil {
+		return false
+	}
+	return ValidateBuiltin(trimXSDSpace(b), builtinLocal) == nil
 }
 
 // CanonicalKey maps a lexical value to a value-space canonical string for the
@@ -61,25 +121,54 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 func CanonicalKey(s, builtinLocal string) (string, bool) {
 	switch builtinLocal {
 	case "boolean":
-		trimmed := strings.TrimSpace(s)
+		trimmed := trimXSDSpace(s)
+		if ValidateBuiltin(trimmed, "boolean") != nil {
+			return trimmed, false
+		}
 		if trimmed == "true" || trimmed == "1" {
 			return "1", true
 		}
-		if trimmed == "false" || trimmed == "0" {
-			return "0", true
-		}
-		return trimmed, false
+		return "0", true
 	case "float":
 		return canonicalFloatKey(s, 32) // xs:float is 32-bit IEEE-754
 	case "double":
 		return canonicalFloatKey(s, 64)
 	case "dateTime", "date", "time", "gYear", "gYearMonth", "gMonth", "gDay", "gMonthDay":
-		return canonicalDateTimeKey(strings.TrimSpace(s), builtinLocal)
+		return canonicalDateTimeKey(trimXSDSpace(s), builtinLocal)
+	case "hexBinary":
+		trimmed := trimXSDSpace(s)
+		if ValidateBuiltin(trimmed, "hexBinary") != nil {
+			return trimmed, false
+		}
+		decoded, err := hex.DecodeString(trimmed)
+		if err != nil {
+			return trimmed, false
+		}
+		// Stable byte key so case-distinct forms ("0A"/"0a") canonicalize equal.
+		return hex.EncodeToString(decoded), true
+	case "base64Binary":
+		trimmed := trimXSDSpace(s)
+		if ValidateBuiltin(trimmed, "base64Binary") != nil {
+			return trimmed, false
+		}
+		decoded, ok := decodeBase64Binary(trimmed)
+		if !ok {
+			return trimmed, false
+		}
+		// Stable byte key so whitespace-distinct forms ("YWJj"/"YW Jj")
+		// canonicalize equal; hex of the decoded octets is a canonical encoding.
+		return hex.EncodeToString(decoded), true
 	case "decimal", "integer",
 		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
 		"positiveInteger":
-		trimmed := strings.TrimSpace(s)
+		trimmed := trimXSDSpace(s)
+		// Validate strictly (lexical space + range for bounded subtypes) before
+		// canonicalizing, so e.g. "1.0"/integer, "2147483648"/int and "1/2"/
+		// decimal yield ok=false rather than a spurious canonical key.
+		if ValidateBuiltin(trimmed, builtinLocal) != nil {
+			return trimmed, false
+		}
 		r, ok := new(big.Rat).SetString(trimmed)
 		if !ok {
 			return trimmed, false
@@ -94,12 +183,14 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		return whitespaceReplace(s), false
 	case "NMTOKENS", "IDREFS", "ENTITIES":
 		// List types: collapse internal whitespace so token sequences that
-		// differ only in separator whitespace are value-equal.
-		return strings.Join(strings.Fields(s), " "), false
+		// differ only in separator whitespace are value-equal. Split on XSD
+		// whitespace only so a token containing NBSP is preserved (and stays
+		// invalid), rather than being silently split into two tokens.
+		return strings.Join(xsdFields(s), " "), false
 	default:
 		// Remaining string-derived types (token, NMTOKEN, Name, NCName, ID,
 		// IDREF, ENTITY, language, anyURI, …) have whiteSpace=collapse.
-		return strings.Join(strings.Fields(s), " "), false
+		return strings.Join(xsdFields(s), " "), false
 	}
 }
 
@@ -108,7 +199,13 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 // precision ensures values that are equal in xs:float's 32-bit value space (but
 // distinct as 64-bit doubles) map to the same key, and vice versa.
 func canonicalFloatKey(s string, bitSize int) (string, bool) {
-	trimmed := strings.TrimSpace(s)
+	trimmed := trimXSDSpace(s)
+	// Validate against the strict xs:float/xs:double lexical space first: the
+	// lenient parseXSDFloat (and Go's strconv.ParseFloat) accept spellings such
+	// as "Inf" that are not valid XSD lexical forms.
+	if ValidateBuiltin(trimmed, "double") != nil {
+		return trimmed, false
+	}
 	f, ok := parseXSDFloat(trimmed)
 	if !ok {
 		return trimmed, false
@@ -247,6 +344,9 @@ func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
 	if !ok {
 		return s, false
 	}
+	// Normalize 24:00:00 to 00:00:00 of the next day so its key matches the
+	// equivalent start-of-day instant, then to UTC when timezoned.
+	dt = dt.normalizeHour24()
 	if dt.hasTZ {
 		dt = dt.normalizeToUTC()
 	}
@@ -281,8 +381,11 @@ func parseXSDBoolean(s string) (bool, bool) {
 // For a total, deterministic result this orders false < true; equal values
 // return 0.
 func compareBoolean(a, b string) (int, bool) {
-	ba, ok1 := parseXSDBoolean(a)
-	bb, ok2 := parseXSDBoolean(b)
+	if !validBuiltinOperands(a, b, "boolean") {
+		return 0, false
+	}
+	ba, ok1 := parseXSDBoolean(trimXSDSpace(a))
+	bb, ok2 := parseXSDBoolean(trimXSDSpace(b))
 	if !ok1 || !ok2 {
 		return 0, false
 	}
@@ -302,8 +405,11 @@ func compareBoolean(a, b string) (int, bool) {
 // the result is a well-behaved comparator; enumeration only relies on cmp == 0.
 // Returns ok=false if either operand is not valid hexBinary.
 func compareHexBinary(a, b string) (int, bool) {
-	da, err1 := hex.DecodeString(a)
-	db, err2 := hex.DecodeString(b)
+	if !validBuiltinOperands(a, b, "hexBinary") {
+		return 0, false
+	}
+	da, err1 := hex.DecodeString(trimXSDSpace(a))
+	db, err2 := hex.DecodeString(trimXSDSpace(b))
 	if err1 != nil || err2 != nil {
 		return 0, false
 	}
@@ -316,8 +422,11 @@ func compareHexBinary(a, b string) (int, bool) {
 // rather than a bare equality flag. Returns ok=false if either operand is not
 // valid base64Binary.
 func compareBase64Binary(a, b string) (int, bool) {
-	da, ok1 := decodeBase64Binary(a)
-	db, ok2 := decodeBase64Binary(b)
+	if !validBuiltinOperands(a, b, "base64Binary") {
+		return 0, false
+	}
+	da, ok1 := decodeBase64Binary(trimXSDSpace(a))
+	db, ok2 := decodeBase64Binary(trimXSDSpace(b))
 	if !ok1 || !ok2 {
 		return 0, false
 	}
@@ -376,8 +485,17 @@ func IsFloatNaN(s string) bool {
 // Infinities round-trip identically through float32, so only the finite path
 // changes precision.
 func compareFloat(a, b string, single bool) (int, bool) {
-	fa, ok1 := parseXSDFloat(a)
-	fb, ok2 := parseXSDFloat(b)
+	// xs:float and xs:double share one lexical validator; validate both operands
+	// strictly (rejecting e.g. "Inf", the mixed-case spelling) before parsing.
+	floatType := "double"
+	if single {
+		floatType = "float"
+	}
+	if !validBuiltinOperands(a, b, floatType) {
+		return 0, false
+	}
+	fa, ok1 := parseXSDFloat(trimXSDSpace(a))
+	fb, ok2 := parseXSDFloat(trimXSDSpace(b))
 	if !ok1 || !ok2 {
 		return 0, false
 	}
@@ -799,6 +917,44 @@ func (dt xsdDateTime) normalizeToUTC() xsdDateTime {
 	return r
 }
 
+// normalizeHour24 maps the XSD-valid end-of-day form 24:00:00 to 00:00:00 of
+// the following day, so it lives in the same value space as the equivalent
+// start-of-day instant. The lexical validator only accepts hour 24 with zero
+// minutes/seconds, so no minute/second carry is needed; only the day (and any
+// month/year it rolls into) advances. Types without a calendar date (xs:time,
+// the year-agnostic g-types) simply reset the hour, matching how XSD treats
+// 24:00:00 and 00:00:00 of the next day as the same xs:time value.
+func (dt xsdDateTime) normalizeHour24() xsdDateTime {
+	if dt.hour != 24 {
+		return dt
+	}
+	r := dt
+	r.hour = 0
+	if dt.year != nil {
+		r.year = new(big.Int).Set(dt.year)
+	}
+	// Only advance the calendar date when a full date is present; partial
+	// gregorian types (year/month/day zero) carry no date to roll over.
+	if r.day < 1 || r.month < 1 {
+		return r
+	}
+	r.day++
+	if r.day <= daysInMonth(r.yearVal(), r.month) {
+		return r
+	}
+	r.day = 1
+	r.month++
+	if r.month <= 12 {
+		return r
+	}
+	r.month = 1
+	if r.year == nil {
+		r.year = big.NewInt(0)
+	}
+	r.year.Add(r.year, big.NewInt(1))
+	return r
+}
+
 func compareDateTimeFields(a, b xsdDateTime) int {
 	if c := a.yearVal().Cmp(b.yearVal()); c != 0 {
 		return c
@@ -837,6 +993,10 @@ func compareDateTimeFields(a, b xsdDateTime) int {
 }
 
 func compareDateTimeParsed(a, b xsdDateTime) (int, bool) {
+	// Map the end-of-day 24:00:00 form onto 00:00:00 of the next day so it
+	// compares in the correct value space before any timezone normalization.
+	a = a.normalizeHour24()
+	b = b.normalizeHour24()
 	if a.hasTZ != b.hasTZ {
 		return compareDateTimeMixedTZ(a, b)
 	}
@@ -948,6 +1108,11 @@ func compareTime(a, b, builtinLocal string) (int, bool) {
 	if !ok1 || !ok2 {
 		return 0, false
 	}
+	// Normalize the end-of-day 24:00:00 form to 00:00:00 before assigning a
+	// reference date: xs:time carries no date, so 24:00:00 and 00:00:00 are the
+	// same value and must not roll the synthetic reference date forward a day.
+	da = da.normalizeHour24()
+	db = db.normalizeHour24()
 	// Set a reference date so TZ normalization day overflow works.
 	da.year, da.month, da.day = big.NewInt(2000), 1, 15
 	db.year, db.month, db.day = big.NewInt(2000), 1, 15
@@ -1100,8 +1265,11 @@ func parseXSDDurationValue(s string) (xsdDuration, bool) {
 }
 
 func compareDuration(a, b string) (int, bool) {
-	da, ok1 := parseXSDDurationValue(a)
-	db, ok2 := parseXSDDurationValue(b)
+	if !validBuiltinOperands(a, b, "duration") {
+		return 0, false
+	}
+	da, ok1 := parseXSDDurationValue(trimXSDSpace(a))
+	db, ok2 := parseXSDDurationValue(trimXSDSpace(b))
 	if !ok1 || !ok2 {
 		return 0, false
 	}

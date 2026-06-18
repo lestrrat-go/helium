@@ -259,9 +259,9 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDecimal, "0.5", "0.50", 0, true},
 
 		// integer (uses decimal path)
-		{"integer", "10", "20", -1, true},
-		{"integer", "100", "100", 0, true},
-		{"integer", "-5", "5", -1, true},
+		{lexicon.TypeInteger, "10", "20", -1, true},
+		{lexicon.TypeInteger, "100", "100", 0, true},
+		{lexicon.TypeInteger, "-5", "5", -1, true},
 
 		// boolean — "true"/"1" and "false"/"0" are value-equal; invalid lexicals
 		// are indeterminate.
@@ -427,6 +427,24 @@ func TestCompareValues(t *testing.T) {
 		// A valid huge-year date with leap Feb 29 (the year is divisible by 4 and
 		// not by 100) still compares correctly under strict validation.
 		{lexicon.TypeDate, "999999999999999999999996-02-29", "999999999999999999999996-02-28", 1, true},
+
+		// Strict lexical validation now also gates the numeric, float and binary
+		// value-comparable types, not just date/time. A non-integer lexical, an
+		// out-of-range subtype value, a non-decimal lexical, and the wrong-case
+		// "Inf" are all indeterminate rather than silently comparing.
+		{lexicon.TypeInteger, "1.0", "1", 0, false},            // not an integer lexical
+		{"int", "2147483648", "0", 0, false},                   // out of range for xs:int
+		{"unsignedByte", "-1", "0", 0, false},                  // negative is out of range
+		{lexicon.TypeDecimal, "1/2", "0.5", 0, false},          // not a decimal lexical
+		{lexicon.TypeFloat, "Inf", lexicon.FloatINF, 0, false}, // "Inf" is not a valid float lexical
+		// NBSP-padded values are not trimmed by XSD whitespace handling, so they
+		// stay invalid and compare indeterminate.
+		{lexicon.TypeInteger, " 1 ", "1", 0, false},
+
+		// xs:dateTime/xs:time 24:00:00 is the valid end-of-day form; it lives in
+		// the same value space as 00:00:00 of the next day and must compare equal.
+		{lexicon.TypeDateTime, "2024-01-01T24:00:00", "2024-01-02T00:00:00", 0, true},
+		{lexicon.TypeTime, "24:00:00", "00:00:00", 0, true},
 	}
 
 	for _, tt := range tests {

@@ -96,3 +96,85 @@ func TestCanonicalKeyStrictDateValidation(t *testing.T) {
 	_, okHuge := value.CanonicalKey("999999999999999999999996-02-29", "date")
 	require.True(t, okHuge, `valid huge-year leap date must still canonicalize`)
 }
+
+// TestCanonicalKeyStrictNumericValidation verifies CanonicalKey gates the
+// numeric, float and boolean value-comparable types on the strict lexical space
+// (including range checks for bounded integer subtypes) before producing a key,
+// matching the comparison path.
+func TestCanonicalKeyStrictNumericValidation(t *testing.T) {
+	_ = t.Context()
+
+	_, okIntFrac := value.CanonicalKey("1.0", "integer")
+	require.False(t, okIntFrac, `"1.0" is not a valid xs:integer lexical form`)
+
+	_, okIntRange := value.CanonicalKey("2147483648", "int")
+	require.False(t, okIntRange, `"2147483648" is out of range for xs:int`)
+
+	_, okUByte := value.CanonicalKey("-1", "unsignedByte")
+	require.False(t, okUByte, `"-1" is out of range for xs:unsignedByte`)
+
+	_, okDecimal := value.CanonicalKey("1/2", "decimal")
+	require.False(t, okDecimal, `"1/2" is not a valid xs:decimal lexical form`)
+
+	_, okFloat := value.CanonicalKey("Inf", "float")
+	require.False(t, okFloat, `"Inf" is not a valid xs:float lexical form`)
+
+	// NBSP padding is not XSD whitespace, so it is not trimmed and the value
+	// stays invalid (Go's strings.TrimSpace would have wrongly accepted it).
+	_, okNBSP := value.CanonicalKey(" 1 ", "integer")
+	require.False(t, okNBSP, `NBSP-padded integer must not canonicalize`)
+
+	// A valid integer with XSD-whitespace padding still canonicalizes.
+	plus5, okPlus5 := value.CanonicalKey(" +5 ", "integer")
+	require.True(t, okPlus5, `XSD-whitespace-padded "+5" must canonicalize`)
+	five, _ := value.CanonicalKey("5", "integer")
+	require.Equal(t, five, plus5, `"+5" and "5" must canonicalize equal`)
+}
+
+// TestCanonicalKeyBinary verifies hexBinary and base64Binary canonicalize to a
+// stable byte key so value-equal but lexically distinct forms collide, while
+// invalid forms yield ok=false.
+func TestCanonicalKeyBinary(t *testing.T) {
+	_ = t.Context()
+
+	hexUpper, okHU := value.CanonicalKey("0A", "hexBinary")
+	require.True(t, okHU)
+	hexLower, okHL := value.CanonicalKey("0a", "hexBinary")
+	require.True(t, okHL)
+	require.Equal(t, hexUpper, hexLower, `"0A" and "0a" must canonicalize equal`)
+
+	b64Plain, okBP := value.CanonicalKey("YWJj", "base64Binary")
+	require.True(t, okBP)
+	b64Spaced, okBS := value.CanonicalKey("YW Jj", "base64Binary")
+	require.True(t, okBS)
+	require.Equal(t, b64Plain, b64Spaced, `"YWJj" and "YW Jj" must canonicalize equal`)
+
+	hex0B, ok0B := value.CanonicalKey("0B", "hexBinary")
+	require.True(t, ok0B)
+	require.NotEqual(t, hexUpper, hex0B, `distinct byte values must not collide`)
+
+	_, okBadHex := value.CanonicalKey("0G", "hexBinary")
+	require.False(t, okBadHex, `"0G" is not valid hexBinary`)
+
+	_, okBadB64 := value.CanonicalKey("@@@@", "base64Binary")
+	require.False(t, okBadB64, `"@@@@" is not valid base64Binary`)
+}
+
+// TestCanonicalKeyHour24 verifies the end-of-day 24:00:00 form canonicalizes to
+// the same key as 00:00:00 of the next day for xs:dateTime, and to start-of-day
+// for xs:time.
+func TestCanonicalKeyHour24(t *testing.T) {
+	_ = t.Context()
+
+	dt24, ok24 := value.CanonicalKey("2024-01-01T24:00:00", "dateTime")
+	require.True(t, ok24)
+	dt00, ok00 := value.CanonicalKey("2024-01-02T00:00:00", "dateTime")
+	require.True(t, ok00)
+	require.Equal(t, dt00, dt24, `"...T24:00:00" must canonicalize to next-day 00:00:00`)
+
+	t24, okT24 := value.CanonicalKey("24:00:00", "time")
+	require.True(t, okT24)
+	t00, okT00 := value.CanonicalKey("00:00:00", "time")
+	require.True(t, okT00)
+	require.Equal(t, t00, t24, `xs:time "24:00:00" must canonicalize to "00:00:00"`)
+}
