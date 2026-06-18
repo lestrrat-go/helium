@@ -105,7 +105,20 @@ boolean, date/time, and binary builtins (`enumValueSpaceTypes`); hexBinary and
 base64Binary compare by decoded octets (so `"0A"`≡`"0a"`). String-family and
 anyURI types stay lexical-only (their value space equals their whitespace-
 processed lexical space), so a numeric-looking string enum `"5"` does not accept
-`"5.0"`.
+`"5.0"`. **List** enumeration (`checkListEnumeration`) splits both the instance and
+each enumeration member into items and compares item-by-item in the item type's
+value space via `fixedListMatches` (so `xs:list itemType="xs:int"` enum `"1 2"`
+accepts `"01 +2"`; QName item types resolve instance items against the instance's
+namespaces and each member's items against its captured `FacetSet.EnumerationNS`).
+**Union** enumeration (`checkUnionEnumeration`) resolves the active member
+INDEPENDENTLY for the instance value and for each enumeration literal, then
+compares with the same ordered-union value-family logic fixed-value comparison
+uses (`fixedUnionMatches`), recursing through list/nested-union member value
+spaces — so a literal active in a string member is not value-equal to an instance
+active in a numeric member (`memberTypes="zeroString xs:int"` enum `"0"` rejects
+`"+0"`). The union's remaining facets (pattern/length/bounds) are still checked in
+the instance active member's value space via `checkFacets` with enumeration
+suppressed.
 
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
 compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema

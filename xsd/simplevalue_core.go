@@ -99,7 +99,7 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 
 	// Check if this is a list type.
 	if resolveVariety(td) == TypeVarietyList {
-		return validateListValue(ctx, trimmed, td, elemName, filename, line, vc)
+		return validateListValue(ctx, trimmed, valueNS, td, elemName, filename, line, vc)
 	}
 
 	// Check if this is a union type.
@@ -156,19 +156,38 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 	// Suppress the per-facet error; report a union-level error instead.
 	//
 	// Enumeration on a union is defined in the value space of the active member
-	// type (the member that accepts the value), not purely lexically. Resolve
-	// that member's builtin base type so checkFacets compares enumeration in the
-	// correct value space — e.g. a union of xs:int with enumeration "5" accepts
-	// "+5". When no member accepts the value the per-member loop below reports
-	// the failure, so an empty builtinLocal here is harmless.
+	// type. The active member is resolved INDEPENDENTLY for the instance value and
+	// for each enumeration literal, then compared with ordered-union value-family
+	// semantics (the same comparison fixed-value uses). A single instance-member
+	// value space would mis-accept cross-member values — e.g. memberTypes=
+	// "zeroString xs:int" with enumeration "0": the literal "0" is active in the
+	// string member, so the instance "+0" (active in xs:int) must NOT match it
+	// even though both look numeric. Non-enumeration facets still compare in the
+	// instance's active-member value space via checkFacets.
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 	if td.Facets != nil {
+		vc.suppressDepth++
+		enumErr := checkUnionEnumeration(ctx, value, valueNS, td, elemName, filename, line, vc)
+		vc.suppressDepth--
+		if enumErr != nil {
+			typeName := unionTypeDisplayName(td)
+			msg := fmt.Sprintf("'%s' is not a valid value of the %s.", trimmed, typeName)
+			vc.reportValidityError(ctx, filename, line, elemName, msg)
+			return enumErr
+		}
+
 		memberLocal := ""
 		if active := unionActiveMemberNS(ctx, value, valueNS, td); active != nil {
 			memberLocal = builtinBaseLocal(active)
 		}
+		// Suppress the enumeration facet here — it was checked above in union value
+		// space; the remaining facets (pattern, length, bounds) are evaluated in the
+		// instance member's value space.
+		nonEnum := *td.Facets
+		nonEnum.Enumeration = nil
+		nonEnum.EnumerationNS = nil
 		vc.suppressDepth++
-		err := checkFacets(ctx, trimmed, valueNS, td.Facets, memberLocal, elemName, filename, line, vc)
+		err := checkFacets(ctx, trimmed, valueNS, &nonEnum, memberLocal, elemName, filename, line, vc)
 		vc.suppressDepth--
 		if err != nil {
 			typeName := unionTypeDisplayName(td)
@@ -195,6 +214,33 @@ func validateUnionValue(ctx context.Context, value string, valueNS map[string]st
 	msg := fmt.Sprintf("'%s' is not a valid value of the %s.", value, typeName)
 	vc.reportValidityError(ctx, filename, line, elemName, msg)
 	return fmt.Errorf("union validation failed")
+}
+
+// checkUnionEnumeration enforces a union type's enumeration facet in union value
+// space. The instance value and each enumeration literal each resolve their own
+// active member (ordered-union semantics) and are compared with the same
+// value-family logic fixed-value comparison uses (fixedUnionMatches), recursing
+// through list/nested-union member value spaces. This rejects cross-member
+// look-alikes — a literal active in a string member is not value-equal to an
+// instance active in a numeric member. Each literal's prefixes resolve against its
+// captured EnumerationNS bindings; the instance's against valueNS.
+func checkUnionEnumeration(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
+	if td.Facets == nil || len(td.Facets.Enumeration) == 0 {
+		return nil
+	}
+	for i, ev := range td.Facets.Enumeration {
+		var enumNS map[string]string
+		if i < len(td.Facets.EnumerationNS) {
+			enumNS = td.Facets.EnumerationNS[i]
+		}
+		if fixedUnionMatches(ctx, value, ev, td, valueNS, enumNS) {
+			return nil
+		}
+	}
+	set := "'" + strings.Join(td.Facets.Enumeration, "', '") + "'"
+	msg := fmt.Sprintf("[facet 'enumeration'] The value '%s' is not an element of the set {%s}.", value, set)
+	vc.reportValidityError(ctx, filename, line, elemName, msg)
+	return fmt.Errorf("enumeration")
 }
 
 // unionActiveMemberNS returns the union member type that accepts value under the
@@ -241,7 +287,7 @@ func resolveVariety(td *TypeDef) TypeVariety {
 }
 
 // validateListValue validates a space-separated list value against a list type.
-func validateListValue(ctx context.Context, value string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
+func validateListValue(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	// Split value into items by whitespace.
 	var items []string
 	if value != "" {
@@ -278,11 +324,12 @@ func validateListValue(ctx context.Context, value string, td *TypeDef, elemName,
 	// length facets are interpreted as item counts above; checkFacets would
 	// instead measure character length, so enumeration and pattern are applied
 	// here on their own rather than via the generic checkFacets path.
+	itemType := resolveItemType(td)
 	for cur := td; cur != nil; cur = cur.BaseType {
 		if cur.Facets == nil {
 			continue
 		}
-		if err := checkListEnumeration(ctx, value, cur.Facets, elemName, filename, line, vc); err != nil {
+		if err := checkListEnumeration(ctx, value, valueNS, cur.Facets, itemType, elemName, filename, line, vc); err != nil {
 			facetErr = err
 		}
 		if err := checkListPattern(ctx, value, cur.Facets, elemName, filename, line, vc); err != nil {
@@ -297,11 +344,12 @@ func validateListValue(ctx context.Context, value string, td *TypeDef, elemName,
 		return facetErr
 	}
 
-	// Validate each list item against the item type.
-	itemType := resolveItemType(td)
+	// Validate each list item against the item type. valueNS threads the
+	// in-scope namespace bindings down to each item so a list whose item type is
+	// QName/NOTATION resolves item prefixes against the instance's namespaces.
 	if itemType != nil {
 		for _, item := range items {
-			if err := validateValue(ctx, item, nil, itemType, elemName, filename, line, vc); err != nil {
+			if err := validateValue(ctx, item, valueNS, itemType, elemName, filename, line, vc); err != nil {
 				return err
 			}
 		}
@@ -364,16 +412,24 @@ func typeDisplayName(td *TypeDef) string {
 	return td.Name.Local
 }
 
-// checkListEnumeration enforces the enumeration facet on the whitespace-collapsed
-// whole-list value. List enumeration values are themselves space-separated lists,
-// so both the instance value and each member are collapsed before comparison.
-func checkListEnumeration(ctx context.Context, value string, fs *FacetSet, elemName, filename string, line int, vc *validationContext) error {
+// checkListEnumeration enforces the enumeration facet on a list value. List
+// enumeration members are themselves space-separated lists, and the comparison is
+// performed in the item type's VALUE space (XSD §3.16): the instance and each
+// enumeration member are split into items and compared item-by-item via
+// fixedValueMatches on the item type, so an xs:list itemType="xs:int" with
+// enumeration "1 2" accepts the value-equal instance "01 +2". QName/NOTATION item
+// types resolve the instance items against valueNS and each member's items against
+// the member's captured EnumerationNS bindings.
+func checkListEnumeration(ctx context.Context, value string, valueNS map[string]string, fs *FacetSet, itemType *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	if len(fs.Enumeration) == 0 {
 		return nil
 	}
-	collapsed := collapseSpaces(value)
-	for _, ev := range fs.Enumeration {
-		if collapseSpaces(ev) == collapsed {
+	for i, ev := range fs.Enumeration {
+		var enumNS map[string]string
+		if i < len(fs.EnumerationNS) {
+			enumNS = fs.EnumerationNS[i]
+		}
+		if fixedListMatches(ctx, value, ev, &TypeDef{Variety: TypeVarietyList, ItemType: itemType}, valueNS, enumNS) {
 			return nil
 		}
 	}

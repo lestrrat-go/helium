@@ -135,6 +135,150 @@ func TestUnionEnumerationValueSpace(t *testing.T) {
 	})
 }
 
+// TestQNameListNamespaceContext verifies that a list whose item type is xs:QName
+// validates each item against the instance's in-scope namespaces. A bound prefix
+// must be accepted and an unbound prefix rejected — the list path must thread the
+// namespace context down to each item (regression: items were validated with a
+// nil namespace map, wrongly rejecting valid bound QName items).
+func TestQNameListNamespaceContext(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="qnameList">
+    <xs:list itemType="xs:QName"/>
+  </xs:simpleType>
+  <xs:element name="root" type="qnameList"/>
+</xs:schema>`
+
+	t.Run("bound prefixes accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root xmlns:p="urn:p" xmlns:q="urn:q">p:a q:b</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("single bound prefix accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root xmlns:p="urn:p">p:a</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("unbound prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := validateInstance(t, schemaXML, `<root xmlns:p="urn:p">p:a q:b</root>`)
+		require.Error(t, err)
+	})
+}
+
+// TestListEnumerationValueSpace verifies that a list-level enumeration is compared
+// in the item type's VALUE space, not raw collapsed lexical text. A list of xs:int
+// with enumeration "1 2" must accept the value-equal instance "01 +2", and a list
+// of xs:QName must compare items namespace-aware.
+func TestListEnumerationValueSpace(t *testing.T) {
+	t.Parallel()
+
+	t.Run("int list value-equal accepted", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="intList">
+        <xs:enumeration value="1 2"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs, err := validateInstance(t, schemaXML, `<root>01 +2</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("int list value-distinct rejected", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="intList">
+        <xs:enumeration value="1 2"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs, err := validateInstance(t, schemaXML, `<root>1 3</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "[facet 'enumeration']")
+	})
+
+	t.Run("qname list namespace-aware enumeration accepted", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:e="urn:e">
+  <xs:simpleType name="qnameList">
+    <xs:list itemType="xs:QName"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="qnameList">
+        <xs:enumeration value="e:a"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		// Instance binds a DIFFERENT prefix to the same URI as the enumeration
+		// literal — value-space equality requires resolving both to {urn:e}a.
+		errs, err := validateInstance(t, schemaXML, `<root xmlns:p="urn:e">p:a</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+}
+
+// TestUnionEnumerationCrossMember verifies that a union-level enumeration resolves
+// the active member INDEPENDENTLY for the instance value and for each enumeration
+// literal, then compares with ordered-union value-family semantics. A look-alike in
+// a different member must NOT be accepted: with memberTypes="zeroString xs:int" and
+// enumeration "0" (active in the string member), the instance "+0" (active in
+// xs:int) must be rejected even though both look numeric.
+func TestUnionEnumerationCrossMember(t *testing.T) {
+	t.Parallel()
+
+	// zeroString is an xs:string restricted to exactly "0", so the literal "0" is
+	// active in the string member; "+0" is not a valid zeroString, so it falls to
+	// the xs:int member.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="zeroString">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="zeroStringOrInt">
+    <xs:union memberTypes="zeroString xs:int"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="zeroStringOrInt">
+        <xs:enumeration value="0"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("exact string member literal accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>0</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("cross-member look-alike rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>+0</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "is not a valid value")
+	})
+}
+
 // TestQNameUnboundPrefix verifies that an xs:QName value with an unbound prefix
 // is rejected (C-008). Lexical NCName form alone is not sufficient: the prefix
 // must be bound in scope.
