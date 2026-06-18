@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"regexp"
 	"strings"
-	"unicode"
+	"unicode/utf8"
 )
 
 // ValidateBuiltin validates a value against a builtin XSD type's lexical space.
@@ -364,10 +364,10 @@ func validateDateComponents(value string) error {
 	}
 	dayStr = dayStr[:2]
 
-	var year, month, day int
-	if _, err := fmt.Sscanf(yearStr, "%d", &year); err != nil {
-		return fmt.Errorf("invalid date")
-	}
+	// The year is variable-length and may be an arbitrarily large expanded year
+	// (e.g. "999999999999999999999999"), so do not parse it into a fixed-width
+	// int; leap-year status is computed from the digit string directly.
+	var month, day int
 	if _, err := fmt.Sscanf(monthStr, "%d", &month); err != nil {
 		return fmt.Errorf("invalid date")
 	}
@@ -381,7 +381,7 @@ func validateDateComponents(value string) error {
 	// Maximum days per month. February's length depends on whether the year is
 	// a leap year in the proleptic Gregorian calendar.
 	maxDays := [13]int{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
-	if month == 2 && isLeapYear(year) {
+	if month == 2 && isLeapYearStr(yearStr) {
 		maxDays[2] = 29
 	}
 	if day < 1 || day > maxDays[month] {
@@ -390,18 +390,27 @@ func validateDateComponents(value string) error {
 	return nil
 }
 
-// isLeapYear reports whether the given (non-negative) Gregorian year is a leap
-// year. The year value here is the absolute magnitude parsed from the lexical
-// form; leap-year status is symmetric for the BCE side of the proleptic
-// Gregorian calendar as used by XSD.
-func isLeapYear(year int) bool {
-	if year%400 == 0 {
-		return true
+// isLeapYearStr reports whether the Gregorian year given as a (sign-stripped)
+// decimal digit string is a leap year. The year may be an arbitrarily large
+// expanded year, so leap-year status is computed via modulo arithmetic over the
+// digit string rather than by parsing into a fixed-width int (which would
+// overflow): a year is leap iff divisible by 4 and (not divisible by 100, or
+// divisible by 400).
+func isLeapYearStr(year string) bool {
+	mod := func(s string, n int) int {
+		v := 0
+		for _, r := range s {
+			v = (v*10 + int(r-'0')) % n
+		}
+		return v
 	}
-	if year%100 == 0 {
+	if mod(year, 4) != 0 {
 		return false
 	}
-	return year%4 == 0
+	if mod(year, 100) != 0 {
+		return true
+	}
+	return mod(year, 400) == 0
 }
 
 // durationRegex matches xs:duration.
@@ -605,6 +614,12 @@ func isXMLName(value string, allowColon bool) bool {
 	if value == "" {
 		return false
 	}
+	// Ranging a Go string decodes invalid UTF-8 bytes as U+FFFD, which the XML
+	// Name char ranges happen to admit; reject malformed encodings outright so a
+	// raw 0xFF byte does not masquerade as a valid Name character.
+	if !utf8.ValidString(value) {
+		return false
+	}
 	for i, r := range value {
 		colon := r == ':'
 		if i == 0 {
@@ -639,6 +654,9 @@ func validateName(value string) error {
 // (colon allowed).
 func isNMTOKEN(value string) bool {
 	if value == "" {
+		return false
+	}
+	if !utf8.ValidString(value) {
 		return false
 	}
 	for _, r := range value {
@@ -693,7 +711,9 @@ func validateQName(value string) error {
 
 // base64Regex restricts the character repertoire of xs:base64Binary; the
 // grammar (correct quad/padding structure) is enforced by attempting a decode.
-var base64Regex = regexp.MustCompile(`^[A-Za-z0-9+/=\s]*$`)
+// XSD whitespace is exactly space, tab, CR, and LF, so the repertoire excludes
+// other Unicode whitespace such as form-feed.
+var base64Regex = regexp.MustCompile("^[A-Za-z0-9+/= \t\r\n]*$")
 
 func validateBase64Binary(value string) error {
 	if !base64Regex.MatchString(value) {
@@ -705,7 +725,7 @@ func validateBase64Binary(value string) error {
 	// "====", a lone "A", or "AAA" that the character regex alone would pass.
 	var b strings.Builder
 	for _, r := range value {
-		if unicode.IsSpace(r) {
+		if r == ' ' || r == '\t' || r == '\r' || r == '\n' {
 			continue
 		}
 		b.WriteRune(r)

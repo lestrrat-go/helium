@@ -22,10 +22,11 @@ const (
 	testAB       = "a:b"
 	testFoo      = "foo"
 
-	typeGYear     = "gYear"
-	typeGMonth    = "gMonth"
-	typeGDay      = "gDay"
-	typeGMonthDay = "gMonthDay"
+	typeGYear        = "gYear"
+	typeGMonth       = "gMonth"
+	typeGDay         = "gDay"
+	typeGMonthDay    = "gMonthDay"
+	typeBase64Binary = "base64Binary"
 )
 
 func TestBuiltinTypeValidation(t *testing.T) {
@@ -61,8 +62,11 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		},
 		{
 			typeName: lexicon.TypeDate,
-			valid:    []string{testDate0, "2000-02-29", "2400-02-29", "2023-12-31", "-0001-01-01", "2023-01-15Z", "2023-01-15+09:00", "2023-01-15-05:00", "2023-01-15+14:00", "2023-01-15-14:00"},
-			invalid:  []string{"", testAbc, "2023-13-01", "2023-00-01", "2023-01-32", "2023-01-00", "2001-02-29", "2100-02-29", "2023-01-15+99:99", "2023-01-15+15:00", "2023-01-15+14:01"},
+			// The huge-year cases exercise leap-year computation on expanded years
+			// that overflow a fixed-width int: ...996 is divisible by 4 (leap),
+			// ...999 is not (non-leap).
+			valid:   []string{testDate0, "2000-02-29", "2400-02-29", "2023-12-31", "-0001-01-01", "2023-01-15Z", "2023-01-15+09:00", "2023-01-15-05:00", "2023-01-15+14:00", "2023-01-15-14:00", "999999999999999999999999-01-01", "999999999999999999999996-02-29"},
+			invalid: []string{"", testAbc, "2023-13-01", "2023-00-01", "2023-01-32", "2023-01-00", "2001-02-29", "2100-02-29", "2023-01-15+99:99", "2023-01-15+15:00", "2023-01-15+14:01", "999999999999999999999999-02-29"},
 		},
 		{
 			typeName: typeGYear,
@@ -92,12 +96,14 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		{
 			typeName: "Name",
 			valid:    []string{testFoo, testUnderBar, ":baz", "a.b", "a-b", testAB, "A123", "é", "naïve", "Ω"},
-			invalid:  []string{"", test1foo, ".foo", "-foo", "a b"},
+			// The 0xFF byte is malformed UTF-8; ranging it would yield U+FFFD, which
+			// the Name char range admits, so it must be rejected as invalid.
+			invalid: []string{"", test1foo, ".foo", "-foo", "a b", string([]byte{0xff}), "a" + string([]byte{0xff})},
 		},
 		{
 			typeName: "NCName",
 			valid:    []string{testFoo, testUnderBar, "a.b", "a-b", "A123", "é", "naïve", "Ω"},
-			invalid:  []string{"", test1foo, ".foo", "-foo", testAB, ":foo", "a b"},
+			invalid:  []string{"", test1foo, ".foo", "-foo", testAB, ":foo", "a b", string([]byte{0xff}), "a" + string([]byte{0xff})},
 		},
 		{
 			typeName: "ID",
@@ -117,7 +123,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		{
 			typeName: "NMTOKEN",
 			valid:    []string{testFoo, test1foo, ".foo", "-foo", testAB, "A.1-2:3_4", "café", "Ω"},
-			invalid:  []string{"", "foo bar", "foo\ttab"},
+			invalid:  []string{"", "foo bar", "foo\ttab", string([]byte{0xff}), "a" + string([]byte{0xff})},
 		},
 		{
 			typeName: "normalizedString",
@@ -130,9 +136,11 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			invalid:  []string{"has\ttab", "has\nnewline", " leading", "trailing ", "double  space"},
 		},
 		{
-			typeName: "base64Binary",
+			typeName: typeBase64Binary,
 			valid:    []string{"", "SGVsbG8=", "AAAA", "AA==", "AAAA ", " AA== ", "SGVs bG8="},
-			invalid:  []string{"@@@", "SGVsbG8!", "====", "A", "A===", "AAA"},
+			// Form-feed is not XSD whitespace (only space/tab/CR/LF), so "TQ\f=="
+			// must be rejected rather than treated as "TQ==".
+			invalid: []string{"@@@", "SGVsbG8!", "====", "A", "A===", "AAA", "TQ\f==", "TQ"},
 		},
 		{
 			typeName: "QName",
@@ -261,9 +269,13 @@ func TestCompareValues(t *testing.T) {
 		{"hexBinary", "0G", "0A", 0, false}, // invalid hex -> indeterminate
 
 		// base64Binary — compared by decoded octets, whitespace insignificant.
-		{"base64Binary", "YWJj", "YW Jj", 0, true},
-		{"base64Binary", "YWJj", "YWJk", -1, true}, // "abc" < "abd"
-		{"base64Binary", "@@@@", "YWJj", 0, false}, // invalid -> indeterminate
+		{typeBase64Binary, "YWJj", "YW Jj", 0, true},
+		{typeBase64Binary, "YWJj", "YWJk", -1, true}, // "abc" < "abd"
+		{typeBase64Binary, "@@@@", "YWJj", 0, false}, // invalid -> indeterminate
+		// Unpadded operands are not valid base64Binary lexical forms, so a
+		// comparison against them is indeterminate (no RawStdEncoding fallback).
+		{typeBase64Binary, "TQ", "TQ==", 0, false},
+		{typeBase64Binary, "TQ==", "TQ", 0, false},
 
 		// float
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, "2.0", -1, true},
