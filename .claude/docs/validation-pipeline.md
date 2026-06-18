@@ -72,7 +72,13 @@ element *declaration's* type (`edecl.Type`), not an `xsi:type` actual type, so a
 declared `xs:string` (whiteSpace="preserve") fixed `abc ` keeps its trailing space
 even when the instance's `xsi:type` collapses whitespace — element content is still
 validated against the actual type. In `fixedUnionMatches`, when the fixed and
-instance values resolve to *different* active members, they are value-equal iff
+instance values resolve to *different* active members, the cross-member
+comparison (`crossMemberValueEqual`) is **recursive over variety**: when both
+active members are **lists** (e.g. `memberTypes="intList decimalList"`) each value
+is split and compared item-by-item in the item types' shared value space — so the
+literal `1.0 2.0` (active in `decimalList`) accepts the instance `1 2` (active in
+`intList`); a list-vs-atomic variety mismatch has no shared value space and stays
+unequal. When both active members are **atomic** they are value-equal iff
 their members reduce to the same *primitive* value-space family
 (`primitiveValueSpaceFamily`, XSD 1.1 §2.3 — restrictions create no new values):
 all integer types → `decimal`; all xs:string-derived types

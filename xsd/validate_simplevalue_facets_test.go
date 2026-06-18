@@ -515,6 +515,222 @@ func TestEnumQNameUnboundPrefixVarietyAware(t *testing.T) {
 	})
 }
 
+// TestEnumQNameUnboundPrefixRecursiveCarrier verifies item 1 (W09): the
+// enumeration-literal QName/NOTATION prefix-binding check detects a QName/NOTATION
+// carrier that is hidden inside a union member that is itself a LIST or a NESTED
+// UNION — not only a directly-atomic QName/NOTATION member. An unbound prefix in
+// such a literal must be a compile-time schema error; a bound prefix compiles
+// cleanly.
+func TestEnumQNameUnboundPrefixRecursiveCarrier(t *testing.T) {
+	t.Parallel()
+
+	t.Run("union-of-list QName member unbound prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="qnameList">
+    <xs:list itemType="xs:QName"/>
+  </xs:simpleType>
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="qnameList xs:int"/>
+        </xs:simpleType>
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a compile error for unbound QName in union-of-list enumeration")
+		require.Contains(t, errs, "p:foo")
+	})
+
+	t.Run("union-of-list QName member bound prefix compiles cleanly", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:simpleType name="qnameList">
+    <xs:list itemType="xs:QName"/>
+  </xs:simpleType>
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="qnameList xs:int"/>
+        </xs:simpleType>
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for bound QName in union-of-list enumeration: %s", errs)
+	})
+
+	t.Run("nested-union QName member unbound prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="innerUnion">
+    <xs:union memberTypes="xs:QName xs:boolean"/>
+  </xs:simpleType>
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="innerUnion xs:int"/>
+        </xs:simpleType>
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a compile error for unbound QName in nested-union enumeration")
+		require.Contains(t, errs, "p:foo")
+	})
+
+	t.Run("nested-union QName member bound prefix compiles cleanly", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:simpleType name="innerUnion">
+    <xs:union memberTypes="xs:QName xs:boolean"/>
+  </xs:simpleType>
+  <xs:element name="q">
+    <xs:simpleType>
+      <xs:restriction>
+        <xs:simpleType>
+          <xs:union memberTypes="innerUnion xs:int"/>
+        </xs:simpleType>
+        <xs:enumeration value="p:foo"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for bound QName in nested-union enumeration: %s", errs)
+	})
+}
+
+// TestUnionOfListsEnumerationValueSpace verifies item 2 (W09): a union-level
+// enumeration whose active member is itself a LIST compares item-by-item in the
+// list's item-type value space. With memberTypes="intList decimalList" and
+// enumeration "1.0 2.0" (active in decimalList), the value-equal instance "1 2"
+// (active in intList) must be ACCEPTED — the cross-member comparison must split
+// the lists and compare items in the shared decimal value space, not value-compare
+// the whole multi-token strings as scalars.
+func TestUnionOfListsEnumerationValueSpace(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="intList">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="decimalList">
+    <xs:list itemType="xs:decimal"/>
+  </xs:simpleType>
+  <xs:simpleType name="intOrDecimalList">
+    <xs:union memberTypes="intList decimalList"/>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:simpleType>
+      <xs:restriction base="intOrDecimalList">
+        <xs:enumeration value="1.0 2.0"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>`
+
+	t.Run("cross-member value-equal list accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>1 2</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("exact decimal list literal accepted", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>1.0 2.0</root>`)
+		require.NoError(t, err, "validation errors: %s", errs)
+	})
+
+	t.Run("value-distinct list rejected", func(t *testing.T) {
+		t.Parallel()
+		errs, err := validateInstance(t, schemaXML, `<root>1 3</root>`)
+		require.Error(t, err)
+		require.Contains(t, errs, "is not a valid value")
+	})
+}
+
+// TestNotationCarrierRecursive verifies item 3 (W09): the NOTATION-without-
+// enumeration check is recursive over varieties. An xs:list itemType="xs:NOTATION"
+// and a union member typed xs:NOTATION (neither enumeration-derived) are rejected
+// at compile time, while a list/union built over an enumeration-derived NOTATION
+// type compiles cleanly.
+func TestNotationCarrierRecursive(t *testing.T) {
+	t.Parallel()
+
+	t.Run("list of un-enumerated NOTATION rejected", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="notationList">
+    <xs:list itemType="xs:NOTATION"/>
+  </xs:simpleType>
+  <xs:element name="n" type="notationList"/>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a compile error for list of un-enumerated NOTATION")
+		require.Contains(t, errs, "NOTATION")
+	})
+
+	t.Run("union member un-enumerated NOTATION rejected", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="notationOrInt">
+    <xs:union memberTypes="xs:NOTATION xs:int"/>
+  </xs:simpleType>
+  <xs:element name="n" type="notationOrInt"/>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.NotEmpty(t, errs, "expected a compile error for union member un-enumerated NOTATION")
+		require.Contains(t, errs, "NOTATION")
+	})
+
+	t.Run("list of enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:simpleType name="imageNotation">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="p:jpeg"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="notationList">
+    <xs:list itemType="imageNotation"/>
+  </xs:simpleType>
+  <xs:element name="n" type="notationList"/>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for list of enumeration-derived NOTATION: %s", errs)
+	})
+
+	t.Run("union member enumeration-derived NOTATION compiles cleanly", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:simpleType name="imageNotation">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="p:jpeg"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="notationOrInt">
+    <xs:union memberTypes="imageNotation xs:int"/>
+  </xs:simpleType>
+  <xs:element name="n" type="notationOrInt"/>
+</xs:schema>`
+		errs := compileSchemaErrors(t, schemaXML)
+		require.Empty(t, errs, "expected no compile error for union member enumeration-derived NOTATION: %s", errs)
+	})
+}
+
 // TestNotationTypeOnDeclaration verifies item 2: typing an element or attribute
 // directly as xs:NOTATION (no enumeration facet) is rejected at compile time,
 // mirroring the simpleType-level rule that xs:NOTATION may only be used in a

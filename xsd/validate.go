@@ -147,16 +147,66 @@ func fixedUnionMatches(ctx context.Context, instance, fixed string, td *TypeDef,
 
 	// Different active members. XSD 1.1 §2.3 — restrictions do not create new
 	// values, so two values are equal iff they denote the same value in their
-	// SHARED PRIMITIVE value-space family (the primitive built-in their members
-	// reduce to). This includes string-derived members: a value active in one
-	// xs:string restriction (e.g. whiteSpace="collapse") compares equal to a value
-	// active in another xs:string-family member when both denote the same string.
-	// primitiveValueSpaceFamily reduces each member's builtin to that primitive
-	// family (e.g. all integer types → "decimal", all string-derived types →
-	// "string"). Cross-family pairs (string vs integer, integer vs boolean, …) have
-	// no shared value space and remain unequal. QName/NOTATION are excluded because
-	// their equality is namespace-context dependent, not a raw lexical/value
-	// comparison.
+	// SHARED value space. This is dispatched on each member's variety: list members
+	// compare item-by-item in their item type's value space (so an intList member
+	// and a decimalList member both denote the same sequence of decimals), and
+	// atomic members reduce to their primitive value-space family. Cross-variety
+	// pairs (a list member vs an atomic member) have no shared value space and
+	// remain unequal.
+	return crossMemberValueEqual(ctx, instance, fixed, instanceMember, fixedMember, instanceNS, fixedNS)
+}
+
+// crossMemberValueEqual reports whether two values active in DIFFERENT union
+// members denote the same value across the members' shared value space. It is
+// recursive over variety so a union of lists (memberTypes="intList decimalList")
+// compares the instance "1 2" (active in intList) and the literal "1.0 2.0"
+// (active in decimalList) item-by-item in the decimal value space rather than
+// trying to value-compare the whole multi-token strings as scalars.
+//
+//   - Both members LIST: split each value and compare items pairwise via this
+//     same routine on the two item types (so a list of unions still recurses).
+//   - Both members ATOMIC: reduce each to its primitive value-space family (XSD
+//     1.1 §2.3); equal iff the families match and the values compare equal there
+//     (value.Compare for comparable families, normalized-lexical for the string
+//     family). QName/NOTATION have no shared family and remain unequal.
+//   - Mismatched varieties (list vs atomic): no shared value space → unequal.
+func crossMemberValueEqual(ctx context.Context, instance, fixed string, instanceMember, fixedMember *TypeDef, instanceNS, fixedNS map[string]string) bool {
+	instanceVariety := resolveVariety(instanceMember)
+	fixedVariety := resolveVariety(fixedMember)
+
+	if instanceVariety == TypeVarietyList && fixedVariety == TypeVarietyList {
+		ni := normalizeWhiteSpace(instance, resolveWhiteSpace(instanceMember))
+		nf := normalizeWhiteSpace(fixed, resolveWhiteSpace(fixedMember))
+		ii := strings.Fields(ni)
+		fi := strings.Fields(nf)
+		if len(ii) != len(fi) {
+			return false
+		}
+		instanceItem := resolveItemType(instanceMember)
+		fixedItem := resolveItemType(fixedMember)
+		if instanceItem == nil || fixedItem == nil {
+			return false
+		}
+		for i := range ii {
+			if !crossMemberValueEqual(ctx, ii[i], fi[i], instanceItem, fixedItem, instanceNS, fixedNS) {
+				return false
+			}
+		}
+		return true
+	}
+
+	if instanceVariety != TypeVarietyAtomic || fixedVariety != TypeVarietyAtomic {
+		return false
+	}
+
+	// Both atomic. When the two item/member types are the SAME (e.g. both list
+	// items are xs:integer), compare in that one type's value space directly so a
+	// QName/NOTATION item pair resolves namespaces rather than being dropped by the
+	// no-shared-family rule.
+	if instanceMember == fixedMember {
+		return fixedValueMatches(ctx, instance, fixed, fixedMember, instanceNS, fixedNS)
+	}
+
 	fixedLocal := builtinBaseLocal(fixedMember)
 	instanceLocal := builtinBaseLocal(instanceMember)
 	fixedFamily, fComparable, fok := primitiveValueSpaceFamily(fixedLocal)

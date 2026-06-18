@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -124,15 +125,15 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 
 		variety := resolveVariety(td)
 
-		// Direct un-enumerated xs:NOTATION base is not a permitted derivation.
-		if variety == TypeVarietyAtomic && builtinBaseLocal(td) == lexicon.TypeNotation &&
-			td.Derivation == DerivationRestriction && td.BaseType != nil &&
-			td.BaseType.Name.NS == lexicon.NamespaceXSD && td.BaseType.Name.Local == lexicon.TypeNotation {
-			if td.Facets == nil || len(td.Facets.Enumeration) == 0 {
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, e.src.line, "simpleType", component,
-					"It is an error if the base type is the built-in 'NOTATION' and there is no 'enumeration' facet."), helium.ErrorLevelFatal))
-				c.errorCount++
-			}
+		// An un-enumerated xs:NOTATION use is not a permitted derivation. This is
+		// checked recursively over the type's variety so a NOTATION carrier hidden
+		// inside a list item type or a union member is caught too, not only a
+		// direct atomic xs:NOTATION restriction base. A NOTATION carrier is allowed
+		// only when it is itself enumeration-derived.
+		if notationUsedWithoutEnumeration(td) {
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, e.src.line, "simpleType", component,
+				"It is an error if the base type is the built-in 'NOTATION' and there is no 'enumeration' facet."), helium.ErrorLevelFatal))
+			c.errorCount++
 		}
 
 		// Validate each enumeration literal's QName/NOTATION prefix binding,
@@ -187,15 +188,15 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 			if member == nil {
 				continue
 			}
-			if resolveVariety(member) == TypeVarietyAtomic {
-				bl := builtinBaseLocal(member)
-				if bl == lexicon.TypeQName || bl == lexicon.TypeNotation {
-					hasQNameMember = true
-				}
+			// A QName/NOTATION carrier may sit inside a member that is itself a list
+			// or a nested union, so detect it recursively rather than only on an
+			// atomic QName/NOTATION member.
+			if typeHasQNameNotationCarrier(member) {
+				hasQNameMember = true
 			}
 			// The literal is satisfiable (and thus not flagged) as soon as some
 			// member accepts it under the literal's own namespace bindings. A
-			// QName/NOTATION member accepts it only with a bound prefix, so a
+			// QName/NOTATION carrier accepts it only with a bound prefix, so a
 			// successful match means the prefix is bound.
 			sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
 			if validateValue(ctx, ev, enumNS, member, "", "", 0, sub) == nil {
@@ -203,7 +204,7 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 			}
 		}
 		// No member accepts the literal. Only treat this as a prefix-binding
-		// failure when a QName/NOTATION member exists (otherwise the literal is
+		// failure when a QName/NOTATION carrier exists (otherwise the literal is
 		// invalid for some other reason, not flagged by this check).
 		return hasQNameMember
 	default:
@@ -212,6 +213,92 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 		}
 		_, err := resolveLexicalQName(ev, enumNS)
 		return err != nil
+	}
+}
+
+// notationUsedWithoutEnumeration reports whether td INTRODUCES an xs:NOTATION
+// use that is not permitted because the NOTATION carrier is not
+// enumeration-derived. Per XSD, xs:NOTATION may only appear in a derivation that
+// supplies an enumeration of the permitted notation names. The check is keyed on
+// the carrier declared DIRECTLY by td (so each type in a derivation chain is
+// judged once, not once per ancestor step):
+//
+//   - Atomic: td restricts directly from the built-in xs:NOTATION and supplies no
+//     enumeration facet.
+//   - List: td declares an itemType whose item type is (recursively) a
+//     NOTATION carrier that is not itself enumeration-derived.
+//   - Union: td declares memberTypes and some member is (recursively) a NOTATION
+//     carrier that is not itself enumeration-derived.
+//
+// A NOTATION carrier nested inside a list/union is permitted only when that
+// item/member type is enumeration-derived (hasEffectiveEnumeration over its own
+// chain), so an xs:list itemType="<enumerated NOTATION type>" compiles cleanly.
+func notationUsedWithoutEnumeration(td *TypeDef) bool {
+	if td == nil {
+		return false
+	}
+
+	// Atomic: only the type that directly restricts xs:NOTATION is judged, exactly
+	// as the original direct-base check did.
+	if td.Derivation == DerivationRestriction && td.BaseType != nil &&
+		td.BaseType.Name.NS == lexicon.NamespaceXSD && td.BaseType.Name.Local == lexicon.TypeNotation {
+		return td.Facets == nil || len(td.Facets.Enumeration) == 0
+	}
+
+	// List: judged at the type that declares the itemType.
+	if td.ItemType != nil {
+		return notationCarrierNotEnumerated(td.ItemType)
+	}
+
+	// Union: judged at the type that declares the memberTypes.
+	if len(td.MemberTypes) > 0 {
+		return slices.ContainsFunc(td.MemberTypes, notationCarrierNotEnumerated)
+	}
+
+	return false
+}
+
+// notationCarrierNotEnumerated reports whether td is (recursively, through list
+// item types and union members) a NOTATION carrier that is not enumeration-
+// derived. A bare atomic xs:NOTATION carrier is permitted only when its own
+// derivation chain supplies an enumeration; a list/union recurses into its
+// item/member types.
+func notationCarrierNotEnumerated(td *TypeDef) bool {
+	if td == nil {
+		return false
+	}
+	switch resolveVariety(td) {
+	case TypeVarietyList:
+		return notationCarrierNotEnumerated(resolveItemType(td))
+	case TypeVarietyUnion:
+		return slices.ContainsFunc(resolveUnionMembers(td), notationCarrierNotEnumerated)
+	default:
+		if builtinBaseLocal(td) != lexicon.TypeNotation {
+			return false
+		}
+		return !hasEffectiveEnumeration(td)
+	}
+}
+
+// typeHasQNameNotationCarrier reports whether td denotes — anywhere in its
+// variety structure — a value of type xs:QName or xs:NOTATION. It walks
+// recursively through list item types and nested union members, so a member like
+// xs:list itemType="xs:QName" or a union nesting an xs:NOTATION member is
+// recognized as carrying a QName/NOTATION value. Used by the enumeration-literal
+// prefix-binding check (and the NOTATION-use check) so QName/NOTATION carriers
+// hidden inside list/union members are not missed.
+func typeHasQNameNotationCarrier(td *TypeDef) bool {
+	if td == nil {
+		return false
+	}
+	switch resolveVariety(td) {
+	case TypeVarietyList:
+		return typeHasQNameNotationCarrier(resolveItemType(td))
+	case TypeVarietyUnion:
+		return slices.ContainsFunc(resolveUnionMembers(td), typeHasQNameNotationCarrier)
+	default:
+		bl := builtinBaseLocal(td)
+		return bl == lexicon.TypeQName || bl == lexicon.TypeNotation
 	}
 }
 
@@ -260,6 +347,10 @@ func (c *compiler) checkNotationOnDeclarations(ctx context.Context) {
 		if td == nil {
 			continue
 		}
+		// Only the direct atomic type="xs:NOTATION" case is judged here; a list/union
+		// (named or inline anonymous) whose item/member type is an un-enumerated
+		// NOTATION carrier is already caught at the simpleType level by
+		// checkEnumQNameAndNotation, so judging it again here would double-report.
 		if builtinBaseLocal(td) != lexicon.TypeNotation {
 			continue
 		}
@@ -291,6 +382,10 @@ func (c *compiler) checkNotationOnDeclarations(ctx context.Context) {
 		if td == nil {
 			continue
 		}
+		// Only the direct atomic type="xs:NOTATION" case is judged here; a list/union
+		// (named or inline anonymous) whose item/member type is an un-enumerated
+		// NOTATION carrier is already caught at the simpleType level by
+		// checkEnumQNameAndNotation, so judging it again here would double-report.
 		if builtinBaseLocal(td) != lexicon.TypeNotation {
 			continue
 		}
