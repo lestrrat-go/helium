@@ -3,14 +3,140 @@ package helium_test
 import (
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
+
+// infiniteFile is an fs.File whose Read never returns io.EOF, simulating an
+// unbounded source such as /dev/zero. It records whether Close was called.
+type infiniteFile struct {
+	closed *atomic.Bool
+}
+
+func (f *infiniteFile) Stat() (fs.FileInfo, error) { return nil, fs.ErrInvalid }
+
+func (f *infiniteFile) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'A'
+	}
+	return len(p), nil
+}
+
+func (f *infiniteFile) Close() error {
+	f.closed.Store(true)
+	return nil
+}
+
+// infiniteFS hands out a single infiniteFile for any path, recording closure.
+type infiniteFS struct {
+	closed *atomic.Bool
+}
+
+func (s infiniteFS) Open(string) (fs.File, error) {
+	return &infiniteFile{closed: s.closed}, nil
+}
+
+// TestExternalEntitySizeCap ensures that an external parsed entity backed by an
+// unbounded source is rejected (rather than read via io.ReadAll, which would
+// OOM) and that the resolved input is closed.
+func TestExternalEntitySizeCap(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r [<!ENTITY x SYSTEM "zero">]><r>&x;</r>`
+
+	var closed atomic.Bool
+	p := helium.NewParser().SubstituteEntities(true).FS(infiniteFS{closed: &closed})
+
+	done := make(chan struct{})
+	var parseErr error
+	go func() {
+		defer close(done)
+		_, parseErr = p.Parse(t.Context(), []byte(input))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("parsing an unbounded external entity did not terminate (no size cap)")
+	}
+
+	require.Error(t, parseErr, "unbounded external entity must be rejected")
+	require.True(t, closed.Load(), "resolved external entity input must be closed")
+}
+
+// readCloserFile wraps a string and records Close, used to verify external
+// entity inputs are closed even on the success path.
+type readCloserFile struct {
+	r      *io.SectionReader
+	closed *atomic.Bool
+}
+
+func (f *readCloserFile) Stat() (fs.FileInfo, error) { return nil, fs.ErrInvalid }
+func (f *readCloserFile) Read(p []byte) (int, error) { return f.r.Read(p) }
+func (f *readCloserFile) Close() error {
+	f.closed.Store(true)
+	return nil
+}
+
+type closingFS struct {
+	data   string
+	closed *atomic.Bool
+}
+
+func (s closingFS) Open(string) (fs.File, error) {
+	return &readCloserFile{
+		r:      io.NewSectionReader(strings.NewReader(s.data), 0, int64(len(s.data))),
+		closed: s.closed,
+	}, nil
+}
+
+func TestExternalEntityInputClosed(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r [<!ENTITY x SYSTEM "ext">]><r>&x;</r>`
+
+	var closed atomic.Bool
+	p := helium.NewParser().SubstituteEntities(true).FS(closingFS{data: "<e>ok</e>", closed: &closed})
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.True(t, closed.Load(), "resolved external entity input must be closed on success")
+}
+
+// TestEntityValueMalformedGeneralRef ensures that a general reference inside an
+// EntityValue is syntax-checked: a missing semicolon must be rejected even
+// though the general reference itself is not expanded.
+func TestEntityValueMalformedGeneralRef(t *testing.T) {
+	t.Parallel()
+
+	const input = `<!DOCTYPE r [<!ENTITY e "&broken">]><r/>`
+
+	p := helium.NewParser()
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "malformed general reference in entity value must be rejected")
+}
+
+// TestEntityValueValidGeneralRefLiteral ensures that a well-formed general
+// reference in an EntityValue is accepted and stored literally (not expanded).
+func TestEntityValueValidGeneralRefLiteral(t *testing.T) {
+	t.Parallel()
+
+	const input = `<!DOCTYPE r [<!ENTITY e "&amp; &good;">]><r/>`
+
+	p := helium.NewParser()
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "well-formed general references in entity value must be accepted")
+}
 
 func TestEntityAmplification(t *testing.T) {
 	t.Parallel()

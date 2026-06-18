@@ -154,6 +154,14 @@ func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, er
 		return "", "", pctx.error(ctx, err)
 	}
 
+	// decodeEntities below only substitutes parameter-entity references; general
+	// references are left literal and never syntax-checked. Validate them here so
+	// a malformed reference (e.g. a missing semicolon) is rejected rather than
+	// silently stored. This does not expand the references.
+	if err := validateEntityValueRefs([]byte(literal)); err != nil {
+		return "", "", pctx.error(ctx, err)
+	}
+
 	val, err := pctx.decodeEntities(ctx, []byte(literal), SubstitutePERef)
 	if err != nil {
 		return "", "", pctx.error(ctx, err)
@@ -164,6 +172,45 @@ func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, er
 	}
 
 	return literal, val, nil
+}
+
+// validateEntityValueRefs checks that every general reference in an EntityValue
+// literal is well formed: a '&' must begin either a character reference
+// (&#...; or &#x...;) or a general-entity reference (&Name;). The references are
+// not expanded; this only enforces syntax so a malformed reference such as
+// "&broken" (missing semicolon) is rejected. Parameter-entity references (%...;)
+// are left to decodeEntities and are not examined here.
+func validateEntityValueRefs(s []byte) error {
+	for len(s) > 0 {
+		i := bytes.IndexByte(s, '&')
+		if i < 0 {
+			return nil
+		}
+		s = s[i:]
+		if bytes.HasPrefix(s, []byte{'&', '#'}) {
+			_, width, err := parseStringCharRef(s)
+			if err != nil {
+				return err
+			}
+			s = s[width:]
+			continue
+		}
+
+		// General-entity reference: &Name; — parse the name then require ';'.
+		if len(s) < 2 {
+			return errors.New("malformed entity reference in entity value")
+		}
+		_, width, err := parseStringName(s[1:])
+		if err != nil {
+			return errors.New("malformed entity reference in entity value")
+		}
+		rest := s[1+width:]
+		if len(rest) == 0 || rest[0] != ';' {
+			return ErrSemicolonRequired
+		}
+		s = rest[1:]
+	}
+	return nil
 }
 
 func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
@@ -377,9 +424,23 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 		return nil, fmt.Errorf("cannot resolve external entity (URI=%s, publicID=%s)", uri, externalID)
 	}
 
-	content, err := io.ReadAll(input)
+	// The resolved input may hold an OS resource (the default resolver returns a
+	// fileParseInput embedding an open *os.File). Close it when done to avoid
+	// leaking file descriptors.
+	if c, ok := input.(io.Closer); ok {
+		defer func() { _ = c.Close() }()
+	}
+
+	// Read through a bounded reader so an unbounded source (e.g. SYSTEM
+	// "/dev/zero") cannot exhaust memory. LimitReader allows one extra byte so a
+	// content length exactly at the cap is accepted while anything larger is
+	// detected.
+	content, err := io.ReadAll(io.LimitReader(input, externalEntityMaxBytes+1))
 	if err != nil {
 		return nil, pctx.error(ctx, fmt.Errorf("reading external entity: %w", err))
+	}
+	if int64(len(content)) > externalEntityMaxBytes {
+		return nil, pctx.error(ctx, fmt.Errorf("external entity (URI=%s) exceeds maximum size of %d bytes", uri, externalEntityMaxBytes))
 	}
 
 	newctx := &parserCtx{}
