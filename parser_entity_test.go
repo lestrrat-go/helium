@@ -131,6 +131,68 @@ func TestExternalEntityInputClosed(t *testing.T) {
 	require.True(t, closed.Load(), "resolved external entity input must be closed on success")
 }
 
+// orderingFS resolves two external entities, "ext" and "ext2", and records the
+// closed state of "ext" at the moment "ext2" is opened. "ext"'s buffered content
+// references "ext2" (&y;), so "ext2" is opened only while "ext"'s already-read
+// content is being parsed. If the parser closes "ext" promptly — at the read
+// boundary, before parsing the buffered content — then "ext" is already closed
+// by the time "ext2" is opened. If it deferred the close to function return,
+// "ext" would still be open here.
+type orderingFS struct {
+	extClosed           *atomic.Bool
+	extClosedAtNestOpen *atomic.Bool
+	nestOpened          *atomic.Bool
+}
+
+func (s orderingFS) Open(name string) (fs.File, error) {
+	if name == "ext2" {
+		// "ext2" is opened only during the parse of "ext"'s buffered content.
+		// Capture whether "ext" was already closed at this instant.
+		s.nestOpened.Store(true)
+		s.extClosedAtNestOpen.Store(s.extClosed.Load())
+		const data = "<inner/>"
+		return &readCloserFile{
+			r:      io.NewSectionReader(strings.NewReader(data), 0, int64(len(data))),
+			closed: &atomic.Bool{},
+		}, nil
+	}
+	// "ext": its buffered content references the nested external entity &y;.
+	const data = "<e>&y;</e>"
+	return &readCloserFile{
+		r:      io.NewSectionReader(strings.NewReader(data), 0, int64(len(data))),
+		closed: s.extClosed,
+	}, nil
+}
+
+// TestExternalEntityClosedBeforeContentParsed proves the resolved external input
+// is closed at the read boundary — BEFORE its already-buffered content is parsed
+// — not merely before Parse returns. The first entity's content references a
+// second external entity, so the second entity's Open happens mid-parse of the
+// first entity's buffered bytes; at that point the first input must already be
+// closed.
+func TestExternalEntityClosedBeforeContentParsed(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r [
+  <!ENTITY x SYSTEM "ext">
+  <!ENTITY y SYSTEM "ext2">
+]><r>&x;</r>`
+
+	var extClosed, extClosedAtNestOpen, nestOpened atomic.Bool
+	p := helium.NewParser().SubstituteEntities(true).FS(orderingFS{
+		extClosed:           &extClosed,
+		extClosedAtNestOpen: &extClosedAtNestOpen,
+		nestOpened:          &nestOpened,
+	})
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.True(t, nestOpened.Load(),
+		"nested external entity must be opened while the first entity's content is parsed")
+	require.True(t, extClosedAtNestOpen.Load(),
+		"the first external input must be closed BEFORE its buffered content is parsed")
+}
+
 // countingFS hands out the same byte content on every Open and records how many
 // times Open was called, so a test can prove that repeated references to one
 // external entity read the source only once (the rest hit the cached

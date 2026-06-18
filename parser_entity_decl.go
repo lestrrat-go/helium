@@ -202,8 +202,22 @@ func (pctx *parserCtx) validateEntityValueRefs(ctx context.Context, s []byte) er
 	// charges the counters for real. Snapshot and restore the counters so this
 	// pass is side-effect-free and the same parameter entities are not counted
 	// twice.
+	//
+	// The PE-expansion path also resolves parameter-entity references through
+	// parseStringPEReference, which MUTATES live parser state — it sets
+	// pctx.hasPERefs (and, on an unresolved PE in a non-standalone document,
+	// clears pctx.valid). Those mutations belong to the real parse, not to this
+	// throwaway syntax check: a validation that fails (or even one that succeeds)
+	// must not leave hasPERefs/valid perturbed. Snapshot and restore both so the
+	// whole pass is side-effect-free.
 	savedSize := pctx.sizeentcopy
-	defer func() { pctx.sizeentcopy = savedSize }()
+	savedHasPERefs := pctx.hasPERefs
+	savedValid := pctx.valid
+	defer func() {
+		pctx.sizeentcopy = savedSize
+		pctx.hasPERefs = savedHasPERefs
+		pctx.valid = savedValid
+	}()
 
 	expanded, err := pctx.expandEntityValueForRefCheck(ctx, s, 0)
 	if err != nil {
@@ -531,10 +545,15 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	}
 
 	// The resolved input may hold an OS resource (the default resolver returns a
-	// fileParseInput embedding an open *os.File). Close it when done to avoid
-	// leaking file descriptors.
-	if c, ok := input.(io.Closer); ok {
-		defer func() { _ = c.Close() }()
+	// fileParseInput embedding an open *os.File). Close it as soon as the bounded
+	// read completes — before any size/error handling and before the buffered
+	// content is parsed — so the fd is never held open for the lifetime of the
+	// nested parse. Not deferred: the close must happen at the read boundary, not
+	// at function return.
+	closeInput := func() {
+		if c, ok := input.(io.Closer); ok {
+			_ = c.Close()
+		}
 	}
 
 	// Read through a bounded reader so an unbounded source (e.g. SYSTEM
@@ -542,6 +561,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	// content length exactly at the cap is accepted while anything larger is
 	// detected.
 	content, err := io.ReadAll(io.LimitReader(input, externalEntityMaxBytes+1))
+	closeInput()
 	if err != nil {
 		return nil, pctx.error(ctx, fmt.Errorf("reading external entity: %w", err))
 	}
