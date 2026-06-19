@@ -79,6 +79,18 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) 
 // Bare paths are returned unchanged. "file:" URIs are parsed and percent-decoded
 // into a local path. Any other URI scheme is unsupported and rejected.
 func catalogFilePath(ref string) (string, error) {
+	// A Windows path such as "C:\tmp\catalog.xml", "C:/tmp/catalog.xml", or a
+	// "\\host\share" UNC path must be treated as a local OS path, not as a URI
+	// whose scheme is the drive letter "C". Check this before HasScheme so the
+	// leading "C:" is not mistaken for a scheme.
+	//
+	// filepath.VolumeName only recognizes these forms when running on Windows,
+	// so a portable drive-letter check is needed as well to keep the behavior
+	// consistent (and tested) on the POSIX CI host.
+	if filepath.VolumeName(ref) != "" || hasDriveLetterPrefix(ref) {
+		return ref, nil
+	}
+
 	if !icatalog.HasScheme(ref) {
 		return ref, nil
 	}
@@ -99,7 +111,33 @@ func catalogFilePath(ref string) (string, error) {
 		return "", fmt.Errorf("catalog: non-local file URI host %q in %q", u.Host, ref)
 	}
 
-	return u.Path, nil
+	return fileURIPath(u.Path), nil
+}
+
+// fileURIPath converts the (already percent-decoded) path component of a "file:"
+// URI into a local filesystem path. On POSIX an absolute URI path such as
+// "/abs/x" is returned unchanged. On Windows a URI such as "file:///C:/tmp/x"
+// yields a path of "/C:/tmp/x"; the leading slash before the drive letter is
+// stripped ("C:/tmp/x") and slashes are converted to the OS separator.
+func fileURIPath(p string) string {
+	// Detect a Windows drive-letter path of the form "/C:/...": a leading slash
+	// followed by a single ASCII letter and a colon.
+	if len(p) >= 3 && p[0] == '/' && isASCIILetter(p[1]) && p[2] == ':' {
+		p = p[1:]
+	}
+	return filepath.FromSlash(p)
+}
+
+func isASCIILetter(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// hasDriveLetterPrefix reports whether s begins with a Windows drive-letter
+// prefix such as "C:\" or "C:/". This is checked independently of the host OS
+// so a drive-letter reference is never mistaken for a URI scheme.
+func hasDriveLetterPrefix(s string) bool {
+	return len(s) >= 3 && isASCIILetter(s[0]) && s[1] == ':' &&
+		(s[2] == '\\' || s[2] == '/')
 }
 
 func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
