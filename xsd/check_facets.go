@@ -88,6 +88,7 @@ func (c *compiler) checkFacetConsistency(ctx context.Context) {
 		if c.checkFacetApplicability(ctx, td, fs, line) {
 			c.checkFacetValueAgainstBase(ctx, td, fs, line, component)
 		}
+		c.checkEnumValueAgainstBase(ctx, td, fs, line, component)
 		c.checkFacetMutualExclusion(ctx, fs, line, component)
 		c.checkFacetSameTypeConsistency(ctx, td, fs, line, component)
 		c.checkFacetBaseRestriction(ctx, td, fs, line, component)
@@ -374,6 +375,56 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 		}
 		msg := fmt.Sprintf("The value '%s' of the facet '%s' is not a valid value of the base type '%s'.",
 			*rf.value, rf.name, typeDisplayName(base))
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+}
+
+// checkEnumValueAgainstBase validates that each enumeration facet value is itself
+// a valid instance of the base type's value space. Per XSD §3.16, an enumeration
+// {value} must be datatype-valid against the {base type definition}; an invalid
+// member (e.g. <xs:enumeration value="+NaN"/> on an xs:float base — signed NaN is
+// not in the float/double lexical space) makes the schema in error and must be
+// rejected at COMPILE time rather than silently compiling into an unsatisfiable
+// enumeration that fails at instance-validation time.
+//
+// This is deliberately scoped to ATOMIC restrictions whose base is NOT
+// xs:QName/xs:NOTATION: the QName/NOTATION prefix-binding validity of an
+// enumeration literal is already checked (with libxml2-matching phrasing) by
+// checkEnumQNameAndNotation, and list/union enumeration literals carry
+// member/item-relative value semantics that the existing fixed-value machinery
+// owns — validating those whole literals against the base here would mis-judge
+// them. Keeping the new check narrow avoids regressing valid schemas while still
+// rejecting the invalid atomic enumeration members it targets.
+func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
+	base := td.BaseType
+	if base == nil || len(fs.Enumeration) == 0 {
+		return
+	}
+	if resolveVariety(td) != TypeVarietyAtomic {
+		return
+	}
+	// QName/NOTATION enumeration literals are validated by checkEnumQNameAndNotation;
+	// skip them here to avoid duplicate / differently-phrased diagnostics.
+	if prim := builtinBaseLocal(base); prim == lexicon.TypeQName || prim == lexicon.TypeNotation {
+		return
+	}
+
+	for i, ev := range fs.Enumeration {
+		var enumNS map[string]string
+		if i < len(fs.EnumerationNS) {
+			enumNS = fs.EnumerationNS[i]
+		}
+		// Validate the member against the base type's value space with errors
+		// suppressed; only the pass/fail verdict matters. A non-nil result means the
+		// member is not a valid instance of the base type, so the enumeration facet
+		// is in error.
+		sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
+		if validateValue(ctx, ev, enumNS, base, "", "", 0, sub) == nil {
+			continue
+		}
+		msg := fmt.Sprintf("The value '%s' of the facet 'enumeration' is not a valid value of the base type '%s'.",
+			ev, typeDisplayName(base))
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
 		c.errorCount++
 	}

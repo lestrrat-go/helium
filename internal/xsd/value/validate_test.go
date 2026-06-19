@@ -545,10 +545,9 @@ func TestNormalize(t *testing.T) {
 	}
 }
 
-// TestTimezoneUppercaseZOnly verifies that the timezone designator is the
-// uppercase 'Z' only. XSD permits "Z" but never the lowercase "z"; the latter
-// must fail lexical validation and must NOT compare or canonicalize as equal to
-// the uppercase form.
+// TestIsFloatNaN verifies that only the bare "NaN" lexical form denotes NaN: the
+// sign-prefixed "+NaN"/"-NaN" are not valid XSD xs:float/xs:double lexical forms,
+// and INF and finite values are not NaN.
 func TestIsFloatNaN(t *testing.T) {
 	// Only the bare "NaN" denotes NaN. The sign-prefixed +NaN/-NaN are not valid
 	// XSD lexical forms and must be rejected, so a facet value="+NaN" cannot
@@ -560,6 +559,10 @@ func TestIsFloatNaN(t *testing.T) {
 	require.False(t, value.IsFloatNaN("1.5"), "finite value is not NaN")
 }
 
+// TestTimezoneUppercaseZOnly verifies that the timezone designator is the
+// uppercase 'Z' only. XSD permits "Z" but never the lowercase "z"; the latter
+// must fail lexical validation and must NOT compare or canonicalize as equal to
+// the uppercase form.
 func TestTimezoneUppercaseZOnly(t *testing.T) {
 	t.Parallel()
 
