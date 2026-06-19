@@ -166,15 +166,19 @@ const (
 // IDConstraint represents an xs:unique, xs:key, or xs:keyref identity constraint.
 type IDConstraint struct {
 	Name       string
+	QName      QName             // namespace-qualified constraint name ({targetNamespace}Name)
 	Kind       IDCKind
 	Selector   string            // XPath selector expression
 	Fields     []string          // XPath field expressions
-	Refer      string            // for keyref: the name of the referenced key/unique
+	Refer      string            // for keyref: the lexical refer QName as written
+	ReferQName QName             // for keyref: the resolved {ns}local of the referenced key/unique
 	Namespaces map[string]string // prefix → URI from the schema document (for XPath evaluation)
 	Line       int               // source line of the constraint element (for error reporting)
 
 	SelectorExpr *xpath1.Expression   // pre-compiled selector XPath
 	FieldExprs   []*xpath1.Expression // pre-compiled field XPaths (parallel to Fields)
+
+	referUnbound bool // for keyref: @refer used a prefix not bound in scope (already reported)
 }
 
 // DerivationKind describes how a type is derived from its base.

@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -488,12 +489,23 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	}
 	idc := &IDConstraint{
 		Name:       name,
+		// The name attribute is an NCName; the constraint's identity is the
+		// QName {targetNamespace}name (XSD identity-constraints live in the
+		// schema's target namespace).
+		QName:      QName{Local: name, NS: c.schema.targetNamespace},
 		Kind:       kind,
 		Namespaces: collectNSContext(elem),
 		Line:       elem.Line(),
 	}
 	if kind == IDCKeyRef {
 		idc.Refer = getAttr(elem, attrRefer)
+		// @refer is a QName; resolve it namespace-aware against the constraint
+		// element's in-scope namespaces. An empty refer or an unbound prefix is a
+		// fatal schema error (reported later by checkKeyRefRefers, which also
+		// verifies the referenced constraint exists). Store the resolved QName so
+		// validation can look the target up by full identity rather than by local
+		// name only.
+		idc.ReferQName, idc.referUnbound = c.resolveIDCReferQName(ctx, elem, idc)
 	}
 	// fieldLines tracks the source line of each <field>, parallel to idc.Fields,
 	// so a malformed field XPath is reported against the right element.
@@ -550,6 +562,42 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	}
 
 	return idc
+}
+
+// resolveIDCReferQName resolves an xs:keyref/@refer QName against the constraint
+// element's in-scope namespaces. An unprefixed refer resolves to the in-scope
+// default namespace (falling back to the schema's target namespace), matching how
+// other XSD QName-valued attributes (@type, @ref) are resolved. A prefixed refer
+// whose prefix is not bound in scope is a fatal schema error; the returned bool
+// reports that so checkKeyRefRefers can suppress its own "unknown key" diagnostic.
+func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Element, idc *IDConstraint) (QName, bool) {
+	refer := idc.Refer
+	if refer == "" {
+		// An empty @refer is reported by checkKeyRefRefers.
+		return QName{}, false
+	}
+	if i := strings.IndexByte(refer, ':'); i >= 0 {
+		prefix := refer[:i]
+		local := refer[i+1:]
+		ns := lookupNS(elem, prefix)
+		if ns == "" && prefix != "" {
+			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' whose namespace prefix '%s' is not bound.", idc.Name, refer, prefix)
+			if c.filename != "" {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(
+					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
+					helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+			return QName{}, true
+		}
+		return QName{Local: local, NS: ns}, false
+	}
+	// Unprefixed: use the in-scope default namespace, else the target namespace.
+	ns := c.schema.targetNamespace
+	if defNS := lookupNS(elem, ""); defNS != "" {
+		ns = defNS
+	}
+	return QName{Local: refer, NS: ns}, false
 }
 
 // reportIDCXPathError reports a malformed identity-constraint selector/field

@@ -431,6 +431,24 @@ type validationContext struct {
 	// descending the declared content model, so an IDC field whose type is
 	// contributed by xsi:type is canonicalized in the correct value space.
 	actualElemType map[*helium.Element]*TypeDef
+
+	// idcKeyEntries accumulates the key-sequences of every evaluated key/unique
+	// constraint during the IDC walk, keyed by the constraint's full QName
+	// identity. Entries are APPENDED (not overwritten) so a constraint whose host
+	// element occurs multiple times contributes all of its key-sequences. keyref
+	// resolution consults this AFTER the whole document is walked, so a keyref can
+	// reference a key/unique declared on a DIFFERENT element (XSD places all
+	// identity-constraint names in one symbol space). keyrefPending holds the
+	// pending keyref tables to check against it.
+	idcKeyEntries map[QName][]idcEntry
+	keyrefPending []pendingKeyRef
+}
+
+// pendingKeyRef is an evaluated keyref table awaiting cross-element resolution
+// against the document-level key/unique tables.
+type pendingKeyRef struct {
+	idc   *IDConstraint
+	table *idcTable
 }
 
 func newValidationContext(schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext {
@@ -440,6 +458,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		filename:       filename,
 		errorHandler:   handler,
 		actualElemType: make(map[*helium.Element]*TypeDef),
+		idcKeyEntries:  make(map[QName][]idcEntry),
 	}
 }
 
@@ -577,6 +596,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		}
 		return nil
 	}))
+
+	// Resolve keyref constraints AFTER the whole document is walked, so a keyref
+	// can match a key/unique declared on a different element (cross-element refs
+	// would otherwise hit a nil ref-table and be silently skipped).
+	if err := vc.checkPendingKeyRefs(ctx); err != nil {
+		valid = false
+	}
 
 	return valid
 }

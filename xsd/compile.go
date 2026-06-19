@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"sort"
 	"strconv"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
@@ -348,12 +347,16 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 		return
 	}
 
-	// Build the set of all declared key/unique constraint local names.
-	keyNames := make(map[string]struct{})
+	// Build the set of all declared key/unique constraint QNames. Identity
+	// constraints live in the schema's target namespace, so a keyref may refer to
+	// a key/unique declared on a DIFFERENT element; matching must be by full
+	// {namespace}local identity, not local name only (a local-name match could
+	// bind the wrong constraint when two namespaces share a local name).
+	keyNames := make(map[QName]struct{})
 	for _, edecl := range c.schema.elements {
 		for _, idc := range edecl.IDCs {
 			if idc.Kind == IDCKey || idc.Kind == IDCUnique {
-				keyNames[idc.Name] = struct{}{}
+				keyNames[idc.QName] = struct{}{}
 			}
 		}
 	}
@@ -363,13 +366,11 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 			if idc.Kind != IDCKeyRef {
 				continue
 			}
-			// Resolve a possibly-qualified refer to its local part, matching the
-			// validation-time lookup which compares on local name.
-			referLocal := idc.Refer
-			if i := strings.IndexByte(referLocal, ':'); i >= 0 {
-				referLocal = referLocal[i+1:]
+			// An unbound @refer prefix was already reported as fatal at parse time.
+			if idc.referUnbound {
+				continue
 			}
-			if referLocal == "" {
+			if idc.Refer == "" {
 				msg := fmt.Sprintf("The keyref identity-constraint '%s' has no 'refer' attribute naming a key or unique.", idc.Name)
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(
 					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
@@ -377,7 +378,7 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 				c.errorCount++
 				continue
 			}
-			if _, ok := keyNames[referLocal]; ok {
+			if _, ok := keyNames[idc.ReferQName]; ok {
 				continue
 			}
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' references the unknown key or unique '%s'.", idc.Name, idc.Refer)
