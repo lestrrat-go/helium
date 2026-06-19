@@ -336,10 +336,70 @@ func TestAllGroupRefConstraints(t *testing.T) {
   <xs:element name="root"><xs:complexType><xs:group ref="g" maxOccurs="1"/></xs:complexType></xs:element>
 </xs:schema>`,
 			},
+			// A 0/0 occurrence is a prohibited particle that maps to no particle
+			// at all, so the all-group constraints do not apply. xmllint accepts
+			// these both as a direct content model and nested in another group.
+			{
+				name: "direct ref minOccurs 0 maxOccurs 0",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:group ref="g" minOccurs="0" maxOccurs="0"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "nested ref minOccurs 0 maxOccurs 0",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:group ref="g" minOccurs="0" maxOccurs="0"/>
+    <xs:element name="b" type="xs:string"/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 				require.Empty(t, compileErrors(t, tc.schema))
+			})
+		}
+	})
+
+	// When the maxOccurs lexical value fails to parse, or it is "0" with the
+	// default minOccurs=1, the generic occurrence validator already reports the
+	// lexical / ">= 1" diagnostic. The all-specific "must be 1" message must NOT
+	// also fire — xmllint reports only the generic error in these cases.
+	t.Run("ref occurs error not all-specific", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name       string
+			schema     string
+			wantMsg    string
+			notWantMsg string
+		}{
+			{
+				name:       "maxOccurs lexical invalid",
+				wantMsg:    "Expected is '(xs:nonNegativeInteger | unbounded)'.",
+				notWantMsg: wantDirectMax,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:group ref="g" maxOccurs="abc"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:       "maxOccurs 0 default minOccurs",
+				wantMsg:    "The value must be greater than or equal to 1.",
+				notWantMsg: wantDirectMax,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:group ref="g" maxOccurs="0"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				got := compileErrors(t, tc.schema)
+				require.Contains(t, got, tc.wantMsg)
+				require.NotContains(t, got, tc.notWantMsg)
 			})
 		}
 	})

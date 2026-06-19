@@ -411,6 +411,13 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 		return
 	}
 
+	// A 0/0 occurrence is a prohibited particle that maps to no particle at all,
+	// so the all-group constraints do not apply and the reference is valid
+	// (xmllint accepts it). This applies to both direct and nested references.
+	if placeholder.MinOccurs == 0 && placeholder.MaxOccurs == 0 {
+		return
+	}
+
 	if src.nested {
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, src.local, elemGroup,
 			"A model group definition is referenced, but it contains an 'all' model group, which cannot be contained by model groups."), helium.ErrorLevelFatal))
@@ -425,6 +432,19 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 	}
 	n, parsed := parseNonNegativeOccurs(src.maxOccursRaw, true)
 	if parsed && n == 1 {
+		return
+	}
+	// When the maxOccurs lexical value fails to parse, or it is a finite count
+	// below 1 while minOccurs defaults to (or is explicitly) >= 1, the generic
+	// occurrence validator already reports the lexical / ">= 1" diagnostic.
+	// Emitting the all-specific "must be 1" error here would duplicate it, so
+	// only flag an otherwise-valid occurrence range whose max != 1. An unbounded
+	// maxOccurs is a valid lexical form that the generic validator accepts, so
+	// it must still surface the all-specific error.
+	if !parsed {
+		return
+	}
+	if n != Unbounded && n < 1 && placeholder.MinOccurs >= 1 {
 		return
 	}
 	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, src.local, elemGroup,
