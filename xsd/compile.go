@@ -704,6 +704,13 @@ func lookupNS(elem *helium.Element, prefix string) string {
 		}
 		node = node.Parent()
 	}
+	// The "xml" prefix is predeclared (bound to the XML namespace) and never
+	// needs an explicit xmlns:xml declaration, so it is always in scope. Without
+	// this, a ref="xml:lang" would resolve to no namespace and could spuriously
+	// collide with an unrelated unprefixed "lang" attribute use.
+	if prefix == "xml" {
+		return lexicon.NamespaceXML
+	}
 	return ""
 }
 
