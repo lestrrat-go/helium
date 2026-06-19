@@ -529,7 +529,7 @@ func main() {
 						if gt.InitialTemplateParams == nil {
 							gt.InitialTemplateParams = make(map[string]string)
 						}
-						gt.InitialTemplateParams[p.Name] = p.Select
+						gt.InitialTemplateParams[resolvedName] = p.Select
 					}
 				}
 			}
@@ -570,12 +570,13 @@ func main() {
 			if len(tc.Test.Params) > 0 {
 				gt.Params = make(map[string]string)
 				for _, p := range tc.Test.Params {
-					gt.Params[p.Name] = p.Select
+					name := resolveQNameWithAttrs(p.Name, p.Attrs)
+					gt.Params[name] = p.Select
 					if p.As != "" {
 						if gt.ParamTypes == nil {
 							gt.ParamTypes = make(map[string]string)
 						}
-						gt.ParamTypes[p.Name] = p.As
+						gt.ParamTypes[name] = p.As
 					}
 				}
 			}
@@ -702,8 +703,19 @@ func main() {
 	copied := 0
 	for relPath := range assetFiles {
 		normalizedRelPath := normalizeAssetPath(relPath)
-		srcFull := filepath.Join(sourceDir, resolvedAssetSourcePath(normalizedRelPath))
-		dstFull := filepath.Join(assetsDir, normalizedRelPath)
+		// Reject paths that escape the destination asset tree (absolute or
+		// ".."-escaping). A catalog referencing "../../xslt3/pwn.go" or an
+		// absolute path must not let the generator write outside assetsDir.
+		dstFull, err := containedPath(assetsDir, normalizedRelPath)
+		if err != nil {
+			log.Printf("warning: skipping unsafe asset path %q: %v", relPath, err)
+			continue
+		}
+		srcFull, err := containedPath(sourceDir, resolvedAssetSourcePath(normalizedRelPath))
+		if err != nil {
+			log.Printf("warning: skipping unsafe asset path %q: %v", relPath, err)
+			continue
+		}
 		if err := copyFile(srcFull, dstFull); err != nil {
 			log.Printf("warning: copying %s: %v", relPath, err)
 			continue
@@ -2093,6 +2105,26 @@ func addAssetTree(assetFiles map[string]struct{}, rootDir, relDir string) error 
 func normalizeAssetPath(path string) string {
 	base, _, _ := strings.Cut(path, "#")
 	return base
+}
+
+// containedPath joins root and relPath, rejecting any relPath that is absolute
+// or escapes root via ".." segments. It returns the cleaned absolute path on
+// success. This prevents a malicious or malformed catalog asset reference (e.g.
+// "../../xslt3/pwn.go" or "/etc/passwd") from causing the generator to read or
+// write outside the intended testdata tree.
+func containedPath(root, relPath string) (string, error) {
+	if filepath.IsAbs(relPath) {
+		return "", fmt.Errorf("absolute path not allowed: %q", relPath)
+	}
+	cleaned := filepath.Clean(filepath.Join(root, relPath))
+	rel, err := filepath.Rel(root, cleaned)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes root %q: %q", root, relPath)
+	}
+	return cleaned, nil
 }
 
 func boolAttrTrue(v string) bool {
