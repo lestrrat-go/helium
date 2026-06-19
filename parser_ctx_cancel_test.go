@@ -67,7 +67,7 @@ func (s *cancellingSAX) recorded() []error {
 // TestParseContextCancelledUpFront verifies that a context cancelled before
 // Parse runs aborts immediately with the context error instead of doing work.
 func TestParseContextCancelledUpFront(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	_, err := helium.NewParser().Parse(ctx, []byte(`<?xml version="1.0"?><root><a/></root>`))
@@ -79,7 +79,7 @@ func TestParseContextCancelledUpFront(t *testing.T) {
 // running to completion. Cancellation is triggered deterministically from a SAX
 // handler after a known number of elements have been parsed.
 func TestParseContextCancelledDuringParse(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	handler := &cancellingSAX{TreeBuilder: helium.NewTreeBuilder(), cancel: cancel, cancelAt: 100}
 
 	done := make(chan error, 1)
@@ -101,7 +101,7 @@ func TestParseContextCancelledDuringParse(t *testing.T) {
 // handler is NOT invoked at all: a clean cancellation must not look like a
 // malformed document to the handler.
 func TestParseContextCancelDoesNotFireSAXError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	handler := &cancellingSAX{TreeBuilder: helium.NewTreeBuilder(), cancel: cancel, cancelAt: 100}
 
 	done := make(chan error, 1)
@@ -126,7 +126,7 @@ func TestParseContextCancelDoesNotFireSAXError(t *testing.T) {
 // RecoverOnError(true) enabled, Parse must return the context error AND a nil
 // document, never a partial tree.
 func TestParseContextCancelWithRecoverOnError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	handler := &cancellingSAX{TreeBuilder: helium.NewTreeBuilder(), cancel: cancel, cancelAt: 100}
 
 	done := make(chan struct {
@@ -173,7 +173,7 @@ func malformedRecoverableDoc() []byte {
 // input is malformed so recovery is active and RecoverOnError is enabled so the
 // parser would otherwise keep scanning the long tail to the end of input.
 func TestParseContextCancelDuringRecovery(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	done := make(chan struct {
 		doc *helium.Document

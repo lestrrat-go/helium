@@ -250,16 +250,38 @@ After parsing start tag:
 
 ## Recovery Mode (RecoverOnError)
 
-On error in `parseContent()`:
+On a recoverable parse error in `parseContent()`:
 1. Save error in `recoverErr`
 2. Set `disableSAX=true`
 3. `skipToRecoverPoint()` → advance to next `<`
 4. Continue parsing
 5. Return partial document + saved error
 
+Recovery applies only to genuine parse errors (malformed content). It does NOT
+apply to context cancellation — see Context Cancellation below.
+
+## Context Cancellation (parse abort)
+
+Context cancellation is distinct from recovery and from `StopParser`. When the
+parse context is cancelled or its deadline is exceeded, the parser aborts:
+
+- `context.Canceled` / `context.DeadlineExceeded` BYPASS recovery entirely, even
+  when `RecoverOnError(true)` is set — a cancelled parse is not a recoverable
+  parse error.
+- Parse returns a **nil document** and the **context error** (matchable with
+  `errors.Is(err, context.Canceled)` / `context.DeadlineExceeded`). It never
+  returns a partial tree.
+- The SAX `Error` handler is NOT invoked: a clean cancellation must not look like
+  a malformed document to the handler.
+- The cancellation is observed both in the normal content loop and inside the
+  recovery / `skipToRecoverPoint()` skip path, so an in-progress recovery scan
+  also aborts promptly.
+
 ## Early Termination
 
-`StopParser(ctx)` → set `stopped=true`, `instate=psEOF`. Returns parsed document so far, nil error.
+`StopParser(ctx)` → set `stopped=true`, `instate=psEOF`. Returns the parsed
+document so far and a nil error (partial document, as opposed to context
+cancellation which returns a nil document and the context error).
 
 ## Key Parser Fluent Method Effects
 
