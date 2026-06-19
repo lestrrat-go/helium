@@ -251,7 +251,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		if minPresent && maxPresent && maxOcc != attrValUnbounded {
 			minVal, minOK := parseNonNegativeOccurs(minOcc, false)
 			maxVal, maxOK := parseNonNegativeOccurs(maxOcc, true)
-			if minOK && maxOK && maxVal != Unbounded && !(maxVal < 1 && minVal >= 1) && minVal > maxVal {
+			if minOK && maxOK && maxVal != Unbounded && (maxVal >= 1 || minVal < 1) && minVal > maxVal {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
 					"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
 				c.errorCount++
@@ -329,7 +329,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		if minPresent && maxPresent && maxOcc != attrValUnbounded {
 			minVal, minOK := parseNonNegativeOccurs(minOcc, false)
 			maxVal, maxOK := parseNonNegativeOccurs(maxOcc, true)
-			if minOK && maxOK && maxVal != Unbounded && !(maxVal < 1 && minVal >= 1) && minVal > maxVal {
+			if minOK && maxOK && maxVal != Unbounded && (maxVal >= 1 || minVal < 1) && minVal > maxVal {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
 					"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
 				c.errorCount++
