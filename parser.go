@@ -573,7 +573,18 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 // bytes carry the EBCDIC invariant prefix the reader is buffered into memory and
 // parsed through the same path as [Parse], so an EBCDIC document parses
 // identically via ParseReader/ParseFile as via Parse. All other inputs stream.
-func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) { //nolint:contextcheck
+func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
+	// A generic reader has unknown size: pass -1 so the streaming path keeps
+	// inputSize == 0 and the entity-amplification guard behaves as before.
+	return p.parseReader(ctx, r, -1)
+}
+
+// parseReader parses XML from an io.Reader. srcSize is the known size of the
+// underlying source in bytes, or a negative value when the size is unknown.
+// When a non-negative size is supplied (e.g. by ParseFile, which can stat the
+// file) it seeds parserCtx.inputSize so the entity-amplification guard matches
+// the byte-slice path in Parse, where inputSize is set from the slice length.
+func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -601,6 +612,12 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 	pctx := &parserCtx{baseURI: p.cfg.baseURI}
 	if err := pctx.init(p.cfg, br); err != nil {
 		return nil, err
+	}
+	// init seeds inputSize from rawInput (nil here, so 0). When the caller
+	// knows the source size, set it so the amplification guard isn't tripped
+	// for a large internal entity referenced only once.
+	if srcSize >= 0 {
+		pctx.inputSize = srcSize
 	}
 	defer func() {
 		if err := pctx.release(); err != nil {
@@ -649,7 +666,14 @@ func (p Parser) ParseFile(ctx context.Context, path string) (*Document, error) {
 	}
 	defer f.Close()
 
-	doc, err := p.BaseURI(abs).ParseReader(ctx, f)
+	// Pass the file size so the entity-amplification guard uses the real input
+	// size, matching Parse([]byte). Stat failure falls back to unknown (-1).
+	srcSize := int64(-1)
+	if fi, statErr := f.Stat(); statErr == nil {
+		srcSize = fi.Size()
+	}
+
+	doc, err := p.BaseURI(abs).parseReader(ctx, f, srcSize)
 	if err != nil {
 		return nil, err
 	}
