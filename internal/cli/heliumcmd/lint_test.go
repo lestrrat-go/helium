@@ -518,6 +518,25 @@ func TestSchemaValidation(t *testing.T) {
 	}
 }
 
+func TestSchemaCompileDiagnosticReachesStderr(t *testing.T) {
+	// A duplicate global element is a fatal schema compile error. lint must
+	// compile with an ErrorHandler + Label so the diagnostic detail reaches
+	// stderr instead of being discarded behind a bare summary.
+	dir := t.TempDir()
+	xsdContent := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+	xsdFile := writeFile(t, dir, "dup.xsd", xsdContent)
+	xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>x</root>`)
+
+	_, errOut, code := executeLintFile(t, xmlFile, "--schema", xsdFile, "--noout")
+	require.Equal(t, heliumcmd.ExitSchemaComp, code)
+	require.Contains(t, errOut, "dup.xsd", "diagnostic should name the schema file")
+	require.Contains(t, errOut, "does already exist", "diagnostic detail should reach stderr")
+}
+
 func TestDropDTD(t *testing.T) {
 	dir := t.TempDir()
 	xml := `<?xml version="1.0"?>

@@ -115,9 +115,9 @@ type pendingOutput struct {
 func newPendingOutput(dest string) (*pendingOutput, error) {
 	target := dest
 	if fi, err := os.Lstat(dest); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		resolved, rerr := filepath.EvalSymlinks(dest)
+		resolved, rerr := resolveSymlinkTarget(dest)
 		if rerr != nil {
-			return nil, rerr //nolint:wrapcheck // caller reports raw error
+			return nil, rerr
 		}
 		target = resolved
 	}
@@ -128,6 +128,42 @@ func newPendingOutput(dest string) (*pendingOutput, error) {
 		return nil, err
 	}
 	return &pendingOutput{f: tmp.f, tmp: tmp.name, dest: target}, nil
+}
+
+// maxSymlinkHops bounds how many links resolveSymlinkTarget will follow before
+// declaring a loop. It mirrors the conventional ELOOP limit.
+const maxSymlinkHops = 40
+
+// resolveSymlinkTarget resolves a symlink to the path it ultimately points at,
+// WITHOUT requiring that path to exist. filepath.EvalSymlinks cannot be used
+// here: it stats every component and fails with ENOENT on a link whose target
+// is missing (link.xml -> missing.xml), yet plain os.Create would happily write
+// THROUGH such a link, creating the missing target. We replicate that
+// write-through behavior so the output lands on the resolved target and the
+// link itself is preserved.
+//
+// The chain is followed with os.Readlink: each relative link is resolved
+// against the directory of the link that named it, and a hop cap detects loops
+// (a self- or mutually-referential link never resolves to a real file).
+func resolveSymlinkTarget(path string) (string, error) {
+	current := path
+	for range maxSymlinkHops {
+		dest, err := os.Readlink(current)
+		if err != nil {
+			// Not a symlink (EINVAL) or a broken/missing component (ENOENT):
+			// the last resolved path is the write-through target. The common
+			// case is the final target not existing yet, which is exactly the
+			// path we want os.Create to write to. The Readlink error is
+			// expected end-of-chain, not a failure, so it is intentionally not
+			// propagated.
+			return current, nil //nolint:nilerr // Readlink error marks chain end, not a failure
+		}
+		if !filepath.IsAbs(dest) {
+			dest = filepath.Join(filepath.Dir(current), dest)
+		}
+		current = filepath.Clean(dest)
+	}
+	return "", fmt.Errorf("too many levels of symbolic links resolving %q", path)
 }
 
 // tempFile is a freshly created, exclusively owned temp file.
@@ -164,7 +200,8 @@ func (p *pendingOutput) File() *os.File { return p.f }
 // already matches the os.Create default for a NEW destination, so no chmod is
 // needed in that case. When the destination already EXISTS, os.Create would
 // keep the file's current permissions; we replicate that by chmod-ing the temp
-// to the existing mode before the rename.
+// to the existing mode (permission plus sticky/setuid/setgid bits) before the
+// rename.
 func (p *pendingOutput) Commit() error {
 	if p.done {
 		return nil
@@ -175,7 +212,10 @@ func (p *pendingOutput) Commit() error {
 		return err //nolint:wrapcheck // caller reports raw error
 	}
 	if fi, err := os.Stat(p.dest); err == nil {
-		if cerr := os.Chmod(p.tmp, fi.Mode().Perm()); cerr != nil {
+		// Preserve the permission bits AND the sticky/setuid/setgid bits the
+		// existing destination carries; fi.Mode().Perm() drops the latter.
+		mode := fi.Mode() & (os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky)
+		if cerr := os.Chmod(p.tmp, mode); cerr != nil {
 			_ = os.Remove(p.tmp)
 			return cerr //nolint:wrapcheck // caller reports raw error
 		}

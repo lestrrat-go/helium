@@ -83,6 +83,31 @@ func TestXSDValidateSchemaCompileError(t *testing.T) {
 	require.Equal(t, heliumcmd.ExitSchemaComp, code)
 }
 
+func TestXSDValidateDuplicateGlobalElementDiagnostic(t *testing.T) {
+	// A duplicate global element declaration is a fatal compile error. The CLI
+	// must compile with an ErrorHandler so the diagnostic detail (schema file +
+	// the offending element) reaches stderr, not just a bare "failed to compile
+	// schema" summary.
+	dir := t.TempDir()
+	schemaFile := writeFile(t, dir, "schema.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`)
+	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>ok</root>`)
+
+	var stderr bytes.Buffer
+	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
+	ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+	code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, schemaFile, xmlFile})
+	require.Equal(t, heliumcmd.ExitSchemaComp, code)
+	out := stderr.String()
+	require.Contains(t, out, "schema.xsd", "diagnostic should name the schema file")
+	require.Contains(t, out, "root", "diagnostic should name the duplicate element")
+	require.Contains(t, out, "does already exist", "diagnostic detail should reach stderr")
+}
+
 func TestXSDValidateFileReadError(t *testing.T) {
 	dir := t.TempDir()
 	schemaFile := writeFile(t, dir, "schema.xsd", `<?xml version="1.0"?>

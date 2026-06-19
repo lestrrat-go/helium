@@ -498,7 +498,21 @@ func (c *command) pathDirs(cfg *config) []string {
 }
 
 func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
-	schema, err := xsd.NewCompiler().CompileFile(ctx, cfg.schemaFile)
+	// Compile with a Label and an ErrorHandler so fatal schema diagnostics
+	// (file/line/detail) reach stderr. Without a handler the xsd compiler
+	// discards them and the user sees only the terminal "schema compilation
+	// failed" summary with no clue what went wrong.
+	handler := &compileErrorHandler{w: c.stderr}
+	schema, err := xsd.NewCompiler().
+		Label(cfg.schemaFile).
+		ErrorHandler(handler).
+		CompileFile(ctx, cfg.schemaFile)
+	if err == nil && handler.fatal {
+		// The xsd compiler may still return a (schema, nil) for a schema with
+		// fatal diagnostics; treat any drained fatal diagnostic as a failure so
+		// the CLI never validates against a malformed schema.
+		err = errSchemaCompilation
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to compile schema: %w", c.prog, err)
 	}

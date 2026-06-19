@@ -2,6 +2,7 @@ package heliumcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,28 @@ type writerErrorHandler struct {
 }
 
 func (h *writerErrorHandler) Handle(_ context.Context, err error) {
+	_, _ = fmt.Fprint(h.w, err)
+}
+
+// errSchemaCompilation is the CLI-side sentinel for a schema that produced
+// fatal compilation diagnostics. The xsd compiler may still return a non-nil
+// schema with a nil error in that case (the terminal failure contract lives in
+// the xsd package); the CLI must not validate against such a schema.
+var errSchemaCompilation = errors.New("schema compilation failed")
+
+// compileErrorHandler streams schema compilation diagnostics to an io.Writer
+// (as writerErrorHandler does) and additionally records whether any fatal
+// diagnostic was seen, so the CLI can fail compilation even when the xsd
+// compiler returns a (schema, nil) for a malformed schema.
+type compileErrorHandler struct {
+	w     io.Writer
+	fatal bool
+}
+
+func (h *compileErrorHandler) Handle(_ context.Context, err error) {
+	if l, ok := err.(helium.ErrorLeveler); ok && l.ErrorLevel() == helium.ErrorLevelFatal {
+		h.fatal = true
+	}
 	_, _ = fmt.Fprint(h.w, err)
 }
 
@@ -76,9 +99,19 @@ func (c *xsdValidateCommand) runContext(ctx context.Context, args []string) int 
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	schema, err := xsd.NewCompiler().CompileFile(ctx, cfg.schemaFile)
+	// Compile with a Label and an ErrorHandler so fatal schema diagnostics
+	// (file/line/detail) reach stderr before the summary error, rather than
+	// being discarded.
+	ceh := &compileErrorHandler{w: c.stderr}
+	schema, err := xsd.NewCompiler().
+		Label(cfg.schemaFile).
+		ErrorHandler(ceh).
+		CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
+	}
+	if err == nil && ceh.fatal {
+		err = errSchemaCompilation
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: failed to compile schema: %s\n", c.prog, err)

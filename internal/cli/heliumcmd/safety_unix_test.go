@@ -68,6 +68,54 @@ func TestLintOutputThroughSymlink(t *testing.T) {
 	require.Equal(t, os.FileMode(0o640), rfi.Mode().Perm())
 }
 
+func TestLintOutputThroughDanglingSymlink(t *testing.T) {
+	// --output onto a symlink whose target does NOT exist must write through to
+	// the resolved target path (creating it), exactly as os.Create would.
+	// filepath.EvalSymlinks rejects a dangling link, so the resolver must follow
+	// it with os.Readlink instead.
+	dir := t.TempDir()
+	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>x</root>`)
+
+	missing := filepath.Join(dir, "missing.xml")
+	link := filepath.Join(dir, "link.xml")
+	require.NoError(t, os.Symlink(missing, link))
+
+	_, errOut, code := executeArgs(t, strings.NewReader(""), "lint", "--output", link, xmlFile)
+	require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+
+	// The previously-missing target now exists and holds the output.
+	got, err := os.ReadFile(missing)
+	require.NoError(t, err)
+	require.Contains(t, string(got), "<root>x</root>")
+
+	// link.xml is still a symlink pointing at the resolved target.
+	fi, err := os.Lstat(link)
+	require.NoError(t, err)
+	require.NotZero(t, fi.Mode()&os.ModeSymlink, "link.xml should remain a symlink")
+	dest, err := os.Readlink(link)
+	require.NoError(t, err)
+	require.Equal(t, missing, dest)
+}
+
+func TestLintOutputExistingFileStickyBitPreserved(t *testing.T) {
+	// A pre-existing output file with the sticky bit set must keep it: mode
+	// preservation must include sticky/setuid/setgid, not just the permission
+	// bits.
+	dir := t.TempDir()
+	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>x</root>`)
+	outFile := filepath.Join(dir, "out.xml")
+	require.NoError(t, os.WriteFile(outFile, []byte("old"), 0o640))
+	require.NoError(t, os.Chmod(outFile, 0o640|os.ModeSticky))
+
+	_, errOut, code := executeArgs(t, strings.NewReader(""), "lint", "--output", outFile, xmlFile)
+	require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+
+	fi, err := os.Stat(outFile)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o640), fi.Mode().Perm())
+	require.NotZero(t, fi.Mode()&os.ModeSticky, "sticky bit should be preserved")
+}
+
 func TestLintOutputNewFileModeRespectsUmask(t *testing.T) {
 	// os.CreateTemp makes the temp 0600; a NEW --output destination must end up
 	// with the usual os.Create mode (0666 masked by umask), not 0600.
