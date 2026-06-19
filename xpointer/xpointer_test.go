@@ -308,6 +308,57 @@ func TestBareNameChildSequence(t *testing.T) {
 	})
 }
 
+func TestElementChildIndexBounds(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="r"><child>text</child></root>`))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{"zero index", "element(/0)"},
+		{"negative index", "element(/-1)"},
+		{"zero index mid-sequence", "element(/1/0)"},
+		{"zero index from id", "element(r/0)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// A child-sequence index < 1 is malformed: it must be an error,
+			// not a silent empty result (which would unlink an XInclude node).
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
+			require.Error(t, err, "expr %q must be rejected", tt.expr)
+			require.Nil(t, nodes)
+		})
+	}
+}
+
+func TestShorthandAfterSchemeRejected(t *testing.T) {
+	t.Parallel()
+
+	// Parse with NewParser so xml:id registers in the ID table.
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root><target xml:id="fallback">found</target></root>`))
+	require.NoError(t, err)
+
+	// A bare shorthand appended after a scheme-based part is invalid; it must
+	// not select the "fallback" element. The whole pointer must fail to parse.
+	nodes, err := xpointer.Evaluate(t.Context(), doc, "xpointer(//missing)fallback")
+	require.Error(t, err)
+	require.Nil(t, nodes)
+
+	// Sanity check: the same shorthand on its own still resolves the ID.
+	nodes, err = xpointer.Evaluate(t.Context(), doc, "fallback")
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	require.Equal(t, "target", nodes[0].(*helium.Element).LocalName())
+}
+
 func TestMultiSchemeExpressionsTable(t *testing.T) {
 	t.Parallel()
 

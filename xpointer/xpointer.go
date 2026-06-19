@@ -200,6 +200,20 @@ func parseParts(expr string) ([]xptrPart, error) {
 			return nil, err
 		}
 
+		// A bare shorthand (barename) is only valid as the entire pointer on
+		// its own. Once scheme-based parsing has started, every remaining part
+		// must be a scheme(...) part. A trailing barename appended after a
+		// scheme part is malformed and must not be allowed to select an
+		// unintended node. (A lone trailing ")" left over from an unbalanced
+		// scheme body is not a barename and is tolerated as trailing garbage,
+		// matching libxml2.)
+		if scheme == "" && len(parts) > 0 {
+			if isBareName(body) {
+				return nil, fmt.Errorf("xpointer: bare shorthand %q is not allowed after scheme-based parts", body)
+			}
+			break
+		}
+
 		parts = append(parts, xptrPart{scheme: scheme, body: body})
 
 		// Bare name (no scheme) consumes everything
@@ -213,6 +227,33 @@ func parseParts(expr string) ([]xptrPart, error) {
 		return nil, fmt.Errorf("xpointer: empty expression")
 	}
 	return parts, nil
+}
+
+// isBareName reports whether s is a plausible XPointer shorthand barename
+// (an XML NCName: starts with a letter or '_', followed by NCName chars).
+// It is used to distinguish a real trailing shorthand from leftover garbage
+// such as an unbalanced ')'.
+func isBareName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if i == 0 {
+			if r == '_' || isLetter(r) {
+				continue
+			}
+			return false
+		}
+		if r == '_' || r == '-' || r == '.' || isLetter(r) || (r >= '0' && r <= '9') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isLetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r >= 0x80
 }
 
 // parseScheme parses the first XPointer scheme(body) from expr.
@@ -285,6 +326,12 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 		childIdx, err := strconv.Atoi(part)
 		if err != nil {
 			return nil, fmt.Errorf("xpointer: invalid child index %q in element() scheme", part)
+		}
+		// Child-sequence indexes are 1-based per the XPointer element() scheme.
+		// An index < 1 is malformed; reject it rather than returning an empty
+		// node set (an empty result would silently unlink an XInclude node).
+		if childIdx < 1 {
+			return nil, fmt.Errorf("xpointer: child index %d out of range in element() scheme (must be >= 1)", childIdx)
 		}
 		cur = nthElementChild(cur, childIdx)
 		if cur == nil {
