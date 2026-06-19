@@ -102,11 +102,23 @@ func collectContentModelElements(mg *ModelGroup, byName map[QName][]*ElementDecl
 	if mg == nil {
 		return
 	}
+	// A model group with maxOccurs="0" is a prohibited particle and maps to no
+	// particle at all, so it contributes no element declarations to the
+	// effective content model and must not be collected.
+	if mg.MaxOccurs == 0 {
+		return
+	}
 	if _, seen := visited[mg]; seen {
 		return
 	}
 	visited[mg] = struct{}{}
 	for _, p := range mg.Particles {
+		// A particle with maxOccurs="0" is prohibited (it maps to NO particle),
+		// so it is not part of the effective content model and must not be
+		// collected or recursed into for cos-element-consistent.
+		if p.MaxOccurs == 0 {
+			continue
+		}
 		switch term := p.Term.(type) {
 		case *ElementDecl:
 			byName[term.Name] = append(byName[term.Name], term)

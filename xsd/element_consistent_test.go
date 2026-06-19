@@ -200,6 +200,44 @@ func TestElementConsistent(t *testing.T) {
   </xs:element>
 </xs:schema>`,
 			},
+			{
+				// A prohibited element particle (maxOccurs="0") maps to NO
+				// particle, so it is not part of the effective content model and
+				// cannot conflict with a real same-named particle of a different
+				// type.
+				name: "prohibited element particle of a different type is ignored",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A prohibited group reference (maxOccurs="0") maps to NO
+				// particle, so the element declarations it would otherwise
+				// expand to do not enter the effective content model.
+				name: "prohibited group ref with a different type is ignored",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:int"/>
+        <xs:group ref="g" minOccurs="0" maxOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
