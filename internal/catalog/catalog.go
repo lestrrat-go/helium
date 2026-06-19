@@ -50,8 +50,8 @@ type Entry struct {
 	Prefer  Prefer   // inherited or overridden prefer attribute
 	Catalog *Catalog // for nextCatalog/delegate entries (lazy-loaded)
 
-	once    sync.Once // guards the lazy load of Catalog (concurrency-safe)
-	loadErr error     // sticky load error recorded by the once-guarded load
+	loadMu sync.Mutex // guards the lazy load of Catalog (concurrency-safe)
+	loaded bool       // true once Catalog has been successfully loaded
 }
 
 // Loader loads a catalog from a file path. This interface decouples

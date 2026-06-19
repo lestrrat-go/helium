@@ -420,36 +420,43 @@ func (c *Catalog) resolveNextCatalogsURI(ctx context.Context, st *resolveState, 
 }
 
 // lazyLoad loads the catalog file for a delegate or nextCatalog entry on first
-// access via the Loader and returns the (possibly cached) sub-catalog. The
-// load is guarded by a sync.Once so that concurrent resolutions sharing one
+// access via the Loader and returns the (possibly cached) sub-catalog. The load
+// is guarded by a per-entry mutex so that concurrent resolutions sharing one
 // *Catalog load the referenced catalog at most once and never observe a
-// partially-populated entry. The returned sub-catalog carries no run state —
-// depth and the visited cache live in the caller's resolveState.
+// partially-populated entry. Only SUCCESSFUL loads are cached: an error (a
+// missing loader, a transient/Loader failure, or a load that yields no
+// catalog) is returned without marking the entry loaded, so a later healthy
+// Resolve can retry. The returned sub-catalog carries no run state — depth and
+// the visited cache live in the caller's resolveState.
 func (c *Catalog) lazyLoad(ctx context.Context, e *Entry) (*Catalog, error) {
-	e.once.Do(func() {
-		if e.Catalog != nil {
-			// Pre-populated (e.g. tests, or an inlined sub-catalog).
-			return
-		}
-		if c.Loader == nil {
-			// The referenced catalog needs loading but no loader is configured.
-			e.loadErr = errNoLoader
-			return
-		}
-		cat, err := c.Loader.Load(ctx, e.URL)
-		if err != nil {
-			e.loadErr = err
-			return
-		}
-		e.Catalog = cat
-	})
+	e.loadMu.Lock()
+	defer e.loadMu.Unlock()
 
-	if e.loadErr != nil {
-		return nil, e.loadErr
+	if e.loaded {
+		return e.Catalog, nil
 	}
-	if e.Catalog == nil {
-		// A load that neither errored nor produced a catalog: treat as a miss.
+	if e.Catalog != nil {
+		// Pre-populated (e.g. tests, or an inlined sub-catalog).
+		e.loaded = true
+		return e.Catalog, nil
+	}
+	if c.Loader == nil {
+		// The referenced catalog needs loading but no loader is configured.
 		return nil, errNoLoader
 	}
+
+	cat, err := c.Loader.Load(ctx, e.URL)
+	if err != nil {
+		// Do not cache the failure: a later call may succeed.
+		return nil, err
+	}
+	if cat == nil {
+		// A load that neither errored nor produced a catalog: treat as a miss
+		// and allow a retry.
+		return nil, errNoLoader
+	}
+
+	e.Catalog = cat
+	e.loaded = true
 	return e.Catalog, nil
 }
