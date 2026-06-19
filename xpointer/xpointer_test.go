@@ -359,6 +359,54 @@ func TestShorthandAfterSchemeRejected(t *testing.T) {
 	require.Equal(t, "target", nodes[0].(*helium.Element).LocalName())
 }
 
+func TestTrailingChildSequenceAfterSchemeRejected(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root><target xml:id="fallback">found</target></root>`))
+	require.NoError(t, err)
+
+	// A trailing bare child-sequence appended after a scheme-based part is
+	// malformed: it must be rejected, not silently ignored. Silently ignoring
+	// it would let XInclude unlink the include node instead of reporting the
+	// malformed pointer.
+	for _, expr := range []string{
+		"xpointer(//missing)r/1",
+		"xpointer(//missing)/1",
+	} {
+		nodes, err := xpointer.Evaluate(t.Context(), doc, expr)
+		require.Error(t, err, "expr %q must be rejected", expr)
+		require.Nil(t, nodes, "expr %q", expr)
+	}
+
+	// The tolerated compatibility exception: a lone unbalanced ")" left over
+	// from a scheme body (libxml2 parity / xinclude coalesce.xml golden test).
+	nodes, err := xpointer.Evaluate(t.Context(), doc, "xpointer(//missing))")
+	require.NoError(t, err, "lone trailing ) must remain tolerated")
+	require.Nil(t, nodes)
+}
+
+func TestElementBodyValidatedBeforeLookup(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="r"><child>text</child></root>`))
+	require.NoError(t, err)
+
+	// A malformed element() body must be reported as a syntax error regardless
+	// of whether the leading ID exists. element(0) has an invalid leading token
+	// (a bare "0" is neither an NCName nor an absolute child sequence), and
+	// element(missing/0) has an out-of-range index whose ID does not exist.
+	for _, expr := range []string{
+		"element(0)",
+		"element(missing/0)",
+	} {
+		nodes, err := xpointer.Evaluate(t.Context(), doc, expr)
+		require.Error(t, err, "expr %q must be rejected", expr)
+		require.Nil(t, nodes, "expr %q", expr)
+	}
+}
+
 func TestMultiSchemeExpressionsTable(t *testing.T) {
 	t.Parallel()
 

@@ -200,18 +200,22 @@ func parseParts(expr string) ([]xptrPart, error) {
 			return nil, err
 		}
 
-		// A bare shorthand (barename) is only valid as the entire pointer on
+		// A non-scheme trailing token is only valid as the entire pointer on
 		// its own. Once scheme-based parsing has started, every remaining part
-		// must be a scheme(...) part. A trailing barename appended after a
-		// scheme part is malformed and must not be allowed to select an
-		// unintended node. (A lone trailing ")" left over from an unbalanced
-		// scheme body is not a barename and is tolerated as trailing garbage,
-		// matching libxml2.)
+		// must be a scheme(...) part. Any trailing non-scheme text — a barename
+		// (e.g. "foo") OR a child-sequence (e.g. "/1" or "r/1") — appended after
+		// a scheme part is malformed and must not be silently ignored, since an
+		// ignored-but-malformed pointer would let XInclude unlink the include
+		// node instead of reporting the error.
+		//
+		// The single tolerated exception is a lone unbalanced ")" left over from
+		// a scheme body (e.g. "xpointer(/t1))"), which libxml2 accepts and the
+		// xinclude coalesce.xml golden test relies on.
 		if scheme == "" && len(parts) > 0 {
-			if isBareName(body) {
-				return nil, fmt.Errorf("xpointer: bare shorthand %q is not allowed after scheme-based parts", body)
+			if body == ")" {
+				break
 			}
-			break
+			return nil, fmt.Errorf("xpointer: trailing non-scheme text %q is not allowed after scheme-based parts", body)
 		}
 
 		parts = append(parts, xptrPart{scheme: scheme, body: body})
@@ -229,10 +233,9 @@ func parseParts(expr string) ([]xptrPart, error) {
 	return parts, nil
 }
 
-// isBareName reports whether s is a plausible XPointer shorthand barename
-// (an XML NCName: starts with a letter or '_', followed by NCName chars).
-// It is used to distinguish a real trailing shorthand from leftover garbage
-// such as an unbalanced ')'.
+// isBareName reports whether s is a valid XML NCName: it starts with a letter
+// or '_', followed by NCName characters. It is used to validate the leading
+// shorthand/ID token of an element() body (e.g. the "r" in "r/1").
 func isBareName(s string) bool {
 	if s == "" {
 		return false
@@ -303,23 +306,18 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 
 	parts := strings.Split(body, "/")
 
-	var cur helium.Node = doc
-	startIdx := 0
-
-	if parts[0] == "" {
-		// Starts with "/" — absolute child sequence from document
-		startIdx = 1
-	} else {
-		// Starts with an NCName — look up element by ID first
-		elem := doc.GetElementByID(parts[0])
-		if elem == nil {
-			return nil, nil
-		}
-		cur = elem
-		startIdx = 1
+	// Validate the ENTIRE body syntactically BEFORE any document lookup, so that
+	// a malformed pointer is reported as an error regardless of whether the
+	// initial ID exists. A silent empty result would let XInclude unlink the
+	// include node instead of surfacing the syntax error.
+	//
+	// A non-empty leading token must be a valid NCName (the shorthand ID); an
+	// empty leading token denotes an absolute "/..." child sequence. Every
+	// child-sequence segment after the first must be a 1-based integer index.
+	if parts[0] != "" && !isBareName(parts[0]) {
+		return nil, fmt.Errorf("xpointer: invalid element() id %q (not an NCName)", parts[0])
 	}
-
-	for _, part := range parts[startIdx:] {
+	for _, part := range parts[1:] {
 		if part == "" {
 			continue
 		}
@@ -333,6 +331,24 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 		if childIdx < 1 {
 			return nil, fmt.Errorf("xpointer: child index %d out of range in element() scheme (must be >= 1)", childIdx)
 		}
+	}
+
+	var cur helium.Node = doc
+
+	if parts[0] != "" {
+		// Starts with an NCName — look up element by ID.
+		elem := doc.GetElementByID(parts[0])
+		if elem == nil {
+			return nil, nil
+		}
+		cur = elem
+	}
+
+	for _, part := range parts[1:] {
+		if part == "" {
+			continue
+		}
+		childIdx, _ := strconv.Atoi(part) // already validated above
 		cur = nthElementChild(cur, childIdx)
 		if cur == nil {
 			return nil, nil
