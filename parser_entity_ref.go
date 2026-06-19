@@ -184,6 +184,18 @@ func (pctx *parserCtx) replayEntityNode(ctx context.Context, n Node) error {
 
 	switch v := n.(type) {
 	case *Element:
+		// Replaying a cached entity subtree must honor MaxDepth exactly like
+		// the live parse path (parseElement). Without this, an entity first
+		// expanded at a shallow depth caches its subtree, and a later
+		// reference under a deeper element replays that subtree without any
+		// depth accounting — bypassing the configured limit.
+		pctx.elemDepth++
+		defer func() { pctx.elemDepth-- }()
+
+		if pctx.maxElemDepth > 0 && pctx.elemDepth > pctx.maxElemDepth {
+			return pctx.error(ctx, fmt.Errorf("xml: exceeded max depth"))
+		}
+
 		namespaces := make([]sax.Namespace, 0, len(v.Namespaces()))
 		for _, ns := range v.Namespaces() {
 			namespaces = append(namespaces, ns)
