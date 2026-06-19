@@ -40,6 +40,16 @@ func (s panicOnMaterializeSeq) Materialize() []xpath3.Item {
 	panic("Materialize called: sequence was fully materialized")
 }
 
+// varsSet returns a *xpath3.Variables binding a single name to val. Used to hand
+// an oversized input to a built-in via a variable (under EvalBorrowing) so the
+// input itself bypasses construction/range guards and only the function under
+// test's own bound can fire.
+func varsSet(name string, val xpath3.Sequence) *xpath3.Variables {
+	v := xpath3.NewVariables()
+	v.Set(name, val)
+	return v
+}
+
 // TestHOFMaterializationLimit verifies that higher-order / map / array built-ins
 // that accumulate per-item callback results enforce the configured
 // sequence/node-set size limit instead of materializing unbounded output. The
@@ -51,49 +61,101 @@ func TestHOFMaterializationLimit(t *testing.T) {
 
 	const limit = 1000
 
+	// Cases that must hand an oversized array/map/sequence to the function under
+	// test bind it via a variable so the construction does NOT trip the `1 to N`
+	// range guard or a producing function's bound — only the TARGET function's
+	// accumulation can overflow the limit, so each case truly exercises its named
+	// bound.
+	//
+	// wideSeq builds a plain sequence of n single-integer items (1..n).
+	wideSeq := func(n int) xpath3.Sequence {
+		items := make([]xpath3.Item, n)
+		for i := range items {
+			items[i] = xpath3.SingleInteger(int64(i + 1)).Get(0)
+		}
+		return xpath3.ItemSlice(items)
+	}
+	// wideArray builds an array of n single-integer members (1..n).
+	wideArray := func(n int) xpath3.Sequence {
+		members := make([]xpath3.Sequence, n)
+		for i := range members {
+			members[i] = xpath3.SingleInteger(int64(i + 1))
+		}
+		return xpath3.ItemSlice{xpath3.NewArray(members)}
+	}
+	// wideMaps builds a sequence of n single-entry maps, each {"k": i}. map:find
+	// collects one value per map, so n maps yield n matched values.
+	wideMaps := func(n int) xpath3.Sequence {
+		key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "k"}
+		items := make([]xpath3.Item, n)
+		for i := range items {
+			items[i] = xpath3.NewMap([]xpath3.MapEntry{{Key: key, Value: xpath3.SingleInteger(int64(i + 1))}})
+		}
+		return xpath3.ItemSlice(items)
+	}
+
 	overLimit := []struct {
 		name string
 		expr string
+		vars *xpath3.Variables
 	}{
 		// for-each: 600 inputs, each callback yields 2 items -> 1200 > 1000.
-		{"for-each", `for-each(1 to 600, function($x) { ($x, $x) })`},
+		{name: "for-each", expr: `for-each(1 to 600, function($x) { ($x, $x) })`},
 		// for-each-pair: 600 pairs, each callback yields 2 items -> 1200 > 1000.
-		{"for-each-pair", `for-each-pair(1 to 600, 1 to 600, function($a, $b) { ($a, $b) })`},
+		{name: "for-each-pair", expr: `for-each-pair(1 to 600, 1 to 600, function($a, $b) { ($a, $b) })`},
 		// map:for-each over a 600-entry map, each callback yields 2 items.
-		{"map-for-each", `map:for-each(map:merge(for-each(1 to 600, function($x) { map:entry($x, $x) })), function($k, $v) { ($k, $v) })`},
-		// array:join concatenating array members past the limit.
-		{"array-join", `array:join(for-each(1 to 1100, function($x) { [$x] }))`},
+		{name: "map-for-each", expr: `map:for-each(map:merge(for-each(1 to 600, function($x) { map:entry($x, $x) })), function($k, $v) { ($k, $v) })`},
+		// array:join concatenating two 600-member arrays -> 1200 members > 1000.
+		// Inputs stay within the limit; only array:join's accumulated member list
+		// overflows it.
+		{name: "array-join", expr: `array:join((array { 1 to 600 }, array { 1 to 600 }))`},
 		// array:flat-map producing 2 members per input member.
-		{"array-flat-map", `array:flat-map(array { 1 to 600 }, function($x) { [$x, $x] })`},
-		// array:flatten over a wide array whose flattened size exceeds the limit.
-		{"array-flatten", `array:flatten(array { 1 to 1100 })`},
-		// fn:filter accumulating every (true) item past the limit.
-		{"filter", `filter(1 to 1100, function($x) { true() })`},
-		// map:find collecting matching values past the limit.
-		{"map-find", `map:find(for-each(1 to 1100, function($x) { map:entry("k", $x) }), "k")`},
+		{name: "array-flat-map", expr: `array:flat-map(array { 1 to 600 }, function($x) { [$x, $x] })`},
+		// array:flatten over a wide (variable-bound) array whose flattened size
+		// exceeds the limit. The array is bound as a variable so its construction
+		// does not trip the `1 to N` range guard before array:flatten runs.
+		{name: "array-flatten", expr: `array:flatten($arr)`, vars: varsSet("arr", wideArray(1100))},
+		// fn:filter accumulating every (true) item of a variable-bound wide
+		// sequence past the limit. Binding via a variable keeps the input out of
+		// the `1 to N` range guard so only filter's accumulation overflows.
+		{name: "filter", expr: `filter($seq, function($x) { true() })`, vars: varsSet("seq", wideSeq(1100))},
+		// map:find collecting one matching value per map past the limit. The
+		// maps are bound as a variable so map:find's accumulation, not the input
+		// construction, is what overflows the limit.
+		{name: "map-find", expr: `map:find($maps, "k")`, vars: varsSet("maps", wideMaps(1100))},
 		// fold-left: accumulator grows by 2 items per step -> overflows the limit.
-		{"fold-left", `fold-left(1 to 600, (), function($acc, $x) { ($acc, $x, $x) })`},
+		{name: "fold-left", expr: `fold-left(1 to 600, (), function($acc, $x) { ($acc, $x, $x) })`},
 		// fold-right: same, accumulator grows past the limit.
-		{"fold-right", `fold-right(1 to 600, (), function($x, $acc) { ($x, $x, $acc) })`},
+		{name: "fold-right", expr: `fold-right(1 to 600, (), function($x, $acc) { ($x, $x, $acc) })`},
 		// array:fold-left: accumulator grows by 2 items per member.
-		{"array-fold-left", `array:fold-left(array { 1 to 600 }, (), function($acc, $x) { ($acc, $x, $x) })`},
+		{name: "array-fold-left", expr: `array:fold-left(array { 1 to 600 }, (), function($acc, $x) { ($acc, $x, $x) })`},
 		// array:fold-right: same from the right.
-		{"array-fold-right", `array:fold-right(array { 1 to 600 }, (), function($x, $acc) { ($x, $x, $acc) })`},
-		// array:filter accumulating every (true) member past the limit.
-		{"array-filter", `array:filter(array { 1 to 1100 }, function($x) { true() })`},
-		// array:for-each producing one member per input member past the limit.
-		{"array-for-each", `array:for-each(array { 1 to 1100 }, function($x) { $x })`},
-		// array:for-each-pair producing one member per pair past the limit.
-		{"array-for-each-pair", `array:for-each-pair(array { 1 to 1100 }, array { 1 to 1100 }, function($a, $b) { ($a, $b) })`},
+		{name: "array-fold-right", expr: `array:fold-right(array { 1 to 600 }, (), function($x, $acc) { ($x, $x, $acc) })`},
+		// array:filter accumulating every (true) member of a variable-bound wide
+		// array past the limit. Binding via a variable keeps the input out of the
+		// `1 to N` range guard so only array:filter's accumulation overflows.
+		{name: "array-filter", expr: `array:filter($arr, function($x) { true() })`, vars: varsSet("arr", wideArray(1100))},
+		// array:for-each producing one member per member of a variable-bound wide
+		// array past the limit.
+		{name: "array-for-each", expr: `array:for-each($arr, function($x) { $x })`, vars: varsSet("arr", wideArray(1100))},
+		// array:for-each-pair producing one member per pair of two variable-bound
+		// wide arrays past the limit.
+		{name: "array-for-each-pair", expr: `array:for-each-pair($arr, $arr, function($a, $b) { ($a, $b) })`, vars: varsSet("arr", wideArray(1100))},
 	}
 	for _, tc := range overLimit {
 		t.Run("over/"+tc.name, func(t *testing.T) {
 			t.Parallel()
 			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
 			require.NoError(t, err)
-			_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-				MaxNodesForTesting(limit).
-				Evaluate(t.Context(), compiled, nil)
+			// EvalBorrowing keeps a variable-bound array/map out of the
+			// variable-clone path so the input itself never trips a length bound;
+			// only the function under test's accumulation can overflow.
+			eval := xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				MaxNodesForTesting(limit)
+			if tc.vars != nil {
+				eval = eval.Variables(tc.vars)
+			}
+			_, err = eval.Evaluate(t.Context(), compiled, nil)
 			require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
 		})
 	}
@@ -235,6 +297,101 @@ func TestAppendBoundedSeqHonorsOpLimit(t *testing.T) {
 				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
 					Variables(vars).
 					OpLimit(1000).
+					Evaluate(t.Context(), compiled, nil)
+			})
+			require.ErrorIs(t, evalErr, xpath3.ErrOpLimit)
+		})
+	}
+}
+
+// TestBulkCloneSitesHonorOpLimit proves that the built-ins which clone or
+// materialize a whole sub-sequence in one shot — array:for-each,
+// array:for-each-pair, array:join, array:flat-map, and map:find — charge the
+// sub-sequence length against the op-counter BEFORE the bulk clone/append. A
+// callback result / array member list / matched value that is below maxNodes but
+// whose length exceeds OpLimit must be rejected with ErrOpLimit rather than
+// silently cloned. With NO node-set limit (so only the op-counter can fire) and
+// a low op-limit, each case's single oversized sub-sequence must trip ErrOpLimit.
+func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
+	t.Parallel()
+
+	const opLimit = 1000
+	// A sub-sequence longer than opLimit but small enough to materialize cheaply.
+	const wide = 5000
+
+	wideSeq := func(n int) xpath3.Sequence {
+		items := make([]xpath3.Item, n)
+		for i := range items {
+			items[i] = xpath3.SingleInteger(int64(i + 1)).Get(0)
+		}
+		return xpath3.ItemSlice(items)
+	}
+	wideArrayVal := func(n int) xpath3.Sequence {
+		members := make([]xpath3.Sequence, n)
+		for i := range members {
+			members[i] = xpath3.SingleInteger(int64(i + 1))
+		}
+		return xpath3.ItemSlice{xpath3.NewArray(members)}
+	}
+
+	cases := []struct {
+		name string
+		expr string
+		vars *xpath3.Variables
+	}{
+		// array:for-each callback returns one oversized sequence; NewArray would
+		// clone it. The op-charge on the result length must fire first.
+		{
+			name: "array-for-each",
+			expr: `array:for-each(array { 1 }, function($x) { $wide })`,
+			vars: varsSet("wide", wideSeq(wide)),
+		},
+		// array:for-each-pair, same: a single oversized callback result.
+		{
+			name: "array-for-each-pair",
+			expr: `array:for-each-pair(array { 1 }, array { 1 }, function($a, $b) { $wide })`,
+			vars: varsSet("wide", wideSeq(wide)),
+		},
+		// array:join bulk-appends one array's wide member list.
+		{
+			name: "array-join",
+			expr: `array:join($arr)`,
+			vars: varsSet("arr", wideArrayVal(wide)),
+		},
+		// array:flat-map's callback returns a wide array whose members are
+		// bulk-appended.
+		{
+			name: "array-flat-map",
+			expr: `array:flat-map(array { 1 }, function($x) { $arr })`,
+			vars: varsSet("arr", wideArrayVal(wide)),
+		},
+		// map:find clones a matched value; the op-charge on the value length must
+		// fire before cloneSequence. The value is a panicOnMaterializeSeq stored
+		// via map:entry (which borrows, not clones), so a regression that clones
+		// before charging ops calls Materialize and panics — proving the precharge
+		// runs first. (A plain wide sequence cannot isolate this site because the
+		// surrounding result construction also charges per-item ops.)
+		{
+			name: "map-find",
+			expr: `map:find(map:entry("k", $panic), "k")`,
+			vars: varsSet("panic", panicOnMaterializeSeq{n: wide}),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			var evalErr error
+			// NotPanics guards the map-find case against a regression that clones
+			// the borrowed value before charging ops (which calls Materialize and
+			// panics).
+			require.NotPanics(t, func() {
+				// EvalBorrowing keeps the value out of the variable-clone path, and
+				// no MaxNodesForTesting is set, so only the op-counter can fire.
+				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+					Variables(tc.vars).
+					OpLimit(opLimit).
 					Evaluate(t.Context(), compiled, nil)
 			})
 			require.ErrorIs(t, evalErr, xpath3.ErrOpLimit)

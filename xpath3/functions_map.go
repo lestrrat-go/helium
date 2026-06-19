@@ -308,6 +308,12 @@ func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequen
 				if maxNodes > 0 && valLen > maxNodes-total {
 					return nil, ErrNodeSetLimit
 				}
+				// Charge the value length against the op-counter before cloning
+				// it: a value below maxNodes but above OpLimit must still be
+				// rejected rather than materialized by cloneSequence.
+				if err := fnCountOps(ctx, ec, valLen); err != nil {
+					return nil, err
+				}
 				total += valLen
 				results = append(results, cloneSequence(val))
 			}

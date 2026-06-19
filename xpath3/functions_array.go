@@ -253,6 +253,11 @@ func fnArrayJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 		if maxNodes > 0 && len(allMembers)+len(members) > maxNodes {
 			return nil, ErrNodeSetLimit
 		}
+		// Charge the member count against the op-counter before the bulk append:
+		// a member slice below maxNodes but above OpLimit must still be rejected.
+		if err := fnCountOps(ctx, ec, len(members)); err != nil {
+			return nil, err
+		}
 		allMembers = append(allMembers, members...)
 	}
 	return ItemSlice{NewArray(allMembers)}, nil
@@ -372,13 +377,23 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 		// wide array member list can overshoot the limit before the check.
 		for item := range seqItems(r) {
 			if ra, ok := item.(ArrayItem); ok {
-				for _, member := range ra.members0() {
+				members := ra.members0()
+				// Charge the member count against the op-counter before the bulk
+				// append: a member slice below maxNodes but above OpLimit must
+				// still be rejected.
+				if err := fnCountOps(ctx, ec, len(members)); err != nil {
+					return nil, err
+				}
+				for _, member := range members {
 					if maxNodes > 0 && len(allMembers)+1 > maxNodes {
 						return nil, ErrNodeSetLimit
 					}
 					allMembers = append(allMembers, member)
 				}
 				continue
+			}
+			if err := fnCountOp(ctx, ec); err != nil {
+				return nil, err
 			}
 			if maxNodes > 0 && len(allMembers)+1 > maxNodes {
 				return nil, ErrNodeSetLimit
@@ -515,6 +530,11 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		if maxNodes > 0 && rLen > maxNodes-total {
 			return nil, ErrNodeSetLimit
 		}
+		// Charge the result length against the op-counter before NewArray clones
+		// it: a result below maxNodes but above OpLimit must still be rejected.
+		if err := fnCountOps(ctx, ec, rLen); err != nil {
+			return nil, err
+		}
 		total += rLen
 		results = append(results, r)
 	}
@@ -558,6 +578,11 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 		rLen := seqLen(r)
 		if maxNodes > 0 && rLen > maxNodes-total {
 			return nil, ErrNodeSetLimit
+		}
+		// Charge the result length against the op-counter before NewArray clones
+		// it: a result below maxNodes but above OpLimit must still be rejected.
+		if err := fnCountOps(ctx, ec, rLen); err != nil {
+			return nil, err
 		}
 		total += rLen
 		results = append(results, r)

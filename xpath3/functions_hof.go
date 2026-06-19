@@ -42,6 +42,20 @@ func fnCountOp(ctx context.Context, ec *evalContext) error {
 	return ctx.Err()
 }
 
+// fnCountOps charges n operations against the evaluation's op-counter and
+// honors context cancellation. It is a no-op (other than the cancellation
+// check) when called outside an evaluation. Built-ins that clone or materialize
+// a whole sub-sequence in one shot (array:for-each, array:for-each-pair,
+// array:join, array:flat-map, map:find) call it with the sub-sequence length
+// BEFORE the bulk clone/append so the work is charged against OpLimit — a length
+// below maxNodes but above OpLimit is still rejected with ErrOpLimit.
+func fnCountOps(ctx context.Context, ec *evalContext, n int) error {
+	if ec != nil {
+		return ec.countOps(ctx, n)
+	}
+	return ctx.Err()
+}
+
 func fnForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
 	fi, err := extractFunctionItem(args[1])
