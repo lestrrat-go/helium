@@ -1105,8 +1105,11 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 		}
 		// Bound memory: flush accumulated content as a chunk once it reaches
 		// the configured limit, then keep scanning with a fresh buffer.
+		// Clone the bytes before Reset: bytes.Buffer.Reset reuses the same
+		// backing array, so a SAX handler that retains the slice would see
+		// this chunk overwritten by subsequent content.
 		if content.Len() >= limit {
-			p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
+			p.handleSAXErr(p.sax.CDataBlock(bytes.Clone(content.Bytes())))
 			content.Reset()
 		}
 		// Check for <!-- to enter escaped state
@@ -1298,8 +1301,11 @@ func (p *parser) parsePlaintext(ctx context.Context) {
 			return
 		}
 		// Bound memory: flush the buffer as a chunk once it reaches the limit.
+		// Clone the bytes before Reset: bytes.Buffer.Reset reuses the same
+		// backing array, so a SAX handler that retains the slice would see
+		// this chunk overwritten by subsequent content.
 		if content.Len() >= limit {
-			p.handleSAXErr(p.sax.Characters(content.Bytes()))
+			p.handleSAXErr(p.sax.Characters(bytes.Clone(content.Bytes())))
 			content.Reset()
 		}
 		// A real U+0000 (NUL) byte reads as 0, which the previous PeekAt-based

@@ -245,3 +245,61 @@ func TestCommentChunkingCorruptionRepro(t *testing.T) {
 	require.Len(t, comments, 1)
 	require.Equal(t, "aaaaaaaaaa", string(comments[0]))
 }
+
+// TestRawTextChunkSlicesAreIndependent guards against a buffer-reuse aliasing
+// bug in the chunk flush: the parser flushed content via bytes.Buffer.Bytes()
+// and then called Reset(), which reuses the same backing array. A SAX handler
+// that RETAINS the chunk slice (without copying) would then see earlier chunks
+// overwritten by later content. This handler deliberately does NOT copy the
+// slices, so the concatenation of retained slices must still equal the original
+// content.
+func TestRawTextChunkSlicesAreIndependent(t *testing.T) {
+	const limit = 1 << 10 // 1 KiB cap
+	const total = 10 * limit
+
+	cases := []struct {
+		name  string
+		open  string
+		close string
+	}{
+		{"script", "<script>", "</script>"},
+		{"style", "<style>", "</style>"},
+		{"plaintext", "<plaintext>", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Use a varying body so an aliased (overwritten) earlier chunk
+			// would produce a detectable mismatch, not an accidental match.
+			body := make([]byte, total)
+			for i := range body {
+				body[i] = byte('A' + (i % 26))
+			}
+			input := tc.open + string(body) + tc.close
+
+			// Retain the slices WITHOUT copying them.
+			var chunks [][]byte
+			retain := html.CharactersFunc(func(data []byte) error {
+				chunks = append(chunks, data)
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(retain)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(retain))
+
+			p := html.NewParser().MaxContentSize(limit)
+			err := p.ParseWithSAX(t.Context(), []byte(input), sax)
+			require.NoError(t, err)
+
+			require.Greater(t, len(chunks), 1,
+				"over-cap content must be split into multiple chunks")
+
+			var got []byte
+			for _, c := range chunks {
+				got = append(got, c...)
+			}
+			require.Equal(t, string(body), string(got),
+				"retained chunk slices must not be overwritten by later content")
+		})
+	}
+}
