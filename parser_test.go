@@ -2003,6 +2003,38 @@ func TestMaxDepth(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, doc)
 	})
+
+	t.Run("single level via substituted entity counts parent depth", func(t *testing.T) {
+		t.Parallel()
+
+		// The entity replacement text is a single element, but it is substituted
+		// inside <r>, so the literal document is <r><a/></r> (depth 2). The nested
+		// chunk parse must continue counting from the parent's current element
+		// depth (1) instead of restarting at 0, so MaxDepth(1) must reject it.
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a/>">]><r>&e;</r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(1)
+
+		_, err := p.Parse(t.Context(), input)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("enforced within external substituted entity", func(t *testing.T) {
+		t.Parallel()
+
+		// The external entity replacement text adds element nesting. With the
+		// parent's current element depth carried into the external chunk parse,
+		// MaxDepth(1) must reject the element delivered by the external entity.
+		fsys := fstest.MapFS{
+			"nested.xml": &fstest.MapFile{Data: []byte(`<a/>`)},
+		}
+		input := []byte(`<!DOCTYPE r [<!ENTITY e SYSTEM "nested.xml">]><r>&e;</r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(1).FS(fsys)
+
+		_, err := p.Parse(t.Context(), input)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
 }
 
 func TestParseLenientXMLDecl(t *testing.T) {

@@ -511,6 +511,48 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 	return nil
 }
 
+// inheritNestedParserState copies the security/behavior policy and the running
+// resource-accounting state from a parent parser context onto a freshly
+// initialized nested context used to parse entity replacement text (internal or
+// external). Both the internal balanced-chunk path and the external entity path
+// must seed identical policy so entity replacement text honors the same depth,
+// resource, normalization, and sandbox limits as the top-level parse instead of
+// silently falling back to zero-value defaults (which would, for example, reset
+// element-depth accounting to 0 and let MaxDepth be bypassed via a substituted
+// entity, or default fsys back to the permissive os.Open root).
+//
+// Notably this copies BOTH maxElemDepth (the configured limit) AND the current
+// elemDepth, so element nesting that crosses an entity-expansion boundary keeps
+// accumulating against the same limit rather than restarting at 0.
+//
+// It does NOT touch newctx.doc, newctx.external, or the amplification counters
+// (sizeentcopy/inputSize/maxAmpl); those are handled by the caller because their
+// lifecycle (document swap, external flag, write-back on return) differs between
+// the two paths.
+func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
+	newctx.sax = pctx.sax
+	newctx.treeBuilder = pctx.treeBuilder
+	newctx.attsDefault = pctx.attsDefault
+	newctx.options = pctx.options
+	newctx.loadsubset = pctx.loadsubset
+	newctx.replaceEntities = pctx.replaceEntities
+	newctx.keepBlanks = pctx.keepBlanks
+	newctx.pedantic = pctx.pedantic
+	newctx.charBufferSize = pctx.charBufferSize
+	newctx.maxExtDTDSize = pctx.maxExtDTDSize
+	// Carry both the element-depth limit and the current depth so nesting that
+	// crosses the entity boundary keeps counting toward MaxDepth.
+	newctx.maxElemDepth = pctx.maxElemDepth
+	newctx.elemDepth = pctx.elemDepth
+	// Inherit the parent's security/resolution policy so any external reference
+	// reached while expanding this replacement text honors the same FS sandbox,
+	// catalog, and base URI as the top-level parse rather than falling back to
+	// the permissive os.Open root.
+	newctx.fsys = pctx.fsys
+	newctx.catalog = pctx.catalog
+	newctx.baseURI = pctx.baseURI
+}
+
 func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, externalID string) (Node, error) {
 	if pctx.options.IsSet(parseNoXXE) {
 		return nil, nil //nolint:nilnil
@@ -605,20 +647,12 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 		setLastChild(pctx.doc, lc)
 	}()
 	newctx.doc = pctx.doc
-	newctx.sax = pctx.sax
-	newctx.attsDefault = pctx.attsDefault
-	newctx.options = pctx.options
 	newctx.depth = pctx.depth + 1
 	newctx.external = true
-	newctx.replaceEntities = pctx.replaceEntities
-	newctx.loadsubset = pctx.loadsubset
-	// Inherit the parent's security/resolution policy so nested external
-	// entities are confined to the same FS sandbox, catalog, and base URI as
-	// the top-level parse. Without this the sub-context defaults fsys to the
-	// permissive os.Open root and escapes the caller's configured sandbox.
-	newctx.fsys = pctx.fsys
-	newctx.catalog = pctx.catalog
-	newctx.baseURI = pctx.baseURI
+	// Seed all shared policy/state (security sandbox, normalization, element-depth
+	// limit AND current depth, etc.) from the parent so external entity
+	// replacement text cannot bypass MaxDepth or escape the configured sandbox.
+	pctx.inheritNestedParserState(newctx)
 	// Carry the amplification counters through the nested parse so any entity
 	// expansion performed while parsing this external entity (including further
 	// nested external entities) is charged against the same accumulated budget
@@ -732,20 +766,12 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 		setLastChild(pctx.doc, lc)
 	}()
 	newctx.doc = pctx.doc
-	newctx.sax = pctx.sax
-	newctx.treeBuilder = pctx.treeBuilder
-	newctx.attsDefault = pctx.attsDefault
 	newctx.depth = pctx.depth + 1
-	// Mirror the parent's security/behavior policy so the entity replacement
-	// text honors the same depth, resource, and normalization limits as the
-	// top-level parse instead of falling back to the zero-value defaults.
-	newctx.options = pctx.options
-	newctx.loadsubset = pctx.loadsubset
-	newctx.keepBlanks = pctx.keepBlanks
-	newctx.pedantic = pctx.pedantic
-	newctx.charBufferSize = pctx.charBufferSize
-	newctx.maxElemDepth = pctx.maxElemDepth
-	newctx.maxExtDTDSize = pctx.maxExtDTDSize
+	// Seed all shared policy/state (security sandbox, normalization, element-depth
+	// limit AND current depth, etc.) from the parent so internal-entity
+	// replacement text honors the same limits as the top-level parse instead of
+	// restarting depth accounting at 0 or falling back to zero-value defaults.
+	pctx.inheritNestedParserState(newctx)
 	if pctx.elem != nil {
 		for _, ns := range collectInScopeNamespaces(pctx.elem) {
 			newctx.pushNS(ns.Prefix(), ns.URI())
@@ -754,14 +780,6 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	newctx.sizeentcopy = pctx.sizeentcopy
 	newctx.inputSize = pctx.inputSize
 	newctx.maxAmpl = pctx.maxAmpl
-	// Inherit the parent's security/resolution policy so any external entity
-	// reached while expanding this internal-entity replacement text honors the
-	// same FS sandbox, catalog, and base URI as the top-level parse rather than
-	// falling back to the permissive os.Open root.
-	newctx.fsys = pctx.fsys
-	newctx.catalog = pctx.catalog
-	newctx.baseURI = pctx.baseURI
-	newctx.replaceEntities = pctx.replaceEntities
 	defer func() { pctx.sizeentcopy = newctx.sizeentcopy }()
 
 	newRoot := newctx.doc.CreateElement(pseudoRootName)
