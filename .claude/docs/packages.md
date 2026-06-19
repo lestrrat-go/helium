@@ -312,11 +312,12 @@ Drop-in replacement for encoding/xml backed by helium parser.
 
 Generic channel-based async event sink.
 
-- **New[T](ctx, Handler[T], ...Option) → *Sink[T]**
-- **Sink.Handle(ctx, T)** — async send (blocks if buffer full)
-- **Sink.Close()** — drain and stop
+- **New[T](ctx, Handler[T], ...Option) → *Sink[T]** — nil handler is replaced with a no-op (delivery never panics)
+- **Sink.Handle(ctx, T)** — async send (blocks if buffer full); re-entrant call from within a Handler is best-effort non-blocking
+- **Sink.Close()** — drain and stop; self-close from within a Handler returns immediately (no deadlock)
 - WithBufferSize(n) — default 256; negative values clamped to 0 (unbuffered)
 - Nil-safe: Handle() on nil *Sink is no-op
+- Re-entrancy-safe: a Handler may call Close or Handle on its own Sink without deadlock (worker-goroutine detection)
 - When T=error, satisfies helium.ErrorHandler
 - Files: `sink.go`
 - Imports: none
