@@ -209,6 +209,18 @@ func parseParts(expr string) ([]xptrPart, error) {
 			return nil, err
 		}
 
+		// The XPointer framework defines SchemeName as a QName. A non-empty
+		// scheme name that is not a valid QName is a syntax error, NOT an
+		// unknown scheme: rejecting it here prevents a malformed scheme (e.g.
+		// "1bad(/x)") from being skipped via the unknown-scheme cascade and
+		// letting a later well-formed part succeed, which would bypass the
+		// trailing-text rejection below. A syntactically valid but unsupported
+		// scheme (e.g. "foo(...)") is still a valid QName and continues to
+		// cascade as an unknown scheme during evaluation.
+		if scheme != "" && !xmlchar.IsValidQName(scheme) {
+			return nil, fmt.Errorf("xpointer: invalid scheme name %q (not a QName)", scheme)
+		}
+
 		// A non-scheme trailing token is only valid as the entire pointer on
 		// its own. Once scheme-based parsing has started, every remaining part
 		// must be a scheme(...) part. Any trailing non-scheme text — a barename

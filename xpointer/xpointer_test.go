@@ -419,6 +419,39 @@ func TestTrailingChildSequenceAfterSchemeRejected(t *testing.T) {
 	require.Nil(t, nodes)
 }
 
+func TestInvalidSchemeNameRejected(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root><target xml:id="x">found</target></root>`))
+	require.NoError(t, err)
+
+	// A scheme name is a QName per the XPointer framework. A malformed scheme
+	// name must be a syntax error, NOT an unknown-scheme cascade — otherwise a
+	// later well-formed part (element(/1)) could succeed and silently bypass
+	// the malformed leading part. libxml2 rejects these.
+	for _, expr := range []string{
+		"1bad(/x)",
+		"xpointer(//missing)1bad(/x)element(/1)",
+		"-bad(/x)",
+		"bad name(/x)",
+		":bad(/x)",
+	} {
+		nodes, err := xpointer.Evaluate(t.Context(), doc, expr)
+		require.Error(t, err, "expr %q must be rejected as a syntax error", expr)
+		require.Nil(t, nodes, "expr %q", expr)
+	}
+
+	// A syntactically valid but unsupported scheme name is a QName, so it must
+	// continue to cascade as an unknown scheme rather than abort parsing. Here
+	// the unknown "foo" scheme yields no nodes and the following element() part
+	// resolves the target.
+	nodes, err := xpointer.Evaluate(t.Context(), doc, "foo(/x)element(x)")
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	require.Equal(t, "target", nodes[0].(*helium.Element).LocalName())
+}
+
 func TestElementBodyValidatedBeforeLookup(t *testing.T) {
 	t.Parallel()
 
