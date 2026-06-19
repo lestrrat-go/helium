@@ -2035,6 +2035,35 @@ func TestMaxDepth(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "exceeded max depth")
 	})
+
+	t.Run("cached entity replay under deeper element exceeds limit", func(t *testing.T) {
+		t.Parallel()
+
+		// The first &e; expands as a direct child of <r> (depth 2) and caches
+		// its subtree. The second &e; is referenced inside <x> (depth 2), so its
+		// element reaches depth 3. The cached subtree must still be charged
+		// against MaxDepth on replay, otherwise the deeper reuse is wrongly
+		// accepted.
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a/>">]><r>&e;<x>&e;</x></r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(2)
+
+		_, err := p.Parse(t.Context(), input)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("cached entity replay within limit succeeds", func(t *testing.T) {
+		t.Parallel()
+
+		// Same shape as above, but MaxDepth(3) accommodates the deeper reuse, so
+		// both expansions parse cleanly.
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a/>">]><r>&e;<x>&e;</x></r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(3)
+
+		doc, err := p.Parse(t.Context(), input)
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+	})
 }
 
 func TestParseLenientXMLDecl(t *testing.T) {
