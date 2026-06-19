@@ -447,8 +447,22 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 	if pctx.inputTab.Len() < baseLen {
 		return true, nil
 	}
+	// When we are back at the floor, inspect the floor cursor DIRECTLY rather
+	// than via getCursor(): if the floor content cursor is exhausted,
+	// getCursor() would auto-pop it and return the cursor BELOW the floor (e.g.
+	// the main document cursor for the top-level subset), which is not Done.
+	// The step would then parse post-DOCTYPE DOCUMENT markup as if it were
+	// external-subset markup — dropping a post-DOCTYPE comment/PI from the
+	// document. Stop here instead, the same "don't auto-pop past the floor"
+	// principle the INCLUDE loop already applies.
+	if pctx.inputTab.Len() == baseLen {
+		floor := pctx.adaptCursor(pctx.inputTab.PeekOne())
+		if floor == nil || floor.Done() {
+			return true, nil
+		}
+	}
 	cur := pctx.getCursor()
-	if cur == nil || (pctx.inputTab.Len() == baseLen && cur.Done()) {
+	if cur == nil {
 		return true, nil
 	}
 

@@ -1052,6 +1052,46 @@ func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
 	}
 }
 
+func TestParseExternalDTDTrailingWSPreservesPostDoctypeMisc(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "d.dtd"><!--after--><?pi go?><r/>`
+
+	// The external DTD ends with trailing whitespace AFTER its last declaration.
+	// The shared declaration step's blank-only skip consumes that whitespace and
+	// reaches EOF on the pushed external-DTD (floor) cursor. getCursor() would
+	// then auto-pop the exhausted floor cursor and return the cursor BELOW it —
+	// the MAIN DOCUMENT cursor positioned right after the DOCTYPE — which is not
+	// Done. The step would parse the document's post-DOCTYPE "<!--after-->"
+	// comment and "<?pi go?>" PI as if they were external-subset markup, dropping
+	// them from the parsed document. Inspecting the floor cursor directly (rather
+	// than via getCursor) stops at the floor instead, so the misc nodes survive.
+	const dtd = "<!ELEMENT r EMPTY>\n"
+	fsys := fstest.MapFS{"d.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "external DTD with trailing whitespace must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	var sawComment, sawPI bool
+	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
+		switch n.Type() {
+		case helium.CommentNode:
+			require.Equal(t, "after", string(n.Content()), "post-DOCTYPE comment content must be preserved")
+			sawComment = true
+		case helium.ProcessingInstructionNode:
+			sawPI = true
+		}
+	}
+	require.True(t, sawComment, "post-DOCTYPE comment must not be consumed as external-subset markup")
+	require.True(t, sawPI, "post-DOCTYPE PI must not be consumed as external-subset markup")
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 
