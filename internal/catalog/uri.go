@@ -6,9 +6,13 @@ import (
 	"strings"
 )
 
-// ResolveURI resolves value against base. If value is already absolute
-// (has a scheme) or base is empty, value is returned as-is.
-// For file paths, filepath.Join is used.
+// ResolveURI resolves value against base. If value already has a scheme, or
+// base is empty, value is returned as-is. When base carries a URI scheme (e.g.
+// "file:///..."), the reference is resolved in URI space via
+// (*url.URL).ResolveReference, which handles path-absolute ("/abs/x"),
+// relative ("x"), and absolute-URI references correctly. When base is a
+// non-URI local path, OS-path semantics apply: an absolute value is returned
+// unchanged and a relative value is joined against the base directory.
 func ResolveURI(base, value string) string {
 	if value == "" {
 		return ""
@@ -18,27 +22,32 @@ func ResolveURI(base, value string) string {
 		return value
 	}
 
-	if filepath.IsAbs(value) {
-		return value
-	}
-
 	if base == "" {
 		return value
 	}
 
-	if !HasScheme(base) {
-		return filepath.Join(filepath.Dir(base), value)
+	// When base has a URI scheme, resolve in URI space. A path-absolute
+	// reference such as "/abs/asset.xml" must stay in the base's URI space
+	// ("file:///abs/asset.xml"), not collapse to a bare local path.
+	if HasScheme(base) {
+		baseURL, err := url.Parse(base)
+		if err != nil {
+			return value
+		}
+		ref, err := url.Parse(value)
+		if err != nil {
+			return value
+		}
+		return baseURL.ResolveReference(ref).String()
 	}
 
-	baseURL, err := url.Parse(base)
-	if err != nil {
+	// Non-URI local-path base: apply OS-path semantics. An absolute value is
+	// returned unchanged; a relative one is joined against the base directory.
+	if filepath.IsAbs(value) {
 		return value
 	}
-	ref, err := url.Parse(value)
-	if err != nil {
-		return value
-	}
-	return baseURL.ResolveReference(ref).String()
+
+	return filepath.Join(filepath.Dir(base), value)
 }
 
 // HasScheme checks if s looks like a URI with a scheme (e.g., "http://...").

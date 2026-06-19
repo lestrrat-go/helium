@@ -125,6 +125,31 @@ func TestCatalogFilePathRemoteHostRejected(t *testing.T) {
 	require.Error(t, err)
 }
 
+// catalogFilePath must reject an opaque file: URI such as "file:next.xml"
+// (url.URL.Opaque is set, Path is empty). Such a reference has no local path,
+// so it must error rather than silently fall through to reading the process
+// working directory.
+func TestCatalogFilePathOpaqueRejected(t *testing.T) {
+	tests := []string{
+		"file:next.xml",
+		"file:sub/next.xml",
+	}
+
+	for _, ref := range tests {
+		t.Run(ref, func(t *testing.T) {
+			_, _, err := catalogFilePath(ref)
+			require.Error(t, err)
+		})
+	}
+}
+
+// catalogFilePath must reject a file: URI whose path component is empty, such
+// as "file://localhost" with no path. There is no local path to read.
+func TestCatalogFilePathEmptyPathRejected(t *testing.T) {
+	_, _, err := catalogFilePath("file://localhost")
+	require.Error(t, err)
+}
+
 // catalogFilePath must keep a POSIX "file:///C:/..." path absolute. The
 // drive-letter slash strip is Windows-only; on POSIX "/C:/tmp/..." is a valid
 // absolute path, so this asserts deterministically on the Linux CI host.
