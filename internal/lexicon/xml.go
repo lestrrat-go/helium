@@ -75,6 +75,7 @@ const (
 const (
 	TypeBoolean            = "boolean"
 	TypeString             = "string"
+	TypeNormalizedString   = "normalizedString"
 	TypeInteger            = "integer"
 	TypeDecimal            = "decimal"
 	TypeFloat              = "float"

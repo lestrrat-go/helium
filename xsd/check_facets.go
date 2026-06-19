@@ -128,7 +128,7 @@ var decimalFamilyTypes = map[string]struct{}{
 // a "facet not allowed" message on an anyURI-derived type names xs:anyURI, not
 // xs:string — matching libxml2.
 var stringDerivedTypes = map[string]struct{}{
-	"normalizedString": {}, "token": {}, "language": {},
+	lexicon.TypeNormalizedString: {}, "token": {}, "language": {},
 	"Name": {}, "NCName": {}, "ID": {}, "IDREF": {}, "IDREFS": {},
 	"ENTITY": {}, "ENTITIES": {}, "NMTOKEN": {}, "NMTOKENS": {},
 }
@@ -144,7 +144,7 @@ var stringDerivedTypes = map[string]struct{}{
 // primitive-collapsing in atomicPrimitiveLocal.
 var lengthApplicableTypes = map[string]struct{}{
 	// String and its derivations.
-	lexicon.TypeString: {}, "normalizedString": {}, lexicon.TypeToken: {}, "language": {},
+	lexicon.TypeString: {}, lexicon.TypeNormalizedString: {}, lexicon.TypeToken: {}, "language": {},
 	"Name": {}, "NCName": {}, "ID": {}, lexicon.TypeIDREF: {}, "IDREFS": {},
 	"ENTITY": {}, "ENTITIES": {}, "NMTOKEN": {}, "NMTOKENS": {},
 	// anyURI, QName, NOTATION (own primitives) and the binary types.
