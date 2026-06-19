@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -48,6 +49,17 @@ var (
 	errParserStopped       = errors.New("parser stopped")
 	errNoCursor            = errors.New("parser has no input")
 )
+
+// isParseAbort reports whether err signals that parsing must stop immediately
+// rather than be treated as a recoverable parse error. This covers the
+// internal stop sentinel (helium.StopParser) and context cancellation /
+// deadline expiry. Such errors must never enter recovery, be rewrapped as a
+// parse error, or fire SAX error handlers as if the document were malformed.
+func isParseAbort(err error) bool {
+	return errors.Is(err, errParserStopped) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded)
+}
 
 // DTDDupTokenError is returned when a DTD attribute enumeration contains
 // a duplicate token value.
