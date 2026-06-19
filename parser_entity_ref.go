@@ -555,6 +555,7 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 		return
 	}
 	if cur.ConsumeString("&#x") {
+		var digits int
 		for c := cur.Peek(); !cur.Done() && c != ';'; c = cur.Peek() {
 			if c >= '0' && c <= '9' {
 				val = val*16 + int32(c-'0')
@@ -566,6 +567,7 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 				err = errors.New("invalid hex CharRef")
 				return
 			}
+			digits++
 			// Stop accumulating once the value is out of range so an
 			// oversized reference cannot wrap int32 into a valid-looking rune.
 			if val > unicode.MaxRune {
@@ -576,12 +578,19 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 				return utf8.RuneError, err
 			}
 		}
-		if cur.Peek() == ';' {
-			if err := cur.Advance(1); err != nil {
-				return utf8.RuneError, err
-			}
+		if digits == 0 {
+			err = errors.New("invalid hex CharRef: missing digits")
+			return
+		}
+		if cur.Peek() != ';' {
+			err = ErrSemicolonRequired
+			return
+		}
+		if err := cur.Advance(1); err != nil {
+			return utf8.RuneError, err
 		}
 	} else if cur.ConsumeString("&#") {
+		var digits int
 		for !cur.Done() && cur.Peek() != ';' {
 			c := cur.Peek()
 			if c >= '0' && c <= '9' {
@@ -590,6 +599,7 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 				err = errors.New("invalid decimal CharRef")
 				return
 			}
+			digits++
 			// Stop accumulating once the value is out of range so an
 			// oversized reference cannot wrap int32 into a valid-looking rune.
 			if val > unicode.MaxRune {
@@ -600,10 +610,16 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 				return utf8.RuneError, err
 			}
 		}
-		if cur.Peek() == ';' {
-			if err := cur.Advance(1); err != nil {
-				return utf8.RuneError, err
-			}
+		if digits == 0 {
+			err = errors.New("invalid decimal CharRef: missing digits")
+			return
+		}
+		if cur.Peek() != ';' {
+			err = ErrSemicolonRequired
+			return
+		}
+		if err := cur.Advance(1); err != nil {
+			return utf8.RuneError, err
 		}
 	} else {
 		err = errors.New("invalid char ref")
@@ -661,10 +677,18 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 	err = nil
 
 	if s := pctx.sax; s != nil {
-		var loadedEnt sax.Entity
-		loadedEnt, _ = s.GetEntity(ctx, name)
+		// A non-nil error here is advisory (e.g. "entity not found"): we fall
+		// through to the undeclared-entity handling below, matching libxml2's
+		// getEntity-returns-NULL behavior. Only a non-nil returned entity is
+		// consumed, and it must be a *Entity. A foreign sax.Entity
+		// implementation yields a clear error rather than a forced-cast panic.
+		loadedEnt, _ := s.GetEntity(ctx, name)
 		if loadedEnt != nil {
-			ent = loadedEnt.(*Entity) //nolint:forcetypeassert
+			typed, ok := loadedEnt.(*Entity)
+			if !ok {
+				return nil, pctx.error(ctx, fmt.Errorf("SAX GetEntity returned unsupported entity type %T for entity '%s'", loadedEnt, name))
+			}
+			ent = typed
 			return
 		}
 
