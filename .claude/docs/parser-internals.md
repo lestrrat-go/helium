@@ -205,7 +205,7 @@ Both XML and HTML push parsers use the `push` package (`push.Parser[T]`), which 
 
 **XML PushParser** (`parser.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
-Parser runs in a background goroutine reading from the stream via `ParseReader`. Tokens are processed incrementally as data is pushed — the stream's `Read` blocks until bytes are available, so the parser advances as each chunk arrives.
+Parser runs in a background goroutine reading from the stream via `ParseReader`. Tokens are processed incrementally as data is pushed — the stream's `Read` blocks only while the buffer is empty and the stream is neither closed nor its context cancelled, then returns whatever bytes are currently available (up to `len(p)`), so the parser advances as each chunk arrives without waiting to fill a full read buffer. A context watcher goroutine wakes a blocked `Read` on cancellation (returning the ctx error) and exits when the stream is closed.
 
 **HTML PushParser** (`html/html.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 

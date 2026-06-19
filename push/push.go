@@ -15,19 +15,41 @@ import (
 )
 
 // stream is a thread-safe concurrent buffer. Write appends data and
-// signals waiting readers; Read blocks until enough bytes are available
-// or the stream is closed.
+// signals waiting readers; Read blocks only while the buffer is empty
+// and the stream is neither closed nor its context cancelled, then
+// returns whatever bytes are currently available (up to len(p)). This
+// enables incremental push parsing: a reader is woken as soon as any
+// data arrives instead of stalling until a full len(p) chunk or EOF.
 type stream struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
 	buf    bytes.Buffer
 	closed bool
 	wrErr  error
+	// ctxErr reports the parse context's cancellation error, if any. It is
+	// a closure rather than a stored context.Context to keep the runtime
+	// context out of long-lived struct state.
+	ctxErr  func() error
+	stopped chan struct{}
 }
 
-func newStream() *stream {
-	s := &stream{}
+func newStream(ctx context.Context) *stream {
+	s := &stream{ctxErr: ctx.Err, stopped: make(chan struct{})}
 	s.cond = sync.NewCond(&s.mu)
+	// Watch the context so a blocked Read is woken on cancellation. The
+	// Broadcast happens under the lock so it can never be lost between a
+	// reader's wait-condition check and its cond.Wait(). The watcher also
+	// exits once the stream is closed, so it does not leak when ctx is
+	// never cancelled.
+	go func() {
+		select {
+		case <-ctx.Done():
+			s.mu.Lock()
+			s.cond.Broadcast()
+			s.mu.Unlock()
+		case <-s.stopped:
+		}
+	}()
 	return s
 }
 
@@ -35,8 +57,12 @@ func (s *stream) Read(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for s.buf.Len() < len(p) && !s.closed {
+	for s.buf.Len() == 0 && !s.closed && s.ctxErr() == nil {
 		s.cond.Wait()
+	}
+
+	if err := s.ctxErr(); err != nil {
+		return 0, err
 	}
 
 	if s.buf.Len() == 0 && s.closed {
@@ -66,7 +92,7 @@ func (s *stream) close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.closed = true
+	s.markClosed()
 	s.cond.Broadcast()
 	return nil
 }
@@ -76,8 +102,18 @@ func (s *stream) closeWithWriteError(err error) {
 	defer s.mu.Unlock()
 
 	s.wrErr = err
-	s.closed = true
+	s.markClosed()
 	s.cond.Broadcast()
+}
+
+// markClosed flips the closed flag and stops the context watcher exactly
+// once. Caller must hold s.mu.
+func (s *stream) markClosed() {
+	if s.closed {
+		return
+	}
+	s.closed = true
+	close(s.stopped)
 }
 
 // Source is the interface satisfied by any parser that can parse from
@@ -106,7 +142,7 @@ type result[T any] struct {
 // pushed data to the given [ReaderParser]. The goroutine recovers from
 // panics and delivers the result when [Parser.Close] is called.
 func New[T any](ctx context.Context, p Source[T]) *Parser[T] {
-	s := newStream()
+	s := newStream(ctx)
 	pp := &Parser[T]{
 		s:    s,
 		done: make(chan result[T], 1),
@@ -118,6 +154,14 @@ func New[T any](ctx context.Context, p Source[T]) *Parser[T] {
 				if res.err == nil {
 					res.err = fmt.Errorf("parser panic: %v", r)
 				}
+			}
+			// A cancelled context must surface through Close even if the
+			// underlying parser swallowed the stream's ctx error (some
+			// readers treat any non-nil read error as EOF and return a
+			// partial, error-free result).
+			if res.err == nil && ctx.Err() != nil {
+				var zero T
+				res = result[T]{val: zero, err: ctx.Err()}
 			}
 			s.closeWithWriteError(res.err)
 			pp.done <- res
