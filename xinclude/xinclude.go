@@ -2,9 +2,11 @@ package xinclude
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -24,6 +26,19 @@ const (
 	maxURILength = 2000
 )
 
+// MaxIncludeSize is the default maximum number of bytes read from a single
+// included resource (XML or text) when no cap is configured via
+// [Processor.MaxIncludeSize]. It guards against a hostile or pathological
+// Resolver (e.g. one returning an endless or multi-gigabyte reader) exhausting
+// memory: the bytes of every included resource are read fully and cached.
+const MaxIncludeSize = 10 << 20 // 10 MiB
+
+// ErrIncludeTooLarge is returned when an included resource exceeds the
+// configured maximum size (see [Processor.MaxIncludeSize], default
+// [MaxIncludeSize]). The cap is enforced against the actual number of bytes
+// read, not any reported size.
+var ErrIncludeTooLarge = errors.New("xi:include: included resource exceeds maximum allowed size")
+
 // Resolver loads content from a URI.
 //
 // The processor resolves each xi:include href against the include's
@@ -40,11 +55,12 @@ type Resolver interface {
 
 // processorCfg holds the configuration for a Processor.
 type processorCfg struct {
-	noMarkers    bool
-	noBaseFixup  bool
-	resolver     Resolver
-	baseURI      string
-	errorHandler helium.ErrorHandler
+	noMarkers      bool
+	noBaseFixup    bool
+	resolver       Resolver
+	baseURI        string
+	errorHandler   helium.ErrorHandler
+	maxIncludeSize int
 }
 
 // Processor configures XInclude processing. It is a value-style wrapper:
@@ -147,6 +163,19 @@ func (p Processor) BaseURI(uri string) Processor {
 	return p
 }
 
+// MaxIncludeSize sets the maximum number of bytes read from a single included
+// resource (XML or text). The cap is enforced against the actual number of
+// bytes read, guarding against a hostile or pathological Resolver (e.g. an
+// endless or multi-gigabyte reader) exhausting memory before the bytes are
+// cached. A value less than or equal to zero (the default) means
+// [MaxIncludeSize] (10 MiB) is used. Exceeding the cap fails the include with
+// [ErrIncludeTooLarge].
+func (p Processor) MaxIncludeSize(n int) Processor {
+	p = p.clone()
+	p.cfg.maxIncludeSize = n
+	return p
+}
+
 // ErrorHandler sets a handler for non-fatal warnings such as
 // entity definition mismatches during XInclude entity merging.
 // Errors delivered to the handler have ErrorLevelWarning.
@@ -167,16 +196,17 @@ type txtCacheEntry struct {
 }
 
 type processor struct {
-	noMarkers    bool
-	noBaseFixup  bool
-	resolver     Resolver
-	baseURI      string
-	expanding    map[string]bool          // circular inclusion detection (set during recursive expansion)
-	docCache     map[string]docCacheEntry // cached raw bytes for XML documents
-	txtCache     map[string]txtCacheEntry // cached text inclusions
-	errorHandler helium.ErrorHandler
-	depth        int
-	count        int
+	noMarkers      bool
+	noBaseFixup    bool
+	resolver       Resolver
+	baseURI        string
+	expanding      map[string]bool          // circular inclusion detection (set during recursive expansion)
+	docCache       map[string]docCacheEntry // cached raw bytes for XML documents
+	txtCache       map[string]txtCacheEntry // cached text inclusions
+	errorHandler   helium.ErrorHandler
+	maxIncludeSize int
+	depth          int
+	count          int
 }
 
 // Process performs XInclude processing on the document.
@@ -204,14 +234,15 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		cfg = &processorCfg{}
 	}
 	p := &processor{
-		noMarkers:    cfg.noMarkers,
-		noBaseFixup:  cfg.noBaseFixup,
-		resolver:     cfg.resolver,
-		baseURI:      cfg.baseURI,
-		errorHandler: cfg.errorHandler,
-		expanding:    make(map[string]bool),
-		docCache:     make(map[string]docCacheEntry),
-		txtCache:     make(map[string]txtCacheEntry),
+		noMarkers:      cfg.noMarkers,
+		noBaseFixup:    cfg.noBaseFixup,
+		resolver:       cfg.resolver,
+		baseURI:        cfg.baseURI,
+		errorHandler:   cfg.errorHandler,
+		maxIncludeSize: cfg.maxIncludeSize,
+		expanding:      make(map[string]bool),
+		docCache:       make(map[string]docCacheEntry),
+		txtCache:       make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
 		p.resolver = NewFSResolver(nil)
@@ -618,7 +649,7 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, sub
 	}
 	defer func() { _ = rc.Close() }()
 
-	data, err := io.ReadAll(rc)
+	data, err := p.readCapped(rc)
 	if err != nil {
 		wrapErr := fmt.Errorf("xi:include: error reading %q: %w", uri, err)
 		p.docCache[cacheKey] = docCacheEntry{err: wrapErr}
@@ -645,6 +676,35 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, sub
 // base directory (e.g. open dir/dir/inc.xml instead of dir/inc.xml).
 func (p *processor) resolve(uri, base string) (io.ReadCloser, error) {
 	return p.resolver.Resolve(uri, base) //nolint:wrapcheck // callers wrap with the URI for context
+}
+
+// readCapped reads all bytes from r but no more than the configured include-size
+// cap, returning [ErrIncludeTooLarge] when the resource exceeds it. The cap is
+// enforced against the bytes actually read so a Resolver that returns an
+// endless or oversized reader cannot exhaust memory.
+func (p *processor) readCapped(r io.Reader) ([]byte, error) {
+	limit := p.maxIncludeSize
+	if limit <= 0 {
+		limit = MaxIncludeSize
+	}
+	limit64 := int64(limit)
+
+	// Read one byte past the cap so a resource exactly at the limit succeeds
+	// while anything larger is detected, guarding against overflow when
+	// limit==math.MaxInt on 64-bit platforms (int64(limit)+1 would wrap).
+	readLimit := limit64
+	if readLimit < math.MaxInt64 {
+		readLimit++
+	}
+
+	data, err := io.ReadAll(io.LimitReader(r, readLimit))
+	if int64(len(data)) > limit64 {
+		return nil, ErrIncludeTooLarge
+	}
+	if err != nil {
+		return nil, err //nolint:wrapcheck // caller wraps with the URI for context
+	}
+	return data, nil
 }
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
@@ -735,7 +795,7 @@ func (p *processor) loadText(uri string, base string) ([]byte, error) {
 	}
 	defer func() { _ = rc.Close() }()
 
-	data, err := io.ReadAll(rc)
+	data, err := p.readCapped(rc)
 	if err != nil {
 		wrapErr := fmt.Errorf("xi:include: error reading %q: %w", uri, err)
 		p.txtCache[uri] = txtCacheEntry{err: wrapErr}
@@ -1278,6 +1338,17 @@ func (p *processor) computeFixupBases(inc *helium.Element, sourceURI string) (st
 	return relSource, effectiveBaseURI(inc, relTarget)
 }
 
+// isFileURI reports whether href is an absolute "file:" URI (e.g.
+// "file:///tmp/inc.xml"). Such hrefs must be converted to a local path before
+// being handed to an [fs.FS]; plain OS paths and other schemes are not.
+func isFileURI(href string) bool {
+	u, err := url.Parse(href)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == lexicon.SchemeFile
+}
+
 // fsResolver resolves URIs by reading from an [fs.FS]. The default FS
 // is [iofs.PermissiveRoot] which opens any OS path verbatim; callers
 // handling untrusted input should construct one with a stricter fs.FS
@@ -1334,6 +1405,19 @@ func (r *fsResolver) Resolve(href, _ string) (io.ReadCloser, error) {
 	// directly — base is intentionally ignored. Joining base here would
 	// double-apply the base directory (e.g. dir/dir/inc.xml).
 	//
+	// An absolute "file:" href (e.g. from <xi:include href="file:///tmp/x"/>)
+	// is a URI, not a path; handing it to fs.FS verbatim would clean it to
+	// "file:/tmp/x" and fail. Convert it to a local filesystem path first,
+	// matching the catalog loader (PR #602). Non-local-host file URIs are
+	// rejected by the helper.
+	if isFileURI(href) {
+		p, err := iofs.FileURIToPath(href)
+		if err != nil {
+			return nil, fmt.Errorf("xi:include: %w", err)
+		}
+		return r.fsys.Open(filepath.ToSlash(p)) //nolint:wrapcheck // resolver errors propagate to caller verbatim
+	}
+
 	// Upstream resolution (resolveURI) may emit OS-specific separators via
 	// filepath.Join on Windows, so normalize to slashes for fs.FS, which
 	// requires slash-separated names.
