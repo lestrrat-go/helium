@@ -58,7 +58,12 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 						// A let whose expression cannot be evaluated must
 						// not be silently dropped: a later let or test that
 						// references it would then break in confusing ways.
-						// Surface the error instead of swallowing it.
+						// Treat this as a validation failure and surface the
+						// error rather than swallowing it -- otherwise an
+						// otherwise-passing rule with a broken let would make
+						// Validate report a false "valid" result (and with a
+						// nil handler the error would be invisible).
+						valid = false
 						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
 						continue
 					}
