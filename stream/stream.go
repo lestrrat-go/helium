@@ -450,13 +450,13 @@ func validateXMLChars(kind, s string) error {
 	return nil
 }
 
-// validateDTDFragment validates a DTD declaration body fragment (an element
-// contentspec or an attlist body) that is written verbatim into the internal
-// subset. Beyond rejecting non-XML characters, it forbids the markup-delimiter
-// characters '<' and '>', which can never legitimately appear in an element
-// contentspec or an attlist body. Allowing them would let an untrusted fragment
-// terminate the current declaration and inject a new one (e.g. a content of
-// "ANY><!ENTITY e \"pwn\"" smuggling an extra <!ENTITY declaration).
+// validateDTDFragment validates an element contentspec written verbatim into
+// the internal subset. Beyond rejecting non-XML characters, it forbids the
+// markup-delimiter characters '<' and '>', which can never legitimately appear
+// in an element contentspec (a contentspec has no quoted literals). Allowing
+// them would let an untrusted fragment terminate the current declaration and
+// inject a new one (e.g. a content of "ANY><!ENTITY e \"pwn\"" smuggling an
+// extra <!ENTITY declaration).
 func validateDTDFragment(kind, s string) error {
 	if err := validateXMLChars(kind, s); err != nil {
 		return err
@@ -465,6 +465,39 @@ func validateDTDFragment(kind, s string) error {
 		if r == '<' || r == '>' {
 			return fmt.Errorf("stream: %s content must not contain %q", kind, string(r))
 		}
+	}
+	return nil
+}
+
+// validateDTDAttlistFragment validates an attlist body written verbatim into
+// the internal subset. Like validateDTDFragment it rejects non-XML characters
+// and any '<'. Unlike a contentspec, an attlist body legitimately contains
+// quoted attribute default values (e.g. a CDATA "a>b"), so a '>' inside a
+// single- or double-quoted literal is permitted; a '>' outside any quote is
+// rejected because it would terminate the <!ATTLIST and allow injection of a
+// following declaration. An unterminated literal is treated as outside-quote
+// for the trailing content, so a dangling '>' is still caught.
+func validateDTDAttlistFragment(kind, s string) error {
+	if err := validateXMLChars(kind, s); err != nil {
+		return err
+	}
+	var quote rune // 0 when outside a literal, else the active quote char
+	for _, r := range s {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == '<':
+			return fmt.Errorf("stream: %s content must not contain %q", kind, string(r))
+		case r == '>':
+			return fmt.Errorf("stream: %s content must not contain %q outside a quoted literal", kind, string(r))
+		}
+	}
+	if quote != 0 {
+		return fmt.Errorf("stream: %s content has an unterminated %q literal", kind, string(quote))
 	}
 	return nil
 }
@@ -1408,7 +1441,7 @@ func (w *Writer) WriteDTDAttlist(name, content string) error {
 	if !xmlchar.IsValidQName(name) {
 		return fmt.Errorf("stream: invalid DTD attlist name %q", name)
 	}
-	if err := validateDTDFragment("DTD attlist", content); err != nil {
+	if err := validateDTDAttlistFragment("DTD attlist", content); err != nil {
 		return err
 	}
 	w.ensureDTDInternalSubset()

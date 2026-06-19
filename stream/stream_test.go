@@ -1641,6 +1641,36 @@ func TestDTDFragmentInjectionRejected(t *testing.T) {
 		require.Error(t, w.WriteDTDAttlist("root", `id CDATA #IMPLIED><!ENTITY e "pwn"`))
 		require.NotContains(t, buf.String(), "ENTITY")
 	})
+	t.Run("attlist unquoted greater-than injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDAttlist("root", `x CDATA "v"> <!ENTITY e "pwn"`))
+		require.NotContains(t, buf.String(), "ENTITY")
+	})
+	t.Run("attlist quoted greater-than accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.NoError(t, w.WriteDTDAttlist("root", `a CDATA "a>b"`))
+		require.NoError(t, w.EndDTD())
+		require.Contains(t, buf.String(), `<!ATTLIST root a CDATA "a>b">`)
+	})
+	t.Run("attlist unterminated literal trailing greater-than rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		// The opening quote is never closed; malformed (unterminated)
+		// quoting is rejected, so the trailing '>' cannot smuggle markup.
+		require.Error(t, w.WriteDTDAttlist("root", `a CDATA "unterminated literal >`))
+		require.NotContains(t, buf.String(), "ATTLIST")
+	})
 	t.Run("valid contentspec and attlist still accepted", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
