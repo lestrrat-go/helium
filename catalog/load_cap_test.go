@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,5 +71,19 @@ func TestLoadMaxBytes(t *testing.T) {
 		require.NoError(t, err)
 		got := cat.Resolve(t.Context(), "", "http://example.com/test.dtd")
 		require.NotEqual(t, "", got)
+	})
+
+	t.Run("MaxInt cap does not overflow into a zero read", func(t *testing.T) {
+		t.Parallel()
+		// MaxBytes(math.MaxInt) once made the over-cap probe (limit+1) overflow
+		// to a negative value on 64-bit platforms, so io.LimitReader read zero
+		// bytes and a valid catalog failed to parse. A huge cap must load a
+		// normal catalog successfully.
+		path := writeCatalog(t, minimalCatalogXML)
+
+		cat, err := catalog.NewLoader().MaxBytes(math.MaxInt).Load(t.Context(), path)
+		require.NoError(t, err)
+		got := cat.Resolve(t.Context(), "", "http://example.com/test.dtd")
+		require.NotEqual(t, "", got, "expected the system entry to resolve")
 	})
 }

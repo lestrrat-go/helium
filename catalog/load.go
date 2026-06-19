@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -98,7 +99,8 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler, 
 // cap is maxBytes, or [MaxCatalogSize] when maxBytes is less than or equal to
 // zero. LimitReader allows one extra byte so a file exactly at the cap is
 // accepted while anything larger is detected and rejected with
-// [ErrCatalogTooLarge].
+// [ErrCatalogTooLarge]. The extra byte is suppressed when the cap is already
+// math.MaxInt64 so it cannot overflow into a zero-byte read.
 func readCatalogFile(absPath string, maxBytes int) ([]byte, error) {
 	limit := int64(maxBytes)
 	if limit <= 0 {
@@ -111,7 +113,17 @@ func readCatalogFile(absPath string, maxBytes int) ([]byte, error) {
 	}
 	defer f.Close()
 
-	data, err := io.ReadAll(io.LimitReader(f, limit+1))
+	// Read one byte past the cap so a file that is exactly at the cap is
+	// accepted while anything larger is detected, but guard against overflow:
+	// limit+1 wraps to a negative value for limit==math.MaxInt on 64-bit
+	// platforms, which would make io.LimitReader read zero bytes and silently
+	// reject a valid catalog.
+	readLimit := limit
+	if readLimit < math.MaxInt64 {
+		readLimit++
+	}
+
+	data, err := io.ReadAll(io.LimitReader(f, readLimit))
 	if err != nil {
 		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
 	}
