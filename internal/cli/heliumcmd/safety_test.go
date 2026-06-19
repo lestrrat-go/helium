@@ -112,7 +112,7 @@ func TestLintMaxInputBytesExceeded(t *testing.T) {
 	dir := t.TempDir()
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>aaaaaaaaaa</root>`)
 
-	_, errOut, code := executeArgs(t, strings.NewReader(""), "lint", "--max-input-bytes", "10", xmlFile)
+	_, errOut, code := executeArgs(t, strings.NewReader(""), "lint", flagMaxInput, "10", xmlFile)
 	require.Equal(t, heliumcmd.ExitReadFile, code)
 	require.Contains(t, errOut, "exceeds maximum size")
 }
@@ -122,7 +122,7 @@ func TestLintMaxInputBytesStdinExceeded(t *testing.T) {
 	var outBuf, errBuf bytes.Buffer
 	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(big), &outBuf, &errBuf)
 	ctx = heliumcmd.WithStdinTTY(ctx, false)
-	code := heliumcmd.Execute(ctx, []string{"lint", "--max-input-bytes", "50"})
+	code := heliumcmd.Execute(ctx, []string{"lint", flagMaxInput, "50"})
 	require.Equal(t, heliumcmd.ExitReadFile, code)
 	require.Contains(t, errBuf.String(), "exceeds maximum size")
 }
@@ -131,7 +131,7 @@ func TestLintMaxInputBytesUnlimited(t *testing.T) {
 	dir := t.TempDir()
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>x</root>`)
 
-	_, _, code := executeArgs(t, strings.NewReader(""), "lint", "--max-input-bytes", "0", xmlFile)
+	_, _, code := executeArgs(t, strings.NewReader(""), "lint", flagMaxInput, "0", xmlFile)
 	require.Equal(t, heliumcmd.ExitOK, code)
 }
 
@@ -148,7 +148,7 @@ func TestXPathMaxInputBytesExceeded(t *testing.T) {
 	dir := t.TempDir()
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root><book/></root>`)
 
-	_, errOut, code := executeArgs(t, strings.NewReader(""), "xpath", "--max-input-bytes", "10", "count(//book)", xmlFile)
+	_, errOut, code := executeArgs(t, strings.NewReader(""), "xpath", flagMaxInput, "10", "count(//book)", xmlFile)
 	require.Equal(t, heliumcmd.ExitReadFile, code)
 	require.Contains(t, errOut, "exceeds maximum size")
 }

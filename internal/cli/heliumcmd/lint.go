@@ -398,7 +398,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 				return nil, nil
 			}
 			cfg.repeat = n
-		case "--max-input-bytes":
+		case flagMaxInputBytes:
 			i++
 			if i >= len(args) {
 				_, _ = fmt.Fprintf(c.stderr, "%s: --max-input-bytes requires an argument\n", c.prog)

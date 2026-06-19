@@ -135,8 +135,9 @@ Primary file: `internal/cli/heliumcmd/xpath.go`
 
 Primary file: `internal/cli/heliumcmd/xsd_validate.go`
 
-- Usage: `helium xsd validate [--timing] SCHEMA [XMLfiles ...]`
+- Usage: `helium xsd validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
+- `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
 - Schema compiled once with `xsd.NewCompiler().Label(schema).ErrorHandler(...).CompileFile(ctx, schema)`; a `compileErrorHandler` streams compilation diagnostics (file/line/detail) to stderr and records whether any FATAL diagnostic was seen
 - The xsd compiler may return a non-nil schema with a nil error for a malformed schema; the CLI folds that into a failure (`errSchemaCompilation`) when the handler saw a fatal diagnostic, so it never validates against a bad schema. Compilation failure → `ExitSchemaComp`
 - Each XML input parsed with `helium.NewParser()` (file inputs get `.BaseURI(name)`) + validated with `xsd.NewValidator(schema).ErrorHandler(...).Validate(ctx, doc)`, diagnostics streamed to stderr via a `writerErrorHandler`
@@ -145,8 +146,9 @@ Primary file: `internal/cli/heliumcmd/xsd_validate.go`
 
 Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 
-- Usage: `helium relaxng validate [--timing] SCHEMA [XMLfiles ...]`
+- Usage: `helium relaxng validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
+- `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
 - Grammar compiled once with `relaxng.NewCompiler().CompileFile()`
 - Each XML input parsed with `helium.NewParser()` + validated with `relaxng.NewValidator(grammar).Validate()`
 
@@ -154,8 +156,9 @@ Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 
 Primary file: `internal/cli/heliumcmd/schematron_validate.go`
 
-- Usage: `helium schematron validate [--timing] SCHEMA [XMLfiles ...]`
+- Usage: `helium schematron validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
+- `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
 - Schema compiled once with `schematron.NewCompiler().Label(path).CompileFile(ctx, path)`
 - Each XML input parsed with `helium.NewParser()` + validated with `schematron.NewValidator(schema).Label(name).Validate(ctx, doc)`
 - Validation passes `.Label(input.name)` so error output names the current XML source

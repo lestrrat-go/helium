@@ -99,7 +99,7 @@ func (c *xpathCommand) parseArgs(args []string) (*xpathConfig, []string) {
 				return nil, nil
 			}
 			cfg.engine = args[i] //nolint:gosec // bounds checked above
-		case "--max-input-bytes":
+		case flagMaxInputBytes:
 			i++
 			if i >= len(args) {
 				_, _ = fmt.Fprintf(c.stderr, "%s: --max-input-bytes requires an argument\n", c.prog)

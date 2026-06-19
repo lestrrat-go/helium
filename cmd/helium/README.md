@@ -46,29 +46,32 @@ Applies an XSLT 3.0 stylesheet to one or more XML documents.
 ## `helium relaxng validate`
 
 ```text
-helium relaxng validate [--timing] SCHEMA [XMLfiles ...]
+helium relaxng validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]
 ```
 
 Compiles a RELAX NG schema once, then validates each input XML document
-against it.
+against it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
+`0` = unlimited).
 
 ## `helium schematron validate`
 
 ```text
-helium schematron validate [--timing] SCHEMA [XMLfiles ...]
+helium schematron validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]
 ```
 
 Compiles a Schematron schema once, then validates each input XML document
-against it.
+against it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
+`0` = unlimited).
 
 ## `helium xsd validate`
 
 ```text
-helium xsd validate [--timing] SCHEMA [XMLfiles ...]
+helium xsd validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]
 ```
 
 Compiles an XML Schema once, then validates each input XML document against
-it.
+it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
+`0` = unlimited).
 
 ## Common XSLT Flags
 

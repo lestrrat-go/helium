@@ -326,7 +326,7 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 			}
 			cfg.params = append(cfg.params, xsltParam{name: args[i+1], value: args[i+2], isExpr: false})
 			i += 2
-		case "--max-input-bytes":
+		case flagMaxInputBytes:
 			i++
 			if i >= len(args) {
 				_, _ = fmt.Fprintf(c.stderr, "%s: --max-input-bytes requires an argument\n", c.prog)

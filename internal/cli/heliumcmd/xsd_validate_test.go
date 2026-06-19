@@ -153,6 +153,44 @@ func TestXSDValidateMultipleFiles(t *testing.T) {
 	require.Equal(t, heliumcmd.ExitValidation, code)
 }
 
+func TestXSDValidateMaxInputBytes(t *testing.T) {
+	dir := t.TempDir()
+	schemaFile := writeFile(t, dir, "schema.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`)
+	xml := `<?xml version="1.0"?><root>ok</root>`
+
+	t.Run("file over cap rejected", func(t *testing.T) {
+		xmlFile := writeFile(t, dir, "over.xml", xml)
+		var stderr bytes.Buffer
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, flagMaxInput, "5", schemaFile, xmlFile})
+		require.Equal(t, heliumcmd.ExitReadFile, code)
+		require.Contains(t, stderr.String(), "exceeds maximum size")
+	})
+
+	t.Run("stdin over cap rejected", func(t *testing.T) {
+		var stderr bytes.Buffer
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(xml), io.Discard, &stderr)
+
+		code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, flagMaxInput, "5", schemaFile})
+		require.Equal(t, heliumcmd.ExitReadFile, code)
+		require.Contains(t, stderr.String(), "exceeds maximum size")
+	})
+
+	t.Run("within cap ok", func(t *testing.T) {
+		xmlFile := writeFile(t, dir, "within.xml", xml)
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdXSD, cmdValidate, flagMaxInput, "100000", schemaFile, xmlFile})
+		require.Equal(t, heliumcmd.ExitOK, code)
+	})
+}
+
 func TestXSDValidateStdIn(t *testing.T) {
 	dir := t.TempDir()
 	schemaFile := writeFile(t, dir, "schema.xsd", `<?xml version="1.0"?>
