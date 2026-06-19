@@ -607,6 +607,39 @@ func TestCatalogLoading(t *testing.T) {
 	require.Equal(t, heliumcmd.ExitOK, code)
 }
 
+// TestCatalogChainSecondFile exercises XML_CATALOG_FILES holding multiple
+// space-separated catalogs where only the second one carries the mapping.
+// Resolution must consult every listed catalog in order, not just the first.
+func TestCatalogChainSecondFile(t *testing.T) {
+	dir := t.TempDir()
+
+	dtdContent := `<!ATTLIST doc status CDATA "active">`
+	writeFile(t, dir, "test.dtd", dtdContent)
+
+	emptyCat := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+</catalog>`
+	emptyFile := writeFile(t, dir, "empty.xml", emptyCat)
+
+	usefulCat := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <system systemId="http://example.com/test.dtd" uri="` + filepath.Join(dir, "test.dtd") + `"/>
+</catalog>`
+	usefulFile := writeFile(t, dir, "useful.xml", usefulCat)
+
+	xmlContent := `<?xml version="1.0"?>
+<!DOCTYPE doc SYSTEM "http://example.com/test.dtd">
+<doc>hello</doc>`
+	xmlFile := writeFile(t, dir, "test.xml", xmlContent)
+
+	t.Setenv("XML_CATALOG_FILES", emptyFile+" "+usefulFile)
+
+	out, _, code := executeLintFile(t, xmlFile, "--catalogs", "--loaddtd", "--dtdattr")
+	require.Equal(t, heliumcmd.ExitOK, code)
+	// The ATTLIST default from the resolved DTD must materialize.
+	require.Contains(t, out, `status="active"`)
+}
+
 func TestFormatNestedElements(t *testing.T) {
 	out, _, code := executeLintStdin(t, `<a><b><c><d/></c></b></a>`, "--format")
 	require.Equal(t, 0, code)
