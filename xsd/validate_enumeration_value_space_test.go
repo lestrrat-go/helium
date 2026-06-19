@@ -21,6 +21,11 @@ func TestEnumerationValueSpace(t *testing.T) {
 		enum       []string
 		instance   string
 		wantReject bool
+		// wantRejectMsg is the substring expected in the validation error when
+		// wantReject is set. It defaults to the enumeration-facet message; cases
+		// that are rejected at the lexical-type level (e.g. an out-of-space
+		// lexical form) override it with the atomic-type message.
+		wantRejectMsg string
 	}
 
 	cases := []testCase{
@@ -42,12 +47,13 @@ func TestEnumerationValueSpace(t *testing.T) {
 		{name: "double exponent form", baseType: xsDoubleType, enum: []string{"1.5"}, instance: "1.5E0"},
 		{name: "double non-member", baseType: xsDoubleType, enum: []string{"1.5"}, instance: "2.5", wantReject: true},
 
-		// float NaN — per XSD, NaN equals NaN for enumeration purposes; signed
-		// lexical forms (accepted by the float validator) must match too.
+		// float NaN — per XSD, NaN equals NaN for enumeration purposes. The only
+		// valid lexical form is bare "NaN": signed forms "+NaN"/"-NaN" are not in
+		// the xs:float/xs:double lexical space, so they must be rejected outright.
 		{name: "float NaN matches NaN", baseType: xsFloatType, enum: []string{nanLexical}, instance: nanLexical},
 		{name: "double NaN matches NaN", baseType: xsDoubleType, enum: []string{nanLexical}, instance: nanLexical},
-		{name: "float signed NaN matches NaN", baseType: xsFloatType, enum: []string{nanLexical}, instance: "+NaN"},
-		{name: "double signed NaN matches NaN", baseType: xsDoubleType, enum: []string{nanLexical}, instance: "-NaN"},
+		{name: "float signed NaN rejected", baseType: xsFloatType, enum: []string{nanLexical}, instance: "+NaN", wantReject: true, wantRejectMsg: "is not a valid value of the atomic type 'xs:float'"},
+		{name: "double signed NaN rejected", baseType: xsDoubleType, enum: []string{nanLexical}, instance: "-NaN", wantReject: true, wantRejectMsg: "is not a valid value of the atomic type 'xs:double'"},
 
 		// hexBinary — value space is the decoded octets, so case differences are
 		// not significant ("0A" == "0a"); a different byte must be rejected.
@@ -122,7 +128,11 @@ func TestEnumerationValueSpace(t *testing.T) {
 
 			if tc.wantReject {
 				require.Error(t, err)
-				require.Contains(t, errs, "[facet 'enumeration']")
+				wantMsg := tc.wantRejectMsg
+				if wantMsg == "" {
+					wantMsg = "[facet 'enumeration']"
+				}
+				require.Contains(t, errs, wantMsg)
 				return
 			}
 			require.NoError(t, err, "validation errors: %s", errs)

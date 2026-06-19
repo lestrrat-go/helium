@@ -47,12 +47,14 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		{
 			typeName: lexicon.TypeFloat,
 			valid:    []string{lexicon.XSLTVersion10, "-1.5", "+3.14", "1", ".5", "1.", "1e10", "1.5E-3", lexicon.FloatINF, lexicon.FloatNegINF, "+INF", lexicon.FloatNaN},
-			invalid:  []string{"", testAbc, "1.2.3", "inf", "nan", "Inf"},
+			// The optional sign applies to INF and the numeric forms but NOT to NaN:
+			// "+NaN"/"-NaN" are not valid xs:float lexical forms.
+			invalid: []string{"", testAbc, "1.2.3", "inf", "nan", "Inf", "+NaN", "-NaN"},
 		},
 		{
 			typeName: lexicon.TypeDouble,
-			valid:    []string{lexicon.XSLTVersion10, "-1.5", "1e10", lexicon.FloatINF, lexicon.FloatNegINF, lexicon.FloatNaN},
-			invalid:  []string{"", testAbc, "inf", "nan"},
+			valid:    []string{lexicon.XSLTVersion10, "-1.5", "1e10", "+INF", lexicon.FloatINF, lexicon.FloatNegINF, lexicon.FloatNaN},
+			invalid:  []string{"", testAbc, "inf", "nan", "+NaN", "-NaN"},
 		},
 		{
 			typeName: lexicon.TypeDateTime,
