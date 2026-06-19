@@ -119,6 +119,7 @@ func fnFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	callArgs := make([]Sequence, 2)
 	for item := range seqItems(seq) {
 		if err := fnCountOp(ctx, ec); err != nil {
@@ -129,6 +130,11 @@ func fnFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 		acc, err = fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
+		}
+		// The accumulator can grow without bound across iterations; reject once
+		// it would exceed the configured sequence/node-set limit.
+		if maxNodes > 0 && seqLen(acc) > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 	}
 	return acc, nil
@@ -142,6 +148,7 @@ func fnFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	items := seqMaterialize(seq)
 	callArgs := make([]Sequence, 2)
 	for _, v := range slices.Backward(items) {
@@ -153,6 +160,11 @@ func fnFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 		acc, err = fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
+		}
+		// The accumulator can grow without bound across iterations; reject once
+		// it would exceed the configured sequence/node-set limit.
+		if maxNodes > 0 && seqLen(acc) > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 	}
 	return acc, nil

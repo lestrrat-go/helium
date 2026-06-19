@@ -247,10 +247,13 @@ func fnArrayJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 		if !ok {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array:join requires sequence of arrays"}
 		}
-		allMembers = append(allMembers, a.members0()...)
-		if maxNodes > 0 && len(allMembers) > maxNodes {
+		members := a.members0()
+		// Check before the bulk append so the accumulator cannot overshoot the
+		// limit by a whole member slice.
+		if maxNodes > 0 && len(allMembers)+len(members) > maxNodes {
 			return nil, ErrNodeSetLimit
 		}
+		allMembers = append(allMembers, members...)
 	}
 	return ItemSlice{NewArray(allMembers)}, nil
 }
@@ -325,16 +328,22 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Each result should be an array; collect members
+		// Each result should be an array; collect members. Check before each
+		// bulk append so the accumulator cannot overshoot the limit by a whole
+		// member slice.
 		for item := range seqItems(r) {
 			if ra, ok := item.(ArrayItem); ok {
-				allMembers = append(allMembers, ra.members0()...)
-			} else {
-				allMembers = append(allMembers, ItemSlice{item})
+				members := ra.members0()
+				if maxNodes > 0 && len(allMembers)+len(members) > maxNodes {
+					return nil, ErrNodeSetLimit
+				}
+				allMembers = append(allMembers, members...)
+				continue
 			}
-		}
-		if maxNodes > 0 && len(allMembers) > maxNodes {
-			return nil, ErrNodeSetLimit
+			if maxNodes > 0 && len(allMembers)+1 > maxNodes {
+				return nil, ErrNodeSetLimit
+			}
+			allMembers = append(allMembers, ItemSlice{item})
 		}
 	}
 	return ItemSlice{NewArray(allMembers)}, nil
@@ -350,6 +359,7 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result []Sequence
 	for _, m := range a.members0() {
 		if err := fnCountOp(ctx, ec); err != nil {
@@ -368,6 +378,9 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array:filter callback must return xs:boolean"}
 		}
 		if av.BooleanVal() {
+			if maxNodes > 0 && len(result)+1 > maxNodes {
+				return nil, ErrNodeSetLimit
+			}
 			result = append(result, m)
 		}
 	}
@@ -385,6 +398,7 @@ func fnArrayFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	for _, m := range a.members0() {
 		if err := fnCountOp(ctx, ec); err != nil {
 			return nil, err
@@ -392,6 +406,11 @@ func fnArrayFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 		acc, err = fi.Invoke(ctx, []Sequence{acc, m})
 		if err != nil {
 			return nil, err
+		}
+		// The accumulator can grow without bound across iterations; reject once
+		// it would exceed the configured sequence/node-set limit.
+		if maxNodes > 0 && seqLen(acc) > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 	}
 	return acc, nil
@@ -408,6 +427,7 @@ func fnArrayFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	members := a.members0()
 	for _, v := range slices.Backward(members) {
 		if err := fnCountOp(ctx, ec); err != nil {
@@ -416,6 +436,11 @@ func fnArrayFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 		acc, err = fi.Invoke(ctx, []Sequence{v, acc})
 		if err != nil {
 			return nil, err
+		}
+		// The accumulator can grow without bound across iterations; reject once
+		// it would exceed the configured sequence/node-set limit.
+		if maxNodes > 0 && seqLen(acc) > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 	}
 	return acc, nil
@@ -431,6 +456,7 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var results []Sequence
 	for _, m := range a.members0() {
 		if err := fnCountOp(ctx, ec); err != nil {
@@ -439,6 +465,9 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
+		}
+		if maxNodes > 0 && len(results)+1 > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 		results = append(results, r)
 	}
@@ -462,6 +491,7 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("array:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
 	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	size := min(a1.Size(), a2.Size())
 	var results []Sequence
 	for i := 1; i <= size; i++ {
@@ -473,6 +503,9 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 		r, err := fi.Invoke(ctx, []Sequence{m1, m2})
 		if err != nil {
 			return nil, err
+		}
+		if maxNodes > 0 && len(results)+1 > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 		results = append(results, r)
 	}

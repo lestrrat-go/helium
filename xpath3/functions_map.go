@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
@@ -255,49 +256,78 @@ func fnMapFind(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	ec := getFnContext(ctx)
 	maxNodes := fnMaxNodes(ec)
-	var results []Sequence
-	if err := mapFindRecurse(ctx, ec, maxNodes, args[0], ka, &results); err != nil {
+	results, err := mapFindIter(ctx, ec, maxNodes, args[0], ka)
+	if err != nil {
 		return nil, err
 	}
 	return ItemSlice{NewArray(results)}, nil
 }
 
-// mapFindRecurse recursively searches for a key in maps within items.
-// Per XPath 3.1, map:find searches recursively through maps and arrays. The
-// traversal charges an op per item and bounds the accumulated result count so a
-// deeply or widely nested input cannot exhaust resources unchecked.
-func mapFindRecurse(ctx context.Context, ec *evalContext, maxNodes int, items Sequence, key AtomicValue, results *[]Sequence) error {
-	for item := range seqItems(items) {
-		if err := fnCountOp(ctx, ec); err != nil {
-			return err
+// mapFindIter searches for a key in maps within items. Per XPath 3.1, map:find
+// searches recursively through maps and arrays, in document order. The walk is
+// performed iteratively with an explicit work stack rather than recursively, so
+// a pathologically nested input cannot exhaust the goroutine stack when no op
+// limit is set. The traversal charges an op per item and bounds the accumulated
+// result count so a deeply or widely nested input cannot exhaust resources.
+//
+// The stack is LIFO, so child items are pushed in reverse order to preserve
+// document order in the output.
+func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequence, key AtomicValue) ([]Sequence, error) {
+	var results []Sequence
+
+	var stack []Item
+	pushReversed := func(items []Item) {
+		for _, item := range slices.Backward(items) {
+			stack = append(stack, item)
 		}
+	}
+
+	var initial []Item
+	for item := range seqItems(root) {
+		initial = append(initial, item)
+	}
+	pushReversed(initial)
+
+	for len(stack) > 0 {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		item := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
 		switch v := item.(type) {
 		case MapItem:
+			// The map's own match comes before its descendants in document order.
 			if val, found := v.Get(key); found {
-				if maxNodes > 0 && len(*results) >= maxNodes {
-					return ErrNodeSetLimit
+				if maxNodes > 0 && len(results) >= maxNodes {
+					return nil, ErrNodeSetLimit
 				}
-				*results = append(*results, val)
+				results = append(results, val)
 			}
-			// Also recurse into map values
+			// Then descend into the map's values, in insertion order.
+			var children []Item
 			forEachErr := v.ForEach(func(_ AtomicValue, val Sequence) error {
-				return mapFindRecurse(ctx, ec, maxNodes, val, key, results)
+				for child := range seqItems(val) {
+					children = append(children, child)
+				}
+				return nil
 			})
 			if forEachErr != nil {
-				return forEachErr
+				return nil, forEachErr
 			}
+			pushReversed(children)
 		case ArrayItem:
-			// Recurse into array members
+			var children []Item
 			for i := 1; i <= v.Size(); i++ {
 				member, err := v.Get(i)
 				if err != nil {
 					continue
 				}
-				if err := mapFindRecurse(ctx, ec, maxNodes, member, key, results); err != nil {
-					return err
+				for child := range seqItems(member) {
+					children = append(children, child)
 				}
 			}
+			pushReversed(children)
 		}
 	}
-	return nil
+	return results, nil
 }
