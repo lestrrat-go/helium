@@ -16,7 +16,7 @@ func compileXSD(t *testing.T, schemaXML string) (xsd.Validator, string) {
 	require.NoError(t, err)
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	s, err := xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
-	require.NoError(t, err)
+	requireCompileResultErr(t, err)
 	_, errors := partitionCompileErrors(collector.Errors())
 	if errors != "" {
 		return xsd.Validator{}, errors

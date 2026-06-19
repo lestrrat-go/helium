@@ -55,7 +55,7 @@ func TestIDCImportedKeyRefReferCitesImportedFile(t *testing.T) {
 	require.NoError(t, err)
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	_, err = xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
-	require.NoError(t, err)
+	requireCompileResultErr(t, err)
 
 	var b strings.Builder
 	for _, e := range collector.Errors() {
