@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -566,8 +567,12 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 // ParseReader parses XML from an io.Reader and returns the resulting Document
 // (libxml2: xmlReadIO).
 // This is identical to [Parse] but reads from a stream instead of a byte slice.
-// EBCDIC encoding detection is not supported when parsing from a reader.
 // See [Parse] for DTD validation error handling.
+//
+// EBCDIC encoding detection requires the full input up front: when the leading
+// bytes carry the EBCDIC invariant prefix the reader is buffered into memory and
+// parsed through the same path as [Parse], so an EBCDIC document parses
+// identically via ParseReader/ParseFile as via Parse. All other inputs stream.
 func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
@@ -577,8 +582,24 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 		defer g.IRelease("=== END Parser.ParseReader ===")
 	}
 
+	// Peek the leading bytes to detect EBCDIC, which is not ASCII-compatible
+	// and whose detection/decode requires the original raw bytes (the
+	// streaming path cannot replay them). When detected, read the whole input
+	// and route through the byte-slice path so behavior matches Parse exactly.
+	// bufio.Peek leaves the bytes (and any error returned alongside them) in
+	// place so the non-EBCDIC streaming path is unaffected.
+	br := bufio.NewReader(r)
+	head, perr := br.Peek(len(patEBCDIC))
+	if perr == nil && bytes.Equal(head, patEBCDIC) {
+		b, rerr := io.ReadAll(br)
+		if rerr != nil {
+			return nil, rerr
+		}
+		return p.Parse(ctx, b)
+	}
+
 	pctx := &parserCtx{baseURI: p.cfg.baseURI}
-	if err := pctx.init(p.cfg, r); err != nil {
+	if err := pctx.init(p.cfg, br); err != nil {
 		return nil, err
 	}
 	defer func() {

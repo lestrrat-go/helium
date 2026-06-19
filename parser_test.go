@@ -22,6 +22,7 @@ import (
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/encoding/charmap"
 )
 
 func TestDetectBOM(t *testing.T) {
@@ -2137,6 +2138,45 @@ func TestParseFileMissingFileErrors(t *testing.T) {
 
 	_, err := helium.NewParser().ParseFile(t.Context(), path)
 	require.Error(t, err, "parsing a missing file must error")
+}
+
+// TestParseFileEBCDICMatchesParse guards EBCDIC encoding parity across entry
+// points: an EBCDIC-encoded document must parse identically whether read via
+// ParseFile, ParseReader, or Parse([]byte). EBCDIC detection/decode relies on
+// the original raw bytes, so the reader-based paths must buffer the input.
+func TestParseFileEBCDICMatchesParse(t *testing.T) {
+	t.Parallel()
+
+	const xml = `<?xml version="1.0" encoding="IBM037"?><root><child>hi</child></root>`
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	// Sanity: the encoded bytes must carry the EBCDIC invariant prefix that
+	// triggers detection (otherwise the test would not exercise the path).
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	bytesDoc, err := helium.NewParser().Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must handle EBCDIC")
+	want := serialize(bytesDoc)
+
+	readerDoc, err := helium.NewParser().ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err, "ParseReader must handle EBCDIC")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for EBCDIC")
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.xml")
+	require.NoError(t, os.WriteFile(path, ebcdic, 0o600))
+	fileDoc, err := helium.NewParser().ParseFile(t.Context(), path)
+	require.NoError(t, err, "ParseFile must handle EBCDIC")
+	require.Equal(t, want, serialize(fileDoc),
+		"ParseFile output must match Parse([]byte) for EBCDIC")
 }
 
 func TestParseFileResolvesRelativeExternalEntity(t *testing.T) {
