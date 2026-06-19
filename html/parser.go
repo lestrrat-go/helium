@@ -1093,30 +1093,41 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 	limit := p.cfg.contentLimit()
 	var content bytes.Buffer
 
+	flushChunk := func() {
+		// Clone the bytes before Reset: bytes.Buffer.Reset reuses the same
+		// backing array, so a SAX handler that retains the slice would see
+		// this chunk overwritten by subsequent content.
+		if content.Len() > 0 {
+			p.handleSAXErr(p.sax.CDataBlock(bytes.Clone(content.Bytes())))
+			content.Reset()
+		}
+	}
+	// append writes a whole token (a single rune or a complete ASCII tag
+	// fragment) to the buffer, flushing first if it would push the chunk past
+	// the cap. Flushing on whole-token boundaries keeps every emitted chunk
+	// valid UTF-8: a multi-byte rune is never split across two chunks. A single
+	// token larger than the cap is emitted whole as its own chunk rather than
+	// split, so no partial rune is ever produced.
+	appendToken := func(s string) {
+		if content.Len() > 0 && content.Len()+len(s) > limit {
+			flushChunk()
+		}
+		content.WriteString(s)
+	}
+
 	for !p.cur.Done() {
 		// Abort promptly on context cancellation rather than buffering the
 		// entire (possibly gigantic or unterminated) section first. The main
 		// parse loop re-checks ctx.Err() and surfaces it.
 		if ctx.Err() != nil {
-			if content.Len() > 0 {
-				p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
-			}
+			flushChunk()
 			return
-		}
-		// Bound memory: flush accumulated content as a chunk once it reaches
-		// the configured limit, then keep scanning with a fresh buffer.
-		// Clone the bytes before Reset: bytes.Buffer.Reset reuses the same
-		// backing array, so a SAX handler that retains the slice would see
-		// this chunk overwritten by subsequent content.
-		if content.Len() >= limit {
-			p.handleSAXErr(p.sax.CDataBlock(bytes.Clone(content.Bytes())))
-			content.Reset()
 		}
 		// Check for <!-- to enter escaped state
 		if isScript && state == scriptNormal && p.cur.Peek() == '<' && p.cur.PeekAt(1) == '!' &&
 			p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
 			state = scriptEscaped
-			content.WriteString(p.cur.PeekString(4))
+			appendToken(p.cur.PeekString(4))
 			_ = p.cur.Advance(4)
 			continue
 		}
@@ -1124,7 +1135,7 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 		// Check for --> to exit escaped/double-escaped state
 		if isScript && state != scriptNormal && p.cur.Peek() == '-' && p.cur.PeekAt(1) == '-' && p.cur.PeekAt(2) == '>' {
 			state = scriptNormal
-			content.WriteString(p.cur.PeekString(3))
+			appendToken(p.cur.PeekString(3))
 			_ = p.cur.Advance(3)
 			continue
 		}
@@ -1136,7 +1147,7 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 				afterTag := len(startTag)
 				if p.cur.PeekAt(afterTag) == 0 || !isNameChar(p.cur.PeekAt(afterTag)) {
 					state = scriptDoubleEscaped
-					content.WriteString(p.cur.PeekString(afterTag))
+					appendToken(p.cur.PeekString(afterTag))
 					_ = p.cur.Advance(afterTag)
 					continue
 				}
@@ -1163,18 +1174,16 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 					if state == scriptDoubleEscaped {
 						// In double-escaped, </script> returns to escaped
 						state = scriptEscaped
-						content.WriteString(p.cur.PeekString(afterTag))
+						appendToken(p.cur.PeekString(afterTag))
 						_ = p.cur.Advance(afterTag)
 						if p.cur.Peek() == '>' {
-							content.WriteByte('>')
+							appendToken(">")
 							_ = p.cur.Advance(1)
 						}
 						continue
 					}
 					// In normal or escaped state, </script> closes the element
-					if content.Len() > 0 {
-						p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
-					}
+					flushChunk()
 					return // Let the main loop handle the end tag
 				}
 			}
@@ -1183,18 +1192,60 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 		// The loop already advances on every byte (so no spin), but emit the
 		// replacement character instead of a literal NUL for correctness.
 		if p.cur.Peek() == 0 {
-			content.WriteString("�")
+			appendToken("�")
 			_ = p.cur.Advance(1)
 			continue
 		}
-		content.WriteByte(p.cur.Peek())
-		_ = p.cur.Advance(1)
+		// Consume a whole rune at a time and append it as one indivisible
+		// token, so the cap-aware flush in appendToken never splits a
+		// multi-byte UTF-8 sequence across two chunks.
+		s, n := p.peekRuneToken()
+		appendToken(s)
+		_ = p.cur.Advance(n)
 	}
 
 	// Unterminated — emit everything as cdata
-	if content.Len() > 0 {
-		p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
+	flushChunk()
+}
+
+// peekRuneToken returns the next whole UTF-8 rune at the cursor as a string
+// together with its byte length, without advancing. A byte that is not a valid
+// UTF-8 lead/sequence is returned as a single byte (length 1) so the scan
+// always makes progress and the caller never emits a partial rune. A validly
+// encoded U+FFFD is returned whole (length 3), unlike a lone bad byte. Callers
+// must have already confirmed at least one byte is available (not Done).
+func (p *parser) peekRuneToken() (string, int) {
+	b := p.cur.Peek()
+	if b < 0x80 {
+		return string([]byte{b}), 1
 	}
+	// Peek up to utf8.UTFMax bytes and decode. DecodeRuneInString reports a
+	// size of 1 for an invalid sequence and the true size for a valid rune
+	// (including a genuine U+FFFD), so the size distinguishes the two cases.
+	s := p.cur.PeekString(utf8.UTFMax)
+	if s == "" {
+		// Fewer than UTFMax bytes remain near EOF; peek whatever is left.
+		for n := utf8.UTFMax - 1; n >= 1; n-- {
+			if s = p.cur.PeekString(n); s != "" {
+				break
+			}
+		}
+	}
+	if s == "" {
+		return string([]byte{b}), 1
+	}
+	_, size := utf8.DecodeRuneInString(s)
+	if size <= 0 {
+		size = 1
+	}
+	return s[:size], size
+}
+
+// isUTF8Continuation reports whether b is a UTF-8 continuation byte
+// (0b10xxxxxx). A rune boundary is any byte that is not a continuation byte, so
+// backing a byte index off continuation bytes lands on a whole-rune boundary.
+func isUTF8Continuation(b byte) bool {
+	return b&0xC0 == 0x80
 }
 
 // parseRCDATAContent parses RCDATA content (title, textarea).
@@ -1251,6 +1302,24 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 					break
 				}
 			}
+			// The cap may land mid-rune. Back off to the last whole-rune
+			// boundary so the emitted chunk is valid UTF-8 — but only while a
+			// complete rune still precedes the boundary. If the run begins with
+			// a single rune that is itself larger than the cap, keep extending
+			// until that rune is whole rather than splitting it.
+			if n >= limit {
+				for n > 0 && isUTF8Continuation(p.cur.PeekAt(n)) {
+					n--
+				}
+				if n == 0 {
+					// A lone rune exceeds the cap. Extend to cover it whole so a
+					// partial rune is never emitted.
+					n = limit
+					for p.cur.HasByteAt(n) && isUTF8Continuation(p.cur.PeekAt(n)) {
+						n++
+					}
+				}
+			}
 			if n > 0 {
 				text := p.cur.PeekString(n)
 				_ = p.cur.Advance(n)
@@ -1291,39 +1360,46 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 func (p *parser) parsePlaintext(ctx context.Context) {
 	limit := p.cfg.contentLimit()
 	var content bytes.Buffer
+	flushChunk := func() {
+		// Clone the bytes before Reset: bytes.Buffer.Reset reuses the same
+		// backing array, so a SAX handler that retains the slice would see
+		// this chunk overwritten by subsequent content.
+		if content.Len() > 0 {
+			p.handleSAXErr(p.sax.Characters(bytes.Clone(content.Bytes())))
+			content.Reset()
+		}
+	}
+	// appendToken writes a whole rune to the buffer, flushing first if it would
+	// push the chunk past the cap. Flushing on rune boundaries keeps every
+	// emitted chunk valid UTF-8 (no multi-byte rune split across chunks); a
+	// single rune larger than the cap is emitted whole rather than split.
+	appendToken := func(s string) {
+		if content.Len() > 0 && content.Len()+len(s) > limit {
+			flushChunk()
+		}
+		content.WriteString(s)
+	}
 	for !p.cur.Done() {
 		// Abort promptly on context cancellation rather than buffering the
 		// entire (possibly endless) plaintext section first.
 		if ctx.Err() != nil {
-			if content.Len() > 0 {
-				p.handleSAXErr(p.sax.Characters(content.Bytes()))
-			}
+			flushChunk()
 			return
-		}
-		// Bound memory: flush the buffer as a chunk once it reaches the limit.
-		// Clone the bytes before Reset: bytes.Buffer.Reset reuses the same
-		// backing array, so a SAX handler that retains the slice would see
-		// this chunk overwritten by subsequent content.
-		if content.Len() >= limit {
-			p.handleSAXErr(p.sax.Characters(bytes.Clone(content.Bytes())))
-			content.Reset()
 		}
 		// A real U+0000 (NUL) byte reads as 0, which the previous PeekAt-based
 		// scan treated as EOF, truncating plaintext early. Per HTML5 the
 		// PLAINTEXT state replaces U+0000 with U+FFFD; consume the rest of the
 		// input verbatim, distinguishing genuine EOF via Done().
-		b := p.cur.Peek()
-		if b == 0 {
-			content.WriteString("�")
+		if p.cur.Peek() == 0 {
+			appendToken("�")
 			_ = p.cur.Advance(1)
 			continue
 		}
-		content.WriteByte(b)
-		_ = p.cur.Advance(1)
+		s, n := p.peekRuneToken()
+		appendToken(s)
+		_ = p.cur.Advance(n)
 	}
-	if content.Len() > 0 {
-		p.handleSAXErr(p.sax.Characters(content.Bytes()))
-	}
+	flushChunk()
 }
 
 // parseName parses an HTML tag name (letters, digits, colons, hyphens).

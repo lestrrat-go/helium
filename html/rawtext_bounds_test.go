@@ -2,24 +2,63 @@ package html_test
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/html"
 	"github.com/stretchr/testify/require"
 )
 
-// TestRawTextContextCancellationAborts verifies that cancelling the context
-// aborts a long, unterminated raw-text/RCDATA/plaintext/comment section
-// promptly instead of buffering the whole thing until EOF.
-func TestRawTextContextCancellationAborts(t *testing.T) {
-	// ~64 MiB of content per section: large enough that buffering it all
-	// would be observable, small enough to keep the test fast.
-	const size = 64 << 20
-	body := strings.Repeat("a", size)
+// tagPlaintext is the <plaintext> element name, reused across these table-driven
+// cases (factored out to satisfy goconst).
+const tagPlaintext = "plaintext"
 
-	cases := []struct {
+// cancelAfterReader is an io.Reader that streams a fixed body and invokes a
+// cancel func once a threshold number of bytes has been read. It lets a test
+// cancel the context AFTER the parser has entered (and is actively scanning) a
+// raw-text / comment section, rather than before parsing starts.
+type cancelAfterReader struct {
+	data   []byte
+	pos    int
+	after  int
+	cancel context.CancelFunc
+	fired  bool
+}
+
+func (r *cancelAfterReader) Read(p []byte) (int, error) {
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.data[r.pos:])
+	r.pos += n
+	if !r.fired && r.pos >= r.after {
+		r.fired = true
+		r.cancel()
+	}
+	return n, nil
+}
+
+// TestRawTextContextCancellationAborts verifies that cancelling the context
+// WHILE the parser is inside a raw-text / RCDATA / plaintext / comment section
+// aborts the scan promptly with context.Canceled, instead of buffering the rest
+// of the (possibly endless) section until EOF.
+//
+// The chunked sections (script/style/textarea/plaintext) emit content chunks
+// from inside the scan loop, so a SAX callback cancels mid-scan on the first
+// chunk. The comment section emits no mid-scan SAX event, so a controlled
+// reader cancels after enough bytes have streamed in. Either way the scan loop
+// observes ctx.Err() on its next iteration and unwinds. No large allocations.
+func TestRawTextContextCancellationAborts(t *testing.T) {
+	const limit = 8      // small cap → chunks flush almost immediately
+	const reps = 1 << 16 // enough body that scanning is still in progress
+	body := strings.Repeat("a", reps)
+
+	// Sections that emit chunked SAX events: cancel from the callback.
+	chunked := []struct {
 		name  string
 		input string
 	}{
@@ -27,29 +66,112 @@ func TestRawTextContextCancellationAborts(t *testing.T) {
 		{"style", "<style>" + body},
 		{"textarea", "<textarea>" + body},
 		{"title", "<title>" + body},
-		{"plaintext", "<plaintext>" + body},
-		{"comment", "<!--" + body},
+		{tagPlaintext, "<plaintext>" + body},
 	}
-
-	for _, tc := range cases {
+	for _, tc := range chunked {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
-			cancel() // already cancelled before parsing starts
+			t.Cleanup(cancel)
+
+			sax := &html.SAXCallbacks{}
+			cancelOnChunk := html.CharactersFunc(func([]byte) error {
+				cancel() // cancel AFTER the scan has begun emitting content
+				return nil
+			})
+			sax.SetOnCharacters(cancelOnChunk)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(cancelOnChunk))
 
 			done := make(chan error, 1)
 			go func() {
-				_, err := html.NewParser().Parse(ctx, []byte(tc.input))
-				done <- err
+				done <- html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(ctx, []byte(tc.input), sax)
 			}()
 
 			select {
 			case err := <-done:
 				require.ErrorIs(t, err, context.Canceled,
-					"cancelled parse should return context.Canceled")
+					"cancelled mid-scan parse should return context.Canceled")
 			case <-time.After(10 * time.Second):
 				t.Fatal("parse did not abort promptly on context cancellation")
 			}
 		})
+	}
+
+	// Comment: no mid-scan SAX event, so cancel via the reader after a few
+	// bytes of the comment body have streamed in.
+	t.Run("comment", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		t.Cleanup(cancel)
+
+		input := []byte("<!--" + body)
+		r := &cancelAfterReader{data: input, after: 16, cancel: cancel}
+
+		done := make(chan error, 1)
+		go func() {
+			_, err := html.NewParser().ParseReader(ctx, r)
+			done <- err
+		}()
+
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, context.Canceled,
+				"cancelled mid-comment parse should return context.Canceled")
+		case <-time.After(10 * time.Second):
+			t.Fatal("parse did not abort promptly on context cancellation")
+		}
+	})
+}
+
+// TestRawTextChunksAreValidUTF8 verifies that with a tiny MaxContentSize and
+// multibyte content, every emitted raw-text / RCDATA / plaintext chunk is a
+// whole-rune (valid UTF-8) slice. The cap-aware flush must never split a
+// multi-byte UTF-8 sequence across two chunks: with MaxContentSize(1) the prior
+// code emitted "\xc3" and "\xa9" of "é" as separate invalid chunks.
+func TestRawTextChunksAreValidUTF8(t *testing.T) {
+	// Mix of 1-, 2-, 3-, and 4-byte runes, repeated past several tiny caps.
+	body := strings.Repeat("aé→𝄞z", 50)
+
+	cases := []struct {
+		name  string
+		open  string
+		close string
+	}{
+		{"script", "<script>", "</script>"},
+		{"style", "<style>", "</style>"},
+		{"textarea", "<textarea>", "</textarea>"}, // RCDATA
+		{"title", "<title>", "</title>"},          // RCDATA
+		{tagPlaintext, "<plaintext>", ""},
+	}
+
+	// Exercise caps both larger and smaller than the widest rune (4 bytes).
+	for _, limit := range []int{1, 2, 3, 4, 7} {
+		for _, tc := range cases {
+			t.Run(fmt.Sprintf("%s_cap%d", tc.name, limit), func(t *testing.T) {
+				input := tc.open + body + tc.close
+
+				var chunks [][]byte
+				record := html.CharactersFunc(func(data []byte) error {
+					chunks = append(chunks, append([]byte(nil), data...))
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				require.NoError(t, err)
+
+				var got strings.Builder
+				for i, c := range chunks {
+					require.True(t, utf8.Valid(c),
+						"chunk %d must be valid UTF-8 (limit=%d): %q", i, limit, c)
+					got.Write(c)
+				}
+				require.Equal(t, body, got.String(),
+					"reassembled content must match input (limit=%d)", limit)
+			})
+		}
 	}
 }
 
@@ -68,7 +190,7 @@ func TestRawTextContentChunkedUnderCap(t *testing.T) {
 		{"script", "<script>", "</script>"},
 		{"style", "<style>", "</style>"},
 		{"textarea", "<textarea>", "</textarea>"},
-		{"plaintext", "<plaintext>", ""},
+		{tagPlaintext, "<plaintext>", ""},
 	}
 
 	for _, tc := range cases {
@@ -264,7 +386,7 @@ func TestRawTextChunkSlicesAreIndependent(t *testing.T) {
 	}{
 		{"script", "<script>", "</script>"},
 		{"style", "<style>", "</style>"},
-		{"plaintext", "<plaintext>", ""},
+		{tagPlaintext, "<plaintext>", ""},
 	}
 
 	for _, tc := range cases {
