@@ -31,10 +31,10 @@ func compareDecimal(a, b string) int {
 // those types regardless of what value.Compare would return.
 var orderedRangeFacetTypes = map[string]struct{}{
 	// Numeric (decimal-derived integers, plus the standalone decimal).
-	lexicon.TypeDecimal: {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
-	"long": {}, "int": {}, "short": {}, "byte": {},
-	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
-	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
+	lexicon.TypeDecimal: {}, lexicon.TypeInteger: {}, lexicon.TypeNonPositiveInteger: {}, lexicon.TypeNegativeInteger: {},
+	lexicon.TypeLong: {}, lexicon.TypeInt: {}, lexicon.TypeShort: {}, lexicon.TypeByte: {},
+	lexicon.TypeNonNegativeInteger: {}, lexicon.TypeUnsignedLong: {}, lexicon.TypeUnsignedInt: {},
+	lexicon.TypeUnsignedShort: {}, lexicon.TypeUnsignedByte: {}, lexicon.TypePositiveInteger: {},
 	// Floating point.
 	lexicon.TypeFloat: {}, lexicon.TypeDouble: {},
 	// Date/time/duration family (all ordered, non-numeric).
@@ -118,10 +118,10 @@ func checkMaxExclusive(v, bound, builtinLocal string) bool {
 // their (whitespace-processed) lexical space.
 var enumValueSpaceTypes = map[string]struct{}{
 	// Numeric (decimal-derived).
-	lexicon.TypeDecimal: {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
-	"long": {}, "int": {}, "short": {}, "byte": {},
-	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
-	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
+	lexicon.TypeDecimal: {}, lexicon.TypeInteger: {}, lexicon.TypeNonPositiveInteger: {}, lexicon.TypeNegativeInteger: {},
+	lexicon.TypeLong: {}, lexicon.TypeInt: {}, lexicon.TypeShort: {}, lexicon.TypeByte: {},
+	lexicon.TypeNonNegativeInteger: {}, lexicon.TypeUnsignedLong: {}, lexicon.TypeUnsignedInt: {},
+	lexicon.TypeUnsignedShort: {}, lexicon.TypeUnsignedByte: {}, lexicon.TypePositiveInteger: {},
 	// Floating point.
 	lexicon.TypeFloat: {}, lexicon.TypeDouble: {},
 	// Boolean.

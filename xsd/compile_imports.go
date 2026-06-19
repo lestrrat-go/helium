@@ -681,7 +681,16 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	maps.Copy(c.elemRefs, impC.elemRefs)
 	maps.Copy(c.elemRefSources, impC.elemRefSources)
 	maps.Copy(c.typeRefs, impC.typeRefs)
-	maps.Copy(c.typeDefSources, impC.typeDefSources)
+	// Offset each imported type's parse-order ordinal past the parent's counter
+	// so ordinals remain globally unique across the merged compilers; otherwise
+	// a parent type and an imported type sharing a source line and an empty name
+	// could collide on the diagnostic tie-breaker.
+	base := c.nextTypeDefOrdinal
+	for td, src := range impC.typeDefSources {
+		src.ordinal += base
+		c.typeDefSources[td] = src
+	}
+	c.nextTypeDefOrdinal = base + impC.nextTypeDefOrdinal
 	maps.Copy(c.groupRefs, impC.groupRefs)
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
 	maps.Copy(c.globalElemSources, impC.globalElemSources)

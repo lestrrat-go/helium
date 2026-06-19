@@ -42,7 +42,7 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 		td.Final = c.schema.finalDefault & (FinalExtension | FinalRestriction)
 	}
 
-	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
+	c.recordTypeDefSource(td, elem.Line(), false)
 	c.typeKinds[td.Name] = redefineKindComplexType
 	c.schema.types[td.Name] = td
 	return nil
@@ -79,7 +79,7 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 		td.Final = c.schema.finalDefault & (FinalRestriction | FinalList | FinalUnion)
 	}
 
-	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
+	c.recordTypeDefSource(td, elem.Line(), false)
 	c.typeKinds[td.Name] = redefineKindSimpleType
 	c.schema.types[td.Name] = td
 	return nil
@@ -87,7 +87,7 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 
 func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {
 	td := &TypeDef{}
-	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: true}
+	c.recordTypeDefSource(td, elem.Line(), true)
 
 	mixed := getAttr(elem, "mixed")
 	if mixed == attrValTrue {
@@ -384,7 +384,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 	// name is assigned. Recording it here ensures reportUnresolvedTypeRef can
 	// fire for unresolved base/itemType/memberTypes references inside inline
 	// simpleTypes, not just top-level named ones.
-	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: true}
+	c.recordTypeDefSource(td, elem.Line(), true)
 
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -518,21 +518,25 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 				fs = &FacetSet{}
 			}
 			fs.MinInclusive = &val
+			fs.MinInclusiveNS = captureFacetNS(ce)
 		case "maxInclusive":
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MaxInclusive = &val
+			fs.MaxInclusiveNS = captureFacetNS(ce)
 		case "minExclusive":
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MinExclusive = &val
+			fs.MinExclusiveNS = captureFacetNS(ce)
 		case "maxExclusive":
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MaxExclusive = &val
+			fs.MaxExclusiveNS = captureFacetNS(ce)
 		case "totalDigits":
 			if fs == nil {
 				fs = &FacetSet{}
@@ -592,4 +596,17 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 	}
 
 	return fs
+}
+
+// captureFacetNS records the in-scope namespace bindings at a single range-facet
+// element so a namespace-sensitive bound value (e.g. a prefixed xs:QName) can be
+// resolved later when that specific bound is validated against its base type.
+// Each range facet captures its OWN context because sibling facets in the same
+// <xs:restriction> may declare different prefixes; the bound must be resolved
+// with the prefixes in scope at its own element, not a shared snapshot.
+func captureFacetNS(ce *helium.Element) map[string]string {
+	nsCtx := collectNSContext(ce)
+	nsCopy := make(map[string]string, len(nsCtx))
+	maps.Copy(nsCopy, nsCtx)
+	return nsCopy
 }
