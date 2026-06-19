@@ -177,14 +177,13 @@ func (v Validator) closeHandler() {
 }
 
 // Validate validates a document against the compiled schema.
-// It returns nil if the document is valid, or [ErrValidationFailed].
-// Individual validation errors are delivered to the configured [helium.ErrorHandler].
+//
+// It returns [ErrNoSchema] when the Validator has no compiled schema and
+// [ErrValidationFailed] when the document is invalid; it returns nil when
+// the document is valid. Individual validation errors are delivered to the
+// configured [helium.ErrorHandler].
 // (libxml2: xmlSchematronValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
-	if v.schema == nil {
-		return ErrNoSchema
-	}
-
 	cfg := v.cfg
 	if cfg == nil {
 		cfg = &validateConfig{}
@@ -195,8 +194,16 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 		handler = helium.NilErrorHandler{}
 	}
 
+	// Close the handler on every exit path, including the nil-schema guard
+	// below, so a closable ErrorHandler (e.g. helium.ErrorCollector) is not
+	// leaked.
+	defer v.closeHandler()
+
+	if v.schema == nil {
+		return ErrNoSchema
+	}
+
 	valid := validateDocument(ctx, doc, v.schema, cfg, handler)
-	v.closeHandler()
 	if valid {
 		return nil
 	}
