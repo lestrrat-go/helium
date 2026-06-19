@@ -16,8 +16,33 @@ const CatalogBreak = "\x00CATAL_BREAK"
 // load failure and skip the entry.
 var errNoLoader = errors.New("catalog: no loader configured")
 
+// resolveState holds the per-resolution mutable bookkeeping (recursion depth
+// and visited cache). It is allocated once per top-level Resolve/ResolveURI
+// call and threaded through the recursion so that a single *Catalog can be
+// resolved concurrently from multiple goroutines without data races. The
+// receiver carries only immutable configuration; all run state lives here.
+type resolveState struct {
+	depth   int
+	visited map[visitedKey]struct{}
+}
+
+// checkVisited returns true if the (url, id1, id2) combination has already
+// been visited during this resolution. If not, marks it as visited.
+// Matches libxml2's xmlCatalogResolveCacheVisited.
+func (s *resolveState) checkVisited(url, id1, id2 string) bool {
+	key := visitedKey{url: url, id1: id1, id2: id2}
+	if _, ok := s.visited[key]; ok {
+		return true
+	}
+	s.visited[key] = struct{}{}
+	return false
+}
+
 // Resolve resolves an external identifier (pubID and/or sysID) to a URI.
 // Returns the resolved URI or "" if not found.
+//
+// Resolve is safe to call concurrently on a single *Catalog: per-resolution
+// state lives in a local resolveState rather than on the receiver.
 func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 	if c == nil {
 		return ""
@@ -26,14 +51,18 @@ func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 		return ""
 	}
 
-	// Initialize visited cache for this top-level resolution,
-	// matching libxml2's xmlResetCatalogResolveCache pattern.
-	topLevel := c.visited == nil
-	if topLevel {
-		c.visited = make(map[visitedKey]struct{})
-		defer func() { c.visited = nil }()
+	st := &resolveState{visited: make(map[visitedKey]struct{})}
+	ret := c.resolveTop(ctx, st, pubID, sysID)
+	if ret == CatalogBreak {
+		return ""
 	}
+	return ret
+}
 
+// resolveTop performs URN unwrapping and public-ID normalization before
+// entering the core resolve algorithm. It shares the visited cache across the
+// (possibly recursive) unwrap steps via st.
+func (c *Catalog) resolveTop(ctx context.Context, st *resolveState, pubID, sysID string) string {
 	// Normalize public ID.
 	if pubID != "" {
 		pubID = NormalizePublicID(pubID)
@@ -42,49 +71,46 @@ func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 	// Unwrap URNs.
 	if pubID != "" {
 		if urnPub := UnwrapURN(pubID); urnPub != "" {
-			return c.Resolve(ctx, urnPub, sysID)
+			return c.resolveTop(ctx, st, urnPub, sysID)
 		}
 	}
 	if sysID != "" {
 		if urnSys := UnwrapURN(sysID); urnSys != "" {
 			if pubID == "" {
-				return c.Resolve(ctx, urnSys, "")
+				return c.resolveTop(ctx, st, urnSys, "")
 			}
 			if pubID == urnSys {
-				return c.Resolve(ctx, pubID, "")
+				return c.resolveTop(ctx, st, pubID, "")
 			}
-			return c.Resolve(ctx, pubID, urnSys)
+			return c.resolveTop(ctx, st, pubID, urnSys)
 		}
 	}
 
-	ret := c.resolve(ctx, pubID, sysID)
-	if ret == CatalogBreak {
-		return ""
-	}
-	return ret
+	return c.resolve(ctx, st, pubID, sysID)
 }
 
 // ResolveURI resolves a URI reference.
 // Returns the resolved URI or "" if not found.
+//
+// ResolveURI is safe to call concurrently on a single *Catalog.
 func (c *Catalog) ResolveURI(ctx context.Context, uri string) string {
 	if c == nil || uri == "" {
 		return ""
 	}
 
-	// Initialize visited cache for this top-level resolution.
-	topLevel := c.visited == nil
-	if topLevel {
-		c.visited = make(map[visitedKey]struct{})
-		defer func() { c.visited = nil }()
-	}
+	st := &resolveState{visited: make(map[visitedKey]struct{})}
 
 	// Unwrap urn:publicid: URNs and delegate to Resolve as a public ID,
 	// matching libxml2's xmlCatalogListXMLResolveURI behavior.
 	if pubID := UnwrapURN(uri); pubID != "" {
-		return c.Resolve(ctx, pubID, "")
+		ret := c.resolveTop(ctx, st, pubID, "")
+		if ret == CatalogBreak {
+			return ""
+		}
+		return ret
 	}
 
-	ret := c.resolveURI(ctx, uri)
+	ret := c.resolveURI(ctx, st, uri)
 	if ret == CatalogBreak {
 		return ""
 	}
@@ -94,12 +120,12 @@ func (c *Catalog) ResolveURI(ctx context.Context, uri string) string {
 // resolve implements the core resolution algorithm from libxml2's
 // xmlCatalogXMLResolve. Returns "" if not found or CatalogBreak to
 // signal cut.
-func (c *Catalog) resolve(ctx context.Context, pubID, sysID string) string {
-	if c.Depth > MaxDepth {
+func (c *Catalog) resolve(ctx context.Context, st *resolveState, pubID, sysID string) string {
+	if st.depth > MaxDepth {
 		return ""
 	}
-	c.Depth++
-	defer func() { c.Depth-- }()
+	st.depth++
+	defer func() { st.depth-- }()
 
 	haveDelegate := 0
 	haveNext := 0
@@ -135,7 +161,7 @@ func (c *Catalog) resolve(ctx context.Context, pubID, sysID string) string {
 		}
 
 		if haveDelegate > 0 {
-			ret := c.resolveDelegateSystem(ctx, sysID)
+			ret := c.resolveDelegateSystem(ctx, st, sysID)
 			if ret != "" {
 				return ret
 			}
@@ -166,7 +192,7 @@ func (c *Catalog) resolve(ctx context.Context, pubID, sysID string) string {
 		}
 
 		if haveDelegate > 0 {
-			ret := c.resolveDelegatePublic(ctx, pubID)
+			ret := c.resolveDelegatePublic(ctx, st, pubID)
 			if ret != "" {
 				return ret
 			}
@@ -176,19 +202,19 @@ func (c *Catalog) resolve(ctx context.Context, pubID, sysID string) string {
 
 	// nextCatalog fallback.
 	if haveNext > 0 {
-		return c.resolveNextCatalogs(ctx, pubID, sysID)
+		return c.resolveNextCatalogs(ctx, st, pubID, sysID)
 	}
 
 	return ""
 }
 
 // resolveURI implements URI resolution from libxml2's xmlCatalogXMLResolveURI.
-func (c *Catalog) resolveURI(ctx context.Context, uri string) string {
-	if c.Depth > MaxDepth {
+func (c *Catalog) resolveURI(ctx context.Context, st *resolveState, uri string) string {
+	if st.depth > MaxDepth {
 		return ""
 	}
-	c.Depth++
-	defer func() { c.Depth-- }()
+	st.depth++
+	defer func() { st.depth-- }()
 
 	haveDelegate := 0
 	haveNext := 0
@@ -222,7 +248,7 @@ func (c *Catalog) resolveURI(ctx context.Context, uri string) string {
 	}
 
 	if haveDelegate > 0 {
-		ret := c.resolveDelegateURI(ctx, uri)
+		ret := c.resolveDelegateURI(ctx, st, uri)
 		if ret != "" {
 			return ret
 		}
@@ -230,14 +256,14 @@ func (c *Catalog) resolveURI(ctx context.Context, uri string) string {
 	}
 
 	if haveNext > 0 {
-		return c.resolveNextCatalogsURI(ctx, uri)
+		return c.resolveNextCatalogsURI(ctx, st, uri)
 	}
 
 	return ""
 }
 
 // resolveDelegateSystem tries all matching delegateSystem entries.
-func (c *Catalog) resolveDelegateSystem(ctx context.Context, sysID string) string {
+func (c *Catalog) resolveDelegateSystem(ctx context.Context, st *resolveState, sysID string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
 	for i := range c.Entries {
@@ -255,14 +281,15 @@ func (c *Catalog) resolveDelegateSystem(ctx context.Context, sysID string) strin
 			seen[e.URL] = struct{}{}
 		}
 
-		if err := c.lazyLoad(ctx, e); err != nil {
+		sub, err := c.lazyLoad(ctx, e)
+		if err != nil {
 			continue
 		}
-		if c.checkVisited(e.URL, "", sysID) {
+		if st.checkVisited(e.URL, "", sysID) {
 			continue
 		}
 		// Delegate with sysID only (pubID=nil per libxml2).
-		ret := e.Catalog.resolve(ctx, "", sysID)
+		ret := sub.resolve(ctx, st, "", sysID)
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
@@ -271,7 +298,7 @@ func (c *Catalog) resolveDelegateSystem(ctx context.Context, sysID string) strin
 }
 
 // resolveDelegatePublic tries all matching delegatePublic entries.
-func (c *Catalog) resolveDelegatePublic(ctx context.Context, pubID string) string {
+func (c *Catalog) resolveDelegatePublic(ctx context.Context, st *resolveState, pubID string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
 	for i := range c.Entries {
@@ -292,14 +319,15 @@ func (c *Catalog) resolveDelegatePublic(ctx context.Context, pubID string) strin
 			seen[e.URL] = struct{}{}
 		}
 
-		if err := c.lazyLoad(ctx, e); err != nil {
+		sub, err := c.lazyLoad(ctx, e)
+		if err != nil {
 			continue
 		}
-		if c.checkVisited(e.URL, pubID, "") {
+		if st.checkVisited(e.URL, pubID, "") {
 			continue
 		}
 		// Delegate with pubID only (sysID=nil per libxml2).
-		ret := e.Catalog.resolve(ctx, pubID, "")
+		ret := sub.resolve(ctx, st, pubID, "")
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
@@ -308,7 +336,7 @@ func (c *Catalog) resolveDelegatePublic(ctx context.Context, pubID string) strin
 }
 
 // resolveDelegateURI tries all matching delegateURI entries.
-func (c *Catalog) resolveDelegateURI(ctx context.Context, uri string) string {
+func (c *Catalog) resolveDelegateURI(ctx context.Context, st *resolveState, uri string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
 	for i := range c.Entries {
@@ -326,13 +354,14 @@ func (c *Catalog) resolveDelegateURI(ctx context.Context, uri string) string {
 			seen[e.URL] = struct{}{}
 		}
 
-		if err := c.lazyLoad(ctx, e); err != nil {
+		sub, err := c.lazyLoad(ctx, e)
+		if err != nil {
 			continue
 		}
-		if c.checkVisited(e.URL, uri, "") {
+		if st.checkVisited(e.URL, uri, "") {
 			continue
 		}
-		ret := e.Catalog.resolveURI(ctx, uri)
+		ret := sub.resolveURI(ctx, st, uri)
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
@@ -341,23 +370,24 @@ func (c *Catalog) resolveDelegateURI(ctx context.Context, uri string) string {
 }
 
 // resolveNextCatalogs tries all nextCatalog entries for Resolve.
-func (c *Catalog) resolveNextCatalogs(ctx context.Context, pubID, sysID string) string {
+func (c *Catalog) resolveNextCatalogs(ctx context.Context, st *resolveState, pubID, sysID string) string {
 	for i := range c.Entries {
 		e := &c.Entries[i]
 		if e.Type != EntryNextCatalog {
 			continue
 		}
-		if err := c.lazyLoad(ctx, e); err != nil {
+		sub, err := c.lazyLoad(ctx, e)
+		if err != nil {
 			continue
 		}
-		if c.checkVisited(e.URL, pubID, sysID) {
+		if st.checkVisited(e.URL, pubID, sysID) {
 			continue
 		}
-		ret := e.Catalog.resolve(ctx, pubID, sysID)
+		ret := sub.resolve(ctx, st, pubID, sysID)
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
-		if e.Catalog.Depth > MaxDepth {
+		if st.depth > MaxDepth {
 			return ""
 		}
 	}
@@ -365,67 +395,61 @@ func (c *Catalog) resolveNextCatalogs(ctx context.Context, pubID, sysID string) 
 }
 
 // resolveNextCatalogsURI tries all nextCatalog entries for ResolveURI.
-func (c *Catalog) resolveNextCatalogsURI(ctx context.Context, uri string) string {
+func (c *Catalog) resolveNextCatalogsURI(ctx context.Context, st *resolveState, uri string) string {
 	for i := range c.Entries {
 		e := &c.Entries[i]
 		if e.Type != EntryNextCatalog {
 			continue
 		}
-		if err := c.lazyLoad(ctx, e); err != nil {
+		sub, err := c.lazyLoad(ctx, e)
+		if err != nil {
 			continue
 		}
-		if c.checkVisited(e.URL, uri, "") {
+		if st.checkVisited(e.URL, uri, "") {
 			continue
 		}
-		ret := e.Catalog.resolveURI(ctx, uri)
+		ret := sub.resolveURI(ctx, st, uri)
 		if ret != "" && ret != CatalogBreak {
 			return ret
 		}
-		if e.Catalog.Depth > MaxDepth {
+		if st.depth > MaxDepth {
 			return ""
 		}
 	}
 	return ""
 }
 
-// checkVisited returns true if the (url, id1, id2) combination has already
-// been visited during this resolution. If not, marks it as visited.
-// Matches libxml2's xmlCatalogResolveCacheVisited.
-func (c *Catalog) checkVisited(url, id1, id2 string) bool {
-	if c.visited == nil {
-		return false
-	}
-	key := visitedKey{url: url, id1: id1, id2: id2}
-	if _, ok := c.visited[key]; ok {
-		return true
-	}
-	c.visited[key] = struct{}{}
-	return false
-}
+// lazyLoad loads the catalog file for a delegate or nextCatalog entry on first
+// access via the Loader and returns the (possibly cached) sub-catalog. The
+// load is guarded by a sync.Once so that concurrent resolutions sharing one
+// *Catalog load the referenced catalog at most once and never observe a
+// partially-populated entry. The returned sub-catalog carries no run state —
+// depth and the visited cache live in the caller's resolveState.
+func (c *Catalog) lazyLoad(ctx context.Context, e *Entry) (*Catalog, error) {
+	e.once.Do(func() {
+		if e.Catalog != nil {
+			// Pre-populated (e.g. tests, or an inlined sub-catalog).
+			return
+		}
+		if c.Loader == nil {
+			// The referenced catalog needs loading but no loader is configured.
+			e.loadErr = errNoLoader
+			return
+		}
+		cat, err := c.Loader.Load(ctx, e.URL)
+		if err != nil {
+			e.loadErr = err
+			return
+		}
+		e.Catalog = cat
+	})
 
-// lazyLoad loads the catalog file for a delegate or nextCatalog entry
-// on first access via the Loader. The loaded catalog shares the parent's
-// depth counter and visited cache for recursion detection.
-func (c *Catalog) lazyLoad(ctx context.Context, e *Entry) error {
-	if e.Catalog != nil {
-		// Already loaded — share depth and visited cache.
-		e.Catalog.Depth = c.Depth
-		e.Catalog.visited = c.visited
-		return nil
+	if e.loadErr != nil {
+		return nil, e.loadErr
 	}
-	if c.Loader == nil {
-		// The referenced catalog needs loading but no loader is configured.
-		// Return an error so callers skip this entry instead of dereferencing
-		// the still-nil e.Catalog.
-		return errNoLoader
+	if e.Catalog == nil {
+		// A load that neither errored nor produced a catalog: treat as a miss.
+		return nil, errNoLoader
 	}
-	cat, err := c.Loader.Load(ctx, e.URL)
-	if err != nil {
-		return err
-	}
-	// Share the parent's depth counter and visited cache.
-	cat.Depth = c.Depth
-	cat.visited = c.visited
-	e.Catalog = cat
-	return nil
+	return e.Catalog, nil
 }

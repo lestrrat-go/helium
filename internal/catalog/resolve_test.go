@@ -2,6 +2,7 @@ package catalog_test
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -104,6 +105,99 @@ func TestResolveURIIgnoresDelegateSystem(t *testing.T) {
 	got := cat.ResolveURI(t.Context(), "http://example.com/asset")
 	require.Equal(t, "", got)
 	require.Nil(t, loader.counts[sharedCatalogXML], "delegateSystem must not be loaded during ResolveURI")
+}
+
+// TestConcurrentResolveSharedCatalog exercises a single *Catalog resolved from
+// many goroutines at once over delegate and nextCatalog chains. With the
+// shared-receiver bug it raced (or panicked) under -race; per-resolution state
+// must keep it correct and race-free.
+func TestConcurrentResolveSharedCatalog(t *testing.T) {
+	t.Parallel()
+
+	// Leaf catalogs reached through the delegate / next chains.
+	systemLeaf := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntrySystem, Name: "http://example.com/sys.dtd", URL: "file:///sys.dtd"},
+		},
+	}
+	publicLeaf := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryPublic, Name: "-//Example//DTD Pub//EN", URL: "file:///pub.dtd"},
+		},
+		Prefer: catalog.PreferPublic,
+	}
+	uriLeaf := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryURI, Name: "http://example.com/asset", URL: "file:///asset"},
+		},
+	}
+
+	loader := &multiLoader{
+		counts: make(map[string]*atomic.Int32),
+		cats: map[string]*catalog.Catalog{
+			"sys.xml": systemLeaf,
+			"pub.xml": publicLeaf,
+			"uri.xml": uriLeaf,
+		},
+	}
+
+	// One shared root combining a delegate chain (system + public) and a
+	// nextCatalog fallback (uri leaf).
+	root := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryDelegateSystem, Name: "http://example.com/", URL: "sys.xml"},
+			{Type: catalog.EntryDelegatePublic, Name: "-//Example//", URL: "pub.xml", Prefer: catalog.PreferPublic},
+			{Type: catalog.EntryNextCatalog, URL: "uri.xml"},
+		},
+		Loader: loader,
+		Prefer: catalog.PreferPublic,
+	}
+
+	const goroutines = 32
+	const iterations = 50
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			ctx := context.Background()
+			for range iterations {
+				require.Equal(t, "file:///sys.dtd", root.Resolve(ctx, "", "http://example.com/sys.dtd"))
+				require.Equal(t, "file:///pub.dtd", root.Resolve(ctx, "-//Example//DTD Pub//EN", ""))
+				require.Equal(t, "file:///asset", root.ResolveURI(ctx, "http://example.com/asset"))
+				require.Equal(t, "", root.Resolve(ctx, "", "http://example.com/missing.dtd"))
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Each referenced catalog must be loaded at most once despite the storm of
+	// concurrent resolutions (sync.Once guard).
+	for url, cnt := range loader.counts {
+		require.LessOrEqual(t, cnt.Load(), int32(1), "catalog %q loaded more than once", url)
+	}
+}
+
+// multiLoader is a concurrency-safe Loader serving distinct catalogs by URL
+// and counting loads per URL.
+type multiLoader struct {
+	mu     sync.Mutex
+	counts map[string]*atomic.Int32
+	cats   map[string]*catalog.Catalog
+}
+
+func (l *multiLoader) Load(_ context.Context, filename string) (*catalog.Catalog, error) {
+	l.mu.Lock()
+	if l.counts[filename] == nil {
+		l.counts[filename] = &atomic.Int32{}
+	}
+	cnt := l.counts[filename]
+	cat := l.cats[filename]
+	l.mu.Unlock()
+
+	cnt.Add(1)
+	return cat, nil
 }
 
 // countingLoader is a Loader that counts how many times each URL is loaded.
