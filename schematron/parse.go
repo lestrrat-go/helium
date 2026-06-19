@@ -151,10 +151,10 @@ func compileRuleChild(compileCtx context.Context, r *rule, childElem *helium.Ele
 			return
 		}
 		if lb != nil {
-			// Prepend to match libxml2's LIFO ordering: each new let
-			// is inserted at the head of the list, so evaluation
-			// proceeds in reverse-definition order.
-			r.lets = append([]*letBinding{lb}, r.lets...)
+			// Append in document order so each let is bound before any
+			// later let that references it (e.g. <let name="b"
+			// value="$a"/> after <let name="a" .../>).
+			r.lets = append(r.lets, lb)
 		}
 	case "assert":
 		if t := compileTest(compileCtx, childElem, testAssert, schNS, eh); t != nil {

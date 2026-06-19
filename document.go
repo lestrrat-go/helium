@@ -379,10 +379,12 @@ func (d *Document) createLiteralAttribute(name, value string, ns *Namespace) *At
 }
 
 func (d *Document) CreatePI(target, data string) *ProcessingInstruction {
-	return &ProcessingInstruction{
+	pi := &ProcessingInstruction{
 		target: target,
 		data:   data,
 	}
+	pi.doc = d
+	return pi
 }
 
 func (d *Document) CreateDTD() (*DTD, error) {

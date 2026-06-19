@@ -348,6 +348,26 @@ func TestRelativeNamespaceURIRejected(t *testing.T) {
 	require.Contains(t, err.Error(), "relative namespace URI")
 }
 
+func TestActiveRelativeNamespaceURIRejected(t *testing.T) {
+	t.Parallel()
+	// A programmatically built DOM may set an *active* namespace with a
+	// relative URI via SetActiveNamespace. This active namespace is emitted
+	// during canonicalization, so the C14N relative-URI check must reject it
+	// even though it was never added as a declared namespace.
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	child := doc.CreateElement("child")
+	require.NoError(t, root.AddChild(child))
+	require.NoError(t, child.SetActiveNamespace("p", "relative/uri"))
+
+	_, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "relative namespace URI")
+}
+
 func TestAbsoluteNamespaceURIAccepted(t *testing.T) {
 	t.Parallel()
 	xml := `<?xml version="1.0"?><root xmlns:ok="http://example.com"><child/></root>`

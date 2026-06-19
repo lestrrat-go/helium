@@ -136,3 +136,10 @@ func TestDocProperties(t *testing.T) {
 		require.False(t, doc.HasProperty(helium.DocWellFormed|helium.DocDTDValid))
 	})
 }
+
+func TestCreatePIOwnerDocument(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	pi := doc.CreatePI("p", "data")
+	require.Same(t, doc, pi.OwnerDocument(), "PI owner document should be the creating document")
+}
