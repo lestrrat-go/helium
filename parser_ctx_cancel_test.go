@@ -28,7 +28,7 @@ func TestParseContextCancelledDuringParse(t *testing.T) {
 	// iterates enough times to observe the cancellation.
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0"?><root>`)
-	for i := 0; i < 200000; i++ {
+	for range 200000 {
 		b.WriteString(`<a>x</a>`)
 	}
 	b.WriteString(`</root>`)
