@@ -237,7 +237,7 @@ Streaming XML writer (no DOM needed).
 - Methods: StartDocument/EndDocument, StartElement/EndElement, WriteAttribute, WriteString (escaped), WriteRaw (unescaped), WriteComment, WritePI, WriteCDATA, StartDTD/EndDTD, WriteDTDElement/Entity/Attlist/Notation, Flush
 - State machine: tracks open elements, namespace scopes, self-close optimization
 - Files: `stream.go` (single ~1100 line file)
-- Imports: internal/encoding/
+- Imports: internal/encoding/, internal/xmlchar/
 
 ## sax/
 
@@ -429,11 +429,16 @@ Parser option bitset type and constants. Bit positions match libxml2's XML_PARSE
 
 ## internal/xmlchar/
 
-XML 1.0 NCName character classification. Single source of truth for NCNameStartChar, NCNameChar, and IsValidNCName.
+XML 1.0 character classification and name validation. Single source of truth for the NCName/QName/Name productions, plus XML Char range, encoding-name, and PI-target validation shared across packages.
 
+- **IsChar(rune) → bool** — XML 1.0 Char production (legal document character)
 - **IsNCNameStartChar(rune) → bool** — XML 1.0 NCName start character production
 - **IsNCNameChar(rune) → bool** — XML 1.0 NCName continuation character production
 - **IsValidNCName(string) → bool** — validates a complete NCName string
+- **IsValidQName(string) → bool** — validates a complete QName (NCName, optionally prefixed)
+- **IsValidName(string) → bool** — validates a complete XML Name (NCName allowing colons)
+- **IsValidEncName(string) → bool** — validates an XML declaration encoding name
+- **IsValidPITarget(string) → bool** — validates a processing-instruction target
 - Files: `xmlchar.go`
 - Imports: none
 
