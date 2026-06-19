@@ -7,5 +7,6 @@ const (
 	cmdXSD        = "xsd"
 	cmdValidate   = "validate"
 	flagVersion   = "--version"
+	flagMaxInput  = "--max-input-bytes"
 	xpathBook     = "//book"
 )
