@@ -532,8 +532,26 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		if ctx.inputTab.Len() <= baseLen {
 			break
 		}
+		// The blank skip above may have consumed the LAST bytes of a
+		// parameter-entity cursor whose replacement text is (or ends with)
+		// only whitespace, e.g. `<!ENTITY % ws "   ">` then `%ws;`. Breaking
+		// here on a Done() PE cursor would let the deferred cleanup pop the
+		// parent DTD cursor too, silently skipping declarations that follow the
+		// PE reference. Instead pop the spent NESTED cursors (mirroring the
+		// conditional-section cleanup below) and only exit the loop once we are
+		// back at the base/parent cursor; otherwise resume parsing the parent.
+		for ctx.inputTab.Len() > baseLen {
+			top = ctx.adaptCursor(ctx.inputTab.PeekOne())
+			if top == nil || !top.Done() {
+				break
+			}
+			ctx.popInput()
+		}
+		if ctx.inputTab.Len() <= baseLen {
+			break
+		}
 		top = ctx.adaptCursor(ctx.inputTab.PeekOne())
-		if top == nil || top.Done() {
+		if top == nil {
 			break
 		}
 

@@ -923,6 +923,41 @@ func TestParseExternalDTDPEConditionalSectionFollowedByDecl(t *testing.T) {
 	require.Equal(t, "d", val, "trailing <!ATTLIST> must not be silently skipped")
 }
 
+func TestParseExternalDTDPEWhitespaceFollowedByDecl(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "ws.dtd">
+<r/>`
+
+	// The external subset declares a parameter entity whose replacement text is
+	// ONLY whitespace, references it, and THEN declares another markup
+	// declaration. The blank skip consumes the PE's entire replacement text, so
+	// the PE cursor is exhausted by the skip itself. The loop must pop the spent
+	// PE cursor and resume in the parent DTD to apply the trailing <!ATTLIST>.
+	// Before the fix, the blank-skip's Done()-cursor break exited the loop and
+	// the deferred cleanup popped the parent DTD cursor too, silently skipping
+	// the trailing declaration.
+	const dtd = `<!ELEMENT r EMPTY>
+<!ENTITY % ws "   ">
+%ws;
+<!ATTLIST r x CDATA 'd'>
+`
+	fsys := fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "PE expanding to only whitespace must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	val, ok := root.GetAttribute("x")
+	require.True(t, ok, "declaration following the whitespace-only PE must be applied")
+	require.Equal(t, "d", val, "trailing <!ATTLIST> must not be silently skipped")
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 
