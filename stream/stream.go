@@ -450,6 +450,25 @@ func validateXMLChars(kind, s string) error {
 	return nil
 }
 
+// validateDTDFragment validates a DTD declaration body fragment (an element
+// contentspec or an attlist body) that is written verbatim into the internal
+// subset. Beyond rejecting non-XML characters, it forbids the markup-delimiter
+// characters '<' and '>', which can never legitimately appear in an element
+// contentspec or an attlist body. Allowing them would let an untrusted fragment
+// terminate the current declaration and inject a new one (e.g. a content of
+// "ANY><!ENTITY e \"pwn\"" smuggling an extra <!ENTITY declaration).
+func validateDTDFragment(kind, s string) error {
+	if err := validateXMLChars(kind, s); err != nil {
+		return err
+	}
+	for _, r := range s {
+		if r == '<' || r == '>' {
+			return fmt.Errorf("stream: %s content must not contain %q", kind, string(r))
+		}
+	}
+	return nil
+}
+
 // qualifiedName returns prefix:localName or just localName if prefix is empty.
 func qualifiedName(prefix, localName string) string {
 	if prefix == "" {
@@ -750,6 +769,14 @@ func (w *Writer) FullEndElement() error {
 
 // WriteElement is a convenience for StartElement + WriteString + EndElement.
 func (w *Writer) WriteElement(name, content string) error {
+	if w.err != nil {
+		return w.err
+	}
+	// Pre-validate content before StartElement emits the opening tag, so a
+	// rejected write leaves the writer unmutated.
+	if err := validateXMLChars("text", content); err != nil {
+		return err
+	}
 	if err := w.StartElement(name); err != nil {
 		return err
 	}
@@ -761,6 +788,14 @@ func (w *Writer) WriteElement(name, content string) error {
 
 // WriteElementNS is a convenience for StartElementNS + WriteString + EndElement.
 func (w *Writer) WriteElementNS(prefix, localName, namespaceURI, content string) error {
+	if w.err != nil {
+		return w.err
+	}
+	// Pre-validate content before StartElementNS declares the namespace or
+	// emits markup, so a rejected write leaves the writer unmutated.
+	if err := validateXMLChars("text", content); err != nil {
+		return err
+	}
 	if err := w.StartElementNS(prefix, localName, namespaceURI); err != nil {
 		return err
 	}
@@ -836,6 +871,14 @@ func (w *Writer) EndAttribute() error {
 
 // WriteAttribute is a convenience for StartAttribute + WriteString + EndAttribute.
 func (w *Writer) WriteAttribute(name, value string) error {
+	if w.err != nil {
+		return w.err
+	}
+	// Pre-validate the value before StartAttribute emits ` name="`, so a
+	// rejected write leaves the writer unmutated.
+	if err := validateXMLChars("attribute", value); err != nil {
+		return err
+	}
 	if err := w.StartAttribute(name); err != nil {
 		return err
 	}
@@ -847,6 +890,14 @@ func (w *Writer) WriteAttribute(name, value string) error {
 
 // WriteAttributeNS is a convenience for StartAttributeNS + WriteString + EndAttribute.
 func (w *Writer) WriteAttributeNS(prefix, localName, namespaceURI, value string) error {
+	if w.err != nil {
+		return w.err
+	}
+	// Pre-validate the value before StartAttributeNS declares the namespace or
+	// emits markup, so a rejected write leaves the writer unmutated.
+	if err := validateXMLChars("attribute", value); err != nil {
+		return err
+	}
 	if err := w.StartAttributeNS(prefix, localName, namespaceURI); err != nil {
 		return err
 	}
@@ -1012,6 +1063,11 @@ func (w *Writer) WriteComment(content string) error {
 	if w.err != nil {
 		return w.err
 	}
+	// Pre-validate content before StartComment emits "<!--", so a rejected
+	// write leaves the writer unmutated.
+	if err := validateXMLChars("comment", content); err != nil {
+		return err
+	}
 	if strings.Contains(content, "--") {
 		return errors.New("stream: comment content must not contain '--'")
 	}
@@ -1093,6 +1149,11 @@ func (w *Writer) WritePI(target, content string) error {
 	if w.err != nil {
 		return w.err
 	}
+	// Pre-validate content before StartPI emits "<?target", so a rejected
+	// write leaves the writer unmutated.
+	if err := validateXMLChars("processing instruction", content); err != nil {
+		return err
+	}
 	if strings.Contains(content, "?>") {
 		return errors.New("stream: processing instruction content must not contain '?>'")
 	}
@@ -1156,6 +1217,14 @@ func (w *Writer) EndCDATA() error {
 // If content contains "]]>", it is split into multiple CDATA sections
 // per the XML serialization spec (e.g., "]]>" becomes "]]]]><![CDATA[>").
 func (w *Writer) WriteCDATA(content string) error {
+	if w.err != nil {
+		return w.err
+	}
+	// Pre-validate content before StartCDATA emits "<![CDATA[", so a rejected
+	// write leaves the writer unmutated.
+	if err := validateXMLChars("CDATA", content); err != nil {
+		return err
+	}
 	for {
 		idx := strings.Index(content, "]]>")
 		if idx < 0 {
@@ -1316,7 +1385,7 @@ func (w *Writer) WriteDTDElement(name, content string) error {
 	if !xmlchar.IsValidQName(name) {
 		return fmt.Errorf("stream: invalid DTD element name %q", name)
 	}
-	if err := validateXMLChars("DTD element", content); err != nil {
+	if err := validateDTDFragment("DTD element", content); err != nil {
 		return err
 	}
 	w.ensureDTDInternalSubset()
@@ -1339,7 +1408,7 @@ func (w *Writer) WriteDTDAttlist(name, content string) error {
 	if !xmlchar.IsValidQName(name) {
 		return fmt.Errorf("stream: invalid DTD attlist name %q", name)
 	}
-	if err := validateXMLChars("DTD attlist", content); err != nil {
+	if err := validateDTDFragment("DTD attlist", content); err != nil {
 		return err
 	}
 	w.ensureDTDInternalSubset()

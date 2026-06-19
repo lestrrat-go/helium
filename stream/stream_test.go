@@ -1612,3 +1612,95 @@ func TestInvalidUTF8Rejection(t *testing.T) {
 		require.Error(t, w.StartDTD("root", "", "sys"+bad))
 	})
 }
+
+func TestDTDFragmentInjectionRejected(t *testing.T) {
+	t.Parallel()
+	t.Run("element contentspec injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDElement("root", `ANY><!ENTITY e "pwn"`))
+		require.NotContains(t, buf.String(), "ENTITY")
+	})
+	t.Run("element contentspec less-than rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDElement("root", `<!ELEMENT x ANY`))
+	})
+	t.Run("attlist body injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDAttlist("root", `id CDATA #IMPLIED><!ENTITY e "pwn"`))
+		require.NotContains(t, buf.String(), "ENTITY")
+	})
+	t.Run("valid contentspec and attlist still accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.NoError(t, w.WriteDTDElement("root", "(a|b)*"))
+		require.NoError(t, w.WriteDTDElement("a", "(#PCDATA)"))
+		require.NoError(t, w.WriteDTDElement("b", "EMPTY"))
+		require.NoError(t, w.WriteDTDAttlist("a", `id ID #REQUIRED kind CDATA #IMPLIED`))
+		require.NoError(t, w.EndDTD())
+	})
+}
+
+func TestOneShotHelpersPreValidateBeforeMutation(t *testing.T) {
+	t.Parallel()
+	bad := "x\x00"
+	t.Run("WriteComment", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WriteComment(bad))
+		require.Empty(t, buf.String())
+	})
+	t.Run("WritePI", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WritePI("target", bad))
+		require.Empty(t, buf.String())
+	})
+	t.Run("WriteCDATA", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WriteCDATA(bad))
+		require.Empty(t, buf.String())
+	})
+	t.Run("WriteAttribute", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WriteAttribute("attr", bad))
+		require.Empty(t, buf.String())
+	})
+	t.Run("WriteElement", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WriteElement("child", bad))
+		require.Empty(t, buf.String())
+	})
+}
