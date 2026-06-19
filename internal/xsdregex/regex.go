@@ -65,7 +65,14 @@ func (e *regexError) Error() string { return e.Message }
 // through and relies on Go's (different) interpretation. It also does NOT reject
 // Perl-specific constructs or validate back-references — call RejectPerlSpecific
 // and Validate separately for those checks.
-func translateXPathRegex(pattern string, dotAll, ignoreCase bool) (string, error) {
+// xsdPattern selects between the two regex flavors that share this translator:
+//
+//   - true  → XSD xs:pattern facet. The pattern is implicitly anchored to the
+//     whole value and '^'/'$' are ordinary literal characters, not anchors.
+//   - false → XPath/XQuery fn:matches/tokenize/replace. The pattern is NOT
+//     implicitly anchored and '^'/'$' keep their RE2 anchor meaning (start/end,
+//     multiline with the 'm' flag).
+func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern bool) (string, error) {
 	isDotAll := dotAll
 	var b strings.Builder
 	runes := []rune(pattern)
@@ -175,12 +182,14 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase bool) (string, error
 			continue
 		}
 
-		// '^' and '$' are RE2 anchors but ordinary literal characters in the
-		// XSD/XPath regex grammar (the only XSD metacharacters are
+		// In the XSD xs:pattern grammar '^' and '$' are ordinary literal
+		// characters, not anchors (the only XSD metacharacters are
 		// . \ ? * + { } ( ) [ ] |, and the whole pattern is already implicitly
 		// anchored when Compile wraps it in \A(?:...)\z). Escape them so RE2
-		// treats them as literals rather than zero-width anchors.
-		if r == '^' || r == '$' {
+		// treats them as literals. In XPath/XQuery regex (fn:matches/tokenize/
+		// replace) '^' and '$' are anchors (start/end, multiline with 'm'); leave
+		// them untouched so the engine keeps that meaning.
+		if xsdPattern && (r == '^' || r == '$') {
 			b.WriteRune('\\')
 			b.WriteRune(r)
 			i++
@@ -1183,9 +1192,12 @@ func rejectPerlSpecific(pattern string) error {
 	return nil
 }
 
-// Translate converts an XPath/XML Schema regex pattern into a Go RE2 pattern.
+// Translate converts an XPath/XQuery regex pattern (fn:matches/tokenize/replace)
+// into a Go RE2 pattern. In this flavor '^' and '$' are anchors and the pattern
+// is not implicitly anchored; use Compile for XSD xs:pattern facets, where
+// '^'/'$' are literals and the whole value must match.
 func Translate(pattern string, dotAll, ignoreCase bool) (string, error) {
-	return translateXPathRegex(pattern, dotAll, ignoreCase)
+	return translateXPathRegex(pattern, dotAll, ignoreCase, false)
 }
 
 // Regexp is a compiled XML Schema pattern-facet regular expression. It matches
@@ -1231,7 +1243,10 @@ func Compile(pattern string) (*Regexp, error) {
 		return nil, err
 	}
 
-	translated, err := translateXPathRegex(pattern, false, false)
+	// Compile handles XSD xs:pattern facets: '^'/'$' are literal characters and
+	// the pattern is implicitly anchored to the whole value (the \A(?:...)\z
+	// wrap below). Pass xsdPattern=true so the translator escapes '^'/'$'.
+	translated, err := translateXPathRegex(pattern, false, false, true)
 	if err != nil {
 		return nil, err
 	}

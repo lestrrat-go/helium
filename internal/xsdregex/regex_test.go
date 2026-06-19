@@ -10,9 +10,9 @@ import (
 )
 
 func TestCaretDollarAreLiterals(t *testing.T) {
-	// In the XSD/XPath regex grammar '^' and '$' are literal characters, not
-	// anchors, and the pattern is implicitly anchored to the whole value. So
-	// "^a$" must match only the literal string "^a$" and nothing else.
+	// In the XSD xs:pattern grammar (Compile) '^' and '$' are literal
+	// characters, not anchors, and the pattern is implicitly anchored to the
+	// whole value. So "^a$" must match only the literal string "^a$".
 	re, err := xsdregex.Compile("^a$")
 	require.NoError(t, err, "compiling ^a$")
 
@@ -21,6 +21,29 @@ func TestCaretDollarAreLiterals(t *testing.T) {
 	require.False(t, re.MatchString("^a"), `pattern "^a$" should not match "^a"`)
 	require.False(t, re.MatchString("a$"), `pattern "^a$" should not match "a$"`)
 	require.False(t, re.MatchString(""), `pattern "^a$" should not match empty`)
+}
+
+// TestCaretDollarModeDistinction pins the two opposite regex flavors that share
+// this translator. Compile is the XSD xs:pattern facet, where '^'/'$' are
+// literal characters; Translate is the XPath/XQuery flavor (fn:matches/
+// tokenize/replace), where '^'/'$' must stay RE2 anchors.
+func TestCaretDollarModeDistinction(t *testing.T) {
+	t.Run("xsd pattern escapes anchors as literals", func(t *testing.T) {
+		out, err := xsdregex.Translate("^a$", false, false)
+		require.NoError(t, err)
+		// In the XPath flavor '^'/'$' are anchors, so Translate must NOT escape
+		// them; the output is left as-is for RE2 to treat as zero-width anchors.
+		require.Equal(t, "^a$", out, "XPath Translate keeps ^/$ as anchors")
+	})
+
+	t.Run("xsd compile treats anchors as literals", func(t *testing.T) {
+		// Compile (xs:pattern) must treat the same pattern as the literal
+		// three-character string, anchored to the whole value.
+		re, err := xsdregex.Compile("^a$")
+		require.NoError(t, err)
+		require.True(t, re.MatchString("^a$"), "xs:pattern ^a$ matches literal ^a$")
+		require.False(t, re.MatchString("a"), "xs:pattern ^a$ does not match bare a")
+	})
 }
 
 func TestLiteralAnchorChars(t *testing.T) {
@@ -87,17 +110,17 @@ func TestDefaultMatchTimeoutNoRace(t *testing.T) {
 	t.Cleanup(func() { xsdregex.SetDefaultMatchTimeout(orig) })
 
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 100; j++ {
+			for j := range 100 {
 				xsdregex.SetDefaultMatchTimeout(time.Duration(j) * time.Millisecond)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 100; j++ {
+			for range 100 {
 				_, err := xsdregex.Compile(`[a-z-[aeiou]]+`)
 				require.NoError(t, err)
 			}
