@@ -206,6 +206,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 	}
 
+	// Reject duplicate attribute uses within a single type's own attribute set
+	// (XSD 3.4.6 ct-props-correct.4 / 3.6.6 ag-props-correct.2). After
+	// attribute-group expansion a type may carry two uses with the same expanded
+	// name; the validation-time map would silently coalesce them, so catch the
+	// collision here. This runs BEFORE base-type attribute merging so it only
+	// inspects each type's OWN declared/expanded uses — duplicates between a base
+	// type and its extension are reported separately during the merge below.
+	c.checkDuplicateAttrUses(ctx)
+
 	// Resolve attribute references: copy Default/Fixed/TypeName from global attr.
 	for au, qn := range c.attrRefs {
 		ga, ok := c.schema.globalAttrs[qn]
@@ -388,6 +397,50 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			if td.ContentModel != nil {
 				c.checkUPA(ctx, td, src)
 			}
+		}
+	}
+}
+
+// checkDuplicateAttrUses reports duplicate attribute uses (by expanded QName)
+// within a single complex type's own attribute set. Prohibited uses do not
+// contribute an attribute use and are skipped. Types are processed in source
+// line order for deterministic diagnostics.
+func (c *compiler) checkDuplicateAttrUses(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	tds := make([]*TypeDef, 0, len(c.typeDefSources))
+	for td := range c.typeDefSources {
+		if len(td.Attributes) > 1 {
+			tds = append(tds, td)
+		}
+	}
+	sort.Slice(tds, func(i, j int) bool {
+		return c.typeDefSources[tds[i]].line < c.typeDefSources[tds[j]].line
+	})
+	for _, td := range tds {
+		seen := make(map[QName]bool, len(td.Attributes))
+		reported := make(map[QName]bool)
+		for _, au := range td.Attributes {
+			if au.Prohibited {
+				continue
+			}
+			if seen[au.Name] {
+				if reported[au.Name] {
+					continue
+				}
+				reported[au.Name] = true
+				src := c.typeDefSources[td]
+				component := componentLocalComplexType
+				if !src.isLocal {
+					component = td.Name.Local
+				}
+				msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+				c.errorCount++
+				continue
+			}
+			seen[au.Name] = true
 		}
 	}
 }

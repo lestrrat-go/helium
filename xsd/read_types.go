@@ -32,7 +32,7 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 		return err
 	}
 	td.Name = qn
-	td.Abstract = getAttr(elem, attrAbstract) == attrValTrue
+	td.Abstract = c.readBooleanAttr(ctx, elem, attrAbstract)
 
 	// Parse final attribute with schema default.
 	if hasAttr(elem, attrFinal) {
@@ -89,9 +89,29 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 	td := &TypeDef{}
 	c.recordTypeDefSource(td, elem.Line(), true)
 
-	mixed := getAttr(elem, "mixed")
-	if mixed == attrValTrue {
+	if c.readBooleanAttr(ctx, elem, "mixed") {
 		td.ContentType = ContentTypeMixed
+	}
+
+	// XSD 3.4.2: the content of an xs:complexType is one of:
+	//   - a single simpleContent OR complexContent, OR
+	//   - an optional model-group particle (sequence|choice|all|group)
+	//     followed by attribute uses.
+	// These two forms are mutually exclusive, and at most one model-group
+	// particle / content-model wrapper may appear. Track what we have seen so
+	// a schema that supplies a second model group (silently overwriting the
+	// first) or mixes a particle with simple/complexContent is rejected rather
+	// than accepting the last-seen child.
+	var contentModelChild string   // local name of the first model-group particle seen
+	var contentWrapperChild string // "simpleContent" or "complexContent" if seen
+
+	reportExtraContent := func(ce *helium.Element, what string) {
+		if c.filename == "" {
+			return
+		}
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, ce.Line(),
+			elem.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
+		c.errorCount++
 	}
 
 	for child := range helium.Children(elem) {
@@ -102,6 +122,23 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		if !ok {
 			continue
 		}
+
+		// Guard model-group particles: at most one, and not alongside a
+		// simple/complexContent wrapper.
+		isModelGroup := isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) ||
+			isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup)
+		if isModelGroup {
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The content model particle '%s' is not allowed together with '%s'.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if contentModelChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild))
+				continue
+			}
+			contentModelChild = ce.LocalName()
+		}
+
 		switch {
 		case isXSDElement(ce, elemSequence):
 			mg, err := c.parseModelGroup(ctx, ce, CompositorSequence)
@@ -153,10 +190,28 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				}
 			}
 		case isXSDElement(ce, elemComplexContent):
+			if contentModelChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the content model particle '%s'.", ce.LocalName(), contentModelChild))
+				continue
+			}
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one of 'simpleContent' or 'complexContent' (found '%s' after '%s').", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			contentWrapperChild = ce.LocalName()
 			if err := c.parseComplexContent(ctx, ce, td); err != nil {
 				return nil, err
 			}
 		case isXSDElement(ce, elemSimpleContent):
+			if contentModelChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the content model particle '%s'.", ce.LocalName(), contentModelChild))
+				continue
+			}
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one of 'simpleContent' or 'complexContent' (found '%s' after '%s').", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			contentWrapperChild = ce.LocalName()
 			c.parseSimpleContent(ctx, ce, td)
 		case isXSDElement(ce, elemAttribute):
 			au := c.parseAttributeUse(ctx, ce)

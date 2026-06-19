@@ -176,26 +176,80 @@ func readDefaultOrFixed(elem *helium.Element) (*string, *string) {
 	return defaultValue, fixedValue
 }
 
-func readProcessContents(elem *helium.Element) ProcessContentsKind {
-	switch getAttr(elem, attrProcessContents) {
+// readProcessContents reads and validates the @processContents attribute of a
+// wildcard. An absent attribute defaults to "strict". An invalid value is
+// reported as a schema parser error and treated as the "strict" default.
+func (c *compiler) readProcessContents(ctx context.Context, elem *helium.Element) ProcessContentsKind {
+	if !hasAttr(elem, attrProcessContents) {
+		return ProcessStrict
+	}
+	switch v := normalizeWhiteSpace(getAttr(elem, attrProcessContents), "collapse"); v {
+	case attrValStrict:
+		return ProcessStrict
 	case attrValLax:
 		return ProcessLax
 	case attrValSkip:
 		return ProcessSkip
 	default:
+		if c.filename != "" {
+			msg := fmt.Sprintf("'%s' is not a valid value of the union type '#processContents'.", v)
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, elem.Line(),
+				elem.LocalName(), elem.LocalName(), attrProcessContents, msg), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
 		return ProcessStrict
 	}
 }
 
-func (c *compiler) readWildcard(_ context.Context, elem *helium.Element) *Wildcard {
+// validateWildcardNamespace validates the namespace-constraint grammar of a
+// wildcard's @namespace attribute (XSD 3.10.2). The value is either the keyword
+// "##any" or "##other", or a whitespace-separated list whose members are each an
+// anyURI, "##targetNamespace", or "##local". The "##any"/"##other" keywords
+// must stand alone, and no other "##"-prefixed token is allowed.
+func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.Element, raw string) {
+	if c.filename == "" {
+		return
+	}
+	reject := func(msg string) {
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, elem.Line(),
+			elem.LocalName(), elem.LocalName(), attrNamespace, msg), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+
+	tokens := splitSpace(normalizeWhiteSpace(raw, "collapse"))
+	if len(tokens) == 0 {
+		return
+	}
+	for _, tok := range tokens {
+		switch tok {
+		case WildcardNSAny, WildcardNSOther:
+			if len(tokens) != 1 {
+				reject(fmt.Sprintf("The value '%s' is not a valid namespace constraint: '%s' must not be combined with other items.", raw, tok))
+				return
+			}
+		case WildcardNSTargetNamespace, WildcardNSLocal:
+			// Valid only as list members.
+		default:
+			if strings.HasPrefix(tok, "##") {
+				reject(fmt.Sprintf("The value '%s' is not a valid namespace constraint: '%s' is not a recognized '##' token.", raw, tok))
+				return
+			}
+			// Otherwise treated as an anyURI namespace name.
+		}
+	}
+}
+
+func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wildcard {
 	namespace := getAttr(elem, attrNamespace)
 	if namespace == "" {
 		namespace = WildcardNSAny
+	} else {
+		c.validateWildcardNamespace(ctx, elem, namespace)
 	}
 
 	return &Wildcard{
 		Namespace:       namespace,
-		ProcessContents: readProcessContents(elem),
+		ProcessContents: c.readProcessContents(ctx, elem),
 		TargetNS:        c.schema.targetNamespace,
 	}
 }
@@ -209,7 +263,7 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	}
 
 	if opts.allowAbstract {
-		decl.Abstract = getAttr(elem, attrAbstract) == attrValTrue
+		decl.Abstract = c.readBooleanAttr(ctx, elem, attrAbstract)
 	}
 
 	if opts.allowSubstitutionGroup {
@@ -246,26 +300,40 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	return decl, nil
 }
 
-// readBooleanAttr reads a schema-side xs:boolean attribute (e.g. nillable),
-// applying whitespace-collapse lexical rules (true/false/1/0). An absent
-// attribute is false. An invalid lexical is reported as a schema parser error
-// and treated as false.
+// readBooleanAttr reads a schema-side xs:boolean attribute (e.g. nillable,
+// abstract, mixed) applying whitespace-collapse lexical rules. It accepts the
+// four canonical xs:boolean lexical forms (true/false/1/0); an absent attribute
+// is false. An invalid lexical form is reported as a schema parser error and
+// treated as false. The owning element's local name is used in the diagnostic
+// so the same helper serves every boolean schema attribute.
 func (c *compiler) readBooleanAttr(ctx context.Context, elem *helium.Element, attr string) bool {
 	if !hasAttr(elem, attr) {
 		return false
 	}
-	v := normalizeWhiteSpace(getAttr(elem, attr), "collapse")
-	switch v {
-	case "true", "1":
-		return true
-	case "false", "0":
-		return false
+	v, ok := parseSchemaBool(getAttr(elem, attr))
+	if ok {
+		return v
 	}
-	msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", v)
+	msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", normalizeWhiteSpace(getAttr(elem, attr), "collapse"))
 	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, elem.Line(),
-		elem.LocalName(), elemElement, attr, msg), helium.ErrorLevelFatal))
+		elem.LocalName(), elem.LocalName(), attr, msg), helium.ErrorLevelFatal))
 	c.errorCount++
 	return false
+}
+
+// parseSchemaBool parses an xs:boolean lexical value, applying the
+// whitespace-collapse rule and accepting the four canonical forms
+// "true"/"false"/"1"/"0". The second return value is false when the value is
+// not a valid xs:boolean lexical form.
+func parseSchemaBool(raw string) (bool, bool) {
+	switch normalizeWhiteSpace(raw, "collapse") {
+	case "true", "1":
+		return true, true
+	case "false", "0":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, decl *ElementDecl, sourceName string) error {
