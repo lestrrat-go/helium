@@ -1978,6 +1978,31 @@ func TestMaxDepth(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "exceeded max depth")
 	})
+
+	t.Run("enforced within substituted entity", func(t *testing.T) {
+		t.Parallel()
+
+		// The replacement text expands to two nested elements. With entity
+		// substitution enabled the depth check must still apply to the chunk
+		// parsed for the entity, so MaxDepth(1) rejects the inner <b/>.
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a><b/></a>">]><r>&e;</r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(1)
+
+		_, err := p.Parse(t.Context(), input)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("within limit inside substituted entity", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a><b/></a>">]><r>&e;</r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(10)
+
+		doc, err := p.Parse(t.Context(), input)
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+	})
 }
 
 func TestParseLenientXMLDecl(t *testing.T) {

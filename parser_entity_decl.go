@@ -733,8 +733,19 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	}()
 	newctx.doc = pctx.doc
 	newctx.sax = pctx.sax
+	newctx.treeBuilder = pctx.treeBuilder
 	newctx.attsDefault = pctx.attsDefault
 	newctx.depth = pctx.depth + 1
+	// Mirror the parent's security/behavior policy so the entity replacement
+	// text honors the same depth, resource, and normalization limits as the
+	// top-level parse instead of falling back to the zero-value defaults.
+	newctx.options = pctx.options
+	newctx.loadsubset = pctx.loadsubset
+	newctx.keepBlanks = pctx.keepBlanks
+	newctx.pedantic = pctx.pedantic
+	newctx.charBufferSize = pctx.charBufferSize
+	newctx.maxElemDepth = pctx.maxElemDepth
+	newctx.maxExtDTDSize = pctx.maxExtDTDSize
 	if pctx.elem != nil {
 		for _, ns := range collectInScopeNamespaces(pctx.elem) {
 			newctx.pushNS(ns.Prefix(), ns.URI())

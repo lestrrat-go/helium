@@ -75,7 +75,7 @@ State affects parsing rules: e.g., external entity refs forbidden in `psAttribut
 - `attsDefault map[string][]*Attribute` — default attributes from DTD
 - `inSubset int` — 0=not in subset, 1=internal, 2=external
 - `replaceEntities bool` — expand entity refs (set by SubstituteEntities(true))
-- `fsys fs.FS` — filesystem used to load external DTDs/entities; defaults to `internal/iofs.PermissiveRoot{}` (passthrough to os.Open), overridden via `Parser.FS()`. Used by `TreeBuilder.ExternalSubset` and `TreeBuilder.ResolveEntity`. Entity sub-parsers (`parseExternalEntityPrivate`, `parseBalancedChunkInternal`) inherit the parent's `fsys`, `catalog`, and `baseURI` so nested external entities stay confined to the same sandbox/policy as the top-level parse (they would otherwise default `fsys` back to `PermissiveRoot`).
+- `fsys fs.FS` — filesystem used to load external DTDs/entities; defaults to `internal/iofs.PermissiveRoot{}` (passthrough to os.Open), overridden via `Parser.FS()`. Used by `TreeBuilder.ExternalSubset` and `TreeBuilder.ResolveEntity`. Entity sub-parsers (`parseExternalEntityPrivate`, `parseBalancedChunkInternal`) inherit the parent's config-derived policy (`options`, `loadsubset`, `keepBlanks`, `pedantic`, `charBufferSize`, `maxElemDepth`, `maxExtDTDSize`, `fsys`, `catalog`, `baseURI`) so entity replacement text honors the same depth/resource/normalization limits and sandbox as the top-level parse (they would otherwise reset these to zero-value defaults, e.g. `maxElemDepth=0` disabling the depth check and `fsys` falling back to `PermissiveRoot`).
 
 ### Entity Amplification Guard
 - `sizeentcopy int64` — cumulative entity expansion bytes
