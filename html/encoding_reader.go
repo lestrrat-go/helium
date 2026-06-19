@@ -6,6 +6,14 @@ import (
 	"unicode/utf8"
 )
 
+// errReader always returns its stored error (and no bytes). It is used to
+// re-deliver a non-EOF read error that arrived together with peeked bytes
+// during charset detection, so the error is not lost once the buffered bytes
+// drain.
+type errReader struct{ err error }
+
+func (e *errReader) Read([]byte) (int, error) { return 0, e.err }
+
 // newlineNormReader normalizes line endings in a stream: \r\n → \n, standalone \r → \n.
 type newlineNormReader struct {
 	r       io.Reader
@@ -278,6 +286,13 @@ type deferredLatin1Reader struct {
 	eof      bool   // true once the underlying reader has reported EOF
 	enc      string // encoding name reported after switching
 	encOnHit string // encoding name to report once a non-UTF-8 byte appears
+
+	// readErr is a sticky non-EOF error returned by the underlying reader. An
+	// io.Reader may return n > 0 together with a non-EOF error in a single Read;
+	// dropping it would let a truncated/checksummed/decompressing stream look
+	// like a clean parse once the buffered/converted bytes drain. We remember it
+	// and surface it only after all already-read output has been delivered.
+	readErr error
 }
 
 func newDeferredLatin1Reader(r io.Reader, encOnHit string) *deferredLatin1Reader {
@@ -317,7 +332,14 @@ func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
 		}
 
 		if dr.eof {
-			// EOF reached, decision already made and output drained.
+			// EOF reached, decision already made and output drained. Surface a
+			// sticky non-EOF read error here so a stream that returned data
+			// together with an error is not mistaken for a clean end.
+			if dr.readErr != nil {
+				err := dr.readErr
+				dr.readErr = nil
+				return 0, err
+			}
 			return 0, io.EOF
 		}
 
@@ -329,19 +351,19 @@ func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
 		switch {
 		case err == io.EOF:
 			dr.eof = true
-		case err != nil && n == 0:
-			// Genuine, non-recoverable read error with no new data.
-			return 0, err
+		case err != nil:
+			// A non-EOF error. io.Reader allows returning n > 0 alongside an
+			// error, so keep any bytes we just buffered and remember the error
+			// as sticky; treat the stream as ended and deliver buffered output
+			// first, surfacing the error only after it drains.
+			dr.readErr = err
+			dr.eof = true
 		}
 
 		// Re-evaluate the buffered bytes; decide() makes output available once
 		// it can (at the first invalid byte, or at EOF). When it stays
-		// undecided we loop to read more. If nothing was read and we are not at
-		// EOF, surface a zero read to avoid spinning.
+		// undecided we loop to read more.
 		dr.decide()
-		if dr.out == nil && !dr.eof && n == 0 {
-			return 0, err
-		}
 	}
 }
 
@@ -392,7 +414,18 @@ func (dr *deferredLatin1Reader) decide() bool {
 func (dr *deferredLatin1Reader) fillLatin1(p []byte) (int, error) {
 	var buf [2048]byte
 	n, err := dr.r.Read(buf[:])
+	// io.Reader may deliver data together with a non-EOF error. Remember the
+	// error as sticky and convert any bytes we did get; the error is surfaced
+	// once the converted output has drained.
+	if err != nil && err != io.EOF && dr.readErr == nil {
+		dr.readErr = err
+	}
 	if n == 0 {
+		if dr.readErr != nil {
+			e := dr.readErr
+			dr.readErr = nil
+			return 0, e
+		}
 		return 0, err
 	}
 	dr.out = latin1ToUTF8(buf[:n])
@@ -419,14 +452,30 @@ func (dr *deferredLatin1Reader) fillLatin1(p []byte) (int, error) {
 func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader, *deferredLatin1Reader) {
 	// Read up to 1024 bytes for charset detection.
 	head := make([]byte, 1024)
-	n, _ := io.ReadFull(r, head)
+	n, peekErr := io.ReadFull(r, head)
 	head = head[:n]
 
-	// Reconstruct full reader: peeked bytes + remainder.
+	// io.ReadFull collapses a short read into io.ErrUnexpectedEOF and a full
+	// read into nil; both mean "stream ended" for our purposes. Any other
+	// (non-EOF) error is a genuine read failure that may have arrived together
+	// with the peeked bytes — it must not be silently dropped, or a truncated/
+	// checksummed/decompressing stream that fits within the detection window
+	// would look like a clean parse. Re-deliver it after the peeked bytes.
+	if peekErr == io.EOF || peekErr == io.ErrUnexpectedEOF {
+		peekErr = nil
+	}
+
+	// Reconstruct full reader: peeked bytes + remainder (+ any sticky peek
+	// error to surface once the buffered bytes drain).
 	var full io.Reader
-	if n > 0 {
+	switch {
+	case n > 0 && peekErr != nil:
+		full = io.MultiReader(bytes.NewReader(head), r, &errReader{err: peekErr})
+	case n > 0:
 		full = io.MultiReader(bytes.NewReader(head), r)
-	} else {
+	case peekErr != nil:
+		full = io.MultiReader(r, &errReader{err: peekErr})
+	default:
 		full = r
 	}
 

@@ -521,6 +521,14 @@ func (p *parser) parse(ctx context.Context) error {
 		}
 	}
 
+	// A clean Done() may mask an underlying read error (e.g. a truncated or
+	// checksummed stream that returned data together with a non-EOF error).
+	// Surface it as a fatal parse error rather than accepting the input as a
+	// cleanly terminated document. Mirrors the XML parser's cursorDecodeErr.
+	if err := p.cur.Err(); err != nil {
+		return err
+	}
+
 	p.htmlAutoCloseOnEnd()
 	p.handleSAXErr(p.sax.EndDocument())
 	return p.fatalSAXErr
