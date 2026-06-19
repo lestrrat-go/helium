@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math/rand/v2"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -11,6 +12,10 @@ import (
 
 	"github.com/lestrrat-go/helium/internal/iofs"
 )
+
+// nextRandom returns a non-negative random value used to build unique temp file
+// names. math/rand/v2 is process-safe for concurrent use and needs no seeding.
+func nextRandom() uint64 { return rand.Uint64() }
 
 // iofsPermissiveRoot returns the default permissive fs.FS helium uses to open
 // external resources. The --path search FS falls back to it before trying the
@@ -94,17 +99,58 @@ type pendingOutput struct {
 	done bool
 }
 
-// newPendingOutput creates a temporary file in the same directory as dest.
-// Using the same directory keeps the eventual os.Rename atomic (no cross-device
-// copy). The caller writes to the returned *pendingOutput's File and must call
-// either Commit (on success) or Cleanup (on failure).
+// newPendingOutput creates a temporary file in the same directory as the final
+// target and prepares the atomic rename. When dest is a symlink, the rename
+// target is the resolved real file rather than the link itself: os.Rename would
+// otherwise replace the symlink with a regular file, leaving the linked-to file
+// untouched (a regression from os.Create, which writes THROUGH symlinks). For a
+// non-symlink dest the target is dest unchanged.
+//
+// The temp file is created with os.OpenFile + O_EXCL and mode 0666 so the
+// KERNEL applies the process umask to the new file (matching os.Create
+// semantics) without ever reading or mutating the global umask. Keeping the
+// temp in the same directory as the target keeps the eventual os.Rename atomic
+// (no cross-device copy). The caller writes to the returned *pendingOutput's
+// File and must call either Commit (on success) or Cleanup (on failure).
 func newPendingOutput(dest string) (*pendingOutput, error) {
-	dir := filepath.Dir(dest)
-	f, err := os.CreateTemp(dir, ".helium-out-*")
-	if err != nil {
-		return nil, err //nolint:wrapcheck // caller reports raw error
+	target := dest
+	if fi, err := os.Lstat(dest); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		resolved, rerr := filepath.EvalSymlinks(dest)
+		if rerr != nil {
+			return nil, rerr //nolint:wrapcheck // caller reports raw error
+		}
+		target = resolved
 	}
-	return &pendingOutput{f: f, tmp: f.Name(), dest: dest}, nil
+
+	dir := filepath.Dir(target)
+	tmp, err := newTempFile(dir)
+	if err != nil {
+		return nil, err
+	}
+	return &pendingOutput{f: tmp.f, tmp: tmp.name, dest: target}, nil
+}
+
+// tempFile is a freshly created, exclusively owned temp file.
+type tempFile struct {
+	f    *os.File
+	name string
+}
+
+// newTempFile creates a uniquely named temp file in dir using O_CREATE|O_EXCL so
+// the kernel applies the process umask to the new file's 0666 mode. It retries
+// on the rare name collision.
+func newTempFile(dir string) (*tempFile, error) {
+	for range 10000 {
+		name := filepath.Join(dir, fmt.Sprintf(".helium-out-%d-%d", os.Getpid(), nextRandom()))
+		f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o666) //nolint:gosec // umask applied by kernel; mode adjusted at Commit
+		if err == nil {
+			return &tempFile{f: f, name: name}, nil
+		}
+		if !os.IsExist(err) {
+			return nil, err //nolint:wrapcheck // caller reports raw error
+		}
+	}
+	return nil, fmt.Errorf("could not create temp output file in %s", dir)
 }
 
 // File returns the underlying temp file the caller writes output to.
@@ -114,11 +160,11 @@ func (p *pendingOutput) File() *os.File { return p.f }
 // It must be called only after all output has been written and all inputs have
 // been read. A non-nil error means the destination was left untouched.
 //
-// os.CreateTemp opens the temp file with mode 0600, which would silently make
-// --output files more restrictive than the usual os.Create default. Before the
-// rename we restore the expected permissions: an existing destination keeps its
-// current mode, and a new destination gets 0666 masked by the process umask
-// (matching os.Create semantics, since chmod is not itself umask-filtered).
+// The temp file was created with mode 0666 masked by the process umask, which
+// already matches the os.Create default for a NEW destination, so no chmod is
+// needed in that case. When the destination already EXISTS, os.Create would
+// keep the file's current permissions; we replicate that by chmod-ing the temp
+// to the existing mode before the rename.
 func (p *pendingOutput) Commit() error {
 	if p.done {
 		return nil
@@ -128,25 +174,17 @@ func (p *pendingOutput) Commit() error {
 		_ = os.Remove(p.tmp)
 		return err //nolint:wrapcheck // caller reports raw error
 	}
-	if err := os.Chmod(p.tmp, p.destMode()); err != nil {
-		_ = os.Remove(p.tmp)
-		return err //nolint:wrapcheck // caller reports raw error
+	if fi, err := os.Stat(p.dest); err == nil {
+		if cerr := os.Chmod(p.tmp, fi.Mode().Perm()); cerr != nil {
+			_ = os.Remove(p.tmp)
+			return cerr //nolint:wrapcheck // caller reports raw error
+		}
 	}
 	if err := os.Rename(p.tmp, p.dest); err != nil {
 		_ = os.Remove(p.tmp)
 		return err //nolint:wrapcheck // caller reports raw error
 	}
 	return nil
-}
-
-// destMode returns the file mode the committed output should carry. If the
-// destination already exists its current mode is preserved; otherwise the
-// os.Create default (0666 with the process umask applied) is used.
-func (p *pendingOutput) destMode() os.FileMode {
-	if fi, err := os.Stat(p.dest); err == nil {
-		return fi.Mode().Perm()
-	}
-	return 0o666 &^ os.FileMode(currentUmask())
 }
 
 // Cleanup closes and removes the temp file without touching the destination. It

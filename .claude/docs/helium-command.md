@@ -66,13 +66,14 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 
 File output (`--output`/`-o`, not stdout and not `--noout`) is written through a write-to-temp-then-atomic-rename scheme (`pendingOutput` in `safety.go`):
 
-- A temp file (`.helium-out-*`) is created in the SAME directory as the target; output is written there, and `os.Rename`d onto the target ONLY after all inputs are processed successfully.
+- A temp file (`.helium-out-*`) is created (via `os.OpenFile` with `O_CREATE|O_EXCL`, mode `0666` so the kernel applies umask) in the SAME directory as the target; output is written there, and `os.Rename`d onto the target ONLY after all inputs are processed successfully.
+- When the target is a symlink, the rename target is the resolved real file (`os.Lstat` + `filepath.EvalSymlinks`), so output is written THROUGH the link (matching `os.Create`) instead of replacing the link with a regular file.
 - This closes a truncate-before-read hole: `os.Create` on the target would truncate it up front, destroying a resource the same path is read from LATER — e.g. a DTD/entity resolved via `--path` during validation (lint), or a stylesheet read at transform time via `fn:transform(map{'stylesheet-location':...})` through the retained `URIResolver` (xslt).
 - On any non-OK exit code the temp file is removed (`Cleanup`) and the target is left untouched.
 - A failed commit (flush/close/rename) folds `ExitErr` into the exit status, so an incomplete write is never reported as success.
 - The pre-flight same-file rejection (`checkOutputCollision`) is kept as a fast/friendly error for the obvious `--output X X` case, but the temp+rename is what actually protects later-resolved reads.
 - stdout output and `--noout` are unaffected (no temp file is created).
-- Output file mode: `os.CreateTemp` makes the temp `0600`, so before the rename `Commit` restores the expected permissions — an EXISTING destination keeps its current mode (`os.Stat` + `chmod`), a NEW destination gets `0666 &^ umask` (matching `os.Create`). umask is read via a platform-split helper (`umask_unix.go` uses `syscall.Umask`; `umask_other.go` returns 0 on Windows/plan9).
+- Output file mode: the temp is created `0666` so the kernel applies the process umask, which already matches `os.Create` for a NEW destination (no chmod). For an EXISTING destination `Commit` chmods the temp to the current mode (`os.Stat` + `chmod`) before the rename. umask is never read in-process (the old `syscall.Umask(0)` read-modify-write was racy and has been removed).
 
 ### Flag Groups
 
