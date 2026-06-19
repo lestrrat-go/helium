@@ -407,6 +407,94 @@ func TestElementBodyValidatedBeforeLookup(t *testing.T) {
 	}
 }
 
+func TestElementGrammarStrictness(t *testing.T) {
+	t.Parallel()
+
+	// Document with an NCName id "id" and nested structure for the valid cases.
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="id"><a><b>found</b></a></root>`))
+	require.NoError(t, err)
+
+	rejected := []struct {
+		name string
+		expr string
+	}{
+		// Empty child-sequence segments (trailing slash, doubled slash).
+		{"trailing slash absolute", "element(/)"},
+		{"doubled slash absolute", "element(/1//2)"},
+		{"trailing slash from id", "element(r/)"},
+		// Index lexeme grammar [1-9][0-9]*.
+		{"zero absolute", "element(/0)"},
+		{"bare zero token", "element(0)"},
+		{"plus-signed index", "element(+1)"},
+		{"leading-zero index", "element(01)"},
+		{"negative index", "element(/-1)"},
+		// Missing/out-of-range index whose ID does not exist.
+		{"missing id with zero index", "element(missing/0)"},
+		{"id with trailing slash", "element(id/)"},
+	}
+	for _, tt := range rejected {
+		t.Run("reject/"+tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
+			require.Error(t, err, "expr %q must be rejected", tt.expr)
+			require.Nil(t, nodes, "expr %q", tt.expr)
+		})
+	}
+
+	valid := []struct {
+		name     string
+		expr     string
+		wantName string
+	}{
+		{"id plus sequence", "element(id/1/1)", "b"},
+		{"absolute sequence", "element(/1/1)", "a"},
+		{"absolute single", "element(/1)", "root"},
+		{"id alone", "element(id)", "root"},
+	}
+	for _, tt := range valid {
+		t.Run("accept/"+tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
+			require.NoError(t, err, "expr %q must be accepted", tt.expr)
+			require.Len(t, nodes, 1, "expr %q", tt.expr)
+			require.Equal(t, tt.wantName, nodes[0].(*helium.Element).LocalName())
+		})
+	}
+}
+
+func TestShorthandNCNameStrictness(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="good">found</root>`))
+	require.NoError(t, err)
+
+	t.Run("valid NCName resolves", func(t *testing.T) {
+		t.Parallel()
+
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "good")
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, "root", nodes[0].(*helium.Element).LocalName())
+	})
+
+	// A shorthand pointer that is not a valid NCName must be a syntax error,
+	// not a silent empty result. Includes a colon (NCNames are non-colonized),
+	// a leading digit, and invalid UTF-8.
+	for _, expr := range []string{"1bad", "a:b", "bad name", "\xff\xfe"} {
+		t.Run("reject/"+expr, func(t *testing.T) {
+			t.Parallel()
+
+			nodes, err := xpointer.Evaluate(t.Context(), doc, expr)
+			require.Error(t, err, "expr %q must be rejected", expr)
+			require.Nil(t, nodes, "expr %q", expr)
+		})
+	}
+}
+
 func TestMultiSchemeExpressionsTable(t *testing.T) {
 	t.Parallel()
 

@@ -6,10 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -129,7 +129,15 @@ func (e *Expression) evaluatePart(ctx context.Context, doc *helium.Document, p x
 		if strings.ContainsRune(p.body, '/') {
 			// Bare child sequence (/1/2/3) or name+child sequence (name/1/2).
 			// libxml2 supports these at top level without element() wrapper.
+			// evaluateElement validates the leading NCName and every index.
 			return evaluateElement(doc, p.body)
+		}
+		// A shorthand pointer must be a valid XML NCName per the XPointer
+		// framework. Reject malformed names (invalid NCName chars, invalid
+		// UTF-8) as syntax errors rather than silently resolving to no node,
+		// which would let XInclude unlink the include node.
+		if !xmlchar.IsValidNCName(p.body) {
+			return nil, fmt.Errorf("xpointer: invalid shorthand pointer %q (not an NCName)", p.body)
 		}
 		elem := doc.GetElementByID(p.body)
 		if elem == nil {
@@ -233,32 +241,6 @@ func parseParts(expr string) ([]xptrPart, error) {
 	return parts, nil
 }
 
-// isBareName reports whether s is a valid XML NCName: it starts with a letter
-// or '_', followed by NCName characters. It is used to validate the leading
-// shorthand/ID token of an element() body (e.g. the "r" in "r/1").
-func isBareName(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i, r := range s {
-		if i == 0 {
-			if r == '_' || isLetter(r) {
-				continue
-			}
-			return false
-		}
-		if r == '_' || r == '-' || r == '.' || isLetter(r) || (r >= '0' && r <= '9') {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func isLetter(r rune) bool {
-	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r >= 0x80
-}
-
 // parseScheme parses the first XPointer scheme(body) from expr.
 // Returns the scheme, body, remaining string after the closing paren, and any error.
 // For bare names (no parenthesis), remaining is empty.
@@ -312,24 +294,21 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 	// include node instead of surfacing the syntax error.
 	//
 	// A non-empty leading token must be a valid NCName (the shorthand ID); an
-	// empty leading token denotes an absolute "/..." child sequence. Every
-	// child-sequence segment after the first must be a 1-based integer index.
-	if parts[0] != "" && !isBareName(parts[0]) {
+	// empty leading token denotes an absolute "/..." child sequence. Only the
+	// very first segment may be empty (the leading "/" of an absolute sequence
+	// like "/1/2"). Every child-sequence segment after the first must be a
+	// non-empty 1-based integer index matching [1-9][0-9]* (no sign, no leading
+	// zero). An empty segment anywhere else is a trailing/doubled slash and is a
+	// syntax error.
+	if parts[0] != "" && !xmlchar.IsValidNCName(parts[0]) {
 		return nil, fmt.Errorf("xpointer: invalid element() id %q (not an NCName)", parts[0])
 	}
 	for _, part := range parts[1:] {
 		if part == "" {
-			continue
+			return nil, fmt.Errorf("xpointer: empty child-sequence segment in element() scheme (trailing or doubled %q)", "/")
 		}
-		childIdx, err := strconv.Atoi(part)
-		if err != nil {
-			return nil, fmt.Errorf("xpointer: invalid child index %q in element() scheme", part)
-		}
-		// Child-sequence indexes are 1-based per the XPointer element() scheme.
-		// An index < 1 is malformed; reject it rather than returning an empty
-		// node set (an empty result would silently unlink an XInclude node).
-		if childIdx < 1 {
-			return nil, fmt.Errorf("xpointer: child index %d out of range in element() scheme (must be >= 1)", childIdx)
+		if !isChildIndex(part) {
+			return nil, fmt.Errorf("xpointer: invalid child index %q in element() scheme (must match [1-9][0-9]*)", part)
 		}
 	}
 
@@ -345,10 +324,7 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 	}
 
 	for _, part := range parts[1:] {
-		if part == "" {
-			continue
-		}
-		childIdx, _ := strconv.Atoi(part) // already validated above
+		childIdx := atoiChildIndex(part) // already validated above
 		cur = nthElementChild(cur, childIdx)
 		if cur == nil {
 			return nil, nil
@@ -359,6 +335,36 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 		return nil, nil
 	}
 	return []helium.Node{cur}, nil
+}
+
+// isChildIndex reports whether s is a valid XPointer element() child-sequence
+// index: it must match [1-9][0-9]* exactly. That rejects the empty string, a
+// leading sign ("+1", "-1"), a leading zero ("01"), zero itself ("0"), and any
+// non-digit lexeme, all of which Atoi would otherwise silently accept or coerce.
+func isChildIndex(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s[0] < '1' || s[0] > '9' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// atoiChildIndex converts a child-sequence index already validated by
+// isChildIndex into an int. The grammar guarantees only ASCII digits, so the
+// conversion cannot fail.
+func atoiChildIndex(s string) int {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		n = n*10 + int(s[i]-'0')
+	}
+	return n
 }
 
 // nthElementChild returns the n-th element child (1-based) of the given node.
