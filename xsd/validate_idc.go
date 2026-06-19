@@ -37,8 +37,21 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 	}
 
 	// Evaluate all constraints declared on this element and collect their
-	// key-sequence tables.
+	// key-sequence tables. The tables are scoped to THIS element OCCURRENCE: an
+	// xs:key/xs:unique table built here is visible only to keyrefs declared on the
+	// SAME occurrence. This matches the XSD identity-constraint scope (and
+	// xmllint): a keyref resolves against the key table built for its own host
+	// occurrence, so two sibling occurrences of a repeating host never leak key
+	// spaces into each other.
 	var lastErr error
+
+	// keyTables holds this occurrence's evaluated key/unique tables, indexed by
+	// the constraint's full QName identity, for resolving same-occurrence keyrefs.
+	keyTables := make(map[QName]*idcTable)
+	// keyRefs collects this occurrence's keyrefs to resolve after every key/unique
+	// on the same occurrence has been evaluated (a keyref may be declared before
+	// the key it refers to in document order).
+	var keyRefs []pendingKeyRef
 
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
@@ -69,18 +82,17 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 		}
 
 		if idc.Kind == IDCKeyRef {
-			// Defer keyref checks until the whole document is walked: a keyref may
-			// reference a key/unique declared on a DIFFERENT element, whose table is
-			// not yet available here.
-			vc.keyrefPending = append(vc.keyrefPending, pendingKeyRef{idc: idc, table: table})
+			// Defer keyref resolution until every key/unique on this occurrence is
+			// evaluated, so a keyref declared before its key (document order) still
+			// resolves.
+			keyRefs = append(keyRefs, pendingKeyRef{idc: idc, table: table})
 			continue
 		}
 
 		// Register the key/unique key-sequences under the constraint's full QName
-		// identity for cross-element keyref resolution. Appending (rather than
-		// overwriting) keeps every occurrence's key-sequences when the host element
-		// repeats.
-		vc.idcKeyEntries[idc.QName] = append(vc.idcKeyEntries[idc.QName], table.keys...)
+		// identity, scoped to THIS occurrence, for same-occurrence keyref
+		// resolution.
+		keyTables[idc.QName] = table
 
 		// Check unique/key uniqueness immediately.
 		if err := vc.checkUniqueness(ctx, table, idc); err != nil {
@@ -88,29 +100,22 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 		}
 	}
 
-	return lastErr
-}
-
-// checkPendingKeyRefs resolves every deferred keyref against the document-level
-// key/unique tables collected during the IDC walk. Resolution is by the keyref's
-// resolved @refer QName (namespace + local), so cross-element references are
-// enforced and a local-name collision across namespaces cannot bind the wrong
-// constraint. An unresolved refer (missing table) is rejected at schema compile
-// time, so a nil ref-table here means the referenced element simply did not
-// appear in the instance: that is an empty key space, against which any non-empty
-// keyref is a "no match" failure.
-func (vc *validationContext) checkPendingKeyRefs(ctx context.Context) error {
-	var lastErr error
-	for _, pending := range vc.keyrefPending {
-		// idcKeyEntries holds every key-sequence the referenced key/unique produced
-		// across the document (possibly empty if its host element never appeared).
-		// An empty ref space means any non-empty keyref is a "no match" failure,
-		// which checkKeyRef reports — never a silent skip.
-		refTable := &idcTable{idc: pending.idc, keys: vc.idcKeyEntries[pending.idc.ReferQName]}
+	// Resolve this occurrence's keyrefs against the key/unique tables built for
+	// the SAME occurrence. A keyref whose referenced key/unique is NOT declared on
+	// this host occurrence resolves against an empty key space, so every non-empty
+	// key-sequence is a "no match" failure — matching xmllint, which rejects a
+	// keyref that names a key declared on a different element (the referenced key
+	// is out of the keyref's scope).
+	for _, pending := range keyRefs {
+		refTable := keyTables[pending.idc.ReferQName]
+		if refTable == nil {
+			refTable = &idcTable{idc: pending.idc}
+		}
 		if err := vc.checkKeyRef(ctx, pending.table, refTable, pending.idc); err != nil {
 			lastErr = err
 		}
 	}
+
 	return lastErr
 }
 

@@ -65,17 +65,21 @@ func TestIDCFieldXPathEvalError(t *testing.T) {
 	require.Contains(t, errs, "itemKey")
 }
 
-// TestIDCCrossElementKeyRef confirms that a keyref whose referenced key lives on
-// a DIFFERENT element is actually enforced. Previously validation only consulted
-// the keyref host element's own tables, so a cross-element refer hit a nil
-// ref-table and was silently skipped — a dangling reference wrongly validated.
-func TestIDCCrossElementKeyRef(t *testing.T) {
+// TestIDCCrossElementKeyRefOutOfScope verifies the XSD identity-constraint scope
+// rule for a keyref whose referenced key is declared on a DIFFERENT element. The
+// keyref's referenced key/unique must be in the keyref host occurrence's scope;
+// a key declared on a SIBLING element is NOT, so every key-sequence is a "no
+// match" failure — even when an equal value exists under the sibling key. This
+// matches xmllint, which rejects BOTH the "matching" and the dangling instance
+// here. (A doc-wide merged key table would falsely accept the first.) The schema
+// itself still COMPILES: @refer resolves in the schema-wide identity-constraint
+// symbol space; only value resolution is occurrence-scoped.
+func TestIDCCrossElementKeyRefOutOfScope(t *testing.T) {
 	t.Parallel()
 
 	// "productKey" is declared on the GLOBAL element <products>; "orderRef" is
-	// declared on the GLOBAL element <orders>. The two constraints live on
-	// different (globally-declared) elements, so resolving the keyref requires the
-	// document-level cross-element key table.
+	// declared on the GLOBAL element <orders>. They live on different elements, so
+	// the key is out of the keyref's scope.
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="catalog">
     <xs:complexType>
@@ -118,16 +122,19 @@ func TestIDCCrossElementKeyRef(t *testing.T) {
 </xs:schema>`
 
 	v, compileErrs := compileXSD(t, schemaXML)
-	require.Empty(t, compileErrs, "cross-element keyref should compile clean")
+	require.Empty(t, compileErrs, "cross-element keyref should compile clean (refer resolves in the symbol space)")
 
-	t.Run("matching cross-element keyref validates", func(t *testing.T) {
+	t.Run("out-of-scope key does not satisfy keyref", func(t *testing.T) {
 		t.Parallel()
+		// An equal value DOES exist under the sibling productKey, but it is out of
+		// the orderRef scope, so xmllint (and helium) reject it.
 		doc, err := helium.NewParser().Parse(t.Context(),
 			[]byte(`<catalog><products><product id="a"/><product id="b"/></products><orders><order product="a"/></orders></catalog>`))
 		require.NoError(t, err)
 		var errs string
 		err = validateWithOutput(t, v, doc, &errs)
-		require.NoError(t, err, "expected valid, got: %s", errs)
+		require.Error(t, err, "a key on a sibling element is out of the keyref scope and must not satisfy it")
+		require.Contains(t, errs, "No match found")
 	})
 
 	t.Run("dangling cross-element keyref fails", func(t *testing.T) {
@@ -239,4 +246,165 @@ func TestIDCSameNamespaceKeyRef(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, errs, "No match found")
 	})
+}
+
+// TestIDCKeyRefOccurrenceScope is the regression test for the leak that the
+// document-level key table introduced: a key/unique declared on a REPEATING host
+// element must be scoped to each occurrence, so a keyref on a later occurrence
+// cannot satisfy itself using an earlier occurrence's keys. xmllint rejects the
+// cross-occurrence case; a doc-wide merged table would falsely accept it. The
+// host <group> is a GLOBAL element referenced with maxOccurs="unbounded", which
+// is the path pass-2 IDC evaluation actually walks.
+func TestIDCKeyRefOccurrenceScope(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="group" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="group">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="id" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="ref" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="r" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="itemKey">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="@id"/>
+    </xs:key>
+    <xs:keyref name="itemRef" refer="itemKey">
+      <xs:selector xpath="ref"/>
+      <xs:field xpath="@r"/>
+    </xs:keyref>
+  </xs:element>
+</xs:schema>`
+
+	v, compileErrs := compileXSD(t, schemaXML)
+	require.Empty(t, compileErrs, "repeated-host keyref schema should compile clean")
+
+	t.Run("each occurrence satisfies its own keyref", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>
+  <group><item id="a"/><ref r="a"/></group>
+  <group><item id="b"/><ref r="b"/></group>
+</root>`))
+		require.NoError(t, err)
+		var errs string
+		err = validateWithOutput(t, v, doc, &errs)
+		require.NoError(t, err, "expected valid, got: %s", errs)
+	})
+
+	t.Run("cross-occurrence key does not leak", func(t *testing.T) {
+		t.Parallel()
+		// group2's ref points to group1's item key — out of group2's scope.
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>
+  <group><item id="a"/><ref r="a"/></group>
+  <group><item id="b"/><ref r="a"/></group>
+</root>`))
+		require.NoError(t, err)
+		var errs string
+		err = validateWithOutput(t, v, doc, &errs)
+		require.Error(t, err, "a later occurrence must not reuse an earlier occurrence's keys")
+		require.Contains(t, errs, "No match found for key-sequence ['a'] of keyref 'itemRef'.")
+	})
+}
+
+// TestIDCLocalKeyRefMissingRefer is the regression test for finding #2: a keyref
+// declared on a LOCAL element declaration (buried inside a content model) with a
+// @refer that names no existing key/unique must be a fatal schema compile error.
+// The prior registry scanned only GLOBAL element declarations, so a local keyref's
+// dangling refer was never checked and the constraint was silently disabled.
+func TestIDCLocalKeyRefMissingRefer(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="child">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="ref" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:attribute name="r" type="xs:string"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+          <xs:keyref name="danglingRef" refer="nonexistentKey">
+            <xs:selector xpath="ref"/>
+            <xs:field xpath="@r"/>
+          </xs:keyref>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	_, compileErrs := compileXSD(t, schemaXML)
+	require.NotEmpty(t, compileErrs, "a local keyref with a missing refer must be a fatal schema error")
+	require.Contains(t, compileErrs, "nonexistentKey")
+}
+
+// TestIDCLocalKeyRefCrossLocalKey confirms the registry also reaches a key/unique
+// declared on a LOCAL element when validating a local keyref's @refer: a local
+// keyref referring to a key on another local element compiles clean (the refer
+// resolves), exercising the recursive content-model walk in collectAllIDCs.
+func TestIDCLocalKeyRefCrossLocalKey(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="items">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="item" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:attribute name="id" type="xs:string"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+          <xs:key name="localItemKey">
+            <xs:selector xpath="item"/>
+            <xs:field xpath="@id"/>
+          </xs:key>
+        </xs:element>
+        <xs:element name="refs">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="ref" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:attribute name="r" type="xs:string"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+          <xs:keyref name="localRef" refer="localItemKey">
+            <xs:selector xpath="ref"/>
+            <xs:field xpath="@r"/>
+          </xs:keyref>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	_, compileErrs := compileXSD(t, schemaXML)
+	require.Empty(t, compileErrs, "a local keyref referring to a local key must compile clean")
 }

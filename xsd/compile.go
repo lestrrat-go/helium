@@ -342,10 +342,18 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 // refer to a key/unique declared on a different element; the prior per-host
 // resolution missed those and any typo'd or missing refer silently disabled the
 // keyref. A failure here is reported as a fatal schema parser error.
+//
+// The registry is built from ALL identity-constraints in the schema, not just
+// those on GLOBAL element declarations: a keyref (or the key/unique it refers
+// to) declared on a LOCAL element declaration buried in a content model must be
+// checked too. collectAllIDCs walks every global element/type/group content
+// model recursively (with a visited set) to reach those local hosts.
 func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 	if c.filename == "" {
 		return
 	}
+
+	idcs := c.collectAllIDCs()
 
 	// Build the set of all declared key/unique constraint QNames. Identity
 	// constraints live in the schema's target namespace, so a keyref may refer to
@@ -353,39 +361,112 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 	// {namespace}local identity, not local name only (a local-name match could
 	// bind the wrong constraint when two namespaces share a local name).
 	keyNames := make(map[QName]struct{})
-	for _, edecl := range c.schema.elements {
-		for _, idc := range edecl.IDCs {
-			if idc.Kind == IDCKey || idc.Kind == IDCUnique {
-				keyNames[idc.QName] = struct{}{}
-			}
+	for _, idc := range idcs {
+		if idc.Kind == IDCKey || idc.Kind == IDCUnique {
+			keyNames[idc.QName] = struct{}{}
 		}
 	}
 
-	for _, edecl := range c.schema.elements {
-		for _, idc := range edecl.IDCs {
-			if idc.Kind != IDCKeyRef {
-				continue
-			}
-			// An unbound @refer prefix was already reported as fatal at parse time.
-			if idc.referUnbound {
-				continue
-			}
-			if idc.Refer == "" {
-				msg := fmt.Sprintf("The keyref identity-constraint '%s' has no 'refer' attribute naming a key or unique.", idc.Name)
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(
-					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
-					helium.ErrorLevelFatal))
-				c.errorCount++
-				continue
-			}
-			if _, ok := keyNames[idc.ReferQName]; ok {
-				continue
-			}
-			msg := fmt.Sprintf("The keyref identity-constraint '%s' references the unknown key or unique '%s'.", idc.Name, idc.Refer)
+	for _, idc := range idcs {
+		if idc.Kind != IDCKeyRef {
+			continue
+		}
+		// An unbound @refer prefix was already reported as fatal at parse time.
+		if idc.referUnbound {
+			continue
+		}
+		if idc.Refer == "" {
+			msg := fmt.Sprintf("The keyref identity-constraint '%s' has no 'refer' attribute naming a key or unique.", idc.Name)
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(
 				schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
 				helium.ErrorLevelFatal))
 			c.errorCount++
+			continue
+		}
+		if _, ok := keyNames[idc.ReferQName]; ok {
+			continue
+		}
+		msg := fmt.Sprintf("The keyref identity-constraint '%s' references the unknown key or unique '%s'.", idc.Name, idc.Refer)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(
+			schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
+			helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+}
+
+// collectAllIDCs returns every identity-constraint declared anywhere in the
+// schema, including those on LOCAL element declarations nested inside content
+// models. It seeds the walk from all global element declarations, named types,
+// and named model groups, then descends each content model recursively. Visited
+// sets on *ElementDecl, *ModelGroup, and *TypeDef bound the walk so shared
+// group particles, recursive types, and circular references are each traversed
+// once.
+func (c *compiler) collectAllIDCs() []*IDConstraint {
+	w := &idcWalker{
+		elems:  make(map[*ElementDecl]struct{}),
+		groups: make(map[*ModelGroup]struct{}),
+		types:  make(map[*TypeDef]struct{}),
+	}
+	for _, edecl := range c.schema.elements {
+		w.walkElement(edecl)
+	}
+	for _, td := range c.schema.types {
+		w.walkType(td)
+	}
+	for _, mg := range c.schema.groups {
+		w.walkGroup(mg)
+	}
+	return w.idcs
+}
+
+// idcWalker accumulates identity-constraints while recursively descending
+// element declarations, types, and model groups, tracking visited nodes to
+// terminate on shared/recursive/circular structures.
+type idcWalker struct {
+	idcs   []*IDConstraint
+	elems  map[*ElementDecl]struct{}
+	groups map[*ModelGroup]struct{}
+	types  map[*TypeDef]struct{}
+}
+
+func (w *idcWalker) walkElement(edecl *ElementDecl) {
+	if edecl == nil {
+		return
+	}
+	if _, seen := w.elems[edecl]; seen {
+		return
+	}
+	w.elems[edecl] = struct{}{}
+	w.idcs = append(w.idcs, edecl.IDCs...)
+	w.walkType(edecl.Type)
+}
+
+func (w *idcWalker) walkType(td *TypeDef) {
+	if td == nil {
+		return
+	}
+	if _, seen := w.types[td]; seen {
+		return
+	}
+	w.types[td] = struct{}{}
+	w.walkGroup(td.ContentModel)
+	w.walkType(td.BaseType)
+}
+
+func (w *idcWalker) walkGroup(mg *ModelGroup) {
+	if mg == nil {
+		return
+	}
+	if _, seen := w.groups[mg]; seen {
+		return
+	}
+	w.groups[mg] = struct{}{}
+	for _, p := range mg.Particles {
+		switch term := p.Term.(type) {
+		case *ElementDecl:
+			w.walkElement(term)
+		case *ModelGroup:
+			w.walkGroup(term)
 		}
 	}
 }

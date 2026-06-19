@@ -167,14 +167,29 @@ engine, which RE2 cannot. A pattern that is not a valid XSD regular expression i
 reported as a schema parser error (`The value '…' is not a valid regular
 expression.`); its `compiledPatterns` entry stays nil and is skipped at validation.
 
-**Compile-time IDC checks:** a malformed `xs:selector`/`xs:field` `@xpath` is a fatal schema parser error (`parseIDConstraint` → `reportIDCXPathError`) rather than a silently-dropped `xpath1.Compile` failure that would disable the whole constraint. After all elements are parsed, `checkKeyRefRefers` (in `compileSchema`) resolves every `xs:keyref/@refer` against a schema-wide set of key/unique constraint names (identity-constraint names share one symbol space, so a keyref may refer to a key/unique on a different element) and raises a fatal error for an unknown/empty refer. At validation time, an IDC whose selector/field XPath fails to evaluate is reported as a validity error (`Failed to evaluate identity-constraint '…'`), not swallowed.
+**Compile-time IDC checks:** a malformed `xs:selector`/`xs:field` `@xpath` is a fatal schema parser error (`parseIDConstraint` → `reportIDCXPathError`) rather than a silently-dropped `xpath1.Compile` failure that would disable the whole constraint. After all elements are parsed, `checkKeyRefRefers` (in `compileSchema`) resolves every `xs:keyref/@refer` against a schema-wide set of key/unique constraint names (identity-constraint names share one symbol space) and raises a fatal error for an unknown/empty refer. The registry is built by `collectAllIDCs`, which walks EVERY element declaration — not just `schema.elements` (globals) — by recursively descending each global element's/type's/named-group's content model (`idcWalker`, with visited sets on `*ElementDecl`/`*ModelGroup`/`*TypeDef` to bound shared/recursive/circular structures), so a keyref (or the key it refers to) declared on a LOCAL element buried in a content model is checked too. **@refer resolution is schema-wide (the symbol space); keyref VALUE resolution is occurrence-scoped** — the two are distinct (see Pass 2 below). At validation time, an IDC whose selector/field XPath fails to evaluate is reported as a validity error (`Failed to evaluate identity-constraint '…'`), not swallowed.
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):
   1. Evaluate selector XPath → node set
   2. For each selected node, evaluate field XPaths → collect key-sequences
   3. Check unique/key: all key-sequences must be unique
-  4. Check keyref: all key-sequences must exist in referenced constraint table
+  4. Check keyref: all key-sequences must exist in referenced constraint table.
+     **Keyref tables are OCCURRENCE-SCOPED** (XSD identity-constraint scope,
+     matching xmllint): the key/unique tables a keyref resolves against are those
+     built for the SAME host-element OCCURRENCE that declares the keyref
+     (`validateIDConstraints` builds a per-occurrence `keyTables map[QName]*idcTable`
+     and resolves that occurrence's keyrefs against it after every key/unique on
+     the occurrence is evaluated, so a keyref declared before its key still
+     resolves). A keyref whose referenced key/unique is declared on a DIFFERENT
+     element (a sibling, or a repeating host's other occurrence) resolves against
+     an EMPTY key space → every key-sequence is a "no match" failure. This is
+     deliberate: two sibling occurrences of a repeating host never leak key spaces
+     into each other (a doc-wide merged table would falsely accept a cross-scope
+     reference), and a key on a sibling element is out of the keyref's scope just
+     as xmllint enforces. Note this means a genuine cross-host keyref (key on
+     element A, keyref on element B≠A) is conservatively rejected — xmllint rejects
+     it too, so there are no false accepts.
   - Field presence (cvc-identity-constraint.4.2.1): an `xs:key` requires every
     field to evaluate to a node for each selected node; an absent field is a
     validity error (`Not all fields of key identity-constraint '…' evaluate to a
