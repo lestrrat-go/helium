@@ -815,6 +815,23 @@ func TestNamespaceNotRedeclared(t *testing.T) {
 	require.Equal(t, `<ns:root xmlns:ns="http://example.com"><ns:child/></ns:root>`, buf.String())
 }
 
+func TestStartAttributeNSAfterTagCloseLeavesNamespaceUnmutated(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	// Write text to close the start tag so the writer is no longer in
+	// stateName. A StartAttributeNS call now must be rejected.
+	require.NoError(t, w.WriteString("x"))
+	require.Error(t, w.StartAttributeNS("ns", "attr", "http://example.com"))
+	// The rejected call must not have recorded the ns:->uri declaration, so a
+	// child element with the same prefix still emits its xmlns:ns binding.
+	require.NoError(t, w.StartElementNS("ns", "child", "http://example.com"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root>x<ns:child xmlns:ns="http://example.com"/></root>`, buf.String())
+}
+
 func TestNamespaceRedeclaredDifferentURI(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer

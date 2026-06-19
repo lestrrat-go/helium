@@ -905,6 +905,14 @@ func (w *Writer) StartAttributeNS(prefix, localName, namespaceURI string) error 
 	if err := validateXMLChars("namespace URI", namespaceURI); err != nil {
 		return err
 	}
+	// Verify the writer is in the correct state before declareNS records a
+	// declaration, so a call made after the start tag is closed is rejected
+	// without leaking a namespace declaration into the scope (which would make
+	// a later child element skip emitting its xmlns:prefix binding). This
+	// mirrors the state check StartAttribute performs below.
+	if w.state != stateName {
+		return errors.New("stream: StartAttribute called outside element opening tag")
+	}
 	if namespaceURI != "" && prefix != "" {
 		w.declareNS(prefix, namespaceURI)
 	}
