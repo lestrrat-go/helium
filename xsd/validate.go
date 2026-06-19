@@ -588,13 +588,16 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			return nil
 		}
 		// Choose the declaration whose identity constraints apply to this element
-		// instance. Prefer the LOCAL declaration matched during pass-1 when it
-		// actually carries IDCs — lookupElemDecl finds only GLOBAL declarations, so
-		// IDCs on a local element would otherwise be silently skipped. Fall back to
-		// the global lookup otherwise: an <xs:element ref="g"> matches a ref
-		// declaration that does NOT copy the global's IDCs (IDCs are a property of
-		// the referenced global declaration), so for a ref the global lookup is the
-		// one that carries the constraints.
+		// instance. idcHostDecl uses the non-ref declaration recorded during pass-1
+		// if one is present — even when it carries zero IDCs — because a local
+		// element that merely shadows a same-named global must NOT inherit the
+		// global's IDCs. lookupElemDecl finds only GLOBAL declarations, so IDCs on a
+		// local element would otherwise be silently skipped. It falls back to the
+		// global lookup only when no declaration was recorded OR the recorded one is
+		// a ref: an <xs:element ref="g"> matches a ref declaration (IsRef) that does
+		// NOT copy the global's IDCs (IDCs are a property of the referenced global
+		// declaration), so for a ref the global lookup is the one that carries the
+		// constraints.
 		edecl := vc.idcHostDecl(elem)
 		if edecl != nil && len(edecl.IDCs) > 0 {
 			if err := vc.validateIDConstraints(ctx, elem, edecl); err != nil {

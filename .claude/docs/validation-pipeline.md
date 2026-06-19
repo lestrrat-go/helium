@@ -177,16 +177,19 @@ expression.`); its `compiledPatterns` entry stays nil and is skipped at validati
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - **Host declaration resolution** (`idcHostDecl`): the declaration whose IDCs apply
-  to an element instance is the LOCAL declaration matched during pass-1 when it
-  carries IDCs, else the GLOBAL lookup (`lookupElemDecl`). Pass-1 records the matched
+  to an element instance is the non-ref declaration recorded during pass-1 if one is
+  present — used even when it carries ZERO IDCs, because a local element that merely
+  shadows a same-named global must NOT inherit the global's IDCs. It falls back to the
+  GLOBAL lookup (`lookupElemDecl`) only when no declaration was recorded OR the recorded
+  declaration is a ref (`IsRef`). Pass-1 records the matched
   `*ElementDecl` for every element instance in `validationContext.actualElemDecl`
   (`recordElemDecl`, called at the content-model match sites alongside
   `annotateElement` and at the validation root), so an `xs:key`/`xs:unique`/`xs:keyref`
   declared on a LOCAL element buried in a content model is EVALUATED rather than
-  silently skipped — `lookupElemDecl` finds only globals. The local-decl preference is
-  gated on `len(decl.IDCs) > 0`: an `<xs:element ref="g">` matches a ref declaration
-  that does NOT copy the global's IDCs (IDCs are a property of the referenced global
-  declaration), so for a `ref` the global lookup is the one carrying the constraints.
+  silently skipped — `lookupElemDecl` finds only globals. The ref fallback exists
+  because an `<xs:element ref="g">` matches a ref declaration that does NOT copy the
+  global's IDCs (IDCs are a property of the referenced global declaration), so for a
+  `ref` the global lookup is the one carrying the constraints.
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):
   1. Evaluate selector XPath → node set
   2. For each selected node, evaluate field XPaths → collect key-sequences
