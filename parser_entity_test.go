@@ -542,6 +542,40 @@ func TestDirectPEReferenceAmplification(t *testing.T) {
 		"error must explain the amplification limit, got: %v", err)
 }
 
+// TestNestedPEReferenceNoDoubleCount is the regression for the PE-accounting
+// double-count bug. The PE %p; has a TINY literal replacement text ("<!-- &g;
+// -->") that expands ALMOST ENTIRELY through a nested GENERAL entity reference
+// &g; pointing at a large value. When %p; is referenced, parsePEReference
+// decodes its replacement via decodeEntities(SubstituteBoth), which ALREADY
+// charges the &g; expansion against the amplification counters. The PE-direct
+// charge must therefore account ONLY p's own literal replacement bytes
+// (len(entity.Content()), here ~12 bytes), NOT the full decoded length
+// (~100 KiB). Charging the decoded length double-counts g's expansion and
+// would falsely reject this legitimate DTD.
+//
+// Sizing keeps the CORRECT total (one charge of g per %p;, ~8*100 KiB ≈ 800 KiB)
+// below the 1 MiB amplification baseline so it must NOT be rejected, while the
+// OLD double-counting total (~1.6 MiB) crosses the baseline and trips the ratio
+// guard against the ~100 KiB input. A regression to the old accounting
+// (entityCheck on len(decodedContent)) brings this test back as a spurious
+// "amplification" rejection.
+func TestNestedPEReferenceNoDoubleCount(t *testing.T) {
+	t.Parallel()
+
+	big := strings.Repeat("A", 100_000)
+	xml := `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r [` + "\n" +
+		`<!ENTITY g "` + big + `">` + "\n" +
+		`<!ENTITY % p "<!-- &g; -->">` + "\n" +
+		strings.Repeat("%p;\n", 8) +
+		`]>` + "\n" + `<r/>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err,
+		"a PE that expands mostly through a nested general entity must stay under the amplification limit; double-counting the nested expansion would falsely reject it")
+	require.NotNil(t, doc)
+}
+
 func TestEntityAmplification(t *testing.T) {
 	t.Parallel()
 
