@@ -734,21 +734,29 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 		c.errorCount++
 	}
 
-	// Range-bound consistency is compared in the restricted type's ORDERED VALUE
+	// Range-bound ORDERING consistency (min/max{Inclusive,Exclusive}) is only
+	// meaningful — and only checked — when the range facets are APPLICABLE to the
+	// type: an ORDERED ATOMIC primitive (numeric, float/double, date/time/duration).
+	//
+	// For a list- or union-variety type, or an atomic type whose primitive is not
+	// ordered, the range facets are inapplicable and already rejected as "not
+	// allowed" by checkFacetApplicability. Running the ordering check there too
+	// would emit a SPURIOUS extra min>max error that xmllint never reports (xmllint
+	// emits only the "facet not allowed" applicability error). So we gate the whole
+	// ordering block on an ordered-atomic builtin: list/union and non-ordered atomic
+	// primitives skip it entirely (no comparison, no decimal fallback).
+	//
+	// When the gate passes, the bounds are compared in the type's ORDERED VALUE
 	// SPACE, not lexically: for a non-decimal ordered atomic (date/time/duration,
 	// float, double) compareDecimal would treat the bounds as incomparable and let
-	// an inconsistent pair (e.g. minInclusive 2021-01-01 > maxInclusive
-	// 2020-01-01) compile. cmp resolves the builtin primitive and uses the same
-	// value-space comparison the instance validator uses.
+	// an inconsistent pair (e.g. minInclusive 2021-01-01 > maxInclusive 2020-01-01)
+	// compile. cmp resolves the builtin primitive and uses the same value-space
+	// comparison the instance validator uses.
 	//
-	// When a builtin primitive RESOLVED, compareForRangeFacet ok=false means one of
-	// the bounds is not a valid value of that type's value space (e.g. xs:int with
-	// minInclusive="1.5"). That invalid bound is already reported by the bound-value
-	// validation, so we treat the pair as incomparable and SKIP the ordering check —
-	// falling back to compareDecimal here would emit a spurious extra min>max error
-	// that xmllint does not. The compareDecimal fallback applies ONLY when NO builtin
-	// resolved (builtinLocal == ""), preserving prior behavior for a non-atomic
-	// (list/union) carrier whose ordering cannot be determined from a primitive.
+	// compareForRangeFacet ok=false means one of the bounds is not a valid value of
+	// that type's value space (e.g. xs:int with minInclusive="1.5"). That invalid
+	// bound is already reported by the bound-value validation, so we treat the pair
+	// as incomparable and SKIP the ordering check (no spurious extra min>max error).
 	//
 	// float/double get a dedicated bound comparator first: compareForRangeFacet
 	// reports NaN as incomparable (the right answer for INSTANCE ordering, where
@@ -759,17 +767,15 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	// still returns ok=false for an invalid float bound, leaving the invalid-bound
 	// error to the dedicated bound-value check (no spurious extra ordering error).
 	builtinLocal := builtinBaseLocal(td)
+	_, orderedAtomic := orderedRangeFacetTypes[builtinLocal]
+	if resolveVariety(td) != TypeVarietyAtomic || !orderedAtomic {
+		return
+	}
 	cmp := func(a, b string) (int, bool) {
 		if v, ok := value.CompareFloatFacetBound(a, b, builtinLocal); ok {
 			return v, true
 		}
 		if v, ok := compareForRangeFacet(a, b, builtinLocal); ok {
-			return v, true
-		}
-		if builtinLocal != "" {
-			return 0, false
-		}
-		if v := compareDecimal(a, b); v != -2 {
 			return v, true
 		}
 		return 0, false

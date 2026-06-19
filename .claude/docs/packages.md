@@ -445,7 +445,7 @@ XSD builtin value validation and comparison, extracted from `xsd/`.
 - **Compare(a, b, builtinLocal string) (int, bool)** — type-aware comparison (-1/0/+1, ok)
 - **CompareDecimal(a, b string) int** — decimal comparison via math/big.Rat (-2 on error)
 - Files: `validate.go`, `compare.go`
-- Imports: (none — leaf package)
+- Imports: `internal/lexicon` (XSD builtin type-name constants)
 
 ## internal/stack/
 

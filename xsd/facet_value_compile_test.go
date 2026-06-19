@@ -508,6 +508,56 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.")
 	})
 
+	// CONVERGENCE REGRESSION: a union or list base carrying BOTH a min and a max
+	// range facet must report ONLY the "facet not allowed" applicability error and
+	// NEVER an ordering (min>max) error. Range facets are inapplicable to list/union
+	// varieties, so the same-type ordering consistency check must be gated off
+	// entirely for them — no decimal fallback comparison. xmllint (the oracle)
+	// reports only the two "not allowed" lines and never an ordering line.
+	t.Run("union base with min and max range facet reports only not-allowed no ordering error", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="u">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:int xs:string"/>
+      </xs:simpleType>
+      <xs:minInclusive value="10"/>
+      <xs:maxInclusive value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="u"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, "The facet 'minInclusive' is not allowed.")
+		require.Contains(t, errs, "The facet 'maxInclusive' is not allowed.")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.",
+			"a union range facet must not fire a spurious ordering error")
+	})
+
+	t.Run("list base with min and max range facet reports only not-allowed no ordering error", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="l">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:list itemType="xs:int"/>
+      </xs:simpleType>
+      <xs:minInclusive value="10"/>
+      <xs:maxInclusive value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="l"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, "The facet 'minInclusive' is not allowed.")
+		require.Contains(t, errs, "The facet 'maxInclusive' is not allowed.")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.",
+			"a list range facet must not fire a spurious ordering error")
+	})
+
 	t.Run("float invalid bound and NaN report only the invalid-bound error", func(t *testing.T) {
 		t.Parallel()
 		// An invalid float bound (e.g. "Inf", the mixed-case spelling rejected by
