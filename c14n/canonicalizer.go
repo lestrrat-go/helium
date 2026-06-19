@@ -104,16 +104,33 @@ func (c *canonicalizer) processDocument() error {
 	return nil
 }
 
-// checkForRelativeNamespaces checks that no namespace declaration on the
-// element has a relative URI.  The C14N spec requires implementations to
-// report failure when a relative namespace URI is encountered.
+// checkForRelativeNamespaces checks that no namespace on the element has a
+// relative URI.  The C14N spec requires implementations to report failure when
+// a relative namespace URI is encountered. Both declared namespaces
+// (e.Namespaces()) and the element's active namespace (e.Namespace()) are
+// inspected, because canonicalization emits in-scope active namespaces too — a
+// programmatically built DOM can set an active namespace with a relative URI
+// (via SetActiveNamespace) without ever declaring it.
 // Mirrors libxml2's xmlC14NCheckForRelativeNamespaces (c14n.c:1338-1373).
 func checkForRelativeNamespaces(e *helium.Element) error {
+	if err := checkRelativeNamespaceURI(e, e.Namespace()); err != nil {
+		return err
+	}
 	for _, ns := range e.Namespaces() {
-		uri := ns.URI()
-		if uri != "" && !strings.Contains(uri, ":") {
-			return fmt.Errorf("c14n: relative namespace URI %q on element %s", uri, e.Name())
+		if err := checkRelativeNamespaceURI(e, ns); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+func checkRelativeNamespaceURI(e *helium.Element, ns *helium.Namespace) error {
+	if ns == nil {
+		return nil
+	}
+	uri := ns.URI()
+	if uri != "" && !strings.Contains(uri, ":") {
+		return fmt.Errorf("c14n: relative namespace URI %q on element %s", uri, e.Name())
 	}
 	return nil
 }
