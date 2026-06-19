@@ -62,7 +62,7 @@ func fnForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		result, err = appendBounded(result, seqMaterialize(r), maxNodes)
+		result, err = appendBoundedSeq(result, r, maxNodes)
 		if err != nil {
 			return nil, err
 		}
@@ -196,7 +196,7 @@ func fnForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		result, err = appendBounded(result, seqMaterialize(r), maxNodes)
+		result, err = appendBoundedSeq(result, r, maxNodes)
 		if err != nil {
 			return nil, err
 		}

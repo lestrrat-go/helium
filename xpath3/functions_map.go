@@ -3,7 +3,6 @@ package xpath3
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
@@ -237,7 +236,7 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return err
 		}
-		result, err = appendBounded(result, seqMaterialize(r), maxNodes)
+		result, err = appendBoundedSeq(result, r, maxNodes)
 		if err != nil {
 			return err
 		}
@@ -270,30 +269,26 @@ func fnMapFind(ctx context.Context, args []Sequence) (Sequence, error) {
 // limit is set. The traversal charges an op per item and bounds the accumulated
 // result count so a deeply or widely nested input cannot exhaust resources.
 //
-// The stack is LIFO, so child items are pushed in reverse order to preserve
-// document order in the output.
+// Each frame is a one-item-at-a-time cursor over a list of sequences (the root
+// input, a map's values, or an array's members). Items are consumed via
+// Sequence.Get so a lazy value/member sequence is never expanded into a
+// temporary slice. The stack is LIFO, so on descending into a nested map/array
+// the parent frame is left in place beneath the child frame, yielding document
+// order.
 func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequence, key AtomicValue) ([]Sequence, error) {
 	var results []Sequence
 
-	var stack []Item
-	pushReversed := func(items []Item) {
-		for _, item := range slices.Backward(items) {
-			stack = append(stack, item)
-		}
-	}
-
-	var initial []Item
-	for item := range seqItems(root) {
-		initial = append(initial, item)
-	}
-	pushReversed(initial)
-
+	stack := []seqCursor{{members: []Sequence{root}}}
 	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		item, ok := top.next()
+		if !ok {
+			stack = stack[:len(stack)-1]
+			continue
+		}
 		if err := fnCountOp(ctx, ec); err != nil {
 			return nil, err
 		}
-		item := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
 		switch v := item.(type) {
 		case MapItem:
 			// The map's own match comes before its descendants in document order.
@@ -304,29 +299,9 @@ func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequen
 				results = append(results, val)
 			}
 			// Then descend into the map's values, in insertion order.
-			var children []Item
-			forEachErr := v.ForEach(func(_ AtomicValue, val Sequence) error {
-				for child := range seqItems(val) {
-					children = append(children, child)
-				}
-				return nil
-			})
-			if forEachErr != nil {
-				return nil, forEachErr
-			}
-			pushReversed(children)
+			stack = append(stack, seqCursor{members: v.values0()})
 		case ArrayItem:
-			var children []Item
-			for i := 1; i <= v.Size(); i++ {
-				member, err := v.Get(i)
-				if err != nil {
-					continue
-				}
-				for child := range seqItems(member) {
-					children = append(children, child)
-				}
-			}
-			pushReversed(children)
+			stack = append(stack, seqCursor{members: v.members0()})
 		}
 	}
 	return results, nil

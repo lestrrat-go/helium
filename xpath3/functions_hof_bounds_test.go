@@ -98,6 +98,70 @@ func TestHOFMaterializationLimit(t *testing.T) {
 	}
 }
 
+// TestHOFLazySequenceLimit proves that the higher-order / map / array built-ins
+// reject an oversized LAZY callback result, map value, or array member with
+// ErrNodeSetLimit WITHOUT first materializing it. The lazy source is a 1<<40
+// (≈1.1 trillion) integer range supplied via a variable: materializing it would
+// attempt a ~9 TB allocation (each Item is multiple words), so any path that
+// still does "materialize, then check" would OOM or hang here rather than return
+// promptly. A correct, streaming/precheck implementation stops after at most
+// `limit` items.
+//
+// The range is handed in as a borrowed variable (not written as `1 to N`) so it
+// bypasses the range-expression construction guard AND the variable-clone path
+// (which would otherwise materialize it), reaching the accumulation sites as a
+// genuine unbounded lazy Sequence.
+func TestHOFLazySequenceLimit(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+	// A lazy range far larger than anything that could be materialized in memory.
+	const huge = int64(1) << 40
+
+	vars := xpath3.NewVariables()
+	vars.Set("lazy", xpath3.NewRangeSequence(1, huge))
+
+	// Only the callback-result / accumulator accumulation sites can receive a
+	// genuinely lazy Sequence: maps and arrays are eager value types whose
+	// members/values are cloned (materialized) at construction, so a lazy member
+	// or map value cannot be constructed through the expression path. These cases
+	// drive a lazy Sequence directly into the per-item accumulators.
+	cases := []struct {
+		name string
+		expr string
+	}{
+		// Callback returns the huge lazy sequence on the very first invocation;
+		// the accumulator (appendBoundedSeq) must stop before materializing it.
+		{"for-each", `for-each(1 to 3, function($x) { $lazy })`},
+		{"for-each-pair", `for-each-pair(1 to 3, 1 to 3, function($a, $b) { $lazy })`},
+		{"map-for-each", `map:for-each(map { 1: 1 }, function($k, $v) { $lazy })`},
+		// fold accumulator becomes the huge lazy sequence; the seqLen check (O(1)
+		// on a lazy range) must reject it without materializing.
+		{"fold-left", `fold-left(1 to 3, (), function($acc, $x) { $lazy })`},
+		{"fold-right", `fold-right(1 to 3, (), function($x, $acc) { $lazy })`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			var evalErr error
+			// NotPanics guards against a regression that materializes the range
+			// (which would either OOM-panic or take effectively forever).
+			require.NotPanics(t, func() {
+				// EvalBorrowing keeps the lazy range out of the variable-clone
+				// path so it stays unmaterialized until an accumulation site
+				// consumes it.
+				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+					Variables(vars).
+					MaxNodesForTesting(limit).
+					Evaluate(t.Context(), compiled, nil)
+			})
+			require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+		})
+	}
+}
+
 // TestArrayFlattenDeepNesting verifies that array:flatten on a deeply nested
 // array structure is iterative/bounded and does not blow the goroutine stack.
 // The nested array flattens to a single item, so the node-set limit is not the

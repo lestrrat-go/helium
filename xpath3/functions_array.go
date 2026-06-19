@@ -268,24 +268,26 @@ func fnArrayFlatten(ctx context.Context, args []Sequence) (Sequence, error) {
 	// input cannot exhaust the goroutine stack. The op-counter and node-set
 	// limit bound the total work and output respectively.
 	//
-	// The stack is LIFO, so items are pushed in reverse order to preserve
-	// document order in the output.
-	var initial []Item
-	for item := range seqItems(args[0]) {
-		initial = append(initial, item)
-	}
-	stack := make([]Item, 0, len(initial))
-	for _, item := range slices.Backward(initial) {
-		stack = append(stack, item)
-	}
+	// Each frame is a cursor over a list of member sequences (the array's
+	// members, or the single top-level input) tracking the current member and
+	// the current item within it. Items are consumed one at a time via
+	// Sequence.Get so a lazy member sequence (e.g. a large integer range) is
+	// never materialized into a temporary slice. The stack is LIFO, so on
+	// descending into a nested array the parent frame is left in place beneath
+	// the child frame, yielding document order.
+	stack := []seqCursor{{members: []Sequence{args[0]}}}
 	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		item, ok := top.next()
+		if !ok {
+			stack = stack[:len(stack)-1]
+			continue
+		}
 		if err := fnCountOp(ctx, ec); err != nil {
 			return nil, err
 		}
-		item := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		arr, ok := item.(ArrayItem)
-		if !ok {
+		arr, isArr := item.(ArrayItem)
+		if !isArr {
 			var err error
 			result, err = appendBounded(result, []Item{item}, maxNodes)
 			if err != nil {
@@ -293,19 +295,36 @@ func fnArrayFlatten(ctx context.Context, args []Sequence) (Sequence, error) {
 			}
 			continue
 		}
-		// Push members in reverse so they are popped in document order.
-		members := arr.members0()
-		var children []Item
-		for _, member := range members {
-			for child := range seqItems(member) {
-				children = append(children, child)
-			}
-		}
-		for _, child := range slices.Backward(children) {
-			stack = append(stack, child)
-		}
+		// Descend into the nested array. The parent cursor was already advanced
+		// past this item, so pushing the child frame on top processes the
+		// array's contents before the parent's following items (document order).
+		stack = append(stack, seqCursor{members: arr.members0()})
 	}
 	return result, nil
+}
+
+// seqCursor is a one-item-at-a-time cursor over a list of member sequences. It
+// lets the iterative array/map walkers descend into nested structures without
+// expanding any child sequence into a temporary slice: next() advances through
+// the members in order, returning a single Item per call.
+type seqCursor struct {
+	members []Sequence
+	mi      int // current member index
+	ii      int // current item index within members[mi]
+}
+
+func (c *seqCursor) next() (Item, bool) {
+	for c.mi < len(c.members) {
+		m := c.members[c.mi]
+		if c.ii < seqLen(m) {
+			item := m.Get(c.ii)
+			c.ii++
+			return item, true
+		}
+		c.mi++
+		c.ii = 0
+	}
+	return nil, false
 }
 
 func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -328,16 +347,17 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Each result should be an array; collect members. Check before each
-		// bulk append so the accumulator cannot overshoot the limit by a whole
-		// member slice.
+		// Each result should be an array; collect members one at a time, checking
+		// the limit before each append so neither a lazy callback result nor a
+		// wide array member list can overshoot the limit before the check.
 		for item := range seqItems(r) {
 			if ra, ok := item.(ArrayItem); ok {
-				members := ra.members0()
-				if maxNodes > 0 && len(allMembers)+len(members) > maxNodes {
-					return nil, ErrNodeSetLimit
+				for _, member := range ra.members0() {
+					if maxNodes > 0 && len(allMembers)+1 > maxNodes {
+						return nil, ErrNodeSetLimit
+					}
+					allMembers = append(allMembers, member)
 				}
-				allMembers = append(allMembers, members...)
 				continue
 			}
 			if maxNodes > 0 && len(allMembers)+1 > maxNodes {

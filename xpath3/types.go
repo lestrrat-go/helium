@@ -823,6 +823,16 @@ func (m MapItem) ForEach(fn func(AtomicValue, Sequence) error) error {
 	return nil
 }
 
+// values0 returns the map's value sequences in insertion order without cloning.
+// Callers must not mutate the returned sequences.
+func (m MapItem) values0() []Sequence {
+	vals := make([]Sequence, len(m.entries))
+	for i, e := range m.entries {
+		vals[i] = e.value
+	}
+	return vals
+}
+
 // Remove returns a new map with the given key removed.
 func (m MapItem) Remove(key AtomicValue) MapItem {
 	nk := normalizeMapKey(key)
