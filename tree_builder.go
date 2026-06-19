@@ -447,8 +447,12 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	if int64(len(data)) > limit64 {
 		return ErrExternalDTDTooLarge
 	}
-	if readErr != nil {
-		return nil
+	// A non-EOF read error (e.g. io.ErrUnexpectedEOF or a transport failure)
+	// means the DTD was only partially read. Treating that as an absent DTD
+	// would silently accept a truncated subset, so surface it. io.EOF is the
+	// normal terminator for a fully consumed stream and is not an error.
+	if readErr != nil && readErr != io.EOF {
+		return readErr
 	}
 
 	doc := ctx.doc
@@ -470,43 +474,44 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 
 	baseLen := ctx.inputTab.Len()
 	ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(data)))
+	// The DTD cursor we just pushed is the enclosing content cursor for the
+	// shared declaration step: it lives one level above baseLen.
+	dtdFloor := ctx.inputTab.Len()
 
+	// Restore parser state on every exit path, including the error returns
+	// below, and ensure our pushed input is always removed from the stack.
+	defer func() {
+		for ctx.inputTab.Len() > baseLen {
+			ctx.popInput()
+		}
+		ctx.external = savedExternal
+		ctx.baseURI = savedBaseURI
+	}()
+
+	// Parse the external subset declaration-by-declaration through the SHARED
+	// step used for INCLUDE-section bodies (parseExternalSubsetDeclStep), so a
+	// parameter-entity reference expands identically in both contexts: a
+	// blank-only skip (NOT skipBlanks, whose handlePEReference would consume a
+	// "%pe;" reference without expanding it), explicit parsePEReference
+	// expansion, spent-cursor cleanup, and a forward-progress guard that surfaces
+	// a malformed "<!BOGUS" while the external DTD cursor/baseURI are still
+	// active (so its location, not the main doctype's, is reported). The
+	// top-level loop is tolerant of conditional-section errors (stop, do not
+	// fail).
 	for ctx.inputTab.Len() > baseLen {
 		top := ctx.adaptCursor(ctx.inputTab.PeekOne())
 		if top == nil || top.Done() {
 			break
 		}
 
-		ctx.skipBlanks(ctxif)
-
-		if ctx.inputTab.Len() <= baseLen {
-			break
+		stop, err := ctx.parseExternalSubsetDeclStep(ctxif, dtdFloor, true)
+		if err != nil {
+			return err
 		}
-		top = ctx.adaptCursor(ctx.inputTab.PeekOne())
-		if top == nil || top.Done() {
-			break
-		}
-
-		cur := ctx.getCursor()
-		if cur != nil && cur.Peek() == '<' && cur.PeekAt(1) == '!' && cur.PeekAt(2) == '[' {
-			if err := ctx.parseConditionalSections(ctxif); err != nil {
-				break
-			}
-			continue
-		}
-
-		if err := ctx.parseMarkupDecl(ctxif); err != nil {
+		if stop {
 			break
 		}
 	}
-
-	// Clean up: ensure our pushed input is removed
-	for ctx.inputTab.Len() > baseLen {
-		ctx.popInput()
-	}
-
-	ctx.external = savedExternal
-	ctx.baseURI = savedBaseURI
 
 	return nil
 }
