@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -964,20 +963,18 @@ func TestDerivedUnionRestrictionInheritsFacets(t *testing.T) {
 	})
 }
 
-// TestUnionListRangeFacetInapplicable verifies that a numeric range facet
-// (minInclusive) on a union whose active member is itself a LIST does NOT apply a
-// decimal comparison to the list value. Range facets are only meaningful on
-// ordered (atomic numeric/date-time) value spaces; a list variety has no such
-// ordering, so the bound must be treated as inapplicable. With u =
-// union(intList) and a minInclusive="10" restriction, the instance "5" is a valid
-// single-item xs:int list and must NOT be rejected by the range facet — the prior
-// empty-builtin-local decimal fallback wrongly rejected it. A parallel numeric
-// union (atomic xs:int leaf) must still enforce the bound, so "5" fails and "15"
-// passes.
-func TestUnionListRangeFacetInapplicable(t *testing.T) {
+// TestUnionRangeFacetRejectedAtCompile verifies that a range facet (minInclusive)
+// on a UNION variety is rejected at COMPILE time, regardless of the members'
+// types. Range facets are applicable only to atomic ordered value spaces; a
+// union's value space is not ordered (XSD §4.1.5 {applicable facets}), so even a
+// union of ordered numeric members, or a union whose member is itself a list, is
+// rejected — matching xmllint ("The facet 'minInclusive' is not allowed."). This
+// is the convergence regression: silently accepting the facet here turned the
+// range comparison into a no-op at validation time and let any instance through.
+func TestUnionRangeFacetRejectedAtCompile(t *testing.T) {
 	t.Parallel()
 
-	t.Run("list active member does not apply decimal range", func(t *testing.T) {
+	t.Run("union whose member is a list", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="intList">
@@ -994,18 +991,11 @@ func TestUnionListRangeFacetInapplicable(t *testing.T) {
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
-		// "5" is a valid one-item xs:int list; minInclusive is inapplicable to a
-		// list value space, so it must be accepted.
-		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
-		require.NoError(t, err, "validation errors: %s", errs)
-
-		// A multi-item list well below the bound is likewise accepted — the range
-		// facet never fires for the list variety.
-		errs, err = validateInstance(t, schemaXML, `<root>1 2 3</root>`)
-		require.NoError(t, err, "validation errors: %s", errs)
+		require.Contains(t, compileSchemaErrors(t, schemaXML),
+			"local union type: The facet 'minInclusive' is not allowed.")
 	})
 
-	t.Run("atomic numeric union still enforces minInclusive", func(t *testing.T) {
+	t.Run("union of an ordered numeric member", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="u">
@@ -1019,33 +1009,29 @@ func TestUnionListRangeFacetInapplicable(t *testing.T) {
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
-		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
-		require.Error(t, err)
-		require.Contains(t, errs, "is not a valid value")
-
-		errs, err = validateInstance(t, schemaXML, `<root>15</root>`)
-		require.NoError(t, err, "validation errors: %s", errs)
+		require.Contains(t, compileSchemaErrors(t, schemaXML),
+			"local union type: The facet 'minInclusive' is not allowed.")
 	})
 }
 
-// TestUnionNonOrderedRangeFacetInapplicable verifies that a range facet
-// (minInclusive) on a union whose active member is a NON-ordered type does NOT
-// fire. Range facets are defined only on types whose primitive value space is
-// ORDERED (numeric and the date/time/duration family); boolean and the binary
-// types are NOT ordered, so the bound must be treated as inapplicable even though
-// value.Compare returns a deterministic total order for them (that order exists
-// only so enumeration can use cmp==0). The compiler does NOT reject such a schema
-// (probed: no compile error), so the facet IS reachable and the gate in
-// compareForRangeFacet is what keeps it from mis-firing.
+// TestUnionNonOrderedRangeFacetRejected verifies that a range facet
+// (minInclusive) on a union whose member is a NON-ordered atomic type (boolean,
+// the binary types) is rejected at COMPILE time. Range facets are applicable only
+// to ORDERED value spaces (numeric and the date/time/duration family); boolean
+// and the binary types are NOT ordered even though value.Compare returns a
+// deterministic total order for them (that order exists only so enumeration can
+// use cmp==0). Because the facet is inapplicable to the union variety, xmllint
+// rejects the schema outright — accepting it would make the range comparison a
+// no-op at validation time and silently drop the constraint.
 //
-// Each sub-case is a genuine discriminator: with the gate removed,
-// compareForRangeFacet would fall through to value.Compare and the asserted value
-// would be wrongly rejected (boolean false < true; base64Binary "QQ==" sorts
-// before the bound "Qg==").
-func TestUnionNonOrderedRangeFacetInapplicable(t *testing.T) {
+// The compareForRangeFacet gate (orderedRangeFacetTypes) still protects the
+// VALIDATION path for a genuinely reachable non-ordered atomic value (e.g. a list
+// item or an active union member at instance time); this test covers the
+// COMPILE-time rejection of the inapplicable facet on the union restriction.
+func TestUnionNonOrderedRangeFacetRejected(t *testing.T) {
 	t.Parallel()
 
-	t.Run("boolean union does not apply range bound", func(t *testing.T) {
+	t.Run("boolean union range facet is not allowed", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="u">
@@ -1059,21 +1045,11 @@ func TestUnionNonOrderedRangeFacetInapplicable(t *testing.T) {
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
-		// The schema compiles (the compiler does not reject range facets on a
-		// non-ordered primitive), so confirm the facet is reachable yet inapplicable.
-		require.Empty(t, compileSchemaErrors(t, schemaXML),
-			"boolean-union range facet schema is expected to compile cleanly")
-
-		// xs:boolean is not ordered: "false"/"0" are below "true"/"1" only in
-		// value.Compare's synthetic order, which the range facet must NOT use. Every
-		// valid boolean must be accepted.
-		for _, v := range []string{"false", "0", lexicon.ValueTrue, "1"} {
-			errs, err := validateInstance(t, schemaXML, "<root>"+v+"</root>")
-			require.NoError(t, err, "boolean %q wrongly rejected by inapplicable range facet: %s", v, errs)
-		}
+		require.Contains(t, compileSchemaErrors(t, schemaXML),
+			"local union type: The facet 'minInclusive' is not allowed.")
 	})
 
-	t.Run("base64Binary union does not apply range bound", func(t *testing.T) {
+	t.Run("base64Binary union range facet is not allowed", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="u">
@@ -1087,16 +1063,8 @@ func TestUnionNonOrderedRangeFacetInapplicable(t *testing.T) {
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
-		require.Empty(t, compileSchemaErrors(t, schemaXML),
-			"base64Binary-union range facet schema is expected to compile cleanly")
-
-		// "QQ==" decodes to a byte that sorts BEFORE the bound "Qg=="; with the gate
-		// removed value.Compare's byte-order total order would wrongly reject it.
-		// hexBinary/base64Binary are not ordered, so the bound is inapplicable.
-		for _, v := range []string{"QQ==", "Qg==", "Qw=="} {
-			errs, err := validateInstance(t, schemaXML, "<root>"+v+"</root>")
-			require.NoError(t, err, "base64Binary %q wrongly rejected by inapplicable range facet: %s", v, errs)
-		}
+		require.Contains(t, compileSchemaErrors(t, schemaXML),
+			"local union type: The facet 'minInclusive' is not allowed.")
 	})
 }
 

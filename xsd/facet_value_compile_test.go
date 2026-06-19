@@ -131,14 +131,17 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
 	})
 
-	t.Run("namespace-prefixed bound on QName-bearing union base resolves", func(t *testing.T) {
+	// The per-facet captured namespace context still exists for the (rare) case
+	// of a prefixed bound on an ORDERED atomic base, but a range facet on a
+	// QName-bearing base — atomic OR reached through a union — is never
+	// applicable: QName is not an ordered primitive, so xmllint rejects the facet
+	// outright. These cases were previously asserted to "compile cleanly" on the
+	// false premise that the bound reached the value-space check; the applicability
+	// rule makes them compile errors instead, matching xmllint.
+	t.Run("range facet on QName-bearing union base is not allowed", func(t *testing.T) {
 		t.Parallel()
-		// The base is a union whose member is xs:QName, so the range-facet bound
-		// "p:a" is a QName value whose prefix must be resolved using the in-scope
-		// namespaces captured at the facet element. With the namespace context
-		// threaded through, "p:a" resolves and the schema compiles cleanly;
-		// previously the bound was validated with a nil namespace map, so the
-		// resolvable prefix was wrongly reported invalid.
+		// Per xmllint a range facet on a union (its value space is not ordered) is
+		// "not allowed", regardless of whether the bound looks like a valid QName.
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
   <xs:simpleType name="qn">
     <xs:union memberTypes="xs:QName"/>
@@ -150,71 +153,130 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
   </xs:simpleType>
   <xs:element name="root" type="bounded"/>
 </xs:schema>`
-		require.NotContains(t, compileErrors(t, schemaXML), wantMsg)
+		require.Contains(t, compileErrors(t, schemaXML), "The facet 'minInclusive' is not allowed.")
 	})
 
-	t.Run("unbound-prefix bound on QName-bearing union base still errors", func(t *testing.T) {
+	t.Run("range facet on QName atomic base is not allowed", func(t *testing.T) {
 		t.Parallel()
-		// The prefix "q" is not declared anywhere in scope, so the bound "q:a" is
-		// not a valid QName and the bound-value check must still flag it.
+		// QName is not an ordered primitive, so a range facet is inapplicable even
+		// directly on xs:QName. xmllint names the offending primitive in the message.
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
-  <xs:simpleType name="qn">
-    <xs:union memberTypes="xs:QName"/>
-  </xs:simpleType>
   <xs:simpleType name="bounded">
-    <xs:restriction base="qn">
-      <xs:minInclusive value="q:a"/>
+    <xs:restriction base="xs:QName">
+      <xs:maxInclusive value="p:a"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:element name="root" type="bounded"/>
 </xs:schema>`
-		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The facet 'maxInclusive' is not allowed on types derived from the type xs:QName.")
 	})
 
-	t.Run("two range facets declaring different prefixes both resolve", func(t *testing.T) {
+	// CONVERGENCE REGRESSION: a range facet on a union of an ORDERED and an
+	// UNORDERED member must be rejected at compile time. Before the applicability
+	// check, validateValue accepted the bound 'abc' because the xs:string member
+	// accepted it, so the schema compiled and the range comparison became a no-op
+	// at validation time — letting integer instances like -999 through. The fix
+	// rejects the facet outright with xmllint's "not allowed" message.
+	t.Run("minInclusive=abc on union(xs:int xs:string) is rejected and does not false-accept", func(t *testing.T) {
 		t.Parallel()
-		// minInclusive and maxInclusive each declare their OWN namespace prefix
-		// (p: and q:) on their own facet element, with neither declared on an
-		// ancestor. Each bound is a QName value that must be resolved with the
-		// prefix in scope at its own element. The old shared-RangeNS code captured
-		// only the first facet's namespaces, so the second bound (q:z) was
-		// validated with the first facet's map — where q: is unbound — and was
-		// wrongly reported invalid. With per-facet namespace context both resolve
-		// and the schema compiles cleanly.
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:simpleType name="qn">
-    <xs:union memberTypes="xs:QName"/>
+  <xs:simpleType name="u">
+    <xs:union memberTypes="xs:int xs:string"/>
   </xs:simpleType>
   <xs:simpleType name="bounded">
-    <xs:restriction base="qn">
-      <xs:minInclusive xmlns:p="urn:p" value="p:a"/>
-      <xs:maxInclusive xmlns:q="urn:q" value="q:z"/>
+    <xs:restriction base="u">
+      <xs:minInclusive value="abc"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:element name="root" type="bounded"/>
 </xs:schema>`
-		require.NotContains(t, compileErrors(t, schemaXML), wantMsg)
+		require.Contains(t, compileErrors(t, schemaXML),
+			"union type 'bounded': The facet 'minInclusive' is not allowed.")
 	})
 
-	t.Run("per-facet prefix does not leak to sibling facet", func(t *testing.T) {
+	t.Run("range facet on list base is not allowed", func(t *testing.T) {
 		t.Parallel()
-		// minInclusive declares prefix p: on its own element; maxInclusive uses
-		// prefix p: but does NOT declare it and no ancestor does either. The
-		// binding must NOT leak from the sibling facet, so the maxInclusive bound
-		// "p:z" is an unbound QName and must still be flagged.
+		// A list value space is a sequence, not an ordered scalar, so a range facet
+		// is inapplicable; the no-op comparison would otherwise drop the constraint.
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:simpleType name="qn">
-    <xs:union memberTypes="xs:QName"/>
+  <xs:simpleType name="l">
+    <xs:list itemType="xs:int"/>
   </xs:simpleType>
   <xs:simpleType name="bounded">
-    <xs:restriction base="qn">
-      <xs:minInclusive xmlns:p="urn:p" value="p:a"/>
-      <xs:maxInclusive value="p:z"/>
+    <xs:restriction base="l">
+      <xs:maxInclusive value="5"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:element name="root" type="bounded"/>
 </xs:schema>`
-		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+		require.Contains(t, compileErrors(t, schemaXML),
+			"list type 'bounded': The facet 'maxInclusive' is not allowed.")
+	})
+
+	t.Run("length facet on list base is allowed", func(t *testing.T) {
+		t.Parallel()
+		// minLength/maxLength/length ARE applicable to a list (measured as item
+		// count), so a list restriction adding them must still compile cleanly.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="l">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="bounded">
+    <xs:restriction base="l">
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bounded"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), "is not allowed")
+	})
+
+	t.Run("range facet on string atomic base is not allowed", func(t *testing.T) {
+		t.Parallel()
+		// A range facet on a non-ordered atomic primitive (string) is inapplicable;
+		// the message names the primitive ancestor (xs:string for a token base).
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bounded">
+    <xs:restriction base="xs:token">
+      <xs:minInclusive value="abc"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bounded"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The facet 'minInclusive' is not allowed on types derived from the type xs:string.")
+	})
+
+	t.Run("digit facet on double atomic base is not allowed", func(t *testing.T) {
+		t.Parallel()
+		// totalDigits/fractionDigits apply only to the xs:decimal family; xs:double
+		// (ordered, so range facets ARE fine) does not admit a digit notion.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bounded">
+    <xs:restriction base="xs:double">
+      <xs:totalDigits value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bounded"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The facet 'totalDigits' is not allowed on types derived from the type xs:double.")
+	})
+
+	t.Run("range facet on date atomic base still compiles", func(t *testing.T) {
+		t.Parallel()
+		// xs:date is an ordered primitive, so a range facet remains applicable and
+		// its bound is still checked for value-space validity (not rejected here).
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bounded">
+    <xs:restriction base="xs:date">
+      <xs:minInclusive value="2020-01-01"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bounded"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), "is not allowed")
 	})
 
 	t.Run("valid numeric bound still compiles", func(t *testing.T) {

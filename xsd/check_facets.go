@@ -70,11 +70,224 @@ func (c *compiler) checkFacetConsistency(ctx context.Context) {
 		}
 		line := entry.src.line
 
-		c.checkFacetValueAgainstBase(ctx, td, fs, line, component)
+		// A restriction must only carry facets APPLICABLE to its variety/primitive
+		// (XSD §4.1.5 — the {applicable facets} set). A range facet on a list/union
+		// or on a non-ordered atomic primitive, or a digit facet outside the
+		// xs:decimal family, is meaningless: its comparison is a no-op at validation
+		// time, which would silently drop the constraint and let any instance
+		// through. checkFacetApplicability reports those inapplicable facets AND, for
+		// an inapplicable RANGE facet, returns false so the value-against-base bound
+		// check is skipped — that check resolves a bound against the base value space
+		// and would otherwise mis-accept a bound that merely validates as some member
+		// of an unordered/list base instead of rejecting it outright.
+		if c.checkFacetApplicability(ctx, td, fs, line) {
+			c.checkFacetValueAgainstBase(ctx, td, fs, line, component)
+		}
 		c.checkFacetMutualExclusion(ctx, fs, line, component)
 		c.checkFacetSameTypeConsistency(ctx, fs, line, component)
 		c.checkFacetBaseRestriction(ctx, td, fs, line, component)
 	}
+}
+
+// facetVarietyComponent returns the component label used in a "facet not allowed"
+// error for a list- or union-variety simple type, matching libxml2's phrasing:
+// "union type 'name'" / "list type 'name'" for a named type and
+// "local union type" / "local list type" for an anonymous one. Only the LOCAL
+// name is used (libxml2 does not qualify it with the target namespace here).
+func facetVarietyComponent(td *TypeDef, variety TypeVariety) string {
+	kind := "union"
+	if variety == TypeVarietyList {
+		kind = "list"
+	}
+	if td.Name.Local == "" {
+		return "local " + kind + " type"
+	}
+	return kind + " type '" + td.Name.Local + "'"
+}
+
+// decimalFamilyTypes is the set of builtin base locals whose value space is the
+// xs:decimal family — xs:decimal and all its integer derivations. These are the
+// ONLY types on which the digit facets (totalDigits, fractionDigits) are
+// applicable; the facets are meaningless on float/double (no decimal digit
+// notion in their value space) and on every non-numeric primitive, so libxml2
+// rejects them there.
+var decimalFamilyTypes = map[string]struct{}{
+	lexicon.TypeDecimal: {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
+	"long": {}, "int": {}, "short": {}, "byte": {},
+	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
+	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
+}
+
+// stringDerivedTypes is the set of builtin base locals whose primitive ancestor
+// is xs:string. anyURI is deliberately EXCLUDED: it is its own XSD primitive, so
+// a "facet not allowed" message on an anyURI-derived type names xs:anyURI, not
+// xs:string — matching libxml2.
+var stringDerivedTypes = map[string]struct{}{
+	"normalizedString": {}, "token": {}, "language": {},
+	"Name": {}, "NCName": {}, "ID": {}, "IDREF": {}, "IDREFS": {},
+	"ENTITY": {}, "ENTITIES": {}, "NMTOKEN": {}, "NMTOKENS": {},
+}
+
+// atomicPrimitiveLocal returns the local name of the XSD PRIMITIVE built-in that
+// an atomic type's builtin base reduces to, used to name the offending primitive
+// in a "facet not allowed on types derived from …" message (e.g. xs:token →
+// "string"). xs:decimal and its integer derivations collapse to "decimal"; the
+// xs:string-derived family collapses to "string"; anyURI and every other
+// primitive (boolean, float, double, the date/time family, the binary types,
+// QName, NOTATION) are their own primitive and pass through unchanged.
+func atomicPrimitiveLocal(builtinLocal string) string {
+	if _, ok := decimalFamilyTypes[builtinLocal]; ok {
+		return lexicon.TypeDecimal
+	}
+	if _, ok := stringDerivedTypes[builtinLocal]; ok {
+		return lexicon.TypeString
+	}
+	return builtinLocal
+}
+
+// checkFacetApplicability rejects facets that are not applicable to a simple
+// type's variety/primitive and reports whether the value-against-base bound check
+// should still run for this type.
+//
+// Per XSD §4.1.5 the {applicable facets} of a simple type depend on its variety,
+// and — for atomic types — on the {ordered}/numeric nature of its primitive:
+//
+//   - list: length, minLength, maxLength, enumeration, pattern, whiteSpace.
+//   - union: enumeration, pattern.
+//   - atomic: the range facets (min/maxInclusive, min/maxExclusive) apply ONLY to
+//     an ordered primitive (numeric or the date/time/duration family); the digit
+//     facets (totalDigits, fractionDigits) apply ONLY to the xs:decimal family.
+//
+// Any facet outside its variety's/primitive's applicable set — a range or digit
+// facet on a list/union, the length family or whiteSpace on a union, a range
+// facet on a non-ordered atomic primitive (string, boolean, anyURI, hexBinary,
+// base64Binary, QName, NOTATION), or a digit facet on a non-decimal atomic
+// primitive (float, double, date/time, …) — is an error, reported exactly as
+// libxml2 does. The disallowed facets are emitted in a fixed canonical order so
+// the output is deterministic.
+//
+// It returns true only when EVERY range facet present is applicable (an ordered
+// atomic primitive), telling the caller to run checkFacetValueAgainstBase — which
+// resolves each bound against the base value space and is meaningful only there.
+// For a list/union, or an atomic whose range facet is inapplicable, it returns
+// FALSE so the caller SKIPS that bound check: on a list/union or non-ordered base
+// the bound comparison is a no-op at validation time, so the leftover
+// value-against-base check would mis-accept a bound that merely validates as some
+// member (e.g. minInclusive='abc' on union(xs:int xs:string)) instead of being
+// rejected outright as it is here.
+func (c *compiler) checkFacetApplicability(ctx context.Context, td *TypeDef, fs *FacetSet, line int) bool {
+	variety := resolveVariety(td)
+	if variety == TypeVarietyList || variety == TypeVarietyUnion {
+		return c.checkListUnionFacetApplicability(ctx, td, fs, line, variety)
+	}
+	return c.checkAtomicFacetApplicability(ctx, td, fs, line)
+}
+
+// checkListUnionFacetApplicability rejects facets inapplicable to a list- or
+// union-variety type. It always returns false so the caller skips the
+// value-against-base bound check (see checkFacetApplicability).
+func (c *compiler) checkListUnionFacetApplicability(ctx context.Context, td *TypeDef, fs *FacetSet, line int, variety TypeVariety) bool {
+	component := facetVarietyComponent(td, variety)
+
+	// disallowed lists the facets inapplicable to this variety, in a fixed
+	// canonical order. Range and digit facets are inapplicable to BOTH list and
+	// union; the length family and whiteSpace are inapplicable to a union but
+	// allowed on a list.
+	type facetPresence struct {
+		name    string
+		present bool
+	}
+	disallowed := []facetPresence{
+		{"minInclusive", fs.MinInclusive != nil},
+		{"maxInclusive", fs.MaxInclusive != nil},
+		{"minExclusive", fs.MinExclusive != nil},
+		{"maxExclusive", fs.MaxExclusive != nil},
+		{"totalDigits", fs.TotalDigits != nil},
+		{"fractionDigits", fs.FractionDigits != nil},
+	}
+	if variety == TypeVarietyUnion {
+		disallowed = append(disallowed,
+			facetPresence{"length", fs.Length != nil},
+			facetPresence{"minLength", fs.MinLength != nil},
+			facetPresence{"maxLength", fs.MaxLength != nil},
+			facetPresence{"whiteSpace", fs.WhiteSpace != nil},
+		)
+	}
+
+	for _, fp := range disallowed {
+		if !fp.present {
+			continue
+		}
+		msg := fmt.Sprintf("The facet '%s' is not allowed.", fp.name)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+
+	return false
+}
+
+// checkAtomicFacetApplicability rejects range facets on a non-ordered atomic
+// primitive and digit facets on a non-decimal atomic primitive. It returns false
+// (so the caller skips the value-against-base bound check) only when an
+// inapplicable RANGE facet was reported — on a non-ordered base that bound check
+// is a no-op and must not run. Otherwise it returns true.
+func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDef, fs *FacetSet, line int) bool {
+	builtinLocal := builtinBaseLocal(td)
+	if builtinLocal == "" {
+		// No resolvable builtin primitive (e.g. a type whose base chain has not
+		// resolved). Leave the bound check to run; nothing to reject here.
+		return true
+	}
+
+	component := "local atomic type"
+	if td.Name.Local != "" {
+		component = "atomic type '" + td.Name.Local + "'"
+	}
+	primitive := "xs:" + atomicPrimitiveLocal(builtinLocal)
+
+	_, ordered := orderedRangeFacetTypes[builtinLocal]
+	_, decimal := decimalFamilyTypes[builtinLocal]
+
+	report := func(facet string) {
+		msg := fmt.Sprintf("The facet '%s' is not allowed on types derived from the type %s.", facet, primitive)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+
+	rangeRejected := false
+	// Range facets, in canonical order. Inapplicable unless the primitive is
+	// ordered; when rejected, the bound check must be skipped.
+	if !ordered {
+		for _, rf := range []struct {
+			name    string
+			present bool
+		}{
+			{"minInclusive", fs.MinInclusive != nil},
+			{"maxInclusive", fs.MaxInclusive != nil},
+			{"minExclusive", fs.MinExclusive != nil},
+			{"maxExclusive", fs.MaxExclusive != nil},
+		} {
+			if !rf.present {
+				continue
+			}
+			report(rf.name)
+			rangeRejected = true
+		}
+	}
+
+	// Digit facets are applicable only to the xs:decimal family. Their
+	// rejection does not affect the range-bound check, so it never flips the
+	// returned verdict.
+	if !decimal {
+		if fs.TotalDigits != nil {
+			report("totalDigits")
+		}
+		if fs.FractionDigits != nil {
+			report("fractionDigits")
+		}
+	}
+
+	return !rangeRejected
 }
 
 // checkFacetValueAgainstBase validates that each value-bearing range facet
