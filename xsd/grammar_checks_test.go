@@ -247,6 +247,54 @@ func TestDuplicateAttributeUse(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	// Extension duplicate detection must key on the expanded QName, not the
+	// local name alone: a base attribute {}a and an extension attribute
+	// {urn:t}a share a local name but are distinct attribute uses.
+	t.Run("accepts same local name in different namespaces across extension", func(t *testing.T) {
+		t.Parallel()
+		// Base has an unqualified local attribute {}a; the extension references a
+		// global attribute {urn:t}a. Same local name, distinct namespaces => not
+		// a duplicate.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:t="urn:t" targetNamespace="urn:t" attributeFormDefault="unqualified">
+  <xs:complexType name="Base">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="t:Base">
+        <xs:attribute ref="t:a"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:attribute name="a" type="xs:string"/>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects same expanded QName across base and extension", func(t *testing.T) {
+		t.Parallel()
+		// Both the base and the extension reference the same global attribute
+		// {urn:t}a, so the expanded QNames collide and it is a real duplicate.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:t="urn:t" targetNamespace="urn:t" attributeFormDefault="unqualified">
+  <xs:complexType name="Base">
+    <xs:attribute ref="t:a"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="t:Base">
+        <xs:attribute ref="t:a"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:attribute name="a" type="xs:string"/>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), dup)
+	})
 }
 
 // TestWildcardConstraintValidation (C-011) verifies that a wildcard's

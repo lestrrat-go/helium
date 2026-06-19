@@ -341,12 +341,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 		// Check for duplicate attributes before merging base type attributes.
 		if td.BaseType.Attributes != nil && td.Attributes != nil && c.filename != "" {
-			baseAttrNames := make(map[string]bool, len(td.BaseType.Attributes))
+			baseAttrNames := make(map[QName]bool, len(td.BaseType.Attributes))
 			for _, au := range td.BaseType.Attributes {
-				baseAttrNames[au.Name.Local] = true
+				baseAttrNames[au.Name] = true
 			}
 			for _, au := range td.Attributes {
-				if baseAttrNames[au.Name.Local] {
+				if baseAttrNames[au.Name] {
 					if src, ok := c.typeDefSources[td]; ok {
 						component := componentLocalComplexType
 						if !src.isLocal {
