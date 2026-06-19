@@ -379,6 +379,15 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// integrity is never enforced.
 	c.checkKeyRefRefers(ctx)
 
+	// Fatal schema diagnostics were already delivered to the ErrorHandler as
+	// they were discovered. A non-zero error count means the schema is
+	// invalid, so the compiled Schema must not be handed back: returning it
+	// would let callers validate against a malformed schema. Surface the
+	// failure as ErrCompilationFailed (mirrors Validate's ErrValidationFailed).
+	if c.errorCount > 0 {
+		return nil, ErrCompilationFailed
+	}
+
 	return c.schema, nil
 }
 

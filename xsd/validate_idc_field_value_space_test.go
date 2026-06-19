@@ -567,10 +567,7 @@ func TestIDCFieldNestedUnionFacetFallthrough(t *testing.T) {
 
 	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="inner">
-    <xs:restriction>
-      <xs:simpleType>
-        <xs:union memberTypes="xs:integer"/>
-      </xs:simpleType>
+    <xs:restriction base="xs:integer">
       <xs:maxInclusive value="0"/>
     </xs:restriction>
   </xs:simpleType>
