@@ -557,18 +557,29 @@ func TestIDCFieldUnionListMember(t *testing.T) {
 // TestIDCFieldNestedUnionFacetFallthrough covers active-member selection for a
 // union whose first member is itself a NESTED UNION whose wrapper restriction
 // rejects the value by FACET. inner = restriction of a union over xs:integer with
-// maxInclusive="0"; outer = union memberTypes="inner xs:string". `5`/`+5` are
-// lexical integers but the inner wrapper facet rejects them, so they must fall
-// through to xs:string (active member xs:string, lexical-only) and stay DISTINCT.
-// Pre-flattening the nested union to its xs:integer leaf dropped the wrapper facet
-// and wrongly collapsed `5`/`+5`, reporting a spurious duplicate.
+// a wrapper xs:pattern that admits only negative-signed integer lexical forms
+// (`-[0-9]+`); outer u = union memberTypes="inner xs:string". `5`/`+5` are lexical
+// integers but DON'T match the inner wrapper pattern, so the inner member rejects
+// them and they fall through to xs:string (active member xs:string, lexical-only)
+// and stay DISTINCT. Pre-flattening the nested union to its xs:integer leaf would
+// drop the wrapper pattern, wrongly accept `5`/`+5` as the integer leaf, and
+// collapse them in integer value space, reporting a spurious duplicate.
+//
+// xs:pattern (and xs:enumeration) are the only constraining facets applicable to
+// a union variety; range facets like xs:maxInclusive are rejected at compile time
+// (see check_facets.go checkListUnionFacetApplicability), so the wrapper facet
+// here must be a pattern to keep the schema valid while still exercising the
+// nested-union value-space fallthrough path.
 func TestIDCFieldNestedUnionFacetFallthrough(t *testing.T) {
 	t.Parallel()
 
 	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="innerLeaf">
+    <xs:union memberTypes="xs:integer"/>
+  </xs:simpleType>
   <xs:simpleType name="inner">
-    <xs:restriction base="xs:integer">
-      <xs:maxInclusive value="0"/>
+    <xs:restriction base="innerLeaf">
+      <xs:pattern value="-[0-9]+"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="u">
@@ -593,13 +604,16 @@ func TestIDCFieldNestedUnionFacetFallthrough(t *testing.T) {
 		valid    bool
 	}{
 		{
-			// inner wrapper facet rejects 5/+5, fall through to xs:string; distinct.
+			// inner wrapper pattern rejects 5/+5 (no leading '-'), so they fall
+			// through to xs:string; lexically distinct.
 			name:     "nested-union facet-rejected ints fall through to string",
 			instance: `<root><item>5</item><item>+5</item></root>`,
 			valid:    true,
 		},
 		{
-			// inner accepts -1/-01 (== -1 in integer value space): collide.
+			// inner accepts -1/-01 (both match the pattern); the active member is the
+			// nested union, canonicalized in xs:integer value space where -1 == -01,
+			// so they collide.
 			name:     "nested-union facet-accepted ints collapse",
 			instance: `<root><item>-1</item><item>-01</item></root>`,
 			valid:    false,
