@@ -1552,12 +1552,21 @@ func TestDTDIdentifierValidation(t *testing.T) {
 		require.NoError(t, w.StartDocument("", "", ""))
 		require.Error(t, w.StartDTD("root", "", `a'b"c`))
 	})
-	t.Run("sysid markup rejected", func(t *testing.T) {
+	t.Run("sysid with angle brackets accepted", func(t *testing.T) {
 		t.Parallel()
-		var buf bytes.Buffer
-		w := stream.NewWriter(&buf)
-		require.NoError(t, w.StartDocument("", "", ""))
-		require.Error(t, w.StartDTD("root", "", `x"><x/>`))
+		// A SystemLiteral may contain any XML char except the delimiting
+		// quote, so '<' and '>' are valid and must round-trip.
+		for _, sysid := range []string{"a>b", "a<b"} {
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.NoError(t, w.StartDocument("", "", ""))
+			require.NoError(t, w.StartDTD("root", "", sysid))
+			require.NoError(t, w.EndDTD())
+			require.NoError(t, w.StartElement("root"))
+			require.NoError(t, w.EndElement())
+			require.NoError(t, w.EndDocument())
+			require.Contains(t, buf.String(), `SYSTEM "`+sysid+`"`)
+		}
 	})
 	t.Run("pubid invalid char rejected", func(t *testing.T) {
 		t.Parallel()
@@ -1572,7 +1581,7 @@ func TestDTDIdentifierValidation(t *testing.T) {
 		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartDocument("", "", ""))
 		require.NoError(t, w.StartDTD("root", "", "sys"))
-		require.Error(t, w.WriteDTDNotation("n", "", `x"><x/>`))
+		require.Error(t, w.WriteDTDNotation("n", "", `a'b"c`))
 	})
 	t.Run("valid dtd accepted", func(t *testing.T) {
 		t.Parallel()

@@ -414,9 +414,12 @@ func validatePubid(s string) bool {
 }
 
 // validateSystemID reports whether s is representable as a quoted DTD system
-// identifier. A system literal must contain only valid XML chars and must not
-// contain both quote characters (which would make it unquotable), and must not
-// contain markup-significant '<' or '>'.
+// identifier. Per the XML SystemLiteral grammar a system literal may contain
+// any valid XML char except the delimiting quote, so the only constraints are
+// that s be valid XML chars and not contain both quote characters (which would
+// make it unquotable). '<' and '>' are permitted: they are harmless inside the
+// quoted literal, and dtdQuoteFor prevents the value from breaking out of its
+// quotes.
 func validateSystemID(s string) bool {
 	if strings.Contains(s, "'") && strings.Contains(s, `"`) {
 		return false
@@ -426,9 +429,6 @@ func validateSystemID(s string) bool {
 	}
 	for _, r := range s {
 		if !xmlchar.IsChar(r) {
-			return false
-		}
-		if r == '<' || r == '>' {
 			return false
 		}
 	}
