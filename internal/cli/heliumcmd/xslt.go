@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"time"
 
@@ -126,21 +125,27 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 
 	// Determine output destination.
 	out := c.stdout
-	var outFile *os.File
+	var pending *pendingOutput
 	if cfg.outputFile != "" {
-		// Refuse to overwrite any input or the stylesheet: os.Create
-		// truncates before inputs are read.
+		// Refuse to overwrite any input or the stylesheet. This is a fast,
+		// friendly pre-flight rejection; the temp-file-then-rename scheme
+		// below is what actually closes the truncate-before-read hole for
+		// files resolved at transform time (e.g. fn:transform with a
+		// stylesheet-location read through the retained URIResolver).
 		if code := c.checkOutputCollision(cfg, inputs); code != ExitOK {
 			return code
 		}
 
-		f, err := os.Create(cfg.outputFile)
+		// Write to a sibling temp file and rename onto the destination only
+		// after processing succeeds. os.Create on the destination would
+		// truncate it up front, destroying any file the transform reads later.
+		p, err := newPendingOutput(cfg.outputFile)
 		if err != nil {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}
-		outFile = f
-		out = f
+		pending = p
+		out = p.File()
 	}
 
 	exitCode := ExitOK
@@ -149,10 +154,16 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 		exitCode = mergeExitCode(exitCode, code)
 	}
 
-	// Fold the close error into the exit status: a failed flush/close means
-	// the output may be incomplete.
-	if outFile != nil {
-		if err := outFile.Close(); err != nil {
+	if pending != nil {
+		// Only publish the output on a fully successful run. On any error the
+		// temp file is discarded and the destination is left untouched.
+		if exitCode != ExitOK {
+			pending.Cleanup()
+			return exitCode
+		}
+		// Fold the commit (flush/close/rename) error into the exit status: a
+		// failed commit means the output may be incomplete.
+		if err := pending.Commit(); err != nil {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			exitCode = mergeExitCode(exitCode, ExitErr)
 		}

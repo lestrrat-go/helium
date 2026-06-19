@@ -142,23 +142,27 @@ func (c *command) runContext(ctx context.Context, args []string) int {
 	}
 
 	out := c.stdout
-	var outFile *os.File
+	var pending *pendingOutput
 	if cfg.outputFile != "" {
-		// Refuse to write output over any input or the schema. os.Create
-		// truncates before the inputs are read, so without this check
-		// `helium lint --output doc.xml doc.xml` would destroy the input
-		// before it is parsed.
+		// Refuse to write output over any input or the schema. This is a
+		// fast, friendly pre-flight rejection; the temp-file-then-rename
+		// scheme below is what actually closes the truncate-before-read hole
+		// for resources resolved LATER (e.g. a --path DTD).
 		if code := c.checkOutputCollision(cfg, inputs); code != ExitOK {
 			return code
 		}
 
-		f, err := os.Create(cfg.outputFile) //nolint:gosec // CLI output path is user supplied
+		// Write to a sibling temp file and rename onto the destination only
+		// after processing succeeds. os.Create on the destination would
+		// truncate it up front, destroying any input/DTD/entity that the same
+		// path is read from later during parse or validation.
+		p, err := newPendingOutput(cfg.outputFile)
 		if err != nil {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}
-		outFile = f
-		out = f
+		pending = p
+		out = p.File()
 	}
 
 	exitCode := ExitOK
@@ -167,10 +171,17 @@ func (c *command) runContext(ctx context.Context, args []string) int {
 		exitCode = mergeExitCode(exitCode, code)
 	}
 
-	// Fold the close error into the exit status: a failed flush/close means
-	// the output may be incomplete, which must not be reported as success.
-	if outFile != nil {
-		if err := outFile.Close(); err != nil {
+	if pending != nil {
+		// Only publish the output on a fully successful run. On any error the
+		// temp file is discarded and the destination is left untouched.
+		if exitCode != ExitOK {
+			pending.Cleanup()
+			return exitCode
+		}
+		// Fold the commit (flush/close/rename) error into the exit status: a
+		// failed commit means the output may be incomplete, which must not be
+		// reported as success.
+		if err := pending.Commit(); err != nil {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			exitCode = mergeExitCode(exitCode, ExitErr)
 		}

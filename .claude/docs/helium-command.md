@@ -62,6 +62,17 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 7. OUTPUT    — C14N or helium.Writer unless --noout
 ```
 
+### `--output FILE` safety (lint and xslt)
+
+File output (`--output`/`-o`, not stdout and not `--noout`) is written through a write-to-temp-then-atomic-rename scheme (`pendingOutput` in `safety.go`):
+
+- A temp file (`.helium-out-*`) is created in the SAME directory as the target; output is written there, and `os.Rename`d onto the target ONLY after all inputs are processed successfully.
+- This closes a truncate-before-read hole: `os.Create` on the target would truncate it up front, destroying a resource the same path is read from LATER — e.g. a DTD/entity resolved via `--path` during validation (lint), or a stylesheet read at transform time via `fn:transform(map{'stylesheet-location':...})` through the retained `URIResolver` (xslt).
+- On any non-OK exit code the temp file is removed (`Cleanup`) and the target is left untouched.
+- A failed commit (flush/close/rename) folds `ExitErr` into the exit status, so an incomplete write is never reported as success.
+- The pre-flight same-file rejection (`checkOutputCollision`) is kept as a fast/friendly error for the obvious `--output X X` case, but the temp+rename is what actually protects later-resolved reads.
+- stdout output and `--noout` are unaffected (no temp file is created).
+
 ### Flag Groups
 
 | Group | Flags |

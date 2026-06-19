@@ -81,6 +81,49 @@ func TestLintOutputWritesToFile(t *testing.T) {
 	require.Contains(t, string(got), "<root>x</root>")
 }
 
+func TestLintOutputOverLaterReadDTDSucceeds(t *testing.T) {
+	// --output points at a DTD that is resolved via --path and read DURING
+	// validation, i.e. AFTER the output target is opened. The pre-flight
+	// collision check cannot catch this (the DTD path is not an input arg), so
+	// the temp-file-then-rename scheme must keep the DTD intact until its read
+	// completes. The run must succeed rather than truncate the DTD first.
+	dir := t.TempDir()
+	dtdDir := filepath.Join(dir, "dtd")
+	require.NoError(t, os.Mkdir(dtdDir, 0o755))
+	dtdFile := filepath.Join(dtdDir, "note.dtd")
+	require.NoError(t, os.WriteFile(dtdFile, []byte("<!ELEMENT note (to)>\n<!ELEMENT to (#PCDATA)>\n"), 0o600))
+
+	xmlFile := writeFile(t, dir, "doc.xml",
+		"<?xml version=\"1.0\"?>\n<!DOCTYPE note SYSTEM \"note.dtd\">\n<note><to>x</to></note>")
+
+	out, errOut, code := executeArgs(t, strings.NewReader(""),
+		"lint", "--loaddtd", "--valid", "--path", dtdDir, "--output", dtdFile, xmlFile)
+	require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+
+	// The output was published to the DTD path only after the DTD read
+	// completed during validation, so validation succeeded.
+	got, err := os.ReadFile(dtdFile)
+	require.NoError(t, err)
+	require.Contains(t, string(got), "<note>")
+	require.Empty(t, out)
+}
+
+func TestLintOutputErrorLeavesTargetIntact(t *testing.T) {
+	// A processing error (malformed XML) must leave the pre-existing output
+	// target untouched: the temp file is discarded and never renamed onto it.
+	dir := t.TempDir()
+	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root><unclosed></root>`)
+	outFile := filepath.Join(dir, "out.xml")
+	require.NoError(t, os.WriteFile(outFile, []byte("KEEP"), 0o600))
+
+	_, _, code := executeArgs(t, strings.NewReader(""), "lint", "--output", outFile, xmlFile)
+	require.NotEqual(t, heliumcmd.ExitOK, code)
+
+	got, err := os.ReadFile(outFile)
+	require.NoError(t, err)
+	require.Equal(t, "KEEP", string(got))
+}
+
 func TestLintMaxInputBytesExceeded(t *testing.T) {
 	dir := t.TempDir()
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>aaaaaaaaaa</root>`)

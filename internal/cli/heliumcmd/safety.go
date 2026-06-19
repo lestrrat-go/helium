@@ -69,6 +69,69 @@ func readInputFile(name string, maxBytes int64) ([]byte, error) {
 	return readInput(f, name, maxBytes)
 }
 
+// pendingOutput is a write-to-temp-then-atomic-rename target. The CLI writes
+// command output to a temporary file in the same directory as the final
+// destination and only renames it onto the destination after processing
+// completes successfully. This closes a truncate-before-read hole: os.Create
+// on the destination would truncate it up front, destroying any input, DTD, or
+// runtime-resolved stylesheet that the same path is read from LATER during
+// processing. Writing to a sibling temp file leaves the destination untouched
+// until Commit, so those later reads still see the original contents. On any
+// processing error the temp file is removed via Cleanup and the destination is
+// never modified.
+type pendingOutput struct {
+	f    *os.File
+	tmp  string
+	dest string
+	done bool
+}
+
+// newPendingOutput creates a temporary file in the same directory as dest.
+// Using the same directory keeps the eventual os.Rename atomic (no cross-device
+// copy). The caller writes to the returned *pendingOutput's File and must call
+// either Commit (on success) or Cleanup (on failure).
+func newPendingOutput(dest string) (*pendingOutput, error) {
+	dir := filepath.Dir(dest)
+	f, err := os.CreateTemp(dir, ".helium-out-*")
+	if err != nil {
+		return nil, err //nolint:wrapcheck // caller reports raw error
+	}
+	return &pendingOutput{f: f, tmp: f.Name(), dest: dest}, nil
+}
+
+// File returns the underlying temp file the caller writes output to.
+func (p *pendingOutput) File() *os.File { return p.f }
+
+// Commit closes the temp file and atomically renames it onto the destination.
+// It must be called only after all output has been written and all inputs have
+// been read. A non-nil error means the destination was left untouched.
+func (p *pendingOutput) Commit() error {
+	if p.done {
+		return nil
+	}
+	p.done = true
+	if err := p.f.Close(); err != nil {
+		_ = os.Remove(p.tmp)
+		return err //nolint:wrapcheck // caller reports raw error
+	}
+	if err := os.Rename(p.tmp, p.dest); err != nil {
+		_ = os.Remove(p.tmp)
+		return err //nolint:wrapcheck // caller reports raw error
+	}
+	return nil
+}
+
+// Cleanup closes and removes the temp file without touching the destination. It
+// is safe to call after Commit (it becomes a no-op) so callers can defer it.
+func (p *pendingOutput) Cleanup() {
+	if p.done {
+		return
+	}
+	p.done = true
+	_ = p.f.Close()
+	_ = os.Remove(p.tmp)
+}
+
 // samePath reports whether a and b refer to the same file on disk. It compares
 // resolved absolute paths first, then falls back to os.SameFile (inode/device)
 // so symlinks and "./" prefixes are caught even when the lexical paths differ.
