@@ -12,6 +12,8 @@ import (
 // scheme. A path-absolute reference such as "/abs/asset.xml" against a
 // "file:///..." base must stay in "file:" URI space ("file:///abs/asset.xml"),
 // not collapse to the bare local path "/abs/asset.xml".
+const fileCatalogURI = "file:///tmp/catalog.xml"
+
 func TestResolveURI(t *testing.T) {
 	t.Parallel()
 
@@ -23,13 +25,13 @@ func TestResolveURI(t *testing.T) {
 	}{
 		{
 			name:   "empty value",
-			base:   "file:///tmp/catalog.xml",
+			base:   fileCatalogURI,
 			value:  "",
 			expect: "",
 		},
 		{
 			name:   "value already has scheme",
-			base:   "file:///tmp/catalog.xml",
+			base:   fileCatalogURI,
 			value:  "http://example.com/x.xsd",
 			expect: "http://example.com/x.xsd",
 		},
@@ -37,19 +39,19 @@ func TestResolveURI(t *testing.T) {
 			// Regression: a path-absolute reference against a file: base must
 			// resolve in URI space, keeping the file: scheme.
 			name:   "path-absolute ref against file base",
-			base:   "file:///tmp/catalog.xml",
+			base:   fileCatalogURI,
 			value:  "/abs/asset.xml",
 			expect: "file:///abs/asset.xml",
 		},
 		{
 			name:   "relative ref against file base",
-			base:   "file:///tmp/catalog.xml",
+			base:   fileCatalogURI,
 			value:  "asset.xml",
 			expect: "file:///tmp/asset.xml",
 		},
 		{
 			name:   "absolute-uri ref against file base",
-			base:   "file:///tmp/catalog.xml",
+			base:   fileCatalogURI,
 			value:  "http://example.com/asset.xml",
 			expect: "http://example.com/asset.xml",
 		},
