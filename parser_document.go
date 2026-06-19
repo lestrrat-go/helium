@@ -24,6 +24,12 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	ctx = sax.WithDocumentLocator(ctx, pctx)
 	ctx = context.WithValue(ctx, stopFuncKey{}, pctx.stop)
 
+	// Honor a context that is already cancelled before any parsing work
+	// (or blocking reads) begins.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if s := pctx.sax; s != nil {
 		switch err := s.SetDocumentLocator(ctx, pctx); err {
 		case nil, sax.ErrHandlerUnspecified:
@@ -49,6 +55,17 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 
 	// nothing left? eek
 	if bcur.Done() {
+		// An apparently empty document may instead be a cancelled read: the
+		// push parser's stream returns the context error from its blocking
+		// wait, which the byte cursor records and Done() then masks. Surface
+		// cancellation (and any other sticky read error) instead of the
+		// misleading "empty document".
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := bcur.Err(); err != nil {
+			return pctx.error(ctx, err)
+		}
 		return pctx.error(ctx, errors.New("empty document"))
 	}
 
@@ -183,6 +200,15 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	pctx.skipBlanks(ctx)
 
 	if cur.Peek() != '<' {
+		// A cancelled or failed read can leave the cursor at an apparent end
+		// of input; report the underlying cause rather than a misleading
+		// "start tag expected".
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := pctx.cursorDecodeErr(); err != nil {
+			return pctx.error(ctx, err)
+		}
 		return pctx.error(ctx, ErrEmptyDocument)
 	}
 
@@ -240,7 +266,16 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 
 	doRecover := pctx.options.IsSet(parseRecover)
 
-	for !cur.Done() && !pctx.stopped {
+	for {
+		// Check the context BEFORE cur.Done(), which may refill the cursor
+		// from an io.Reader and block; this lets a cancelled context be
+		// observed between reads rather than after a blocking refill.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if cur.Done() || pctx.stopped {
+			break
+		}
 		if cur.Peek() == '<' && cur.PeekAt(1) == '/' {
 			break
 		}
@@ -273,7 +308,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 			err = pctx.parseReference(ctx)
 		default:
 			if err := pctx.parseCharData(ctx, false); err != nil {
-				if !doRecover || errors.Is(err, errParserStopped) {
+				if !doRecover || isParseAbort(err) {
 					return err
 				}
 				if pctx.recoverErr == nil {
@@ -281,13 +316,15 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 				}
 				pctx.disableSAX = true
 				pctx.wellFormed = false
-				pctx.skipToRecoverPoint()
+				if err := pctx.skipToRecoverPoint(ctx); err != nil {
+					return err
+				}
 			}
 			continue
 		}
 
 		if err != nil {
-			if !doRecover || errors.Is(err, errParserStopped) {
+			if !doRecover || isParseAbort(err) {
 				return pctx.error(ctx, err)
 			}
 			if pctx.recoverErr == nil {
@@ -297,7 +334,9 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 			pctx.wellFormed = false
 
 			prevLine, prevCol := cur.LineNumber(), cur.Column()
-			pctx.skipToRecoverPoint()
+			if err := pctx.skipToRecoverPoint(ctx); err != nil {
+				return err
+			}
 			if !cur.Done() && cur.LineNumber() == prevLine && cur.Column() == prevCol {
 				_ = cur.Advance(1)
 			}
@@ -318,14 +357,25 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 
 // skipToRecoverPoint advances the cursor past unrecoverable content to the
 // next '<' character or EOF, for re-synchronization in parseRecover mode.
-func (ctx *parserCtx) skipToRecoverPoint() {
-	cur := ctx.getCursor()
+// It returns the context error if the context is cancelled so that recovery
+// cannot run (or block on a cursor refill) after cancellation.
+func (pctx *parserCtx) skipToRecoverPoint(ctx context.Context) error {
+	cur := pctx.getCursor()
 	if cur == nil {
-		return
+		return nil
 	}
-	for !cur.Done() {
+	for {
+		// Check the context BEFORE cur.Done(), which may refill the cursor
+		// from an io.Reader and block; this lets a cancelled context abort
+		// recovery rather than spin or block.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if cur.Done() {
+			return nil
+		}
 		if cur.Peek() == '<' {
-			return
+			return nil
 		}
 		_ = cur.Advance(1)
 	}

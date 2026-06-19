@@ -205,7 +205,7 @@ Both XML and HTML push parsers use the `push` package (`push.Parser[T]`), which 
 
 **XML PushParser** (`parser.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
-Parser runs in a background goroutine reading from the stream via `ParseReader`. Tokens are processed incrementally as data is pushed — the stream's `Read` blocks until bytes are available, so the parser advances as each chunk arrives.
+Parser runs in a background goroutine reading from the stream via `ParseReader`. Tokens are processed incrementally as data is pushed — the stream's `Read` blocks until bytes are available, so the parser advances as each chunk arrives. The stream wait is context-aware: cancelling the context passed to `New`/`NewPushParser` unblocks a waiting `Read`, which returns the context error so the background parse aborts even while waiting for more pushed data (see Context Cancellation below).
 
 **HTML PushParser** (`html/html.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
@@ -250,16 +250,61 @@ After parsing start tag:
 
 ## Recovery Mode (RecoverOnError)
 
-On error in `parseContent()`:
+On a recoverable parse error in `parseContent()`:
 1. Save error in `recoverErr`
 2. Set `disableSAX=true`
 3. `skipToRecoverPoint()` → advance to next `<`
 4. Continue parsing
 5. Return partial document + saved error
 
+Recovery applies only to genuine parse errors (malformed content). It does NOT
+apply to context cancellation — see Context Cancellation below.
+
+## Context Cancellation (parse abort)
+
+Context cancellation is distinct from recovery and from `StopParser`. When the
+parse context is cancelled or its deadline is exceeded, the parser aborts:
+
+- `context.Canceled` / `context.DeadlineExceeded` BYPASS recovery entirely, even
+  when `RecoverOnError(true)` is set — a cancelled parse is not a recoverable
+  parse error.
+- Parse returns a **nil document** and the **context error** (matchable with
+  `errors.Is(err, context.Canceled)` / `context.DeadlineExceeded`). It never
+  returns a partial tree.
+- The SAX `Error` handler is NOT invoked: a clean cancellation must not look like
+  a malformed document to the handler.
+- The cancellation is observed both in the normal content loop and inside the
+  recovery / `skipToRecoverPoint()` skip path, so an in-progress recovery scan
+  also aborts promptly.
+
+### Cancellation boundary (between reads vs. blocked Read)
+
+Cancellation is checked BETWEEN read operations and parse steps — before each
+cursor refill and between content-loop iterations. The parser does not (and
+cannot generically) interrupt a read already in progress:
+
+- **`Parse([]byte, ...)`**: reads from an in-memory byte slice, so there is no
+  blocking read. Cancellation is always observed promptly.
+- **`ParseReader(io.Reader, ...)`**: cancellation is observed as soon as the
+  parser regains control between reads. A reader already blocked inside its own
+  `Read` cannot be unblocked generically — Go provides no way to cancel a Read in
+  progress. Such a read is only interruptible if the reader itself honors the
+  context or a deadline (e.g. sets a read deadline when `ctx.Done()` fires, or
+  returns an error from `Read` on cancellation). To make a slow/never-returning
+  reader cancellable, wrap it so its `Read` observes `ctx`, or read the bytes
+  yourself and call `Parse`.
+- **Push parser** (`push` package): the parser-owned stream wait IS a sync.Cond,
+  not an arbitrary `io.Reader.Read`, so it is unblocked on cancellation. A watcher
+  goroutine broadcasts on the cond when `ctx.Done()` fires; `stream.Read` then
+  returns the context error instead of blocking for more pushed data. The watcher
+  exits when the stream is closed so it does not outlive a parse on a context that
+  is never cancelled.
+
 ## Early Termination
 
-`StopParser(ctx)` → set `stopped=true`, `instate=psEOF`. Returns parsed document so far, nil error.
+`StopParser(ctx)` → set `stopped=true`, `instate=psEOF`. Returns the parsed
+document so far and a nil error (partial document, as opposed to context
+cancellation which returns a nil document and the context error).
 
 ## Key Parser Fluent Method Effects
 

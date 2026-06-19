@@ -92,6 +92,9 @@ func (pctx *parserCtx) parseInternalSubset(ctx context.Context) error {
 		if pctx.stopped {
 			return errParserStopped
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		cur = pctx.getCursor()
 		if cur == nil || cur.Done() || cur.Peek() == ']' {
 			break
