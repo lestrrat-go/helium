@@ -225,13 +225,21 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
 	mapErr := m.ForEach(func(k AtomicValue, v Sequence) error {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return err
+		}
 		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{k}, v})
 		if err != nil {
 			return err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBounded(result, seqMaterialize(r), maxNodes)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	if mapErr != nil {
@@ -240,30 +248,44 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	return result, nil
 }
 
-func fnMapFind(_ context.Context, args []Sequence) (Sequence, error) {
+func fnMapFind(ctx context.Context, args []Sequence) (Sequence, error) {
 	ka, err := extractSingleAtomicArg(args[1], "map:find key")
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var results []Sequence
-	mapFindRecurse(args[0], ka, &results)
+	if err := mapFindRecurse(ctx, ec, maxNodes, args[0], ka, &results); err != nil {
+		return nil, err
+	}
 	return ItemSlice{NewArray(results)}, nil
 }
 
 // mapFindRecurse recursively searches for a key in maps within items.
-// Per XPath 3.1, map:find searches recursively through maps and arrays.
-func mapFindRecurse(items Sequence, key AtomicValue, results *[]Sequence) {
+// Per XPath 3.1, map:find searches recursively through maps and arrays. The
+// traversal charges an op per item and bounds the accumulated result count so a
+// deeply or widely nested input cannot exhaust resources unchecked.
+func mapFindRecurse(ctx context.Context, ec *evalContext, maxNodes int, items Sequence, key AtomicValue, results *[]Sequence) error {
 	for item := range seqItems(items) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return err
+		}
 		switch v := item.(type) {
 		case MapItem:
 			if val, found := v.Get(key); found {
+				if maxNodes > 0 && len(*results) >= maxNodes {
+					return ErrNodeSetLimit
+				}
 				*results = append(*results, val)
 			}
 			// Also recurse into map values
-			_ = v.ForEach(func(_ AtomicValue, val Sequence) error {
-				mapFindRecurse(val, key, results)
-				return nil
+			forEachErr := v.ForEach(func(_ AtomicValue, val Sequence) error {
+				return mapFindRecurse(ctx, ec, maxNodes, val, key, results)
 			})
+			if forEachErr != nil {
+				return forEachErr
+			}
 		case ArrayItem:
 			// Recurse into array members
 			for i := 1; i <= v.Size(); i++ {
@@ -271,8 +293,11 @@ func mapFindRecurse(items Sequence, key AtomicValue, results *[]Sequence) {
 				if err != nil {
 					continue
 				}
-				mapFindRecurse(member, key, results)
+				if err := mapFindRecurse(ctx, ec, maxNodes, member, key, results); err != nil {
+					return err
+				}
 			}
 		}
 	}
+	return nil
 }

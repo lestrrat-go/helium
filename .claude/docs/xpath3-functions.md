@@ -99,6 +99,8 @@ Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-
 ### `functions_hof.go`
 `for-each`, `filter`, `fold-left`, `fold-right`, `apply`, `function-lookup`, `function-arity`, `function-name`
 
+**Resource bounds.** Accumulating higher-order / map / array built-ins honor the same limits as the evaluator's accumulation sites: per-iteration `ec.countOps` (op limit + context cancellation) and `appendBounded(..., ec.maxNodes)` (sequence/node-set length → `ErrNodeSetLimit`). Shared helpers `fnMaxNodes(ec)` / `fnCountOp(ctx, ec)` (in `functions_hof.go`) default to `maxNodeSetLength` and stay safe when `ec == nil` (function called outside an evaluation). Covers `for-each`, `for-each-pair`, `filter`, `fold-left`/`fold-right`, `map:for-each`, `map:find`, `array:join`, `array:flat-map`, `array:filter`, `array:for-each`/`for-each-pair`, `array:fold-left`/`fold-right`. `array:flatten` is **iterative** (explicit work stack) so deeply nested arrays cannot exhaust the goroutine stack; it is op-counted and `maxNodes`-bounded.
+
 ### `functions_map.go`
 `map:merge`, `map:size`, `map:keys`, `map:contains`, `map:get`, `map:put`, `map:entry`, `map:remove`, `map:for-each`, `map:find`
 

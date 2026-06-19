@@ -235,37 +235,74 @@ func fnArrayReverse(_ context.Context, args []Sequence) (Sequence, error) {
 	return ItemSlice{NewArray(reversed)}, nil
 }
 
-func fnArrayJoin(_ context.Context, args []Sequence) (Sequence, error) {
+func fnArrayJoin(ctx context.Context, args []Sequence) (Sequence, error) {
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var allMembers []Sequence
 	for item := range seqItems(args[0]) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		a, ok := item.(ArrayItem)
 		if !ok {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array:join requires sequence of arrays"}
 		}
 		allMembers = append(allMembers, a.members0()...)
+		if maxNodes > 0 && len(allMembers) > maxNodes {
+			return nil, ErrNodeSetLimit
+		}
 	}
 	return ItemSlice{NewArray(allMembers)}, nil
 }
 
-func fnArrayFlatten(_ context.Context, args []Sequence) (Sequence, error) {
+func fnArrayFlatten(ctx context.Context, args []Sequence) (Sequence, error) {
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
-	for item := range seqItems(args[0]) {
-		flattenArrayItem(&result, item)
-	}
-	return result, nil
-}
 
-func flattenArrayItem(dst *ItemSlice, item Item) {
-	arr, ok := item.(ArrayItem)
-	if !ok {
-		*dst = append(*dst, item)
-		return
+	// Walk the (possibly deeply nested) array structure iteratively with an
+	// explicit work stack rather than recursively, so a pathologically nested
+	// input cannot exhaust the goroutine stack. The op-counter and node-set
+	// limit bound the total work and output respectively.
+	//
+	// The stack is LIFO, so items are pushed in reverse order to preserve
+	// document order in the output.
+	var initial []Item
+	for item := range seqItems(args[0]) {
+		initial = append(initial, item)
 	}
-	for _, member := range arr.members0() {
-		for child := range seqItems(member) {
-			flattenArrayItem(dst, child)
+	stack := make([]Item, 0, len(initial))
+	for _, item := range slices.Backward(initial) {
+		stack = append(stack, item)
+	}
+	for len(stack) > 0 {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		item := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		arr, ok := item.(ArrayItem)
+		if !ok {
+			var err error
+			result, err = appendBounded(result, []Item{item}, maxNodes)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		// Push members in reverse so they are popped in document order.
+		members := arr.members0()
+		var children []Item
+		for _, member := range members {
+			for child := range seqItems(member) {
+				children = append(children, child)
+			}
+		}
+		for _, child := range slices.Backward(children) {
+			stack = append(stack, child)
 		}
 	}
+	return result, nil
 }
 
 func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -277,8 +314,13 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var allMembers []Sequence
 	for _, m := range a.members0() {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
@@ -290,6 +332,9 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 			} else {
 				allMembers = append(allMembers, ItemSlice{item})
 			}
+		}
+		if maxNodes > 0 && len(allMembers) > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 	}
 	return ItemSlice{NewArray(allMembers)}, nil
@@ -304,8 +349,12 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
 	var result []Sequence
 	for _, m := range a.members0() {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
@@ -335,7 +384,11 @@ func fnArrayFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
 	for _, m := range a.members0() {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		acc, err = fi.Invoke(ctx, []Sequence{acc, m})
 		if err != nil {
 			return nil, err
@@ -354,8 +407,12 @@ func fnArrayFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
 	members := a.members0()
 	for _, v := range slices.Backward(members) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		acc, err = fi.Invoke(ctx, []Sequence{v, acc})
 		if err != nil {
 			return nil, err
@@ -373,8 +430,12 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
 	var results []Sequence
 	for _, m := range a.members0() {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
@@ -400,9 +461,13 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 	if fi.Arity >= 0 && fi.Arity != 2 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("array:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
+	ec := getFnContext(ctx)
 	size := min(a1.Size(), a2.Size())
 	var results []Sequence
 	for i := 1; i <= size; i++ {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		m1, _ := a1.get0(i)
 		m2, _ := a2.get0(i)
 		r, err := fi.Invoke(ctx, []Sequence{m1, m2})

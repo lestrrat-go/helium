@@ -20,21 +20,52 @@ func init() {
 	registerFn("function-name", 1, 1, fnFunctionName)
 }
 
+// fnMaxNodes returns the node-set/sequence length limit that accumulating
+// built-ins (for-each, for-each-pair, map:for-each, array:flatten, ...) must
+// honor via appendBounded. When the function is called outside an evaluation
+// (ec == nil) or the evaluation did not set an explicit limit, the package
+// default applies so unbounded materialization is still rejected.
+func fnMaxNodes(ec *evalContext) int {
+	if ec == nil || ec.maxNodes <= 0 {
+		return maxNodeSetLength
+	}
+	return ec.maxNodes
+}
+
+// fnCountOp charges one operation against the evaluation's op-counter and
+// honors context cancellation. It is a no-op (other than the cancellation
+// check) when called outside an evaluation. Accumulating built-ins call it once
+// per iteration so a long-running higher-order call respects op/time limits.
+func fnCountOp(ctx context.Context, ec *evalContext) error {
+	if ec != nil {
+		return ec.countOps(ctx, 1)
+	}
+	return ctx.Err()
+}
+
 func fnForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
 	fi, err := extractFunctionItem(args[1])
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
 	callArgs := make([]Sequence, 1)
 	for item := range seqItems(seq) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		callArgs[0] = ItemSlice{item}
 		r, err := fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBounded(result, seqMaterialize(r), maxNodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -49,9 +80,14 @@ func fnFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 	if fi.Arity >= 0 && fi.Arity != 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:filter callback must have arity 1, got %d", fi.Arity)}
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
 	callArgs := make([]Sequence, 1)
 	for item := range seqItems(seq) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		callArgs[0] = ItemSlice{item}
 		r, err := fi.Invoke(ctx, callArgs)
 		if err != nil {
@@ -66,7 +102,10 @@ func fnFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:filter callback must return a single xs:boolean value"}
 		}
 		if av.BooleanVal() {
-			result = append(result, item)
+			result, err = appendBounded(result, []Item{item}, maxNodes)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return result, nil
@@ -79,8 +118,12 @@ func fnFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
 	callArgs := make([]Sequence, 2)
 	for item := range seqItems(seq) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		callArgs[0] = acc
 		callArgs[1] = ItemSlice{item}
 		acc, err = fi.Invoke(ctx, callArgs)
@@ -98,9 +141,13 @@ func fnFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
 	items := seqMaterialize(seq)
 	callArgs := make([]Sequence, 2)
 	for _, v := range slices.Backward(items) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		callArgs[0] = ItemSlice{v}
 		callArgs[1] = acc
 		acc, err = fi.Invoke(ctx, callArgs)
@@ -122,17 +169,25 @@ func fnForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
 	if fi.Arity >= 0 && fi.Arity != 2 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	size := min(seqLen(seq1), seqLen(seq2))
 	var result ItemSlice
 	callArgs := make([]Sequence, 2)
 	for i := range size {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		callArgs[0] = ItemSlice{seq1.Get(i)}
 		callArgs[1] = ItemSlice{seq2.Get(i)}
 		r, err := fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBounded(result, seqMaterialize(r), maxNodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
