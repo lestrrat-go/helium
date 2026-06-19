@@ -120,3 +120,32 @@ func TestParseContextCancelDoesNotFireSAXError(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled, "Parse must return the context error")
 	require.Empty(t, handler.recorded(), "SAX Error handler must not be invoked on a clean cancellation")
 }
+
+// TestParseContextCancelWithRecoverOnError verifies that a mid-parse
+// cancellation is not treated as a recoverable parse error: even with
+// RecoverOnError(true) enabled, Parse must return the context error AND a nil
+// document, never a partial tree.
+func TestParseContextCancelWithRecoverOnError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	handler := &cancellingSAX{TreeBuilder: helium.NewTreeBuilder(), cancel: cancel, cancelAt: 100}
+
+	done := make(chan struct {
+		doc *helium.Document
+		err error
+	}, 1)
+	go func() {
+		doc, err := helium.NewParser().RecoverOnError(true).SAXHandler(handler).Parse(ctx, largeDoc())
+		done <- struct {
+			doc *helium.Document
+			err error
+		}{doc, err}
+	}()
+
+	select {
+	case res := <-done:
+		require.ErrorIs(t, res.err, context.Canceled, "Parse must return the context error even with RecoverOnError")
+		require.Nil(t, res.doc, "cancelled parse must not return a partial document")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Parse did not return promptly after context cancellation")
+	}
+}

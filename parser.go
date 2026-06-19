@@ -540,6 +540,11 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 		if errors.Is(err, errParserStopped) {
 			return pctx.doc, nil
 		}
+		// A cancelled or timed-out parse is not a recoverable parse error:
+		// return the context error with a nil document, never a partial tree.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
 		if p.cfg.options.IsSet(parseRecover) {
 			// ParseRecover: return the partial document along with the error
 			return pctx.doc, err
@@ -592,6 +597,11 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 	if err := pctx.parseDocument(ctx); err != nil {
 		if errors.Is(err, errParserStopped) {
 			return pctx.doc, nil
+		}
+		// A cancelled or timed-out parse is not a recoverable parse error:
+		// return the context error with a nil document, never a partial tree.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
 		}
 		if p.cfg.options.IsSet(parseRecover) {
 			return pctx.doc, err
