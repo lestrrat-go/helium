@@ -498,6 +498,11 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	ec := getFnContext(ctx)
 	maxNodes := fnMaxNodes(ec)
 	var results []Sequence
+	// total counts items across all callback results: NewArray clones each result,
+	// so a callback returning one oversized lazy/borrowed sequence is still
+	// materialized unless its length is bounded. Use an overflow-safe compare
+	// (rLen > maxNodes-total) so total+rLen never overflows.
+	total := 0
 	for _, m := range a.members0() {
 		if err := fnCountOp(ctx, ec); err != nil {
 			return nil, err
@@ -506,9 +511,11 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		if maxNodes > 0 && len(results)+1 > maxNodes {
+		rLen := seqLen(r)
+		if maxNodes > 0 && rLen > maxNodes-total {
 			return nil, ErrNodeSetLimit
 		}
+		total += rLen
 		results = append(results, r)
 	}
 	return ItemSlice{NewArray(results)}, nil
@@ -534,6 +541,10 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 	maxNodes := fnMaxNodes(ec)
 	size := min(a1.Size(), a2.Size())
 	var results []Sequence
+	// total counts items across all callback results (NewArray clones each), so a
+	// callback returning one oversized lazy/borrowed sequence is bounded too. The
+	// compare is overflow-safe (rLen > maxNodes-total).
+	total := 0
 	for i := 1; i <= size; i++ {
 		if err := fnCountOp(ctx, ec); err != nil {
 			return nil, err
@@ -544,9 +555,11 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 		if err != nil {
 			return nil, err
 		}
-		if maxNodes > 0 && len(results)+1 > maxNodes {
+		rLen := seqLen(r)
+		if maxNodes > 0 && rLen > maxNodes-total {
 			return nil, ErrNodeSetLimit
 		}
+		total += rLen
 		results = append(results, r)
 	}
 	return ItemSlice{NewArray(results)}, nil

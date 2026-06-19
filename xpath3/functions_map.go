@@ -236,7 +236,7 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return err
 		}
-		result, err = appendBoundedSeq(result, r, maxNodes)
+		result, err = appendBoundedSeq(ctx, ec, result, r, maxNodes)
 		if err != nil {
 			return err
 		}
@@ -304,10 +304,11 @@ func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequen
 			// range stored via map:entry, which does not clone) must be rejected
 			// with ErrNodeSetLimit rather than materialized by the clone in Get.
 			if val, found := v.get0(key); found {
-				if maxNodes > 0 && total+seqLen(val) > maxNodes {
+				valLen := seqLen(val)
+				if maxNodes > 0 && valLen > maxNodes-total {
 					return nil, ErrNodeSetLimit
 				}
-				total += seqLen(val)
+				total += valLen
 				results = append(results, cloneSequence(val))
 			}
 			// Then descend into the map's values, in insertion order, iterating

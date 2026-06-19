@@ -167,6 +167,11 @@ func TestHOFLazySequenceLimit(t *testing.T) {
 		{"for-each", `for-each(1 to 3, function($x) { $lazy })`},
 		{"for-each-pair", `for-each-pair(1 to 3, 1 to 3, function($a, $b) { $lazy })`},
 		{"map-for-each", `map:for-each(map { 1: 1 }, function($k, $v) { $lazy })`},
+		// array:for-each / array:for-each-pair cap the NUMBER of result members,
+		// but NewArray clones each callback result; a single oversized lazy result
+		// must be rejected by the per-result seqLen bound before it is cloned.
+		{"array-for-each", `array:for-each(array { 1, 2, 3 }, function($x) { $lazy })`},
+		{"array-for-each-pair", `array:for-each-pair(array { 1, 2, 3 }, array { 1, 2, 3 }, function($a, $b) { $lazy })`},
 		// fold accumulator becomes the huge lazy sequence; the seqLen check (O(1)
 		// on a lazy range) must reject it without materializing.
 		{"fold-left", `fold-left(1 to 3, (), function($acc, $x) { $lazy })`},
@@ -190,6 +195,49 @@ func TestHOFLazySequenceLimit(t *testing.T) {
 					Evaluate(t.Context(), compiled, nil)
 			})
 			require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+		})
+	}
+}
+
+// TestAppendBoundedSeqHonorsOpLimit proves that appendBoundedSeq — the
+// accumulation helper used by fn:for-each, fn:for-each-pair, and map:for-each —
+// charges an op per appended item, so draining a large lazy callback result
+// respects OpLimit (and, by extension, context cancellation) instead of running
+// to completion unbounded. Each callback returns the huge lazy range on its
+// first invocation; with NO node-set limit but a low op-limit the drain must
+// stop with ErrOpLimit rather than materialize the trillion-item range.
+func TestAppendBoundedSeqHonorsOpLimit(t *testing.T) {
+	t.Parallel()
+
+	const huge = int64(1) << 40
+
+	vars := xpath3.NewVariables()
+	vars.Set("lazy", xpath3.NewRangeSequence(1, huge))
+
+	cases := []struct {
+		name string
+		expr string
+	}{
+		{"for-each", `for-each(1 to 3, function($x) { $lazy })`},
+		{"for-each-pair", `for-each-pair(1 to 3, 1 to 3, function($a, $b) { $lazy })`},
+		{"map-for-each", `map:for-each(map { 1: 1 }, function($k, $v) { $lazy })`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+
+			var evalErr error
+			// NotPanics guards against a regression that drains the lazy range
+			// without an op check (which would hang / OOM rather than abort).
+			require.NotPanics(t, func() {
+				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+					Variables(vars).
+					OpLimit(1000).
+					Evaluate(t.Context(), compiled, nil)
+			})
+			require.ErrorIs(t, evalErr, xpath3.ErrOpLimit)
 		})
 	}
 }

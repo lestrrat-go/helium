@@ -132,8 +132,15 @@ func appendBounded(dst ItemSlice, src []Item, maxNodes int) (ItemSlice, error) {
 // lazily via seqItems so a callback returning an unbounded lazy Sequence is
 // rejected with ErrNodeSetLimit as soon as the accumulated length would exceed
 // maxNodes — without ever materializing the whole source sequence.
-func appendBoundedSeq(dst ItemSlice, src Sequence, maxNodes int) (ItemSlice, error) {
+//
+// It also charges one op (and honors cancellation) per appended item via
+// fnCountOp, so draining a large lazy source respects OpLimit / context
+// cancellation rather than running to completion unbounded.
+func appendBoundedSeq(ctx context.Context, ec *evalContext, dst ItemSlice, src Sequence, maxNodes int) (ItemSlice, error) {
 	for item := range seqItems(src) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		if maxNodes > 0 && len(dst)+1 > maxNodes {
 			return nil, ErrNodeSetLimit
 		}
