@@ -51,7 +51,12 @@ func newStream(ctx context.Context) *stream {
 		go func() {
 			select {
 			case <-ctx.Done():
+				// Hold the lock around Broadcast so a Read that has just
+				// observed ctx.Err()==nil but not yet called cond.Wait()
+				// cannot miss this wakeup (lost-wakeup race).
+				s.mu.Lock()
 				s.cond.Broadcast()
+				s.mu.Unlock()
 			case <-s.stop:
 			}
 		}()
