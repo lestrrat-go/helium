@@ -179,6 +179,25 @@ func nameClassesOverlap(a, b *nameClass) bool {
 	return false
 }
 
+// nameClassContainsNoMatch reports whether the name class tree contains a
+// poisoned (ncNoMatch) leaf. It is used to detect an invalid name class nested
+// inside an <except>, which must poison the enclosing anyName/nsName rather than
+// be silently treated as an empty exclusion.
+func nameClassContainsNoMatch(nc *nameClass) bool {
+	if nc == nil {
+		return false
+	}
+	switch nc.kind {
+	case ncNoMatch:
+		return true
+	case ncChoice:
+		return nameClassContainsNoMatch(nc.left) || nameClassContainsNoMatch(nc.right)
+	case ncAnyName, ncNsName:
+		return nameClassContainsNoMatch(nc.except)
+	}
+	return false
+}
+
 // nameClassMatches returns true if the name class matches the given local name and namespace.
 func nameClassMatches(nc *nameClass, local, ns string) bool {
 	if nc == nil {

@@ -986,6 +986,13 @@ func (c *compiler) parseNameClass(ctx context.Context, node *helium.Element) *na
 				nc.except = c.parseNameClassChildren(ctx, elem)
 			}
 		}
+		// An <except> whose name class is invalid (e.g. an unbound prefix that
+		// compiled to ncNoMatch) must not be silently treated as an empty
+		// exclusion: that would let the anyName match everything. Poison the
+		// whole name class so it never matches.
+		if nameClassContainsNoMatch(nc.except) {
+			return &nameClass{kind: ncNoMatch}
+		}
 		return nc
 	case "nsName":
 		ns, hasNS := getAttrOpt(node, "ns")
@@ -1001,6 +1008,9 @@ func (c *compiler) parseNameClass(ctx context.Context, node *helium.Element) *na
 			if isRNG(elem, "except") {
 				nc.except = c.parseNameClassChildren(ctx, elem)
 			}
+		}
+		if nameClassContainsNoMatch(nc.except) {
+			return &nameClass{kind: ncNoMatch}
 		}
 		return nc
 	case "choice":

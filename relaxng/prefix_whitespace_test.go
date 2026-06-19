@@ -109,6 +109,101 @@ func TestUnboundPrefixInNameIsCompileError(t *testing.T) {
 	})
 }
 
+// TestUnboundPrefixInExceptPoisonsNameClass covers the interaction with the
+// unbound-prefix fix: an invalid/unbound name inside an <except> compiles to a
+// never-matching name class. On the DEFAULT compile path (no error collector)
+// the fatal diagnostic is dropped, so the enclosing anyName/nsName must poison
+// itself rather than silently treat the exclusion as empty — otherwise it would
+// match everything and spuriously validate the instance.
+func TestUnboundPrefixInExceptPoisonsNameClass(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default handler: anyName/except unbound prefix does not spuriously validate", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="root" xmlns="http://relaxng.org/ns/structure/1.0">
+  <element>
+    <anyName>
+      <except><name>p:admin</name></except>
+    </anyName>
+    <empty/>
+  </element>
+</element>`
+
+		schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err, "schema should parse")
+
+		grammar, err := relaxng.NewCompiler().Compile(t.Context(), schemaDoc)
+		require.NoError(t, err, "default Compile returns a nil hard error")
+		require.NotNil(t, grammar, "default Compile still returns a grammar")
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><child/></root>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"an unbound-prefix name inside <except> must poison anyName, not be an empty exclusion")
+	})
+
+	t.Run("default handler: nsName/except unbound prefix does not spuriously validate", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="root"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    ns="urn:example:e">
+  <element>
+    <nsName>
+      <except><name>p:admin</name></except>
+    </nsName>
+    <empty/>
+  </element>
+</element>`
+
+		schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err, "schema should parse")
+
+		grammar, err := relaxng.NewCompiler().Compile(t.Context(), schemaDoc)
+		require.NoError(t, err, "default Compile returns a nil hard error")
+		require.NotNil(t, grammar, "default Compile still returns a grammar")
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<root xmlns="urn:example:e"><child/></root>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"an unbound-prefix name inside <except> must poison nsName, not be an empty exclusion")
+	})
+
+	t.Run("anyName/except unbound prefix is a fatal compile error", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="root" xmlns="http://relaxng.org/ns/structure/1.0">
+  <element>
+    <anyName>
+      <except><name>p:admin</name></except>
+    </anyName>
+    <empty/>
+  </element>
+</element>`
+		require.NotEmpty(t, compileErrorsFor(t, schema),
+			"an unbound prefix inside <except> must be a fatal compile error")
+	})
+
+	t.Run("bound prefix in anyName/except compiles and excludes correctly", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="root"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    xmlns:p="urn:example:p">
+  <element>
+    <anyName>
+      <except><name>p:admin</name></except>
+    </anyName>
+    <empty/>
+  </element>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"a bound prefix inside <except> must compile cleanly")
+		require.NoError(t, validateWith(t, schema, `<root><child/></root>`),
+			"a no-namespace child is not the excluded p:admin and must match anyName")
+	})
+}
+
 // TestNBSPNotXMLWhitespace covers D-RNG-003: XML whitespace is only #x20, #x9,
 // #xA, #xD. A U+00A0 NBSP must NOT be treated as ignorable whitespace, so an
 // NBSP between element children, or an NBSP value for an <empty/> pattern, is
