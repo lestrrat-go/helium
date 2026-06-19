@@ -246,9 +246,15 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 
 	doRecover := pctx.options.IsSet(parseRecover)
 
-	for !cur.Done() && !pctx.stopped {
+	for {
+		// Check the context BEFORE cur.Done(), which may refill the cursor
+		// from an io.Reader and block; this lets a cancelled context be
+		// observed between reads rather than after a blocking refill.
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if cur.Done() || pctx.stopped {
+			break
 		}
 		if cur.Peek() == '<' && cur.PeekAt(1) == '/' {
 			break

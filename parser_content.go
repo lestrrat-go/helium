@@ -80,9 +80,15 @@ func (pctx *parserCtx) parseMisc(ctx context.Context) error {
 	}
 
 	cur := pctx.getCursor()
-	for !cur.Done() && pctx.instate != psEOF {
+	for {
+		// Check the context BEFORE cur.Done(), which may refill the cursor
+		// from an io.Reader and block; this lets a cancelled context be
+		// observed between reads rather than after a blocking refill.
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if cur.Done() || pctx.instate == psEOF {
+			break
 		}
 		if cur.HasPrefixString("<?") {
 			if err := pctx.parsePI(ctx); err != nil {

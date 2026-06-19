@@ -2,15 +2,67 @@ package helium_test
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
 )
+
+// largeDoc builds a document with many sibling elements so the content loop
+// iterates enough times to observe a mid-parse cancellation.
+func largeDoc() []byte {
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0"?><root>`)
+	for range 200000 {
+		b.WriteString(`<a>x</a>`)
+	}
+	b.WriteString(`</root>`)
+	return []byte(b.String())
+}
+
+// cancellingSAX embeds the default tree builder and cancels the parse context
+// after a fixed number of StartElementNS callbacks. This makes cancellation
+// deterministic: the parser is guaranteed to have entered the content loop and
+// processed a known number of elements before the context is cancelled, so the
+// next loop iteration observes the cancellation regardless of machine speed. It
+// also records every SAX Error callback so a test can assert that a clean
+// cancellation surfaces no error to the SAX handler.
+type cancellingSAX struct {
+	*helium.TreeBuilder
+	cancel   context.CancelFunc
+	cancelAt int
+	mu       sync.Mutex
+	starts   int
+	errors   []error
+}
+
+func (s *cancellingSAX) StartElementNS(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.mu.Lock()
+	s.starts++
+	fire := s.cancel != nil && s.starts == s.cancelAt
+	s.mu.Unlock()
+	if fire {
+		s.cancel()
+	}
+	return s.TreeBuilder.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
+}
+
+func (s *cancellingSAX) Error(ctx context.Context, err error) error {
+	s.mu.Lock()
+	s.errors = append(s.errors, err)
+	s.mu.Unlock()
+	return s.TreeBuilder.Error(ctx, err)
+}
+
+func (s *cancellingSAX) recorded() []error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]error(nil), s.errors...)
+}
 
 // TestParseContextCancelledUpFront verifies that a context cancelled before
 // Parse runs aborts immediately with the context error instead of doing work.
@@ -23,29 +75,16 @@ func TestParseContextCancelledUpFront(t *testing.T) {
 }
 
 // TestParseContextCancelledDuringParse verifies that cancelling the context
-// while Parse is running on a large, deeply repetitive input aborts promptly
-// with the context error rather than running to completion.
+// while Parse is running aborts promptly with the context error rather than
+// running to completion. Cancellation is triggered deterministically from a SAX
+// handler after a known number of elements have been parsed.
 func TestParseContextCancelledDuringParse(t *testing.T) {
-	// Build a large document with many sibling elements so the content loop
-	// iterates enough times to observe the cancellation.
-	var b strings.Builder
-	b.WriteString(`<?xml version="1.0"?><root>`)
-	for range 200000 {
-		b.WriteString(`<a>x</a>`)
-	}
-	b.WriteString(`</root>`)
-	input := []byte(b.String())
-
 	ctx, cancel := context.WithCancel(context.Background())
-	// Cancel shortly after parsing begins.
-	go func() {
-		time.Sleep(2 * time.Millisecond)
-		cancel()
-	}()
+	handler := &cancellingSAX{TreeBuilder: helium.NewTreeBuilder(), cancel: cancel, cancelAt: 100}
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := helium.NewParser().Parse(ctx, input)
+		_, err := helium.NewParser().SAXHandler(handler).Parse(ctx, largeDoc())
 		done <- err
 	}()
 
@@ -57,51 +96,17 @@ func TestParseContextCancelledDuringParse(t *testing.T) {
 	}
 }
 
-// errRecordingSAX embeds the default tree builder and records every SAX Error
-// callback so the test can assert that context cancellation does NOT surface as
-// a parse error to the SAX handler.
-type errRecordingSAX struct {
-	*helium.TreeBuilder
-	mu     sync.Mutex
-	errors []error
-}
-
-func (s *errRecordingSAX) Error(ctx context.Context, err error) error {
-	s.mu.Lock()
-	s.errors = append(s.errors, err)
-	s.mu.Unlock()
-	return s.TreeBuilder.Error(ctx, err)
-}
-
-func (s *errRecordingSAX) recorded() []error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]error(nil), s.errors...)
-}
-
 // TestParseContextCancelDoesNotFireSAXError verifies that when a context is
 // cancelled mid-parse, Parse returns the context error and the SAX Error
-// handler is NOT invoked as if the document were malformed.
+// handler is NOT invoked at all: a clean cancellation must not look like a
+// malformed document to the handler.
 func TestParseContextCancelDoesNotFireSAXError(t *testing.T) {
-	var b strings.Builder
-	b.WriteString(`<?xml version="1.0"?><root>`)
-	for range 200000 {
-		b.WriteString(`<a>x</a>`)
-	}
-	b.WriteString(`</root>`)
-	input := []byte(b.String())
-
-	handler := &errRecordingSAX{TreeBuilder: helium.NewTreeBuilder()}
-
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(2 * time.Millisecond)
-		cancel()
-	}()
+	handler := &cancellingSAX{TreeBuilder: helium.NewTreeBuilder(), cancel: cancel, cancelAt: 100}
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := helium.NewParser().SAXHandler(handler).Parse(ctx, input)
+		_, err := helium.NewParser().SAXHandler(handler).Parse(ctx, largeDoc())
 		done <- err
 	}()
 
@@ -113,10 +118,5 @@ func TestParseContextCancelDoesNotFireSAXError(t *testing.T) {
 	}
 
 	require.ErrorIs(t, err, context.Canceled, "Parse must return the context error")
-
-	for _, e := range handler.recorded() {
-		require.False(t,
-			errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded),
-			"SAX Error handler must not be invoked for context cancellation, got: %v", e)
-	}
+	require.Empty(t, handler.recorded(), "SAX Error handler must not be invoked on a clean cancellation")
 }
