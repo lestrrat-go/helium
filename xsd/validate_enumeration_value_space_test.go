@@ -54,6 +54,10 @@ func TestEnumerationValueSpace(t *testing.T) {
 		{name: "double NaN matches NaN", baseType: xsDoubleType, enum: []string{nanLexical}, instance: nanLexical},
 		{name: "float signed NaN rejected", baseType: xsFloatType, enum: []string{nanLexical}, instance: "+NaN", wantReject: true, wantRejectMsg: "is not a valid value of the atomic type 'xs:float'"},
 		{name: "double signed NaN rejected", baseType: xsDoubleType, enum: []string{nanLexical}, instance: "-NaN", wantReject: true, wantRejectMsg: "is not a valid value of the atomic type 'xs:double'"},
+		// A signed-NaN enumeration member is itself an invalid lexical form; it must
+		// not value-match a bare "NaN" instance via the value-equality path.
+		{name: "float signed NaN member does not match NaN", baseType: xsFloatType, enum: []string{"+NaN"}, instance: nanLexical, wantReject: true},
+		{name: "double signed NaN member does not match NaN", baseType: xsDoubleType, enum: []string{"-NaN"}, instance: nanLexical, wantReject: true},
 
 		// hexBinary — value space is the decoded octets, so case differences are
 		// not significant ("0A" == "0a"); a different byte must be rejected.

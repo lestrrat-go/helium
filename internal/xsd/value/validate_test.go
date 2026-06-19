@@ -310,6 +310,12 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeFloat, lexicon.FloatNaN, lexicon.XSLTVersion10, 0, false},
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, lexicon.FloatNaN, 0, false},
 		{lexicon.TypeFloat, lexicon.FloatNaN, lexicon.FloatNaN, 0, false},
+		// "+NaN"/"-NaN" are not valid xs:float lexical forms, so a comparison
+		// against them is indeterminate rather than treating them as NaN. This
+		// keeps the value space consistent with the lexical validator.
+		{lexicon.TypeFloat, "+NaN", lexicon.FloatNaN, 0, false},
+		{lexicon.TypeFloat, "-NaN", lexicon.FloatNaN, 0, false},
+		{lexicon.TypeFloat, lexicon.FloatNaN, "+NaN", 0, false},
 		{lexicon.TypeFloat, "1e2", "100", 0, true},
 		{lexicon.TypeFloat, "1.5E-3", "0.0015", 0, true},
 		// xs:float value space is IEEE-754 single precision: 16777216 and
@@ -543,6 +549,17 @@ func TestNormalize(t *testing.T) {
 // uppercase 'Z' only. XSD permits "Z" but never the lowercase "z"; the latter
 // must fail lexical validation and must NOT compare or canonicalize as equal to
 // the uppercase form.
+func TestIsFloatNaN(t *testing.T) {
+	// Only the bare "NaN" denotes NaN. The sign-prefixed +NaN/-NaN are not valid
+	// XSD lexical forms and must be rejected, so a facet value="+NaN" cannot
+	// value-match an instance "NaN".
+	require.True(t, value.IsFloatNaN(lexicon.FloatNaN), "bare NaN is NaN")
+	require.False(t, value.IsFloatNaN("+NaN"), "+NaN is not a valid NaN form")
+	require.False(t, value.IsFloatNaN("-NaN"), "-NaN is not a valid NaN form")
+	require.False(t, value.IsFloatNaN(lexicon.FloatINF), "INF is not NaN")
+	require.False(t, value.IsFloatNaN("1.5"), "finite value is not NaN")
+}
+
 func TestTimezoneUppercaseZOnly(t *testing.T) {
 	t.Parallel()
 

@@ -514,10 +514,11 @@ func parseXSDFloat(s string) (float64, bool) {
 		return math.Inf(1), true
 	case "-INF":
 		return math.Inf(-1), true
-	// The float lexical validator (floatRegex) accepts an optional leading sign
-	// on NaN, so accept the signed forms here too for consistency. The sign is
-	// meaningless for NaN.
-	case "NaN", "+NaN", "-NaN":
+	// Per XSD the only valid lexical form for NaN is the bare "NaN"; +NaN and
+	// -NaN are not valid (floatRegex rejects them). Reject them here too so the
+	// value space stays consistent with the lexical space — otherwise an invalid
+	// facet such as enumeration value="+NaN" would value-match instance "NaN".
+	case "NaN":
 		return math.NaN(), true
 	}
 	f, err := strconv.ParseFloat(s, 64)
@@ -535,7 +536,8 @@ func parseXSDFloat(s string) (float64, bool) {
 }
 
 // IsFloatNaN reports whether s is a valid xs:float/xs:double lexical form that
-// denotes NaN (including the sign-prefixed forms the lexical validator accepts).
+// denotes NaN. Only the bare "NaN" qualifies; the sign-prefixed +NaN/-NaN are
+// not valid XSD lexical forms and are rejected.
 func IsFloatNaN(s string) bool {
 	f, ok := parseXSDFloat(s)
 	return ok && math.IsNaN(f)
