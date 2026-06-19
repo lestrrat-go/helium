@@ -188,13 +188,17 @@ func (vc *validationContext) collectSubtreeKeyTable(ctx context.Context, host *h
 }
 
 // idcHostDecl returns the declaration whose identity constraints apply to an
-// element instance, preferring the LOCAL declaration recorded during pass-1 when
-// it carries IDCs and otherwise falling back to the GLOBAL lookup. It mirrors the
-// selection logic in the pass-2 walk so subtree key-table gathering sees the same
-// constraints pass-2 evaluates per element.
+// element instance. It uses the declaration recorded during pass-1 for ANY
+// non-ref local match — including one that carries zero IDCs — because a local
+// element that merely shadows a same-named global declaration must NOT inherit
+// the global's identity constraints. It falls back to the GLOBAL lookup only
+// when no declaration was recorded or the recorded one is a ref (a
+// `<xs:element ref="g"/>` correctly resolves to global g and its IDCs). This
+// mirrors the selection logic in the pass-2 walk so subtree key-table gathering
+// sees the same constraints pass-2 evaluates per element.
 func (vc *validationContext) idcHostDecl(elem *helium.Element) *ElementDecl {
 	decl := vc.actualElemDecl[elem]
-	if decl != nil && len(decl.IDCs) > 0 {
+	if decl != nil && !decl.IsRef {
 		return decl
 	}
 	return lookupElemDecl(elem, vc.schema)

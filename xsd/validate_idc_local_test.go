@@ -198,6 +198,79 @@ func TestIDCLocalKeyRefSiblingKeyOutOfScope(t *testing.T) {
 	require.Contains(t, errs, "No match found for key-sequence ['a'] of keyref 'localRef'.")
 }
 
+// TestIDCLocalShadowsGlobalNoInherit confirms a LOCAL element declaration that
+// merely shadows a same-named GLOBAL declaration does NOT inherit the global's
+// identity constraints. The local <item> here carries no IDC of its own; the
+// global <item> carries a key on its <sub> children. An instance whose LOCAL
+// <item> has duplicate @k values across <sub> must VALIDATE — the global key
+// is out of scope. xmllint validates this instance and only enforces
+// globalSubKey on the global item. Regression for idcHostDecl falling back to
+// the global lookup whenever the recorded local decl carried zero IDCs.
+func TestIDCLocalShadowsGlobalNoInherit(t *testing.T) {
+	t.Parallel()
+
+	// Global <item> carries a key (globalSubKey); the LOCAL <item> nested in
+	// <root> shadows the NAME but declares no identity constraint.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="item">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="sub" maxOccurs="unbounded">
+          <xs:complexType><xs:attribute name="k" type="xs:string"/></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="globalSubKey">
+      <xs:selector xpath="sub"/>
+      <xs:field xpath="@k"/>
+    </xs:key>
+  </xs:element>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="sub" maxOccurs="unbounded">
+                <xs:complexType><xs:attribute name="k" type="xs:string"/></xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	v, compileErrs := compileXSD(t, schemaXML)
+	require.Empty(t, compileErrs, "shadowing schema should compile clean")
+
+	t.Run("local item does not inherit global key", func(t *testing.T) {
+		t.Parallel()
+		// Duplicate @k under the LOCAL item: only valid because globalSubKey
+		// does not apply to the shadowing local declaration.
+		doc, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<root><item><sub k="dup"/><sub k="dup"/></item></root>`))
+		require.NoError(t, err)
+		var errs string
+		err = validateWithOutput(t, v, doc, &errs)
+		require.NoError(t, err, "a local element shadowing a global name must not inherit the global's key; got: %s", errs)
+	})
+
+	t.Run("global item still enforces its key", func(t *testing.T) {
+		t.Parallel()
+		// Same duplicate, but under the GLOBAL item where globalSubKey applies.
+		doc, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<item><sub k="dup"/><sub k="dup"/></item>`))
+		require.NoError(t, err)
+		var errs string
+		err = validateWithOutput(t, v, doc, &errs)
+		require.Error(t, err, "the global item's key must still be enforced")
+		require.Contains(t, errs, "Duplicate key-sequence ['dup']")
+		require.Contains(t, errs, "globalSubKey")
+	})
+}
+
 // TestIDCLocalUniqueEvaluated confirms an xs:unique declared on a LOCAL element
 // is evaluated at validation time: a duplicate key-sequence is rejected.
 func TestIDCLocalUniqueEvaluated(t *testing.T) {
