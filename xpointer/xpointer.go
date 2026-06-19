@@ -361,7 +361,7 @@ func isChildIndex(s string) bool {
 // conversion cannot fail.
 func atoiChildIndex(s string) int {
 	n := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		n = n*10 + int(s[i]-'0')
 	}
 	return n
