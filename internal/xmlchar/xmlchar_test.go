@@ -208,6 +208,45 @@ func TestIsNCNameChar(t *testing.T) {
 	}
 }
 
+func TestIsValidName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"foo", true},
+		{"_bar", true},
+		{"café", true},
+		{"a123", true},
+		{"a:b", true},   // single colon (QName-shaped) is a valid Name
+		{"a:b:c", true}, // multiple colons: valid Name but NOT a valid QName
+		{":foo", true},  // leading colon: valid Name, invalid QName/NCName
+		{"foo:", true},  // trailing colon: valid Name, invalid QName/NCName
+		{":", true},     // a bare colon is a valid NameStartChar
+		{"a-b.c", true},
+		{"", false},                   // empty
+		{"1abc", false},               // must start with NameStartChar
+		{"-abc", false},               // '-' is not a NameStartChar
+		{".abc", false},               // '.' is not a NameStartChar
+		{"a b", false},                // space is not a NameChar
+		{"a<b", false},                // '<' must be rejected (injection guard)
+		{string([]byte{0xff}), false}, // invalid UTF-8
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, xmlchar.IsValidName(tt.input))
+		})
+	}
+}
+
+func TestIsValidNameWidthAware(t *testing.T) {
+	t.Parallel()
+	require.True(t, xmlchar.IsValidName("a�b"), "valid U+FFFD must be accepted")
+	require.True(t, xmlchar.IsValidName("�"), "U+FFFD is a valid NameStartChar")
+	require.False(t, xmlchar.IsValidName(string([]byte{0xff})), "invalid UTF-8 must be rejected")
+}
+
 func TestIsValidNCNameWidthAware(t *testing.T) {
 	t.Parallel()
 	require.True(t, xmlchar.IsValidNCName("a�b"), "valid U+FFFD must be accepted")

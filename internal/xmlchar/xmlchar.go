@@ -115,6 +115,41 @@ func isEncNameChar(c byte) bool {
 		c == '.' || c == '_' || c == '-'
 }
 
+// IsValidName checks whether s is a valid XML Name (XML 1.0 §2.3):
+//
+//	Name          ::= NameStartChar (NameChar)*
+//	NameStartChar ::= ":" | NCNameStartChar
+//	NameChar      ::= NameStartChar | "-" | "." | [0-9] | #xB7 | ...
+//
+// Unlike NCName/QName, a Name may contain colons anywhere (including leading,
+// trailing, or repeated), so the Name production is strictly broader than
+// QName. This matches the XML DTD productions for element, attlist, notation,
+// and doctype names, which helium's parser reads as the Name production.
+func IsValidName(s string) bool {
+	if s == "" {
+		return false
+	}
+	// Decode explicitly (not range) so invalid UTF-8 — which range reports as
+	// RuneError indistinguishable from a real U+FFFD — is rejected by width.
+	first := true
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			return false
+		}
+		if first {
+			if r != ':' && !IsNCNameStartChar(r) {
+				return false
+			}
+			first = false
+		} else if r != ':' && !IsNCNameChar(r) {
+			return false
+		}
+		i += size
+	}
+	return true
+}
+
 // IsValidNCName checks whether s is a valid XML NCName (non-colonized name).
 func IsValidNCName(s string) bool {
 	if s == "" {

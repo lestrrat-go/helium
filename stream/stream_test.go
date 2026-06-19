@@ -1860,3 +1860,44 @@ func TestWriteDTDEntityAcceptsNCName(t *testing.T) {
 	require.NoError(t, w.WriteDTDEntity(false, "ent", "v"))
 	require.NoError(t, w.WriteDTDExternalEntity(false, "logo", "", "logo.gif", "gif"))
 }
+
+// DTD element/attlist/notation/doctype/NDATA names follow the XML Name
+// production, which is broader than QName: a Name may contain multiple colons
+// (or leading/trailing colons). Such names must be accepted, while genuinely
+// malformed names (injection, empty) must still be rejected.
+func TestDTDNamesUseXMLNameProduction(t *testing.T) {
+	t.Parallel()
+	t.Run("multi-colon names accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		// "a:b:c" is a valid Name but NOT a valid QName.
+		require.NoError(t, w.StartDTD("a:b:c", "", ""))
+		require.NoError(t, w.WriteDTDElement("a:b:c", "(#PCDATA)"))
+		require.NoError(t, w.WriteDTDAttlist("a:b:c", "x CDATA #IMPLIED"))
+		require.NoError(t, w.WriteDTDNotation("n:o:t", "", "sys"))
+		require.NoError(t, w.WriteDTDExternalEntity(false, "img", "", "img.gif", "g:i:f"))
+		require.NoError(t, w.EndDTD())
+		out := buf.String()
+		require.Contains(t, out, "<!DOCTYPE a:b:c")
+		require.Contains(t, out, "<!ELEMENT a:b:c")
+		require.Contains(t, out, "<!ATTLIST a:b:c")
+		require.Contains(t, out, "<!NOTATION n:o:t")
+		require.Contains(t, out, "NDATA g:i:f")
+	})
+	t.Run("invalid names still rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDElement("a b", "(#PCDATA)"), "space not a NameChar")
+		require.Error(t, w.WriteDTDElement(`x><!ENTITY e "pwn">`, "(#PCDATA)"), "injection")
+		require.Error(t, w.WriteDTDElement("", "(#PCDATA)"), "empty")
+		require.Error(t, w.WriteDTDElement("1bad", "(#PCDATA)"), "bad start char")
+		require.Error(t, w.WriteDTDAttlist("a b", "x CDATA #IMPLIED"), "space not a NameChar")
+		require.Error(t, w.WriteDTDNotation("n>x", "", "sys"), "injection")
+		require.Error(t, w.WriteDTDExternalEntity(false, "img", "", "img.gif", "g h"), "bad NDATA")
+	})
+}

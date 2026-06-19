@@ -1332,7 +1332,7 @@ func (w *Writer) StartDTD(name, pubid, sysid string) error {
 	}
 	// Validate name and external identifiers before writing, so an untrusted
 	// value cannot inject markup into (or produce an unquotable) DOCTYPE.
-	if !xmlchar.IsValidQName(name) {
+	if !xmlchar.IsValidName(name) {
 		return fmt.Errorf("stream: invalid DTD name %q", name)
 	}
 	if pubid != "" && !validatePubid(pubid) {
@@ -1450,7 +1450,7 @@ func (w *Writer) WriteDTDElement(name, content string) error {
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDElement called outside DTD")
 	}
-	if !xmlchar.IsValidQName(name) {
+	if !xmlchar.IsValidName(name) {
 		return fmt.Errorf("stream: invalid DTD element name %q", name)
 	}
 	if err := validateDTDFragment("DTD element", content); err != nil {
@@ -1473,7 +1473,7 @@ func (w *Writer) WriteDTDAttlist(name, content string) error {
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDAttlist called outside DTD")
 	}
-	if !xmlchar.IsValidQName(name) {
+	if !xmlchar.IsValidName(name) {
 		return fmt.Errorf("stream: invalid DTD attlist name %q", name)
 	}
 	if err := validateDTDAttlistFragment("DTD attlist", content); err != nil {
@@ -1540,7 +1540,7 @@ func (w *Writer) WriteDTDExternalEntity(pe bool, name, pubid, sysid, ndata strin
 	if sysid != "" && !validateSystemID(sysid) {
 		return fmt.Errorf("stream: invalid DTD system identifier %q", sysid)
 	}
-	if ndata != "" && !xmlchar.IsValidQName(ndata) {
+	if ndata != "" && !xmlchar.IsValidName(ndata) {
 		return fmt.Errorf("stream: invalid DTD notation name %q", ndata)
 	}
 	w.ensureDTDInternalSubset()
@@ -1583,7 +1583,7 @@ func (w *Writer) WriteDTDNotation(name, pubid, sysid string) error {
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDNotation called outside DTD")
 	}
-	if !xmlchar.IsValidQName(name) {
+	if !xmlchar.IsValidName(name) {
 		return fmt.Errorf("stream: invalid DTD notation name %q", name)
 	}
 	if pubid != "" && !validatePubid(pubid) {
