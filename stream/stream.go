@@ -68,20 +68,21 @@ type nsScope struct {
 //
 // (libxml2: xmlTextWriter)
 type Writer struct {
-	out         io.Writer
-	indent      string // indent string per level; empty = no indentation
-	quoteChar   byte   // attribute quote character ('"' or '\'')
-	singleByte  [1]byte
-	state       writerState
-	elemStack   []elementEntry
-	nsStack     []nsScope
-	stateStack  []writerState // for comment/PI/CDATA nesting
-	err         error         // sticky error
-	depth       int           // current element nesting depth (for indentation)
-	hasOutput   bool          // true after first output has been written
-	wroteNL     bool          // true after EndComment/EndPI wrote trailing \n (suppresses writeIndent's \n)
-	commentDash bool          // true if the current comment body ends with '-' (would form '--->' on close)
-	piQuestion  bool          // true if the current PI body ends with '?' (would form '?>' across writes)
+	out           io.Writer
+	indent        string // indent string per level; empty = no indentation
+	quoteChar     byte   // attribute quote character ('"' or '\'')
+	singleByte    [1]byte
+	state         writerState
+	elemStack     []elementEntry
+	nsStack       []nsScope
+	stateStack    []writerState // for comment/PI/CDATA nesting
+	err           error         // sticky error
+	depth         int           // current element nesting depth (for indentation)
+	hasOutput     bool          // true after first output has been written
+	wroteNL       bool          // true after EndComment/EndPI wrote trailing \n (suppresses writeIndent's \n)
+	commentDash   bool          // true if the current comment body ends with '-' (would form '--->' on close)
+	piQuestion    bool          // true if the current PI body ends with '?' (would form '?>' across writes)
+	cdataBrackets int           // count (0,1,2) of trailing ']' in the current CDATA body, to detect ']]>' across writes
 }
 
 // NewWriter creates a Writer that writes to w. Configure the Writer
@@ -379,6 +380,34 @@ func (w *Writer) writeTextEscaped(s string) {
 // writeAttrEscaped writes text content with XML escaping for attribute values.
 func (w *Writer) writeAttrEscaped(s string) {
 	w.writeEscaped(s, escapeAttr)
+}
+
+// writeCDATAEscaped writes content into the current CDATA section, splitting
+// any "]]>" terminator across two CDATA sections so the emitted bytes never
+// contain a raw "]]>" inside a single section. The "]]>" sequence is broken
+// after the "]]" by closing and reopening the section, yielding
+// "]]" + "]]><![CDATA[" + ">". The count of trailing ']' is tracked across
+// calls so a "]]>" split over multiple WriteString calls is also handled.
+func (w *Writer) writeCDATAEscaped(s string) {
+	start := 0
+	for i := range len(s) {
+		c := s[i]
+		if c == '>' && w.cdataBrackets >= 2 {
+			// "]]>" detected: the preceding "]]" has already been
+			// written into this section, so flush up to here, close the
+			// section, and reopen a new one before emitting the '>'.
+			w.writeStr(s[start:i])
+			w.writeStr("]]><![CDATA[")
+			start = i
+			w.cdataBrackets = 0
+		}
+		if c == ']' {
+			w.cdataBrackets++
+			continue
+		}
+		w.cdataBrackets = 0
+	}
+	w.writeStr(s[start:])
 }
 
 // --- Document lifecycle ---
@@ -772,7 +801,7 @@ func (w *Writer) WriteString(content string) error {
 		}
 		w.state = statePIText
 	case stateCDATA:
-		w.writeStr(content)
+		w.writeCDATAEscaped(content)
 	default:
 		return errors.New("stream: WriteString called in invalid state")
 	}
@@ -980,6 +1009,7 @@ func (w *Writer) StartCDATA() error {
 		w.elemStack[len(w.elemStack)-1].hasText = true
 	}
 	w.writeStr("<![CDATA[")
+	w.cdataBrackets = 0
 	w.stateStack = append(w.stateStack, w.state)
 	w.state = stateCDATA
 	return w.err
