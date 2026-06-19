@@ -25,7 +25,8 @@ type config struct {
 	bufSize int
 }
 
-// WithBufferSize sets the channel buffer size. Default is 256.
+// WithBufferSize sets the channel buffer size. Default is 256. Negative
+// values are clamped to 0 (an unbuffered channel).
 func WithBufferSize(n int) Option {
 	return func(c *config) { c.bufSize = n }
 }
@@ -54,6 +55,9 @@ func New[T any](ctx context.Context, handler Handler[T], options ...Option) *Sin
 	cfg := config{bufSize: 256}
 	for _, o := range options {
 		o(&cfg)
+	}
+	if cfg.bufSize < 0 {
+		cfg.bufSize = 0
 	}
 	s := &Sink[T]{
 		ch:      make(chan T, cfg.bufSize),

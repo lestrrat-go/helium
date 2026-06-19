@@ -387,13 +387,37 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 				pdebug.Printf("Expanding parameter entity '%s' with content: %s", name, string(entity.Content()))
 			}
 
-			decodedContent, err := pctx.decodeEntities(ctx, entity.Content(), SubstituteBoth)
+			// Capture the PE's replacement text once: Entity.Content()
+			// allocates a fresh []byte copy on every call, so we reuse this
+			// local for both decoding and the amplification accounting below.
+			content := entity.Content()
+
+			decodedContent, err := pctx.decodeEntities(ctx, content, SubstituteBoth)
 			if err != nil {
 				return fmt.Errorf("failed to decode parameter entity content: %v", err)
 			}
 
 			if pdebug.Enabled {
 				pdebug.Printf("Decoded parameter entity content: %s", decodedContent)
+			}
+
+			// Charge this PE's OWN replacement bytes before pushing it as new
+			// input. Without this the PE's direct contribution is free, so a
+			// small DTD that references a large PE many times could drive
+			// unbounded expansion past the amplification limit.
+			//
+			// Charge len(content) (the PE's stored replacement text), NOT
+			// len(decodedContent): decodeEntities(SubstituteBoth) above already
+			// charged every nested entity expansion it performed — general
+			// references (&g;) left literal in the stored value, and any
+			// parameter references — via its own entityCheck calls.
+			// decodedContent is the result AFTER those nested expansions, so
+			// charging its length here would double-count those nested bytes and
+			// could falsely reject a legitimate DTD whose %p; expands mostly
+			// through a nested entity. content is the direct bytes this PE itself
+			// contributes.
+			if err := pctx.entityCheck(entity, len(content)); err != nil {
+				return pctx.error(ctx, err)
 			}
 
 			pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader([]byte(decodedContent))))

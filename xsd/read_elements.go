@@ -3,6 +3,8 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -36,6 +38,126 @@ func parseParticleOccurs(elem *helium.Element) (int, int) {
 		maxOccurs = parseOccurs(v, 1)
 	}
 	return minOccurs, maxOccurs
+}
+
+// parseNonNegativeOccurs parses an occurs attribute value as a non-negative
+// integer. maxOccurs (allowMax) may additionally be the literal "unbounded",
+// represented by the Unbounded sentinel. ok is false when the lexical value is
+// not a valid non-negative integer (or "unbounded" when permitted); callers
+// report a schema error in that case rather than silently accepting a bogus
+// occurrence count.
+func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
+	if allowMax && s == attrValUnbounded {
+		return Unbounded, true
+	}
+	// xs:nonNegativeInteger has no leading sign: a leading '+' or '-' (including
+	// "+0"/"-0") is not a valid lexical form. strconv.Atoi would accept these, so
+	// reject any non-digit character before converting.
+	if !isASCIIDigits(s) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// isASCIIDigits reports whether s is a non-empty run of ASCII digits ('0'-'9')
+// with no sign, whitespace, or other characters. This matches the lexical space
+// of xs:nonNegativeInteger as XSD/libxml2 enforce it for occurrence counts.
+func isASCIIDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// validateOccursAttrs validates the minOccurs/maxOccurs attributes of a
+// non-element particle (model group, group reference, wildcard). It rejects
+// negative, signed, non-integer, and empty occurrence values, applies the
+// effective-default minOccurs=1 so a maxOccurs of 0 with an absent or >=1
+// minOccurs is rejected with the "maxOccurs >= 1" diagnostic, and enforces
+// minOccurs <= maxOccurs. Errors are reported as libxml2-style schema parser
+// errors via the compiler's error handler.
+//
+// xs:element particles are validated by checkLocalElement to preserve the
+// libxml2 diagnostic ordering golden tests depend on; this method deliberately
+// skips them.
+//
+// Presence is detected with hasAttr (not value!=""), so an explicitly empty
+// minOccurs="" / maxOccurs="" is validated and rejected, matching xmllint.
+func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element) {
+	if c.filename == "" {
+		return
+	}
+
+	line := elem.Line()
+	local := elem.LocalName()
+	xsdElem := local
+
+	minPresent := hasAttr(elem, attrMinOccurs)
+	maxPresent := hasAttr(elem, attrMaxOccurs)
+
+	minVal, minOK := 1, true
+	if minPresent {
+		v := getAttr(elem, attrMinOccurs)
+		n, ok := parseNonNegativeOccurs(v, false)
+		if !ok {
+			minOK = false
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMinOccurs,
+				"'"+v+"' is not a valid value of the atomic type 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
+			c.errorCount++
+		} else {
+			minVal = n
+		}
+	}
+
+	maxVal, maxOK := 1, true
+	if maxPresent {
+		v := getAttr(elem, attrMaxOccurs)
+		n, ok := parseNonNegativeOccurs(v, true)
+		if !ok {
+			maxOK = false
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMaxOccurs,
+				"'"+v+"' is not a valid value of the union type 'xs:allNNI'."), helium.ErrorLevelFatal))
+			c.errorCount++
+		} else {
+			maxVal = n
+		}
+	}
+
+	// maxOccurs must be >= 1 unless the effective minOccurs is 0 (a legal
+	// prohibited particle, minOccurs=0 maxOccurs=0). The effective minOccurs is 1
+	// when minOccurs is absent or invalid, so maxOccurs=0 with an absent/explicit
+	// min>=1 is rejected with the ">= 1" diagnostic.
+	maxBelowOne := false
+	if maxOK && maxVal != Unbounded && maxVal < 1 {
+		effMin := 1
+		if minPresent && minOK {
+			effMin = minVal
+		}
+		if effMin >= 1 {
+			maxBelowOne = true
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMaxOccurs,
+				"The value must be greater than or equal to 1."), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+	}
+
+	// minOccurs must not exceed maxOccurs (Unbounded is treated as +inf, so it
+	// can never be exceeded). Suppress this when the ">= 1" rule already fired on
+	// maxOccurs; libxml2 reports only the maxOccurs error there.
+	if minPresent && maxPresent && minOK && maxOK && maxVal != Unbounded && !maxBelowOne && minVal > maxVal {
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMinOccurs,
+			"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
 }
 
 func readDefaultOrFixed(elem *helium.Element) (*string, *string) {
@@ -366,6 +488,7 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 }
 
 func (c *compiler) parseWildcard(ctx context.Context, elem *helium.Element) *Particle {
+	c.validateOccursAttrs(ctx, elem)
 	minOcc, maxOcc := parseParticleOccurs(elem)
 	wc := c.readWildcard(ctx, elem)
 	return &Particle{
@@ -481,19 +604,35 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 }
 
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
-func (c *compiler) parseIDConstraint(_ context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
+func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return nil
 	}
 	idc := &IDConstraint{
-		Name:       name,
+		Name: name,
+		// The name attribute is an NCName; the constraint's identity is the
+		// QName {targetNamespace}name (XSD identity-constraints live in the
+		// schema's target namespace).
+		QName:      QName{Local: name, NS: c.schema.targetNamespace},
 		Kind:       kind,
 		Namespaces: collectNSContext(elem),
+		Line:       elem.Line(),
 	}
 	if kind == IDCKeyRef {
 		idc.Refer = getAttr(elem, attrRefer)
+		// @refer is a QName; resolve it namespace-aware against the constraint
+		// element's in-scope namespaces. An empty refer or an unbound prefix is a
+		// fatal schema error (reported later by checkKeyRefRefers, which also
+		// verifies the referenced constraint exists). Store the resolved QName so
+		// validation can look the target up by full identity rather than by local
+		// name only.
+		idc.ReferQName, idc.referUnbound = c.resolveIDCReferQName(ctx, elem, idc)
 	}
+	// fieldLines tracks the source line of each <field>, parallel to idc.Fields,
+	// so a malformed field XPath is reported against the right element.
+	var selectorLine int
+	var fieldLines []int
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -505,27 +644,95 @@ func (c *compiler) parseIDConstraint(_ context.Context, elem *helium.Element, ki
 		switch {
 		case isXSDElement(ce, elemSelector):
 			idc.Selector = getAttr(ce, attrXPath)
+			selectorLine = ce.Line()
 		case isXSDElement(ce, elemField):
 			idc.Fields = append(idc.Fields, getAttr(ce, attrXPath))
+			fieldLines = append(fieldLines, ce.Line())
 		}
 	}
 
-	// Pre-compile selector XPath expression.
+	// Pre-compile selector XPath expression. A malformed selector XPath is a
+	// fatal schema error: leaving SelectorExpr nil would silently disable the
+	// whole constraint (the field-level uniqueness/keyref checks would never
+	// run), so an invalid schema must fail to compile rather than validate
+	// documents as if no constraint were present.
 	if idc.Selector != "" {
 		compiled, err := xpath1.Compile(idc.Selector)
-		if err == nil {
+		if err != nil {
+			c.reportIDCXPathError(ctx, elemSelector, selectorLine, idc.Selector, err)
+		} else {
 			idc.SelectorExpr = compiled
 		}
 	}
 
-	// Pre-compile field XPath expressions.
+	// Pre-compile field XPath expressions. A malformed field XPath is likewise
+	// fatal: with FieldExprs[i] nil the field would fall back to a per-validation
+	// recompile that also fails and is currently swallowed, again disabling the
+	// constraint.
 	idc.FieldExprs = make([]*xpath1.Expression, len(idc.Fields))
 	for i, f := range idc.Fields {
 		compiled, err := xpath1.Compile(f)
-		if err == nil {
-			idc.FieldExprs[i] = compiled
+		if err != nil {
+			line := 0
+			if i < len(fieldLines) {
+				line = fieldLines[i]
+			}
+			c.reportIDCXPathError(ctx, elemField, line, f, err)
+			continue
 		}
+		idc.FieldExprs[i] = compiled
 	}
 
 	return idc
+}
+
+// resolveIDCReferQName resolves an xs:keyref/@refer QName against the constraint
+// element's in-scope namespaces. An unprefixed refer resolves to the in-scope
+// default namespace (falling back to the schema's target namespace), matching how
+// other XSD QName-valued attributes (@type, @ref) are resolved. A prefixed refer
+// whose prefix is not bound in scope is a fatal schema error; the returned bool
+// reports that so checkKeyRefRefers can suppress its own "unknown key" diagnostic.
+func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Element, idc *IDConstraint) (QName, bool) {
+	refer := idc.Refer
+	if refer == "" {
+		// An empty @refer is reported by checkKeyRefRefers.
+		return QName{}, false
+	}
+	if prefix, local, found := strings.Cut(refer, ":"); found {
+		ns := lookupNS(elem, prefix)
+		if ns == "" && prefix != "" {
+			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' whose namespace prefix '%s' is not bound.", idc.Name, refer, prefix)
+			if c.filename != "" {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(
+					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
+					helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+			return QName{}, true
+		}
+		return QName{Local: local, NS: ns}, false
+	}
+	// Unprefixed: use the in-scope default namespace, else the target namespace.
+	ns := c.schema.targetNamespace
+	if defNS := lookupNS(elem, ""); defNS != "" {
+		ns = defNS
+	}
+	return QName{Local: refer, NS: ns}, false
+}
+
+// reportIDCXPathError reports a malformed identity-constraint selector/field
+// XPath as a fatal schema compilation error. kind is elemSelector or elemField.
+func (c *compiler) reportIDCXPathError(ctx context.Context, kind string, line int, xpath string, cause error) {
+	if c.filename == "" {
+		return
+	}
+	noun := "selector"
+	if kind == elemField {
+		noun = "field"
+	}
+	msg := fmt.Sprintf("The %s XPath '%s' is not a valid %s expression: %s.", noun, xpath, noun, cause)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(
+		schemaParserErrorAttr(c.filename, line, kind, kind, attrXPath, msg),
+		helium.ErrorLevelFatal))
+	c.errorCount++
 }

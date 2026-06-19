@@ -133,13 +133,9 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		case isXSDElement(ce, elemGroup):
 			ref := getAttr(ce, attrRef)
 			if ref != "" {
-				placeholder := &ModelGroup{MinOccurs: 1, MaxOccurs: 1}
-				if v := getAttr(ce, "minOccurs"); v != "" {
-					placeholder.MinOccurs = parseOccurs(v, 1)
-				}
-				if v := getAttr(ce, "maxOccurs"); v != "" {
-					placeholder.MaxOccurs = parseOccurs(v, 1)
-				}
+				c.validateOccursAttrs(ctx, ce)
+				placeholderMin, placeholderMax := parseParticleOccurs(ce)
+				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
 				qn := c.resolveQName(ctx, ce, ref)
 				c.groupRefs[placeholder] = qn
 				td.ContentModel = placeholder

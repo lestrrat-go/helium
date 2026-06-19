@@ -243,8 +243,15 @@ func (dtd *DTD) LookupNotation(name string) (*Notation, bool) {
 }
 
 func (dtd *DTD) GetElementDesc(name string) (*ElementDecl, bool) {
-	ret, ok := dtd.elements[name]
-	return ret, ok
+	// Element decls are registered under a "name:prefix" key with the QName
+	// split into local name and prefix (see AddElementDecl). Split the same
+	// way here so a QName lookup composes the identical key.
+	var prefix string
+	if i := strings.IndexByte(name, ':'); i > -1 {
+		prefix = name[:i]
+		name = name[i+1:]
+	}
+	return dtd.LookupElement(name, prefix)
 }
 
 // AttributesForElement returns all attribute declarations for the named element.

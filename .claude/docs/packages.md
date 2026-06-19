@@ -273,6 +273,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 - Transforms: `Enveloped()`, `C14NTransform(uri)`, `ExcC14NTransform(prefixes...)`
 - Algorithms: RSA-SHA1/SHA256, ECDSA-SHA256/SHA384, HMAC-SHA1/SHA256, Ed25519
 - Digests: SHA-1, SHA-256, SHA-384, SHA-512
+- Errors: `ErrNoKeySource` sentinel — returned by verify when no usable KeySource is configured (nil cfg, untyped-nil, or typed-nil KeySource/func)
 - Files: `xmldsig1.go` (API), `constants.go`, `algorithms.go`, `sign.go`, `verify.go`, `transforms.go`, `keyinfo.go`, `errors.go`
 - Imports: helium, c14n/
 
@@ -311,7 +312,7 @@ Generic channel-based async event sink.
 - **New[T](ctx, Handler[T], ...Option) → *Sink[T]**
 - **Sink.Handle(ctx, T)** — async send (blocks if buffer full)
 - **Sink.Close()** — drain and stop
-- WithBufferSize(n) — default 256
+- WithBufferSize(n) — default 256; negative values clamped to 0 (unbuffered)
 - Nil-safe: Handle() on nil *Sink is no-op
 - When T=error, satisfies helium.ErrorHandler
 - Files: `sink.go`

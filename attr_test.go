@@ -421,23 +421,27 @@ func TestAttributeReplaceInPropertyList(t *testing.T) {
 	cases := []struct {
 		name string
 		// pick selects which of the three attributes (a, b, c) to replace.
-		pick func(a, b, c *helium.Attribute) *helium.Attribute
-		want []string
+		pick    func(a, b, c *helium.Attribute) *helium.Attribute
+		want    []string
+		wantXML string
 	}{
 		{
-			name: "first",
-			pick: func(a, b, c *helium.Attribute) *helium.Attribute { return a },
-			want: []string{"z", "b", "c"},
+			name:    "first",
+			pick:    func(a, b, c *helium.Attribute) *helium.Attribute { return a },
+			want:    []string{"z", "b", "c"},
+			wantXML: `<root z="9" b="2" c="3"/>`,
 		},
 		{
-			name: "middle",
-			pick: func(a, b, c *helium.Attribute) *helium.Attribute { return b },
-			want: []string{"a", "z", "c"},
+			name:    "middle",
+			pick:    func(a, b, c *helium.Attribute) *helium.Attribute { return b },
+			want:    []string{"a", "z", "c"},
+			wantXML: `<root a="1" z="9" c="3"/>`,
 		},
 		{
-			name: "last",
-			pick: func(a, b, c *helium.Attribute) *helium.Attribute { return c },
-			want: []string{"a", "b", "z"},
+			name:    "last",
+			pick:    func(a, b, c *helium.Attribute) *helium.Attribute { return c },
+			want:    []string{"a", "b", "z"},
+			wantXML: `<root a="1" b="2" z="9"/>`,
 		},
 	}
 
@@ -465,6 +469,12 @@ func TestAttributeReplaceInPropertyList(t *testing.T) {
 			require.Nil(t, target.Parent(), "replaced attribute is detached")
 			require.Nil(t, target.PrevSibling(), "replaced attribute has no stale prev")
 			require.Nil(t, target.NextSibling(), "replaced attribute has no stale next")
+
+			// Serialization reads the element's property list head/chain, so it
+			// must reflect the replacement and never the detached old attribute.
+			str, err := helium.WriteString(e)
+			require.NoError(t, err, "serialize element")
+			require.Equal(t, tc.wantXML, str, "serialization reflects replacement, not stale attr")
 		})
 	}
 }

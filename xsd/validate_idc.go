@@ -36,18 +36,38 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 		return nil
 	}
 
-	// Phase 1: Evaluate all constraints and collect key-sequence tables.
-	tables := make(map[string]*idcTable, len(edecl.IDCs))
+	// Evaluate all constraints declared on this element and collect their
+	// key-sequence tables. The tables are scoped to THIS element OCCURRENCE: an
+	// xs:key/xs:unique table built here is visible only to keyrefs declared on the
+	// SAME occurrence. This matches the XSD identity-constraint scope (and
+	// xmllint): a keyref resolves against the key table built for its own host
+	// occurrence, so two sibling occurrences of a repeating host never leak key
+	// spaces into each other.
 	var lastErr error
+
+	// keyTables holds this occurrence's evaluated key/unique tables, indexed by
+	// the constraint's full QName identity, for resolving same-occurrence keyrefs.
+	keyTables := make(map[QName]*idcTable)
+	// keyRefs collects this occurrence's keyrefs to resolve after every key/unique
+	// on the same occurrence has been evaluated (a keyref may be declared before
+	// the key it refers to in document order).
+	var keyRefs []pendingKeyRef
 
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
 		ev := xpath1.NewEvaluator().AdditionalNamespaces(idc.Namespaces)
 		table, err := vc.evaluateIDC(ctx, ev, elem, edecl, idc)
 		if err != nil {
+			// A selector/field XPath that fails to compile or evaluate must NOT be
+			// swallowed: doing so silently disables the constraint and lets an
+			// otherwise-invalid document validate. Report it as a validity error.
+			// (Malformed XPaths are also rejected at schema compile time, so this
+			// path normally fires only on a genuine evaluation failure.)
+			msg := fmt.Sprintf("Failed to evaluate identity-constraint '%s': %s", idc.Name, err)
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+			lastErr = err
 			continue
 		}
-		tables[idc.Name] = table
 
 		// A key with an absent field was already reported during
 		// evaluation; surface it as a validation failure.
@@ -61,36 +81,37 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 			lastErr = fmt.Errorf("field evaluates to more than one node")
 		}
 
-		// Check unique/key constraints immediately.
-		if idc.Kind == IDCUnique || idc.Kind == IDCKey {
-			if err := vc.checkUniqueness(ctx, table, idc); err != nil {
-				lastErr = err
-			}
+		if idc.Kind == IDCKeyRef {
+			// Defer keyref resolution until every key/unique on this occurrence is
+			// evaluated, so a keyref declared before its key (document order) still
+			// resolves.
+			keyRefs = append(keyRefs, pendingKeyRef{idc: idc, table: table})
+			continue
+		}
+
+		// Register the key/unique key-sequences under the constraint's full QName
+		// identity, scoped to THIS occurrence, for same-occurrence keyref
+		// resolution.
+		keyTables[idc.QName] = table
+
+		// Check unique/key uniqueness immediately.
+		if err := vc.checkUniqueness(ctx, table, idc); err != nil {
+			lastErr = err
 		}
 	}
 
-	// Phase 2: Check keyref constraints against referenced key/unique tables.
-	for _, idc := range edecl.IDCs {
-		if idc.Kind != IDCKeyRef {
-			continue
-		}
-		table := tables[idc.Name]
-		if table == nil {
-			continue
-		}
-
-		// Find the referenced key/unique constraint.
-		referName := idc.Refer
-		// Handle qualified refer names (prefix:local).
-		if idx := strings.IndexByte(referName, ':'); idx >= 0 {
-			referName = referName[idx+1:]
-		}
-		refTable := tables[referName]
+	// Resolve this occurrence's keyrefs against the key/unique tables built for
+	// the SAME occurrence. A keyref whose referenced key/unique is NOT declared on
+	// this host occurrence resolves against an empty key space, so every non-empty
+	// key-sequence is a "no match" failure — matching xmllint, which rejects a
+	// keyref that names a key declared on a different element (the referenced key
+	// is out of the keyref's scope).
+	for _, pending := range keyRefs {
+		refTable := keyTables[pending.idc.ReferQName]
 		if refTable == nil {
-			continue
+			refTable = &idcTable{idc: pending.idc}
 		}
-
-		if err := vc.checkKeyRef(ctx, table, refTable, idc); err != nil {
+		if err := vc.checkKeyRef(ctx, pending.table, refTable, pending.idc); err != nil {
 			lastErr = err
 		}
 	}
@@ -143,14 +164,19 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 			} else {
 				compiled, compErr := xpath1.Compile(fieldXPath)
 				if compErr != nil {
-					allPresent = false
-					break
+					// A field XPath that fails to compile must NOT be swallowed:
+					// marking the field absent silently drops the selected node from
+					// the constraint, so a unique/keyref could miss a duplicate or a
+					// dangling reference. Surface it like the selector path.
+					return nil, fmt.Errorf("xsd: IDC field XPath %q failed to compile: %w", fieldXPath, compErr)
 				}
 				fieldResult, err = ev.Evaluate(ctx, compiled, node)
 			}
 			if err != nil {
-				allPresent = false
-				break
+				// A field XPath that compiles but fails at evaluation (e.g. an
+				// unknown function) must likewise surface as an error rather than
+				// being silently treated as an absent field.
+				return nil, fmt.Errorf("xsd: IDC field XPath %q failed to evaluate: %w", fieldXPath, err)
 			}
 
 			var value string

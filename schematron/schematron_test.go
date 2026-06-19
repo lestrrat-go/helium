@@ -889,18 +889,19 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		require.Contains(t, got, "y is hello")
 	})
 
-	t.Run("LIFO evaluation order", func(t *testing.T) {
+	t.Run("document order evaluation", func(t *testing.T) {
 		t.Parallel()
-		// libxml2 stores lets in LIFO order. When a is defined first and b
-		// second, the list is [b, a]. b is evaluated first (before a is
-		// registered), so $a in b's expression is NaN. We verify the
-		// observable effect: a=1 is reported correctly.
+		// Lets are evaluated in document order, so a later let may depend on
+		// an earlier one: a is defined first, then b references $a. We assert
+		// the dependent value b=2 (a=1 plus 1). Under the old reversed (LIFO)
+		// order b would be evaluated before a was bound, making $a NaN and
+		// b NaN — so this asserting b's resolved value would fail.
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern>
 				<rule context="item">
 					<let name="a" value="1"/>
 					<let name="b" value="$a + 1"/>
-					<report test="$a = 1">a=<value-of select="$a"/></report>
+					<report test="$b = 2">b=<value-of select="$b"/></report>
 				</rule>
 			</pattern>
 		</schema>`)
@@ -911,7 +912,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 
 		collected, err := validateAndCollect(t, schema, doc)
 		require.ErrorIs(t, err, schematron.ErrValidationFailed)
-		require.Contains(t, collectedString(collected), "a=1")
+		require.Contains(t, collectedString(collected), "b=2")
 	})
 }
 
