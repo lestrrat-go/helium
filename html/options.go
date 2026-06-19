@@ -9,20 +9,23 @@ type parseConfig struct {
 	// strict promotes warnings forwarded from silenced SAX callbacks into a
 	// fatal parse error. Default false preserves libxml2-style tolerance.
 	strict bool
-	// maxContentSize bounds, in bytes, how much raw-text/RCDATA/plaintext or
-	// comment content is buffered before it is flushed to SAX in a chunk.
-	// Zero selects defaultMaxContentSize. It guards against unbounded memory
-	// growth on a gigantic or unterminated section.
+	// maxContentSize bounds, in bytes, the size of a single content section.
+	// For raw-text/RCDATA/plaintext it is a soft cap (content is flushed to SAX
+	// in chunks no larger than this). For comment/bogus-comment/PI it is a hard
+	// cap: exceeding it fails the parse with ErrContentSizeExceeded, since those
+	// constructs cannot be chunked without corrupting the document. Zero selects
+	// defaultMaxContentSize. It guards against unbounded memory growth on a
+	// gigantic or unterminated section.
 	maxContentSize int
 }
 
-// defaultMaxContentSize is the default flush threshold for buffered
-// raw-text/RCDATA/plaintext/comment content, used when maxContentSize is 0.
-// Content is delivered to SAX in chunks no larger than this, so a section with
+// defaultMaxContentSize is the default content cap, used when maxContentSize is
+// 0. Raw-text/RCDATA/plaintext content is delivered to SAX in chunks no larger
+// than this; comments/PIs exceeding it fail the parse. Either way a section with
 // gigabytes of data (or one that never terminates) is bounded in memory.
 const defaultMaxContentSize = 16 << 20 // 16 MiB
 
-// contentLimit returns the effective per-chunk content cap.
+// contentLimit returns the effective content cap.
 func (c parseConfig) contentLimit() int {
 	if c.maxContentSize > 0 {
 		return c.maxContentSize

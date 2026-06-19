@@ -89,10 +89,20 @@ func (p Parser) Strict(v bool) Parser {
 	return p
 }
 
-// MaxContentSize bounds, in bytes, how much raw-text (script/style),
-// RCDATA (title/textarea), plaintext, or comment content the parser buffers
-// before flushing it to SAX in a chunk. It caps memory growth on a gigantic
-// or unterminated section. A value <= 0 selects the default (16 MiB).
+// MaxContentSize bounds, in bytes, the size of a single content section.
+//
+// For raw-text (script/style), RCDATA (title/textarea), and plaintext content
+// it is a soft cap: the parser flushes accumulated content to SAX in chunks no
+// larger than this, so a gigantic or unterminated section is bounded in memory
+// while still parsing successfully.
+//
+// For comments, bogus comments, and processing instructions it is a HARD cap:
+// these constructs map to a single indivisible SAX event and DOM node and
+// cannot be chunked without corrupting the document, so a comment/PI exceeding
+// this size before its terminator fails the parse with [ErrContentSizeExceeded]
+// rather than emitting a truncated node.
+//
+// A value <= 0 selects the default (16 MiB).
 //
 // Default: 16 MiB.
 func (p Parser) MaxContentSize(v int) Parser {

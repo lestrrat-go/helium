@@ -61,6 +61,12 @@ type parser struct {
 	// this value as the parse error. Outside strict mode it stays nil.
 	fatalSAXErr error
 
+	// fatalErr is set by a sub-parser that hits an unrecoverable condition
+	// (e.g. a comment/PI exceeding MaxContentSize). The main parse loop checks
+	// it and aborts, surfacing the value. Unlike fatalSAXErr this is always
+	// fatal regardless of strict mode.
+	fatalErr error
+
 	cfg parseConfig
 }
 
@@ -475,6 +481,9 @@ func (p *parser) parse(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if p.fatalErr != nil {
+			return p.fatalErr
+		}
 		if p.cur.Peek() == '<' {
 			if p.cur.PeekAt(1) == '/' {
 				p.parseEndTag()
@@ -500,6 +509,10 @@ func (p *parser) parse(ctx context.Context) error {
 		} else {
 			p.parseCharacters()
 		}
+	}
+
+	if p.fatalErr != nil {
+		return p.fatalErr
 	}
 
 	p.htmlAutoCloseOnEnd()
@@ -650,10 +663,17 @@ func (p *parser) parseComment(ctx context.Context) {
 
 	limit := p.cfg.contentLimit()
 	n := 0
-	// Stop on EOF, when cancelled (abort promptly rather than scanning the
-	// whole possibly-unterminated comment), or at the content limit (bound
-	// memory so a gigantic/unterminated comment cannot force one huge alloc).
-	for ctx.Err() == nil && n < limit {
+	// A comment maps to a single indivisible SAX event / DOM node, so it cannot
+	// be chunked: emitting a truncated first chunk and returning mid-construct
+	// would corrupt the document (the remainder leaks as stray text). Enforce
+	// the content limit as a HARD cap — fail the parse if the comment exceeds
+	// it before its terminator. Also abort promptly on cancellation rather than
+	// scanning the whole (possibly unterminated) comment.
+	for ctx.Err() == nil {
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("comment exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return
+		}
 		b := p.cur.PeekAt(n)
 		if b == 0 {
 			break
@@ -675,7 +695,8 @@ func (p *parser) parseComment(ctx context.Context) {
 		n++
 	}
 
-	// Unterminated comment — emit everything as comment
+	// Unterminated comment reaching EOF — emit everything as comment. (n is
+	// bounded by limit, so this allocation is bounded.)
 	data := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
 	p.handleSAXErr(p.sax.Comment([]byte(data)))
@@ -686,8 +707,15 @@ func (p *parser) parseBogusComment(ctx context.Context) {
 	_ = p.cur.Advance(2) // skip '<!'
 	limit := p.cfg.contentLimit()
 	n := 0
-	// Abort promptly on cancellation; bound memory at the content limit.
-	for ctx.Err() == nil && n < limit {
+	// A bogus comment maps to a single indivisible SAX event / DOM node and
+	// cannot be chunked, so enforce the content limit as a HARD cap: fail the
+	// parse if it exceeds the limit before its '>' terminator rather than
+	// emitting a truncated comment. Abort promptly on cancellation too.
+	for ctx.Err() == nil {
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("bogus comment exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return
+		}
 		b := p.cur.PeekAt(n)
 		if b == 0 || b == '>' {
 			break
@@ -710,8 +738,15 @@ func (p *parser) parsePI(ctx context.Context) {
 
 	limit := p.cfg.contentLimit()
 	n := 0
-	// Abort promptly on cancellation; bound memory at the content limit.
-	for ctx.Err() == nil && n < limit {
+	// A PI is emitted as a single indivisible comment SAX event / DOM node and
+	// cannot be chunked, so enforce the content limit as a HARD cap: fail the
+	// parse if it exceeds the limit before its '>' terminator rather than
+	// emitting a truncated comment. Abort promptly on cancellation too.
+	for ctx.Err() == nil {
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("processing instruction exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return
+		}
 		b := p.cur.PeekAt(n)
 		if b == 0 {
 			break
