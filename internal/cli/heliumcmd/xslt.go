@@ -106,7 +106,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 	// default-denies module loading and local stylesheets fail to compile.
 	ss, err := xslt3.NewCompiler().
 		BaseURI(cfg.stylesheetFile).
-		URIResolver(fileResolver{}).
+		URIResolver(fileResolver{maxInputBytes: cfg.maxInputBytes}).
 		Compile(ctx, ssDoc)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling stylesheet took %s\n", time.Since(t0))

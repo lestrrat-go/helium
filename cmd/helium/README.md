@@ -28,11 +28,12 @@ XInclude processing, schema validation, XPath checks, and canonicalization.
 ## `helium xpath`
 
 ```text
-helium xpath [--engine 1|3] EXPR [XMLfiles ...]
+helium xpath [--engine 1|3] [--max-input-bytes N] EXPR [XMLfiles ...]
 ```
 
 Evaluates an XPath expression against XML input. Engine `3` is the default;
-engine `1` selects the XPath 1.0 implementation.
+engine `1` selects the XPath 1.0 implementation. `--max-input-bytes` caps the
+bytes read per XML input (default 100 MiB; `0` = unlimited).
 
 ## `helium xslt`
 

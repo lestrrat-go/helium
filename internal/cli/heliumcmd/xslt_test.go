@@ -54,6 +54,63 @@ func TestXSLTIncludeFileURIResolves(t *testing.T) {
 	require.Contains(t, out, "<out>hello</out>")
 }
 
+func TestXSLTIncludeRespectsMaxInputBytes(t *testing.T) {
+	// An oversized xsl:include module must be rejected by --max-input-bytes:
+	// the module is loaded through the URIResolver, which xslt3 drains with
+	// io.ReadAll, so the cap has to be enforced inside the resolver itself.
+	mod := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root"><out><xsl:value-of select="."/></out></xsl:template>
+  <!-- ` + strings.Repeat("padding ", 300) + ` -->
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:include href="mod.xsl"/>
+</xsl:stylesheet>`
+
+	xml := `<?xml version="1.0"?><root>hello</root>`
+
+	t.Run("oversized include rejected", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "mod.xsl", mod)
+		ssFile := writeFile(t, dir, "main.xsl", main)
+		xmlFile := writeFile(t, dir, "in.xml", xml)
+
+		require.Greater(t, len(mod), 500, "module must exceed the cap for the test to be meaningful")
+		require.Less(t, len(main), 500, "main stylesheet must be within the cap")
+
+		_, errOut, code := executeArgs(t, strings.NewReader(""),
+			"xslt", "--max-input-bytes", "500", ssFile, xmlFile)
+		require.NotEqual(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+		require.Contains(t, errOut, "exceeds maximum size")
+	})
+
+	t.Run("within-cap include works", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "mod.xsl", mod)
+		ssFile := writeFile(t, dir, "main.xsl", main)
+		xmlFile := writeFile(t, dir, "in.xml", xml)
+
+		out, errOut, code := executeArgs(t, strings.NewReader(""),
+			"xslt", "--max-input-bytes", "100000", ssFile, xmlFile)
+		require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+		require.Contains(t, out, "<out>hello</out>")
+	})
+
+	t.Run("unlimited include works", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "mod.xsl", mod)
+		ssFile := writeFile(t, dir, "main.xsl", main)
+		xmlFile := writeFile(t, dir, "in.xml", xml)
+
+		out, errOut, code := executeArgs(t, strings.NewReader(""),
+			"xslt", "--max-input-bytes", "0", ssFile, xmlFile)
+		require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+		require.Contains(t, out, "<out>hello</out>")
+	})
+}
+
 func TestXSLTOutputNoOutRejected(t *testing.T) {
 	dir := t.TempDir()
 	ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>

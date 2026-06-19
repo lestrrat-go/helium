@@ -1,6 +1,7 @@
 package heliumcmd
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -301,9 +302,18 @@ func samePath(a, b string) bool {
 // compiler default-denies module loading unless a URIResolver is installed.
 // The compiler resolves hrefs against the stylesheet's base URI before
 // calling Resolve, so the supplied uri is already an absolute path.
-type fileResolver struct{}
+//
+// maxInputBytes carries the configured --max-input-bytes cap so modules loaded
+// here (xsl:include/xsl:import, plus stylesheet-location reads via the retained
+// resolver) are subject to the same byte limit as the top-level inputs. xslt3
+// drains the returned reader with io.ReadAll, so the resolver must enforce the
+// cap itself rather than relying on the caller; a maxInputBytes <= 0 disables
+// it (unbounded read).
+type fileResolver struct {
+	maxInputBytes int64
+}
 
-func (fileResolver) Resolve(uri string) (io.ReadCloser, error) {
+func (r fileResolver) Resolve(uri string) (io.ReadCloser, error) {
 	path, err := localFilePath(uri)
 	if err != nil {
 		return nil, err
@@ -312,7 +322,16 @@ func (fileResolver) Resolve(uri string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err //nolint:wrapcheck // compiler wraps the resolve error
 	}
-	return f, nil
+	defer func() { _ = f.Close() }()
+
+	// Read the whole module through readInput so the byte cap applies. xslt3
+	// reads the returned ReadCloser with io.ReadAll, so a streaming-but-capped
+	// reader would not help: the cap must reject oversized modules up front.
+	data, err := readInput(f, path, r.maxInputBytes)
+	if err != nil {
+		return nil, err
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
 // localFilePath converts a stylesheet href into a local filesystem path. Plain
