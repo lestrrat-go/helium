@@ -2,8 +2,10 @@ package catalog_test
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/catalog"
@@ -266,6 +268,96 @@ func TestResolveURI(t *testing.T) {
 	// Non-matching URI should return "".
 	got = cat.ResolveURI(t.Context(), "http://example.com/nonexistent")
 	require.Equal(t, "", got)
+}
+
+// A root catalog whose nextCatalog references a downstream catalog via a
+// "file://" URI must resolve the downstream mapping. The file: URI has to be
+// converted to a local filesystem path before opening.
+func TestNextCatalogFileURI(t *testing.T) {
+	dir := t.TempDir()
+
+	nextPath, err := filepath.Abs(filepath.Join(dir, "next.xml"))
+	require.NoError(t, err)
+
+	nextXML := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <uri name="http://example.com/asset" uri="file:///downstream/asset.xml"/>
+</catalog>`
+	require.NoError(t, os.WriteFile(nextPath, []byte(nextXML), 0o600))
+
+	// Reference the downstream catalog via a file:// URI (not a bare path).
+	// Build the URI portably: slash-normalize the absolute path and ensure a
+	// leading slash so the authority component is empty. On POSIX nextPath is
+	// "/abs/next.xml" -> "file:///abs/next.xml"; on Windows it is
+	// "C:\...\next.xml" -> "C:/.../next.xml" -> "file:///C:/.../next.xml".
+	// This round-trips through the production catalogFilePath/fileURIPath code
+	// back to nextPath on the current OS.
+	slashPath := filepath.ToSlash(nextPath)
+	if !strings.HasPrefix(slashPath, "/") {
+		slashPath = "/" + slashPath
+	}
+	nextURI := (&url.URL{Scheme: "file", Path: slashPath}).String()
+	rootXML := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <nextCatalog catalog="` + nextURI + `"/>
+</catalog>`
+	rootPath := filepath.Join(dir, "root.xml")
+	require.NoError(t, os.WriteFile(rootPath, []byte(rootXML), 0o600))
+
+	cat, err := catalog.Load(context.Background(), rootPath)
+	require.NoError(t, err)
+
+	got := cat.ResolveURI(context.Background(), "http://example.com/asset")
+	require.Equal(t, "file:///downstream/asset.xml", got)
+}
+
+// A downstream catalog reached via a "file:" nextCatalog whose own entry uses a
+// RELATIVE uri must resolve that uri against the catalog's "file:" URI, yielding
+// a "file:" URI — not a bare filesystem path. Regression for the baseURI being
+// overwritten with the decoded local path in loadInternal.
+func TestNextCatalogFileURIRelativeEntry(t *testing.T) {
+	dir := t.TempDir()
+
+	nextPath, err := filepath.Abs(filepath.Join(dir, "next.xml"))
+	require.NoError(t, err)
+
+	// The downstream entry's uri is relative ("asset.xml"); it must resolve
+	// against the downstream catalog's own file: URI.
+	nextXML := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <uri name="http://example.com/asset" uri="asset.xml"/>
+</catalog>`
+	require.NoError(t, os.WriteFile(nextPath, []byte(nextXML), 0o600))
+
+	// Reference the downstream catalog via a portable file:// URI (see
+	// TestNextCatalogFileURI for the construction rationale).
+	slashPath := filepath.ToSlash(nextPath)
+	if !strings.HasPrefix(slashPath, "/") {
+		slashPath = "/" + slashPath
+	}
+	nextURI := (&url.URL{Scheme: "file", Path: slashPath}).String()
+	rootXML := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <nextCatalog catalog="` + nextURI + `"/>
+</catalog>`
+	rootPath := filepath.Join(dir, "root.xml")
+	require.NoError(t, os.WriteFile(rootPath, []byte(rootXML), 0o600))
+
+	cat, err := catalog.Load(context.Background(), rootPath)
+	require.NoError(t, err)
+
+	got := cat.ResolveURI(context.Background(), "http://example.com/asset")
+
+	// The relative "asset.xml" must resolve to a file: URI in the same
+	// directory as next.xml, not to the bare local path nextPath's directory.
+	dirSlash := filepath.ToSlash(filepath.Dir(nextPath))
+	if !strings.HasPrefix(dirSlash, "/") {
+		dirSlash = "/" + dirSlash
+	}
+	want := (&url.URL{Scheme: "file", Path: dirSlash + "/asset.xml"}).String()
+	require.Equal(t, want, got)
+	require.True(t, strings.HasPrefix(got, "file:"),
+		"relative downstream uri must resolve to a file: URI, got %q", got)
 }
 
 func TestLoadError(t *testing.T) {

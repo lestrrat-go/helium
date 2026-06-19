@@ -111,7 +111,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		if !ok {
 			minOK = false
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMinOccurs,
-				"'"+v+"' is not a valid value of the atomic type 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
+				"The value '"+v+"' is not valid. Expected is 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
 			minVal = n
@@ -125,7 +125,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		if !ok {
 			maxOK = false
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMaxOccurs,
-				"'"+v+"' is not a valid value of the union type 'xs:allNNI'."), helium.ErrorLevelFatal))
+				"The value '"+v+"' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
 			maxVal = n

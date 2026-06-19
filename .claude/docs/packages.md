@@ -203,7 +203,7 @@ XPointer expression evaluation with scheme cascading.
 - Schemes: xpointer(), xpath1() → XPath; element(/1/2/3) → child-sequence; xmlns() → ns binding; shorthand → ID lookup
 - Multiple scheme parts left-to-right; first non-empty result wins
 - Files: `xpointer.go`
-- Imports: helium, xpath1/
+- Imports: helium, xpath1/, internal/xmlchar/
 
 ## schematron/
 

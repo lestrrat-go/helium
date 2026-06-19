@@ -584,6 +584,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		elemRefs:                 make(map[*ElementDecl]QName),
 		elemRefSources:           make(map[*ElementDecl]elemRefSource),
 		groupRefs:                make(map[*ModelGroup]QName),
+		groupRefSources:          make(map[*ModelGroup]groupRefSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
@@ -692,6 +693,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	}
 	c.nextTypeDefOrdinal = base + impC.nextTypeDefOrdinal
 	maps.Copy(c.groupRefs, impC.groupRefs)
+	maps.Copy(c.groupRefSources, impC.groupRefSources)
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
 	maps.Copy(c.globalElemSources, impC.globalElemSources)
 	maps.Copy(c.itemTypeRefs, impC.itemTypeRefs)

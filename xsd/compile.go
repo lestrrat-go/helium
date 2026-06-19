@@ -24,6 +24,11 @@ type compiler struct {
 	elemRefSources map[*ElementDecl]elemRefSource
 	// unresolved group references: maps from model group placeholder to group QName
 	groupRefs map[*ModelGroup]QName
+	// source info for group references, used to enforce the all-group reference
+	// constraints (cos-all-limited / cos-group-ref) once the ref resolves: an
+	// 'all' model group may only be referenced as the entire content of a
+	// complex type, and that reference's maxOccurs must be 1.
+	groupRefSources map[*ModelGroup]groupRefSource
 	// unresolved attribute group references: maps from TypeDef to list of QNames
 	attrGroupRefs map[*TypeDef][]QName
 	// source info for global elements, used in substitution group error messages
@@ -171,6 +176,22 @@ type elemRefSource struct {
 	line     int
 }
 
+// groupRefSource tracks where an xs:group ref="..." particle appeared so the
+// all-group reference constraints can be enforced after the ref resolves.
+type groupRefSource struct {
+	line  int
+	local string // referencing element display name (e.g. "group")
+	// nested is true when the group reference is contained inside another model
+	// group (xs:sequence/xs:choice/xs:all) rather than being the sole top-level
+	// particle of a complex type's content. A reference to an 'all' model group
+	// is forbidden when nested.
+	nested bool
+	// maxOccursRaw is the lexical maxOccurs attribute on the referencing element
+	// ("" if absent, which defaults to 1). A reference to an 'all' model group
+	// must have maxOccurs == 1.
+	maxOccursRaw string
+}
+
 // unionMemberRef tracks an unresolved union member type reference.
 type unionMemberRef struct {
 	owner *TypeDef
@@ -243,6 +264,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		elemRefs:                 make(map[*ElementDecl]QName),
 		elemRefSources:           make(map[*ElementDecl]elemRefSource),
 		groupRefs:                make(map[*ModelGroup]QName),
+		groupRefSources:          make(map[*ModelGroup]groupRefSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),

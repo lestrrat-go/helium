@@ -29,8 +29,8 @@ func TestOccursValidation(t *testing.T) {
 	}
 
 	const (
-		wantNonNegInt = "is not a valid value of the atomic type 'xs:nonNegativeInteger'"
-		wantAllNNI    = "is not a valid value of the union type 'xs:allNNI'"
+		wantNonNegInt = "is not valid. Expected is 'xs:nonNegativeInteger'."
+		wantAllNNI    = "is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."
 		wantMinGtMax  = "The value must not be greater than the value of 'maxOccurs'"
 		wantMaxGteOne = "The value must be greater than or equal to 1"
 	)
