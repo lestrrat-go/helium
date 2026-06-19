@@ -166,7 +166,19 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	}
 
 	// Resolve group references — replace placeholder content with actual group content.
-	for placeholder, qn := range c.groupRefs {
+	//
+	// Collect and sort by source line so the all-group reference constraint
+	// diagnostics below are emitted in a deterministic order independent of Go
+	// map iteration.
+	groupRefPlaceholders := make([]*ModelGroup, 0, len(c.groupRefs))
+	for placeholder := range c.groupRefs {
+		groupRefPlaceholders = append(groupRefPlaceholders, placeholder)
+	}
+	sort.Slice(groupRefPlaceholders, func(i, j int) bool {
+		return c.groupRefSources[groupRefPlaceholders[i]].line < c.groupRefSources[groupRefPlaceholders[j]].line
+	})
+	for _, placeholder := range groupRefPlaceholders {
+		qn := c.groupRefs[placeholder]
 		grp, ok := c.schema.groups[qn]
 		if !ok {
 			continue
@@ -174,6 +186,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// Copy the group's content into the placeholder.
 		placeholder.Compositor = grp.Compositor
 		placeholder.Particles = grp.Particles
+
+		// Enforce the all-group reference constraints (XSD §3.8.6 cos-all-limited
+		// / §3.8.2): a reference that resolves to an 'all' model group may only
+		// appear as the entire content model of a complex type (never nested in
+		// another model group), and its {max occurs} must be 1.
+		if grp.Compositor != CompositorAll {
+			continue
+		}
+		c.checkAllGroupRef(ctx, placeholder)
 	}
 
 	// Resolve attribute group references.
@@ -369,6 +390,66 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// checkAllGroupRef enforces the constraints on an xs:group reference that
+// resolves to an 'all' model group (XSD §3.8.6 cos-all-limited / §3.8.2):
+//
+//   - The reference may only appear as the entire content model of a complex
+//     type, never nested inside another model group (xs:sequence / xs:choice /
+//     xs:all). A nested reference is rejected.
+//   - A direct (non-nested) reference's {max occurs} must be 1.
+//
+// The diagnostics mirror xmllint's wording and are attributed to the
+// referencing xs:group element.
+func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup) {
+	if c.filename == "" {
+		return
+	}
+	src, ok := c.groupRefSources[placeholder]
+	if !ok {
+		return
+	}
+
+	// A 0/0 occurrence is a prohibited particle that maps to no particle at all,
+	// so the all-group constraints do not apply and the reference is valid
+	// (xmllint accepts it). This applies to both direct and nested references.
+	if placeholder.MinOccurs == 0 && placeholder.MaxOccurs == 0 {
+		return
+	}
+
+	if src.nested {
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, src.local, elemGroup,
+			"A model group definition is referenced, but it contains an 'all' model group, which cannot be contained by model groups."), helium.ErrorLevelFatal))
+		c.errorCount++
+		return
+	}
+
+	// Direct reference: {max occurs} must be 1. An absent maxOccurs defaults to
+	// 1 and is fine; otherwise the lexical value must parse to exactly 1.
+	if src.maxOccursRaw == "" {
+		return
+	}
+	n, parsed := parseNonNegativeOccurs(src.maxOccursRaw, true)
+	if parsed && n == 1 {
+		return
+	}
+	// When the maxOccurs lexical value fails to parse, or it is a finite count
+	// below 1 while minOccurs defaults to (or is explicitly) >= 1, the generic
+	// occurrence validator already reports the lexical / ">= 1" diagnostic.
+	// Emitting the all-specific "must be 1" error here would duplicate it, so
+	// only flag an otherwise-valid occurrence range whose max != 1. An unbounded
+	// maxOccurs is a valid lexical form that the generic validator accepts, so
+	// it must still surface the all-specific error.
+	if !parsed {
+		return
+	}
+	if n != Unbounded && n < 1 && placeholder.MinOccurs >= 1 {
+		return
+	}
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, src.local, elemGroup,
+		"The particle's {max occurs} must be 1, since the reference resolves to an 'all' model group."), helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 // reportUnresolvedTypeRef reports a fatal schema parser error for a type
