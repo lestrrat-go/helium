@@ -115,6 +115,47 @@ func TestAllOccursValidation(t *testing.T) {
 		}
 	})
 
+	// A lexically invalid occurs value on a direct xs:all child must surface only
+	// the generic xs:nonNegativeInteger/allNNI lexical error from checkLocalElement
+	// — never the all-specific "(must be 0 or 1)" diagnostic, matching xmllint.
+	t.Run("child lexical error not all-specific", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name       string
+			schema     string
+			wantMsg    string
+			notWantMsg string
+		}{
+			{
+				name:       "child minOccurs -1",
+				wantMsg:    "Expected is 'xs:nonNegativeInteger'.",
+				notWantMsg: wantChildMin,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all><xs:element name="child" type="xs:string" minOccurs="-1"/></xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:       "child maxOccurs -2",
+				wantMsg:    "Expected is '(xs:nonNegativeInteger | unbounded)'.",
+				notWantMsg: wantChildMax,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all><xs:element name="child" type="xs:string" maxOccurs="-2"/></xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				got := compileErrors(t, tc.schema)
+				require.Contains(t, got, tc.wantMsg)
+				require.NotContains(t, got, tc.notWantMsg)
+			})
+		}
+	})
+
 	// Valid xs:all forms must still compile cleanly: default occurs, minOccurs=0,
 	// minOccurs=1, maxOccurs=1, and child element occurs in {0,1}.
 	t.Run("accepts valid all", func(t *testing.T) {
@@ -152,6 +193,42 @@ func TestAllOccursValidation(t *testing.T) {
 				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root"><xs:complexType>
     <xs:all><xs:element name="child" type="xs:string" minOccurs="0" maxOccurs="1"/></xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			// xs:nonNegativeInteger lexical space allows leading zeros: "01"
+			// parses to 1 and is accepted on both the all compositor and a child,
+			// matching xmllint (these were wrongly rejected by raw "0"/"1" string
+			// comparison before the fix).
+			{
+				name: "all minOccurs 01",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all minOccurs="01"><xs:element name="child" type="xs:string"/></xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "all maxOccurs 01",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all maxOccurs="01"><xs:element name="child" type="xs:string"/></xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "child minOccurs 01",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all><xs:element name="child" type="xs:string" minOccurs="01"/></xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "child maxOccurs 01",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all><xs:element name="child" type="xs:string" maxOccurs="01"/></xs:all>
   </xs:complexType></xs:element>
 </xs:schema>`,
 			},

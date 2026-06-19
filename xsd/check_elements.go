@@ -207,18 +207,29 @@ func (c *compiler) validateAllOccurs(ctx context.Context, elem *helium.Element) 
 	line := elem.Line()
 	local := elem.LocalName()
 
+	// The all compositor's minOccurs lexical space allows leading zeros (e.g.
+	// "01" parses to 1 and is accepted). libxml2 reports the all-specific
+	// "(0 | 1)" wording for every value outside {0,1}, including lexically
+	// invalid forms such as "-1", "abc", or "unbounded", so a failed parse and
+	// an out-of-range parse are both reported with this diagnostic.
 	if hasAttr(elem, attrMinOccurs) {
 		v := getAttr(elem, attrMinOccurs)
-		if v != "0" && v != "1" {
+		n, ok := parseNonNegativeOccurs(v, false)
+		if !ok || (n != 0 && n != 1) {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, elemAll, attrMinOccurs,
 				"The value '"+v+"' is not valid. Expected is '(0 | 1)'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 
+	// maxOccurs must parse to exactly 1; "1"/"01" are accepted, everything else
+	// (including "unbounded" and lexically invalid forms) is reported with the
+	// all-specific "Expected is '1'." wording. allowMax is true so "unbounded"
+	// parses successfully and is then rejected for being != 1, matching libxml2.
 	if hasAttr(elem, attrMaxOccurs) {
 		v := getAttr(elem, attrMaxOccurs)
-		if v != "1" {
+		n, ok := parseNonNegativeOccurs(v, true)
+		if !ok || n != 1 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, elemAll, attrMaxOccurs,
 				"The value '"+v+"' is not valid. Expected is '1'."), helium.ErrorLevelFatal))
 			c.errorCount++
@@ -239,9 +250,16 @@ func (c *compiler) checkAllElementParticleOccurs(ctx context.Context, elem *heli
 	line := elem.Line()
 	local := elem.LocalName()
 
+	// Child occurs lexical space allows leading zeros ("01" parses to 1 and is
+	// accepted). The all-specific "(must be 0 or 1)" diagnostic only fires for a
+	// lexically valid value outside {0,1}: a lexically invalid value (e.g. "-1",
+	// "unbounded") already produced the generic nonNegativeInteger/allNNI error
+	// in checkLocalElement, so suppress the all-specific message there to match
+	// libxml2, which emits only the lexical error.
 	if hasAttr(elem, attrMaxOccurs) {
 		v := getAttr(elem, attrMaxOccurs)
-		if v != "0" && v != "1" {
+		n, ok := parseNonNegativeOccurs(v, true)
+		if ok && n != 0 && n != 1 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 				"Invalid value for maxOccurs (must be 0 or 1)."), helium.ErrorLevelFatal))
 			c.errorCount++
@@ -250,7 +268,8 @@ func (c *compiler) checkAllElementParticleOccurs(ctx context.Context, elem *heli
 
 	if hasAttr(elem, attrMinOccurs) {
 		v := getAttr(elem, attrMinOccurs)
-		if v != "0" && v != "1" {
+		n, ok := parseNonNegativeOccurs(v, false)
+		if ok && n != 0 && n != 1 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 				"Invalid value for minOccurs (must be 0 or 1)."), helium.ErrorLevelFatal))
 			c.errorCount++
