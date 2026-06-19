@@ -7,11 +7,17 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
+
+// goosWindows is the runtime.GOOS value for Windows. Drive-letter handling in
+// file: URIs is gated on this so POSIX behavior is never altered.
+const goosWindows = "windows"
 
 // internalLoader implements icatalog.Loader using helium's parser.
 type internalLoader struct {
@@ -106,8 +112,10 @@ func catalogFilePath(ref string) (string, error) {
 
 	// For "file:///abs/path" the host is empty and Path holds the (already
 	// percent-decoded) absolute path. For "file://host/path" a non-localhost
-	// host is not addressable on the local filesystem.
-	if u.Host != "" && u.Host != "localhost" {
+	// host is not addressable on the local filesystem. URI hosts are
+	// case-insensitive, so an empty host and "localhost" in any case both
+	// denote the local machine.
+	if u.Host != "" && !strings.EqualFold(u.Host, "localhost") {
 		return "", fmt.Errorf("catalog: non-local file URI host %q in %q", u.Host, ref)
 	}
 
@@ -116,13 +124,22 @@ func catalogFilePath(ref string) (string, error) {
 
 // fileURIPath converts the (already percent-decoded) path component of a "file:"
 // URI into a local filesystem path. On POSIX an absolute URI path such as
-// "/abs/x" is returned unchanged. On Windows a URI such as "file:///C:/tmp/x"
-// yields a path of "/C:/tmp/x"; the leading slash before the drive letter is
-// stripped ("C:/tmp/x") and slashes are converted to the OS separator.
+// "/abs/x" — including "/C:/tmp/x", which is a legitimate POSIX absolute path —
+// is returned unchanged. On Windows a URI such as "file:///C:/tmp/x" yields a
+// path of "/C:/tmp/x"; the leading slash before the drive letter is stripped
+// ("C:/tmp/x") and slashes are converted to the OS separator.
 func fileURIPath(p string) string {
-	// Detect a Windows drive-letter path of the form "/C:/...": a leading slash
-	// followed by a single ASCII letter and a colon.
-	if len(p) >= 3 && p[0] == '/' && isASCIILetter(p[1]) && p[2] == ':' {
+	return fileURIPathFor(runtime.GOOS, p)
+}
+
+// fileURIPathFor is the OS-parameterized implementation of fileURIPath. The
+// drive-letter slash strip only applies on Windows; on POSIX "/C:/tmp/x" is a
+// valid absolute path and must be left untouched. goos is threaded explicitly
+// so the conversion is deterministically testable on a non-Windows CI host.
+func fileURIPathFor(goos, p string) string {
+	// On Windows, detect a drive-letter path of the form "/C:/...": a leading
+	// slash followed by a single ASCII letter and a colon, and strip the slash.
+	if goos == goosWindows && len(p) >= 3 && p[0] == '/' && isASCIILetter(p[1]) && p[2] == ':' {
 		p = p[1:]
 	}
 	return filepath.FromSlash(p)
