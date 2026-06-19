@@ -888,6 +888,41 @@ func TestParseExternalDTDParameterEntityExpands(t *testing.T) {
 	require.Equal(t, "default", val, "expanded PE must apply the default attribute value")
 }
 
+func TestParseExternalDTDPEConditionalSectionFollowedByDecl(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "cs.dtd">
+<r/>`
+
+	// The external subset declares a parameter entity whose replacement text is
+	// a conditional section, references it, and THEN declares another markup
+	// declaration. After the PE expands to the conditional section and is
+	// exhausted, the loop must resume in the parent DTD and apply the trailing
+	// <!ATTLIST>. Before the fix, the conditional-section path "continue"-d past
+	// the cursor-cleanup/progress guard, leaving the spent PE cursor on the
+	// stack so the next iteration broke the loop and the trailing declaration
+	// was silently skipped.
+	const dtd = `<!ELEMENT r EMPTY>
+<!ENTITY % cs "<![INCLUDE[ <!ELEMENT a EMPTY> ]]>">
+%cs;
+<!ATTLIST r x CDATA 'd'>
+`
+	fsys := fstest.MapFS{"cs.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "PE expanding to a conditional section must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	val, ok := root.GetAttribute("x")
+	require.True(t, ok, "declaration following the PE conditional section must be applied")
+	require.Equal(t, "d", val, "trailing <!ATTLIST> must not be silently skipped")
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 

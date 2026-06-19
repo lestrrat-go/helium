@@ -543,23 +543,42 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 			// per-section error stops the loop without failing the whole parse,
 			// matching the long-standing behavior relied on by valid documents
 			// whose conditional-section handling is otherwise imperfect.
+			//
+			// Fall through to the SAME cursor-cleanup/progress guard below rather
+			// than "continue"-ing past it. A "continue" here would leave an
+			// exhausted parameter-entity cursor (e.g. when a PE expands to a
+			// conditional section) sitting on top of the input stack; the next
+			// iteration's PeekOne().Done() check would then break the loop and the
+			// deferred cleanup would pop the parent DTD cursor, silently skipping
+			// any declarations that follow the PE reference.
 			if err := ctx.parseConditionalSections(ctxif); err != nil {
 				break
 			}
-			continue
+		} else {
+			if err := ctx.parseMarkupDecl(ctxif); err != nil {
+				return err
+			}
+
+			// Expand a parameter-entity reference at the cursor. parseMarkupDecl
+			// does not handle top-level "%pe;" references in the external subset,
+			// so this pushes the PE replacement text onto the input stack and lets
+			// its declarations be parsed by subsequent loop iterations, mirroring
+			// parseInternalSubset.
+			if err := ctx.parsePEReference(ctxif); err != nil {
+				return err
+			}
 		}
 
-		if err := ctx.parseMarkupDecl(ctxif); err != nil {
-			return err
-		}
-
-		// Expand a parameter-entity reference at the cursor. parseMarkupDecl does
-		// not handle top-level "%pe;" references in the external subset, so this
-		// pushes the PE replacement text onto the input stack and lets its
-		// declarations be parsed by subsequent loop iterations, mirroring
-		// parseInternalSubset.
-		if err := ctx.parsePEReference(ctxif); err != nil {
-			return err
+		// Pop any exhausted parameter-entity (or conditional-section) cursors so
+		// the next iteration resumes in the parent DTD where the expanded content
+		// left off, instead of breaking the loop on a Done() PE cursor and letting
+		// the deferred cleanup discard the declarations that follow.
+		for ctx.inputTab.Len() > baseLen {
+			top = ctx.adaptCursor(ctx.inputTab.PeekOne())
+			if top == nil || !top.Done() {
+				break
+			}
+			ctx.popInput()
 		}
 
 		// Guard against an iteration that neither advanced the cursor nor
