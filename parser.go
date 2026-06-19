@@ -618,15 +618,17 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 // absolute path of the file, and the file path is used as the base URI for
 // relative URI resolution during parsing.
 func (p Parser) ParseFile(ctx context.Context, path string) (*Document, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // path is caller-supplied
-	if err != nil {
-		return nil, fmt.Errorf("helium: failed to read %q: %w", path, err)
-	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("helium: failed to resolve path %q: %w", path, err)
 	}
-	doc, err := p.BaseURI(abs).Parse(ctx, data)
+	f, err := os.Open(path) //nolint:gosec // path is caller-supplied
+	if err != nil {
+		return nil, fmt.Errorf("helium: failed to read %q: %w", path, err)
+	}
+	defer f.Close()
+
+	doc, err := p.BaseURI(abs).ParseReader(ctx, f)
 	if err != nil {
 		return nil, err
 	}

@@ -2112,3 +2112,53 @@ func TestParseReaderSurfacesErrorReturnedWithData(t *testing.T) {
 	})
 	require.ErrorIs(t, err, wantErr, "a reader error returned alongside the final bytes must not be swallowed")
 }
+
+func TestParseFileParsesNormalFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.xml")
+	require.NoError(t, os.WriteFile(path, []byte(`<root><child>hi</child></root>`), 0o600))
+
+	doc, err := helium.NewParser().ParseFile(t.Context(), path)
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	abs, err := filepath.Abs(path)
+	require.NoError(t, err)
+	require.Equal(t, abs, doc.URL(), "document URL should be the absolute path")
+}
+
+func TestParseFileMissingFileErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "does-not-exist.xml")
+
+	_, err := helium.NewParser().ParseFile(t.Context(), path)
+	require.Error(t, err, "parsing a missing file must error")
+}
+
+func TestParseFileResolvesRelativeExternalEntity(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "child.xml"), []byte("WORLD"), 0o600))
+
+	main := `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY child SYSTEM "child.xml">
+]>
+<doc>&child;</doc>`
+	mainPath := filepath.Join(dir, "main.xml")
+	require.NoError(t, os.WriteFile(mainPath, []byte(main), 0o600))
+
+	doc, err := helium.NewParser().SubstituteEntities(true).ParseFile(t.Context(), mainPath)
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	var buf bytes.Buffer
+	require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+	require.Contains(t, buf.String(), "WORLD",
+		"relative external entity must resolve against the file's base URI")
+}

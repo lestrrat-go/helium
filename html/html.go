@@ -105,7 +105,7 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*helium.Document,
 	if err := hp.parse(ctx); err != nil {
 		return nil, err
 	}
-	if enc := hp.detectedEncoding; enc != "" {
+	if enc := hp.finalEncoding(); enc != "" {
 		tb.doc.SetEncoding(enc)
 	}
 	return tb.doc, nil
@@ -128,15 +128,17 @@ func (p Parser) Parse(ctx context.Context, data []byte) (*helium.Document, error
 // ParseFile reads and parses an HTML file.
 // (libxml2: htmlParseFile)
 func (p Parser) ParseFile(ctx context.Context, filename string) (*helium.Document, error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	doc, err := p.Parse(ctx, data)
-	if err != nil {
-		return nil, err
-	}
 	abs, err := filepath.Abs(filename)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(filename) //nolint:gosec // filename is caller-supplied
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	doc, err := p.ParseReader(ctx, f)
 	if err != nil {
 		return nil, err
 	}

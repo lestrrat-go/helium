@@ -247,6 +247,129 @@ func (sr *utf8SanitizeReader) trackByte(b byte) {
 	}
 }
 
+// deferredLatin1Reader handles undeclared-charset HTML streams whose first
+// chunk is valid UTF-8 but which may contain non-UTF-8 (Latin-1/Windows-1252)
+// bytes further into the document — past the 1024-byte detection window.
+//
+// While every byte seen so far decodes as valid UTF-8 it passes data through
+// unchanged. The moment an invalid UTF-8 byte appears it switches, for the
+// remainder of the stream, to interpreting bytes as Latin-1/Windows-1252 and
+// converting them to UTF-8 (matching the whole-document []byte parse path,
+// which reinterprets an undeclared non-UTF-8 document as Windows-1252). The
+// detected encoding name is reported lazily via detectedEncoding once the
+// switch happens.
+type deferredLatin1Reader struct {
+	r io.Reader
+
+	raw    []byte // raw bytes read from r (may hold a partial UTF-8 tail)
+	rawLen int
+
+	out    []byte // converted output ready to consume
+	outPos int
+
+	switched bool   // true once a non-UTF-8 byte forced Latin-1 interpretation
+	enc      string // encoding name reported after switching
+	encOnHit string // encoding name to report once a non-UTF-8 byte appears
+}
+
+func newDeferredLatin1Reader(r io.Reader, encOnHit string) *deferredLatin1Reader {
+	return &deferredLatin1Reader{
+		r:        r,
+		raw:      make([]byte, 4096),
+		encOnHit: encOnHit,
+	}
+}
+
+// detectedEncoding returns the encoding name once a non-UTF-8 byte has forced
+// the reader into Latin-1 mode, or "" while the stream is still pure UTF-8.
+func (dr *deferredLatin1Reader) detectedEncoding() string {
+	return dr.enc
+}
+
+func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
+	if dr.outPos < len(dr.out) {
+		n := copy(p, dr.out[dr.outPos:])
+		dr.outPos += n
+		if dr.outPos >= len(dr.out) {
+			dr.out = dr.out[:0]
+			dr.outPos = 0
+		}
+		return n, nil
+	}
+
+	// Preserve any partial UTF-8 tail kept from the previous read.
+	leftover := dr.rawLen
+	n, err := dr.r.Read(dr.raw[leftover:])
+	dr.rawLen = leftover + n
+
+	if dr.rawLen == 0 {
+		return 0, err
+	}
+
+	dr.out = dr.out[:0]
+	dr.outPos = 0
+	data := dr.raw[:dr.rawLen]
+	var encBuf [4]byte
+	i := 0
+	for i < len(data) {
+		b := data[i]
+		if b < 0x80 {
+			dr.out = append(dr.out, b)
+			i++
+			continue
+		}
+
+		if dr.switched {
+			// Already in Latin-1 mode: every high byte is one Latin-1 rune.
+			if b <= 0x9F {
+				sz := utf8.EncodeRune(encBuf[:], win1252ToUnicode[b-0x80])
+				dr.out = append(dr.out, encBuf[:sz]...)
+			} else {
+				sz := utf8.EncodeRune(encBuf[:], rune(b))
+				dr.out = append(dr.out, encBuf[:sz]...)
+			}
+			i++
+			continue
+		}
+
+		// Still in UTF-8 mode: try to decode a multi-byte sequence.
+		r, size := utf8.DecodeRune(data[i:])
+		if r == utf8.RuneError && size <= 1 {
+			// Incomplete sequence at the buffer tail and more data may come:
+			// hold it over for the next read.
+			if i+utf8.UTFMax > len(data) && err == nil {
+				break
+			}
+			// Genuine non-UTF-8 byte: switch to Latin-1 for the remainder.
+			dr.switched = true
+			dr.enc = dr.encOnHit
+			continue
+		}
+		dr.out = append(dr.out, data[i:i+size]...)
+		i += size
+	}
+
+	// Shift any unconsumed tail to the front for the next read.
+	if i < len(data) {
+		copy(dr.raw, data[i:])
+		dr.rawLen = len(data) - i
+	} else {
+		dr.rawLen = 0
+	}
+
+	if len(dr.out) == 0 {
+		return 0, err
+	}
+
+	written := copy(p, dr.out[dr.outPos:])
+	dr.outPos += written
+	if dr.outPos >= len(dr.out) {
+		dr.out = dr.out[:0]
+		dr.outPos = 0
+	}
+	return written, err
+}
+
 // wrapReaderForHTML wraps an io.Reader with the appropriate encoding
 // transformation chain for HTML parsing:
 //  1. Peek first 1024 bytes to detect charset
@@ -254,8 +377,10 @@ func (sr *utf8SanitizeReader) trackByte(b byte) {
 //  3. Apply either Latin-1→UTF-8 conversion or UTF-8 sanitization
 //
 // Returns the wrapped reader, the detected encoding name (empty for UTF-8),
-// and the sanitizer (non-nil only for UTF-8 path, for error position queries).
-func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader) {
+// the sanitizer (non-nil only for the charset=utf-8 path, for error position
+// queries), and the deferred Latin-1 reader (non-nil only for the undeclared
+// path, queried after parsing for the lazily-detected encoding name).
+func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader, *deferredLatin1Reader) {
 	// Read up to 1024 bytes for charset detection.
 	head := make([]byte, 1024)
 	n, _ := io.ReadFull(r, head)
@@ -280,20 +405,30 @@ func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader) {
 			if declaredCharsetIsLatin1(head) {
 				enc = "ISO-8859-1"
 			}
-			return &latin1Reader{r: normalized, enc: enc}, enc, nil
+			return &latin1Reader{r: normalized, enc: enc}, enc, nil, nil
 		}
 		// charset=utf-8 declared but head has invalid bytes — sanitize.
 		san := newUTF8SanitizeReader(normalized)
-		return san, "", san
+		return san, "", san, nil
 	}
 
-	// Head is valid UTF-8 (or empty). Still wrap with sanitizer in case
-	// invalid bytes appear after the first 1024 bytes.
-	if declaredCharsetIsUTF8(head) || n == 0 || utf8.Valid(head) {
+	// charset=utf-8 is explicitly declared: any later invalid bytes are
+	// genuine encoding errors and must be replaced with U+FFFD.
+	if declaredCharsetIsUTF8(head) {
 		san := newUTF8SanitizeReader(normalized)
-		return san, "", san
+		return san, "", san, nil
 	}
 
-	san := newUTF8SanitizeReader(normalized)
-	return san, "", san
+	// Head is valid UTF-8 (or empty) and not declared as charset=utf-8. The
+	// document may still turn out to be Latin-1/Windows-1252 past the
+	// detection window, so defer the decision: stay UTF-8 until a non-UTF-8
+	// byte appears, then interpret the remainder as Latin-1 (matching the
+	// whole-document []byte parse path). An explicit charset=iso-8859-1
+	// selects strict ISO-8859-1; otherwise auto-detected Windows-1252.
+	encOnHit := "Windows-1252"
+	if declaredCharsetIsLatin1(head) {
+		encOnHit = "ISO-8859-1"
+	}
+	dr := newDeferredLatin1Reader(normalized, encOnHit)
+	return dr, "", nil, dr
 }

@@ -209,7 +209,11 @@ Parser runs in a background goroutine reading from the stream via `ParseReader`.
 
 **HTML PushParser** (`html/html.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
-A background goroutine reads all pushed data via `ParseReader` (which calls `io.ReadAll` internally), then parses in one shot. The HTML parser requires a complete `[]byte` buffer (it uses direct byte-slice indexing), so it cannot stream incrementally like the XML parser. The `push` package keeps both APIs symmetric.
+A background goroutine feeds the pushed data to `ParseReader`. The HTML tokenizer reads from the stream through a `strcursor.UTF8Cursor` over the encoding wrappers (`wrapReaderForHTML`), but its tree-construction phase needs all data before it completes, so HTML push parsing effectively materializes the document in one shot rather than streaming incrementally like the XML parser. The `push` package keeps both APIs symmetric.
+
+`ParseFile` (XML in `parser.go`, HTML in `html/html.go`) opens the file and delegates to `ParseReader` rather than reading the whole file with `os.ReadFile`, so parser limits and context cancellation apply during the read. The XML side sets the absolute path as both base URI and document URL; the HTML side sets it as the document URL.
+
+HTML encoding detection over a stream (`wrapReaderForHTML`) peeks the first 1024 bytes for a declared charset. When the head is valid UTF-8 with no `charset=utf-8` declaration, a `deferredLatin1Reader` keeps interpreting the stream as UTF-8 until a non-UTF-8 byte appears past the detection window, then switches the remainder to Latin-1/Windows-1252 (matching the whole-document `[]byte` path that reinterprets an undeclared non-UTF-8 document). The chosen encoding name (`ISO-8859-1` if `charset=iso-8859-1` was declared, else `Windows-1252`) is reported lazily after parsing via `parser.finalEncoding()`.
 
 ## Character Buffering
 
