@@ -15,28 +15,68 @@ import (
 )
 
 // stream is a thread-safe concurrent buffer. Write appends data and
-// signals waiting readers; Read blocks until enough bytes are available
-// or the stream is closed.
+// signals waiting readers; Read blocks until enough bytes are available,
+// the stream is closed, or the supplied context is cancelled.
+//
+// A blocked Read is a parser-owned wait (sync.Cond), not an arbitrary
+// io.Reader.Read, so it can be unblocked on context cancellation: a watcher
+// goroutine broadcasts on the cond when ctx.Done() fires, and Read returns the
+// context error after waking.
 type stream struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
 	buf    bytes.Buffer
 	closed bool
 	wrErr  error
+	// ctx is stored intentionally: the stream's blocking Read is a
+	// parser-owned wait (sync.Cond), and storing the context lets that wait
+	// observe cancellation and return the context error. This is the
+	// controllable-wait exception to the usual "do not store a context" rule.
+	ctx      context.Context //nolint:containedctx
+	stopOnce sync.Once
+	stop     chan struct{}
 }
 
-func newStream() *stream {
-	s := &stream{}
+func newStream(ctx context.Context) *stream {
+	if ctx == nil {
+		ctx = context.Background() //nolint:contextcheck // background fallback only when caller passes a nil context
+	}
+	s := &stream{ctx: ctx, stop: make(chan struct{})}
 	s.cond = sync.NewCond(&s.mu)
+	// Wake any blocked Read when the context is cancelled so the parser
+	// can observe the cancellation between reads. The watcher exits when the
+	// stream is closed so it does not outlive the parse on a context that is
+	// never cancelled.
+	if ctx.Done() != nil {
+		go func() {
+			select {
+			case <-ctx.Done():
+				s.cond.Broadcast()
+			case <-s.stop:
+			}
+		}()
+	}
 	return s
+}
+
+// stopWatcher terminates the context watcher goroutine. Safe to call multiple
+// times and from any close path.
+func (s *stream) stopWatcher() {
+	s.stopOnce.Do(func() { close(s.stop) })
 }
 
 func (s *stream) Read(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for s.buf.Len() < len(p) && !s.closed {
+	for s.buf.Len() < len(p) && !s.closed && s.ctx.Err() == nil {
 		s.cond.Wait()
+	}
+
+	// Honor context cancellation before delivering buffered bytes so a
+	// cancelled parse aborts promptly rather than draining the buffer.
+	if err := s.ctx.Err(); err != nil {
+		return 0, err
 	}
 
 	if s.buf.Len() == 0 && s.closed {
@@ -62,22 +102,23 @@ func (s *stream) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func (s *stream) close() error {
+func (s *stream) close() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.closed = true
 	s.cond.Broadcast()
-	return nil
+	s.mu.Unlock()
+
+	s.stopWatcher()
 }
 
 func (s *stream) closeWithWriteError(err error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.wrErr = err
 	s.closed = true
 	s.cond.Broadcast()
+	s.mu.Unlock()
+
+	s.stopWatcher()
 }
 
 // Source is the interface satisfied by any parser that can parse from
@@ -105,8 +146,12 @@ type result[T any] struct {
 // New creates a Parser and starts a background goroutine that feeds
 // pushed data to the given [ReaderParser]. The goroutine recovers from
 // panics and delivers the result when [Parser.Close] is called.
+//
+// If ctx is cancelled, the internal stream's blocking Read is unblocked and
+// returns the context error, so the background parse aborts promptly even while
+// it is waiting for more pushed data.
 func New[T any](ctx context.Context, p Source[T]) *Parser[T] {
-	s := newStream()
+	s := newStream(ctx)
 	pp := &Parser[T]{
 		s:    s,
 		done: make(chan result[T], 1),
@@ -144,10 +189,7 @@ func (pp *Parser[T]) Write(p []byte) (int, error) {
 // return the same result.
 func (pp *Parser[T]) Close() (T, error) {
 	pp.closeOnce.Do(func() {
-		if err := pp.s.close(); err != nil {
-			pp.res = result[T]{err: err}
-			return
-		}
+		pp.s.close()
 		pp.res = <-pp.done
 	})
 	return pp.res.val, pp.res.err

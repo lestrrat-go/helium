@@ -514,6 +514,13 @@ func (p Parser) closeHandler() {
 // returned error is [ErrDTDValidationFailed] and the document is still
 // returned. Individual validation errors are delivered to the [ErrorHandler]
 // configured via [Parser.ErrorHandler].
+//
+// Cancellation: if ctx is cancelled or its deadline is exceeded, Parse aborts
+// and returns the context error (matched by [errors.Is] against
+// [context.Canceled] / [context.DeadlineExceeded]) with a nil Document — never
+// a partial tree. Because Parse reads from an in-memory byte slice there is no
+// blocking read, so cancellation is always observed promptly: the parser checks
+// the context between parse steps and between cursor refills.
 func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
@@ -573,6 +580,21 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 // This is identical to [Parse] but reads from a stream instead of a byte slice.
 // EBCDIC encoding detection is not supported when parsing from a reader.
 // See [Parse] for DTD validation error handling.
+//
+// Cancellation: context cancellation and deadlines are observed BETWEEN read
+// operations and parse steps. The parser checks ctx before each cursor refill
+// (read from r) and between parse steps, so a cancelled or timed-out context is
+// honored as soon as the parser regains control, returning the context error
+// (matched by [errors.Is] against [context.Canceled] /
+// [context.DeadlineExceeded]) with a nil Document.
+//
+// A reader already blocked inside its own Read call cannot be interrupted
+// generically: Go provides no way to unblock a Read in progress. Such a read is
+// only interruptible if r itself honors the context or a deadline — for example
+// a reader that sets a read deadline when ctx.Done() fires, or that returns from
+// Read with an error on cancellation. If r can block indefinitely (e.g. a slow
+// or never-returning network reader), wrap it so its Read observes ctx, or pass
+// the already-read bytes to [Parse] instead.
 func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
