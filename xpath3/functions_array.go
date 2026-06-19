@@ -307,15 +307,35 @@ func fnArrayFlatten(ctx context.Context, args []Sequence) (Sequence, error) {
 // lets the iterative array/map walkers descend into nested structures without
 // expanding any child sequence into a temporary slice: next() advances through
 // the members in order, returning a single Item per call.
+//
+// The backing list of sequences is either an explicit []Sequence (array
+// members or the single top-level input) or a map's entries, accessed in place
+// via mapEntries so a wide map is never duplicated into a temporary []Sequence
+// before traversal. memberAt/memberCount hide which backing is in use.
 type seqCursor struct {
-	members []Sequence
-	mi      int // current member index
-	ii      int // current item index within members[mi]
+	members    []Sequence
+	mapEntries []mapEntry
+	mi         int // current member index
+	ii         int // current item index within member mi
+}
+
+func (c *seqCursor) memberCount() int {
+	if c.mapEntries != nil {
+		return len(c.mapEntries)
+	}
+	return len(c.members)
+}
+
+func (c *seqCursor) memberAt(i int) Sequence {
+	if c.mapEntries != nil {
+		return c.mapEntries[i].value
+	}
+	return c.members[i]
 }
 
 func (c *seqCursor) next() (Item, bool) {
-	for c.mi < len(c.members) {
-		m := c.members[c.mi]
+	for c.mi < c.memberCount() {
+		m := c.memberAt(c.mi)
 		if c.ii < seqLen(m) {
 			item := m.Get(c.ii)
 			c.ii++

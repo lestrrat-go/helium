@@ -267,16 +267,23 @@ func fnMapFind(ctx context.Context, args []Sequence) (Sequence, error) {
 // performed iteratively with an explicit work stack rather than recursively, so
 // a pathologically nested input cannot exhaust the goroutine stack when no op
 // limit is set. The traversal charges an op per item and bounds the accumulated
-// result count so a deeply or widely nested input cannot exhaust resources.
+// result item count so a deeply or widely nested input cannot exhaust resources.
 //
-// Each frame is a one-item-at-a-time cursor over a list of sequences (the root
-// input, a map's values, or an array's members). Items are consumed via
-// Sequence.Get so a lazy value/member sequence is never expanded into a
-// temporary slice. The stack is LIFO, so on descending into a nested map/array
-// the parent frame is left in place beneath the child frame, yielding document
-// order.
+// Each frame is a one-item-at-a-time cursor over a list of sequences: the root
+// input, an array's members, or — for maps — the map's own entries accessed in
+// place (so a wide map is never copied into a temporary []Sequence). Items are
+// consumed via Sequence.Get so a lazy value/member sequence is never expanded
+// into a temporary slice. A matched value is looked up without cloning (get0)
+// and its length bound-checked before it is cloned, so a borrowed lazy value is
+// rejected rather than materialized. The stack is LIFO, so on descending into a
+// nested map/array the parent frame is left in place beneath the child frame,
+// yielding document order.
 func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequence, key AtomicValue) ([]Sequence, error) {
 	var results []Sequence
+	// total counts items already accumulated across all matched value sequences,
+	// so a single huge (possibly lazy) matched value is bounded the same as many
+	// small matches.
+	total := 0
 
 	stack := []seqCursor{{members: []Sequence{root}}}
 	for len(stack) > 0 {
@@ -292,14 +299,21 @@ func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequen
 		switch v := item.(type) {
 		case MapItem:
 			// The map's own match comes before its descendants in document order.
-			if val, found := v.Get(key); found {
-				if maxNodes > 0 && len(results) >= maxNodes {
+			// Look the value up WITHOUT cloning (get0) and bound-check its length
+			// before materializing: a borrowed lazy value (e.g. a huge integer
+			// range stored via map:entry, which does not clone) must be rejected
+			// with ErrNodeSetLimit rather than materialized by the clone in Get.
+			if val, found := v.get0(key); found {
+				if maxNodes > 0 && total+seqLen(val) > maxNodes {
 					return nil, ErrNodeSetLimit
 				}
-				results = append(results, val)
+				total += seqLen(val)
+				results = append(results, cloneSequence(val))
 			}
-			// Then descend into the map's values, in insertion order.
-			stack = append(stack, seqCursor{members: v.values0()})
+			// Then descend into the map's values, in insertion order, iterating
+			// the entries in place so a wide map is not duplicated into a
+			// temporary []Sequence before traversal.
+			stack = append(stack, seqCursor{mapEntries: v.entries0()})
 		case ArrayItem:
 			stack = append(stack, seqCursor{members: v.members0()})
 		}

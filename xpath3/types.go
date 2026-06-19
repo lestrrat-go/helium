@@ -770,6 +770,25 @@ func (m MapItem) Get(key AtomicValue) (Sequence, bool) {
 	return cloneSequence(m.entries[idx].value), true
 }
 
+// get0 returns the value associated with key without cloning it, or
+// (nil, false) if not found. The returned Sequence is the one stored in the
+// map (possibly a borrowed lazy sequence); callers must not mutate it and must
+// clone before exposing it outward. This lets bounded walkers check the stored
+// value's length before deciding whether to clone/materialize it.
+func (m MapItem) get0(key AtomicValue) (Sequence, bool) {
+	if m.index == nil {
+		if len(m.entries) == 1 && normalizeMapKey(m.entries[0].key) == normalizeMapKey(key) {
+			return m.entries[0].value, true
+		}
+		return nil, false
+	}
+	idx, ok := m.index[normalizeMapKey(key)]
+	if !ok {
+		return nil, false
+	}
+	return m.entries[idx].value, true
+}
+
 // Put returns a new map with the given key-value pair added or replaced.
 func (m MapItem) Put(key AtomicValue, value Sequence) MapItem {
 	nk := normalizeMapKey(key)
@@ -823,14 +842,12 @@ func (m MapItem) ForEach(fn func(AtomicValue, Sequence) error) error {
 	return nil
 }
 
-// values0 returns the map's value sequences in insertion order without cloning.
-// Callers must not mutate the returned sequences.
-func (m MapItem) values0() []Sequence {
-	vals := make([]Sequence, len(m.entries))
-	for i, e := range m.entries {
-		vals[i] = e.value
-	}
-	return vals
+// entries0 returns the map's entries in insertion order without cloning. The
+// returned slice and its value sequences are the map's own backing storage;
+// callers must not mutate either. Used by bounded walkers that iterate value
+// sequences in place rather than allocating a []Sequence copy.
+func (m MapItem) entries0() []mapEntry {
+	return m.entries
 }
 
 // Remove returns a new map with the given key removed.

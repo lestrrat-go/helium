@@ -154,11 +154,10 @@ func TestHOFLazySequenceLimit(t *testing.T) {
 	vars := xpath3.NewVariables()
 	vars.Set("lazy", xpath3.NewRangeSequence(1, huge))
 
-	// Only the callback-result / accumulator accumulation sites can receive a
-	// genuinely lazy Sequence: maps and arrays are eager value types whose
-	// members/values are cloned (materialized) at construction, so a lazy member
-	// or map value cannot be constructed through the expression path. These cases
-	// drive a lazy Sequence directly into the per-item accumulators.
+	// These cases drive a lazy Sequence directly into the per-item callback-result
+	// / accumulator accumulation sites. (Lazy MAP values are covered separately by
+	// TestMapFindNeverMaterializesValue: map:entry / map:merge borrow values
+	// without cloning, so a lazy value reaches map:find intact.)
 	cases := []struct {
 		name string
 		expr string
@@ -185,6 +184,59 @@ func TestHOFLazySequenceLimit(t *testing.T) {
 				// EvalBorrowing keeps the lazy range out of the variable-clone
 				// path so it stays unmaterialized until an accumulation site
 				// consumes it.
+				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+					Variables(vars).
+					MaxNodesForTesting(limit).
+					Evaluate(t.Context(), compiled, nil)
+			})
+			require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+		})
+	}
+}
+
+// TestMapFindNeverMaterializesValue proves map:find applies its size bound to a
+// matched map VALUE before cloning/materializing it. A map value stored via
+// map:entry / map:merge is NOT cloned at construction (the single-entry and
+// builder paths borrow the value), so a borrowed lazy value reaches map:find
+// intact. map:find must reject an oversized matched value with ErrNodeSetLimit
+// using an O(1) length check (seqLen) on the borrowed value, never the clone
+// path that would materialize it.
+//
+// Two sources prove this: a panicOnMaterializeSeq (Materialize panics, so any
+// "clone first, check later" regression panics) and a 1<<40 lazy integer range
+// (materializing it would attempt a multi-TB allocation).
+func TestMapFindNeverMaterializesValue(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+	const inputLen = 1 << 20
+	const huge = int64(1) << 40
+
+	cases := []struct {
+		name  string
+		value xpath3.Sequence
+		expr  string
+	}{
+		// Materialize panics; a clone-before-check regression panics instead of
+		// returning a limit error.
+		{"panic-on-materialize", panicOnMaterializeSeq{n: inputLen}, `map:find(map:entry("k", $lazy), "k")`},
+		// A huge lazy range; materializing it would OOM/hang, so a correct O(1)
+		// seqLen precheck must reject it promptly.
+		{"huge-lazy-range", xpath3.NewRangeSequence(1, huge), `map:find(map:entry("k", $lazy), "k")`},
+		// Same, reached through map:merge (also a non-cloning builder path).
+		{"huge-via-merge", xpath3.NewRangeSequence(1, huge), `map:find(map:merge(map:entry("k", $lazy)), "k")`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			vars := xpath3.NewVariables()
+			vars.Set("lazy", tc.value)
+
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+
+			var evalErr error
+			require.NotPanics(t, func() {
 				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
 					Variables(vars).
 					MaxNodesForTesting(limit).
