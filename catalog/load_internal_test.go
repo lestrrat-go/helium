@@ -70,9 +70,10 @@ func TestCatalogFilePathDriveLetterIsLocal(t *testing.T) {
 
 	for _, ref := range tests {
 		t.Run(ref, func(t *testing.T) {
-			got, err := catalogFilePath(ref)
+			got, isFileURI, err := catalogFilePath(ref)
 			require.NoError(t, err)
 			require.Equal(t, ref, got)
+			require.False(t, isFileURI)
 		})
 	}
 }
@@ -110,16 +111,17 @@ func TestCatalogFilePathLocalHost(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := catalogFilePath(tc.ref)
+			got, isFileURI, err := catalogFilePath(tc.ref)
 			require.NoError(t, err)
 			require.Equal(t, tc.expect, got)
+			require.True(t, isFileURI)
 		})
 	}
 }
 
 // catalogFilePath must reject a genuinely remote (non-local) host.
 func TestCatalogFilePathRemoteHostRejected(t *testing.T) {
-	_, err := catalogFilePath("file://example.com/etc/xml/catalog.xml")
+	_, _, err := catalogFilePath("file://example.com/etc/xml/catalog.xml")
 	require.Error(t, err)
 }
 
@@ -130,7 +132,8 @@ func TestCatalogFilePathPOSIXDriveLetterStaysAbsolute(t *testing.T) {
 	if runtime.GOOS == goosWindows {
 		t.Skip("POSIX-specific behavior")
 	}
-	got, err := catalogFilePath("file:///C:/tmp/catalog.xml")
+	got, isFileURI, err := catalogFilePath("file:///C:/tmp/catalog.xml")
 	require.NoError(t, err)
 	require.Equal(t, "/C:/tmp/catalog.xml", got)
+	require.True(t, isFileURI)
 }

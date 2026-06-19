@@ -63,7 +63,7 @@ func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) { /
 }
 
 func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
-	path, err := catalogFilePath(filename)
+	path, isFileURI, err := catalogFilePath(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -78,13 +78,28 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) 
 		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
 	}
 
-	return loadFromBytes(ctx, data, absPath, eh)
+	// Read from the local filesystem path, but resolve relative URIs in the
+	// catalog against the catalog's URI. When the catalog was referenced via a
+	// "file:" URI, downstream relative URIs must stay in "file:" URI space (so
+	// "asset.xml" in /tmp/catalog.xml resolves to "file:///tmp/asset.xml", not
+	// the bare local path "/tmp/asset.xml"). For a plain OS path input, the
+	// filesystem path itself is the base, preserving the original behavior.
+	baseURI := absPath
+	if isFileURI {
+		baseURI = localPathToFileURI(absPath)
+	}
+
+	return loadFromBytes(ctx, data, baseURI, eh)
 }
 
 // catalogFilePath converts a catalog reference into a local filesystem path.
 // Bare paths are returned unchanged. "file:" URIs are parsed and percent-decoded
 // into a local path. Any other URI scheme is unsupported and rejected.
-func catalogFilePath(ref string) (string, error) {
+//
+// The second return value reports whether ref was a "file:" URI. Callers use it
+// to decide the catalog's baseURI: a "file:" reference keeps relative downstream
+// URIs in "file:" URI space, while a plain OS path resolves them as OS paths.
+func catalogFilePath(ref string) (string, bool, error) {
 	// A Windows path such as "C:\tmp\catalog.xml", "C:/tmp/catalog.xml", or a
 	// "\\host\share" UNC path must be treated as a local OS path, not as a URI
 	// whose scheme is the drive letter "C". Check this before HasScheme so the
@@ -94,20 +109,20 @@ func catalogFilePath(ref string) (string, error) {
 	// so a portable drive-letter check is needed as well to keep the behavior
 	// consistent (and tested) on the POSIX CI host.
 	if filepath.VolumeName(ref) != "" || hasDriveLetterPrefix(ref) {
-		return ref, nil
+		return ref, false, nil
 	}
 
 	if !icatalog.HasScheme(ref) {
-		return ref, nil
+		return ref, false, nil
 	}
 
 	u, err := url.Parse(ref)
 	if err != nil {
-		return "", fmt.Errorf("catalog: failed to parse URI %q: %w", ref, err)
+		return "", false, fmt.Errorf("catalog: failed to parse URI %q: %w", ref, err)
 	}
 
 	if u.Scheme != "file" {
-		return "", fmt.Errorf("catalog: unsupported URI scheme %q in %q", u.Scheme, ref)
+		return "", false, fmt.Errorf("catalog: unsupported URI scheme %q in %q", u.Scheme, ref)
 	}
 
 	// For "file:///abs/path" the host is empty and Path holds the (already
@@ -116,10 +131,23 @@ func catalogFilePath(ref string) (string, error) {
 	// case-insensitive, so an empty host and "localhost" in any case both
 	// denote the local machine.
 	if u.Host != "" && !strings.EqualFold(u.Host, "localhost") {
-		return "", fmt.Errorf("catalog: non-local file URI host %q in %q", u.Host, ref)
+		return "", false, fmt.Errorf("catalog: non-local file URI host %q in %q", u.Host, ref)
 	}
 
-	return fileURIPath(u.Path), nil
+	return fileURIPath(u.Path), true, nil
+}
+
+// localPathToFileURI builds a "file://" URI from an absolute local filesystem
+// path. It is used as the catalog baseURI when the catalog was referenced by a
+// "file:" URI, so relative URIs in the catalog resolve back into "file:" URI
+// space rather than as bare filesystem paths.
+//
+// (&url.URL{Scheme: "file", Path: ...}).String() percent-encodes as needed and,
+// on Windows, converts the OS separator to "/" via filepath.ToSlash, yielding
+// "file:///C:/tmp/catalog.xml". On POSIX the absolute path already uses "/".
+func localPathToFileURI(absPath string) string {
+	u := url.URL{Scheme: "file", Path: filepath.ToSlash(absPath)}
+	return u.String()
 }
 
 // fileURIPath converts the (already percent-decoded) path component of a "file:"
