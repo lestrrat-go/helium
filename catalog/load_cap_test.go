@@ -1,7 +1,6 @@
 package catalog_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +35,7 @@ func TestLoadMaxBytes(t *testing.T) {
 		padded := minimalCatalogXML + strings.Repeat(" ", 4096)
 		path := writeCatalog(t, padded)
 
-		_, err := catalog.NewLoader().MaxBytes(64).Load(context.Background(), path)
+		_, err := catalog.NewLoader().MaxBytes(64).Load(t.Context(), path)
 		require.Error(t, err)
 		require.ErrorIs(t, err, catalog.ErrCatalogTooLarge)
 	})
@@ -45,9 +44,9 @@ func TestLoadMaxBytes(t *testing.T) {
 		t.Parallel()
 		path := writeCatalog(t, minimalCatalogXML)
 
-		cat, err := catalog.NewLoader().MaxBytes(64<<10).Load(context.Background(), path)
+		cat, err := catalog.NewLoader().MaxBytes(64<<10).Load(t.Context(), path)
 		require.NoError(t, err)
-		got := cat.Resolve(context.Background(), "", "http://example.com/test.dtd")
+		got := cat.Resolve(t.Context(), "", "http://example.com/test.dtd")
 		require.NotEqual(t, "", got, "expected the system entry to resolve")
 	})
 
@@ -55,9 +54,9 @@ func TestLoadMaxBytes(t *testing.T) {
 		t.Parallel()
 		path := writeCatalog(t, minimalCatalogXML)
 
-		cat, err := catalog.Load(context.Background(), path)
+		cat, err := catalog.Load(t.Context(), path)
 		require.NoError(t, err)
-		got := cat.Resolve(context.Background(), "", "http://example.com/test.dtd")
+		got := cat.Resolve(t.Context(), "", "http://example.com/test.dtd")
 		require.NotEqual(t, "", got)
 	})
 
@@ -67,9 +66,9 @@ func TestLoadMaxBytes(t *testing.T) {
 		info, err := os.Stat(path)
 		require.NoError(t, err)
 
-		cat, err := catalog.NewLoader().MaxBytes(int(info.Size())).Load(context.Background(), path)
+		cat, err := catalog.NewLoader().MaxBytes(int(info.Size())).Load(t.Context(), path)
 		require.NoError(t, err)
-		got := cat.Resolve(context.Background(), "", "http://example.com/test.dtd")
+		got := cat.Resolve(t.Context(), "", "http://example.com/test.dtd")
 		require.NotEqual(t, "", got)
 	})
 }
