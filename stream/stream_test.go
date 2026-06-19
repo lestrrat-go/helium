@@ -638,6 +638,97 @@ func TestCDATAInvalidState(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestCDATAWriteStringEscapesTerminator(t *testing.T) {
+	t.Parallel()
+	t.Run("single write", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.StartCDATA())
+		require.NoError(t, w.WriteString("]]>"))
+		require.NoError(t, w.EndCDATA())
+		require.NoError(t, w.EndElement())
+		out := buf.String()
+		require.Equal(t, `<root><![CDATA[]]]]><![CDATA[>]]></root>`, out)
+		requireNoRawCDATATerminator(t, out)
+	})
+	t.Run("split across writes", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.StartCDATA())
+		require.NoError(t, w.WriteString("foo]]"))
+		require.NoError(t, w.WriteString(">bar"))
+		require.NoError(t, w.EndCDATA())
+		require.NoError(t, w.EndElement())
+		out := buf.String()
+		require.Equal(t, `<root><![CDATA[foo]]]]><![CDATA[>bar]]></root>`, out)
+		requireNoRawCDATATerminator(t, out)
+	})
+	t.Run("terminator straddling call boundary emits no empty write", func(t *testing.T) {
+		t.Parallel()
+		// "]]>" split as "]]" then ">" forces the split point to land at
+		// the very start of the second WriteString. The Writer must not
+		// flush an empty string before the CDATA split marker, which would
+		// trip a side-effecting io.StringWriter implementation.
+		sw := &noEmptyStringWriter{}
+		w := stream.NewWriter(sw)
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.StartCDATA())
+		require.NoError(t, w.WriteString("]]"))
+		require.NoError(t, w.WriteString(">"))
+		require.NoError(t, w.EndCDATA())
+		require.NoError(t, w.EndElement())
+		require.NoError(t, w.Error())
+		require.Empty(t, sw.empties, "Writer emitted an empty WriteString")
+		out := sw.buf.String()
+		require.Equal(t, `<root><![CDATA[]]]]><![CDATA[>]]></root>`, out)
+		requireNoRawCDATATerminator(t, out)
+	})
+}
+
+// noEmptyStringWriter is an io.StringWriter that records any empty WriteString
+// call so tests can assert the Writer never emits an avoidable empty write.
+type noEmptyStringWriter struct {
+	buf     bytes.Buffer
+	empties int
+}
+
+func (w *noEmptyStringWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		w.empties++
+	}
+	return w.buf.Write(p)
+}
+
+func (w *noEmptyStringWriter) WriteString(s string) (int, error) {
+	if s == "" {
+		w.empties++
+	}
+	return w.buf.WriteString(s)
+}
+
+// requireNoRawCDATATerminator scans the emitted XML and asserts that no CDATA
+// section contains a raw "]]>" before its own closing delimiter, which would
+// make the output malformed.
+func requireNoRawCDATATerminator(t *testing.T, s string) {
+	t.Helper()
+	const open = "<![CDATA["
+	for {
+		i := strings.Index(s, open)
+		if i < 0 {
+			break
+		}
+		body := s[i+len(open):]
+		end := strings.Index(body, "]]>")
+		require.GreaterOrEqual(t, end, 0, "unterminated CDATA section in %q", s)
+		require.NotContains(t, body[:end], "]]>", "raw ]]> inside CDATA section in %q", s)
+		s = body[end+3:]
+	}
+}
+
 func TestWriteRaw(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
