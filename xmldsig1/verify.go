@@ -22,7 +22,7 @@ func isNilKeySource(ks KeySource) bool {
 	}
 	v := reflect.ValueOf(ks)
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Map, reflect.Chan, reflect.Func, reflect.Slice, reflect.Interface:
+	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.Func, reflect.Slice, reflect.Interface:
 		return v.IsNil()
 	default:
 		return false
