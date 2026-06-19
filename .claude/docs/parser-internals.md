@@ -209,7 +209,7 @@ Parser runs in a background goroutine reading from the stream via `ParseReader`.
 
 **HTML PushParser** (`html/html.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
-A background goroutine reads all pushed data via `ParseReader` (which calls `io.ReadAll` internally), then parses in one shot. The HTML parser requires a complete `[]byte` buffer (it uses direct byte-slice indexing), so it cannot stream incrementally like the XML parser. The `push` package keeps both APIs symmetric.
+A background goroutine reads from the stream via `ParseReader` (`html/html.go`), which does not buffer the whole input up front. `ParseReader` builds a reader from `newParserFromReader`, whose encoding chain (`wrapReaderForHTML` in `html/encoding_reader.go`) first does a bounded charset prescan: `io.ReadFull` reads up to 1024 bytes into a `head` buffer, then the full reader is reconstructed with `io.MultiReader(bytes.NewReader(head), r)` so the sniffed bytes are not lost. Based on the head it wraps the reconstructed reader with newline normalization plus either a Latin-1→UTF-8 converter or a UTF-8 sanitizer, and the parser then consumes data through its streaming cursor. Because `push.stream.Read` returns whatever bytes are currently buffered (rather than waiting for a full read or EOF), pushed chunks flow through the prescan and cursor incrementally rather than being collected and parsed in one shot. The `push` package keeps both APIs symmetric.
 
 ## Character Buffering
 
