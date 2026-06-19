@@ -330,7 +330,7 @@ func main() {
 					relPath := filepath.Join(tsDir, ss.File)
 					assetFiles[relPath] = struct{}{}
 					absPath := filepath.Join(sourceDir, relPath)
-					for _, dep := range collectTransitiveDeps(absPath) {
+					for _, dep := range collectTransitiveDeps(sourceDir, absPath) {
 						relDep, err := filepath.Rel(sourceDir, dep)
 						if err == nil {
 							assetFiles[relDep] = struct{}{}
@@ -344,7 +344,7 @@ func main() {
 					relPath := filepath.Join(tsDir, pkg.File)
 					assetFiles[relPath] = struct{}{}
 					absPath := filepath.Join(sourceDir, relPath)
-					for _, dep := range collectTransitiveDeps(absPath) {
+					for _, dep := range collectTransitiveDeps(sourceDir, absPath) {
 						relDep, err := filepath.Rel(sourceDir, dep)
 						if err == nil {
 							assetFiles[relDep] = struct{}{}
@@ -436,7 +436,7 @@ func main() {
 				}
 				assetFiles[relPath] = struct{}{}
 				absPath := filepath.Join(sourceDir, relPath)
-				for _, dep := range collectTransitiveDeps(absPath) {
+				for _, dep := range collectTransitiveDeps(sourceDir, absPath) {
 					relDep, err := filepath.Rel(sourceDir, dep)
 					if err == nil {
 						assetFiles[relDep] = struct{}{}
@@ -500,7 +500,7 @@ func main() {
 							})
 							assetFiles[relPath] = struct{}{}
 							absPath := filepath.Join(sourceDir, relPath)
-							for _, dep := range collectTransitiveDeps(absPath) {
+							for _, dep := range collectTransitiveDeps(sourceDir, absPath) {
 								relDep, err := filepath.Rel(sourceDir, dep)
 								if err == nil {
 									assetFiles[relDep] = struct{}{}
@@ -673,7 +673,7 @@ func main() {
 				assetFiles[gt.StylesheetPath] = struct{}{}
 				// Scan transitive xsl:import/xsl:include deps
 				absPath := filepath.Join(sourceDir, gt.StylesheetPath)
-				for _, dep := range collectTransitiveDeps(absPath) {
+				for _, dep := range collectTransitiveDeps(sourceDir, absPath) {
 					relDep, err := filepath.Rel(sourceDir, dep)
 					if err == nil {
 						assetFiles[relDep] = struct{}{}
@@ -683,7 +683,7 @@ func main() {
 			for _, ss := range gt.SecondaryStylesheets {
 				assetFiles[ss] = struct{}{}
 				absPath := filepath.Join(sourceDir, ss)
-				for _, dep := range collectTransitiveDeps(absPath) {
+				for _, dep := range collectTransitiveDeps(sourceDir, absPath) {
 					relDep, err := filepath.Rel(sourceDir, dep)
 					if err == nil {
 						assetFiles[relDep] = struct{}{}
@@ -1054,14 +1054,37 @@ func resolveQNameWithAttrs(name string, attrs []xml.Attr) string {
 // Stylesheet dependency scanning
 // ──────────────────────────────────────────────────────────────────────
 
-func collectTransitiveDeps(xslPath string) []string {
+func collectTransitiveDeps(sourceDir, xslPath string) []string {
 	visited := make(map[string]struct{})
 	var result []string
-	collectDepsRecursive(xslPath, visited, &result)
+	collectDepsRecursive(sourceDir, xslPath, visited, &result)
 	return result
 }
 
-func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[]string) {
+// resolveDep resolves a discovered dependency reference (relative to dir) and
+// verifies it stays within the containment root. It returns the cleaned
+// absolute path, or ok=false (with a logged warning) when the reference is
+// absolute or escapes the root.
+func resolveDep(root, dir, ref string) (string, bool) {
+	if filepath.IsAbs(ref) {
+		log.Printf("xslt3gen: skipping absolute dependency %q", ref)
+		return "", false
+	}
+	depAbs := filepath.Join(dir, ref)
+	rel, err := filepath.Rel(root, depAbs)
+	if err != nil {
+		log.Printf("xslt3gen: skipping dependency %q: %v", ref, err)
+		return "", false
+	}
+	contained, err := containedPath(root, rel)
+	if err != nil {
+		log.Printf("xslt3gen: skipping dependency %q: %v", ref, err)
+		return "", false
+	}
+	return contained, true
+}
+
+func collectDepsRecursive(sourceDir, xslPath string, visited map[string]struct{}, result *[]string) {
 	absPath, err := filepath.Abs(xslPath)
 	if err != nil {
 		return
@@ -1097,9 +1120,12 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		if isXSLT && (se.Name.Local == "import" || se.Name.Local == "include") {
 			for _, attr := range se.Attr {
 				if attr.Name.Local == "href" {
-					depPath := filepath.Join(dir, attr.Value)
+					depPath, ok := resolveDep(sourceDir, dir, attr.Value)
+					if !ok {
+						continue
+					}
 					*result = append(*result, depPath)
-					collectDepsRecursive(depPath, visited, result)
+					collectDepsRecursive(sourceDir, depPath, visited, result)
 				}
 			}
 			continue
@@ -1108,9 +1134,12 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		if isXSLT && se.Name.Local == "import-schema" {
 			for _, attr := range se.Attr {
 				if attr.Name.Local == "schema-location" && attr.Value != "" {
-					depPath := filepath.Join(dir, attr.Value)
+					depPath, ok := resolveDep(sourceDir, dir, attr.Value)
+					if !ok {
+						continue
+					}
 					*result = append(*result, depPath)
-					collectSchemaDeps(depPath, visited, result)
+					collectSchemaDeps(sourceDir, depPath, visited, result)
 				}
 			}
 			continue
@@ -1119,9 +1148,12 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		if isXSD && (se.Name.Local == "include" || se.Name.Local == "import") {
 			for _, attr := range se.Attr {
 				if attr.Name.Local == "schemaLocation" && attr.Value != "" {
-					depPath := filepath.Join(dir, attr.Value)
+					depPath, ok := resolveDep(sourceDir, dir, attr.Value)
+					if !ok {
+						continue
+					}
 					*result = append(*result, depPath)
-					collectSchemaDeps(depPath, visited, result)
+					collectSchemaDeps(sourceDir, depPath, visited, result)
 				}
 			}
 			continue
@@ -1130,7 +1162,10 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		if isXSLT && se.Name.Local == "source-document" {
 			for _, attr := range se.Attr {
 				if attr.Name.Local == "href" && attr.Value != "" && !strings.Contains(attr.Value, "{") {
-					depPath := filepath.Join(dir, normalizeAssetPath(attr.Value))
+					depPath, ok := resolveDep(sourceDir, dir, normalizeAssetPath(attr.Value))
+					if !ok {
+						continue
+					}
 					*result = append(*result, depPath)
 				}
 			}
@@ -1144,7 +1179,7 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 
 // collectSchemaDeps scans an XSD file for xs:include/xs:import with
 // schemaLocation attributes and collects them as transitive dependencies.
-func collectSchemaDeps(xsdPath string, visited map[string]struct{}, result *[]string) {
+func collectSchemaDeps(sourceDir, xsdPath string, visited map[string]struct{}, result *[]string) {
 	absPath, err := filepath.Abs(xsdPath)
 	if err != nil {
 		return
@@ -1178,9 +1213,12 @@ func collectSchemaDeps(xsdPath string, visited map[string]struct{}, result *[]st
 		}
 		for _, attr := range se.Attr {
 			if attr.Name.Local == "schemaLocation" && attr.Value != "" {
-				depPath := filepath.Join(dir, attr.Value)
+				depPath, ok := resolveDep(sourceDir, dir, attr.Value)
+				if !ok {
+					continue
+				}
 				*result = append(*result, depPath)
-				collectSchemaDeps(depPath, visited, result)
+				collectSchemaDeps(sourceDir, depPath, visited, result)
 			}
 		}
 	}
