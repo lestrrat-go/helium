@@ -27,6 +27,10 @@ type validateConfig struct {
 // to the configured [helium.ErrorHandler].
 var ErrValidationFailed = errors.New("schematron: validation failed")
 
+// ErrNoSchema is returned by [Validator.Validate] when the Validator has no
+// compiled schema (for example, NewValidator(nil) or a zero-value Validator).
+var ErrNoSchema = errors.New("schematron: no schema")
+
 // Compiler compiles Schematron documents into Schema values.
 // It uses clone-on-write semantics: each builder method returns
 // a new Compiler sharing the underlying config until mutation.
@@ -177,6 +181,10 @@ func (v Validator) closeHandler() {
 // Individual validation errors are delivered to the configured [helium.ErrorHandler].
 // (libxml2: xmlSchematronValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
+	if v.schema == nil {
+		return ErrNoSchema
+	}
+
 	cfg := v.cfg
 	if cfg == nil {
 		cfg = &validateConfig{}
