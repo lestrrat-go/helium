@@ -55,6 +55,17 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 
 	// nothing left? eek
 	if bcur.Done() {
+		// An apparently empty document may instead be a cancelled read: the
+		// push parser's stream returns the context error from its blocking
+		// wait, which the byte cursor records and Done() then masks. Surface
+		// cancellation (and any other sticky read error) instead of the
+		// misleading "empty document".
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := bcur.Err(); err != nil {
+			return pctx.error(ctx, err)
+		}
 		return pctx.error(ctx, errors.New("empty document"))
 	}
 
@@ -189,6 +200,15 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	pctx.skipBlanks(ctx)
 
 	if cur.Peek() != '<' {
+		// A cancelled or failed read can leave the cursor at an apparent end
+		// of input; report the underlying cause rather than a misleading
+		// "start tag expected".
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := pctx.cursorDecodeErr(); err != nil {
+			return pctx.error(ctx, err)
+		}
 		return pctx.error(ctx, ErrEmptyDocument)
 	}
 

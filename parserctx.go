@@ -387,11 +387,14 @@ func (ctx *parserCtx) getCursor() strcursor.Cursor {
 // EOF via Done(), so callers must consult this explicitly to reject malformed
 // encoded input.
 func (ctx *parserCtx) cursorDecodeErr() error {
-	u8, ok := ctx.getCursor().(*strcursor.UTF8Cursor)
-	if !ok {
+	switch cur := ctx.getCursor().(type) {
+	case *strcursor.UTF8Cursor:
+		return cur.Err()
+	case *strcursor.ByteCursor:
+		return cur.Err()
+	default:
 		return nil
 	}
-	return u8.Err()
 }
 
 func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for type generality
