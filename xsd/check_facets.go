@@ -727,10 +727,41 @@ func (c *compiler) checkFacetMutualExclusion(ctx context.Context, fs *FacetSet, 
 }
 
 // checkFacetSameTypeConsistency checks consistency of facets within the same type.
+//
+// Each consistency comparison (length, digit, range) is gated to the facet
+// family's APPLICABLE type/variety. When a facet family is inapplicable to the
+// type, checkFacetApplicability already emits the canonical "facet not allowed"
+// error; running the consistency comparison there too would add a SPURIOUS extra
+// error (e.g. minLength>maxLength on an xs:int, or fractionDigits>totalDigits on
+// an xs:double) that xmllint never reports. So each block runs ONLY where its
+// facet family is applicable, mirroring the applicability gate.
 func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
-	if fs.MinLength != nil && fs.MaxLength != nil && *fs.MinLength > *fs.MaxLength {
+	variety := resolveVariety(td)
+	builtinLocal := builtinBaseLocal(td)
+	_, lengthApplicable := lengthApplicableTypes[builtinLocal]
+	_, decimalFamily := decimalFamilyTypes[builtinLocal]
+
+	// Length consistency (minLength > maxLength). Length facets are applicable to
+	// a list variety (measured as item count) and to atomic primitives in the
+	// length-applicable set (string-derived, the binary types, anyURI, QName,
+	// NOTATION). On any other type the length facets are inapplicable and already
+	// rejected as "not allowed", so this check must not run there.
+	lengthFacetsApplicable := variety == TypeVarietyList || (variety == TypeVarietyAtomic && lengthApplicable)
+	if lengthFacetsApplicable && fs.MinLength != nil && fs.MaxLength != nil && *fs.MinLength > *fs.MaxLength {
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for the value of 'minLength' to be greater than the value of 'maxLength'."), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+
+	// Digit consistency (fractionDigits > totalDigits). The digit facets are
+	// applicable only to the xs:decimal-family atomic types. On float/double or any
+	// non-decimal primitive they are inapplicable and already rejected as "not
+	// allowed", so this check must not run there (an xs:double carrying both
+	// totalDigits and fractionDigits must report ONLY the two applicability errors).
+	digitFacetsApplicable := variety == TypeVarietyAtomic && decimalFamily
+	if digitFacetsApplicable && fs.FractionDigits != nil && fs.TotalDigits != nil && *fs.FractionDigits > *fs.TotalDigits {
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			"It is an error for the value of 'fractionDigits' to be greater than the value of 'totalDigits'."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
@@ -766,9 +797,8 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	// 0<NaN (accepted). value.CompareFloatFacetBound encodes that ordering and
 	// still returns ok=false for an invalid float bound, leaving the invalid-bound
 	// error to the dedicated bound-value check (no spurious extra ordering error).
-	builtinLocal := builtinBaseLocal(td)
 	_, orderedAtomic := orderedRangeFacetTypes[builtinLocal]
-	if resolveVariety(td) != TypeVarietyAtomic || !orderedAtomic {
+	if variety != TypeVarietyAtomic || !orderedAtomic {
 		return
 	}
 	cmp := func(a, b string) (int, bool) {
@@ -794,11 +824,6 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 				"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
-	}
-	if fs.FractionDigits != nil && fs.TotalDigits != nil && *fs.FractionDigits > *fs.TotalDigits {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			"It is an error for the value of 'fractionDigits' to be greater than the value of 'totalDigits'."), helium.ErrorLevelFatal))
-		c.errorCount++
 	}
 	if fs.MinExclusive != nil && fs.MaxInclusive != nil {
 		if v, ok := cmp(*fs.MinExclusive, *fs.MaxInclusive); ok && v >= 0 {
@@ -853,114 +878,148 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 		c.errorCount++
 	}
 
-	// Inclusive/exclusive boundary facets vs base.
+	// Inclusive/exclusive boundary facets vs base. These compare a derived bound
+	// against a base bound in the type's ORDERED VALUE SPACE — exactly as the
+	// same-type consistency check does — so a non-decimal ordered atomic
+	// (date/time/duration, float, double) is compared correctly instead of being
+	// treated as incomparable by compareDecimal (which would FALSE-REJECT a valid
+	// xs:date restriction such as base minInclusive=2021-01-01, derived
+	// maxInclusive=2022-01-01).
+	//
+	// rangeCmp returns (cmp, true) when the two bounds are comparable in this
+	// type's value space, and (0, false) when they are not. For a resolved ORDERED
+	// builtin it uses the value-space comparator (float/double NaN handled via
+	// value.CompareFloatFacetBound) and SKIPS the ordering check on an indeterminate
+	// result (e.g. an invalid bound, already reported by the bound-value check) —
+	// never falling back to compareDecimal for a resolved ordered type. compareDecimal
+	// is used ONLY for the unresolved/no-builtin case, preserving prior behavior for
+	// a base chain whose primitive has not resolved.
+	builtinLocal := builtinBaseLocal(td)
+	_, orderedAtomic := orderedRangeFacetTypes[builtinLocal]
+	rangeCmp := func(a, b string) (int, bool) {
+		if orderedAtomic {
+			if v, ok := value.CompareFloatFacetBound(a, b, builtinLocal); ok {
+				return v, true
+			}
+			return compareForRangeFacet(a, b, builtinLocal)
+		}
+		if builtinLocal != "" {
+			// A resolved but NON-ordered builtin (string/boolean/binary/anyURI/QName/
+			// NOTATION). A range facet is inapplicable there and already rejected as
+			// "not allowed"; do not compare.
+			return 0, false
+		}
+		// Unresolved primitive: fall back to the legacy decimal comparison.
+		return compareDecimal(a, b), true
+	}
+
 	if fs.MaxInclusive != nil && base.MaxInclusive != nil {
-		if compareDecimal(*fs.MaxInclusive, *base.MaxInclusive) > 0 {
+		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MaxInclusive); ok && v > 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxInclusive != nil && base.MaxExclusive != nil {
-		if compareDecimal(*fs.MaxInclusive, *base.MaxExclusive) >= 0 {
+		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MaxExclusive); ok && v >= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxInclusive != nil && base.MinInclusive != nil {
-		if compareDecimal(*fs.MaxInclusive, *base.MinInclusive) < 0 {
+		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MinInclusive); ok && v < 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxInclusive != nil && base.MinExclusive != nil {
-		if compareDecimal(*fs.MaxInclusive, *base.MinExclusive) <= 0 {
+		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MinExclusive); ok && v <= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxExclusive != nil && base.MaxExclusive != nil {
-		if compareDecimal(*fs.MaxExclusive, *base.MaxExclusive) > 0 {
+		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MaxExclusive); ok && v > 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxExclusive != nil && base.MaxInclusive != nil {
-		if compareDecimal(*fs.MaxExclusive, *base.MaxInclusive) > 0 {
+		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MaxInclusive); ok && v > 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxExclusive != nil && base.MinInclusive != nil {
-		if compareDecimal(*fs.MaxExclusive, *base.MinInclusive) <= 0 {
+		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MinInclusive); ok && v <= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxExclusive != nil && base.MinExclusive != nil {
-		if compareDecimal(*fs.MaxExclusive, *base.MinExclusive) <= 0 {
+		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MinExclusive); ok && v <= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && base.MinInclusive != nil {
-		if compareDecimal(*fs.MinInclusive, *base.MinInclusive) < 0 {
+		if v, ok := rangeCmp(*fs.MinInclusive, *base.MinInclusive); ok && v < 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && base.MinExclusive != nil {
-		if compareDecimal(*fs.MinInclusive, *base.MinExclusive) <= 0 {
+		if v, ok := rangeCmp(*fs.MinInclusive, *base.MinExclusive); ok && v <= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && base.MaxInclusive != nil {
-		if compareDecimal(*fs.MinInclusive, *base.MaxInclusive) > 0 {
+		if v, ok := rangeCmp(*fs.MinInclusive, *base.MaxInclusive); ok && v > 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && base.MaxExclusive != nil {
-		if compareDecimal(*fs.MinInclusive, *base.MaxExclusive) >= 0 {
+		if v, ok := rangeCmp(*fs.MinInclusive, *base.MaxExclusive); ok && v >= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && base.MinExclusive != nil {
-		if compareDecimal(*fs.MinExclusive, *base.MinExclusive) < 0 {
+		if v, ok := rangeCmp(*fs.MinExclusive, *base.MinExclusive); ok && v < 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && base.MinInclusive != nil {
-		if compareDecimal(*fs.MinExclusive, *base.MinInclusive) < 0 {
+		if v, ok := rangeCmp(*fs.MinExclusive, *base.MinInclusive); ok && v < 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && base.MaxInclusive != nil {
-		if compareDecimal(*fs.MinExclusive, *base.MaxInclusive) > 0 {
+		if v, ok := rangeCmp(*fs.MinExclusive, *base.MaxInclusive); ok && v > 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && base.MaxExclusive != nil {
-		if compareDecimal(*fs.MinExclusive, *base.MaxExclusive) >= 0 {
+		if v, ok := rangeCmp(*fs.MinExclusive, *base.MaxExclusive); ok && v >= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minExclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
