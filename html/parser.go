@@ -670,10 +670,6 @@ func (p *parser) parseComment(ctx context.Context) {
 	// it before its terminator. Also abort promptly on cancellation rather than
 	// scanning the whole (possibly unterminated) comment.
 	for ctx.Err() == nil {
-		if n >= limit {
-			p.fatalErr = fmt.Errorf("comment exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
-			return
-		}
 		b := p.cur.PeekAt(n)
 		if b == 0 {
 			break
@@ -690,6 +686,14 @@ func (p *parser) parseComment(ctx context.Context) {
 			data := p.cur.PeekString(n)
 			_ = p.cur.Advance(n + 4) // skip data + '--!>'
 			p.handleSAXErr(p.sax.Comment([]byte(data)))
+			return
+		}
+		// No terminator at offset n: this byte is content. Accepting it would
+		// make the content length n+1; fail only if that strictly exceeds the
+		// limit. Content of exactly `limit` bytes followed by its terminator is
+		// fine (the terminator checks above already ran for offset == limit).
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("comment exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
 			return
 		}
 		n++
@@ -712,13 +716,16 @@ func (p *parser) parseBogusComment(ctx context.Context) {
 	// parse if it exceeds the limit before its '>' terminator rather than
 	// emitting a truncated comment. Abort promptly on cancellation too.
 	for ctx.Err() == nil {
-		if n >= limit {
-			p.fatalErr = fmt.Errorf("bogus comment exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
-			return
-		}
 		b := p.cur.PeekAt(n)
 		if b == 0 || b == '>' {
 			break
+		}
+		// No terminator at offset n: this byte is content. Accepting it would
+		// make the content length n+1; fail only if that strictly exceeds the
+		// limit so that exactly `limit` content bytes before '>' is accepted.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("bogus comment exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return
 		}
 		n++
 	}
@@ -743,10 +750,6 @@ func (p *parser) parsePI(ctx context.Context) {
 	// parse if it exceeds the limit before its '>' terminator rather than
 	// emitting a truncated comment. Abort promptly on cancellation too.
 	for ctx.Err() == nil {
-		if n >= limit {
-			p.fatalErr = fmt.Errorf("processing instruction exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
-			return
-		}
 		b := p.cur.PeekAt(n)
 		if b == 0 {
 			break
@@ -755,6 +758,13 @@ func (p *parser) parsePI(ctx context.Context) {
 			data := p.cur.PeekString(n)
 			_ = p.cur.Advance(n + 1) // skip data + '>'
 			p.handleSAXErr(p.sax.Comment([]byte(data)))
+			return
+		}
+		// No terminator at offset n: this byte is content. Accepting it would
+		// make the content length n+1; fail only if that strictly exceeds the
+		// limit so that exactly `limit` content bytes before '>' is accepted.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("processing instruction exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
 			return
 		}
 		n++

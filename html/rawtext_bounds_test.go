@@ -172,6 +172,53 @@ func TestCommentLikeUnderCapParses(t *testing.T) {
 	}
 }
 
+// TestCommentLikeExactCapParses verifies the boundary contract: a comment /
+// bogus comment / PI whose content is EXACTLY MaxContentSize bytes parses
+// successfully as a single Comment event, while content of limit+1 bytes fails
+// with ErrContentSizeExceeded. This pins the off-by-one fix where exact-limit
+// content was previously rejected.
+func TestCommentLikeExactCapParses(t *testing.T) {
+	const limit = 4
+
+	// PI content includes the leading '?' (libxml2 emits <?...> as a comment
+	// without the surrounding '<' and '>'), so a PI with N body chars yields
+	// N+1 content bytes. Account for that when building exact-limit input.
+	cases := []struct {
+		name    string
+		atLimit string // content length == limit
+		want    string
+		over    string // content length == limit+1
+	}{
+		{"comment", "<!--abcd-->", "abcd", "<!--abcde-->"},
+		{"bogus_comment", "<!abcd>", "abcd", "<!abcde>"},
+		{"pi", "<?abc>", "?abc", "<?abcd>"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var comments [][]byte
+			sax := &html.SAXCallbacks{}
+			sax.SetOnComment(html.CommentFunc(func(value []byte) error {
+				comments = append(comments, append([]byte(nil), value...))
+				return nil
+			}))
+
+			p := html.NewParser().MaxContentSize(limit)
+			err := p.ParseWithSAX(t.Context(), []byte(tc.atLimit), sax)
+			require.NoError(t, err,
+				"exact-limit %s content must parse without error", tc.name)
+			require.Len(t, comments, 1,
+				"exact-limit %s must produce a single Comment event", tc.name)
+			require.Equal(t, tc.want, string(comments[0]))
+
+			_, err = html.NewParser().MaxContentSize(limit).
+				Parse(t.Context(), []byte(tc.over))
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"limit+1 %s content must fail with ErrContentSizeExceeded", tc.name)
+		})
+	}
+}
+
 // TestCommentChunkingCorruptionRepro is the concrete regression repro from the
 // review: with MaxContentSize(4), `<!--aaaaaaaaaa--><p>x</p>` previously parsed
 // as a truncated `<!--aaaa-->` followed by stray text `aaaaaa--&gt;`, corrupting
