@@ -206,6 +206,11 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 
 	minOcc := getAttr(elem, attrMinOccurs)
 	maxOcc := getAttr(elem, attrMaxOccurs)
+	// Detect presence with hasAttr so an explicitly empty minOccurs="" /
+	// maxOccurs="" is validated (and rejected as an invalid lexical) instead of
+	// being treated as absent, matching xmllint.
+	minPresent := hasAttr(elem, attrMinOccurs)
+	maxPresent := hasAttr(elem, attrMaxOccurs)
 
 	if ref != "" {
 		// Matches libxml2 ordering for ref elements (src-element 2.2):
@@ -218,7 +223,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// 0 is a legal prohibited particle when the effective minOccurs is also 0;
 		// libxml2 only rejects maxOccurs<1 when the effective minOccurs is >= 1
 		// (default minOccurs is 1), reporting the ">= 1" message on maxOccurs.
-		if maxOcc != "" && maxOcc != attrValUnbounded {
+		if maxPresent && maxOcc != attrValUnbounded {
 			maxVal, ok := parseNonNegativeOccurs(maxOcc, true)
 			if !ok {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
@@ -232,7 +237,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		}
 
 		// minOccurs must be a non-negative integer.
-		if minOcc != "" {
+		if minPresent {
 			if _, ok := parseNonNegativeOccurs(minOcc, false); !ok {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
 					"'"+minOcc+"' is not a valid value of the atomic type 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
@@ -243,7 +248,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// minOccurs > maxOccurs check. Skip it when maxOccurs already failed the
 		// >= 1 rule (maxVal < 1 with an effective minOccurs >= 1); libxml2 reports
 		// only the maxOccurs error there.
-		if minOcc != "" && maxOcc != "" && maxOcc != attrValUnbounded {
+		if minPresent && maxPresent && maxOcc != attrValUnbounded {
 			minVal, minOK := parseNonNegativeOccurs(minOcc, false)
 			maxVal, maxOK := parseNonNegativeOccurs(maxOcc, true)
 			if minOK && maxOK && maxVal != Unbounded && !(maxVal < 1 && minVal >= 1) && minVal > maxVal {
@@ -296,7 +301,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// 0 is a legal prohibited particle when the effective minOccurs is also 0;
 		// libxml2 only rejects maxOccurs<1 when the effective minOccurs is >= 1
 		// (default minOccurs is 1), reporting the ">= 1" message on maxOccurs.
-		if maxOcc != "" && maxOcc != attrValUnbounded {
+		if maxPresent && maxOcc != attrValUnbounded {
 			maxVal, ok := parseNonNegativeOccurs(maxOcc, true)
 			if !ok {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
@@ -310,7 +315,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		}
 
 		// minOccurs must be a non-negative integer.
-		if minOcc != "" {
+		if minPresent {
 			if _, ok := parseNonNegativeOccurs(minOcc, false); !ok {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
 					"'"+minOcc+"' is not a valid value of the atomic type 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
@@ -321,7 +326,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		// minOccurs > maxOccurs check. Skip it when maxOccurs already failed the
 		// >= 1 rule (maxVal < 1 with an effective minOccurs >= 1); libxml2 reports
 		// only the maxOccurs error there.
-		if minOcc != "" && maxOcc != "" && maxOcc != attrValUnbounded {
+		if minPresent && maxPresent && maxOcc != attrValUnbounded {
 			minVal, minOK := parseNonNegativeOccurs(minOcc, false)
 			maxVal, maxOK := parseNonNegativeOccurs(maxOcc, true)
 			if minOK && maxOK && maxVal != Unbounded && !(maxVal < 1 && minVal >= 1) && minVal > maxVal {

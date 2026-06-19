@@ -32,6 +32,7 @@ func TestOccursValidation(t *testing.T) {
 		wantNonNegInt = "is not a valid value of the atomic type 'xs:nonNegativeInteger'"
 		wantAllNNI    = "is not a valid value of the union type 'xs:allNNI'"
 		wantMinGtMax  = "The value must not be greater than the value of 'maxOccurs'"
+		wantMaxGteOne = "The value must be greater than or equal to 1"
 	)
 
 	t.Run("rejects", func(t *testing.T) {
@@ -154,6 +155,184 @@ func TestOccursValidation(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		require.Contains(t, compileErrors(t, schemaXML), wantNonNegInt)
+	})
+
+	// An explicitly empty occurs attribute (minOccurs="" / maxOccurs="") is an
+	// invalid lexical, not an absent attribute. Before the fix presence was
+	// detected with value!="" so empty strings were silently treated as absent
+	// and defaulted; xmllint rejects them. These run across every particle kind.
+	t.Run("rejects empty occurs", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name    string
+			schema  string
+			wantMsg string
+		}{
+			{
+				name:    "element empty minOccurs",
+				wantMsg: wantNonNegInt,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:element name="child" type="xs:string" minOccurs=""/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:    "element empty maxOccurs",
+				wantMsg: wantAllNNI,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:element name="child" type="xs:string" maxOccurs=""/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:    "sequence empty minOccurs",
+				wantMsg: wantNonNegInt,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence minOccurs=""><xs:element name="child" type="xs:string"/></xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:    "sequence empty maxOccurs",
+				wantMsg: wantAllNNI,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence maxOccurs=""><xs:element name="child" type="xs:string"/></xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:    "any empty maxOccurs",
+				wantMsg: wantAllNNI,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:any maxOccurs=""/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:    "group ref empty minOccurs",
+				wantMsg: wantNonNegInt,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence><xs:element name="child" type="xs:string"/></xs:sequence></xs:group>
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:group ref="g" minOccurs=""/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				require.Contains(t, compileErrors(t, tc.schema), tc.wantMsg)
+			})
+		}
+	})
+
+	// maxOccurs=0 with an absent minOccurs (effective default minOccurs=1) is a
+	// content model that requires the particle yet forbids it: xmllint reports the
+	// "maxOccurs >= 1" diagnostic. Before the fix non-element particles only
+	// enforced min<=max when minOccurs was explicitly present, so these compiled.
+	t.Run("rejects default-min maxOccurs zero", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name   string
+			schema string
+		}{
+			{
+				name: "element absent min",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:element name="child" type="xs:string" maxOccurs="0"/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "element explicit min one",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:element name="child" type="xs:string" minOccurs="1" maxOccurs="0"/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "sequence absent min",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence maxOccurs="0"><xs:element name="child" type="xs:string"/></xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "any absent min",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:any maxOccurs="0"/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "group ref absent min",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence><xs:element name="child" type="xs:string"/></xs:sequence></xs:group>
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:group ref="g" maxOccurs="0"/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				errs := compileErrors(t, tc.schema)
+				require.Contains(t, errs, wantMaxGteOne)
+				// xmllint reports only the maxOccurs error here, not a duplicate
+				// min>max diagnostic.
+				require.NotContains(t, errs, wantMinGtMax)
+			})
+		}
+	})
+
+	// minOccurs=0 maxOccurs=0 is a legal prohibited particle on every particle
+	// kind (not just xs:element); it must compile cleanly.
+	t.Run("accepts prohibited particle on all kinds", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name   string
+			schema string
+		}{
+			{
+				name: "sequence",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence minOccurs="0" maxOccurs="0"><xs:element name="child" type="xs:string"/></xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "any",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:any minOccurs="0" maxOccurs="0"/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "group ref",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence><xs:element name="child" type="xs:string"/></xs:sequence></xs:group>
+  <xs:element name="root"><xs:complexType><xs:sequence>
+    <xs:group ref="g" minOccurs="0" maxOccurs="0"/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				require.Empty(t, compileErrors(t, tc.schema))
+			})
+		}
 	})
 
 	// Valid occurs forms must still compile cleanly, including unbounded and
