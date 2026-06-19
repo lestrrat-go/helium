@@ -54,6 +54,12 @@ func newStream(ctx context.Context) *stream {
 }
 
 func (s *stream) Read(p []byte) (int, error) {
+	// Per the io.Reader contract a zero-length Read must return (0, nil)
+	// immediately rather than block on the wait loop below.
+	if len(p) == 0 {
+		return 0, nil
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -142,6 +148,14 @@ type result[T any] struct {
 // pushed data to the given [ReaderParser]. The goroutine recovers from
 // panics and delivers the result when [Parser.Close] is called.
 func New[T any](ctx context.Context, p Source[T]) *Parser[T] {
+	// Normalize a nil context so callers such as NewPushParser(nil) do not
+	// panic when newStream dereferences ctx.Err/ctx.Done. There is no parent
+	// to inherit from here (the parent context is nil), so context.Background
+	// is the correct root; contextcheck's "non-inherited new context" warning
+	// does not apply.
+	if ctx == nil {
+		ctx = context.Background() //nolint:contextcheck
+	}
 	s := newStream(ctx)
 	pp := &Parser[T]{
 		s:    s,

@@ -112,6 +112,54 @@ func TestStreamReadContextCancellation(t *testing.T) {
 	}
 }
 
+// TestStreamReadZeroLength verifies that a zero-length Read on an open,
+// empty stream returns (0, nil) promptly instead of blocking, as required
+// by the io.Reader contract.
+func TestStreamReadZeroLength(t *testing.T) {
+	t.Parallel()
+
+	s := newStream(t.Context())
+
+	type readResult struct {
+		n   int
+		err error
+	}
+	resCh := make(chan readResult, 1)
+	go func() {
+		n, err := s.Read(nil)
+		resCh <- readResult{n: n, err: err}
+	}()
+
+	select {
+	case res := <-resCh:
+		require.NoError(t, res.err)
+		require.Equal(t, 0, res.n)
+	case <-time.After(2 * time.Second):
+		t.Fatal("zero-length Read blocked instead of returning promptly")
+	}
+}
+
+// TestNewNilContext verifies that New tolerates a nil context (as passed
+// by NewPushParser(nil)) without panicking.
+func TestNewNilContext(t *testing.T) {
+	t.Parallel()
+
+	require.NotPanics(t, func() {
+		//nolint:staticcheck // intentionally exercising the nil-context path
+		pp := New[struct{}](nil, nopSource{})
+		_, _ = pp.Close()
+	})
+}
+
+// nopSource is a trivial Source that consumes the stream and returns a
+// zero value, used to exercise New without a real parser.
+type nopSource struct{}
+
+func (nopSource) ParseReader(_ context.Context, r io.Reader) (struct{}, error) {
+	_, _ = io.Copy(io.Discard, r)
+	return struct{}{}, nil
+}
+
 // TestStreamReadEOFAfterClose verifies that a Read on an empty, closed
 // stream returns io.EOF.
 func TestStreamReadEOFAfterClose(t *testing.T) {
