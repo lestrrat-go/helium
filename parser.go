@@ -733,6 +733,8 @@ found:
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContent(innerCtx); err != nil {
+		// errParserStopped is a benign stop (helium.StopParser); any other
+		// error, including context cancellation, propagates with a nil result.
 		if !errors.Is(err, errParserStopped) {
 			return nil, err
 		}

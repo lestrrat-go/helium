@@ -149,3 +149,52 @@ func TestParseContextCancelWithRecoverOnError(t *testing.T) {
 		t.Fatal("Parse did not return promptly after context cancellation")
 	}
 }
+
+// malformedRecoverableDoc builds a large document that becomes malformed right
+// after the root start tag: the content is a huge run of plain text with no
+// closing tag. With RecoverOnError the parser fails on the unterminated content
+// and then sits in its skip-to-recover-point loop scanning the long tail. This
+// keeps recovery active long enough for a concurrently-cancelled context to be
+// observed inside the recovery/skip path.
+func malformedRecoverableDoc() []byte {
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0"?><root>`)
+	// A stray '<' with no following name forces a parse error; the long run of
+	// text after it must be skipped during recovery (skipToRecoverPoint), which
+	// is where the cancellation needs to be observed.
+	b.WriteString(`<`)
+	b.WriteString(strings.Repeat("x", 10_000_000))
+	return []byte(b.String())
+}
+
+// TestParseContextCancelDuringRecovery verifies that cancellation observed
+// while the parser is in its recovery / skip-to-recover-point path returns
+// promptly with the context error and a nil document, and never blocks. The
+// input is malformed so recovery is active and RecoverOnError is enabled so the
+// parser would otherwise keep scanning the long tail to the end of input.
+func TestParseContextCancelDuringRecovery(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct {
+		doc *helium.Document
+		err error
+	}, 1)
+	go func() {
+		doc, err := helium.NewParser().RecoverOnError(true).Parse(ctx, malformedRecoverableDoc())
+		done <- struct {
+			doc *helium.Document
+			err error
+		}{doc, err}
+	}()
+
+	// Give the parser a moment to enter the recovery/skip loop, then cancel.
+	time.AfterFunc(20*time.Millisecond, cancel)
+
+	select {
+	case res := <-done:
+		require.ErrorIs(t, res.err, context.Canceled, "Parse must return the context error when cancelled during recovery")
+		require.Nil(t, res.doc, "cancelled parse must not return a partial document")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Parse did not return promptly after cancellation during recovery")
+	}
+}

@@ -288,7 +288,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 			err = pctx.parseReference(ctx)
 		default:
 			if err := pctx.parseCharData(ctx, false); err != nil {
-				if !doRecover || errors.Is(err, errParserStopped) {
+				if !doRecover || isParseAbort(err) {
 					return err
 				}
 				if pctx.recoverErr == nil {
@@ -296,13 +296,15 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 				}
 				pctx.disableSAX = true
 				pctx.wellFormed = false
-				pctx.skipToRecoverPoint()
+				if err := pctx.skipToRecoverPoint(ctx); err != nil {
+					return err
+				}
 			}
 			continue
 		}
 
 		if err != nil {
-			if !doRecover || errors.Is(err, errParserStopped) {
+			if !doRecover || isParseAbort(err) {
 				return pctx.error(ctx, err)
 			}
 			if pctx.recoverErr == nil {
@@ -312,7 +314,9 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 			pctx.wellFormed = false
 
 			prevLine, prevCol := cur.LineNumber(), cur.Column()
-			pctx.skipToRecoverPoint()
+			if err := pctx.skipToRecoverPoint(ctx); err != nil {
+				return err
+			}
 			if !cur.Done() && cur.LineNumber() == prevLine && cur.Column() == prevCol {
 				_ = cur.Advance(1)
 			}
@@ -333,14 +337,25 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 
 // skipToRecoverPoint advances the cursor past unrecoverable content to the
 // next '<' character or EOF, for re-synchronization in parseRecover mode.
-func (ctx *parserCtx) skipToRecoverPoint() {
-	cur := ctx.getCursor()
+// It returns the context error if the context is cancelled so that recovery
+// cannot run (or block on a cursor refill) after cancellation.
+func (pctx *parserCtx) skipToRecoverPoint(ctx context.Context) error {
+	cur := pctx.getCursor()
 	if cur == nil {
-		return
+		return nil
 	}
-	for !cur.Done() {
+	for {
+		// Check the context BEFORE cur.Done(), which may refill the cursor
+		// from an io.Reader and block; this lets a cancelled context abort
+		// recovery rather than spin or block.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if cur.Done() {
+			return nil
+		}
 		if cur.Peek() == '<' {
-			return
+			return nil
 		}
 		_ = cur.Advance(1)
 	}

@@ -525,14 +525,14 @@ func (pctx *parserCtx) namespaceError(ctx context.Context, err error) error {
 }
 
 func (pctx *parserCtx) errorAtLevel(ctx context.Context, err error, level ErrorLevel) error {
-	// errParserStopped is not a real error; pass through unwrapped.
-	if errors.Is(err, errParserStopped) {
-		return errParserStopped
-	}
-	// Context cancellation/deadline is not a genuine parse failure; pass it
-	// through unchanged so callers see the context error and SAX error
-	// handlers are not fired as if the document was malformed.
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	// Parse-abort errors (the stop sentinel, context cancellation, deadline
+	// expiry) are not genuine parse failures: pass them through unchanged so
+	// callers see them directly and SAX error handlers are not fired as if the
+	// document were malformed.
+	if isParseAbort(err) {
+		if errors.Is(err, errParserStopped) {
+			return errParserStopped
+		}
 		return err
 	}
 	// If it's wrapped, just return as is
