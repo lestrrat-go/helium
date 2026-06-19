@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -303,6 +304,7 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 	if parts[0] != "" && !xmlchar.IsValidNCName(parts[0]) {
 		return nil, fmt.Errorf("xpointer: invalid element() id %q (not an NCName)", parts[0])
 	}
+	childIndexes := make([]int, 0, len(parts)-1)
 	for _, part := range parts[1:] {
 		if part == "" {
 			return nil, fmt.Errorf("xpointer: empty child-sequence segment in element() scheme (trailing or doubled %q)", "/")
@@ -310,6 +312,11 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 		if !isChildIndex(part) {
 			return nil, fmt.Errorf("xpointer: invalid child index %q in element() scheme (must match [1-9][0-9]*)", part)
 		}
+		idx, err := childIndexValue(part)
+		if err != nil {
+			return nil, err
+		}
+		childIndexes = append(childIndexes, idx)
 	}
 
 	var cur helium.Node = doc
@@ -323,8 +330,7 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 		cur = elem
 	}
 
-	for _, part := range parts[1:] {
-		childIdx := atoiChildIndex(part) // already validated above
+	for _, childIdx := range childIndexes {
 		cur = nthElementChild(cur, childIdx)
 		if cur == nil {
 			return nil, nil
@@ -356,15 +362,18 @@ func isChildIndex(s string) bool {
 	return true
 }
 
-// atoiChildIndex converts a child-sequence index already validated by
-// isChildIndex into an int. The grammar guarantees only ASCII digits, so the
-// conversion cannot fail.
-func atoiChildIndex(s string) int {
-	n := 0
-	for i := range len(s) {
-		n = n*10 + int(s[i]-'0')
+// childIndexValue converts a child-sequence index already validated by
+// isChildIndex into an int. isChildIndex guarantees the lexical form, but an
+// arbitrarily long digit string can still exceed the platform int range (e.g.
+// "18446744073709551617"). strconv.Atoi reports such a value as a range error,
+// which we surface as a syntax error rather than letting the index wrap around
+// and silently select the wrong node.
+func childIndexValue(s string) (int, error) {
+	idx, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("xpointer: child index %q in element() scheme is out of range", s)
 	}
-	return n
+	return idx, nil
 }
 
 // nthElementChild returns the n-th element child (1-based) of the given node.

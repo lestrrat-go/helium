@@ -338,6 +338,39 @@ func TestElementChildIndexBounds(t *testing.T) {
 	}
 }
 
+func TestElementChildIndexOverflow(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="r"><child>text</child></root>`))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		// 18446744073709551617 == math.MaxUint64+2. Naive base-10 accumulation
+		// into an int wraps this to 1 and would silently select the first child.
+		{"absolute overflow", "element(/18446744073709551617)"},
+		{"overflow then index", "element(/18446744073709551617/1)"},
+		{"index then overflow", "element(/1/18446744073709551617)"},
+		{"overflow from id", "element(r/99999999999999999999)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// An index that exceeds the int range must be reported as a syntax
+			// error, never wrapped to a small in-range value (which would select
+			// the wrong node) or coerced to a silent empty result.
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
+			require.Error(t, err, "expr %q must be rejected as out of range", tt.expr)
+			require.Nil(t, nodes)
+		})
+	}
+}
+
 func TestShorthandAfterSchemeRejected(t *testing.T) {
 	t.Parallel()
 
