@@ -174,6 +174,7 @@ type IDConstraint struct {
 	ReferQName QName             // for keyref: the resolved {ns}local of the referenced key/unique
 	Namespaces map[string]string // prefix → URI from the schema document (for XPath evaluation)
 	Line       int               // source line of the constraint element (for error reporting)
+	Source     string            // source filename of the declaring schema document (for error reporting); paired with Line so a deferred @refer error on an IMPORTED constraint cites the imported file, not the importing compiler's filename
 
 	SelectorExpr *xpath1.Expression   // pre-compiled selector XPath
 	FieldExprs   []*xpath1.Expression // pre-compiled field XPaths (parallel to Fields)

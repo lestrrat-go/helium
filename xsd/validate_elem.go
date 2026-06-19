@@ -239,6 +239,7 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			continue
 		}
 		vc.annotateElement(ctx, child.elem, td)
+		vc.recordElemDecl(child.elem, actualDecl)
 		if td != nil {
 			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
 			if nilErr != nil {
@@ -368,8 +369,10 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 			contentErr = fmt.Errorf("abstract type")
 			continue
 		}
-		// Annotate child element with its type.
+		// Annotate child element with its type and record its (possibly LOCAL)
+		// declaration for pass-2 identity-constraint evaluation.
 		vc.annotateElement(ctx, child.elem, td)
+		vc.recordElemDecl(child.elem, actualDecl)
 		if td != nil {
 			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
 			if nilErr != nil {

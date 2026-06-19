@@ -399,10 +399,18 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 		if idc.referUnbound {
 			continue
 		}
+		// Report against the constraint's declaring file (idc.Source), paired with
+		// idc.Line: an IMPORTED keyref's deferred @refer error must cite the
+		// imported schema (where the line number is meaningful), not this
+		// (top-level) compiler's filename.
+		source := idc.Source
+		if source == "" {
+			source = c.filename
+		}
 		if idc.Refer == "" {
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' has no 'refer' attribute naming a key or unique.", idc.Name)
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(
-				schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
+				schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
 				helium.ErrorLevelFatal))
 			c.errorCount++
 			continue
@@ -412,7 +420,7 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 		}
 		msg := fmt.Sprintf("The keyref identity-constraint '%s' references the unknown key or unique '%s'.", idc.Name, idc.Refer)
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(
-			schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
+			schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
 			helium.ErrorLevelFatal))
 		c.errorCount++
 	}

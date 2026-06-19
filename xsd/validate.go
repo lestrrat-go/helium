@@ -431,6 +431,14 @@ type validationContext struct {
 	// descending the declared content model, so an IDC field whose type is
 	// contributed by xsi:type is canonicalized in the correct value space.
 	actualElemType map[*helium.Element]*TypeDef
+	// actualElemDecl records the resolved *ElementDecl matched for each element
+	// instance during pass-1 content validation, including LOCAL declarations
+	// buried inside content models (which lookupElemDecl, finding only GLOBAL
+	// declarations, cannot recover). Pass-2 identity-constraint evaluation
+	// consults this map BEFORE falling back to lookupElemDecl, so xs:key/
+	// xs:unique/xs:keyref declared on a local element are evaluated rather than
+	// silently skipped.
+	actualElemDecl map[*helium.Element]*ElementDecl
 }
 
 // pendingKeyRef is an evaluated keyref table awaiting resolution against the
@@ -449,6 +457,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		filename:       filename,
 		errorHandler:   handler,
 		actualElemType: make(map[*helium.Element]*TypeDef),
+		actualElemDecl: make(map[*helium.Element]*ElementDecl),
 	}
 }
 
@@ -578,7 +587,15 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		if !ok {
 			return nil
 		}
-		edecl := lookupElemDecl(elem, vc.schema)
+		// Choose the declaration whose identity constraints apply to this element
+		// instance. Prefer the LOCAL declaration matched during pass-1 when it
+		// actually carries IDCs — lookupElemDecl finds only GLOBAL declarations, so
+		// IDCs on a local element would otherwise be silently skipped. Fall back to
+		// the global lookup otherwise: an <xs:element ref="g"> matches a ref
+		// declaration that does NOT copy the global's IDCs (IDCs are a property of
+		// the referenced global declaration), so for a ref the global lookup is the
+		// one that carries the constraints.
+		edecl := vc.idcHostDecl(elem)
 		if edecl != nil && len(edecl.IDCs) > 0 {
 			if err := vc.validateIDConstraints(ctx, elem, edecl); err != nil {
 				valid = false
@@ -641,8 +658,9 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 		return fmt.Errorf("abstract type")
 	}
 
-	// Annotate root element with its type.
+	// Annotate root element with its type and record its declaration.
 	vc.annotateElement(ctx, elem, td)
+	vc.recordElemDecl(elem, edecl)
 
 	nilled, err := vc.checkXsiNil(ctx, elem)
 	if err != nil {
@@ -1397,6 +1415,17 @@ func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Ele
 		return
 	}
 	(*vc.cfg.annotations)[elem] = xsdTypeName(td)
+}
+
+// recordElemDecl records the resolved *ElementDecl matched for an element
+// instance during pass-1 content validation, so pass-2 identity-constraint
+// evaluation can recover declarations — including LOCAL ones — that
+// lookupElemDecl (global-only) cannot. Called at the content-model match sites
+// where the matched declaration is known.
+func (vc *validationContext) recordElemDecl(elem *helium.Element, decl *ElementDecl) {
+	if vc.actualElemDecl != nil && decl != nil {
+		vc.actualElemDecl[elem] = decl
+	}
 }
 
 // attrUseType resolves the effective simple type for an attribute use. An inline
