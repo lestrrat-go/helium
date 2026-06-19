@@ -502,7 +502,7 @@ func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, 
 	// (file/line/detail) reach stderr. Without a handler the xsd compiler
 	// discards them and the user sees only the terminal "schema compilation
 	// failed" summary with no clue what went wrong.
-	handler := &compileErrorHandler{w: c.stderr}
+	handler := &compileErrorHandler{w: c.stderr, suppressWarnings: cfg.quiet}
 	schema, err := xsd.NewCompiler().
 		Label(cfg.schemaFile).
 		ErrorHandler(handler).

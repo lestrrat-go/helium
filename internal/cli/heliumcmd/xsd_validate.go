@@ -31,14 +31,29 @@ var errSchemaCompilation = errors.New("schema compilation failed")
 // (as writerErrorHandler does) and additionally records whether any fatal
 // diagnostic was seen, so the CLI can fail compilation even when the xsd
 // compiler returns a (schema, nil) for a malformed schema.
+//
+// When suppressWarnings is set (e.g. under --quiet), non-fatal/non-error
+// diagnostics (warning level, or errors that carry no severity, which are
+// treated as warnings per helium.ErrorLeveler) are not printed. Fatal and
+// error-level diagnostics are always printed, and the fatal sentinel is still
+// recorded regardless of suppression.
 type compileErrorHandler struct {
-	w     io.Writer
-	fatal bool
+	w                io.Writer
+	fatal            bool
+	suppressWarnings bool
 }
 
 func (h *compileErrorHandler) Handle(_ context.Context, err error) {
-	if l, ok := err.(helium.ErrorLeveler); ok && l.ErrorLevel() == helium.ErrorLevelFatal {
+	// Errors that do not implement ErrorLeveler are treated as warnings.
+	level := helium.ErrorLevelWarning
+	if l, ok := err.(helium.ErrorLeveler); ok {
+		level = l.ErrorLevel()
+	}
+	if level == helium.ErrorLevelFatal {
 		h.fatal = true
+	}
+	if h.suppressWarnings && level < helium.ErrorLevelError {
+		return
 	}
 	_, _ = fmt.Fprint(h.w, err)
 }
