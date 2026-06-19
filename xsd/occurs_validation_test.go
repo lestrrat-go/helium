@@ -46,6 +46,15 @@ func TestOccursValidation(t *testing.T) {
 			{name: "non-integer minOccurs", occurs: `minOccurs="abc"`, wantMsg: wantNonNegInt},
 			{name: "non-integer maxOccurs", occurs: `maxOccurs="abc"`, wantMsg: wantAllNNI},
 			{name: "min greater than max", occurs: `minOccurs="3" maxOccurs="2"`, wantMsg: wantMinGtMax},
+			// xs:nonNegativeInteger / xs:allNNI have no leading sign: "+0", "+1"
+			// and "-0" are invalid lexical forms even though strconv.Atoi would
+			// parse them. libxml2 rejects all three.
+			{name: "plus-zero minOccurs", occurs: `minOccurs="+0"`, wantMsg: wantNonNegInt},
+			{name: "plus-one minOccurs", occurs: `minOccurs="+1"`, wantMsg: wantNonNegInt},
+			{name: "minus-zero minOccurs", occurs: `minOccurs="-0"`, wantMsg: wantNonNegInt},
+			{name: "plus-zero maxOccurs", occurs: `maxOccurs="+0"`, wantMsg: wantAllNNI},
+			{name: "plus-one maxOccurs", occurs: `maxOccurs="+1"`, wantMsg: wantAllNNI},
+			{name: "minus-zero maxOccurs", occurs: `maxOccurs="-0"`, wantMsg: wantAllNNI},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
@@ -160,6 +169,10 @@ func TestOccursValidation(t *testing.T) {
 			{name: "unbounded", occurs: `maxOccurs="unbounded"`},
 			{name: "range", occurs: `minOccurs="0" maxOccurs="5"`},
 			{name: "zero to unbounded", occurs: `minOccurs="0" maxOccurs="unbounded"`},
+			// maxOccurs=0 is a legal prohibited particle when minOccurs is also 0;
+			// libxml2 compiles this without error (only rejects maxOccurs<1 when
+			// the effective minOccurs is >= 1).
+			{name: "prohibited particle", occurs: `minOccurs="0" maxOccurs="0"`},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()

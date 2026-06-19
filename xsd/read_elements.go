@@ -49,11 +49,32 @@ func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
 	if allowMax && s == attrValUnbounded {
 		return Unbounded, true
 	}
+	// xs:nonNegativeInteger has no leading sign: a leading '+' or '-' (including
+	// "+0"/"-0") is not a valid lexical form. strconv.Atoi would accept these, so
+	// reject any non-digit character before converting.
+	if !isASCIIDigits(s) {
+		return 0, false
+	}
 	n, err := strconv.Atoi(s)
 	if err != nil || n < 0 {
 		return 0, false
 	}
 	return n, true
+}
+
+// isASCIIDigits reports whether s is a non-empty run of ASCII digits ('0'-'9')
+// with no sign, whitespace, or other characters. This matches the lexical space
+// of xs:nonNegativeInteger as XSD/libxml2 enforce it for occurrence counts.
+func isASCIIDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // validateOccursAttrs validates the minOccurs/maxOccurs attributes of a
