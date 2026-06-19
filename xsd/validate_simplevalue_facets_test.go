@@ -1105,10 +1105,13 @@ func TestOrderedNonNumericRangeFacet(t *testing.T) {
 	})
 }
 
-// TestNumericUnionRangeFacetRejectsOutOfRange keeps explicit coverage that a
-// numeric union leaf still enforces a range bound after the ordered-type gate: a
-// value below minInclusive must be rejected and one at/above it accepted.
-func TestNumericUnionRangeFacetRejectsOutOfRange(t *testing.T) {
+// TestNumericUnionRangeFacetRejectedAtCompile verifies that a range facet on a
+// union is rejected at COMPILE time even when every union member is numeric
+// (ordered). A union's value space is not a single ordered scalar, so per XSD
+// §4.1.5 the range facets are not in its {applicable facets} set regardless of
+// member ordering — checkFacetApplicability reports "not allowed" rather than
+// letting the bound compile into a runtime no-op.
+func TestNumericUnionRangeFacetRejectedAtCompile(t *testing.T) {
 	t.Parallel()
 
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -1124,24 +1127,8 @@ func TestNumericUnionRangeFacetRejectsOutOfRange(t *testing.T) {
   </xs:element>
 </xs:schema>`
 
-	t.Run("below bound rejected", func(t *testing.T) {
-		t.Parallel()
-		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
-		require.Error(t, err)
-		require.Contains(t, errs, "is not a valid value")
-	})
-
-	t.Run("at bound accepted", func(t *testing.T) {
-		t.Parallel()
-		errs, err := validateInstance(t, schemaXML, `<root>10</root>`)
-		require.NoError(t, err, "validation errors: %s", errs)
-	})
-
-	t.Run("above bound accepted", func(t *testing.T) {
-		t.Parallel()
-		errs, err := validateInstance(t, schemaXML, `<root>15</root>`)
-		require.NoError(t, err, "validation errors: %s", errs)
-	})
+	errs := compileSchemaErrors(t, schemaXML)
+	require.Contains(t, errs, "The facet 'minInclusive' is not allowed.")
 }
 
 // TestQNameUnboundPrefix verifies that an xs:QName value with an unbound prefix
@@ -1330,18 +1317,17 @@ func TestEnumQNameLiteralWhitespaceNormalized(t *testing.T) {
 	})
 }
 
-// TestNestedUnionRangeFacetLeaf verifies that a range facet (minInclusive)
-// applied over a nested union resolves the active member down to its LEAF basic
-// member before deciding whether a numeric decimal comparison applies. With
-// outer=union(inner) and inner=union(xs:string), a minInclusive="10" restriction
-// must NOT coerce a numeric-looking string leaf into a decimal range comparison:
-// the instance "5" must not be wrongly rejected (the bound is inapplicable to a
-// string value space). A parallel numeric union — both flat and nested over
-// xs:integer — must still enforce the bound, so "5" fails and "15" passes.
-func TestNestedUnionRangeFacetLeaf(t *testing.T) {
+// TestNestedUnionRangeFacetRejectedAtCompile verifies that a range facet
+// (minInclusive) on a union — flat or nested, over a string OR a numeric member —
+// is rejected at COMPILE time. A union's value space is never a single ordered
+// scalar, so the range facets are outside its {applicable facets} set (XSD
+// §4.1.5) no matter what the member leaf resolves to; checkFacetApplicability
+// reports "not allowed" rather than deferring an inapplicable bound to a runtime
+// no-op (which previously let some instances through and wrongly rejected others).
+func TestNestedUnionRangeFacetRejectedAtCompile(t *testing.T) {
 	t.Parallel()
 
-	t.Run("string-leaf nested union does not apply decimal range", func(t *testing.T) {
+	t.Run("string-leaf nested union", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="inner">
@@ -1358,20 +1344,10 @@ func TestNestedUnionRangeFacetLeaf(t *testing.T) {
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
-
-		// "5" is a valid xs:string; the minInclusive bound is inapplicable to a
-		// string value space, so it must NOT be rejected (the bug rejected it via a
-		// spurious decimal comparison triggered by the empty intermediate-union
-		// builtin local).
-		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
-		require.NoError(t, err, "validation errors: %s", errs)
-
-		// A non-numeric string remains a valid string value (range inapplicable).
-		errs, err = validateInstance(t, schemaXML, `<root>abc</root>`)
-		require.NoError(t, err, "validation errors: %s", errs)
+		require.Contains(t, compileSchemaErrors(t, schemaXML), "The facet 'minInclusive' is not allowed.")
 	})
 
-	t.Run("flat numeric union enforces minInclusive", func(t *testing.T) {
+	t.Run("flat numeric union", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="numUnion">
@@ -1385,15 +1361,10 @@ func TestNestedUnionRangeFacetLeaf(t *testing.T) {
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
-		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
-		require.Error(t, err)
-		require.Contains(t, errs, "is not a valid value")
-
-		errs, err = validateInstance(t, schemaXML, `<root>15</root>`)
-		require.NoError(t, err, "validation errors: %s", errs)
+		require.Contains(t, compileSchemaErrors(t, schemaXML), "The facet 'minInclusive' is not allowed.")
 	})
 
-	t.Run("nested numeric union enforces minInclusive", func(t *testing.T) {
+	t.Run("nested numeric union", func(t *testing.T) {
 		t.Parallel()
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="inner">
@@ -1410,11 +1381,6 @@ func TestNestedUnionRangeFacetLeaf(t *testing.T) {
     </xs:simpleType>
   </xs:element>
 </xs:schema>`
-		errs, err := validateInstance(t, schemaXML, `<root>5</root>`)
-		require.Error(t, err)
-		require.Contains(t, errs, "is not a valid value")
-
-		errs, err = validateInstance(t, schemaXML, `<root>15</root>`)
-		require.NoError(t, err, "validation errors: %s", errs)
+		require.Contains(t, compileSchemaErrors(t, schemaXML), "The facet 'minInclusive' is not allowed.")
 	})
 }

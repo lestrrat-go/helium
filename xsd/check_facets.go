@@ -57,7 +57,12 @@ func (c *compiler) checkFacetConsistency(ctx context.Context) {
 		if entries[i].src.line != entries[j].src.line {
 			return entries[i].src.line < entries[j].src.line
 		}
-		return entries[i].td.Name.Local < entries[j].td.Name.Local
+		if entries[i].td.Name.Local != entries[j].td.Name.Local {
+			return entries[i].td.Name.Local < entries[j].td.Name.Local
+		}
+		// Final tie-breaker: anonymous types share an empty name (and may share a
+		// line), so fall back to stable parse order for deterministic output.
+		return entries[i].src.ordinal < entries[j].src.ordinal
 	})
 
 	for _, entry := range entries {
@@ -365,7 +370,10 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 		if entries[i].src.line != entries[j].src.line {
 			return entries[i].src.line < entries[j].src.line
 		}
-		return entries[i].td.Name.Local < entries[j].td.Name.Local
+		if entries[i].td.Name.Local != entries[j].td.Name.Local {
+			return entries[i].td.Name.Local < entries[j].td.Name.Local
+		}
+		return entries[i].src.ordinal < entries[j].src.ordinal
 	})
 
 	for _, e := range entries {

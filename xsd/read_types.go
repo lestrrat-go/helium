@@ -42,7 +42,7 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 		td.Final = c.schema.finalDefault & (FinalExtension | FinalRestriction)
 	}
 
-	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
+	c.recordTypeDefSource(td, elem.Line(), false)
 	c.typeKinds[td.Name] = redefineKindComplexType
 	c.schema.types[td.Name] = td
 	return nil
@@ -79,7 +79,7 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 		td.Final = c.schema.finalDefault & (FinalRestriction | FinalList | FinalUnion)
 	}
 
-	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
+	c.recordTypeDefSource(td, elem.Line(), false)
 	c.typeKinds[td.Name] = redefineKindSimpleType
 	c.schema.types[td.Name] = td
 	return nil
@@ -87,7 +87,7 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 
 func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {
 	td := &TypeDef{}
-	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: true}
+	c.recordTypeDefSource(td, elem.Line(), true)
 
 	mixed := getAttr(elem, "mixed")
 	if mixed == attrValTrue {
@@ -384,7 +384,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 	// name is assigned. Recording it here ensures reportUnresolvedTypeRef can
 	// fire for unresolved base/itemType/memberTypes references inside inline
 	// simpleTypes, not just top-level named ones.
-	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: true}
+	c.recordTypeDefSource(td, elem.Line(), true)
 
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {

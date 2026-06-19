@@ -30,6 +30,12 @@ type compiler struct {
 	globalElemSources map[*ElementDecl]elemRefSource
 	// source info for type definitions, used in duplicate attribute errors
 	typeDefSources map[*TypeDef]typeDefSource
+	// nextTypeDefOrdinal is a monotonic counter assigned to each typeDefSource in
+	// parse order. It is the final tie-breaker when ordering facet/notation
+	// diagnostics so that multiple anonymous (empty-named) types on the SAME
+	// source line have a deterministic error order independent of Go map
+	// iteration.
+	nextTypeDefOrdinal int
 	// typeKinds records, per registered named type QName, whether it was
 	// declared via xs:simpleType or xs:complexType. Both share schema.types,
 	// but redefine must distinguish them so a Phase-A simpleType cannot be
@@ -188,6 +194,24 @@ type attrConstraintSource struct {
 type typeDefSource struct {
 	line    int
 	isLocal bool // true for anonymous (local) complex types
+	// ordinal is a stable parse-order sequence number, used as the final
+	// tie-breaker when ordering diagnostics for types that share a source line
+	// and have empty (anonymous) names. See recordTypeDefSource.
+	ordinal int
+}
+
+// recordTypeDefSource registers the source location for td. The parse-order
+// ordinal is assigned on FIRST registration and preserved across later
+// overwrites (e.g. parseSimpleType records a type as local, then
+// parseNamedSimpleType overwrites it as a named global) so the ordinal always
+// reflects when the type was first seen.
+func (c *compiler) recordTypeDefSource(td *TypeDef, line int, isLocal bool) {
+	if existing, ok := c.typeDefSources[td]; ok {
+		c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, ordinal: existing.ordinal}
+		return
+	}
+	c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, ordinal: c.nextTypeDefOrdinal}
+	c.nextTypeDefOrdinal++
 }
 
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {

@@ -131,12 +131,18 @@ compares with the same ordered-union value-family logic fixed-value comparison
 uses (`fixedUnionMatches`), recursing through list/nested-union member value
 spaces — so a literal active in a string member is not value-equal to an instance
 active in a numeric member (`memberTypes="zeroString xs:int"` enum `"0"` rejects
-`"+0"`). The union's remaining facets (pattern/length/bounds) are still checked in
+`"+0"`). A **union** restriction may carry ONLY `pattern` and `enumeration`
+facets: per XSD §4.1.5 the range facets (`min`/`maxInclusive`,
+`min`/`maxExclusive`), the digit facets (`totalDigits`/`fractionDigits`), the
+length family (`length`/`minLength`/`maxLength`), and `whiteSpace` are NOT in a
+union's {applicable facets} set, so `checkFacetApplicability` rejects them at
+COMPILE time (`The facet '…' is not allowed.`) — they never reach validation as a
+runtime no-op. The union's allowed `pattern`/`enumeration` facets are checked in
 the instance active member's value space via `checkFacets` with enumeration
 suppressed. The active member for that `checkFacets` call is resolved down to its
 LEAF basic member (`fixedUnionActiveMember` descends through nested unions), so a
 nested union (`outer=union(inner)`, `inner=union(xs:string)`) resolves to the
-leaf type rather than an intermediate union. The range facets
+leaf type rather than an intermediate union. On an ATOMIC restriction the range facets
 (`min`/`maxInclusive`, `min`/`maxExclusive`) apply ONLY to types whose primitive
 value space is ORDERED, so `compareForRangeFacet` first gates `builtinLocal` on
 the `orderedRangeFacetTypes` allowlist — the numeric leaves (decimal and derived
