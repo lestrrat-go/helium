@@ -478,7 +478,7 @@ func (c *command) pathDirs(cfg *config) []string {
 		return nil
 	}
 	var dirs []string
-	for _, d := range strings.Split(cfg.pathDirs, ":") {
+	for d := range strings.SplitSeq(cfg.pathDirs, ":") {
 		if d != "" {
 			dirs = append(dirs, d)
 		}
