@@ -261,33 +261,48 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			// against the enclosing cursor, not an exhausted PE cursor.
 			pctx.popSpentExternalSubsetInputs(baseLen)
 			if pctx.inputTab.Len() <= baseLen {
-				if c := pctx.getCursor(); c != nil {
-					n := 0
-					for b := c.PeekAt(n); isBlankByte(b) && !c.Done(); b = c.PeekAt(n) {
-						n++
-					}
-					if n > 0 {
-						if err := c.Advance(n); err != nil {
-							return err
-						}
-					}
-				}
-
-				cur = pctx.getCursor()
-				if cur == nil || cur.Done() {
+				// Inspect the section's OWN cursor (the floor cursor at baseLen-1)
+				// directly rather than via getCursor(): if this external DTD's
+				// INCLUDE section reaches EOF before its "]]>" terminator,
+				// getCursor() would auto-pop the exhausted section cursor and
+				// return the enclosing (e.g. main document) cursor, which is not
+				// Done — defeating the EOF check and spinning this loop forever.
+				sec := pctx.adaptCursor(pctx.inputTab.PeekOne())
+				if sec == nil {
 					return ErrConditionalSectionNotFinished
 				}
 
-				if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
-					if err := cur.Advance(3); err != nil {
+				n := 0
+				for b := sec.PeekAt(n); isBlankByte(b) && !sec.Done(); b = sec.PeekAt(n) {
+					n++
+				}
+				if n > 0 {
+					if err := sec.Advance(n); err != nil {
+						return err
+					}
+				}
+
+				if sec.Done() {
+					return ErrConditionalSectionNotFinished
+				}
+
+				if sec.Peek() == ']' && sec.PeekAt(1) == ']' && sec.PeekAt(2) == '>' {
+					if err := sec.Advance(3); err != nil {
 						return err
 					}
 					return nil
 				}
 			}
 
-			if _, err := pctx.parseExternalSubsetDeclStep(ctx, baseLen, false); err != nil {
+			stop, err := pctx.parseExternalSubsetDeclStep(ctx, baseLen, false)
+			if err != nil {
 				return err
+			}
+			// stop=true means the section's own content cursor is exhausted
+			// before a "]]>" terminator was seen. Report the unterminated
+			// conditional section instead of looping forever.
+			if stop {
+				return ErrConditionalSectionNotFinished
 			}
 		}
 	}

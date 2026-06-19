@@ -1014,6 +1014,44 @@ func TestParseExternalDTDMalformedDeclLocation(t *testing.T) {
 	require.Equal(t, "bogus.dtd", pe.File, "error must reference the external DTD, not the main document")
 }
 
+func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "inc.dtd">
+<r/>`
+
+	// An external DTD whose <![INCLUDE[ ... ]]> section reaches EOF before its
+	// "]]>" terminator must report an error PROMPTLY. The INCLUDE body loop reads
+	// the section through the shared declaration step; when that step signals stop
+	// (the section's own cursor is exhausted), getCursor() would auto-pop the
+	// spent section cursor up to the main document cursor (which is not Done),
+	// defeating the EOF check. Honoring the stop signal — and inspecting the floor
+	// cursor directly — turns the former infinite loop into a prompt error.
+	const dtd = `<![INCLUDE[
+<!ELEMENT r EMPTY>`
+	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	// Guard against a regression manifesting as a hang: run the parse on a
+	// goroutine with a deadline so a re-introduced infinite loop fails the test
+	// instead of hanging the whole suite. The external subset is tolerant of
+	// conditional-section errors (it stops scanning without failing the parse),
+	// so the requirement here is PROMPT completion, not a surfaced error.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+		_, _ = p.Parse(context.Background(), []byte(input))
+	}()
+
+	select {
+	case <-done:
+		// Completed promptly: the unterminated INCLUDE section did not loop.
+	case <-time.After(5 * time.Second):
+		t.Fatal("parsing an unterminated INCLUDE section hung (infinite loop regression)")
+	}
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 
