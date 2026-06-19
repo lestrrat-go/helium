@@ -221,9 +221,13 @@ Schematron schema compilation and validation.
 
 OASIS XML Catalog resolution for public/system IDs and URIs.
 
-- **Load(ctx, path, ...LoadOption) → (*Catalog, error)**
+- **Load(ctx, path) → (*Catalog, error)** — convenience wrapper around `NewLoader().Load`
+- **NewLoader() → Loader** — fluent value-style loader; methods return updated copies
+- **Loader.ErrorHandler(h) → Loader** — deliver parse warnings to a handler
+- **Loader.MaxBytes(n) → Loader** — cap catalog file size; exceed → `ErrCatalogTooLarge` (default `MaxCatalogSize`, 10 MiB)
 - **Catalog.Resolve(ctx, pubID, sysID) → string** — resolve external identifier
 - **Catalog.ResolveURI(ctx, uri) → string** — resolve URI reference
+- Const `MaxCatalogSize`; sentinel `ErrCatalogTooLarge`
 - Catalog chaining via nextCatalog; URN urn:publicid: support
 - Files: `catalog.go`, `load.go`
 - Imports: helium, internal/catalog/, internal/lexicon/

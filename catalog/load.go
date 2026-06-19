@@ -22,10 +22,11 @@ const goosWindows = "windows"
 // internalLoader implements icatalog.Loader using helium's parser.
 type internalLoader struct {
 	errorHandler helium.ErrorHandler
+	maxBytes     int
 }
 
 func (l internalLoader) Load(ctx context.Context, filename string) (*icatalog.Catalog, error) {
-	return loadInternal(ctx, filename, l.errorHandler)
+	return loadInternal(ctx, filename, l.errorHandler, l.maxBytes)
 }
 
 // Load parses an OASIS XML Catalog file and returns a Catalog.
@@ -52,7 +53,7 @@ func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) { /
 		eh = helium.NilErrorHandler{}
 	}
 
-	ic, err := loadInternal(ctx, filename, eh)
+	ic, err := loadInternal(ctx, filename, eh, cfg.maxBytes)
 	if err != nil {
 		closeHandler(eh)
 		return nil, err
@@ -62,7 +63,7 @@ func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) { /
 	return &Catalog{cat: ic}, nil
 }
 
-func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
+func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler, maxBytes int) (*icatalog.Catalog, error) {
 	path, isFileURI, err := catalogFilePath(filename)
 	if err != nil {
 		return nil, err
@@ -73,9 +74,9 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) 
 		return nil, fmt.Errorf("catalog: failed to resolve path %q: %w", filename, err)
 	}
 
-	data, err := os.ReadFile(absPath)
+	data, err := readCatalogFile(absPath, maxBytes)
 	if err != nil {
-		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
+		return nil, err
 	}
 
 	// Read from the local filesystem path, but resolve relative URIs in the
@@ -89,7 +90,36 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) 
 		baseURI = localPathToFileURI(absPath)
 	}
 
-	return loadFromBytes(ctx, data, baseURI, eh)
+	return loadFromBytes(ctx, data, baseURI, eh, maxBytes)
+}
+
+// readCatalogFile reads a catalog file at absPath through a bounded reader so an
+// unbounded or pathological source (e.g. /dev/zero) cannot exhaust memory. The
+// cap is maxBytes, or [MaxCatalogSize] when maxBytes is less than or equal to
+// zero. LimitReader allows one extra byte so a file exactly at the cap is
+// accepted while anything larger is detected and rejected with
+// [ErrCatalogTooLarge].
+func readCatalogFile(absPath string, maxBytes int) ([]byte, error) {
+	limit := int64(maxBytes)
+	if limit <= 0 {
+		limit = MaxCatalogSize
+	}
+
+	f, err := os.Open(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("catalog: %q exceeds maximum size of %d bytes: %w", absPath, limit, ErrCatalogTooLarge)
+	}
+
+	return data, nil
 }
 
 // catalogFilePath converts a catalog reference into a local filesystem path.
@@ -193,7 +223,7 @@ func hasDriveLetterPrefix(s string) bool {
 		(s[2] == '\\' || s[2] == '/')
 }
 
-func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
+func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.ErrorHandler, maxBytes int) (*icatalog.Catalog, error) {
 	p := helium.NewParser()
 	doc, err := p.Parse(ctx, data)
 	if err != nil {
@@ -213,7 +243,7 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 	cat := &icatalog.Catalog{
 		Prefer:  icatalog.PreferPublic, // default per OASIS spec
 		BaseURI: baseURI,
-		Loader:  internalLoader{errorHandler: eh},
+		Loader:  internalLoader{errorHandler: eh, maxBytes: maxBytes},
 	}
 
 	if v := getAttr(root, lexicon.AttrPrefer); v != "" {
