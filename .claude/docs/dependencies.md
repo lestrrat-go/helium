@@ -20,7 +20,7 @@ xmldsig1       → helium, c14n, internal/lexicon
 xmlenc1        → helium
 html           → helium, sax, push
 catalog        → helium, internal/catalog, internal/lexicon
-stream         → internal/encoding
+stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
 helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack
 sink           → (none)
