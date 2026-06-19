@@ -154,6 +154,10 @@ All bytes pulled from the filesystem (`ctx.fsys`) are byte-capped and the opened
    - `replaceEntities=true`: expand inline and replay parsed node children through SAX (`StartElementNS`/`EndElementNS`, `Characters`, `CDataBlock`, `Comment`, `PI`)
    - `replaceEntities=false`: fire Reference callback only
 
+### Parameter Entity References (`parsePEReference()`)
+
+When a `%name;` parameter-entity reference in the DTD subset resolves, `parsePEReference` (in `parser_dtd_subset.go`) decodes the PE replacement text via `decodeEntities(SubstituteBoth)` and then charges the PE's OWN expanded replacement size against the amplification guard with `entityCheck(entity, len(decodedContent))` BEFORE pushing the decoded text as new input via `pushInput`. Nested entity references inside that replacement are charged separately (once) by `decodeEntities`, so this `entityCheck` covers only the PE's direct expansion. Without it the direct PE expansion would be free, letting a small DTD reference a large PE many times to drive unbounded expansion past the amplification limit. A `%name;` that resolves to nothing (not found, in a context where that is non-fatal) still calls `entityCheck(entity, 0)` to charge the per-reference fixed cost.
+
 ### Attribute Value Entities (`decodeEntities()`)
 
 ```
