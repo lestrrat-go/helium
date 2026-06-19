@@ -134,6 +134,14 @@ func catalogFilePath(ref string) (string, bool, error) {
 		return "", false, fmt.Errorf("catalog: non-local file URI host %q in %q", u.Host, ref)
 	}
 
+	// An opaque file: URI such as "file:next.xml" has u.Opaque set and an empty
+	// u.Path, and a "file://localhost" URI has no path at all. Neither denotes a
+	// local filesystem path, so reject them rather than letting an empty path
+	// fall through and read the process working directory.
+	if u.Opaque != "" || u.Path == "" {
+		return "", false, fmt.Errorf("catalog: invalid file URI %q: no local path", ref)
+	}
+
 	return fileURIPath(u.Path), true, nil
 }
 
