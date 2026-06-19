@@ -3,7 +3,6 @@ package xpath3
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
@@ -149,13 +148,15 @@ func fnFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	ec := getFnContext(ctx)
 	maxNodes := fnMaxNodes(ec)
-	items := seqMaterialize(seq)
+	// Iterate from last to first WITHOUT materializing the input sequence, so a
+	// lazy/borrowed input is never fully realized before the per-item op-count
+	// and accumulator size-bound checks run (mirrors fnFoldLeft's streaming).
 	callArgs := make([]Sequence, 2)
-	for _, v := range slices.Backward(items) {
+	for i := seqLen(seq); i > 0; i-- {
 		if err := fnCountOp(ctx, ec); err != nil {
 			return nil, err
 		}
-		callArgs[0] = ItemSlice{v}
+		callArgs[0] = ItemSlice{seq.Get(i - 1)}
 		callArgs[1] = acc
 		acc, err = fi.Invoke(ctx, callArgs)
 		if err != nil {

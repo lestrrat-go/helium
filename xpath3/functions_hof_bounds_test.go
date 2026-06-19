@@ -1,11 +1,44 @@
 package xpath3_test
 
 import (
+	"iter"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
+
+// panicOnMaterializeSeq is a Sequence of n items where realizing the WHOLE
+// sequence at once via Materialize panics. Len and Get are O(1), and Items
+// yields lazily one item at a time, so any streaming consumer — whether it
+// walks by index (fold-right) or via the lazy iterator (fold-left) — applies
+// its per-item op-count / size-bound checks and stops early without ever
+// triggering the panic. A "materialize up front, then check" consumer panics.
+// It lets a test prove a built-in consumes a lazy/borrowed input WITHOUT fully
+// realizing it.
+type panicOnMaterializeSeq struct {
+	n int
+}
+
+func (s panicOnMaterializeSeq) Len() int { return s.n }
+
+func (s panicOnMaterializeSeq) Get(i int) xpath3.Item {
+	return xpath3.SingleInteger(int64(i + 1)).Get(0)
+}
+
+func (s panicOnMaterializeSeq) Items() iter.Seq[xpath3.Item] {
+	return func(yield func(xpath3.Item) bool) {
+		for i := range s.n {
+			if !yield(s.Get(i)) {
+				return
+			}
+		}
+	}
+}
+
+func (s panicOnMaterializeSeq) Materialize() []xpath3.Item {
+	panic("Materialize called: sequence was fully materialized")
+}
 
 // TestHOFMaterializationLimit verifies that higher-order / map / array built-ins
 // that accumulate per-item callback results enforce the configured
@@ -158,6 +191,71 @@ func TestHOFLazySequenceLimit(t *testing.T) {
 					Evaluate(t.Context(), compiled, nil)
 			})
 			require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+		})
+	}
+}
+
+// TestFoldNeverMaterializesInput proves fold-left and fold-right consume their
+// (lazy/borrowed) input sequence by streaming — index-by-index — and apply the
+// per-item op-count and accumulator size-bound BEFORE the input is ever fully
+// materialized. The input is a panicOnMaterializeSeq: Get/Len are safe but
+// Materialize/Items panic. A regression that does `seqMaterialize(seq)` up
+// front (the original fold-right) would panic here instead of returning a limit
+// error.
+func TestFoldNeverMaterializesInput(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+	// Far more items than the limit, so the accumulator bound trips well before
+	// the input is exhausted (and long before any whole-sequence realization).
+	const inputLen = 1 << 20
+
+	cases := []struct {
+		name string
+		expr string
+	}{
+		// Accumulator grows by 1 per step; after `limit` steps it exceeds the
+		// node-set limit and must be rejected with ErrNodeSetLimit.
+		{"fold-left", `fold-left($huge, (), function($acc, $x) { ($acc, $x) })`},
+		{"fold-right", `fold-right($huge, (), function($x, $acc) { ($x, $acc) })`},
+	}
+	for _, tc := range cases {
+		t.Run("node-limit/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			vars := xpath3.NewVariables()
+			vars.Set("huge", panicOnMaterializeSeq{n: inputLen})
+
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+
+			var evalErr error
+			// NotPanics guards against a regression that materializes the input
+			// up front (which panicOnMaterializeSeq turns into a panic).
+			require.NotPanics(t, func() {
+				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+					Variables(vars).
+					MaxNodesForTesting(limit).
+					Evaluate(t.Context(), compiled, nil)
+			})
+			require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+		})
+
+		t.Run("op-limit/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			vars := xpath3.NewVariables()
+			vars.Set("huge", panicOnMaterializeSeq{n: inputLen})
+
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+
+			var evalErr error
+			require.NotPanics(t, func() {
+				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+					Variables(vars).
+					OpLimit(1000).
+					Evaluate(t.Context(), compiled, nil)
+			})
+			require.ErrorIs(t, evalErr, xpath3.ErrOpLimit)
 		})
 	}
 }
