@@ -94,12 +94,13 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 	type rangeFacet struct {
 		name  string
 		value *string
+		ns    map[string]string
 	}
 	for _, rf := range []rangeFacet{
-		{"minInclusive", fs.MinInclusive},
-		{"maxInclusive", fs.MaxInclusive},
-		{"minExclusive", fs.MinExclusive},
-		{"maxExclusive", fs.MaxExclusive},
+		{"minInclusive", fs.MinInclusive, fs.MinInclusiveNS},
+		{"maxInclusive", fs.MaxInclusive, fs.MaxInclusiveNS},
+		{"minExclusive", fs.MinExclusive, fs.MinExclusiveNS},
+		{"maxExclusive", fs.MaxExclusive, fs.MaxExclusiveNS},
 	} {
 		if rf.value == nil {
 			continue
@@ -107,9 +108,11 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 		// Validate the bound against the base type's value space with errors
 		// suppressed; only the pass/fail verdict matters here. A non-nil result
 		// means the bound is not a valid instance of the base type, so the
-		// restriction is in error.
+		// restriction is in error. Each bound is resolved with ITS OWN captured
+		// namespace context so a prefixed bound (e.g. a QName-typed q:z) binds the
+		// prefix declared at its own facet element, not a sibling's.
 		sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
-		if validateValue(ctx, *rf.value, fs.RangeNS, base, "", "", 0, sub) == nil {
+		if validateValue(ctx, *rf.value, rf.ns, base, "", "", 0, sub) == nil {
 			continue
 		}
 		msg := fmt.Sprintf("The value '%s' of the facet '%s' is not a valid value of the base type '%s'.",

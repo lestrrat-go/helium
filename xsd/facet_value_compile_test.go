@@ -171,6 +171,52 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
 	})
 
+	t.Run("two range facets declaring different prefixes both resolve", func(t *testing.T) {
+		t.Parallel()
+		// minInclusive and maxInclusive each declare their OWN namespace prefix
+		// (p: and q:) on their own facet element, with neither declared on an
+		// ancestor. Each bound is a QName value that must be resolved with the
+		// prefix in scope at its own element. The old shared-RangeNS code captured
+		// only the first facet's namespaces, so the second bound (q:z) was
+		// validated with the first facet's map — where q: is unbound — and was
+		// wrongly reported invalid. With per-facet namespace context both resolve
+		// and the schema compiles cleanly.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="qn">
+    <xs:union memberTypes="xs:QName"/>
+  </xs:simpleType>
+  <xs:simpleType name="bounded">
+    <xs:restriction base="qn">
+      <xs:minInclusive xmlns:p="urn:p" value="p:a"/>
+      <xs:maxInclusive xmlns:q="urn:q" value="q:z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bounded"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), wantMsg)
+	})
+
+	t.Run("per-facet prefix does not leak to sibling facet", func(t *testing.T) {
+		t.Parallel()
+		// minInclusive declares prefix p: on its own element; maxInclusive uses
+		// prefix p: but does NOT declare it and no ancestor does either. The
+		// binding must NOT leak from the sibling facet, so the maxInclusive bound
+		// "p:z" is an unbound QName and must still be flagged.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="qn">
+    <xs:union memberTypes="xs:QName"/>
+  </xs:simpleType>
+  <xs:simpleType name="bounded">
+    <xs:restriction base="qn">
+      <xs:minInclusive xmlns:p="urn:p" value="p:a"/>
+      <xs:maxInclusive value="p:z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bounded"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+	})
+
 	t.Run("valid numeric bound still compiles", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

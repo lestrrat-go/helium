@@ -222,14 +222,20 @@ type FacetSet struct {
 	MaxInclusive  *string
 	MinExclusive  *string
 	MaxExclusive  *string
-	// RangeNS holds the in-scope namespace bindings (prefix → URI) captured at
-	// the point a min/max range-facet bound was declared in the schema document.
-	// It mirrors EnumerationNS for the range facets: a namespace-sensitive base
-	// type (e.g. xs:QName reached through a union) needs this context to resolve
-	// a prefixed bound value like <xs:minInclusive value="p:a"/>. All range
-	// facets in a single <xs:restriction> step share the same in-scope context,
-	// so one map suffices for the whole FacetSet.
-	RangeNS        map[string]string
+	// MinInclusiveNS/MaxInclusiveNS/MinExclusiveNS/MaxExclusiveNS hold the
+	// in-scope namespace bindings (prefix → URI) captured at the point each
+	// individual range-facet bound was declared in the schema document. Each
+	// facet element gets its own map because sibling facets in the same
+	// <xs:restriction> may declare different prefixes (e.g. minInclusive binds
+	// p: while maxInclusive binds q:). They mirror EnumerationNS for the range
+	// facets: a namespace-sensitive base type (e.g. xs:QName reached through a
+	// union) needs this context to resolve a prefixed bound value like
+	// <xs:minInclusive value="p:a"/>. A nil map means no extra bindings were in
+	// scope at that facet (the facet was absent or carried no namespace context).
+	MinInclusiveNS map[string]string
+	MaxInclusiveNS map[string]string
+	MinExclusiveNS map[string]string
+	MaxExclusiveNS map[string]string
 	TotalDigits    *int
 	FractionDigits *int
 	Length         *int
