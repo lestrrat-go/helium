@@ -77,6 +77,35 @@ func TestResolveURIURNNotFound(t *testing.T) {
 	require.Equal(t, "", got)
 }
 
+// A catalog containing only delegateSystem entries must NOT influence URI
+// resolution. System-identifier delegation belongs to the system-id path only.
+func TestResolveURIIgnoresDelegateSystem(t *testing.T) {
+	t.Parallel()
+
+	delegate := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryURI, Name: "http://example.com/asset", URL: "file:///delegated/asset"},
+		},
+	}
+	loader := &countingLoader{
+		counts: make(map[string]*atomic.Int32),
+		cat:    delegate,
+	}
+
+	cat := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryDelegateSystem, Name: "http://example.com/", URL: sharedCatalogXML},
+		},
+		Loader: loader,
+		Prefer: catalog.PreferPublic,
+	}
+
+	// delegateSystem must not be consulted for URI resolution.
+	got := cat.ResolveURI(t.Context(), "http://example.com/asset")
+	require.Equal(t, "", got)
+	require.Nil(t, loader.counts[sharedCatalogXML], "delegateSystem must not be loaded during ResolveURI")
+}
+
 // countingLoader is a Loader that counts how many times each URL is loaded.
 type countingLoader struct {
 	counts map[string]*atomic.Int32

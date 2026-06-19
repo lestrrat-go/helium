@@ -4,13 +4,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
+
+// goosWindows is the runtime.GOOS value for Windows. Drive-letter handling in
+// file: URIs is gated on this so POSIX behavior is never altered.
+const goosWindows = "windows"
 
 // internalLoader implements icatalog.Loader using helium's parser.
 type internalLoader struct {
@@ -56,7 +63,12 @@ func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) { /
 }
 
 func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
-	absPath, err := filepath.Abs(filename)
+	path, isFileURI, err := catalogFilePath(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("catalog: failed to resolve path %q: %w", filename, err)
 	}
@@ -66,7 +78,111 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) 
 		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
 	}
 
-	return loadFromBytes(ctx, data, absPath, eh)
+	// Read from the local filesystem path, but resolve relative URIs in the
+	// catalog against the catalog's URI. When the catalog was referenced via a
+	// "file:" URI, downstream relative URIs must stay in "file:" URI space (so
+	// "asset.xml" in /tmp/catalog.xml resolves to "file:///tmp/asset.xml", not
+	// the bare local path "/tmp/asset.xml"). For a plain OS path input, the
+	// filesystem path itself is the base, preserving the original behavior.
+	baseURI := absPath
+	if isFileURI {
+		baseURI = localPathToFileURI(absPath)
+	}
+
+	return loadFromBytes(ctx, data, baseURI, eh)
+}
+
+// catalogFilePath converts a catalog reference into a local filesystem path.
+// Bare paths are returned unchanged. "file:" URIs are parsed and percent-decoded
+// into a local path. Any other URI scheme is unsupported and rejected.
+//
+// The second return value reports whether ref was a "file:" URI. Callers use it
+// to decide the catalog's baseURI: a "file:" reference keeps relative downstream
+// URIs in "file:" URI space, while a plain OS path resolves them as OS paths.
+func catalogFilePath(ref string) (string, bool, error) {
+	// A Windows path such as "C:\tmp\catalog.xml", "C:/tmp/catalog.xml", or a
+	// "\\host\share" UNC path must be treated as a local OS path, not as a URI
+	// whose scheme is the drive letter "C". Check this before HasScheme so the
+	// leading "C:" is not mistaken for a scheme.
+	//
+	// filepath.VolumeName only recognizes these forms when running on Windows,
+	// so a portable drive-letter check is needed as well to keep the behavior
+	// consistent (and tested) on the POSIX CI host.
+	if filepath.VolumeName(ref) != "" || hasDriveLetterPrefix(ref) {
+		return ref, false, nil
+	}
+
+	if !icatalog.HasScheme(ref) {
+		return ref, false, nil
+	}
+
+	u, err := url.Parse(ref)
+	if err != nil {
+		return "", false, fmt.Errorf("catalog: failed to parse URI %q: %w", ref, err)
+	}
+
+	if u.Scheme != "file" {
+		return "", false, fmt.Errorf("catalog: unsupported URI scheme %q in %q", u.Scheme, ref)
+	}
+
+	// For "file:///abs/path" the host is empty and Path holds the (already
+	// percent-decoded) absolute path. For "file://host/path" a non-localhost
+	// host is not addressable on the local filesystem. URI hosts are
+	// case-insensitive, so an empty host and "localhost" in any case both
+	// denote the local machine.
+	if u.Host != "" && !strings.EqualFold(u.Host, "localhost") {
+		return "", false, fmt.Errorf("catalog: non-local file URI host %q in %q", u.Host, ref)
+	}
+
+	return fileURIPath(u.Path), true, nil
+}
+
+// localPathToFileURI builds a "file://" URI from an absolute local filesystem
+// path. It is used as the catalog baseURI when the catalog was referenced by a
+// "file:" URI, so relative URIs in the catalog resolve back into "file:" URI
+// space rather than as bare filesystem paths.
+//
+// (&url.URL{Scheme: "file", Path: ...}).String() percent-encodes as needed and,
+// on Windows, converts the OS separator to "/" via filepath.ToSlash, yielding
+// "file:///C:/tmp/catalog.xml". On POSIX the absolute path already uses "/".
+func localPathToFileURI(absPath string) string {
+	u := url.URL{Scheme: "file", Path: filepath.ToSlash(absPath)}
+	return u.String()
+}
+
+// fileURIPath converts the (already percent-decoded) path component of a "file:"
+// URI into a local filesystem path. On POSIX an absolute URI path such as
+// "/abs/x" — including "/C:/tmp/x", which is a legitimate POSIX absolute path —
+// is returned unchanged. On Windows a URI such as "file:///C:/tmp/x" yields a
+// path of "/C:/tmp/x"; the leading slash before the drive letter is stripped
+// ("C:/tmp/x") and slashes are converted to the OS separator.
+func fileURIPath(p string) string {
+	return fileURIPathFor(runtime.GOOS, p)
+}
+
+// fileURIPathFor is the OS-parameterized implementation of fileURIPath. The
+// drive-letter slash strip only applies on Windows; on POSIX "/C:/tmp/x" is a
+// valid absolute path and must be left untouched. goos is threaded explicitly
+// so the conversion is deterministically testable on a non-Windows CI host.
+func fileURIPathFor(goos, p string) string {
+	// On Windows, detect a drive-letter path of the form "/C:/...": a leading
+	// slash followed by a single ASCII letter and a colon, and strip the slash.
+	if goos == goosWindows && len(p) >= 3 && p[0] == '/' && isASCIILetter(p[1]) && p[2] == ':' {
+		p = p[1:]
+	}
+	return filepath.FromSlash(p)
+}
+
+func isASCIILetter(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// hasDriveLetterPrefix reports whether s begins with a Windows drive-letter
+// prefix such as "C:\" or "C:/". This is checked independently of the host OS
+// so a drive-letter reference is never mistaken for a URI scheme.
+func hasDriveLetterPrefix(s string) bool {
+	return len(s) >= 3 && isASCIILetter(s[0]) && s[1] == ':' &&
+		(s[2] == '\\' || s[2] == '/')
 }
 
 func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
