@@ -446,6 +446,16 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 						continue
 					}
 					if refQN == qn {
+						// The self-reference resolves to the original group's
+						// content. resolveRefs deletes this entry from groupRefs
+						// before it can run checkAllGroupRef, so the all-group
+						// placement rule (cos-all-limited) would be bypassed for a
+						// redefine that nests an all-group self-reference inside a
+						// sequence/choice. Enforce it here, while the source record
+						// is still available, before the entry is removed.
+						if origGroup.Compositor == CompositorAll {
+							c.checkAllGroupRef(ctx, mg)
+						}
 						mg.Compositor = origGroup.Compositor
 						mg.Particles = origGroup.Particles
 						delete(c.groupRefs, mg)

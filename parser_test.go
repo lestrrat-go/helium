@@ -781,6 +781,341 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 	})
 }
 
+// partialReadFS serves a small DTD whose Read hands back a few valid bytes and
+// then a NON-EOF error (a truncated/partial read) well under the size cap. A
+// truncated external subset must surface the read error rather than being
+// silently treated as an absent DTD.
+type partialReadFS struct {
+	prefix []byte
+}
+
+func (fsys partialReadFS) Open(string) (fs.File, error) {
+	return &partialReadFile{prefix: fsys.prefix}, nil
+}
+
+type partialReadFile struct {
+	prefix []byte
+	done   bool
+}
+
+func (f *partialReadFile) Stat() (fs.FileInfo, error) { return underReportingInfo{}, nil }
+
+func (f *partialReadFile) Read(p []byte) (int, error) {
+	if f.done {
+		return 0, io.ErrUnexpectedEOF
+	}
+	n := copy(p, f.prefix)
+	f.done = true
+	return n, io.ErrUnexpectedEOF
+}
+
+func (f *partialReadFile) Close() error { return nil }
+
+func TestParseExternalDTDPartialReadErrorSurfaces(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "trunc.dtd">
+<r/>`
+
+	// The DTD content is well under the cap but Read returns a non-EOF error,
+	// modelling a truncated transport. The parse must fail rather than silently
+	// accept the document as if no external subset existed.
+	fsys := partialReadFS{prefix: []byte("<!ELEMENT r EMPTY>")}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "a truncated external DTD read must surface as a parse error")
+}
+
+func TestParseExternalDTDMalformedDeclTerminates(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "bogus.dtd">
+<r/>`
+
+	// "<!BOGUS" is not a valid markup declaration and may neither advance the
+	// cursor nor return an error. The progress guard must turn that into a
+	// terminating error instead of an infinite loop.
+	fsys := fstest.MapFS{"bogus.dtd": &fstest.MapFile{Data: []byte("<!BOGUS")}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+
+	done := make(chan struct{})
+	var err error
+	go func() {
+		defer close(done)
+		_, err = p.Parse(t.Context(), []byte(input))
+	}()
+
+	select {
+	case <-done:
+		require.Error(t, err, "a malformed external DTD declaration must produce a parse error")
+	case <-time.After(10 * time.Second):
+		t.Fatal("parsing a malformed external DTD did not terminate (no cursor-progress guard)")
+	}
+}
+
+func TestParseExternalDTDParameterEntityExpands(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "pe.dtd">
+<r/>`
+
+	// The external subset declares a parameter entity whose replacement text is
+	// a markup declaration, then references it. The reference must be expanded
+	// (not merely validated and skipped) so the <!ATTLIST> takes effect and the
+	// default attribute is applied to <r/>. A trailing newline after the
+	// reference exercises the progress guard: it must not misfire on valid
+	// PE-expanding input.
+	const dtd = `<!ELEMENT r EMPTY>
+<!ENTITY % defaults "<!ATTLIST r x CDATA 'default'>">
+%defaults;
+`
+	fsys := fstest.MapFS{"pe.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "valid external-subset parameter-entity reference must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	val, ok := root.GetAttribute("x")
+	require.True(t, ok, "default attribute from expanded PE must be present")
+	require.Equal(t, "default", val, "expanded PE must apply the default attribute value")
+}
+
+func TestParseExternalDTDPEConditionalSectionFollowedByDecl(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "cs.dtd">
+<r/>`
+
+	// The external subset declares a parameter entity whose replacement text is
+	// a conditional section, references it, and THEN declares another markup
+	// declaration. After the PE expands to the conditional section and is
+	// exhausted, the loop must resume in the parent DTD and apply the trailing
+	// <!ATTLIST>. Before the fix, the conditional-section path "continue"-d past
+	// the cursor-cleanup/progress guard, leaving the spent PE cursor on the
+	// stack so the next iteration broke the loop and the trailing declaration
+	// was silently skipped.
+	const dtd = `<!ELEMENT r EMPTY>
+<!ENTITY % cs "<![INCLUDE[ <!ELEMENT a EMPTY> ]]>">
+%cs;
+<!ATTLIST r x CDATA 'd'>
+`
+	fsys := fstest.MapFS{"cs.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "PE expanding to a conditional section must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	val, ok := root.GetAttribute("x")
+	require.True(t, ok, "declaration following the PE conditional section must be applied")
+	require.Equal(t, "d", val, "trailing <!ATTLIST> must not be silently skipped")
+}
+
+func TestParseExternalDTDPEWhitespaceFollowedByDecl(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "ws.dtd">
+<r/>`
+
+	// The external subset declares a parameter entity whose replacement text is
+	// ONLY whitespace, references it, and THEN declares another markup
+	// declaration. The blank skip consumes the PE's entire replacement text, so
+	// the PE cursor is exhausted by the skip itself. The loop must pop the spent
+	// PE cursor and resume in the parent DTD to apply the trailing <!ATTLIST>.
+	// Before the fix, the blank-skip's Done()-cursor break exited the loop and
+	// the deferred cleanup popped the parent DTD cursor too, silently skipping
+	// the trailing declaration.
+	const dtd = `<!ELEMENT r EMPTY>
+<!ENTITY % ws "   ">
+%ws;
+<!ATTLIST r x CDATA 'd'>
+`
+	fsys := fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "PE expanding to only whitespace must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	val, ok := root.GetAttribute("x")
+	require.True(t, ok, "declaration following the whitespace-only PE must be applied")
+	require.Equal(t, "d", val, "trailing <!ATTLIST> must not be silently skipped")
+}
+
+func TestParseExternalDTDPEInIncludeSectionExpands(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "inc.dtd">
+<r/>`
+
+	// The external subset wraps its declarations in an <![INCLUDE[ ... ]]>
+	// conditional section. Inside that section it declares a parameter entity
+	// whose replacement text is an <!ATTLIST> and then references it. The
+	// reference must be expanded (not merely validated and skipped by the
+	// blank-skip's handlePEReference) so the default attribute is applied to
+	// <r/>. Before the fix, the INCLUDE loop's skipBlanks consumed "%attrs;"
+	// without pushing its replacement text, silently dropping the declaration.
+	const dtd = `<![INCLUDE[
+<!ELEMENT r EMPTY>
+<!ENTITY % attrs "<!ATTLIST r x CDATA 'inc'>">
+%attrs;
+]]>`
+	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "PE reference inside an INCLUDE section must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	val, ok := root.GetAttribute("x")
+	require.True(t, ok, "default attribute from PE expanded inside INCLUDE must be present")
+	require.Equal(t, "inc", val, "PE inside INCLUDE must apply the default attribute value")
+}
+
+func TestParseExternalDTDMalformedDeclLocation(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "bogus.dtd">
+<r/>`
+
+	// A malformed declaration in the external subset must report the external
+	// DTD's location, not the main document's doctype line. The progress-guard
+	// error must be raised while the external DTD cursor and baseURI are still
+	// active so the reported File carries the DTD path.
+	fsys := fstest.MapFS{"bogus.dtd": &fstest.MapFile{Data: []byte("<!BOGUS")}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "a malformed external DTD declaration must produce a parse error")
+
+	var pe helium.ErrParseError
+	require.ErrorAs(t, err, &pe, "error must be a structured parse error")
+	require.Equal(t, "bogus.dtd", pe.File, "error must reference the external DTD, not the main document")
+}
+
+func TestParseExternalDTDMalformedDeclInIncludeSurfaces(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "inc.dtd">
+<r/>`
+
+	// A malformed declaration ("<!BOGUS") inside a WELL-FORMED, properly
+	// terminated top-level <![INCLUDE[ ... ]]> section must surface as a parse
+	// error. Previously the top-level external-subset loop swallowed EVERY error
+	// from parseConditionalSections, silently accepting the bogus declaration.
+	// Only the conditional-section WRAPPER sentinels (unterminated "]]>" or a
+	// missing/malformed keyword) are tolerated now; an actual declaration parse
+	// error inside the INCLUDE body propagates.
+	const dtd = `<![INCLUDE[ <!BOGUS ]]>`
+	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "a malformed declaration inside a top-level INCLUDE section must surface as a parse error")
+}
+
+func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "inc.dtd">
+<r/>`
+
+	// An external DTD whose <![INCLUDE[ ... ]]> section reaches EOF before its
+	// "]]>" terminator must report an error PROMPTLY. The INCLUDE body loop reads
+	// the section through the shared declaration step; when that step signals stop
+	// (the section's own cursor is exhausted), getCursor() would auto-pop the
+	// spent section cursor up to the main document cursor (which is not Done),
+	// defeating the EOF check. Honoring the stop signal — and inspecting the floor
+	// cursor directly — turns the former infinite loop into a prompt error.
+	const dtd = `<![INCLUDE[
+<!ELEMENT r EMPTY>`
+	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	// Guard against a regression manifesting as a hang: run the parse on a
+	// goroutine with a deadline so a re-introduced infinite loop fails the test
+	// instead of hanging the whole suite. The external subset is tolerant of
+	// conditional-section errors (it stops scanning without failing the parse),
+	// so the requirement here is PROMPT completion, not a surfaced error.
+	ctx := t.Context()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+		_, _ = p.Parse(ctx, []byte(input))
+	}()
+
+	select {
+	case <-done:
+		// Completed promptly: the unterminated INCLUDE section did not loop.
+	case <-time.After(5 * time.Second):
+		t.Fatal("parsing an unterminated INCLUDE section hung (infinite loop regression)")
+	}
+}
+
+func TestParseExternalDTDTrailingWSPreservesPostDoctypeMisc(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "d.dtd"><!--after--><?pi go?><r/>`
+
+	// The external DTD ends with trailing whitespace AFTER its last declaration.
+	// The shared declaration step's blank-only skip consumes that whitespace and
+	// reaches EOF on the pushed external-DTD (floor) cursor. getCursor() would
+	// then auto-pop the exhausted floor cursor and return the cursor BELOW it —
+	// the MAIN DOCUMENT cursor positioned right after the DOCTYPE — which is not
+	// Done. The step would parse the document's post-DOCTYPE "<!--after-->"
+	// comment and "<?pi go?>" PI as if they were external-subset markup, dropping
+	// them from the parsed document. Inspecting the floor cursor directly (rather
+	// than via getCursor) stops at the floor instead, so the misc nodes survive.
+	const dtd = "<!ELEMENT r EMPTY>\n"
+	fsys := fstest.MapFS{"d.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "external DTD with trailing whitespace must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	var sawComment, sawPI bool
+	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
+		switch n.Type() {
+		case helium.CommentNode:
+			require.Equal(t, "after", string(n.Content()), "post-DOCTYPE comment content must be preserved")
+			sawComment = true
+		case helium.ProcessingInstructionNode:
+			sawPI = true
+		}
+	}
+	require.True(t, sawComment, "post-DOCTYPE comment must not be consumed as external-subset markup")
+	require.True(t, sawPI, "post-DOCTYPE PI must not be consumed as external-subset markup")
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 
@@ -1978,6 +2313,92 @@ func TestMaxDepth(t *testing.T) {
 		_, err := p.ParseReader(t.Context(), bytes.NewReader([]byte(input)))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("enforced within substituted entity", func(t *testing.T) {
+		t.Parallel()
+
+		// The replacement text expands to two nested elements. With entity
+		// substitution enabled the depth check must still apply to the chunk
+		// parsed for the entity, so MaxDepth(1) rejects the inner <b/>.
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a><b/></a>">]><r>&e;</r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(1)
+
+		_, err := p.Parse(t.Context(), input)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("within limit inside substituted entity", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a><b/></a>">]><r>&e;</r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(10)
+
+		doc, err := p.Parse(t.Context(), input)
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+	})
+
+	t.Run("single level via substituted entity counts parent depth", func(t *testing.T) {
+		t.Parallel()
+
+		// The entity replacement text is a single element, but it is substituted
+		// inside <r>, so the literal document is <r><a/></r> (depth 2). The nested
+		// chunk parse must continue counting from the parent's current element
+		// depth (1) instead of restarting at 0, so MaxDepth(1) must reject it.
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a/>">]><r>&e;</r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(1)
+
+		_, err := p.Parse(t.Context(), input)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("enforced within external substituted entity", func(t *testing.T) {
+		t.Parallel()
+
+		// The external entity replacement text adds element nesting. With the
+		// parent's current element depth carried into the external chunk parse,
+		// MaxDepth(1) must reject the element delivered by the external entity.
+		fsys := fstest.MapFS{
+			"nested.xml": &fstest.MapFile{Data: []byte(`<a/>`)},
+		}
+		input := []byte(`<!DOCTYPE r [<!ENTITY e SYSTEM "nested.xml">]><r>&e;</r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(1).FS(fsys)
+
+		_, err := p.Parse(t.Context(), input)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("cached entity replay under deeper element exceeds limit", func(t *testing.T) {
+		t.Parallel()
+
+		// The first &e; expands as a direct child of <r> (depth 2) and caches
+		// its subtree. The second &e; is referenced inside <x> (depth 2), so its
+		// element reaches depth 3. The cached subtree must still be charged
+		// against MaxDepth on replay, otherwise the deeper reuse is wrongly
+		// accepted.
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a/>">]><r>&e;<x>&e;</x></r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(2)
+
+		_, err := p.Parse(t.Context(), input)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("cached entity replay within limit succeeds", func(t *testing.T) {
+		t.Parallel()
+
+		// Same shape as above, but MaxDepth(3) accommodates the deeper reuse, so
+		// both expansions parse cleanly.
+		input := []byte(`<!DOCTYPE r [<!ENTITY e "<a/>">]><r>&e;<x>&e;</x></r>`)
+		p := helium.NewParser().SubstituteEntities(true).MaxDepth(3)
+
+		doc, err := p.Parse(t.Context(), input)
+		require.NoError(t, err)
+		require.NotNil(t, doc)
 	})
 }
 

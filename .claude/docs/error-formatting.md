@@ -142,6 +142,7 @@ Unwraps to `Cause` via `Unwrap()`.
 
 All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder` accumulation.
 
+- `Compile()` / `CompileFile()` return `(nil, ErrCompilationFailed)` when the schema has one or more fatal diagnostics (`compileSchema` converts `c.errorCount > 0` into the sentinel after linking); the individual diagnostics are still delivered to the `ErrorHandler`. A well-formed schema returns `(schema, nil)`. This prevents callers from validating against an invalid schema. `xslt3` schema-awareness maps the sentinel to `XTSE0220`.
 - `Validate()` returns `ErrValidationFailed` when the document is invalid; individual errors go to `ErrorHandler`
 - `Validate()` returns `ErrNilSchema` (Validator has no compiled schema) or `ErrNilDocument` (doc is nil) before touching the document, instead of panicking. Handler setup runs first and `closeHandler()` is deferred, so a closable `ErrorHandler` is closed on every exit path (including the nil guards); a nil `ctx` is normalized to `context.Background()` at entry
 - Errors sent to the handler are `*xsd.ValidationError` (extractable via `errors.As`) wrapped with an `ErrorLeveler` for transport. `ValidationError` fields: `Filename`, `Line`, `Element`, `AttributeName` (empty for element-level errors), `Message`.

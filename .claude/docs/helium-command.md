@@ -62,6 +62,20 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 7. OUTPUT    — C14N or helium.Writer unless --noout
 ```
 
+### `--output FILE` safety (lint and xslt)
+
+File output (`--output`/`-o`, not stdout and not `--noout`) is written through a write-to-temp-then-atomic-rename scheme (`pendingOutput` in `safety.go`):
+
+- A temp file (`.helium-out-*`) is created (via `os.OpenFile` with `O_CREATE|O_EXCL`, mode `0666` so the kernel applies umask) in the SAME directory as the target; output is written there, and `os.Rename`d onto the target ONLY after all inputs are processed successfully.
+- When the target is a symlink, the rename target is the resolved real file (`os.Lstat` + `resolveSymlinkTarget`, which follows the chain with `os.Readlink` so even a DANGLING link resolves to its would-be target rather than failing like `filepath.EvalSymlinks`), so output is written THROUGH the link (matching `os.Create`) instead of replacing the link with a regular file.
+- If the resolved target already exists, `newPendingOutput` requires it to be a regular, writable file (probed via `os.Stat` + `os.OpenFile(O_WRONLY)`) before proceeding; a read-only (`0444`) or non-regular target is rejected with `ExitErr` and left untouched, since `os.Rename` would otherwise replace it regardless of mode and exit 0.
+- This closes a truncate-before-read hole: `os.Create` on the target would truncate it up front, destroying a resource the same path is read from LATER — e.g. a DTD/entity resolved via `--path` during validation (lint), or a stylesheet read at transform time via `fn:transform(map{'stylesheet-location':...})` through the retained `URIResolver` (xslt).
+- On any non-OK exit code the temp file is removed (`Cleanup`) and the target is left untouched.
+- A failed commit (flush/close/rename) folds `ExitErr` into the exit status, so an incomplete write is never reported as success.
+- The pre-flight same-file rejection (`checkOutputCollision`) is kept as a fast/friendly error for the obvious `--output X X` case, but the temp+rename is what actually protects later-resolved reads.
+- stdout output and `--noout` are unaffected (no temp file is created).
+- Output file mode: the temp is created `0666` so the kernel applies the process umask, which already matches `os.Create` for a NEW destination (no chmod). For an EXISTING destination `Commit` chmods the temp to the current mode (`os.Stat` + `chmod`) before the rename. umask is never read in-process (the old `syscall.Umask(0)` read-modify-write was racy and has been removed).
+
 ### Flag Groups
 
 | Group | Flags |
@@ -69,7 +83,7 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 | Parser | `--recover`, `--noent`, `--loaddtd`, `--dtdattr`, `--valid`, `--nowarning`, `--pedantic`, `--noblanks`, `--nsclean`, `--nocdata`, `--nonet`, `--huge`, `--noenc`, `--noxincludenode`, `--nofixup-base-uris` |
 | Features | `--xinclude`, `--schema FILE`, `--xpath EXPR`, `--catalogs`, `--nocatalogs`, `--path DIRS` |
 | Output | `--noout`, `--format`, `--pretty N`, `--encode ENC`, `--output FILE`, `--c14n`, `--c14n11`, `--exc-c14n`, `--dropdtd` |
-| Behavior | `--quiet`, `--timing`, `--repeat N`, `--version` |
+| Behavior | `--quiet`, `--timing`, `--repeat N`, `--max-input-bytes N`, `--version` |
 
 ### Cascades
 
@@ -77,6 +91,15 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 - `--valid` → also sets `--loaddtd`
 - `--xpath EXPR` → also sets `--noout`
 - `--pretty N>=1` → also sets `--format`
+
+### Output / Input Safety
+
+- `--output FILE` refers to the same file as an XML input or the `--schema` → rejected (`would overwrite input/schema`, `ExitErr`) before any file is truncated. Same-file detection uses absolute-path equality plus `os.SameFile` (catches `./` prefixes and symlinks).
+- `--output FILE` combined with `--noout` → rejected (`--output cannot be combined with --noout`). Exception: `--xpath` (which also sets `--noout` internally) still writes its result, so it is allowed.
+- The output file is closed explicitly after processing; a close error is folded into the exit status (`ExitErr`).
+- `--max-input-bytes N` caps the bytes read per input (file or stdin); default `DefaultMaxInputBytes` (100 MiB). `0` disables the cap. Exceeding it fails with `input exceeds maximum size` and `ExitReadFile`.
+- `--quiet` suppresses informational output: timing messages are silenced and parser/validator warnings are suppressed.
+- `--path DIRS` (colon-separated) is wired into DTD/entity resolution: a `pathSearchFS` falls back to each listed directory (by base name) when the default loader cannot open a referenced resource.
 
 ### Output Modes
 
@@ -96,8 +119,9 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 
 Primary file: `internal/cli/heliumcmd/xpath.go`
 
-- Usage: `helium xpath [--engine 1|3] EXPR [XMLfiles ...]`
+- Usage: `helium xpath [--engine 1|3] [--max-input-bytes N] EXPR [XMLfiles ...]`
 - Default engine: `3`
+- `--max-input-bytes N` caps bytes read per input (default 100 MiB; `0` = unlimited)
 - `EXPR` mandatory + non-empty
 - Engine `1` → `xpath1`
 - Engine `3` → `xpath3`
@@ -111,17 +135,20 @@ Primary file: `internal/cli/heliumcmd/xpath.go`
 
 Primary file: `internal/cli/heliumcmd/xsd_validate.go`
 
-- Usage: `helium xsd validate [--timing] SCHEMA [XMLfiles ...]`
+- Usage: `helium xsd validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
-- Schema compiled once with `xsd.NewCompiler().CompileFile()`
-- Each XML input parsed with `helium.NewParser()` + validated with `xsd.NewValidator(schema).Validate()`
+- `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
+- Schema compiled once with `xsd.NewCompiler().Label(schema).ErrorHandler(...).CompileFile(ctx, schema)`; a `compileErrorHandler` streams compilation diagnostics (file/line/detail) to stderr and records whether any FATAL diagnostic was seen
+- The xsd compiler may return a non-nil schema with a nil error for a malformed schema; the CLI folds that into a failure (`errSchemaCompilation`) when the handler saw a fatal diagnostic, so it never validates against a bad schema. Compilation failure → `ExitSchemaComp`
+- Each XML input parsed with `helium.NewParser()` (file inputs get `.BaseURI(name)`) + validated with `xsd.NewValidator(schema).ErrorHandler(...).Validate(ctx, doc)`, diagnostics streamed to stderr via a `writerErrorHandler`
 
 ## `helium relaxng validate`
 
 Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 
-- Usage: `helium relaxng validate [--timing] SCHEMA [XMLfiles ...]`
+- Usage: `helium relaxng validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
+- `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
 - Grammar compiled once with `relaxng.NewCompiler().CompileFile()`
 - Each XML input parsed with `helium.NewParser()` + validated with `relaxng.NewValidator(grammar).Validate()`
 
@@ -129,8 +156,9 @@ Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 
 Primary file: `internal/cli/heliumcmd/schematron_validate.go`
 
-- Usage: `helium schematron validate [--timing] SCHEMA [XMLfiles ...]`
+- Usage: `helium schematron validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
+- `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
 - Schema compiled once with `schematron.NewCompiler().Label(path).CompileFile(ctx, path)`
 - Each XML input parsed with `helium.NewParser()` + validated with `schematron.NewValidator(schema).Label(name).Validate(ctx, doc)`
 - Validation passes `.Label(input.name)` so error output names the current XML source
@@ -141,7 +169,10 @@ Primary file: `internal/cli/heliumcmd/xslt.go`
 
 - Usage: `helium xslt [options] STYLESHEET [XMLfiles ...]`
 - Stylesheet path mandatory positional arg
-- Stylesheet parsed with `helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)`, compiled once with `xslt3.NewCompiler().Compile()`
+- Stylesheet parsed with `helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)`, compiled once with `xslt3.NewCompiler().URIResolver(fileResolver{}).Compile()`
+- A filesystem `URIResolver` is installed so local `xsl:include`/`xsl:import` modules load (the compiler default-denies module loading without one)
+- `fileResolver.Resolve` accepts plain relative/absolute paths AND `file:` URIs (`localFilePath` in `safety.go`): a `file:` URI is parsed, only an empty or `localhost` host is accepted, the path is percent-decoded (and de-slashed before a Windows drive letter); any other scheme (`http`/`https`/...) is rejected so the resolver never reaches the network. A bare Windows drive path (`C:\...`) is not mistaken for a scheme.
 - Each XML input parsed with `helium.NewParser()`, transformed with `ss.Transform(doc).WriteTo(ctx, out)`
-- Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--version`
+- Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--max-input-bytes N`, `--version`
 - Parameters passed via `inv.GlobalParameters()`
+- Same output safety as `helium lint`: `--output` is rejected when it matches an input or the stylesheet, or when combined with `--noout`; close errors fold into the exit status; inputs are read under the `--max-input-bytes` cap

@@ -440,9 +440,8 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 		// declared before it is stored, proving the parse reaches the entities and
 		// the rejection is specific to the malformed declaration.
 		//
-		// Note: the external-subset loader currently swallows the per-declaration
-		// error (tracked separately in PR #565), so this asserts at the stored-DTD
-		// level rather than on the top-level parse error.
+		// The malformed per-declaration error in the external subset must now
+		// surface as a top-level parse error rather than being swallowed.
 		fsys := fstest.MapFS{
 			"d.dtd": {Data: []byte(
 				`<!ENTITY c "control">` + "\n" +
@@ -452,20 +451,12 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 		const input = `<?xml version="1.0"?>` + "\n" +
 			`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
 
-		doc, _ := helium.NewParser().
+		_, err := helium.NewParser().
 			LoadExternalDTD(true).
 			FS(fsys).
 			Parse(t.Context(), []byte(input))
-		// External-subset malformed-ref rejection at the top-level parse error is
-		// tracked separately (PR #565); do not assert require.NoError here, which
-		// would encode the arguably-wrong swallowing behavior.
-		require.NotNil(t, doc)
-
-		_, cOK := doc.GetEntity("c")
-		require.True(t, cOK, "control entity declared before the malformed one must be stored")
-
-		_, eOK := doc.GetEntity("e")
-		require.False(t, eOK, "malformed-via-PE entity must be rejected (not stored)")
+		require.Error(t, err, "malformed entity reference in an external subset declaration must surface as a parse error")
+		require.Contains(t, err.Error(), "malformed entity reference in entity value")
 	})
 }
 

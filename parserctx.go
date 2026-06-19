@@ -387,11 +387,14 @@ func (ctx *parserCtx) getCursor() strcursor.Cursor {
 // EOF via Done(), so callers must consult this explicitly to reject malformed
 // encoded input.
 func (ctx *parserCtx) cursorDecodeErr() error {
-	u8, ok := ctx.getCursor().(*strcursor.UTF8Cursor)
-	if !ok {
+	switch cur := ctx.getCursor().(type) {
+	case *strcursor.UTF8Cursor:
+		return cur.Err()
+	case *strcursor.ByteCursor:
+		return cur.Err()
+	default:
 		return nil
 	}
-	return u8.Err()
 }
 
 func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for type generality
@@ -525,9 +528,15 @@ func (pctx *parserCtx) namespaceError(ctx context.Context, err error) error {
 }
 
 func (pctx *parserCtx) errorAtLevel(ctx context.Context, err error, level ErrorLevel) error {
-	// errParserStopped is not a real error; pass through unwrapped.
-	if errors.Is(err, errParserStopped) {
-		return errParserStopped
+	// Parse-abort errors (the stop sentinel, context cancellation, deadline
+	// expiry) are not genuine parse failures: pass them through unchanged so
+	// callers see them directly and SAX error handlers are not fired as if the
+	// document were malformed.
+	if isParseAbort(err) {
+		if errors.Is(err, errParserStopped) {
+			return errParserStopped
+		}
+		return err
 	}
 	// If it's wrapped, just return as is
 	if _, ok := err.(ErrParseError); ok {

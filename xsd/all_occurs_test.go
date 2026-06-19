@@ -2,6 +2,7 @@ package xsd_test
 
 import (
 	"testing"
+	"testing/fstest"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
@@ -26,7 +27,7 @@ func TestAllOccursValidation(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
-		require.NoError(t, err)
+		requireCompileResultErr(t, err)
 		_, errors := partitionCompileErrors(collector.Errors())
 		return errors
 	}
@@ -257,7 +258,7 @@ func TestAllGroupRefConstraints(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
-		require.NoError(t, err)
+		requireCompileResultErr(t, err)
 		_, errors := partitionCompileErrors(collector.Errors())
 		return errors
 	}
@@ -422,7 +423,7 @@ func TestOccursLexicalMessageParity(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
-		require.NoError(t, err)
+		requireCompileResultErr(t, err)
 		_, errors := partitionCompileErrors(collector.Errors())
 		return errors
 	}
@@ -479,4 +480,82 @@ func TestOccursLexicalMessageParity(t *testing.T) {
 			require.Contains(t, compileErrors(t, tc.schema), tc.wantMsg)
 		})
 	}
+}
+
+// TestRedefineAllGroupNesting verifies that an xs:redefine of an xs:all model
+// group enforces the all-group placement rule (cos-all-limited) on its
+// self-reference. Redefining an 'all' group as a sequence/choice that nests the
+// self-reference is illegal: the resolved 'all' group cannot be contained by
+// another model group. Before the fix the self-reference was deleted from the
+// group-ref table before checkAllGroupRef could run, so these compiled with
+// zero diagnostics. A legitimate redefine (self-reference as the entire content
+// model) must still compile cleanly.
+func TestRedefineAllGroupNesting(t *testing.T) {
+	t.Parallel()
+
+	// base.xsd declares group "g" as an xs:all model group; main.xsd redefines it.
+	const baseSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+</xs:schema>`
+
+	compileErrors := func(t *testing.T, mainSchema string) string {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(mainSchema))
+		require.NoError(t, err)
+		fsys := fstest.MapFS{"base.xsd": &fstest.MapFile{Data: []byte(baseSchema)}}
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label("main.xsd").FS(fsys).ErrorHandler(collector).Compile(t.Context(), doc)
+		requireCompileResultErr(t, err)
+		_, errors := partitionCompileErrors(collector.Errors())
+		return errors
+	}
+
+	const wantNested = "A model group definition is referenced, but it contains an 'all' model group, which cannot be contained by model groups."
+
+	t.Run("rejects", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name   string
+			schema string
+		}{
+			{
+				name: "self-reference nested in sequence",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base.xsd">
+    <xs:group name="g"><xs:sequence><xs:group ref="g"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>
+  </xs:redefine>
+  <xs:element name="root"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "self-reference nested in choice",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base.xsd">
+    <xs:group name="g"><xs:choice><xs:group ref="g"/><xs:element name="b" type="xs:string"/></xs:choice></xs:group>
+  </xs:redefine>
+  <xs:element name="root"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				require.Contains(t, compileErrors(t, tc.schema), wantNested)
+			})
+		}
+	})
+
+	// A legitimate redefine must still compile cleanly. Here group "g" is
+	// redefined to a new xs:all model group (no self-reference), which is a valid
+	// override and exercises the same redefine-group path without triggering the
+	// nested-all placement rule.
+	t.Run("accepts legitimate redefine", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base.xsd">
+    <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:all></xs:group>
+  </xs:redefine>
+  <xs:element name="root"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`
+		require.Empty(t, compileErrors(t, schema))
+	})
 }

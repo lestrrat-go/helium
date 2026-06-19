@@ -494,6 +494,14 @@ func (p *parser) parse(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		// A non-EOF read error from the underlying reader (e.g. the push
+		// parser's stream returning the context error when its blocking wait
+		// is cancelled) is recorded by the cursor and otherwise masked by
+		// Done(). Surface it so a cancelled or failed read aborts the parse
+		// rather than silently accepting truncated input.
+		if err := p.cur.Err(); err != nil {
+			return err
+		}
 		if p.cur.Peek() == '<' {
 			if p.cur.PeekAt(1) == '/' {
 				p.parseEndTag()
@@ -522,9 +530,10 @@ func (p *parser) parse(ctx context.Context) error {
 	}
 
 	// A clean Done() may mask an underlying read error (e.g. a truncated or
-	// checksummed stream that returned data together with a non-EOF error).
-	// Surface it as a fatal parse error rather than accepting the input as a
-	// cleanly terminated document. Mirrors the XML parser's cursorDecodeErr.
+	// checksummed stream that returned data together with a non-EOF error, or a
+	// cancelled push-stream wait). Surface it as a fatal parse error rather than
+	// accepting the input as a cleanly terminated document. Mirrors the XML
+	// parser's cursorDecodeErr.
 	if err := p.cur.Err(); err != nil {
 		return err
 	}

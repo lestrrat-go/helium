@@ -515,6 +515,13 @@ func (p Parser) closeHandler() {
 // returned error is [ErrDTDValidationFailed] and the document is still
 // returned. Individual validation errors are delivered to the [ErrorHandler]
 // configured via [Parser.ErrorHandler].
+//
+// Cancellation: if ctx is cancelled or its deadline is exceeded, Parse aborts
+// and returns the context error (matched by [errors.Is] against
+// [context.Canceled] / [context.DeadlineExceeded]) with a nil Document — never
+// a partial tree. Because Parse reads from an in-memory byte slice there is no
+// blocking read, so cancellation is always observed promptly: the parser checks
+// the context between parse steps and between cursor refills.
 func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
@@ -540,6 +547,11 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 	if err := pctx.parseDocument(ctx); err != nil {
 		if errors.Is(err, errParserStopped) {
 			return pctx.doc, nil
+		}
+		// A cancelled or timed-out parse is not a recoverable parse error:
+		// return the context error with a nil document, never a partial tree.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
 		}
 		if p.cfg.options.IsSet(parseRecover) {
 			// ParseRecover: return the partial document along with the error
@@ -573,6 +585,21 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 // bytes carry the EBCDIC invariant prefix the reader is buffered into memory and
 // parsed through the same path as [Parse], so an EBCDIC document parses
 // identically via ParseReader/ParseFile as via Parse. All other inputs stream.
+//
+// Cancellation: context cancellation and deadlines are observed BETWEEN read
+// operations and parse steps. The parser checks ctx before each cursor refill
+// (read from r) and between parse steps, so a cancelled or timed-out context is
+// honored as soon as the parser regains control, returning the context error
+// (matched by [errors.Is] against [context.Canceled] /
+// [context.DeadlineExceeded]) with a nil Document.
+//
+// A reader already blocked inside its own Read call cannot be interrupted
+// generically: Go provides no way to unblock a Read in progress. Such a read is
+// only interruptible if r itself honors the context or a deadline — for example
+// a reader that sets a read deadline when ctx.Done() fires, or that returns from
+// Read with an error on cancellation. If r can block indefinitely (e.g. a slow
+// or never-returning network reader), wrap it so its Read observes ctx, or pass
+// the already-read bytes to [Parse] instead.
 func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
 	// A generic reader has unknown size: pass -1 so the streaming path keeps
 	// inputSize == 0 and the entity-amplification guard behaves as before.
@@ -630,6 +657,11 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 	if err := pctx.parseDocument(ctx); err != nil {
 		if errors.Is(err, errParserStopped) {
 			return pctx.doc, nil
+		}
+		// A cancelled or timed-out parse is not a recoverable parse error:
+		// return the context error with a nil document, never a partial tree.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
 		}
 		if p.cfg.options.IsSet(parseRecover) {
 			return pctx.doc, err
@@ -770,6 +802,8 @@ found:
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContent(innerCtx); err != nil {
+		// errParserStopped is a benign stop (helium.StopParser); any other
+		// error, including context cancellation, propagates with a nil result.
 		if !errors.Is(err, errParserStopped) {
 			return nil, err
 		}
