@@ -154,6 +154,10 @@ All bytes pulled from the filesystem (`ctx.fsys`) are byte-capped and the opened
    - `replaceEntities=true`: expand inline and replay parsed node children through SAX (`StartElementNS`/`EndElementNS`, `Characters`, `CDataBlock`, `Comment`, `PI`)
    - `replaceEntities=false`: fire Reference callback only
 
+### Parameter Entity References (`parsePEReference()`)
+
+When a `%name;` parameter-entity reference in the DTD subset resolves, `parsePEReference` (in `parser_dtd_subset.go`) decodes the PE replacement text via `decodeEntities(SubstituteBoth)` and then charges the PE's OWN replacement bytes against the amplification guard with `entityCheck(entity, len(entity.Content()))` BEFORE pushing the decoded text as new input via `pushInput`. It charges `len(entity.Content())` (the PE's stored replacement text), NOT `len(decodedContent)`. This matters because `decodeEntities(SubstituteBoth)` ALREADY charges every nested entity expansion it performs — general references such as `&g;` are left literal in a PE's stored value (only PE references are substituted at declaration time) and are expanded and charged here, as is any residual parameter reference — via its own `entityCheck` calls. `decodedContent` is the result AFTER those nested expansions, so charging its length would double-count the nested bytes and could falsely reject a legitimate DTD whose `%p;` expands mostly through a nested entity (e.g. `<!ENTITY g "...big...">` plus `<!ENTITY % p "<!-- &g; -->">`). Charging `entity.Content()` accounts only the direct bytes the PE itself contributes. Without this charge the PE's direct contribution would be free, letting a small DTD reference a large PE many times to drive unbounded expansion past the amplification limit. A `%name;` that resolves to nothing (not found, in a context where that is non-fatal) still calls `entityCheck(entity, 0)` to charge the per-reference fixed cost.
+
 ### Attribute Value Entities (`decodeEntities()`)
 
 ```
