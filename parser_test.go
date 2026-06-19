@@ -1014,6 +1014,28 @@ func TestParseExternalDTDMalformedDeclLocation(t *testing.T) {
 	require.Equal(t, "bogus.dtd", pe.File, "error must reference the external DTD, not the main document")
 }
 
+func TestParseExternalDTDMalformedDeclInIncludeSurfaces(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "inc.dtd">
+<r/>`
+
+	// A malformed declaration ("<!BOGUS") inside a WELL-FORMED, properly
+	// terminated top-level <![INCLUDE[ ... ]]> section must surface as a parse
+	// error. Previously the top-level external-subset loop swallowed EVERY error
+	// from parseConditionalSections, silently accepting the bogus declaration.
+	// Only the conditional-section WRAPPER sentinels (unterminated "]]>" or a
+	// missing/malformed keyword) are tolerated now; an actual declaration parse
+	// error inside the INCLUDE body propagates.
+	const dtd = `<![INCLUDE[ <!BOGUS ]]>`
+	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "a malformed declaration inside a top-level INCLUDE section must surface as a parse error")
+}
+
 func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
 	t.Parallel()
 
