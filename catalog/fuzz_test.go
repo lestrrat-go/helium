@@ -25,7 +25,7 @@ func FuzzLoad(f *testing.F) {
 			return
 		}
 
-		cat, err := loadFromBytes(t.Context(), data, "file:///fuzz/catalog.xml", helium.NilErrorHandler{})
+		cat, err := loadFromBytes(t.Context(), data, "file:///fuzz/catalog.xml", helium.NilErrorHandler{}, 0)
 		if err != nil {
 			return
 		}

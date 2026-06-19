@@ -75,7 +75,7 @@ State affects parsing rules: e.g., external entity refs forbidden in `psAttribut
 - `attsDefault map[string][]*Attribute` — default attributes from DTD
 - `inSubset int` — 0=not in subset, 1=internal, 2=external
 - `replaceEntities bool` — expand entity refs (set by SubstituteEntities(true))
-- `fsys fs.FS` — filesystem used to load external DTDs/entities; defaults to `internal/iofs.PermissiveRoot{}` (passthrough to os.Open), overridden via `Parser.FS()`. Used by `TreeBuilder.ExternalSubset` and `TreeBuilder.ResolveEntity`. Entity sub-parsers (`parseExternalEntityPrivate`, `parseBalancedChunkInternal`) inherit the parent's `fsys`, `catalog`, and `baseURI` so nested external entities stay confined to the same sandbox/policy as the top-level parse (they would otherwise default `fsys` back to `PermissiveRoot`).
+- `fsys fs.FS` — filesystem used to load external DTDs/entities; defaults to `internal/iofs.PermissiveRoot{}` (passthrough to os.Open), overridden via `Parser.FS()`. Used by `TreeBuilder.ExternalSubset` and `TreeBuilder.ResolveEntity`. Entity sub-parsers (`parseExternalEntityPrivate`, `parseBalancedChunkInternal`) both seed their nested context through the shared `inheritNestedParserState` helper (`parser_entity_decl.go`), which copies the parent's `sax`, `treeBuilder`, `attsDefault`, config-derived policy (`options`, `loadsubset`, `replaceEntities`, `keepBlanks`, `pedantic`, `charBufferSize`, `maxExtDTDSize`, `fsys`, `catalog`, `baseURI`), and — critically for depth enforcement — BOTH `maxElemDepth` (the limit) AND the parent's current `elemDepth`. Carrying the current `elemDepth` means element nesting that crosses an entity-expansion boundary keeps accumulating toward `MaxDepth` instead of restarting at 0: without it a single substituted element (`<!ENTITY e "<a/>">` used inside `<r>&e;</r>`) would wrongly pass `MaxDepth(1)` even though the literal `<r><a/></r>` is depth 2. This applies equally to external entity replacement text. The helper does NOT touch `doc`, the `external` flag, or the amplification counters (`sizeentcopy`/`inputSize`/`maxAmpl`); each caller sets those because their lifecycle differs (document swap, external flag, counter write-back on return). Otherwise these would all reset to zero-value defaults, e.g. `maxElemDepth=0` disabling the depth check and `fsys` falling back to `PermissiveRoot`.
 
 ### Entity Amplification Guard
 - `sizeentcopy int64` — cumulative entity expansion bytes
@@ -182,7 +182,7 @@ Expands `&#NNN;`, `&#xHHH;`, `&name;`, `%name;` based on substitution type. Recu
 - `InternalSubset` → create internal DTD
 - `ExternalSubset` → load external DTD, parse declarations
   - Temporarily switches parser `baseURI` to the resolved DTD path while parsing the subset so entity system IDs resolve relative to the DTD file
-  - Bounded read: the DTD is read through `io.LimitReader(f, limit+1)` where `limit` is `ctx.maxExtDTDSize` (set by `Parser.MaxExternalDTDBytes`) or `MaxExternalDTDSize` (10 MiB) when unset/≤0. `fs.FileInfo.Size()` is advisory only — never used to accept or reject — because a valid `fs.FS` may stream, synthesize, under-report, or over-report size; the cap is enforced against actual bytes read. If `len(data) > limit` the load returns `ErrExternalDTDTooLarge`. The size cap is checked BEFORE the read error, so a reader that returns `n>0` with a non-EOF error on the cap-crossing read is still rejected; any other (non-cap) read error is silently ignored. The file is closed immediately after the bounded read, before the buffered DTD is parsed.
+  - Bounded read: the DTD is read through `io.LimitReader(f, limit+1)` where `limit` is `ctx.maxExtDTDSize` (set by `Parser.MaxExternalDTDBytes`) or `MaxExternalDTDSize` (10 MiB) when unset/≤0. `fs.FileInfo.Size()` is advisory only — never used to accept or reject — because a valid `fs.FS` may stream, synthesize, under-report, or over-report size; the cap is enforced against actual bytes read. If `len(data) > limit` the load returns `ErrExternalDTDTooLarge`. The size cap is checked BEFORE the read error, so a reader that returns `n>0` with a non-EOF error on the cap-crossing read is still rejected; any other non-EOF read error (e.g. `io.ErrUnexpectedEOF`/transport failure on a partial read) is returned so a truncated subset is not silently accepted, while `io.EOF` is the normal terminator and is not an error. The declaration loop is driven by the shared `parserCtx.parseExternalSubsetDeclStep` helper (in `parser_dtd_subset.go`), used for BOTH the top-level external subset AND the body of an external `<![INCLUDE[ ... ]]>` conditional section so parameter-entity references expand identically in both. Each step does a blank-ONLY skip — NOT `skipBlanks`, whose `handlePEReference` consumes a `%pe;` reference without pushing its replacement text — then an explicit `parsePEReference` expansion (so a defaulting `<!ATTLIST>` supplied by a PE is applied, not skipped), or a `parseMarkupDecl`, or a nested `parseConditionalSections`. It snapshots the cursor position and returns `ErrDocTypeNotFinished` if a step neither advances nor errors (mirrors `parseInternalSubset`), preventing an infinite loop on malformed declarations like `<!BOGUS`; that guard error is raised via `ctx.error` WHILE the external DTD cursor and `baseURI` are still active (before the deferred cleanup restores them), so the reported location points at the external DTD source, not the main document's doctype line. Per-declaration `parseMarkupDecl` errors surface as the top-level parse error; conditional-section errors are tolerated only for the top-level subset (`tolerateCondError`), and propagate for nested INCLUDE bodies. Before and after the markup-decl/PE-reference handling the step pops any exhausted NESTED parameter-entity (or conditional-section) cursors via `popSpentExternalSubsetInputs` and reports `stop` once the enclosing content cursor (the pushed DTD cursor for the top-level subset, or the section's own cursor for an INCLUDE body) is exhausted, so a PE whose replacement text is (or ends with) only whitespace does not leave a Done() cursor on the stack that would break the loop and let the deferred cleanup pop the parent cursor, silently skipping declarations after the `%pe;` reference. The file is closed immediately after the bounded read, before the buffered DTD is parsed.
 - `GetEntity`/`GetParameterEntity` → lookup in document entity table
 
 ### Parent Selection
@@ -205,7 +205,7 @@ Both XML and HTML push parsers use the `push` package (`push.Parser[T]`), which 
 
 **XML PushParser** (`parser.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
-Parser runs in a background goroutine reading from the stream via `ParseReader`. Tokens are processed incrementally as data is pushed — the stream's `Read` blocks until bytes are available, so the parser advances as each chunk arrives.
+Parser runs in a background goroutine reading from the stream via `ParseReader`. Tokens are processed incrementally as data is pushed — the stream's `Read` blocks until bytes are available, so the parser advances as each chunk arrives. The stream wait is context-aware: cancelling the context passed to `New`/`NewPushParser` unblocks a waiting `Read`, which returns the context error so the background parse aborts even while waiting for more pushed data (see Context Cancellation below).
 
 **HTML PushParser** (`html/html.go` + `push/`): `p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
@@ -250,16 +250,61 @@ After parsing start tag:
 
 ## Recovery Mode (RecoverOnError)
 
-On error in `parseContent()`:
+On a recoverable parse error in `parseContent()`:
 1. Save error in `recoverErr`
 2. Set `disableSAX=true`
 3. `skipToRecoverPoint()` → advance to next `<`
 4. Continue parsing
 5. Return partial document + saved error
 
+Recovery applies only to genuine parse errors (malformed content). It does NOT
+apply to context cancellation — see Context Cancellation below.
+
+## Context Cancellation (parse abort)
+
+Context cancellation is distinct from recovery and from `StopParser`. When the
+parse context is cancelled or its deadline is exceeded, the parser aborts:
+
+- `context.Canceled` / `context.DeadlineExceeded` BYPASS recovery entirely, even
+  when `RecoverOnError(true)` is set — a cancelled parse is not a recoverable
+  parse error.
+- Parse returns a **nil document** and the **context error** (matchable with
+  `errors.Is(err, context.Canceled)` / `context.DeadlineExceeded`). It never
+  returns a partial tree.
+- The SAX `Error` handler is NOT invoked: a clean cancellation must not look like
+  a malformed document to the handler.
+- The cancellation is observed both in the normal content loop and inside the
+  recovery / `skipToRecoverPoint()` skip path, so an in-progress recovery scan
+  also aborts promptly.
+
+### Cancellation boundary (between reads vs. blocked Read)
+
+Cancellation is checked BETWEEN read operations and parse steps — before each
+cursor refill and between content-loop iterations. The parser does not (and
+cannot generically) interrupt a read already in progress:
+
+- **`Parse([]byte, ...)`**: reads from an in-memory byte slice, so there is no
+  blocking read. Cancellation is always observed promptly.
+- **`ParseReader(io.Reader, ...)`**: cancellation is observed as soon as the
+  parser regains control between reads. A reader already blocked inside its own
+  `Read` cannot be unblocked generically — Go provides no way to cancel a Read in
+  progress. Such a read is only interruptible if the reader itself honors the
+  context or a deadline (e.g. sets a read deadline when `ctx.Done()` fires, or
+  returns an error from `Read` on cancellation). To make a slow/never-returning
+  reader cancellable, wrap it so its `Read` observes `ctx`, or read the bytes
+  yourself and call `Parse`.
+- **Push parser** (`push` package): the parser-owned stream wait IS a sync.Cond,
+  not an arbitrary `io.Reader.Read`, so it is unblocked on cancellation. A watcher
+  goroutine broadcasts on the cond when `ctx.Done()` fires; `stream.Read` then
+  returns the context error instead of blocking for more pushed data. The watcher
+  exits when the stream is closed so it does not outlive a parse on a context that
+  is never cancelled.
+
 ## Early Termination
 
-`StopParser(ctx)` → set `stopped=true`, `instate=psEOF`. Returns parsed document so far, nil error.
+`StopParser(ctx)` → set `stopped=true`, `instate=psEOF`. Returns the parsed
+document so far and a nil error (partial document, as opposed to context
+cancellation which returns a nil document and the context error).
 
 ## Key Parser Fluent Method Effects
 

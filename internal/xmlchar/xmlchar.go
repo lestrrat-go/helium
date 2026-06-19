@@ -83,6 +83,73 @@ func IsValidQName(s string) bool {
 	return IsValidNCName(s)
 }
 
+// IsValidEncName reports whether s is a valid XML EncName (XML 1.0 §4.3.3):
+//
+//	EncName ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
+//
+// This mirrors the parser's encoding-name production (see
+// parserCtx.parseEncodingName) and is intentionally ASCII-only: it ensures an
+// untrusted encoding string emitted into the XML declaration cannot inject
+// markup or be an otherwise-malformed EncName (e.g. "utf 8").
+func IsValidEncName(s string) bool {
+	if s == "" {
+		return false
+	}
+	if !isEncNameStart(s[0]) {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if !isEncNameChar(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func isEncNameStart(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func isEncNameChar(c byte) bool {
+	return isEncNameStart(c) || (c >= '0' && c <= '9') ||
+		c == '.' || c == '_' || c == '-'
+}
+
+// IsValidName checks whether s is a valid XML Name (XML 1.0 §2.3):
+//
+//	Name          ::= NameStartChar (NameChar)*
+//	NameStartChar ::= ":" | NCNameStartChar
+//	NameChar      ::= NameStartChar | "-" | "." | [0-9] | #xB7 | ...
+//
+// Unlike NCName/QName, a Name may contain colons anywhere (including leading,
+// trailing, or repeated), so the Name production is strictly broader than
+// QName. This matches the XML DTD productions for element, attlist, notation,
+// and doctype names, which helium's parser reads as the Name production.
+func IsValidName(s string) bool {
+	if s == "" {
+		return false
+	}
+	// Decode explicitly (not range) so invalid UTF-8 — which range reports as
+	// RuneError indistinguishable from a real U+FFFD — is rejected by width.
+	first := true
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			return false
+		}
+		if first {
+			if r != ':' && !IsNCNameStartChar(r) {
+				return false
+			}
+			first = false
+		} else if r != ':' && !IsNCNameChar(r) {
+			return false
+		}
+		i += size
+	}
+	return true
+}
+
 // IsValidNCName checks whether s is a valid XML NCName (non-colonized name).
 func IsValidNCName(s string) bool {
 	if s == "" {
