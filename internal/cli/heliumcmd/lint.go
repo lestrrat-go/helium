@@ -108,7 +108,7 @@ func (c *command) runContext(ctx context.Context, args []string) int {
 		return ExitErr
 	}
 
-	var cat *catalog.Catalog
+	var cat helium.CatalogResolver
 	if cfg.catalogs && !cfg.noCatalogs {
 		cat = c.loadCatalogFromEnv(ctx)
 	}
@@ -357,24 +357,47 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	return cfg, files
 }
 
-func (c *command) loadCatalogFromEnv(ctx context.Context) *catalog.Catalog {
+// catalogChain resolves through an ordered list of catalogs, returning the
+// first non-empty match. XML_CATALOG_FILES is a whitespace-separated list, so
+// every listed catalog must participate in resolution, in listed order.
+type catalogChain []*catalog.Catalog
+
+func (cc catalogChain) Resolve(ctx context.Context, pubID, sysID string) string {
+	for _, cat := range cc {
+		if uri := cat.Resolve(ctx, pubID, sysID); uri != "" {
+			return uri
+		}
+	}
+	return ""
+}
+
+func (cc catalogChain) ResolveURI(ctx context.Context, uri string) string {
+	for _, cat := range cc {
+		if resolved := cat.ResolveURI(ctx, uri); resolved != "" {
+			return resolved
+		}
+	}
+	return ""
+}
+
+func (c *command) loadCatalogFromEnv(ctx context.Context) helium.CatalogResolver {
 	envFiles := os.Getenv("XML_CATALOG_FILES")
 	if envFiles == "" {
 		return nil
 	}
-	for f := range strings.SplitSeq(envFiles, " ") {
-		f = strings.TrimSpace(f)
-		if f == "" {
-			continue
-		}
+	var chain catalogChain
+	for f := range strings.FieldsSeq(envFiles) {
 		cat, err := catalog.Load(ctx, f)
 		if err != nil {
 			_, _ = fmt.Fprintf(c.stderr, "%s: failed to load catalog %s: %s\n", c.prog, f, err)
 			continue
 		}
-		return cat
+		chain = append(chain, cat)
 	}
-	return nil
+	if len(chain) == 0 {
+		return nil
+	}
+	return chain
 }
 
 func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
@@ -385,7 +408,7 @@ func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, 
 	return schema, nil
 }
 
-func (c *command) processInput(ctx context.Context, cfg *config, input namedInput, cat *catalog.Catalog, schema *xsd.Schema, out io.Writer) int {
+func (c *command) processInput(ctx context.Context, cfg *config, input namedInput, cat helium.CatalogResolver, schema *xsd.Schema, out io.Writer) int {
 	var buf []byte
 	var err error
 	if input.stdin {
