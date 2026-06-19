@@ -226,6 +226,11 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			continue
 		}
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
+		// Record the (possibly LOCAL) host declaration BEFORE any validation
+		// branch can continue, so pass-2 identity-constraint evaluation does not
+		// fall back to a same-named GLOBAL declaration (and apply its IDCs) when
+		// this element's type resolution fails (e.g. invalid xsi:type, abstract).
+		vc.recordElemDecl(child.elem, actualDecl)
 		td := effectiveDeclType(actualDecl, vc.schema)
 		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
 		if xsiErr != nil {
@@ -239,7 +244,6 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			continue
 		}
 		vc.annotateElement(ctx, child.elem, td)
-		vc.recordElemDecl(child.elem, actualDecl)
 		if td != nil {
 			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
 			if nilErr != nil {
@@ -350,6 +354,12 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 	for i := range count {
 		child := children[pos+i]
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
+		// Record the (possibly LOCAL) host declaration for pass-2 identity-constraint
+		// evaluation BEFORE any validation branch can continue, so a local element
+		// shadowing a same-named GLOBAL does not fall back to the global declaration
+		// (and apply its IDCs) when its own type resolution fails (e.g. invalid
+		// xsi:type, blocked derivation, abstract).
+		vc.recordElemDecl(child.elem, actualDecl)
 		declType := effectiveDeclType(actualDecl, vc.schema)
 		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType)
 		if xsiErr != nil {
@@ -369,10 +379,8 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 			contentErr = fmt.Errorf("abstract type")
 			continue
 		}
-		// Annotate child element with its type and record its (possibly LOCAL)
-		// declaration for pass-2 identity-constraint evaluation.
+		// Annotate child element with its type for pass-2 identity-constraint evaluation.
 		vc.annotateElement(ctx, child.elem, td)
-		vc.recordElemDecl(child.elem, actualDecl)
 		if td != nil {
 			nilled, nilErr := vc.checkXsiNil(ctx, child.elem)
 			if nilErr != nil {

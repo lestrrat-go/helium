@@ -271,6 +271,72 @@ func TestIDCLocalShadowsGlobalNoInherit(t *testing.T) {
 	})
 }
 
+// TestIDCLocalShadowsGlobalInvalidXsiType is the regression test for the
+// recordElemDecl ordering bug: pass-1 recorded the LOCAL host declaration only
+// AFTER xsi:type/abstract resolution succeeded. So when a LOCAL element shadowing
+// a same-named GLOBAL declaration carried an INVALID xsi:type, the type-resolution
+// branch did `continue` BEFORE recording the local decl, leaving pass-2's
+// idcHostDecl to fall back to the GLOBAL declaration and apply the global's key
+// — producing a spurious duplicate-key diagnostic on top of the real xsi:type
+// error. xmllint reports ONLY the xsi:type error here. The fix records the local
+// host decl immediately after it is resolved, before any validation branch can
+// continue.
+func TestIDCLocalShadowsGlobalInvalidXsiType(t *testing.T) {
+	t.Parallel()
+
+	// Global <item> carries globalSubKey on its <sub> children. The LOCAL <item>
+	// nested in <root> shadows the NAME (type localItemType) and declares no
+	// identity constraint of its own.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="item">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="sub" maxOccurs="unbounded">
+          <xs:complexType><xs:attribute name="k" type="xs:string"/></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="globalSubKey">
+      <xs:selector xpath="sub"/>
+      <xs:field xpath="@k"/>
+    </xs:key>
+  </xs:element>
+  <xs:complexType name="localItemType">
+    <xs:sequence>
+      <xs:element name="sub" maxOccurs="unbounded">
+        <xs:complexType><xs:attribute name="k" type="xs:string"/></xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="localItemType"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	v, compileErrs := compileXSD(t, schemaXML)
+	require.Empty(t, compileErrs, "shadowing-with-xsi:type schema should compile clean")
+
+	// The LOCAL <item> carries an unresolvable xsi:type AND duplicate @k under its
+	// <sub> children. The duplicate would only matter if globalSubKey (the GLOBAL
+	// item's key) were wrongly applied; it must NOT be, so the only error is the
+	// xsi:type one.
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><item xsi:type="nonExistentType"><sub k="dup"/><sub k="dup"/></item></root>`))
+	require.NoError(t, err)
+	var errs string
+	err = validateWithOutput(t, v, doc, &errs)
+	require.Error(t, err, "the invalid xsi:type must be reported")
+	require.Contains(t, errs, "xsi:type", "expected the xsi:type error; got: %s", errs)
+	require.NotContains(t, errs, "globalSubKey",
+		"a local element shadowing a global must not inherit the global's key even when its xsi:type is invalid; got: %s", errs)
+	require.NotContains(t, errs, "Duplicate key-sequence",
+		"no spurious IDC diagnostic should fire for the shadowing local element; got: %s", errs)
+}
+
 // TestIDCLocalUniqueEvaluated confirms an xs:unique declared on a LOCAL element
 // is evaluated at validation time: a duplicate key-sequence is rejected.
 func TestIDCLocalUniqueEvaluated(t *testing.T) {
