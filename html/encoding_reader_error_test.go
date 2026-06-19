@@ -30,6 +30,26 @@ func (r *dataThenErrReader) Read(p []byte) (int, error) {
 	return n, r.err
 }
 
+// exactFillReader returns its entire payload together with a non-EOF error on
+// the first Read (modeling a reader that fills the caller's buffer exactly while
+// reporting corruption), then reports io.EOF — not the original error — on all
+// subsequent reads. The error is therefore observable ONLY from the first Read,
+// so dropping it during the charset sniff makes it vanish for good.
+type exactFillReader struct {
+	data []byte
+	err  error
+	done bool
+}
+
+func (r *exactFillReader) Read(p []byte) (int, error) {
+	if r.done {
+		return 0, io.EOF
+	}
+	r.done = true
+	n := copy(p, r.data)
+	return n, r.err
+}
+
 // chunkReader returns one chunk's bytes per logical chunk, handling partial
 // reads when the destination buffer is smaller than the chunk. The error
 // attached to a chunk is returned together with that chunk's FINAL bytes on the
@@ -80,6 +100,40 @@ func TestParseReaderSurfacesReadErrorUndecidedUTF8(t *testing.T) {
 
 	_, err := html.NewParser().ParseReader(t.Context(), r)
 	require.Error(t, err, "a read error before EOF must not be swallowed")
+	require.ErrorIs(t, err, sentinel,
+		"the underlying non-EOF read error must surface out of ParseReader")
+}
+
+// TestParseReaderSurfacesReadErrorExactFill covers the charset-sniff peek when
+// the underlying reader fills the 1024-byte detection buffer EXACTLY and returns
+// a non-EOF sentinel error on that same Read (n == 1024, err != nil), then EOF.
+// io.ReadFull would have collapsed this to (1024, nil), dropping the error and
+// letting a truncated/checksummed stream parse clean. The manual sniff loop must
+// preserve the sentinel and surface it out of ParseReader.
+func TestParseReaderSurfacesReadErrorExactFill(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("checksum mismatch")
+
+	// Build a valid-UTF-8 document of exactly 1024 bytes so the first peek read
+	// fills the detection buffer to the brim and arrives with the sentinel.
+	doc := []byte("<html><body>")
+	for len(doc) < 1024-len("</body></html>") {
+		doc = append(doc, []byte("<p>x</p>")...)
+	}
+	doc = doc[:1024-len("</body></html>")]
+	doc = append(doc, []byte("</body></html>")...)
+	require.Len(t, doc, 1024, "regression requires an exact 1024-byte head")
+
+	// exactFillReader returns the whole 1024-byte payload together with the
+	// sentinel on the first Read, then reports io.EOF (NOT the sentinel) on every
+	// subsequent Read. This isolates the sniff-phase bug: io.ReadFull would
+	// collapse (1024, sentinel) to (1024, nil) and, because no later Read repeats
+	// the error, the error would be lost entirely.
+	r := &exactFillReader{data: doc, err: sentinel}
+
+	_, err := html.NewParser().ParseReader(t.Context(), r)
+	require.Error(t, err, "an exact-fill read error must not be swallowed by the sniff")
 	require.ErrorIs(t, err, sentinel,
 		"the underlying non-EOF read error must surface out of ParseReader")
 }

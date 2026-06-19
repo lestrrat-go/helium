@@ -451,17 +451,37 @@ func (dr *deferredLatin1Reader) fillLatin1(p []byte) (int, error) {
 // path, queried after parsing for the lazily-detected encoding name).
 func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader, *deferredLatin1Reader) {
 	// Read up to 1024 bytes for charset detection.
+	//
+	// We cannot use io.ReadFull here: it only reports an error when it reads
+	// fewer than len(buf) bytes. If the underlying reader returns the final
+	// sniff byte together with a non-EOF error — i.e. it fills the buffer
+	// exactly (n == 1024, err != nil) — io.ReadFull discards that error and
+	// returns (1024, nil), so a truncated/checksummed/decompressing stream
+	// that happens to fit the detection window would look like a clean parse.
+	// Loop manually and preserve any non-EOF error that arrives with the data.
 	head := make([]byte, 1024)
-	n, peekErr := io.ReadFull(r, head)
+	var n int
+	var peekErr error
+	for n < len(head) {
+		m, err := r.Read(head[n:])
+		n += m
+		if err != nil {
+			peekErr = err
+			break
+		}
+		if m == 0 {
+			// Reader made no progress and reported no error: treat as the end
+			// of the sniff window to avoid spinning on a misbehaving reader.
+			break
+		}
+	}
 	head = head[:n]
 
-	// io.ReadFull collapses a short read into io.ErrUnexpectedEOF and a full
-	// read into nil; both mean "stream ended" for our purposes. Any other
+	// io.EOF just means "stream ended"; it is not a failure. Any other
 	// (non-EOF) error is a genuine read failure that may have arrived together
-	// with the peeked bytes — it must not be silently dropped, or a truncated/
-	// checksummed/decompressing stream that fits within the detection window
-	// would look like a clean parse. Re-deliver it after the peeked bytes.
-	if peekErr == io.EOF || peekErr == io.ErrUnexpectedEOF {
+	// with the peeked bytes — it must not be silently dropped. Re-deliver it
+	// after the peeked bytes via an errReader appended to the chain below.
+	if peekErr == io.EOF {
 		peekErr = nil
 	}
 
