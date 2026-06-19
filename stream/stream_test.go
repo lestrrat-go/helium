@@ -279,6 +279,43 @@ func TestStartAttributeNSRejectsInvalidParts(t *testing.T) {
 	require.Error(t, w.StartAttributeNS("p", "bad local", "urn:x"))
 }
 
+func TestNamespaceURIRejectsInvalidChars(t *testing.T) {
+	t.Parallel()
+	badUTF8 := string([]byte{0xff})
+	t.Run("element NS NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartElementNS("", "a", "x\x00"))
+		require.Empty(t, buf.String())
+	})
+	t.Run("element NS invalid UTF-8 rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartElementNS("p", "a", "urn:"+badUTF8))
+		require.Empty(t, buf.String())
+	})
+	t.Run("attribute NS NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.StartAttributeNS("p", "a", "x\x00"))
+		require.Empty(t, buf.String())
+	})
+	t.Run("attribute NS invalid UTF-8 rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.StartAttributeNS("p", "a", "urn:"+badUTF8))
+		require.Empty(t, buf.String())
+	})
+}
+
 func TestAttributeEscaping(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer

@@ -693,6 +693,13 @@ func (w *Writer) StartElementNS(prefix, localName, namespaceURI string) error {
 	if err := validateNSParts("element", prefix, localName); err != nil {
 		return err
 	}
+	// Validate the namespace URI before StartElement emits anything or
+	// declareNS records a declaration, so an untrusted URI cannot inject
+	// markup as an xmlns attribute value and a rejected call leaves the
+	// writer unmutated.
+	if err := validateXMLChars("namespace URI", namespaceURI); err != nil {
+		return err
+	}
 	qname := qualifiedName(prefix, localName)
 	if err := w.StartElement(qname); err != nil {
 		return err
@@ -875,6 +882,13 @@ func (w *Writer) StartAttributeNS(prefix, localName, namespaceURI string) error 
 	// Validate parts before declareNS mutates the namespace scope, so an
 	// invalid prefix/local name never leaks a declaration or markup.
 	if err := validateNSParts("attribute", prefix, localName); err != nil {
+		return err
+	}
+	// Validate the namespace URI before declareNS records a declaration or
+	// StartAttribute emits anything, so an untrusted URI cannot inject markup
+	// as an xmlns attribute value and a rejected call leaves the writer
+	// unmutated.
+	if err := validateXMLChars("namespace URI", namespaceURI); err != nil {
 		return err
 	}
 	if namespaceURI != "" && prefix != "" {
@@ -1394,7 +1408,14 @@ func (w *Writer) EndDTD() error {
 	return w.err
 }
 
-// WriteDTD writes a complete DOCTYPE declaration.
+// WriteDTD writes a complete DOCTYPE declaration. The name, pubid, and sysid
+// arguments are validated, but subset is written verbatim into the internal
+// subset ("[" ... "]") without any escaping or validation, like [Writer.WriteRaw].
+// Callers must ensure subset is well-formed DTD content; passing untrusted
+// input may produce malformed output or introduce XML injection
+// vulnerabilities. To build an internal subset safely, use the
+// WriteDTDElement, WriteDTDAttlist, WriteDTDEntity, and WriteDTDNotation
+// methods between StartDTD and EndDTD instead.
 func (w *Writer) WriteDTD(name, pubid, sysid, subset string) error {
 	if err := w.StartDTD(name, pubid, sysid); err != nil {
 		return err
