@@ -189,12 +189,14 @@ HTML 4.01 parser producing helium DOM or SAX events.
 XInclude 1.0 processing with recursive inclusion and fallback.
 
 - **NewProcessor() → Processor** — create fluent builder
-- Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`, `WarningHandler(func)`
+- Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`, `MaxIncludeSize(int)`, `ErrorHandler(helium.ErrorHandler)`
 - Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
 - `Resolver` interface — custom resource loader; receives the href already resolved against the effective base (base arg is informational only — do NOT re-resolve, or the base directory is double-applied)
+- `MaxIncludeSize` — default per-include byte cap (10 MiB), used when `Processor.MaxIncludeSize` is unset or ≤ 0; over-cap reads fail with `ErrIncludeTooLarge`
+- Default `NewFSResolver` converts absolute `file:` hrefs to OS paths via `internal/iofs.FileURIToPath` (non-local hosts rejected)
 - Max depth 40, max URI 2000 chars, circular detection, doc/text caching
 - Files: `xinclude.go`
-- Imports: helium, xpointer/, internal/encoding/
+- Imports: helium, xpointer/, internal/encoding/, internal/iofs/, internal/lexicon/
 
 ## xpointer/
 
