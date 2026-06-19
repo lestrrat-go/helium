@@ -1,7 +1,6 @@
 package xinclude_test
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -1690,6 +1689,6 @@ func TestXIncludeFileURINonLocalHost(t *testing.T) {
 		NoXIncludeMarkers().NoBaseFixup().
 		Process(t.Context(), doc)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, fs.ErrNotExist) || strings.Contains(err.Error(), "non-local file URI host"),
-		"expected non-local host rejection, got: %v", err)
+	require.ErrorContains(t, err, "non-local file URI host",
+		"expected explicit non-local host rejection, got: %v", err)
 }
