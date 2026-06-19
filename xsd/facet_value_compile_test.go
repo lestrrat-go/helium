@@ -399,6 +399,30 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 		require.NotContains(t, compileErrors(t, schemaXML), "It is an error for the value of")
 	})
 
+	t.Run("invalid int bounds report only the invalid-bound error not an extra ordering error", func(t *testing.T) {
+		t.Parallel()
+		// xs:int with minInclusive="1.5" maxInclusive="1.0": both bounds are invalid
+		// in the xs:int value space, so they are reported by the bound-value check.
+		// The same-type ordering comparison must NOT additionally fire a min>max
+		// error: with a resolved builtin primitive, an incomparable (invalid) bound
+		// pair is skipped rather than falling back to a lexical decimal comparison
+		// that xmllint never performs.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:int">
+      <xs:minInclusive value="1.5"/>
+      <xs:maxInclusive value="1.0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, wantMsg, "the invalid bounds must still be reported")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.",
+			"no spurious ordering error when the bounds are invalid for the type")
+	})
+
 	t.Run("inconsistent dateTime exclusive bounds are rejected", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

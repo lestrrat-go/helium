@@ -738,14 +738,24 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	// SPACE, not lexically: for a non-decimal ordered atomic (date/time/duration,
 	// float, double) compareDecimal would treat the bounds as incomparable and let
 	// an inconsistent pair (e.g. minInclusive 2021-01-01 > maxInclusive
-	// 2020-01-01) compile. compareFacetBounds resolves the builtin primitive and
-	// uses the same value-space comparison the instance validator uses, falling
-	// back to compareDecimal only when the type carries no resolvable ordered
-	// primitive.
+	// 2020-01-01) compile. cmp resolves the builtin primitive and uses the same
+	// value-space comparison the instance validator uses.
+	//
+	// When a builtin primitive RESOLVED, compareForRangeFacet ok=false means one of
+	// the bounds is not a valid value of that type's value space (e.g. xs:int with
+	// minInclusive="1.5"). That invalid bound is already reported by the bound-value
+	// validation, so we treat the pair as incomparable and SKIP the ordering check —
+	// falling back to compareDecimal here would emit a spurious extra min>max error
+	// that xmllint does not. The compareDecimal fallback applies ONLY when NO builtin
+	// resolved (builtinLocal == ""), preserving prior behavior for a non-atomic
+	// (list/union) carrier whose ordering cannot be determined from a primitive.
 	builtinLocal := builtinBaseLocal(td)
 	cmp := func(a, b string) (int, bool) {
 		if v, ok := compareForRangeFacet(a, b, builtinLocal); ok {
 			return v, true
+		}
+		if builtinLocal != "" {
+			return 0, false
 		}
 		if v := compareDecimal(a, b); v != -2 {
 			return v, true
