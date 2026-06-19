@@ -27,6 +27,8 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
    - `checkUPA()` — Unique Particle Attribution (content model determinism)
    - Wildcard overlap detection
 
+7. **Compile result gate:** after linking/checks, `compileSchema` returns `(nil, ErrCompilationFailed)` if `c.errorCount > 0` (fatal diagnostics already delivered to the `ErrorHandler`), otherwise `(schema, nil)`. Sub-compiler `errorCount` is merged into the parent (`compile_imports.go`), so an import/include/redefine fatal also fails the top-level `Compile`. `xslt3` schema-awareness (`compile_schema.go`) maps `ErrCompilationFailed` to `XTSE0220`.
+
 ### Validate: Document + Schema → Errors
 
 **Two-pass validation:**

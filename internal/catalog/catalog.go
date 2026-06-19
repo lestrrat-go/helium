@@ -3,7 +3,10 @@
 // github.com/lestrrat-go/helium/catalog package instead.
 package catalog
 
-import "context"
+import (
+	"context"
+	"sync"
+)
 
 const (
 	// MaxDepth is the maximum recursion depth for catalog resolution.
@@ -46,6 +49,9 @@ type Entry struct {
 
 	Prefer  Prefer   // inherited or overridden prefer attribute
 	Catalog *Catalog // for nextCatalog/delegate entries (lazy-loaded)
+
+	loadMu sync.Mutex // guards the lazy load of Catalog (concurrency-safe)
+	loaded bool       // true once Catalog has been successfully loaded
 }
 
 // Loader loads a catalog from a file path. This interface decouples
@@ -62,14 +68,16 @@ type visitedKey struct {
 	id2 string
 }
 
-// Catalog holds parsed catalog entries and provides resolution.
+// Catalog holds parsed catalog entries and provides resolution. The exported
+// fields are treated as immutable configuration once a Catalog is in use:
+// per-resolution run state (recursion depth, visited cache) lives in a local
+// resolveState, so a single *Catalog may be resolved concurrently from
+// multiple goroutines.
 type Catalog struct {
 	Entries []Entry
 	Prefer  Prefer
 	BaseURI string
-	Depth   int // recursion guard (shared across resolution chain)
 	Loader  Loader
-	visited map[visitedKey]struct{}
 }
 
 // Resolver is the interface that the helium parser uses for catalog

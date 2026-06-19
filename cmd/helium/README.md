@@ -28,11 +28,12 @@ XInclude processing, schema validation, XPath checks, and canonicalization.
 ## `helium xpath`
 
 ```text
-helium xpath [--engine 1|3] EXPR [XMLfiles ...]
+helium xpath [--engine 1|3] [--max-input-bytes N] EXPR [XMLfiles ...]
 ```
 
 Evaluates an XPath expression against XML input. Engine `3` is the default;
-engine `1` selects the XPath 1.0 implementation.
+engine `1` selects the XPath 1.0 implementation. `--max-input-bytes` caps the
+bytes read per XML input (default 100 MiB; `0` = unlimited).
 
 ## `helium xslt`
 
@@ -45,29 +46,32 @@ Applies an XSLT 3.0 stylesheet to one or more XML documents.
 ## `helium relaxng validate`
 
 ```text
-helium relaxng validate [--timing] SCHEMA [XMLfiles ...]
+helium relaxng validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]
 ```
 
 Compiles a RELAX NG schema once, then validates each input XML document
-against it.
+against it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
+`0` = unlimited).
 
 ## `helium schematron validate`
 
 ```text
-helium schematron validate [--timing] SCHEMA [XMLfiles ...]
+helium schematron validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]
 ```
 
 Compiles a Schematron schema once, then validates each input XML document
-against it.
+against it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
+`0` = unlimited).
 
 ## `helium xsd validate`
 
 ```text
-helium xsd validate [--timing] SCHEMA [XMLfiles ...]
+helium xsd validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]
 ```
 
 Compiles an XML Schema once, then validates each input XML document against
-it.
+it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
+`0` = unlimited).
 
 ## Common XSLT Flags
 
@@ -76,6 +80,12 @@ it.
 | `--output FILE` / `-o FILE` | Write output to FILE |
 | `--param NAME VALUE` | Set stylesheet parameter to XPath expression |
 | `--stringparam NAME VALUE` | Set stylesheet parameter to string value |
-| `--noout` | Run transformation without producing output |
+| `--noout` | Run transformation without producing output (rejected with `--output`) |
 | `--timing` | Print compile/parse/transform timing to stderr |
+| `--max-input-bytes N` | Cap bytes read per input (default 100 MiB; `0` = unlimited) |
 | `--version` | Display version |
+
+`--output` is refused when it names an input or the stylesheet, or when
+combined with `--noout`, so it never truncates a file the command still needs
+to read. Local `xsl:include`/`xsl:import` modules resolve relative to the
+stylesheet's directory.
