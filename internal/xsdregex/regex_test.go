@@ -60,10 +60,12 @@ func TestLiteralAnchorChars(t *testing.T) {
 		require.False(t, re.MatchString(""))
 	})
 	t.Run("dollar amount", func(t *testing.T) {
-		re, err := xsdregex.Compile(`\$[0-9]+`)
+		// In XSD regex a bare '$' is a literal character, not an end anchor.
+		// This proves '$' is matched literally and is NOT treated as an anchor.
+		re, err := xsdregex.Compile(`$[0-9]+`)
 		require.NoError(t, err)
-		require.True(t, re.MatchString("$100"))
-		require.False(t, re.MatchString("100"))
+		require.True(t, re.MatchString("$123"), "bare $ is a literal, so $123 matches")
+		require.False(t, re.MatchString("123"), "$ is not an anchor, so 123 alone does not match")
 	})
 }
 
