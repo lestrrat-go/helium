@@ -362,6 +362,84 @@ func validateNSParts(kind, prefix, localName string) error {
 	return nil
 }
 
+// isValidXMLVersion reports whether v is a valid XML declaration VersionNum.
+// VersionNum ::= '1.' [0-9]+ (XML 1.0 §2.8). Restricting to this grammar
+// prevents an untrusted version string from injecting markup into the XML
+// declaration (e.g. `1.0"?><x/>`).
+func isValidXMLVersion(v string) bool {
+	rest, ok := strings.CutPrefix(v, "1.")
+	if !ok {
+		return false
+	}
+	if rest == "" {
+		return false
+	}
+	for i := range len(rest) {
+		if rest[i] < '0' || rest[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isPubidChar reports whether r is a valid XML PubidChar (XML 1.0 §2.3):
+//
+//	PubidChar ::= #x20 | #xD | #xA | [a-zA-Z0-9] | [-'()+,./:=?;!*#@$_%]
+func isPubidChar(r rune) bool {
+	switch {
+	case r == 0x20 || r == 0xD || r == 0xA:
+		return true
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return true
+	case strings.ContainsRune("-'()+,./:=?;!*#@$_%", r):
+		return true
+	default:
+		return false
+	}
+}
+
+// validatePubid reports whether s consists solely of PubidChars, so it cannot
+// inject markup or be unrepresentable when emitted as a DTD public identifier.
+func validatePubid(s string) bool {
+	for _, r := range s {
+		if !isPubidChar(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// validateSystemID reports whether s is representable as a quoted DTD system
+// identifier. A system literal must contain only valid XML chars and must not
+// contain both quote characters (which would make it unquotable), and must not
+// contain markup-significant '<' or '>'.
+func validateSystemID(s string) bool {
+	if strings.Contains(s, "'") && strings.Contains(s, `"`) {
+		return false
+	}
+	for _, r := range s {
+		if !xmlchar.IsChar(r) {
+			return false
+		}
+		if r == '<' || r == '>' {
+			return false
+		}
+	}
+	return true
+}
+
+// validateXMLChars reports whether s contains only valid XML 1.0 Chars.
+// kind shapes the error message. It is used to reject control characters
+// (e.g. NUL) from text, attribute, comment, PI, and CDATA output.
+func validateXMLChars(kind, s string) error {
+	for _, r := range s {
+		if !xmlchar.IsChar(r) {
+			return fmt.Errorf("stream: invalid XML character %#U in %s content", r, kind)
+		}
+	}
+	return nil
+}
+
 // qualifiedName returns prefix:localName or just localName if prefix is empty.
 func qualifiedName(prefix, localName string) string {
 	if prefix == "" {
@@ -428,6 +506,14 @@ func (w *Writer) StartDocument(version, enc, standalone string) error {
 	}
 	if version == "" {
 		version = "1.0"
+	}
+	// Validate version and standalone before writing, so an untrusted value
+	// cannot inject markup into (or otherwise corrupt) the XML declaration.
+	if !isValidXMLVersion(version) {
+		return fmt.Errorf("stream: invalid XML version %q", version)
+	}
+	if standalone != "" && standalone != "yes" && standalone != "no" {
+		return fmt.Errorf("stream: invalid standalone value %q (want \"yes\", \"no\", or empty)", standalone)
 	}
 	w.writeStr("<?xml version=")
 	w.writeByte(w.quoteChar)
@@ -770,19 +856,31 @@ func (w *Writer) WriteString(content string) error {
 	}
 	switch w.state {
 	case stateName:
+		if err := validateXMLChars("text", content); err != nil {
+			return err
+		}
 		w.closeTagIfOpen()
 		if len(w.elemStack) > 0 {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
 		w.writeTextEscaped(content)
 	case stateNone, stateText, stateDocument:
+		if err := validateXMLChars("text", content); err != nil {
+			return err
+		}
 		if len(w.elemStack) > 0 {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
 		w.writeTextEscaped(content)
 	case stateAttribute:
+		if err := validateXMLChars("attribute", content); err != nil {
+			return err
+		}
 		w.writeAttrEscaped(content)
 	case stateComment:
+		if err := validateXMLChars("comment", content); err != nil {
+			return err
+		}
 		if w.commentDash && strings.HasPrefix(content, "-") {
 			return errors.New("stream: comment content must not contain '--'")
 		}
@@ -794,6 +892,9 @@ func (w *Writer) WriteString(content string) error {
 			w.commentDash = strings.HasSuffix(content, "-")
 		}
 	case statePI, statePIText:
+		if err := validateXMLChars("processing instruction", content); err != nil {
+			return err
+		}
 		if w.piQuestion && strings.HasPrefix(content, ">") {
 			return errors.New("stream: processing instruction content must not contain '?>'")
 		}
@@ -806,6 +907,9 @@ func (w *Writer) WriteString(content string) error {
 		}
 		w.state = statePIText
 	case stateCDATA:
+		if err := validateXMLChars("CDATA", content); err != nil {
+			return err
+		}
 		w.writeCDATAEscaped(content)
 	default:
 		return errors.New("stream: WriteString called in invalid state")
@@ -1086,6 +1190,17 @@ func (w *Writer) StartDTD(name, pubid, sysid string) error {
 	if pubid != "" && sysid == "" {
 		return errors.New("stream: StartDTD requires sysid when pubid is provided")
 	}
+	// Validate name and external identifiers before writing, so an untrusted
+	// value cannot inject markup into (or produce an unquotable) DOCTYPE.
+	if !xmlchar.IsValidQName(name) {
+		return fmt.Errorf("stream: invalid DTD name %q", name)
+	}
+	if pubid != "" && !validatePubid(pubid) {
+		return fmt.Errorf("stream: invalid DTD public identifier %q", pubid)
+	}
+	if sysid != "" && !validateSystemID(sysid) {
+		return fmt.Errorf("stream: invalid DTD system identifier %q", sysid)
+	}
 	if w.indent != "" {
 		w.writeStr("\n")
 	}
@@ -1188,6 +1303,12 @@ func (w *Writer) WriteDTDElement(name, content string) error {
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDElement called outside DTD")
 	}
+	if !xmlchar.IsValidQName(name) {
+		return fmt.Errorf("stream: invalid DTD element name %q", name)
+	}
+	if err := validateXMLChars("DTD element", content); err != nil {
+		return err
+	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!ELEMENT ")
 	w.writeStr(name)
@@ -1204,6 +1325,12 @@ func (w *Writer) WriteDTDAttlist(name, content string) error {
 	}
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDAttlist called outside DTD")
+	}
+	if !xmlchar.IsValidQName(name) {
+		return fmt.Errorf("stream: invalid DTD attlist name %q", name)
+	}
+	if err := validateXMLChars("DTD attlist", content); err != nil {
+		return err
 	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!ATTLIST ")
@@ -1222,6 +1349,12 @@ func (w *Writer) WriteDTDEntity(pe bool, name, content string) error {
 	}
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDEntity called outside DTD")
+	}
+	if !xmlchar.IsValidQName(name) {
+		return fmt.Errorf("stream: invalid DTD entity name %q", name)
+	}
+	if err := validateXMLChars("DTD entity", content); err != nil {
+		return err
 	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!ENTITY ")
@@ -1245,6 +1378,18 @@ func (w *Writer) WriteDTDExternalEntity(pe bool, name, pubid, sysid, ndata strin
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDExternalEntity called outside DTD")
 	}
+	if !xmlchar.IsValidQName(name) {
+		return fmt.Errorf("stream: invalid DTD entity name %q", name)
+	}
+	if pubid != "" && !validatePubid(pubid) {
+		return fmt.Errorf("stream: invalid DTD public identifier %q", pubid)
+	}
+	if sysid != "" && !validateSystemID(sysid) {
+		return fmt.Errorf("stream: invalid DTD system identifier %q", sysid)
+	}
+	if ndata != "" && !xmlchar.IsValidQName(ndata) {
+		return fmt.Errorf("stream: invalid DTD notation name %q", ndata)
+	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!ENTITY ")
 	if pe {
@@ -1253,18 +1398,21 @@ func (w *Writer) WriteDTDExternalEntity(pe bool, name, pubid, sysid, ndata strin
 	w.writeStr(name)
 	if pubid != "" {
 		w.writeStr(" PUBLIC ")
-		w.writeByte(w.quoteChar)
+		pubQ := dtdQuoteFor(pubid, w.quoteChar)
+		w.writeByte(pubQ)
 		w.writeStr(pubid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(pubQ)
 		w.writeByte(' ')
-		w.writeByte(w.quoteChar)
+		sysQ := dtdQuoteFor(sysid, w.quoteChar)
+		w.writeByte(sysQ)
 		w.writeStr(sysid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(sysQ)
 	} else if sysid != "" {
 		w.writeStr(" SYSTEM ")
-		w.writeByte(w.quoteChar)
+		sysQ := dtdQuoteFor(sysid, w.quoteChar)
+		w.writeByte(sysQ)
 		w.writeStr(sysid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(sysQ)
 	}
 	if ndata != "" {
 		w.writeStr(" NDATA ")
@@ -1282,25 +1430,37 @@ func (w *Writer) WriteDTDNotation(name, pubid, sysid string) error {
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDNotation called outside DTD")
 	}
+	if !xmlchar.IsValidQName(name) {
+		return fmt.Errorf("stream: invalid DTD notation name %q", name)
+	}
+	if pubid != "" && !validatePubid(pubid) {
+		return fmt.Errorf("stream: invalid DTD public identifier %q", pubid)
+	}
+	if sysid != "" && !validateSystemID(sysid) {
+		return fmt.Errorf("stream: invalid DTD system identifier %q", sysid)
+	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!NOTATION ")
 	w.writeStr(name)
 	if pubid != "" {
 		w.writeStr(" PUBLIC ")
-		w.writeByte(w.quoteChar)
+		pubQ := dtdQuoteFor(pubid, w.quoteChar)
+		w.writeByte(pubQ)
 		w.writeStr(pubid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(pubQ)
 		if sysid != "" {
 			w.writeByte(' ')
-			w.writeByte(w.quoteChar)
+			sysQ := dtdQuoteFor(sysid, w.quoteChar)
+			w.writeByte(sysQ)
 			w.writeStr(sysid)
-			w.writeByte(w.quoteChar)
+			w.writeByte(sysQ)
 		}
 	} else if sysid != "" {
 		w.writeStr(" SYSTEM ")
-		w.writeByte(w.quoteChar)
+		sysQ := dtdQuoteFor(sysid, w.quoteChar)
+		w.writeByte(sysQ)
 		w.writeStr(sysid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(sysQ)
 	}
 	w.writeByte('>')
 	return w.err

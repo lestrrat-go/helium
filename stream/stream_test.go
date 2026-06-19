@@ -1459,3 +1459,137 @@ func (fb *flushableBuffer) Flush() error {
 	fb.flushed = true
 	return nil
 }
+
+func TestStartDocumentVersionStandaloneValidation(t *testing.T) {
+	t.Parallel()
+	t.Run("version injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		err := w.StartDocument(`1.0"?><x/>`, "", "")
+		require.Error(t, err)
+		require.Empty(t, buf.String())
+	})
+	t.Run("non-1.x version rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartDocument("2.0", "", ""))
+	})
+	t.Run("valid 1.1 accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("1.1", "", ""))
+	})
+	t.Run("invalid standalone rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		err := w.StartDocument("1.0", "", `yes"?><x/>`)
+		require.Error(t, err)
+		require.Empty(t, buf.String())
+	})
+	t.Run("standalone yes/no accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("1.0", "", "yes"))
+		require.Contains(t, buf.String(), `standalone="yes"`)
+	})
+}
+
+func TestDTDIdentifierValidation(t *testing.T) {
+	t.Parallel()
+	t.Run("name injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.Error(t, w.StartDTD(`x><!ENTITY e "pwn">`, "", ""))
+	})
+	t.Run("sysid with both quotes rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.Error(t, w.StartDTD("root", "", `a'b"c`))
+	})
+	t.Run("sysid markup rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.Error(t, w.StartDTD("root", "", `x"><x/>`))
+	})
+	t.Run("pubid invalid char rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.Error(t, w.StartDTD("root", "pub<id", "sys"))
+	})
+	t.Run("notation identifiers validated", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", "sys"))
+		require.Error(t, w.WriteDTDNotation("n", "", `x"><x/>`))
+	})
+	t.Run("valid dtd accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "-//W3C//DTD//EN", "http://example.com/x.dtd"))
+		require.NoError(t, w.EndDTD())
+	})
+}
+
+func TestInvalidXMLCharRejection(t *testing.T) {
+	t.Parallel()
+	t.Run("text NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteString("x\x00y"))
+	})
+	t.Run("attribute NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteAttribute("k", "v\x00"))
+	})
+	t.Run("comment control char rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteComment("c\x01"))
+	})
+	t.Run("PI control char rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WritePI("tgt", "d\x00"))
+	})
+	t.Run("CDATA NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteCDATA("c\x00d"))
+	})
+	t.Run("valid chars accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.NoError(t, w.WriteString("hello\tworld\n"))
+		require.NoError(t, w.EndElement())
+	})
+}
