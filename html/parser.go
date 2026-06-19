@@ -1016,6 +1016,170 @@ func (p *parser) parseCharRef() {
 	_ = p.emitCharacters([]byte(text))
 }
 
+// maxEntityNameLen is one past the length of the longest named HTML entity
+// ("CounterClockwiseContourIntegral", 31 chars). An alphanumeric run reaching
+// this length cannot match any known entity, so the char-ref scan can stop and
+// treat the run as unresolved literal text without consulting the entity table.
+const maxEntityNameLen = 32
+
+// parseCharRefBounded handles an entity reference inside cap-aware content
+// (RCDATA: title/textarea) where the surrounding text is flushed to SAX in
+// chunks no larger than limit. Unlike parseCharRef it never scans an unbounded
+// name or numeric-digit run into one string and never emits one giant
+// Characters event for an unresolved reference: the leading '&' plus the bytes
+// that cannot form a valid reference are flushed as literal text in capped
+// chunks. Valid/known references under the cap behave exactly as parseCharRef.
+func (p *parser) parseCharRefBounded(limit int) {
+	// Entity content is non-whitespace — ensure implied elements.
+	p.htmlStartCharData()
+
+	_ = p.cur.Advance(1) // skip '&'
+
+	if p.cur.Peek() == '#' {
+		_ = p.cur.Advance(1) // skip '#'
+		var codepoint int
+		var haveDigits bool
+		var hex bool
+		var digits string
+		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
+			hex = true
+			_ = p.cur.Advance(1) // skip 'x'
+			// Bound the hex-digit run: a numeric reference far longer than a
+			// codepoint's worth of digits is invalid (overflows), so a run that
+			// reaches maxNumericRefLen cannot resolve and the whole construct is
+			// flushed as literal text in capped chunks below.
+			digits = p.parseWhileMax(isHexDigit, maxNumericRefLen)
+			codepoint, haveDigits = parseNumericCharRef(digits, 16)
+		} else {
+			digits = p.parseWhileMax(isDigit, maxNumericRefLen)
+			codepoint, haveDigits = parseNumericCharRef(digits, 10)
+		}
+		// A digit run at the cap means more digits follow than any valid
+		// reference can hold: treat the whole construct as unresolved literal.
+		if len(digits) >= maxNumericRefLen {
+			prefix := "&#"
+			if hex {
+				prefix = "&#x"
+			}
+			p.emitLiteralChunked(prefix+digits, limit)
+			p.flushAlnumLiteral(isHexOrDecDigit(hex), limit)
+			return
+		}
+		if p.cur.Peek() == ';' {
+			_ = p.cur.Advance(1)
+		}
+		if haveDigits {
+			cp := normalizeNumericCharRef(codepoint)
+			var buf [4]byte
+			n := utf8.EncodeRune(buf[:], cp)
+			_ = p.emitCharacters(buf[:n])
+		}
+		return
+	}
+
+	// Named entity — bound the name scan at maxEntityNameLen.
+	name := p.parseWhileMax(isAlphanumeric, maxEntityNameLen)
+
+	// A name at the cap cannot match any known entity (the longest is 31
+	// chars). Flush "&" + the scanned name plus the rest of the alphanumeric
+	// run as literal text in capped chunks rather than buffering it whole.
+	if len(name) >= maxEntityNameLen {
+		p.emitLiteralChunked("&"+name, limit)
+		p.flushAlnumLiteral(isAlphanumeric, limit)
+		return
+	}
+
+	hasSemicolon := false
+	if p.cur.Peek() == ';' {
+		hasSemicolon = true
+		_ = p.cur.Advance(1)
+	}
+
+	if name != "" {
+		if val, ok := lookupEntity(name); ok {
+			if hasSemicolon {
+				_ = p.emitCharacters([]byte(val))
+				return
+			}
+			if isLegacyEntity(name) {
+				_ = p.emitCharacters([]byte(val))
+				return
+			}
+		}
+		if !hasSemicolon {
+			for i := len(name) - 1; i > 0; i-- {
+				prefix := name[:i]
+				if isLegacyEntity(prefix) {
+					if val, ok := lookupEntity(prefix); ok {
+						_ = p.emitCharacters([]byte(val))
+						_ = p.emitCharacters([]byte(name[i:]))
+						return
+					}
+				}
+			}
+		}
+	}
+
+	// Unknown entity — emit as literal text (already bounded by the name cap).
+	text := "&" + name
+	if hasSemicolon {
+		text += ";"
+	}
+	_ = p.emitCharacters([]byte(text))
+}
+
+// maxNumericRefLen is one past the maximum number of digits a valid numeric
+// character reference can hold. The largest Unicode code point is U+10FFFF: 7
+// decimal digits or 6 hex digits, with leading zeros tolerated. A run reaching
+// this length is well past any value parseNumericCharRef accepts, so it is
+// treated as unresolved literal text. The bound only governs chunking — it is
+// generous so legitimate (zero-padded) references still resolve.
+const maxNumericRefLen = 32
+
+// flushAlnumLiteral consumes the remainder of an over-cap character-reference
+// run — the bytes matching pred plus a trailing ';' if present — and emits them
+// as literal text in chunks no larger than limit, so an unresolved reference is
+// never materialized as one giant Characters event.
+func (p *parser) flushAlnumLiteral(pred func(byte) bool, limit int) {
+	for {
+		chunk := p.parseWhileMax(pred, limit)
+		if chunk == "" {
+			break
+		}
+		_ = p.emitCharacters([]byte(chunk))
+	}
+	if p.cur.Peek() == ';' {
+		_ = p.cur.Advance(1)
+		_ = p.emitCharacters([]byte(";"))
+	}
+}
+
+// emitLiteralChunked emits s as literal text in Characters events no larger
+// than limit bytes. s contains only ASCII (the '&', '#', 'x', and alphanumeric
+// or digit bytes of a character reference), so splitting on byte boundaries
+// never breaks a multi-byte rune.
+func (p *parser) emitLiteralChunked(s string, limit int) {
+	if limit <= 0 {
+		limit = defaultMaxContentSize
+	}
+	for len(s) > limit {
+		_ = p.emitCharacters([]byte(s[:limit]))
+		s = s[limit:]
+	}
+	if len(s) > 0 {
+		_ = p.emitCharacters([]byte(s))
+	}
+}
+
+// isHexOrDecDigit returns the digit predicate for a numeric character
+// reference: hex digits when hex is true, decimal digits otherwise.
+func isHexOrDecDigit(hex bool) func(byte) bool {
+	if hex {
+		return isHexDigit
+	}
+	return isDigit
+}
+
 // emitError fires a SAX Error event unless suppressed by WithNoError.
 func (p *parser) emitError(msg string, args ...any) error {
 	if p.cfg.noError {
@@ -1286,7 +1450,7 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 		}
 
 		if p.cur.Peek() == '&' {
-			p.parseCharRef()
+			p.parseCharRefBounded(limit)
 		} else {
 			// Collect text up to next & or potential end tag, but cap the run
 			// at the content limit so one huge text span is emitted in bounded
@@ -1624,6 +1788,27 @@ func (p *parser) parseQuotedString() string {
 func (p *parser) parseWhile(pred func(byte) bool) string {
 	n := 0
 	for {
+		b := p.cur.PeekAt(n)
+		if b == 0 || !pred(b) {
+			break
+		}
+		n++
+	}
+	if n == 0 {
+		return ""
+	}
+	s := p.cur.PeekString(n)
+	_ = p.cur.Advance(n)
+	return s
+}
+
+// parseWhileMax is parseWhile with an upper bound: it consumes at most limit
+// matching bytes, leaving any further matching bytes for the next call. It lets
+// a caller bound an otherwise unbounded scan (e.g. a runaway entity name) and
+// drain it in fixed-size pieces. A limit <= 0 is treated as unbounded.
+func (p *parser) parseWhileMax(pred func(byte) bool, limit int) string {
+	n := 0
+	for limit <= 0 || n < limit {
 		b := p.cur.PeekAt(n)
 		if b == 0 || !pred(b) {
 			break

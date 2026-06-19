@@ -13,9 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// tagPlaintext is the <plaintext> element name, reused across these table-driven
+// tagPlaintext / tagTextarea are element names reused across these table-driven
 // cases (factored out to satisfy goconst).
-const tagPlaintext = "plaintext"
+const (
+	tagPlaintext = "plaintext"
+	tagTextarea  = "textarea"
+)
 
 // cancelAfterReader is an io.Reader that streams a fixed body and invokes a
 // cancel func once a threshold number of bytes has been read. It lets a test
@@ -64,7 +67,7 @@ func TestRawTextContextCancellationAborts(t *testing.T) {
 	}{
 		{"script", "<script>" + body},
 		{"style", "<style>" + body},
-		{"textarea", "<textarea>" + body},
+		{tagTextarea, "<textarea>" + body},
 		{"title", "<title>" + body},
 		{tagPlaintext, "<plaintext>" + body},
 	}
@@ -138,8 +141,8 @@ func TestRawTextChunksAreValidUTF8(t *testing.T) {
 	}{
 		{"script", "<script>", "</script>"},
 		{"style", "<style>", "</style>"},
-		{"textarea", "<textarea>", "</textarea>"}, // RCDATA
-		{"title", "<title>", "</title>"},          // RCDATA
+		{tagTextarea, "<textarea>", "</textarea>"}, // RCDATA
+		{"title", "<title>", "</title>"},           // RCDATA
 		{tagPlaintext, "<plaintext>", ""},
 	}
 
@@ -189,7 +192,7 @@ func TestRawTextContentChunkedUnderCap(t *testing.T) {
 	}{
 		{"script", "<script>", "</script>"},
 		{"style", "<style>", "</style>"},
-		{"textarea", "<textarea>", "</textarea>"},
+		{tagTextarea, "<textarea>", "</textarea>"},
 		{tagPlaintext, "<plaintext>", ""},
 	}
 
@@ -423,5 +426,65 @@ func TestRawTextChunkSlicesAreIndependent(t *testing.T) {
 			require.Equal(t, string(body), string(got),
 				"retained chunk slices must not be overwritten by later content")
 		})
+	}
+}
+
+// TestRCDATAUnknownEntityChunked is the regression for the RCDATA char-ref
+// bypass: with a tiny MaxContentSize, an unresolved entity reference such as
+// `<title>&aaaa...(huge)...</title>` must NOT be scanned into one string and
+// emitted as a single giant Characters event. The leading '&' plus the runaway
+// name must be flushed as literal text in capped chunks, the full content must
+// still be preserved, and no chunk may exceed the cap by more than a small
+// terminator slack. Covers both RCDATA elements (title, textarea) and both the
+// named-entity and numeric-reference paths.
+func TestRCDATAUnknownEntityChunked(t *testing.T) {
+	const limit = 4
+	const runLen = 4096 // far larger than any valid entity name / numeric ref
+
+	cases := []struct {
+		name string
+		body string // RCDATA content (the literal text expected back out)
+	}{
+		{"named", "&" + strings.Repeat("a", runLen)},
+		{"named_semicolon", "&" + strings.Repeat("a", runLen) + ";"},
+		{"numeric_dec", "&#" + strings.Repeat("9", runLen)},
+		{"numeric_hex", "&#x" + strings.Repeat("f", runLen)},
+	}
+
+	for _, elem := range []string{"title", tagTextarea} {
+		for _, tc := range cases {
+			t.Run(elem+"_"+tc.name, func(t *testing.T) {
+				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
+
+				var chunks [][]byte
+				record := html.CharactersFunc(func(data []byte) error {
+					chunks = append(chunks, append([]byte(nil), data...))
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				require.NoError(t, err,
+					"over-cap unknown entity in RCDATA must parse, not error")
+
+				var got strings.Builder
+				maxChunk := 0
+				for _, c := range chunks {
+					got.Write(c)
+					if len(c) > maxChunk {
+						maxChunk = len(c)
+					}
+				}
+				require.Equal(t, tc.body, got.String(),
+					"unresolved RCDATA entity literal must be preserved intact")
+				require.LessOrEqual(t, maxChunk, limit+16,
+					"no single Characters chunk may exceed the cap")
+				require.Greater(t, len(chunks), 1,
+					"runaway RCDATA entity must be split into multiple chunks")
+			})
+		}
 	}
 }
