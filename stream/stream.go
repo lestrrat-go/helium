@@ -396,7 +396,12 @@ func (w *Writer) writeCDATAEscaped(s string) {
 			// "]]>" detected: the preceding "]]" has already been
 			// written into this section, so flush up to here, close the
 			// section, and reopen a new one before emitting the '>'.
-			w.writeStr(s[start:i])
+			// Guard against an empty write when "]]>" straddles a call
+			// boundary (start == i), which would emit an avoidable empty
+			// write and could trip side-effecting io.StringWriter impls.
+			if start < i {
+				w.writeStr(s[start:i])
+			}
 			w.writeStr("]]><![CDATA[")
 			start = i
 			w.cdataBrackets = 0

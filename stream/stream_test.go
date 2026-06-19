@@ -667,6 +667,47 @@ func TestCDATAWriteStringEscapesTerminator(t *testing.T) {
 		require.Equal(t, `<root><![CDATA[foo]]]]><![CDATA[>bar]]></root>`, out)
 		requireNoRawCDATATerminator(t, out)
 	})
+	t.Run("terminator straddling call boundary emits no empty write", func(t *testing.T) {
+		t.Parallel()
+		// "]]>" split as "]]" then ">" forces the split point to land at
+		// the very start of the second WriteString. The Writer must not
+		// flush an empty string before the CDATA split marker, which would
+		// trip a side-effecting io.StringWriter implementation.
+		sw := &noEmptyStringWriter{}
+		w := stream.NewWriter(sw)
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.StartCDATA())
+		require.NoError(t, w.WriteString("]]"))
+		require.NoError(t, w.WriteString(">"))
+		require.NoError(t, w.EndCDATA())
+		require.NoError(t, w.EndElement())
+		require.NoError(t, w.Error())
+		require.Empty(t, sw.empties, "Writer emitted an empty WriteString")
+		out := sw.buf.String()
+		require.Equal(t, `<root><![CDATA[]]]]><![CDATA[>]]></root>`, out)
+		requireNoRawCDATATerminator(t, out)
+	})
+}
+
+// noEmptyStringWriter is an io.StringWriter that records any empty WriteString
+// call so tests can assert the Writer never emits an avoidable empty write.
+type noEmptyStringWriter struct {
+	buf     bytes.Buffer
+	empties int
+}
+
+func (w *noEmptyStringWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		w.empties++
+	}
+	return w.buf.Write(p)
+}
+
+func (w *noEmptyStringWriter) WriteString(s string) (int, error) {
+	if s == "" {
+		w.empties++
+	}
+	return w.buf.WriteString(s)
 }
 
 // requireNoRawCDATATerminator scans the emitted XML and asserts that no CDATA
