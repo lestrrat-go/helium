@@ -483,6 +483,12 @@ func validateDTDAttlistFragment(kind, s string) error {
 	}
 	var quote rune // 0 when outside a literal, else the active quote char
 	for _, r := range s {
+		// '<' is never legal in an attlist body: raw '<' is forbidden even
+		// inside an AttValue literal per the XML grammar, so reject it
+		// regardless of quote state.
+		if r == '<' {
+			return fmt.Errorf("stream: %s content must not contain %q", kind, string(r))
+		}
 		switch {
 		case quote != 0:
 			if r == quote {
@@ -490,8 +496,6 @@ func validateDTDAttlistFragment(kind, s string) error {
 			}
 		case r == '\'' || r == '"':
 			quote = r
-		case r == '<':
-			return fmt.Errorf("stream: %s content must not contain %q", kind, string(r))
 		case r == '>':
 			return fmt.Errorf("stream: %s content must not contain %q outside a quoted literal", kind, string(r))
 		}

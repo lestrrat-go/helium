@@ -1697,6 +1697,16 @@ func TestDTDFragmentInjectionRejected(t *testing.T) {
 		require.NoError(t, w.EndDTD())
 		require.Contains(t, buf.String(), `<!ATTLIST root a CDATA "a>b">`)
 	})
+	t.Run("attlist quoted less-than rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		// '<' is forbidden in an AttValue even inside a quoted literal.
+		require.Error(t, w.WriteDTDAttlist("root", `a CDATA "<"`))
+		require.NotContains(t, buf.String(), "ATTLIST")
+	})
 	t.Run("attlist unterminated literal trailing greater-than rejected", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
