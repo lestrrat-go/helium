@@ -337,6 +337,74 @@ func TestIDCLocalShadowsGlobalInvalidXsiType(t *testing.T) {
 		"no spurious IDC diagnostic should fire for the shadowing local element; got: %s", errs)
 }
 
+// TestIDCAllMissingRequiredShadowsGlobal is the regression test for the matchAll
+// recordElemDecl ordering bug: in an xs:all group, the matched local child
+// declaration was recorded only AFTER the post-scan missing-required/duplicate
+// early returns. So when a matched LOCAL child shadowing a same-named GLOBAL sat
+// alongside a MISSING required sibling, matchAll returned at the missing-required
+// check BEFORE recording the local decl, leaving pass-2's idcHostDecl to fall
+// back to the GLOBAL declaration and apply its key — producing a spurious
+// globalSubKey duplicate-key diagnostic on top of the real missing-child error.
+// xmllint reports ONLY the missing-child error here. The fix records each matched
+// child decl during the initial xs:all scan, before any early return.
+func TestIDCAllMissingRequiredShadowsGlobal(t *testing.T) {
+	t.Parallel()
+
+	// Global <item> carries globalSubKey on its <sub> children. Inside <root>'s
+	// xs:all group the LOCAL <item> shadows the NAME and declares no identity
+	// constraint; a sibling required <other> is also part of the all group.
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="item">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="sub" maxOccurs="unbounded">
+          <xs:complexType><xs:attribute name="k" type="xs:string"/></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="globalSubKey">
+      <xs:selector xpath="sub"/>
+      <xs:field xpath="@k"/>
+    </xs:key>
+  </xs:element>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:all>
+        <xs:element name="item">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="sub" maxOccurs="unbounded">
+                <xs:complexType><xs:attribute name="k" type="xs:string"/></xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="other" type="xs:string"/>
+      </xs:all>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	v, compileErrs := compileXSD(t, schemaXML)
+	require.Empty(t, compileErrs, "xs:all shadowing schema should compile clean")
+
+	// The required sibling <other> is OMITTED, and the LOCAL <item> carries
+	// duplicate @k under its <sub> children. The only error must be the missing
+	// required child; the duplicate must NOT trigger globalSubKey.
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><item><sub k="dup"/><sub k="dup"/></item></root>`))
+	require.NoError(t, err)
+	var errs string
+	err = validateWithOutput(t, v, doc, &errs)
+	require.Error(t, err, "the missing required child must be reported")
+	require.Contains(t, errs, "Missing child element(s)",
+		"expected the missing-child error; got: %s", errs)
+	require.NotContains(t, errs, "globalSubKey",
+		"a local element shadowing a global in xs:all must not inherit the global's key when a sibling is missing; got: %s", errs)
+	require.NotContains(t, errs, "Duplicate key-sequence",
+		"no spurious IDC diagnostic should fire for the shadowing local element; got: %s", errs)
+}
+
 // TestIDCLocalUniqueEvaluated confirms an xs:unique declared on a LOCAL element
 // is evaluated at validation time: a duplicate key-sequence is rejected.
 func TestIDCLocalUniqueEvaluated(t *testing.T) {

@@ -188,6 +188,14 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
 			return consumed, fmt.Errorf("duplicate")
 		}
+		// Record the (possibly LOCAL) host declaration AS SOON AS this child is
+		// matched to a particle, BEFORE the post-scan missing-required/duplicate
+		// early returns can fire. Otherwise pass-2 identity-constraint evaluation
+		// would fall back to a same-named GLOBAL declaration (and apply its IDCs)
+		// for a child that was actually matched to a local declaration here.
+		if edecl, isElem := mg.Particles[idx].Term.(*ElementDecl); isElem {
+			vc.recordElemDecl(child.elem, resolveSubstDecl(child, edecl, vc.schema))
+		}
 		seen[idx] = true
 		consumed++
 	}
@@ -226,11 +234,8 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			continue
 		}
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
-		// Record the (possibly LOCAL) host declaration BEFORE any validation
-		// branch can continue, so pass-2 identity-constraint evaluation does not
-		// fall back to a same-named GLOBAL declaration (and apply its IDCs) when
-		// this element's type resolution fails (e.g. invalid xsi:type, abstract).
-		vc.recordElemDecl(child.elem, actualDecl)
+		// The host declaration was already recorded during the initial scan above
+		// (before any early return). Nothing to record here.
 		td := effectiveDeclType(actualDecl, vc.schema)
 		td, xsiErr := vc.resolveXsiType(ctx, child.elem, td)
 		if xsiErr != nil {
@@ -318,6 +323,14 @@ func (vc *validationContext) matchParticle(ctx context.Context, parent *helium.E
 func (vc *validationContext) matchElementParticle(ctx context.Context, parent *helium.Element, p *Particle, edecl *ElementDecl, children []childElem, pos int, seqHasWildcard bool) (int, error) {
 	count := 0
 	for pos+count < len(children) && elemMatchesDeclOrSubst(children[pos+count], edecl, vc.schema) {
+		// Record each matched child's (possibly LOCAL) host declaration AS SOON
+		// AS it is matched, BEFORE the count<MinOccurs early return below. A
+		// partially-satisfied occurrence (e.g. minOccurs=2 with one child
+		// present) still matched that child to this local declaration; without
+		// recording it, pass-2 identity-constraint evaluation would fall back to
+		// a same-named GLOBAL declaration and apply its IDCs spuriously.
+		child := children[pos+count]
+		vc.recordElemDecl(child.elem, resolveSubstDecl(child, edecl, vc.schema))
 		count++
 		if p.MaxOccurs != Unbounded && count >= p.MaxOccurs {
 			break
@@ -354,12 +367,8 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 	for i := range count {
 		child := children[pos+i]
 		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
-		// Record the (possibly LOCAL) host declaration for pass-2 identity-constraint
-		// evaluation BEFORE any validation branch can continue, so a local element
-		// shadowing a same-named GLOBAL does not fall back to the global declaration
-		// (and apply its IDCs) when its own type resolution fails (e.g. invalid
-		// xsi:type, blocked derivation, abstract).
-		vc.recordElemDecl(child.elem, actualDecl)
+		// The host declaration was already recorded during the initial match scan
+		// above (before any early return). Nothing to record here.
 		declType := effectiveDeclType(actualDecl, vc.schema)
 		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType)
 		if xsiErr != nil {
