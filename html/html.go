@@ -170,15 +170,16 @@ func (sp saxParser) ParseReader(ctx context.Context, r io.Reader) (*helium.Docum
 
 // PushParser provides an incremental HTML parsing interface
 // (libxml2: htmlCreatePushParserCtxt).
-// Data is pushed via Push or Write. A background goroutine waits for all
-// data to arrive, then parses it in one shot. Call [PushParser.Close] to
-// signal end-of-input and retrieve the parsed Document.
+// Data is pushed via Push or Write. A background goroutine consumes the
+// pushed chunks incrementally as they arrive, parsing data progressively
+// rather than waiting for all input. Call [PushParser.Close] to signal
+// end-of-input and retrieve the parsed Document.
 type PushParser = push.Parser[*helium.Document]
 
 // NewPushParser creates an HTML PushParser that builds a DOM tree.
-// A background goroutine is started immediately; it waits for data
-// pushed via [PushParser.Push] or [PushParser.Write], then parses
-// everything in one shot once [PushParser.Close] is called.
+// A background goroutine is started immediately; it consumes data pushed
+// via [PushParser.Push] or [PushParser.Write] incrementally as it arrives,
+// and returns the completed Document once [PushParser.Close] is called.
 func (p Parser) NewPushParser(ctx context.Context) *PushParser {
 	return push.New[*helium.Document](ctx, p)
 }
