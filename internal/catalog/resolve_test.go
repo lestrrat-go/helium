@@ -2,6 +2,8 @@ package catalog_test
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -104,6 +106,176 @@ func TestResolveURIIgnoresDelegateSystem(t *testing.T) {
 	got := cat.ResolveURI(t.Context(), "http://example.com/asset")
 	require.Equal(t, "", got)
 	require.Nil(t, loader.counts[sharedCatalogXML], "delegateSystem must not be loaded during ResolveURI")
+}
+
+// TestConcurrentResolveSharedCatalog exercises a single *Catalog resolved from
+// many goroutines at once over delegate and nextCatalog chains. With the
+// shared-receiver bug it raced (or panicked) under -race; per-resolution state
+// must keep it correct and race-free.
+func TestConcurrentResolveSharedCatalog(t *testing.T) {
+	t.Parallel()
+
+	// Leaf catalogs reached through the delegate / next chains.
+	systemLeaf := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntrySystem, Name: "http://example.com/sys.dtd", URL: "file:///sys.dtd"},
+		},
+	}
+	publicLeaf := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryPublic, Name: "-//Example//DTD Pub//EN", URL: "file:///pub.dtd"},
+		},
+		Prefer: catalog.PreferPublic,
+	}
+	uriLeaf := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryURI, Name: "http://example.com/asset", URL: "file:///asset"},
+		},
+	}
+
+	loader := &multiLoader{
+		counts: make(map[string]*atomic.Int32),
+		cats: map[string]*catalog.Catalog{
+			"sys.xml": systemLeaf,
+			"pub.xml": publicLeaf,
+			"uri.xml": uriLeaf,
+		},
+	}
+
+	// One shared root combining a delegate chain (system + public) and a
+	// nextCatalog fallback (uri leaf).
+	root := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryDelegateSystem, Name: "http://example.com/", URL: "sys.xml"},
+			{Type: catalog.EntryDelegatePublic, Name: "-//Example//", URL: "pub.xml", Prefer: catalog.PreferPublic},
+			{Type: catalog.EntryNextCatalog, URL: "uri.xml"},
+		},
+		Loader: loader,
+		Prefer: catalog.PreferPublic,
+	}
+
+	const goroutines = 32
+	const iterations = 50
+
+	// Workers must not call require.* (it uses runtime.Goexit, which is only
+	// valid on the test goroutine). Collect mismatches and assert after Wait.
+	type mismatch struct {
+		want string
+		got  string
+	}
+	var (
+		mu         sync.Mutex
+		mismatches []mismatch
+	)
+	record := func(want, got string) {
+		if want == got {
+			return
+		}
+		mu.Lock()
+		mismatches = append(mismatches, mismatch{want: want, got: got})
+		mu.Unlock()
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			ctx := context.Background()
+			for range iterations {
+				record("file:///sys.dtd", root.Resolve(ctx, "", "http://example.com/sys.dtd"))
+				record("file:///pub.dtd", root.Resolve(ctx, "-//Example//DTD Pub//EN", ""))
+				record("file:///asset", root.ResolveURI(ctx, "http://example.com/asset"))
+				record("", root.Resolve(ctx, "", "http://example.com/missing.dtd"))
+			}
+		}()
+	}
+	wg.Wait()
+
+	for _, m := range mismatches {
+		require.Equal(t, m.want, m.got)
+	}
+
+	// Each referenced catalog must be loaded at most once despite the storm of
+	// concurrent resolutions (per-entry load mutex).
+	for url, cnt := range loader.counts {
+		require.LessOrEqual(t, cnt.Load(), int32(1), "catalog %q loaded more than once", url)
+	}
+}
+
+// A transient first-load failure must NOT be cached: a later Resolve has to
+// retry and succeed. Regression for the sticky-loadErr bug where the first
+// failure (canceled context, transient error) was remembered forever.
+func TestTransientLoadFailureRetries(t *testing.T) {
+	t.Parallel()
+
+	leaf := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///foo.dtd"},
+		},
+	}
+	loader := &flakyLoader{cat: leaf, failuresLeft: 1}
+
+	root := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryNextCatalog, URL: sharedCatalogXML},
+		},
+		Loader: loader,
+	}
+
+	// First resolution: the load fails, so the entry must not resolve.
+	got := root.Resolve(t.Context(), "", "http://example.com/foo.dtd")
+	require.Equal(t, "", got, "first resolve should fail while the loader is failing")
+
+	// Second resolution: the loader now succeeds; the entry must NOT be stuck
+	// on the cached failure and should resolve.
+	got = root.Resolve(t.Context(), "", "http://example.com/foo.dtd")
+	require.Equal(t, "file:///foo.dtd", got, "second resolve should retry the load and succeed")
+
+	require.Equal(t, int32(2), loader.calls.Load(), "loader should be retried after a transient failure")
+}
+
+// flakyLoader fails its first N loads (errTransient) before serving cat.
+type flakyLoader struct {
+	mu           sync.Mutex
+	failuresLeft int
+	cat          *catalog.Catalog
+	calls        atomic.Int32
+}
+
+var errTransient = errors.New("transient load failure")
+
+func (l *flakyLoader) Load(_ context.Context, _ string) (*catalog.Catalog, error) {
+	l.calls.Add(1)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.failuresLeft > 0 {
+		l.failuresLeft--
+		return nil, errTransient
+	}
+	return l.cat, nil
+}
+
+// multiLoader is a concurrency-safe Loader serving distinct catalogs by URL
+// and counting loads per URL.
+type multiLoader struct {
+	mu     sync.Mutex
+	counts map[string]*atomic.Int32
+	cats   map[string]*catalog.Catalog
+}
+
+func (l *multiLoader) Load(_ context.Context, filename string) (*catalog.Catalog, error) {
+	l.mu.Lock()
+	if l.counts[filename] == nil {
+		l.counts[filename] = &atomic.Int32{}
+	}
+	cnt := l.counts[filename]
+	cat := l.cats[filename]
+	l.mu.Unlock()
+
+	cnt.Add(1)
+	return cat, nil
 }
 
 // countingLoader is a Loader that counts how many times each URL is loaded.
