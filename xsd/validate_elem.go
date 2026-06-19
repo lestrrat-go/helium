@@ -178,6 +178,16 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
 			return consumed, fmt.Errorf("unexpected element")
 		}
+		// Record the (possibly LOCAL) host declaration AS SOON AS this child is
+		// matched to a particle — at the ABSOLUTE EARLIEST point, BEFORE the
+		// duplicate-child check and the post-scan missing-required early returns
+		// can fire. Otherwise pass-2 identity-constraint evaluation would fall
+		// back to a same-named GLOBAL declaration (and apply its IDCs) for a
+		// child that was actually matched to a local declaration here — even a
+		// DUPLICATE local child that shadows a same-named global with IDCs.
+		if edecl, isElem := mg.Particles[idx].Term.(*ElementDecl); isElem {
+			vc.recordElemDecl(child.elem, resolveSubstDecl(child, edecl, vc.schema))
+		}
 		if seen[idx] {
 			// Duplicate — stop matching and report error.
 			expected := unseenParticleNames(mg.Particles, seen, vc.schema)
@@ -187,14 +197,6 @@ func (vc *validationContext) matchAll(ctx context.Context, parent *helium.Elemen
 			}
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
 			return consumed, fmt.Errorf("duplicate")
-		}
-		// Record the (possibly LOCAL) host declaration AS SOON AS this child is
-		// matched to a particle, BEFORE the post-scan missing-required/duplicate
-		// early returns can fire. Otherwise pass-2 identity-constraint evaluation
-		// would fall back to a same-named GLOBAL declaration (and apply its IDCs)
-		// for a child that was actually matched to a local declaration here.
-		if edecl, isElem := mg.Particles[idx].Term.(*ElementDecl); isElem {
-			vc.recordElemDecl(child.elem, resolveSubstDecl(child, edecl, vc.schema))
 		}
 		seen[idx] = true
 		consumed++
