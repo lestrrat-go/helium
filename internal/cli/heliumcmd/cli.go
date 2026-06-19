@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	flagVersion = "--version"
-	flagTiming  = "--timing"
+	flagVersion       = "--version"
+	flagTiming        = "--timing"
+	flagMaxInputBytes = "--max-input-bytes"
 )
 
 type ioContextKey struct{}
