@@ -447,8 +447,12 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	if int64(len(data)) > limit64 {
 		return ErrExternalDTDTooLarge
 	}
-	if readErr != nil {
-		return nil
+	// A non-EOF read error (e.g. io.ErrUnexpectedEOF or a transport failure)
+	// means the DTD was only partially read. Treating that as an absent DTD
+	// would silently accept a truncated subset, so surface it. io.EOF is the
+	// normal terminator for a fully consumed stream and is not an error.
+	if readErr != nil && readErr != io.EOF {
+		return readErr
 	}
 
 	doc := ctx.doc
@@ -471,6 +475,16 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	baseLen := ctx.inputTab.Len()
 	ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(data)))
 
+	// Restore parser state on every exit path, including the error returns
+	// below, and ensure our pushed input is always removed from the stack.
+	defer func() {
+		for ctx.inputTab.Len() > baseLen {
+			ctx.popInput()
+		}
+		ctx.external = savedExternal
+		ctx.baseURI = savedBaseURI
+	}()
+
 	for ctx.inputTab.Len() > baseLen {
 		top := ctx.adaptCursor(ctx.inputTab.PeekOne())
 		if top == nil || top.Done() {
@@ -488,7 +502,24 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		}
 
 		cur := ctx.getCursor()
+		// Snapshot the cursor position so an iteration that consumes nothing is
+		// detected. Without this guard a malformed declaration (e.g. "<!BOGUS")
+		// that parseMarkupDecl neither advances nor errors on would spin
+		// forever.
+		startCur := cur
+		var startLine, startCol int
+		var startByte byte
+		if cur != nil {
+			startLine = cur.LineNumber()
+			startCol = cur.Column()
+			startByte = cur.Peek()
+		}
+
 		if cur != nil && cur.Peek() == '<' && cur.PeekAt(1) == '!' && cur.PeekAt(2) == '[' {
+			// Conditional-section recovery is deliberately tolerant: a
+			// per-section error stops the loop without failing the whole parse,
+			// matching the long-standing behavior relied on by valid documents
+			// whose conditional-section handling is otherwise imperfect.
 			if err := ctx.parseConditionalSections(ctxif); err != nil {
 				break
 			}
@@ -496,17 +527,16 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		}
 
 		if err := ctx.parseMarkupDecl(ctxif); err != nil {
-			break
+			return err
+		}
+
+		// Guard against a markup declaration that neither advanced the cursor
+		// nor reported an error, which would otherwise loop forever.
+		cur = ctx.getCursor()
+		if cur == startCur && cur != nil && cur.LineNumber() == startLine && cur.Column() == startCol && cur.Peek() == startByte {
+			return ErrDocTypeNotFinished
 		}
 	}
-
-	// Clean up: ensure our pushed input is removed
-	for ctx.inputTab.Len() > baseLen {
-		ctx.popInput()
-	}
-
-	ctx.external = savedExternal
-	ctx.baseURI = savedBaseURI
 
 	return nil
 }

@@ -780,6 +780,82 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 	})
 }
 
+// partialReadFS serves a small DTD whose Read hands back a few valid bytes and
+// then a NON-EOF error (a truncated/partial read) well under the size cap. A
+// truncated external subset must surface the read error rather than being
+// silently treated as an absent DTD.
+type partialReadFS struct {
+	prefix []byte
+}
+
+func (fsys partialReadFS) Open(string) (fs.File, error) {
+	return &partialReadFile{prefix: fsys.prefix}, nil
+}
+
+type partialReadFile struct {
+	prefix []byte
+	done   bool
+}
+
+func (f *partialReadFile) Stat() (fs.FileInfo, error) { return underReportingInfo{}, nil }
+
+func (f *partialReadFile) Read(p []byte) (int, error) {
+	if f.done {
+		return 0, io.ErrUnexpectedEOF
+	}
+	n := copy(p, f.prefix)
+	f.done = true
+	return n, io.ErrUnexpectedEOF
+}
+
+func (f *partialReadFile) Close() error { return nil }
+
+func TestParseExternalDTDPartialReadErrorSurfaces(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "trunc.dtd">
+<r/>`
+
+	// The DTD content is well under the cap but Read returns a non-EOF error,
+	// modelling a truncated transport. The parse must fail rather than silently
+	// accept the document as if no external subset existed.
+	fsys := partialReadFS{prefix: []byte("<!ELEMENT r EMPTY>")}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "a truncated external DTD read must surface as a parse error")
+}
+
+func TestParseExternalDTDMalformedDeclTerminates(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "bogus.dtd">
+<r/>`
+
+	// "<!BOGUS" is not a valid markup declaration and may neither advance the
+	// cursor nor return an error. The progress guard must turn that into a
+	// terminating error instead of an infinite loop.
+	fsys := fstest.MapFS{"bogus.dtd": &fstest.MapFile{Data: []byte("<!BOGUS")}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+
+	done := make(chan struct{})
+	var err error
+	go func() {
+		defer close(done)
+		_, err = p.Parse(t.Context(), []byte(input))
+	}()
+
+	select {
+	case <-done:
+		require.Error(t, err, "a malformed external DTD declaration must produce a parse error")
+	case <-time.After(10 * time.Second):
+		t.Fatal("parsing a malformed external DTD did not terminate (no cursor-progress guard)")
+	}
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 
