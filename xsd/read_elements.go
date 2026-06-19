@@ -609,6 +609,16 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	if name == "" {
 		return nil
 	}
+	// Source pins the filename of the schema document that declares this
+	// constraint, paired with Line. A constraint parsed inside an
+	// xs:include/xs:redefine carries that file (c.includeFile); a constraint
+	// parsed by an import sub-compiler carries that sub-compiler's filename. So a
+	// deferred @refer check run later by the (top-level) compiler cites the
+	// declaring file, not the importing compiler's filename, matching Line.
+	source := c.includeFile
+	if source == "" {
+		source = c.filename
+	}
 	idc := &IDConstraint{
 		Name: name,
 		// The name attribute is an NCName; the constraint's identity is the
@@ -618,6 +628,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 		Kind:       kind,
 		Namespaces: collectNSContext(elem),
 		Line:       elem.Line(),
+		Source:     source,
 	}
 	if kind == IDCKeyRef {
 		idc.Refer = getAttr(elem, attrRefer)

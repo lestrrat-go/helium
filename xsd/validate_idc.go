@@ -100,14 +100,22 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 		}
 	}
 
-	// Resolve this occurrence's keyrefs against the key/unique tables built for
-	// the SAME occurrence. A keyref whose referenced key/unique is NOT declared on
-	// this host occurrence resolves against an empty key space, so every non-empty
-	// key-sequence is a "no match" failure — matching xmllint, which rejects a
-	// keyref that names a key declared on a different element (the referenced key
-	// is out of the keyref's scope).
+	// Resolve this occurrence's keyrefs against the key/unique tables in scope for
+	// this host occurrence. Per XSD identity-constraint scope, a key/unique table
+	// declared on a DESCENDANT element propagates UP to the keyref's host node, so
+	// the referenced table is gathered from the host occurrence's OWN SUBTREE (the
+	// host element and all its descendants), not only the constraints declared
+	// directly on the host. This keeps the scope tight: a key on a SIBLING (or on
+	// a different occurrence of a repeating host) is OUTSIDE this subtree and so
+	// does NOT satisfy the keyref — matching xmllint, which rejects those — while a
+	// key on a child element (bug322411) correctly does.
 	for _, pending := range keyRefs {
 		refTable := keyTables[pending.idc.ReferQName]
+		if refTable == nil {
+			// Not declared on the host itself; gather it from the host occurrence's
+			// descendant subtree (propagated-up tables).
+			refTable = vc.collectSubtreeKeyTable(ctx, elem, pending.idc.ReferQName)
+		}
 		if refTable == nil {
 			refTable = &idcTable{idc: pending.idc}
 		}
@@ -117,6 +125,83 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 	}
 
 	return lastErr
+}
+
+// collectSubtreeKeyTable gathers the merged key-sequence table for the
+// key/unique constraint identified by referQN, evaluated over every DESCENDANT
+// element occurrence of host that declares a constraint with that QName. This
+// models XSD identity-constraint table propagation up the tree: a key/unique
+// declared on a child element is in scope for a keyref on an ancestor host.
+//
+// The host element ITSELF is excluded — constraints declared directly on the
+// host are already in the caller's keyTables map (and handled before this path
+// is reached). Only the value collection matters here; uniqueness for each
+// descendant constraint is checked by that descendant's own pass-2 evaluation,
+// so this path does NOT re-report uniqueness violations.
+//
+// Returns nil when no descendant declares a matching constraint (so the keyref
+// resolves against an empty space and every key-sequence is a "no match"
+// failure), preserving the out-of-scope rejection for sibling/other-occurrence
+// keys.
+func (vc *validationContext) collectSubtreeKeyTable(ctx context.Context, host *helium.Element, referQN QName) *idcTable {
+	var merged *idcTable
+	for child := range helium.Children(host) {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		// Evaluate any matching key/unique declared on this descendant occurrence.
+		if decl := vc.idcHostDecl(ce); decl != nil {
+			for _, idc := range decl.IDCs {
+				if idc.Kind == IDCKeyRef || idc.QName != referQN {
+					continue
+				}
+				ev := xpath1.NewEvaluator().AdditionalNamespaces(idc.Namespaces)
+				// Suppress diagnostics during gathering: this descendant constraint is
+				// ALSO evaluated by its own pass-2 walk, which is the canonical place
+				// any cvc field/key-missing error is reported. Without suppression those
+				// would be double-reported. We only need the key-sequence VALUES here.
+				vc.suppressDepth++
+				table, err := vc.evaluateIDC(ctx, ev, ce, decl, idc)
+				vc.suppressDepth--
+				if err != nil {
+					continue
+				}
+				if merged == nil {
+					merged = &idcTable{idc: idc}
+				}
+				merged.keys = append(merged.keys, table.keys...)
+			}
+		}
+		// Recurse so a constraint declared deeper in the subtree also propagates up.
+		if sub := vc.collectSubtreeKeyTable(ctx, ce, referQN); sub != nil {
+			if merged == nil {
+				merged = &idcTable{idc: sub.idc}
+			}
+			merged.keys = append(merged.keys, sub.keys...)
+		}
+	}
+	return merged
+}
+
+// idcHostDecl returns the declaration whose identity constraints apply to an
+// element instance. It uses the declaration recorded during pass-1 for ANY
+// non-ref local match — including one that carries zero IDCs — because a local
+// element that merely shadows a same-named global declaration must NOT inherit
+// the global's identity constraints. It falls back to the GLOBAL lookup only
+// when no declaration was recorded or the recorded one is a ref (a
+// `<xs:element ref="g"/>` correctly resolves to global g and its IDCs). This
+// mirrors the selection logic in the pass-2 walk so subtree key-table gathering
+// sees the same constraints pass-2 evaluates per element.
+func (vc *validationContext) idcHostDecl(elem *helium.Element) *ElementDecl {
+	decl := vc.actualElemDecl[elem]
+	if decl != nil && !decl.IsRef {
+		return decl
+	}
+	return lookupElemDecl(elem, vc.schema)
 }
 
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
