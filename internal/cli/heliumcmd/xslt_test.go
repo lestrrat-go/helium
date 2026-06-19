@@ -32,6 +32,18 @@ func TestXSLTIncludeResolves(t *testing.T) {
 	require.Contains(t, out, "<out>hello</out>")
 }
 
+// fileURIForPath builds a file: URI from a local filesystem path that is
+// correct cross-platform. On Windows, filepath.ToSlash yields "C:/..." which,
+// without a leading slash, serializes as "file://C:/..." (host "C:") and is
+// rejected; the leading slash makes it "file:///C:/...".
+func fileURIForPath(path string) string {
+	p := filepath.ToSlash(path)
+	if len(p) >= 2 && p[1] == ':' && !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
+}
+
 func TestXSLTIncludeFileURIResolves(t *testing.T) {
 	dir := t.TempDir()
 
@@ -44,7 +56,7 @@ func TestXSLTIncludeFileURIResolves(t *testing.T) {
 	// handed verbatim to os.Open. Build the URI via url.URL so it is correct
 	// cross-platform (string concatenation yields "file://C:/..." on Windows,
 	// which parses with host "C:" and is rejected).
-	modURI := (&url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(dir, "mod.xsl"))}).String()
+	modURI := fileURIForPath(filepath.Join(dir, "mod.xsl"))
 	ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:include href="`+modURI+`"/>
