@@ -10,6 +10,8 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // xsdWhitespace is the set of XSD whitespace characters (#x20 space, #x9 tab,
@@ -70,9 +72,9 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 	switch builtinLocal {
 	case "boolean":
 		return compareBoolean(a, b)
-	case "float":
+	case lexicon.TypeFloat:
 		return compareFloat(a, b, true)
-	case "double":
+	case lexicon.TypeDouble:
 		return compareFloat(a, b, false)
 	case "dateTime":
 		return compareDateTime(a, b, builtinLocal)
@@ -143,9 +145,9 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 			return "1", true
 		}
 		return "0", true
-	case "float":
+	case lexicon.TypeFloat:
 		return canonicalFloatKey(s, 32) // xs:float is 32-bit IEEE-754
-	case "double":
+	case lexicon.TypeDouble:
 		return canonicalFloatKey(s, 64)
 	case "dateTime", "date", "time", "gYear", "gYearMonth", "gMonth", "gDay", "gMonthDay":
 		return canonicalDateTimeKey(trimXSDSpace(s), builtinLocal)
@@ -239,7 +241,7 @@ func canonicalFloatKey(s string, bitSize int) (string, bool) {
 	// Validate against the strict xs:float/xs:double lexical space first: the
 	// lenient parseXSDFloat (and Go's strconv.ParseFloat) accept spellings such
 	// as "Inf" that are not valid XSD lexical forms.
-	if ValidateBuiltin(trimmed, "double") != nil {
+	if ValidateBuiltin(trimmed, lexicon.TypeDouble) != nil {
 		return trimmed, false
 	}
 	f, ok := parseXSDFloat(trimmed)
@@ -549,9 +551,9 @@ func IsFloatNaN(s string) bool {
 func compareFloat(a, b string, single bool) (int, bool) {
 	// xs:float and xs:double share one lexical validator; validate both operands
 	// strictly (rejecting e.g. "Inf", the mixed-case spelling) before parsing.
-	floatType := "double"
+	floatType := lexicon.TypeDouble
 	if single {
-		floatType = "float"
+		floatType = lexicon.TypeFloat
 	}
 	if !validBuiltinOperands(a, b, floatType) {
 		return 0, false
@@ -591,7 +593,7 @@ func compareFloat(a, b string, single bool) (int, bool) {
 // ok=false (no ordering decision), so the caller's invalid-bound check — not this
 // consistency check — reports the error.
 func CompareFloatFacetBound(a, b, builtinLocal string) (int, bool) {
-	if builtinLocal != "float" && builtinLocal != "double" {
+	if builtinLocal != lexicon.TypeFloat && builtinLocal != lexicon.TypeDouble {
 		return 0, false
 	}
 	if !validBuiltinOperands(a, b, builtinLocal) {
@@ -614,7 +616,7 @@ func CompareFloatFacetBound(a, b, builtinLocal string) (int, bool) {
 			return -1, true
 		}
 	}
-	return compareFloat(a, b, builtinLocal == "float")
+	return compareFloat(a, b, builtinLocal == lexicon.TypeFloat)
 }
 
 type xsdDateTime struct {
