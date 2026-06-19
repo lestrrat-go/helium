@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -481,19 +482,35 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 }
 
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
-func (c *compiler) parseIDConstraint(_ context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
+func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, kind IDCKind) *IDConstraint {
 	name := getAttr(elem, attrName)
 	if name == "" {
 		return nil
 	}
 	idc := &IDConstraint{
-		Name:       name,
+		Name: name,
+		// The name attribute is an NCName; the constraint's identity is the
+		// QName {targetNamespace}name (XSD identity-constraints live in the
+		// schema's target namespace).
+		QName:      QName{Local: name, NS: c.schema.targetNamespace},
 		Kind:       kind,
 		Namespaces: collectNSContext(elem),
+		Line:       elem.Line(),
 	}
 	if kind == IDCKeyRef {
 		idc.Refer = getAttr(elem, attrRefer)
+		// @refer is a QName; resolve it namespace-aware against the constraint
+		// element's in-scope namespaces. An empty refer or an unbound prefix is a
+		// fatal schema error (reported later by checkKeyRefRefers, which also
+		// verifies the referenced constraint exists). Store the resolved QName so
+		// validation can look the target up by full identity rather than by local
+		// name only.
+		idc.ReferQName, idc.referUnbound = c.resolveIDCReferQName(ctx, elem, idc)
 	}
+	// fieldLines tracks the source line of each <field>, parallel to idc.Fields,
+	// so a malformed field XPath is reported against the right element.
+	var selectorLine int
+	var fieldLines []int
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -505,27 +522,95 @@ func (c *compiler) parseIDConstraint(_ context.Context, elem *helium.Element, ki
 		switch {
 		case isXSDElement(ce, elemSelector):
 			idc.Selector = getAttr(ce, attrXPath)
+			selectorLine = ce.Line()
 		case isXSDElement(ce, elemField):
 			idc.Fields = append(idc.Fields, getAttr(ce, attrXPath))
+			fieldLines = append(fieldLines, ce.Line())
 		}
 	}
 
-	// Pre-compile selector XPath expression.
+	// Pre-compile selector XPath expression. A malformed selector XPath is a
+	// fatal schema error: leaving SelectorExpr nil would silently disable the
+	// whole constraint (the field-level uniqueness/keyref checks would never
+	// run), so an invalid schema must fail to compile rather than validate
+	// documents as if no constraint were present.
 	if idc.Selector != "" {
 		compiled, err := xpath1.Compile(idc.Selector)
-		if err == nil {
+		if err != nil {
+			c.reportIDCXPathError(ctx, elemSelector, selectorLine, idc.Selector, err)
+		} else {
 			idc.SelectorExpr = compiled
 		}
 	}
 
-	// Pre-compile field XPath expressions.
+	// Pre-compile field XPath expressions. A malformed field XPath is likewise
+	// fatal: with FieldExprs[i] nil the field would fall back to a per-validation
+	// recompile that also fails and is currently swallowed, again disabling the
+	// constraint.
 	idc.FieldExprs = make([]*xpath1.Expression, len(idc.Fields))
 	for i, f := range idc.Fields {
 		compiled, err := xpath1.Compile(f)
-		if err == nil {
-			idc.FieldExprs[i] = compiled
+		if err != nil {
+			line := 0
+			if i < len(fieldLines) {
+				line = fieldLines[i]
+			}
+			c.reportIDCXPathError(ctx, elemField, line, f, err)
+			continue
 		}
+		idc.FieldExprs[i] = compiled
 	}
 
 	return idc
+}
+
+// resolveIDCReferQName resolves an xs:keyref/@refer QName against the constraint
+// element's in-scope namespaces. An unprefixed refer resolves to the in-scope
+// default namespace (falling back to the schema's target namespace), matching how
+// other XSD QName-valued attributes (@type, @ref) are resolved. A prefixed refer
+// whose prefix is not bound in scope is a fatal schema error; the returned bool
+// reports that so checkKeyRefRefers can suppress its own "unknown key" diagnostic.
+func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Element, idc *IDConstraint) (QName, bool) {
+	refer := idc.Refer
+	if refer == "" {
+		// An empty @refer is reported by checkKeyRefRefers.
+		return QName{}, false
+	}
+	if prefix, local, found := strings.Cut(refer, ":"); found {
+		ns := lookupNS(elem, prefix)
+		if ns == "" && prefix != "" {
+			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' whose namespace prefix '%s' is not bound.", idc.Name, refer, prefix)
+			if c.filename != "" {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(
+					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
+					helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+			return QName{}, true
+		}
+		return QName{Local: local, NS: ns}, false
+	}
+	// Unprefixed: use the in-scope default namespace, else the target namespace.
+	ns := c.schema.targetNamespace
+	if defNS := lookupNS(elem, ""); defNS != "" {
+		ns = defNS
+	}
+	return QName{Local: refer, NS: ns}, false
+}
+
+// reportIDCXPathError reports a malformed identity-constraint selector/field
+// XPath as a fatal schema compilation error. kind is elemSelector or elemField.
+func (c *compiler) reportIDCXPathError(ctx context.Context, kind string, line int, xpath string, cause error) {
+	if c.filename == "" {
+		return
+	}
+	noun := "selector"
+	if kind == elemField {
+		noun = "field"
+	}
+	msg := fmt.Sprintf("The %s XPath '%s' is not a valid %s expression: %s.", noun, xpath, noun, cause)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(
+		schemaParserErrorAttr(c.filename, line, kind, kind, attrXPath, msg),
+		helium.ErrorLevelFatal))
+	c.errorCount++
 }

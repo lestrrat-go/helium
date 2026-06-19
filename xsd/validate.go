@@ -433,6 +433,15 @@ type validationContext struct {
 	actualElemType map[*helium.Element]*TypeDef
 }
 
+// pendingKeyRef is an evaluated keyref table awaiting resolution against the
+// key/unique tables built for the SAME host-element occurrence (XSD
+// identity-constraint scope), once every key/unique on that occurrence has been
+// evaluated.
+type pendingKeyRef struct {
+	idc   *IDConstraint
+	table *idcTable
+}
+
 func newValidationContext(schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext {
 	return &validationContext{
 		schema:         schema,
