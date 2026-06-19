@@ -10,6 +10,8 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // xsdWhitespace is the set of XSD whitespace characters (#x20 space, #x9 tab,
@@ -70,9 +72,9 @@ func Compare(a, b, builtinLocal string) (int, bool) {
 	switch builtinLocal {
 	case "boolean":
 		return compareBoolean(a, b)
-	case "float":
+	case lexicon.TypeFloat:
 		return compareFloat(a, b, true)
-	case "double":
+	case lexicon.TypeDouble:
 		return compareFloat(a, b, false)
 	case "dateTime":
 		return compareDateTime(a, b, builtinLocal)
@@ -143,9 +145,9 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 			return "1", true
 		}
 		return "0", true
-	case "float":
+	case lexicon.TypeFloat:
 		return canonicalFloatKey(s, 32) // xs:float is 32-bit IEEE-754
-	case "double":
+	case lexicon.TypeDouble:
 		return canonicalFloatKey(s, 64)
 	case "dateTime", "date", "time", "gYear", "gYearMonth", "gMonth", "gDay", "gMonthDay":
 		return canonicalDateTimeKey(trimXSDSpace(s), builtinLocal)
@@ -239,7 +241,7 @@ func canonicalFloatKey(s string, bitSize int) (string, bool) {
 	// Validate against the strict xs:float/xs:double lexical space first: the
 	// lenient parseXSDFloat (and Go's strconv.ParseFloat) accept spellings such
 	// as "Inf" that are not valid XSD lexical forms.
-	if ValidateBuiltin(trimmed, "double") != nil {
+	if ValidateBuiltin(trimmed, lexicon.TypeDouble) != nil {
 		return trimmed, false
 	}
 	f, ok := parseXSDFloat(trimmed)
@@ -549,9 +551,9 @@ func IsFloatNaN(s string) bool {
 func compareFloat(a, b string, single bool) (int, bool) {
 	// xs:float and xs:double share one lexical validator; validate both operands
 	// strictly (rejecting e.g. "Inf", the mixed-case spelling) before parsing.
-	floatType := "double"
+	floatType := lexicon.TypeDouble
 	if single {
-		floatType = "float"
+		floatType = lexicon.TypeFloat
 	}
 	if !validBuiltinOperands(a, b, floatType) {
 		return 0, false
@@ -575,6 +577,46 @@ func compareFloat(a, b string, single bool) (int, bool) {
 		return 1, true
 	}
 	return 0, true
+}
+
+// CompareFloatFacetBound compares two xs:float/xs:double facet BOUND lexicals for
+// the purpose of the same-type range-facet consistency check (e.g. minInclusive
+// vs maxInclusive). It differs from the ordinary value-space Compare in its
+// treatment of NaN: where Compare returns incomparable (ok=false) for any NaN
+// operand, this orders NaN as EQUAL to NaN and GREATER THAN every non-NaN value.
+// That matches xmllint, which rejects a schema whose minInclusive="NaN" exceeds
+// a finite maxInclusive while accepting minInclusive=finite with maxInclusive=NaN.
+//
+// builtinLocal must be xs:float or xs:double; for any other type it returns
+// ok=false so the caller falls back to its normal comparator. Both operands are
+// validated as valid float/double lexicals first: an invalid bound yields
+// ok=false (no ordering decision), so the caller's invalid-bound check — not this
+// consistency check — reports the error.
+func CompareFloatFacetBound(a, b, builtinLocal string) (int, bool) {
+	if builtinLocal != lexicon.TypeFloat && builtinLocal != lexicon.TypeDouble {
+		return 0, false
+	}
+	if !validBuiltinOperands(a, b, builtinLocal) {
+		return 0, false
+	}
+	fa, ok1 := parseXSDFloat(trimXSDSpace(a))
+	fb, ok2 := parseXSDFloat(trimXSDSpace(b))
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	aNaN := math.IsNaN(fa)
+	bNaN := math.IsNaN(fb)
+	if aNaN || bNaN {
+		switch {
+		case aNaN && bNaN:
+			return 0, true
+		case aNaN:
+			return 1, true
+		default:
+			return -1, true
+		}
+	}
+	return compareFloat(a, b, builtinLocal == lexicon.TypeFloat)
 }
 
 type xsdDateTime struct {

@@ -716,7 +716,7 @@ func registerBuiltinTypes(s *Schema) {
 		lexicon.TypeLong, lexicon.TypeInt, lexicon.TypeShort, lexicon.TypeByte,
 		lexicon.TypeNonNegativeInteger, lexicon.TypeUnsignedLong, lexicon.TypeUnsignedInt, lexicon.TypeUnsignedShort, lexicon.TypeUnsignedByte,
 		lexicon.TypePositiveInteger,
-		"normalizedString", "token", "language", "Name", "NCName",
+		lexicon.TypeNormalizedString, "token", "language", "Name", "NCName",
 		"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NMTOKEN", "NMTOKENS",
 		"date", "dateTime", "time", "duration",
 		"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",

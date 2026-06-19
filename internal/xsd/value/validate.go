@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // ValidateBuiltin validates a value against a builtin XSD type's lexical space.
@@ -29,7 +31,7 @@ func ValidateBuiltin(value, builtinLocal string) error {
 		return validateBoolean(value)
 	case "language":
 		return validateLanguage(value)
-	case "float", "double":
+	case lexicon.TypeFloat, lexicon.TypeDouble:
 		return validateFloat(value)
 	case "dateTime":
 		return validateDateTime(value)

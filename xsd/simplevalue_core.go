@@ -36,7 +36,7 @@ func resolveWhiteSpace(td *TypeDef) string {
 			switch cur.Name.Local {
 			case "string":
 				return "preserve"
-			case "normalizedString":
+			case lexicon.TypeNormalizedString:
 				return "replace"
 			}
 			// All other built-in types default to collapse.

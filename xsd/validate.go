@@ -336,7 +336,7 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 		lexicon.TypeNonNegativeInteger, lexicon.TypeUnsignedLong, lexicon.TypeUnsignedInt, lexicon.TypeUnsignedShort,
 		lexicon.TypeUnsignedByte, lexicon.TypePositiveInteger:
 		return lexicon.TypeDecimal, true, true
-	case "string", "normalizedString", "token", "language",
+	case lexicon.TypeString, lexicon.TypeNormalizedString, "token", "language",
 		"Name", "NCName", "ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES",
 		"NMTOKEN", "NMTOKENS", "anyURI":
 		// String value space equals the whitespace-processed lexical space; not

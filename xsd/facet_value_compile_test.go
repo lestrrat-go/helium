@@ -292,4 +292,421 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 </xs:schema>`
 		require.NotContains(t, compileErrors(t, schemaXML), wantMsg)
 	})
+
+	t.Run("length facet on numeric atomic base is not allowed", func(t *testing.T) {
+		t.Parallel()
+		// length/minLength/maxLength apply only to the string-derived, binary,
+		// anyURI, QName and NOTATION primitives. On a numeric (decimal-family)
+		// atomic such as xs:int the length facets are inapplicable; xmllint rejects
+		// them naming the xs:decimal primitive ancestor.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:int">
+      <xs:length value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The facet 'length' is not allowed on types derived from the type xs:decimal.")
+	})
+
+	t.Run("minLength facet on float atomic base is not allowed", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:float">
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The facet 'minLength' is not allowed on types derived from the type xs:float.")
+	})
+
+	t.Run("length facet on date atomic base is not allowed", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:date">
+      <xs:maxLength value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The facet 'maxLength' is not allowed on types derived from the type xs:date.")
+	})
+
+	t.Run("length facet on string atomic base is allowed", func(t *testing.T) {
+		t.Parallel()
+		// length IS applicable to string-derived primitives, so a string restriction
+		// adding it must still compile cleanly.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ok">
+    <xs:restriction base="xs:string">
+      <xs:length value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="ok"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), "is not allowed")
+	})
+
+	t.Run("length facet on hexBinary atomic base is allowed", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ok">
+    <xs:restriction base="xs:hexBinary">
+      <xs:length value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="ok"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), "is not allowed")
+	})
+
+	t.Run("inconsistent date range bounds are rejected", func(t *testing.T) {
+		t.Parallel()
+		// minInclusive > maxInclusive in the xs:date value space is inconsistent;
+		// xmllint rejects it. Previously the decimal-only comparison treated the
+		// non-numeric date bounds as incomparable and let it compile.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:date">
+      <xs:minInclusive value="2021-01-01"/>
+      <xs:maxInclusive value="2020-01-01"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.")
+	})
+
+	t.Run("consistent date range bounds still compile", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ok">
+    <xs:restriction base="xs:date">
+      <xs:minInclusive value="2020-01-01"/>
+      <xs:maxInclusive value="2021-01-01"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="ok"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), "It is an error for the value of")
+	})
+
+	t.Run("invalid int bounds report only the invalid-bound error not an extra ordering error", func(t *testing.T) {
+		t.Parallel()
+		// xs:int with minInclusive="1.5" maxInclusive="1.0": both bounds are invalid
+		// in the xs:int value space, so they are reported by the bound-value check.
+		// The same-type ordering comparison must NOT additionally fire a min>max
+		// error: with a resolved builtin primitive, an incomparable (invalid) bound
+		// pair is skipped rather than falling back to a lexical decimal comparison
+		// that xmllint never performs.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:int">
+      <xs:minInclusive value="1.5"/>
+      <xs:maxInclusive value="1.0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, wantMsg, "the invalid bounds must still be reported")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.",
+			"no spurious ordering error when the bounds are invalid for the type")
+	})
+
+	t.Run("inconsistent dateTime exclusive bounds are rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:dateTime">
+      <xs:minExclusive value="2021-01-01T00:00:00"/>
+      <xs:maxExclusive value="2021-01-01T00:00:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'.")
+	})
+
+	t.Run("float minInclusive=NaN maxInclusive=0 is rejected", func(t *testing.T) {
+		t.Parallel()
+		// For the float/double facet-consistency check NaN is ordered above every
+		// non-NaN bound, so minInclusive="NaN" exceeds a finite maxInclusive and the
+		// pair is inconsistent. The value-space comparator treats any NaN operand as
+		// incomparable (correct for instance ordering), so the dedicated float
+		// facet-bound comparator is required here. xmllint rejects this schema.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:float">
+      <xs:minInclusive value="NaN"/>
+      <xs:maxInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.")
+	})
+
+	t.Run("float minInclusive=0 maxInclusive=NaN compiles", func(t *testing.T) {
+		t.Parallel()
+		// 0 < NaN under the facet-bound ordering, so the pair is consistent and the
+		// schema must compile. xmllint accepts this schema.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ok">
+    <xs:restriction base="xs:float">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="NaN"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="ok"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of")
+	})
+
+	t.Run("float minExclusive=NaN maxExclusive=NaN is rejected", func(t *testing.T) {
+		t.Parallel()
+		// NaN equals NaN under the facet-bound ordering, so the exclusive pair has
+		// equal bounds, which is inconsistent (an exclusive range needs min<max).
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:float">
+      <xs:minExclusive value="NaN"/>
+      <xs:maxExclusive value="NaN"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'.")
+	})
+
+	t.Run("double minInclusive=NaN maxInclusive=0 is rejected", func(t *testing.T) {
+		t.Parallel()
+		// Same NaN ordering applies to xs:double bounds.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:double">
+      <xs:minInclusive value="NaN"/>
+      <xs:maxInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.")
+	})
+
+	// CONVERGENCE REGRESSION: a union or list base carrying BOTH a min and a max
+	// range facet must report ONLY the "facet not allowed" applicability error and
+	// NEVER an ordering (min>max) error. Range facets are inapplicable to list/union
+	// varieties, so the same-type ordering consistency check must be gated off
+	// entirely for them — no decimal fallback comparison. xmllint (the oracle)
+	// reports only the two "not allowed" lines and never an ordering line.
+	t.Run("union base with min and max range facet reports only not-allowed no ordering error", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="u">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:int xs:string"/>
+      </xs:simpleType>
+      <xs:minInclusive value="10"/>
+      <xs:maxInclusive value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="u"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, "The facet 'minInclusive' is not allowed.")
+		require.Contains(t, errs, "The facet 'maxInclusive' is not allowed.")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.",
+			"a union range facet must not fire a spurious ordering error")
+	})
+
+	t.Run("list base with min and max range facet reports only not-allowed no ordering error", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="l">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:list itemType="xs:int"/>
+      </xs:simpleType>
+      <xs:minInclusive value="10"/>
+      <xs:maxInclusive value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="l"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, "The facet 'minInclusive' is not allowed.")
+		require.Contains(t, errs, "The facet 'maxInclusive' is not allowed.")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.",
+			"a list range facet must not fire a spurious ordering error")
+	})
+
+	// CONVERGENCE REGRESSION (base-vs-derived range, non-decimal ordered type):
+	// a base xs:date minInclusive and a derived xs:date maxInclusive that form a
+	// valid (narrowing) range must compile. Previously the base-restriction range
+	// comparison used compareDecimal, which treats the non-numeric date bounds as
+	// incomparable and wrongly reported the derived max as less than the base min.
+	t.Run("valid xs:date base minInclusive derived maxInclusive compiles", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseDate">
+    <xs:restriction base="xs:date">
+      <xs:minInclusive value="2021-01-01"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="derivedDate">
+    <xs:restriction base="baseDate">
+      <xs:maxInclusive value="2022-01-01"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="derivedDate"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.NotContains(t, errs, "It is an error for the value of",
+			"a valid narrowing xs:date range must not be rejected")
+		require.NotContains(t, errs, "is less than the 'minInclusive' value of the base type",
+			"the derived max is not below the base min in the date value space")
+	})
+
+	// CONVERGENCE REGRESSION (base-vs-derived range, dateTime exclusive widening):
+	// a derived maxExclusive that widens beyond the base maxExclusive must still be
+	// rejected, proving the value-space comparator (not a no-op) drives the check.
+	t.Run("xs:dateTime derived maxExclusive widening base is rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseDT">
+    <xs:restriction base="xs:dateTime">
+      <xs:maxExclusive value="2021-01-01T00:00:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="derivedDT">
+    <xs:restriction base="baseDT">
+      <xs:maxExclusive value="2022-01-01T00:00:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="derivedDT"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The 'maxExclusive' value '2022-01-01T00:00:00' is greater than the 'maxExclusive' value of the base type '2021-01-01T00:00:00'.")
+	})
+
+	// CONVERGENCE REGRESSION (inapplicable LENGTH family on a numeric atomic):
+	// xs:int with minLength/maxLength must report ONLY the two "not allowed"
+	// applicability errors and NEVER a spurious minLength>maxLength consistency
+	// error. The length consistency check is gated to length-applicable types.
+	t.Run("xs:int minLength maxLength reports only not-allowed no length ordering error", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="t">
+    <xs:restriction base="xs:int">
+      <xs:minLength value="5"/>
+      <xs:maxLength value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="t"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, "The facet 'minLength' is not allowed on types derived from the type xs:decimal.")
+		require.Contains(t, errs, "The facet 'maxLength' is not allowed on types derived from the type xs:decimal.")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'minLength' to be greater than the value of 'maxLength'.",
+			"length consistency must not run for a type where length facets are inapplicable")
+	})
+
+	// CONVERGENCE REGRESSION (inapplicable DIGIT family on a non-decimal ordered
+	// atomic): xs:double with totalDigits/fractionDigits must report ONLY the two
+	// "not allowed" applicability errors and NEVER a spurious fractionDigits>
+	// totalDigits consistency error. The digit consistency check is gated to the
+	// decimal family, even though xs:double is ordered (so range facets DO apply).
+	t.Run("xs:double totalDigits fractionDigits reports only not-allowed no digit ordering error", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="t">
+    <xs:restriction base="xs:double">
+      <xs:totalDigits value="2"/>
+      <xs:fractionDigits value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="t"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, "The facet 'totalDigits' is not allowed on types derived from the type xs:double.")
+		require.Contains(t, errs, "The facet 'fractionDigits' is not allowed on types derived from the type xs:double.")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'fractionDigits' to be greater than the value of 'totalDigits'.",
+			"digit consistency must not run for a non-decimal type where digit facets are inapplicable")
+	})
+
+	// A genuinely inconsistent DECIMAL-family digit pair must still be rejected, so
+	// the digit consistency gate is not over-broad.
+	t.Run("xs:decimal fractionDigits greater than totalDigits is rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:decimal">
+      <xs:totalDigits value="2"/>
+      <xs:fractionDigits value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'fractionDigits' to be greater than the value of 'totalDigits'.")
+	})
+
+	// A genuinely inconsistent LENGTH pair on a length-applicable atomic type must
+	// still be rejected, so the length consistency gate is not over-broad.
+	t.Run("xs:string minLength greater than maxLength is rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="5"/>
+      <xs:maxLength value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minLength' to be greater than the value of 'maxLength'.")
+	})
+
+	t.Run("float invalid bound and NaN report only the invalid-bound error", func(t *testing.T) {
+		t.Parallel()
+		// An invalid float bound (e.g. "Inf", the mixed-case spelling rejected by
+		// the lexical validator) must be reported by the bound-value check; the
+		// NaN-aware facet comparator must NOT additionally fire an ordering error
+		// when one operand is not a valid float lexical.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:float">
+      <xs:minInclusive value="NaN"/>
+      <xs:maxInclusive value="Inf"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, wantMsg, "the invalid bound must still be reported")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.",
+			"no spurious ordering error when a bound is invalid for the type")
+	})
 }
