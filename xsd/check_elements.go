@@ -194,6 +194,70 @@ func effectiveMinOccurs(minOcc string) int {
 	return n
 }
 
+// validateAllOccurs validates the minOccurs/maxOccurs attributes of an xs:all
+// compositor particle. Per XSD Part 1 §3.8.6 (cos-all-limited) the all
+// compositor's minOccurs must be 0 or 1 and its maxOccurs must be 1. libxml2
+// reports any other value (including non-integer lexicals such as "abc") with
+// dedicated wording rather than the generic xs:nonNegativeInteger/xs:allNNI
+// diagnostics, so the generic validateOccursAttrs is bypassed for xs:all.
+func (c *compiler) validateAllOccurs(ctx context.Context, elem *helium.Element) {
+	if c.filename == "" {
+		return
+	}
+	line := elem.Line()
+	local := elem.LocalName()
+
+	if hasAttr(elem, attrMinOccurs) {
+		v := getAttr(elem, attrMinOccurs)
+		if v != "0" && v != "1" {
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, elemAll, attrMinOccurs,
+				"The value '"+v+"' is not valid. Expected is '(0 | 1)'."), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+	}
+
+	if hasAttr(elem, attrMaxOccurs) {
+		v := getAttr(elem, attrMaxOccurs)
+		if v != "1" {
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, elemAll, attrMaxOccurs,
+				"The value '"+v+"' is not valid. Expected is '1'."), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+	}
+}
+
+// checkAllElementParticleOccurs validates the minOccurs/maxOccurs of an
+// xs:element particle that appears directly inside an xs:all compositor. Per
+// cos-all-limited each such particle may occur at most once, so both occurrence
+// bounds must be 0 or 1. libxml2 reports a value outside that range with the
+// dedicated "Invalid value for {min,max}Occurs (must be 0 or 1)." wording, after
+// the generic occurs ordering that checkLocalElement already emitted.
+func (c *compiler) checkAllElementParticleOccurs(ctx context.Context, elem *helium.Element) {
+	if c.filename == "" {
+		return
+	}
+	line := elem.Line()
+	local := elem.LocalName()
+
+	if hasAttr(elem, attrMaxOccurs) {
+		v := getAttr(elem, attrMaxOccurs)
+		if v != "0" && v != "1" {
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+				"Invalid value for maxOccurs (must be 0 or 1)."), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+	}
+
+	if hasAttr(elem, attrMinOccurs) {
+		v := getAttr(elem, attrMinOccurs)
+		if v != "0" && v != "1" {
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+				"Invalid value for minOccurs (must be 0 or 1)."), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+	}
+}
+
 // checkLocalElement validates constraints on a local xs:element declaration.
 func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) {
 	if c.filename == "" {
@@ -227,7 +291,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			maxVal, ok := parseNonNegativeOccurs(maxOcc, true)
 			if !ok {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
-					"'"+maxOcc+"' is not a valid value of the union type 'xs:allNNI'."), helium.ErrorLevelFatal))
+					"The value '"+maxOcc+"' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			} else if maxVal < 1 && effectiveMinOccurs(minOcc) >= 1 {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
@@ -240,7 +304,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		if minPresent {
 			if _, ok := parseNonNegativeOccurs(minOcc, false); !ok {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
-					"'"+minOcc+"' is not a valid value of the atomic type 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
+					"The value '"+minOcc+"' is not valid. Expected is 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 		}
@@ -305,7 +369,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			maxVal, ok := parseNonNegativeOccurs(maxOcc, true)
 			if !ok {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
-					"'"+maxOcc+"' is not a valid value of the union type 'xs:allNNI'."), helium.ErrorLevelFatal))
+					"The value '"+maxOcc+"' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			} else if maxVal < 1 && effectiveMinOccurs(minOcc) >= 1 {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
@@ -318,7 +382,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 		if minPresent {
 			if _, ok := parseNonNegativeOccurs(minOcc, false); !ok {
 				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
-					"'"+minOcc+"' is not a valid value of the atomic type 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
+					"The value '"+minOcc+"' is not valid. Expected is 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 		}
