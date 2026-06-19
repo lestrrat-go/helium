@@ -166,7 +166,7 @@ const (
 // IDConstraint represents an xs:unique, xs:key, or xs:keyref identity constraint.
 type IDConstraint struct {
 	Name       string
-	QName      QName             // namespace-qualified constraint name ({targetNamespace}Name)
+	QName      QName // namespace-qualified constraint name ({targetNamespace}Name)
 	Kind       IDCKind
 	Selector   string            // XPath selector expression
 	Fields     []string          // XPath field expressions

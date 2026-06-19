@@ -488,7 +488,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 		return nil
 	}
 	idc := &IDConstraint{
-		Name:       name,
+		Name: name,
 		// The name attribute is an NCName; the constraint's identity is the
 		// QName {targetNamespace}name (XSD identity-constraints live in the
 		// schema's target namespace).
@@ -576,9 +576,7 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		// An empty @refer is reported by checkKeyRefRefers.
 		return QName{}, false
 	}
-	if i := strings.IndexByte(refer, ':'); i >= 0 {
-		prefix := refer[:i]
-		local := refer[i+1:]
+	if prefix, local, found := strings.Cut(refer, ":"); found {
 		ns := lookupNS(elem, prefix)
 		if ns == "" && prefix != "" {
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' whose namespace prefix '%s' is not bound.", idc.Name, refer, prefix)
