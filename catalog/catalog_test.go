@@ -268,6 +268,38 @@ func TestResolveURI(t *testing.T) {
 	require.Equal(t, "", got)
 }
 
+// A root catalog whose nextCatalog references a downstream catalog via a
+// "file://" URI must resolve the downstream mapping. The file: URI has to be
+// converted to a local filesystem path before opening.
+func TestNextCatalogFileURI(t *testing.T) {
+	dir, err := os.MkdirTemp(".", ".tmp-nextcatalog-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	nextPath, err := filepath.Abs(filepath.Join(dir, "next.xml"))
+	require.NoError(t, err)
+
+	nextXML := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <uri name="http://example.com/asset" uri="file:///downstream/asset.xml"/>
+</catalog>`
+	require.NoError(t, os.WriteFile(nextPath, []byte(nextXML), 0o600))
+
+	// Reference the downstream catalog via a file:// URI (not a bare path).
+	rootXML := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <nextCatalog catalog="file://` + nextPath + `"/>
+</catalog>`
+	rootPath := filepath.Join(dir, "root.xml")
+	require.NoError(t, os.WriteFile(rootPath, []byte(rootXML), 0o600))
+
+	cat, err := catalog.Load(context.Background(), rootPath)
+	require.NoError(t, err)
+
+	got := cat.ResolveURI(context.Background(), "http://example.com/asset")
+	require.Equal(t, "file:///downstream/asset.xml", got)
+}
+
 func TestLoadError(t *testing.T) {
 	_, err := catalog.Load(context.Background(), "/nonexistent/catalog.xml")
 	require.Error(t, err)

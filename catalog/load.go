@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -56,7 +57,12 @@ func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) { /
 }
 
 func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
-	absPath, err := filepath.Abs(filename)
+	path, err := catalogFilePath(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("catalog: failed to resolve path %q: %w", filename, err)
 	}
@@ -67,6 +73,33 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) 
 	}
 
 	return loadFromBytes(ctx, data, absPath, eh)
+}
+
+// catalogFilePath converts a catalog reference into a local filesystem path.
+// Bare paths are returned unchanged. "file:" URIs are parsed and percent-decoded
+// into a local path. Any other URI scheme is unsupported and rejected.
+func catalogFilePath(ref string) (string, error) {
+	if !icatalog.HasScheme(ref) {
+		return ref, nil
+	}
+
+	u, err := url.Parse(ref)
+	if err != nil {
+		return "", fmt.Errorf("catalog: failed to parse URI %q: %w", ref, err)
+	}
+
+	if u.Scheme != "file" {
+		return "", fmt.Errorf("catalog: unsupported URI scheme %q in %q", u.Scheme, ref)
+	}
+
+	// For "file:///abs/path" the host is empty and Path holds the (already
+	// percent-decoded) absolute path. For "file://host/path" a non-localhost
+	// host is not addressable on the local filesystem.
+	if u.Host != "" && u.Host != "localhost" {
+		return "", fmt.Errorf("catalog: non-local file URI host %q in %q", u.Host, ref)
+	}
+
+	return u.Path, nil
 }
 
 func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
