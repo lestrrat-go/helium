@@ -331,10 +331,10 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 	switch builtinLocal {
 	case lexicon.TypeQName, lexicon.TypeNotation, "":
 		return "", false, false
-	case lexicon.TypeDecimal, "integer",
-		"nonPositiveInteger", "negativeInteger", "long", "int", "short", "byte",
-		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort",
-		"unsignedByte", "positiveInteger":
+	case lexicon.TypeDecimal, lexicon.TypeInteger,
+		lexicon.TypeNonPositiveInteger, lexicon.TypeNegativeInteger, lexicon.TypeLong, lexicon.TypeInt, lexicon.TypeShort, lexicon.TypeByte,
+		lexicon.TypeNonNegativeInteger, lexicon.TypeUnsignedLong, lexicon.TypeUnsignedInt, lexicon.TypeUnsignedShort,
+		lexicon.TypeUnsignedByte, lexicon.TypePositiveInteger:
 		return lexicon.TypeDecimal, true, true
 	case "string", "normalizedString", "token", "language",
 		"Name", "NCName", "ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES",

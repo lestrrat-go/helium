@@ -517,10 +517,10 @@ func parseOccurs(s string, defaultVal int) int {
 func registerBuiltinTypes(s *Schema) {
 	builtins := []string{
 		"string", "boolean", lexicon.TypeDecimal, lexicon.TypeFloat, lexicon.TypeDouble,
-		"integer", "nonPositiveInteger", "negativeInteger",
-		"long", "int", "short", "byte",
-		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
-		"positiveInteger",
+		lexicon.TypeInteger, lexicon.TypeNonPositiveInteger, lexicon.TypeNegativeInteger,
+		lexicon.TypeLong, lexicon.TypeInt, lexicon.TypeShort, lexicon.TypeByte,
+		lexicon.TypeNonNegativeInteger, lexicon.TypeUnsignedLong, lexicon.TypeUnsignedInt, lexicon.TypeUnsignedShort, lexicon.TypeUnsignedByte,
+		lexicon.TypePositiveInteger,
 		"normalizedString", "token", "language", "Name", "NCName",
 		"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NMTOKEN", "NMTOKENS",
 		"date", "dateTime", "time", "duration",

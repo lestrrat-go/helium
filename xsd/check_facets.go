@@ -112,10 +112,10 @@ func facetVarietyComponent(td *TypeDef, variety TypeVariety) string {
 // notion in their value space) and on every non-numeric primitive, so libxml2
 // rejects them there.
 var decimalFamilyTypes = map[string]struct{}{
-	lexicon.TypeDecimal: {}, "integer": {}, "nonPositiveInteger": {}, "negativeInteger": {},
-	"long": {}, "int": {}, "short": {}, "byte": {},
-	"nonNegativeInteger": {}, "unsignedLong": {}, "unsignedInt": {},
-	"unsignedShort": {}, "unsignedByte": {}, "positiveInteger": {},
+	lexicon.TypeDecimal: {}, lexicon.TypeInteger: {}, lexicon.TypeNonPositiveInteger: {}, lexicon.TypeNegativeInteger: {},
+	lexicon.TypeLong: {}, lexicon.TypeInt: {}, lexicon.TypeShort: {}, lexicon.TypeByte: {},
+	lexicon.TypeNonNegativeInteger: {}, lexicon.TypeUnsignedLong: {}, lexicon.TypeUnsignedInt: {},
+	lexicon.TypeUnsignedShort: {}, lexicon.TypeUnsignedByte: {}, lexicon.TypePositiveInteger: {},
 }
 
 // stringDerivedTypes is the set of builtin base locals whose primitive ancestor
