@@ -390,6 +390,12 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 		}
 	}
+
+	// Enforce cos-element-consistent (Element Declarations Consistent): two
+	// element declarations with the same expanded name in one effective content
+	// model must have the same type definition. Gated on errorCount==0 like UPA,
+	// since the content models must be fully resolved and structurally sound.
+	c.checkElementConsistent(ctx)
 }
 
 // checkAllGroupRef enforces the constraints on an xs:group reference that

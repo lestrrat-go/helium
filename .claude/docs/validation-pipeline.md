@@ -25,6 +25,7 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
    - `checkFinalOnTypes()` — final attribute enforcement
    - `checkFinalOnSubstGroups()` — substitution group final
    - `checkUPA()` — Unique Particle Attribution (content model determinism)
+   - `checkElementConsistent()` (`check_element_consistent.go`) — cos-element-consistent (Element Declarations Consistent): two element declarations with the same expanded name reachable in one effective content model (after group-ref expansion and across nested model groups) must have the same {type definition}. Runs at the end of `resolveRefs` right after `checkUPA`, gated on `errorCount==0`. Type identity is by `*TypeDef` pointer (helium shares one pointer per named type and copies the global's type onto a `ref`), with a same-expanded-QName fallback for import-merged duplicates; distinct anonymous inline types are different components and therefore inconsistent. libxml2 does NOT implement this constraint (it is an "URGENT TODO" in `xmlschemas.c`), so the diagnostic uses the existing component-error style rather than mirroring libxml2 wording, and no golden schema trips it.
    - Wildcard overlap detection
 
 ### Validate: Document + Schema → Errors
