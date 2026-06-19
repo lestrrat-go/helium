@@ -749,8 +749,20 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	// that xmllint does not. The compareDecimal fallback applies ONLY when NO builtin
 	// resolved (builtinLocal == ""), preserving prior behavior for a non-atomic
 	// (list/union) carrier whose ordering cannot be determined from a primitive.
+	//
+	// float/double get a dedicated bound comparator first: compareForRangeFacet
+	// reports NaN as incomparable (the right answer for INSTANCE ordering, where
+	// NaN is unordered), but for THIS facet-consistency check xmllint orders NaN
+	// as equal to NaN and above every finite/infinite bound. So minInclusive="NaN"
+	// with a non-NaN maxInclusive is min>max (rejected) while min=0,max=NaN is
+	// 0<NaN (accepted). value.CompareFloatFacetBound encodes that ordering and
+	// still returns ok=false for an invalid float bound, leaving the invalid-bound
+	// error to the dedicated bound-value check (no spurious extra ordering error).
 	builtinLocal := builtinBaseLocal(td)
 	cmp := func(a, b string) (int, bool) {
+		if v, ok := value.CompareFloatFacetBound(a, b, builtinLocal); ok {
+			return v, true
+		}
 		if v, ok := compareForRangeFacet(a, b, builtinLocal); ok {
 			return v, true
 		}

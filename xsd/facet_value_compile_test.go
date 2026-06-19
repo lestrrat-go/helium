@@ -437,4 +437,96 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 		require.Contains(t, compileErrors(t, schemaXML),
 			"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'.")
 	})
+
+	t.Run("float minInclusive=NaN maxInclusive=0 is rejected", func(t *testing.T) {
+		t.Parallel()
+		// For the float/double facet-consistency check NaN is ordered above every
+		// non-NaN bound, so minInclusive="NaN" exceeds a finite maxInclusive and the
+		// pair is inconsistent. The value-space comparator treats any NaN operand as
+		// incomparable (correct for instance ordering), so the dedicated float
+		// facet-bound comparator is required here. xmllint rejects this schema.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:float">
+      <xs:minInclusive value="NaN"/>
+      <xs:maxInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.")
+	})
+
+	t.Run("float minInclusive=0 maxInclusive=NaN compiles", func(t *testing.T) {
+		t.Parallel()
+		// 0 < NaN under the facet-bound ordering, so the pair is consistent and the
+		// schema must compile. xmllint accepts this schema.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ok">
+    <xs:restriction base="xs:float">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="NaN"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="ok"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of")
+	})
+
+	t.Run("float minExclusive=NaN maxExclusive=NaN is rejected", func(t *testing.T) {
+		t.Parallel()
+		// NaN equals NaN under the facet-bound ordering, so the exclusive pair has
+		// equal bounds, which is inconsistent (an exclusive range needs min<max).
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:float">
+      <xs:minExclusive value="NaN"/>
+      <xs:maxExclusive value="NaN"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'.")
+	})
+
+	t.Run("double minInclusive=NaN maxInclusive=0 is rejected", func(t *testing.T) {
+		t.Parallel()
+		// Same NaN ordering applies to xs:double bounds.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:double">
+      <xs:minInclusive value="NaN"/>
+      <xs:maxInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.")
+	})
+
+	t.Run("float invalid bound and NaN report only the invalid-bound error", func(t *testing.T) {
+		t.Parallel()
+		// An invalid float bound (e.g. "Inf", the mixed-case spelling rejected by
+		// the lexical validator) must be reported by the bound-value check; the
+		// NaN-aware facet comparator must NOT additionally fire an ordering error
+		// when one operand is not a valid float lexical.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:float">
+      <xs:minInclusive value="NaN"/>
+      <xs:maxInclusive value="Inf"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs, wantMsg, "the invalid bound must still be reported")
+		require.NotContains(t, errs,
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.",
+			"no spurious ordering error when a bound is invalid for the type")
+	})
 }

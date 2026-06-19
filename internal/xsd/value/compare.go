@@ -577,6 +577,46 @@ func compareFloat(a, b string, single bool) (int, bool) {
 	return 0, true
 }
 
+// CompareFloatFacetBound compares two xs:float/xs:double facet BOUND lexicals for
+// the purpose of the same-type range-facet consistency check (e.g. minInclusive
+// vs maxInclusive). It differs from the ordinary value-space Compare in its
+// treatment of NaN: where Compare returns incomparable (ok=false) for any NaN
+// operand, this orders NaN as EQUAL to NaN and GREATER THAN every non-NaN value.
+// That matches xmllint, which rejects a schema whose minInclusive="NaN" exceeds
+// a finite maxInclusive while accepting minInclusive=finite with maxInclusive=NaN.
+//
+// builtinLocal must be xs:float or xs:double; for any other type it returns
+// ok=false so the caller falls back to its normal comparator. Both operands are
+// validated as valid float/double lexicals first: an invalid bound yields
+// ok=false (no ordering decision), so the caller's invalid-bound check — not this
+// consistency check — reports the error.
+func CompareFloatFacetBound(a, b, builtinLocal string) (int, bool) {
+	if builtinLocal != "float" && builtinLocal != "double" {
+		return 0, false
+	}
+	if !validBuiltinOperands(a, b, builtinLocal) {
+		return 0, false
+	}
+	fa, ok1 := parseXSDFloat(trimXSDSpace(a))
+	fb, ok2 := parseXSDFloat(trimXSDSpace(b))
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	aNaN := math.IsNaN(fa)
+	bNaN := math.IsNaN(fb)
+	if aNaN || bNaN {
+		switch {
+		case aNaN && bNaN:
+			return 0, true
+		case aNaN:
+			return 1, true
+		default:
+			return -1, true
+		}
+	}
+	return compareFloat(a, b, builtinLocal == "float")
+}
+
 type xsdDateTime struct {
 	// year is held with arbitrary precision so that valid expanded years
 	// (e.g. 999999999999999999999999) compare correctly rather than
