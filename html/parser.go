@@ -862,6 +862,26 @@ func normalizeNumericCharRef(cp int) rune {
 	return rune(cp)
 }
 
+// parseNumericCharRef converts a numeric character reference's digit string
+// (already extracted) into a code point. ok reports whether any digits were
+// present at all; a bare "&#" / "&#x" with no digits yields ok==false so the
+// caller emits nothing. When digits are present but the value overflows or
+// exceeds the maximum Unicode code point, ok is true and cp is forced above the
+// valid range so normalizeNumericCharRef maps it to U+FFFD (per HTML5) rather
+// than being dropped.
+func parseNumericCharRef(digits string, base int) (int, bool) {
+	if digits == "" {
+		return 0, false
+	}
+	v, err := strconv.ParseInt(digits, base, 32)
+	if err != nil {
+		// Out-of-range (overflow) or otherwise unrepresentable in 32 bits:
+		// route to normalizeNumericCharRef via an out-of-range sentinel.
+		return 0x110000, true
+	}
+	return int(v), true
+}
+
 // parseCharRef handles entity references (&name; or &#num; or &#xhex;).
 // Emits the resolved value as a Characters SAX event (entity splitting behavior).
 func (p *parser) parseCharRef() {
@@ -877,18 +897,10 @@ func (p *parser) parseCharRef() {
 		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 			_ = p.cur.Advance(1) // skip 'x'
 			hexStr := p.parseWhile(isHexDigit)
-			codepoint64, err := strconv.ParseInt(hexStr, 16, 32)
-			if err == nil {
-				codepoint = int(codepoint64)
-				haveDigits = true
-			}
+			codepoint, haveDigits = parseNumericCharRef(hexStr, 16)
 		} else {
 			numStr := p.parseWhile(isDigit)
-			codepoint64, err := strconv.ParseInt(numStr, 10, 32)
-			if err == nil {
-				codepoint = int(codepoint64)
-				haveDigits = true
-			}
+			codepoint, haveDigits = parseNumericCharRef(numStr, 10)
 		}
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
@@ -1363,18 +1375,10 @@ func (p *parser) resolveEntityInAttr() string {
 		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 			_ = p.cur.Advance(1)
 			hexStr := p.parseWhile(isHexDigit)
-			cp, err := strconv.ParseInt(hexStr, 16, 32)
-			if err == nil {
-				codepoint = int(cp)
-				haveDigits = true
-			}
+			codepoint, haveDigits = parseNumericCharRef(hexStr, 16)
 		} else {
 			numStr := p.parseWhile(isDigit)
-			cp, err := strconv.ParseInt(numStr, 10, 32)
-			if err == nil {
-				codepoint = int(cp)
-				haveDigits = true
-			}
+			codepoint, haveDigits = parseNumericCharRef(numStr, 10)
 		}
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
