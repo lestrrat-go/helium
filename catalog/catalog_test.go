@@ -272,9 +272,7 @@ func TestResolveURI(t *testing.T) {
 // "file://" URI must resolve the downstream mapping. The file: URI has to be
 // converted to a local filesystem path before opening.
 func TestNextCatalogFileURI(t *testing.T) {
-	dir, err := os.MkdirTemp(".", ".tmp-nextcatalog-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	nextPath, err := filepath.Abs(filepath.Join(dir, "next.xml"))
 	require.NoError(t, err)
