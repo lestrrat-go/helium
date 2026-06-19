@@ -89,6 +89,18 @@ func (p Parser) Strict(v bool) Parser {
 	return p
 }
 
+// MaxContentSize bounds, in bytes, how much raw-text (script/style),
+// RCDATA (title/textarea), plaintext, or comment content the parser buffers
+// before flushing it to SAX in a chunk. It caps memory growth on a gigantic
+// or unterminated section. A value <= 0 selects the default (16 MiB).
+//
+// Default: 16 MiB.
+func (p Parser) MaxContentSize(v int) Parser {
+	p = p.clone()
+	p.cfg.maxContentSize = v
+	return p
+}
+
 func (p Parser) parseConfig() parseConfig {
 	if p.cfg == nil {
 		return parseConfig{}

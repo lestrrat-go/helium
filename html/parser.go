@@ -480,18 +480,18 @@ func (p *parser) parse(ctx context.Context) error {
 				p.parseEndTag()
 			} else if p.cur.PeekAt(1) == '!' {
 				if p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
-					p.parseComment()
+					p.parseComment(ctx)
 				} else if p.hasPrefixFold("<!DOCTYPE") {
 					p.parseDoctype()
 				} else {
 					// Bogus comment or similar — treat as comment
-					p.parseBogusComment()
+					p.parseBogusComment(ctx)
 				}
 			} else if p.cur.PeekAt(1) == '?' {
 				// Processing instruction — in HTML mode, treated as comment
-				p.parsePI()
+				p.parsePI(ctx)
 			} else if isASCIIAlpha(p.cur.PeekAt(1)) {
-				p.parseStartTag()
+				p.parseStartTag(ctx)
 			} else {
 				// Lone '<' — emit as character data
 				_ = p.emitCharacters([]byte("<"))
@@ -508,7 +508,7 @@ func (p *parser) parse(ctx context.Context) error {
 }
 
 // parseStartTag parses an HTML start tag: <tagname attrs...>
-func (p *parser) parseStartTag() {
+func (p *parser) parseStartTag(ctx context.Context) {
 	_ = p.cur.Advance(1) // skip '<'
 
 	name := p.parseName()
@@ -558,11 +558,11 @@ func (p *parser) parseStartTag() {
 	if desc != nil {
 		switch desc.dataMode {
 		case dataScript, dataRawText:
-			p.parseRawContent(name)
+			p.parseRawContent(ctx, name)
 		case dataRCDATA:
-			p.parseRCDATAContent(name)
+			p.parseRCDATAContent(ctx, name)
 		case dataPlaintext:
-			p.parsePlaintext()
+			p.parsePlaintext(ctx)
 		}
 	}
 }
@@ -631,7 +631,7 @@ func (p *parser) parseEndTag() {
 }
 
 // parseComment parses an HTML comment: <!-- ... -->
-func (p *parser) parseComment() {
+func (p *parser) parseComment(ctx context.Context) {
 	_ = p.cur.Advance(4) // skip '<!--'
 
 	// Handle short comments: <!-->  and <!--->
@@ -648,8 +648,12 @@ func (p *parser) parseComment() {
 		return
 	}
 
+	limit := p.cfg.contentLimit()
 	n := 0
-	for {
+	// Stop on EOF, when cancelled (abort promptly rather than scanning the
+	// whole possibly-unterminated comment), or at the content limit (bound
+	// memory so a gigantic/unterminated comment cannot force one huge alloc).
+	for ctx.Err() == nil && n < limit {
 		b := p.cur.PeekAt(n)
 		if b == 0 {
 			break
@@ -678,10 +682,12 @@ func (p *parser) parseComment() {
 }
 
 // parseBogusComment parses a bogus comment: <! ... >
-func (p *parser) parseBogusComment() {
+func (p *parser) parseBogusComment(ctx context.Context) {
 	_ = p.cur.Advance(2) // skip '<!'
+	limit := p.cfg.contentLimit()
 	n := 0
-	for {
+	// Abort promptly on cancellation; bound memory at the content limit.
+	for ctx.Err() == nil && n < limit {
 		b := p.cur.PeekAt(n)
 		if b == 0 || b == '>' {
 			break
@@ -698,12 +704,14 @@ func (p *parser) parseBogusComment() {
 
 // parsePI parses a processing instruction in HTML mode.
 // In HTML, <?...> is treated as a comment by libxml2.
-func (p *parser) parsePI() {
+func (p *parser) parsePI(ctx context.Context) {
 	// libxml2 emits the entire <?...> content as a comment (without the < and >).
 	_ = p.cur.Advance(1) // skip '<' — keep the '?' as part of comment content
 
+	limit := p.cfg.contentLimit()
 	n := 0
-	for {
+	// Abort promptly on cancellation; bound memory at the content limit.
+	for ctx.Err() == nil && n < limit {
 		b := p.cur.PeekAt(n)
 		if b == 0 {
 			break
@@ -1032,14 +1040,30 @@ const (
 // - Normal: </script> closes; <!-- enters escaped
 // - Escaped: </script> closes; --> returns to normal; <script enters double-escaped
 // - Double-escaped: </script> returns to escaped; --> returns to normal
-func (p *parser) parseRawContent(tagName string) {
+func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 	endTag := "</" + tagName
 	startTag := "<" + tagName
 	isScript := tagName == "script"
 	state := scriptNormal
+	limit := p.cfg.contentLimit()
 	var content bytes.Buffer
 
 	for !p.cur.Done() {
+		// Abort promptly on context cancellation rather than buffering the
+		// entire (possibly gigantic or unterminated) section first. The main
+		// parse loop re-checks ctx.Err() and surfaces it.
+		if ctx.Err() != nil {
+			if content.Len() > 0 {
+				p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
+			}
+			return
+		}
+		// Bound memory: flush accumulated content as a chunk once it reaches
+		// the configured limit, then keep scanning with a fresh buffer.
+		if content.Len() >= limit {
+			p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
+			content.Reset()
+		}
 		// Check for <!-- to enter escaped state
 		if isScript && state == scriptNormal && p.cur.Peek() == '<' && p.cur.PeekAt(1) == '!' &&
 			p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
@@ -1127,10 +1151,16 @@ func (p *parser) parseRawContent(tagName string) {
 
 // parseRCDATAContent parses RCDATA content (title, textarea).
 // Like raw text but entities are expanded.
-func (p *parser) parseRCDATAContent(tagName string) {
+func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 	endTag := "</" + tagName
+	limit := p.cfg.contentLimit()
 
 	for !p.cur.Done() {
+		// Abort promptly on context cancellation. The main parse loop
+		// re-checks ctx.Err() and surfaces it.
+		if ctx.Err() != nil {
+			return
+		}
 		if p.cur.Peek() == '<' && p.cur.PeekAt(1) == '/' {
 			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
@@ -1159,7 +1189,9 @@ func (p *parser) parseRCDATAContent(tagName string) {
 		if p.cur.Peek() == '&' {
 			p.parseCharRef()
 		} else {
-			// Collect text up to next & or potential end tag
+			// Collect text up to next & or potential end tag, but cap the run
+			// at the content limit so one huge text span is emitted in bounded
+			// chunks instead of buffered whole.
 			n := 0
 			for {
 				b := p.cur.PeekAt(n)
@@ -1167,6 +1199,9 @@ func (p *parser) parseRCDATAContent(tagName string) {
 					break
 				}
 				n++
+				if n >= limit {
+					break
+				}
 			}
 			if n > 0 {
 				text := p.cur.PeekString(n)
@@ -1205,9 +1240,23 @@ func (p *parser) parseRCDATAContent(tagName string) {
 }
 
 // parsePlaintext parses plaintext content — everything until EOF.
-func (p *parser) parsePlaintext() {
+func (p *parser) parsePlaintext(ctx context.Context) {
+	limit := p.cfg.contentLimit()
 	var content bytes.Buffer
 	for !p.cur.Done() {
+		// Abort promptly on context cancellation rather than buffering the
+		// entire (possibly endless) plaintext section first.
+		if ctx.Err() != nil {
+			if content.Len() > 0 {
+				p.handleSAXErr(p.sax.Characters(content.Bytes()))
+			}
+			return
+		}
+		// Bound memory: flush the buffer as a chunk once it reaches the limit.
+		if content.Len() >= limit {
+			p.handleSAXErr(p.sax.Characters(content.Bytes()))
+			content.Reset()
+		}
 		// A real U+0000 (NUL) byte reads as 0, which the previous PeekAt-based
 		// scan treated as EOF, truncating plaintext early. Per HTML5 the
 		// PLAINTEXT state replaces U+0000 with U+FFFD; consume the rest of the

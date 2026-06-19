@@ -9,6 +9,25 @@ type parseConfig struct {
 	// strict promotes warnings forwarded from silenced SAX callbacks into a
 	// fatal parse error. Default false preserves libxml2-style tolerance.
 	strict bool
+	// maxContentSize bounds, in bytes, how much raw-text/RCDATA/plaintext or
+	// comment content is buffered before it is flushed to SAX in a chunk.
+	// Zero selects defaultMaxContentSize. It guards against unbounded memory
+	// growth on a gigantic or unterminated section.
+	maxContentSize int
+}
+
+// defaultMaxContentSize is the default flush threshold for buffered
+// raw-text/RCDATA/plaintext/comment content, used when maxContentSize is 0.
+// Content is delivered to SAX in chunks no larger than this, so a section with
+// gigabytes of data (or one that never terminates) is bounded in memory.
+const defaultMaxContentSize = 16 << 20 // 16 MiB
+
+// contentLimit returns the effective per-chunk content cap.
+func (c parseConfig) contentLimit() int {
+	if c.maxContentSize > 0 {
+		return c.maxContentSize
+	}
+	return defaultMaxContentSize
 }
 
 // Writer configures HTML serialization. It is a value-style wrapper:

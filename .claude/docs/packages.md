@@ -170,7 +170,7 @@ RELAX NG schema compilation and validation.
 HTML 4.01 parser producing helium DOM or SAX events.
 
 - **NewParser() → Parser** — create fluent parser builder
-- Parser methods: `SuppressImplied(bool)`, `StripBlanks(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`
+- Parser methods: `SuppressImplied(bool)`, `StripBlanks(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`, `Strict(bool)`, `MaxContentSize(int)` (caps buffered raw-text/RCDATA/plaintext/comment bytes per chunk; default 16 MiB)
 - Terminal: **Parse(ctx, []byte)**, **ParseReader(ctx, io.Reader)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
 - **NewWriter() → Writer** — create fluent writer builder
 - Writer methods: `DefaultDTD(bool)`, `Format(bool)`, `PreserveCase(bool)`, `EscapeURIAttributes(bool)`, `EscapeControlChars(bool)`
