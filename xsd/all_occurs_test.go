@@ -241,6 +241,110 @@ func TestAllOccursValidation(t *testing.T) {
 	})
 }
 
+// TestAllGroupRefConstraints verifies the constraints on an xs:group reference
+// that resolves to an 'all' model group (XSD Part 1 §3.8.6 cos-all-limited /
+// §3.8.2). Before the fix both invalid forms compiled with zero errors;
+// /usr/bin/xmllint rejects them with the wording mirrored below:
+//
+//	The particle's {max occurs} must be 1, since the reference resolves to an 'all' model group.
+//	A model group definition is referenced, but it contains an 'all' model group, which cannot be contained by model groups.
+func TestAllGroupRefConstraints(t *testing.T) {
+	t.Parallel()
+
+	compileErrors := func(t *testing.T, schemaXML string) string {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		_, errors := partitionCompileErrors(collector.Errors())
+		return errors
+	}
+
+	const (
+		wantDirectMax = "The particle's {max occurs} must be 1, since the reference resolves to an 'all' model group."
+		wantNested    = "A model group definition is referenced, but it contains an 'all' model group, which cannot be contained by model groups."
+	)
+
+	t.Run("rejects", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name    string
+			schema  string
+			wantMsg string
+		}{
+			{
+				name:    "direct ref maxOccurs 2",
+				wantMsg: wantDirectMax,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:group ref="g" maxOccurs="2"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:    "direct ref maxOccurs unbounded",
+				wantMsg: wantDirectMax,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:group ref="g" maxOccurs="unbounded"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:    "nested in sequence",
+				wantMsg: wantNested,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name:    "nested in choice",
+				wantMsg: wantNested,
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:choice><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				require.Contains(t, compileErrors(t, tc.schema), tc.wantMsg)
+			})
+		}
+	})
+
+	// A direct (non-nested) reference to an 'all' model group with the default or
+	// explicit maxOccurs="1" is valid and must compile cleanly.
+	t.Run("accepts direct ref", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name   string
+			schema string
+		}{
+			{
+				name: "default maxOccurs",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "explicit maxOccurs 1",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="root"><xs:complexType><xs:group ref="g" maxOccurs="1"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				require.Empty(t, compileErrors(t, tc.schema))
+			})
+		}
+	})
+}
+
 // TestOccursLexicalMessageParity verifies that the lexical-error wording for an
 // invalid minOccurs/maxOccurs matches /usr/bin/xmllint exactly:
 //

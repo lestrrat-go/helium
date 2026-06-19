@@ -172,6 +172,15 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				}
 				qn := c.resolveQName(ctx, ce, ref)
 				c.groupRefs[placeholder] = qn
+				// Nested reference: this group ref is contained inside another
+				// model group (xs:sequence/xs:choice/xs:all), so a resolved 'all'
+				// model group is forbidden here.
+				c.groupRefSources[placeholder] = groupRefSource{
+					line:         ce.Line(),
+					local:        ce.LocalName(),
+					nested:       true,
+					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+				}
 				mg.Particles = append(mg.Particles, &Particle{
 					MinOccurs: placeholder.MinOccurs,
 					MaxOccurs: placeholder.MaxOccurs,
