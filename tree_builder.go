@@ -474,6 +474,9 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 
 	baseLen := ctx.inputTab.Len()
 	ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(data)))
+	// The DTD cursor we just pushed is the enclosing content cursor for the
+	// shared declaration step: it lives one level above baseLen.
+	dtdFloor := ctx.inputTab.Len()
 
 	// Restore parser state on every exit path, including the error returns
 	// below, and ensure our pushed input is always removed from the stack.
@@ -485,126 +488,28 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		ctx.baseURI = savedBaseURI
 	}()
 
+	// Parse the external subset declaration-by-declaration through the SHARED
+	// step used for INCLUDE-section bodies (parseExternalSubsetDeclStep), so a
+	// parameter-entity reference expands identically in both contexts: a
+	// blank-only skip (NOT skipBlanks, whose handlePEReference would consume a
+	// "%pe;" reference without expanding it), explicit parsePEReference
+	// expansion, spent-cursor cleanup, and a forward-progress guard that surfaces
+	// a malformed "<!BOGUS" while the external DTD cursor/baseURI are still
+	// active (so its location, not the main doctype's, is reported). The
+	// top-level loop is tolerant of conditional-section errors (stop, do not
+	// fail).
 	for ctx.inputTab.Len() > baseLen {
 		top := ctx.adaptCursor(ctx.inputTab.PeekOne())
 		if top == nil || top.Done() {
 			break
 		}
 
-		// Snapshot the cursor position BEFORE consuming blanks so the progress
-		// guard below counts everything this iteration does — whitespace, a markup
-		// declaration, AND a parameter-entity reference — as forward progress.
-		// This mirrors parseInternalSubset, which also snapshots before its blank
-		// skip. The guard must still fire when an iteration makes no progress at
-		// all (e.g. a malformed "<!BOGUS" that parseMarkupDecl ignores).
-		cur := ctx.getCursor()
-		startCur := cur
-		var startLine, startCol int
-		var startByte byte
-		if cur != nil {
-			startLine = cur.LineNumber()
-			startCol = cur.Column()
-			startByte = cur.Peek()
+		stop, err := ctx.parseExternalSubsetDeclStep(ctxif, dtdFloor, true)
+		if err != nil {
+			return err
 		}
-
-		// Skip blanks WITHOUT the parameter-entity handling that skipBlanks would
-		// otherwise perform here. In the external subset, skipBlanks calls
-		// handlePEReference, which CONSUMES a "%pe;" reference while only
-		// validating it — it does not expand the replacement text. That swallows
-		// the reference before parsePEReference (below) can push the PE content
-		// onto the input stack, so the PE's declarations are never parsed.
-		// parseInternalSubset does not hit this because handlePEReference is a
-		// no-op for the internal subset (!pctx.external). Advancing past blanks
-		// only, and leaving any "%" for parsePEReference, keeps the two subset
-		// loops aligned.
-		if c := ctx.getCursor(); c != nil {
-			n := 0
-			for b := c.PeekAt(n); isBlankByte(b) && !c.Done(); b = c.PeekAt(n) {
-				n++
-			}
-			if n > 0 {
-				if err := c.Advance(n); err != nil {
-					return err
-				}
-			}
-		}
-
-		if ctx.inputTab.Len() <= baseLen {
+		if stop {
 			break
-		}
-		// The blank skip above may have consumed the LAST bytes of a
-		// parameter-entity cursor whose replacement text is (or ends with)
-		// only whitespace, e.g. `<!ENTITY % ws "   ">` then `%ws;`. Breaking
-		// here on a Done() PE cursor would let the deferred cleanup pop the
-		// parent DTD cursor too, silently skipping declarations that follow the
-		// PE reference. Instead pop the spent NESTED cursors (mirroring the
-		// conditional-section cleanup below) and only exit the loop once we are
-		// back at the base/parent cursor; otherwise resume parsing the parent.
-		for ctx.inputTab.Len() > baseLen {
-			top = ctx.adaptCursor(ctx.inputTab.PeekOne())
-			if top == nil || !top.Done() {
-				break
-			}
-			ctx.popInput()
-		}
-		if ctx.inputTab.Len() <= baseLen {
-			break
-		}
-		top = ctx.adaptCursor(ctx.inputTab.PeekOne())
-		if top == nil {
-			break
-		}
-
-		cur = ctx.getCursor()
-		if cur != nil && cur.Peek() == '<' && cur.PeekAt(1) == '!' && cur.PeekAt(2) == '[' {
-			// Conditional-section recovery is deliberately tolerant: a
-			// per-section error stops the loop without failing the whole parse,
-			// matching the long-standing behavior relied on by valid documents
-			// whose conditional-section handling is otherwise imperfect.
-			//
-			// Fall through to the SAME cursor-cleanup/progress guard below rather
-			// than "continue"-ing past it. A "continue" here would leave an
-			// exhausted parameter-entity cursor (e.g. when a PE expands to a
-			// conditional section) sitting on top of the input stack; the next
-			// iteration's PeekOne().Done() check would then break the loop and the
-			// deferred cleanup would pop the parent DTD cursor, silently skipping
-			// any declarations that follow the PE reference.
-			if err := ctx.parseConditionalSections(ctxif); err != nil {
-				break
-			}
-		} else {
-			if err := ctx.parseMarkupDecl(ctxif); err != nil {
-				return err
-			}
-
-			// Expand a parameter-entity reference at the cursor. parseMarkupDecl
-			// does not handle top-level "%pe;" references in the external subset,
-			// so this pushes the PE replacement text onto the input stack and lets
-			// its declarations be parsed by subsequent loop iterations, mirroring
-			// parseInternalSubset.
-			if err := ctx.parsePEReference(ctxif); err != nil {
-				return err
-			}
-		}
-
-		// Pop any exhausted parameter-entity (or conditional-section) cursors so
-		// the next iteration resumes in the parent DTD where the expanded content
-		// left off, instead of breaking the loop on a Done() PE cursor and letting
-		// the deferred cleanup discard the declarations that follow.
-		for ctx.inputTab.Len() > baseLen {
-			top = ctx.adaptCursor(ctx.inputTab.PeekOne())
-			if top == nil || !top.Done() {
-				break
-			}
-			ctx.popInput()
-		}
-
-		// Guard against an iteration that neither advanced the cursor nor
-		// reported an error, which would otherwise loop forever (e.g. the
-		// malformed "<!BOGUS" declaration that parseMarkupDecl ignores).
-		cur = ctx.getCursor()
-		if cur == startCur && cur != nil && cur.LineNumber() == startLine && cur.Column() == startCol && cur.Peek() == startByte {
-			return ErrDocTypeNotFinished
 		}
 	}
 

@@ -958,6 +958,62 @@ func TestParseExternalDTDPEWhitespaceFollowedByDecl(t *testing.T) {
 	require.Equal(t, "d", val, "trailing <!ATTLIST> must not be silently skipped")
 }
 
+func TestParseExternalDTDPEInIncludeSectionExpands(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "inc.dtd">
+<r/>`
+
+	// The external subset wraps its declarations in an <![INCLUDE[ ... ]]>
+	// conditional section. Inside that section it declares a parameter entity
+	// whose replacement text is an <!ATTLIST> and then references it. The
+	// reference must be expanded (not merely validated and skipped by the
+	// blank-skip's handlePEReference) so the default attribute is applied to
+	// <r/>. Before the fix, the INCLUDE loop's skipBlanks consumed "%attrs;"
+	// without pushing its replacement text, silently dropping the declaration.
+	const dtd = `<![INCLUDE[
+<!ELEMENT r EMPTY>
+<!ENTITY % attrs "<!ATTLIST r x CDATA 'inc'>">
+%attrs;
+]]>`
+	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "PE reference inside an INCLUDE section must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	val, ok := root.GetAttribute("x")
+	require.True(t, ok, "default attribute from PE expanded inside INCLUDE must be present")
+	require.Equal(t, "inc", val, "PE inside INCLUDE must apply the default attribute value")
+}
+
+func TestParseExternalDTDMalformedDeclLocation(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "bogus.dtd">
+<r/>`
+
+	// A malformed declaration in the external subset must report the external
+	// DTD's location, not the main document's doctype line. The progress-guard
+	// error must be raised while the external DTD cursor and baseURI are still
+	// active so the reported File carries the DTD path.
+	fsys := fstest.MapFS{"bogus.dtd": &fstest.MapFile{Data: []byte("<!BOGUS")}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "a malformed external DTD declaration must produce a parse error")
+
+	var pe helium.ErrParseError
+	require.ErrorAs(t, err, &pe, "error must be a structured parse error")
+	require.Equal(t, "bogus.dtd", pe.File, "error must reference the external DTD, not the main document")
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 
