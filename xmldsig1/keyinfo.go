@@ -21,6 +21,12 @@ type KeySource interface {
 type KeySourceFunc func(ctx context.Context, keyInfo *KeyInfoData, alg string) (any, error)
 
 func (f KeySourceFunc) ResolveKey(ctx context.Context, keyInfo *KeyInfoData, alg string) (any, error) {
+	// A typed-nil KeySourceFunc (e.g. var ks KeySourceFunc; NewVerifier(ks))
+	// survives the interface!=nil check in verifySignature, so guard the nil
+	// func here and return a typed error instead of panicking on the call.
+	if f == nil {
+		return nil, ErrNoKeySource
+	}
 	return f(ctx, keyInfo, alg)
 }
 
