@@ -107,6 +107,25 @@ func TestElementConsistent(t *testing.T) {
 </xs:schema>`,
 			},
 			{
+				// A substitution-group member resolves its declared type through
+				// the head (xs:int). A same-named local element of a genuinely
+				// different type (xs:string) is still inconsistent and must be
+				// rejected even after substitution-group-aware resolution.
+				name: "untyped substitution-group member vs same-named local of a different type",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="a" substitutionGroup="head"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="a"/>
+        <xs:element name="a" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
 				name: "named type vs inline anonymous type",
 				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
@@ -212,6 +231,45 @@ func TestElementConsistent(t *testing.T) {
       <xs:sequence>
         <xs:element name="a" type="xs:int"/>
         <xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A substitution-group member declared without an explicit type
+				// has Type == nil; its effective declared type is the head's
+				// (xs:int here). Referencing the member alongside a same-named
+				// local element of that same head type must NOT be flagged
+				// inconsistent. Before the fix the raw nil Type of the member
+				// compared unequal to the local's xs:int and false-rejected.
+				name: "substitution-group member with no explicit type matches its head type",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="a" type="xs:int" substitutionGroup="head"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="a"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// As above but the member carries no type at all, so its
+				// effective declared type is resolved through the head. It must
+				// compare equal to a same-named local of the head's type.
+				name: "untyped substitution-group member resolves through head",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="a" substitutionGroup="head"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="a"/>
+        <xs:element name="a" type="xs:int"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>

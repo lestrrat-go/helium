@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // checkElementConsistent enforces the XSD "Element Declarations Consistent"
@@ -22,6 +23,15 @@ import (
 // This runs after reference resolution (so every element particle's Type and
 // every group reference's Particles are populated) and only when no prior
 // schema error has been reported, matching the gating of checkUPA.
+//
+// Coverage scope: this check currently covers same-name element declarations
+// reachable within a type's content model, comparing their substitution-group-
+// aware {type definition}s (see resolveDeclaredType). It does NOT yet cover the
+// implicit containment of substitution-group members in a content model (the
+// members a head's particle stands in for) or standalone named xs:group
+// definitions that are never referenced by any type. Missing those cases is
+// conservatively safe: the check is only ever under-strict (it may fail to
+// reject a genuinely inconsistent schema) and never false-rejects a valid one.
 func (c *compiler) checkElementConsistent(ctx context.Context) {
 	if c.filename == "" || c.errorCount != 0 {
 		return
@@ -77,8 +87,9 @@ func (c *compiler) checkModelGroupElementConsistent(ctx context.Context, td *Typ
 			continue
 		}
 		first := decls[0]
+		firstType := c.resolveDeclaredType(first)
 		for _, other := range decls[1:] {
-			if elementTypesConsistent(first.Type, other.Type) {
+			if elementTypesConsistent(firstType, c.resolveDeclaredType(other)) {
 				continue
 			}
 			component := componentLocalComplexType
@@ -126,6 +137,40 @@ func collectContentModelElements(mg *ModelGroup, byName map[QName][]*ElementDecl
 			collectContentModelElements(term, byName, visited)
 		}
 	}
+}
+
+// resolveDeclaredType returns the {type definition} that an element declaration
+// contributes for cos-element-consistent comparison. A substitution-group member
+// declared without an explicit type has Type == nil; its effective declared type
+// is that of the substitution-group head (resolved transitively), and an element
+// with no resolvable type at all defaults to xs:anyType (XSD 1.1 Part 1 §3.3.2).
+// Comparing the raw Type pointer would treat such a member as nil and wrongly
+// flag an inconsistency against its head, so resolve through SubstitutionGroup
+// here before comparing. The seen set bounds malformed cyclic substitution
+// groups (rejected elsewhere) so this never loops.
+func (c *compiler) resolveDeclaredType(decl *ElementDecl) *TypeDef {
+	seen := make(map[QName]struct{})
+	for decl != nil {
+		if decl.Type != nil {
+			return decl.Type
+		}
+		head := decl.SubstitutionGroup
+		if head == (QName{}) {
+			break
+		}
+		if _, ok := seen[head]; ok {
+			break
+		}
+		seen[head] = struct{}{}
+		next, ok := c.schema.elements[head]
+		if !ok {
+			break
+		}
+		decl = next
+	}
+	// No explicit type and no resolvable substitution-group head type: the
+	// declaration's {type definition} defaults to xs:anyType.
+	return c.schema.types[QName{Local: "anyType", NS: lexicon.NamespaceXSD}]
 }
 
 // elementTypesConsistent reports whether two element declarations sharing an
