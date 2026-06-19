@@ -2,8 +2,10 @@ package catalog_test
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/catalog"
@@ -284,9 +286,20 @@ func TestNextCatalogFileURI(t *testing.T) {
 	require.NoError(t, os.WriteFile(nextPath, []byte(nextXML), 0o600))
 
 	// Reference the downstream catalog via a file:// URI (not a bare path).
+	// Build the URI portably: slash-normalize the absolute path and ensure a
+	// leading slash so the authority component is empty. On POSIX nextPath is
+	// "/abs/next.xml" -> "file:///abs/next.xml"; on Windows it is
+	// "C:\...\next.xml" -> "C:/.../next.xml" -> "file:///C:/.../next.xml".
+	// This round-trips through the production catalogFilePath/fileURIPath code
+	// back to nextPath on the current OS.
+	slashPath := filepath.ToSlash(nextPath)
+	if !strings.HasPrefix(slashPath, "/") {
+		slashPath = "/" + slashPath
+	}
+	nextURI := (&url.URL{Scheme: "file", Path: slashPath}).String()
 	rootXML := `<?xml version="1.0"?>
 <catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
-  <nextCatalog catalog="file://` + nextPath + `"/>
+  <nextCatalog catalog="` + nextURI + `"/>
 </catalog>`
 	rootPath := filepath.Join(dir, "root.xml")
 	require.NoError(t, os.WriteFile(rootPath, []byte(rootXML), 0o600))
