@@ -15,7 +15,10 @@ import (
 type pointerKeySource struct{}
 
 func (*pointerKeySource) ResolveKey(_ context.Context, _ *xmldsig1.KeyInfoData, _ string) (any, error) {
-	return nil, nil
+	// Unreachable in this test: a typed-nil *pointerKeySource is detected by
+	// isNilKeySource before ResolveKey is ever called. Return the package
+	// sentinel so a nil value is never paired with a nil error (nilnil lint).
+	return nil, xmldsig1.ErrNoKeySource
 }
 
 // A nil KeySource must surface a typed error rather than panic on a nil
