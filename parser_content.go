@@ -81,6 +81,9 @@ func (pctx *parserCtx) parseMisc(ctx context.Context) error {
 
 	cur := pctx.getCursor()
 	for !cur.Done() && pctx.instate != psEOF {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if cur.HasPrefixString("<?") {
 			if err := pctx.parsePI(ctx); err != nil {
 				return pctx.error(ctx, err)

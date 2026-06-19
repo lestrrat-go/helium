@@ -24,6 +24,12 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	ctx = sax.WithDocumentLocator(ctx, pctx)
 	ctx = context.WithValue(ctx, stopFuncKey{}, pctx.stop)
 
+	// Honor a context that is already cancelled before any parsing work
+	// (or blocking reads) begins.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if s := pctx.sax; s != nil {
 		switch err := s.SetDocumentLocator(ctx, pctx); err {
 		case nil, sax.ErrHandlerUnspecified:
@@ -241,6 +247,9 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 	doRecover := pctx.options.IsSet(parseRecover)
 
 	for !cur.Done() && !pctx.stopped {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if cur.Peek() == '<' && cur.PeekAt(1) == '/' {
 			break
 		}
