@@ -83,6 +83,38 @@ func IsValidQName(s string) bool {
 	return IsValidNCName(s)
 }
 
+// IsValidEncName reports whether s is a valid XML EncName (XML 1.0 §4.3.3):
+//
+//	EncName ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
+//
+// This mirrors the parser's encoding-name production (see
+// parserCtx.parseEncodingName) and is intentionally ASCII-only: it ensures an
+// untrusted encoding string emitted into the XML declaration cannot inject
+// markup or be an otherwise-malformed EncName (e.g. "utf 8").
+func IsValidEncName(s string) bool {
+	if s == "" {
+		return false
+	}
+	if !isEncNameStart(s[0]) {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if !isEncNameChar(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func isEncNameStart(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func isEncNameChar(c byte) bool {
+	return isEncNameStart(c) || (c >= '0' && c <= '9') ||
+		c == '.' || c == '_' || c == '-'
+}
+
 // IsValidNCName checks whether s is a valid XML NCName (non-colonized name).
 func IsValidNCName(s string) bool {
 	if s == "" {

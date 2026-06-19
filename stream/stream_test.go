@@ -1771,3 +1771,73 @@ func TestOneShotHelpersPreValidateBeforeMutation(t *testing.T) {
 		require.Empty(t, buf.String())
 	})
 }
+
+func TestStartDocumentRejectsMalformedEncName(t *testing.T) {
+	t.Parallel()
+	// A value that is not a valid XML EncName (contains a space) must be rejected
+	// before any output is written, even though the lenient encoding.Load would
+	// otherwise normalize and accept it.
+	for _, bad := range []string{"utf 8", "1utf8", "utf8\"?><x/>", "utf+8"} {
+		t.Run(bad, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			err := w.StartDocument("1.0", bad, "")
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "invalid encoding name")
+			require.Empty(t, buf.String(), "writer must be unmutated on rejection")
+		})
+	}
+}
+
+func TestStartDocumentUnsupportedEncNameLeavesWriterUnmutated(t *testing.T) {
+	t.Parallel()
+	// A syntactically valid but unsupported EncName must be rejected before the
+	// XML-declaration prefix is written.
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	err := w.StartDocument("1.0", "BOGUS-999", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported encoding")
+	require.Empty(t, buf.String(), "writer must be unmutated on rejection")
+}
+
+func TestWriteDTDEntityRejectsColonizedName(t *testing.T) {
+	t.Parallel()
+	// Entity names are NCNames in helium's parser (colons are forbidden), so a
+	// "p:e" name must be rejected without mutating the writer.
+	t.Run("internal", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		buf.Reset()
+		err := w.WriteDTDEntity(false, "p:e", "v")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid DTD entity name")
+		require.Empty(t, buf.String(), "writer must be unmutated on rejection")
+	})
+	t.Run("external", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		buf.Reset()
+		err := w.WriteDTDExternalEntity(false, "p:e", "", "ext.dtd", "")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid DTD entity name")
+		require.Empty(t, buf.String(), "writer must be unmutated on rejection")
+	})
+}
+
+func TestWriteDTDEntityAcceptsNCName(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.StartDTD("root", "", ""))
+	require.NoError(t, w.WriteDTDEntity(false, "ent", "v"))
+	require.NoError(t, w.WriteDTDExternalEntity(false, "logo", "", "logo.gif", "gif"))
+}

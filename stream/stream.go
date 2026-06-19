@@ -577,14 +577,24 @@ func (w *Writer) StartDocument(version, enc, standalone string) error {
 	if standalone != "" && standalone != "yes" && standalone != "no" {
 		return fmt.Errorf("stream: invalid standalone value %q (want \"yes\", \"no\", or empty)", standalone)
 	}
+	// Validate the encoding name BEFORE writing any output: first against the XML
+	// EncName production (so a syntactically malformed value like "utf 8" cannot
+	// be emitted raw into the declaration), then for actual support. encoding.Load
+	// is lenient (it normalizes/accepts non-EncName spellings), so the syntactic
+	// check must come first.
+	if enc != "" {
+		if !xmlchar.IsValidEncName(enc) {
+			return fmt.Errorf("stream: invalid encoding name %q", enc)
+		}
+		if encoding.Load(enc) == nil {
+			return fmt.Errorf("stream: unsupported encoding %q", enc)
+		}
+	}
 	w.writeStr("<?xml version=")
 	w.writeByte(w.quoteChar)
 	w.writeStr(version)
 	w.writeByte(w.quoteChar)
 	if enc != "" {
-		if encoding.Load(enc) == nil {
-			return fmt.Errorf("stream: unsupported encoding %q", enc)
-		}
 		w.writeStr(" encoding=")
 		w.writeByte(w.quoteChar)
 		w.writeStr(enc)
@@ -1483,7 +1493,10 @@ func (w *Writer) WriteDTDEntity(pe bool, name, content string) error {
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDEntity called outside DTD")
 	}
-	if !xmlchar.IsValidQName(name) {
+	// An entity name is an XML Name, but helium's parser forbids colons in entity
+	// names, so validate as an NCName to match parser behavior (a "p:e" written
+	// here would be unparseable).
+	if !xmlchar.IsValidNCName(name) {
 		return fmt.Errorf("stream: invalid DTD entity name %q", name)
 	}
 	if err := validateXMLChars("DTD entity", content); err != nil {
@@ -1511,7 +1524,10 @@ func (w *Writer) WriteDTDExternalEntity(pe bool, name, pubid, sysid, ndata strin
 	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("stream: WriteDTDExternalEntity called outside DTD")
 	}
-	if !xmlchar.IsValidQName(name) {
+	// An entity name is an XML Name, but helium's parser forbids colons in entity
+	// names, so validate as an NCName to match parser behavior (a "p:e" written
+	// here would be unparseable).
+	if !xmlchar.IsValidNCName(name) {
 		return fmt.Errorf("stream: invalid DTD entity name %q", name)
 	}
 	if pubid != "" && !validatePubid(pubid) {

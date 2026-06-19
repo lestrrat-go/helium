@@ -39,6 +39,36 @@ func TestIsValidNCName(t *testing.T) {
 	}
 }
 
+func TestIsValidEncName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"UTF-8", true},
+		{"utf-8", true},
+		{"ISO-8859-1", true},
+		{"Shift_JIS", true},
+		{"a", true},
+		{"a1._-", true},
+		{"", false},
+		{"utf 8", false},
+		{"1utf8", false},
+		{".utf8", false},
+		{"-utf8", false},
+		{"_utf8", false},
+		{"utf+8", false},
+		{"utf8\"?><x/>", false},
+		{"カタカナ", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, xmlchar.IsValidEncName(tt.input))
+		})
+	}
+}
+
 func TestIsValidQName(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
