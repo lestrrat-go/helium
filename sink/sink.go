@@ -2,6 +2,7 @@ package sink
 
 import (
 	"context"
+	"reflect"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -64,7 +65,7 @@ type Sink[T any] struct {
 // A nil handler is replaced with a no-op handler that discards items, so the
 // returned Sink is always safe to deliver to and never panics on delivery.
 func New[T any](ctx context.Context, handler Handler[T], options ...Option) *Sink[T] {
-	if handler == nil {
+	if isNilHandler(handler) {
 		handler = HandlerFunc[T](func(context.Context, T) {})
 	}
 	cfg := config{bufSize: 256}
@@ -82,6 +83,24 @@ func New[T any](ctx context.Context, handler Handler[T], options ...Option) *Sin
 	}
 	go s.start(ctx)
 	return s
+}
+
+// isNilHandler reports whether handler is nil — either a nil interface value or
+// a non-nil interface wrapping a nil-able dynamic value (e.g. a nil
+// HandlerFunc[T], or a nil pointer that implements Handler). Both forms would
+// panic at delivery time, so they are treated as "no handler" and substituted
+// with a no-op.
+func isNilHandler[T any](handler Handler[T]) bool {
+	if handler == nil {
+		return true
+	}
+	rv := reflect.ValueOf(handler)
+	switch rv.Kind() {
+	case reflect.Func, reflect.Pointer, reflect.Map, reflect.Slice, reflect.Chan, reflect.Interface:
+		return rv.IsNil()
+	default:
+		return false
+	}
 }
 
 // Handle sends data to the sink for async processing. If the buffer is full,

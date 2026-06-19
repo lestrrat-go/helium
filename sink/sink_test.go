@@ -275,6 +275,66 @@ func TestSinkReentrantHandleDoesNotDeadlock(t *testing.T) {
 	require.NotEmpty(t, handled)
 }
 
+func TestSinkTypedNilHandlerFuncDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+
+	// A typed-nil HandlerFunc[T] is a non-nil Handler interface wrapping a nil
+	// function value. It must be detected and replaced with the no-op handler
+	// rather than slipping through to panic in HandlerFunc.Handle.
+	var h sink.HandlerFunc[string]
+	require.Nil(t, h)
+
+	var s *sink.Sink[string]
+	require.NotPanics(t, func() {
+		s = sink.New[string](ctx, h)
+	})
+
+	require.NotPanics(t, func() {
+		s.Handle(ctx, "first")
+		s.Handle(ctx, "second")
+	})
+
+	require.NoError(t, s.Close())
+}
+
+// nilableHandler is a pointer-receiver Handler whose Handle dereferences the
+// receiver, so a typed-nil *nilableHandler would panic if ever invoked.
+type nilableHandler struct{ called bool }
+
+func (n *nilableHandler) Handle(_ context.Context, _ string) {
+	n.called = true
+}
+
+func TestSinkTypedNilInterfaceHandlerDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+
+	// A typed-nil pointer that implements Handler is a non-nil interface
+	// wrapping a nil pointer. It must be treated as "no handler" so delivery
+	// drains to the no-op instead of panicking on the nil dereference.
+	var impl *nilableHandler
+	var h sink.Handler[string] = impl
+
+	s := sink.New[string](ctx, h, sink.WithBufferSize(2))
+	require.NotPanics(t, func() {
+		for i := range 6 {
+			s.Handle(ctx, string(rune('a'+i)))
+		}
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- s.Close() }()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close on a typed-nil-handler sink deadlocked")
+	}
+}
+
 func TestSinkErrorSatisfiesErrorHandler(t *testing.T) {
 	t.Parallel()
 
