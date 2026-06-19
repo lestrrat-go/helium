@@ -54,12 +54,15 @@ func TestStreamReadBlocksWhileEmpty(t *testing.T) {
 
 	s := newStream(t.Context())
 
-	resCh := make(chan int, 1)
+	type readResult struct {
+		n   int
+		err error
+	}
+	resCh := make(chan readResult, 1)
 	go func() {
 		p := make([]byte, 16)
 		n, err := s.Read(p)
-		require.NoError(t, err)
-		resCh <- n
+		resCh <- readResult{n: n, err: err}
 	}()
 
 	// Read should still be blocked since nothing was written.
@@ -73,8 +76,9 @@ func TestStreamReadBlocksWhileEmpty(t *testing.T) {
 	require.NoError(t, err)
 
 	select {
-	case n := <-resCh:
-		require.Equal(t, 4, n)
+	case res := <-resCh:
+		require.NoError(t, res.err)
+		require.Equal(t, 4, res.n)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Read did not unblock after Write")
 	}
