@@ -6,19 +6,39 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/dlclark/regexp2"
 )
 
-// DefaultMatchTimeout bounds how long the regexp2 backtracking engine spends on
-// a single pattern-facet match before giving up. Patterns that use constructs
-// RE2 cannot handle (character-class subtraction, large quantifiers) compile to
-// regexp2, which is vulnerable to catastrophic backtracking on adversarial
-// inputs; this is a defense-in-depth ceiling for those matches. RE2-compiled
-// patterns are linear-time and unaffected. Set to 0 to disable; mutating it
-// affects only subsequently-compiled patterns.
-var DefaultMatchTimeout = 5 * time.Second
+// defaultMatchTimeoutNanos holds the current default match timeout, in
+// nanoseconds, as an atomic so concurrent compilation (which reads it) and
+// SetDefaultMatchTimeout (which writes it) cannot race. See DefaultMatchTimeout.
+var defaultMatchTimeoutNanos atomic.Int64
+
+func init() {
+	defaultMatchTimeoutNanos.Store(int64(5 * time.Second))
+}
+
+// DefaultMatchTimeout returns the bound on how long the regexp2 backtracking
+// engine spends on a single pattern-facet match before giving up. Patterns that
+// use constructs RE2 cannot handle (character-class subtraction, large
+// quantifiers) compile to regexp2, which is vulnerable to catastrophic
+// backtracking on adversarial inputs; this is a defense-in-depth ceiling for
+// those matches. RE2-compiled patterns are linear-time and unaffected. A value
+// of 0 disables the timeout.
+func DefaultMatchTimeout() time.Duration {
+	return time.Duration(defaultMatchTimeoutNanos.Load())
+}
+
+// SetDefaultMatchTimeout sets the default match timeout returned by
+// DefaultMatchTimeout. Setting it to 0 disables the timeout. The change affects
+// only subsequently-compiled patterns. It is safe to call concurrently with
+// regex compilation.
+func SetDefaultMatchTimeout(d time.Duration) {
+	defaultMatchTimeoutNanos.Store(int64(d))
+}
 
 // errCodeFORX0002 mirrors the XPath FORX0002 ("invalid regular expression")
 // error code. This package is layering-neutral (no xpath3 dependency); callers
@@ -151,6 +171,18 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase bool) (string, error
 			} else {
 				b.WriteString(`[^\n\r]`)
 			}
+			i++
+			continue
+		}
+
+		// '^' and '$' are RE2 anchors but ordinary literal characters in the
+		// XSD/XPath regex grammar (the only XSD metacharacters are
+		// . \ ? * + { } ( ) [ ] |, and the whole pattern is already implicitly
+		// anchored when Compile wraps it in \A(?:...)\z). Escape them so RE2
+		// treats them as literals rather than zero-width anchors.
+		if r == '^' || r == '$' {
+			b.WriteRune('\\')
+			b.WriteRune(r)
 			i++
 			continue
 		}
@@ -1168,7 +1200,7 @@ type Regexp struct {
 func (r *Regexp) MatchString(s string) bool {
 	if r.backtrack != nil {
 		// regexp2 is a backtracking engine; the only error it returns is a
-		// match-timeout (see DefaultMatchTimeout). A timed-out match cannot be
+		// match-timeout (see DefaultMatchTimeout()). A timed-out match cannot be
 		// proven to satisfy the pattern, so report it as a non-match rather than
 		// letting a catastrophic-backtracking input hang the caller.
 		ok, _ := r.backtrack.MatchString(s)
@@ -1214,7 +1246,7 @@ func Compile(pattern string) (*Regexp, error) {
 		}
 		// Bound backtracking so an adversarial pattern/value cannot hang the
 		// process (catastrophic backtracking). 0 disables the timeout.
-		if t := DefaultMatchTimeout; t > 0 {
+		if t := DefaultMatchTimeout(); t > 0 {
 			re.MatchTimeout = t
 		}
 		return &Regexp{backtrack: re}, nil
