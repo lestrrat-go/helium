@@ -439,6 +439,80 @@ func (dr *deferredLatin1Reader) fillLatin1(p []byte) (int, error) {
 	return written, nil
 }
 
+// headHasGenuineInvalidUTF8 reports whether the sniff buffer contains a UTF-8
+// sequence that is invalid for a reason OTHER than truncation at the end of the
+// buffer.
+//
+// utf8.Valid is too blunt for the 1024-byte sniff window: if byte 1024 happens
+// to split a valid multibyte rune, utf8.Valid(head) reports false even though
+// the document is perfectly valid UTF-8 — the trailing rune is merely
+// incomplete because the window ended mid-rune. Classifying such a document as
+// Latin-1/Windows-1252 corrupts every multibyte rune (e.g. é → Ã©).
+//
+// This walks the buffer and only reports invalidity for a genuine bad sequence.
+// A lead byte at the tail with too few continuation bytes to complete its rune
+// is treated as an incomplete trailing rune (not invalid), so the caller can
+// defer the decision and let more bytes — or EOF — settle it.
+func headHasGenuineInvalidUTF8(head []byte) bool {
+	for i := 0; i < len(head); {
+		b := head[i]
+		if b < 0x80 {
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRune(head[i:])
+		if r == utf8.RuneError && size <= 1 {
+			// A decode failure of size <= 1 is either a genuinely invalid byte
+			// or an incomplete multibyte sequence cut off by the buffer end.
+			// Distinguish: if a valid lead byte sits within UTFMax-1 bytes of
+			// the end and the remaining bytes are all valid continuation bytes,
+			// it is an incomplete trailing rune — not a genuine error.
+			if i+utf8.UTFMax > len(head) && isIncompleteTrailingRune(head[i:]) {
+				return false
+			}
+			return true
+		}
+		i += size
+	}
+	return false
+}
+
+// isIncompleteTrailingRune reports whether tail is the beginning of a valid
+// multibyte UTF-8 rune that was cut off before completion: a valid lead byte
+// followed only by valid continuation bytes, but fewer than the lead byte
+// requires.
+func isIncompleteTrailingRune(tail []byte) bool {
+	if len(tail) == 0 {
+		return false
+	}
+	b := tail[0]
+	var need int
+	switch {
+	case b&0xE0 == 0xC0:
+		need = 2
+	case b&0xF0 == 0xE0:
+		need = 3
+	case b&0xF8 == 0xF0:
+		need = 4
+	default:
+		// Not a valid lead byte (continuation byte or invalid prefix).
+		return false
+	}
+	if len(tail) >= need {
+		// Enough bytes were present to complete the rune, so the failure is a
+		// genuine bad sequence, not truncation.
+		return false
+	}
+	// All bytes after the lead must be valid continuation bytes for this to be
+	// a clean truncation rather than an invalid sequence.
+	for _, c := range tail[1:] {
+		if c&0xC0 != 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
 // wrapReaderForHTML wraps an io.Reader with the appropriate encoding
 // transformation chain for HTML parsing:
 //  1. Peek first 1024 bytes to detect charset
@@ -503,7 +577,13 @@ func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader, *de
 	normalized := &newlineNormReader{r: full}
 
 	// Detect encoding from the peeked bytes.
-	if n > 0 && !utf8.Valid(head) {
+	//
+	// Use headHasGenuineInvalidUTF8 rather than !utf8.Valid: the latter reports
+	// false when byte 1024 splits an otherwise-valid multibyte rune, which would
+	// misclassify a valid UTF-8 document as Latin-1. An incomplete trailing rune
+	// is not a genuine error here — it falls through to the deferred reader,
+	// whose decide() re-reads more bytes (or EOF) to settle the encoding.
+	if n > 0 && headHasGenuineInvalidUTF8(head) {
 		// Non-UTF-8 detected in the head. Check if charset is declared.
 		if !declaredCharsetIsUTF8(head) {
 			enc := "Windows-1252"
