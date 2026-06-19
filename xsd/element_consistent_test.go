@@ -126,6 +126,43 @@ func TestElementConsistent(t *testing.T) {
 </xs:schema>`,
 			},
 			{
+				// The content model references the HEAD ('head'). The head's
+				// particle implicitly contains its member 'a' (typed via the head
+				// as xs:int). A same-named local element 'a' of a genuinely
+				// different type (xs:string) therefore collides by name with the
+				// implicitly-contained member and is inconsistent. This requires
+				// the check to fold substitution-group members into the content
+				// model, which in turn requires schema.substGroups to be built
+				// before the check runs.
+				name: "head ref vs same-named local of a different type",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="a" type="xs:int" substitutionGroup="head"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+        <xs:element name="a" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A standalone named group that no complex type references must
+				// still be checked: its two same-named elements have different
+				// types and are inconsistent.
+				name: "inconsistent standalone named group",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g">
+    <xs:sequence>
+      <xs:element name="a" type="xs:int"/>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+</xs:schema>`,
+			},
+			{
 				name: "named type vs inline anonymous type",
 				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
@@ -273,6 +310,38 @@ func TestElementConsistent(t *testing.T) {
       </xs:sequence>
     </xs:complexType>
   </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A head reference folds in the member 'a' (typed xs:int via the
+				// head). A same-named local element 'a' of that SAME type (xs:int)
+				// is consistent and must NOT be flagged. Exercises the
+				// substitution-group-member folding on the accept side.
+				name: "head ref with a consistent same-named local",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="a" type="xs:int" substitutionGroup="head"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A consistent standalone named group (same name, same type) must
+				// compile cleanly even though no complex type references it.
+				name: "consistent standalone named group",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g">
+    <xs:sequence>
+      <xs:element name="a" type="xs:int"/>
+      <xs:element name="a" type="xs:int"/>
+    </xs:sequence>
+  </xs:group>
 </xs:schema>`,
 			},
 			{

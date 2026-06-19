@@ -20,25 +20,30 @@ import (
 // xmlschemas.c), so there is no libxml2 wording to mirror; the diagnostic is
 // emitted in the existing component-error style.
 //
-// This runs after reference resolution (so every element particle's Type and
-// every group reference's Particles are populated) and only when no prior
-// schema error has been reported, matching the gating of checkUPA.
+// This runs after reference resolution and substitution-group construction (so
+// every element particle's Type, every group reference's Particles, and
+// schema.substGroups are populated) and only when no prior schema error has been
+// reported, matching the gating of checkUPA.
 //
-// Coverage scope: this check currently covers same-name element declarations
-// reachable within a type's content model, comparing their substitution-group-
-// aware {type definition}s (see resolveDeclaredType). It does NOT yet cover the
-// implicit containment of substitution-group members in a content model (the
-// members a head's particle stands in for) or standalone named xs:group
-// definitions that are never referenced by any type. Missing those cases is
-// conservatively safe: the check is only ever under-strict (it may fail to
-// reject a genuinely inconsistent schema) and never false-rejects a valid one.
+// Coverage: a content model's same-name element declarations are compared via
+// their substitution-group-aware {type definition}s (see resolveDeclaredType).
+// In addition, for each element term the constraint folds in the term's
+// substitution-group MEMBERS as implicitly-containable declarations (a head's
+// particle stands in for any of its members), so a head reference colliding by
+// name with a different-typed local element is rejected. The check also runs
+// over standalone named xs:group definitions, so a named group never referenced
+// by a complex type is still checked.
+//
+// Conservatism: the check is only ever under-strict (it may fail to reject a
+// genuinely inconsistent schema) and never false-rejects a valid one — a missed
+// violation is safe, a false reject breaks valid schemas.
 func (c *compiler) checkElementConsistent(ctx context.Context) {
 	if c.filename == "" || c.errorCount != 0 {
 		return
 	}
 
-	// Order by source line then ordinal so diagnostics are deterministic
-	// regardless of Go map iteration order.
+	// Order complex-type content models by source line then ordinal so
+	// diagnostics are deterministic regardless of Go map iteration order.
 	type checkedType struct {
 		td  *TypeDef
 		src typeDefSource
@@ -58,18 +63,119 @@ func (c *compiler) checkElementConsistent(ctx context.Context) {
 	})
 
 	for _, ct := range checked {
-		c.checkModelGroupElementConsistent(ctx, ct.td, ct.src)
+		c.checkContentModelConsistent(ctx, ct.td.ContentModel, ct.src.line, c.complexTypeComponent(ct.td, ct.src))
+	}
+
+	// Run the same consistency check over standalone named model group
+	// definitions (xs:group name="..."). A named group that no complex type
+	// references is otherwise never reached through a type's content model, so
+	// its own same-name inconsistencies would be missed.
+	type checkedGroup struct {
+		mg  *ModelGroup
+		src groupSource
+		qn  QName
+	}
+	groups := make([]checkedGroup, 0, len(c.schema.groups))
+	for qn, mg := range c.schema.groups {
+		if mg == nil {
+			continue
+		}
+		src, ok := c.groupSources[qn]
+		if !ok {
+			continue
+		}
+		groups = append(groups, checkedGroup{mg: mg, src: src, qn: qn})
+	}
+	// Stable source order: declaring file, then line, then QName.
+	sort.Slice(groups, func(i, j int) bool {
+		if groups[i].src.source != groups[j].src.source {
+			return groups[i].src.source < groups[j].src.source
+		}
+		if groups[i].src.line != groups[j].src.line {
+			return groups[i].src.line < groups[j].src.line
+		}
+		if groups[i].qn.NS != groups[j].qn.NS {
+			return groups[i].qn.NS < groups[j].qn.NS
+		}
+		return groups[i].qn.Local < groups[j].qn.Local
+	})
+	for _, g := range groups {
+		component := "model group '" + g.qn.Local + "'"
+		c.checkNamedGroupConsistent(ctx, g.mg, g.src, component)
 	}
 }
 
-// checkModelGroupElementConsistent collects every element declaration reachable
-// in td's effective content model, grouped by expanded name, and reports the
-// first inconsistent pair found per name.
-func (c *compiler) checkModelGroupElementConsistent(ctx context.Context, td *TypeDef, src typeDefSource) {
-	byName := make(map[QName][]*ElementDecl)
-	collectContentModelElements(td.ContentModel, byName, make(map[*ModelGroup]struct{}))
+// complexTypeComponent returns the diagnostic component label for a complex
+// type, matching the wording used by the other cos/derivation checks.
+func (c *compiler) complexTypeComponent(td *TypeDef, src typeDefSource) string {
+	if src.isLocal {
+		return componentLocalComplexType
+	}
+	return td.Name.Local
+}
 
-	// Iterate names in a deterministic order so the reported error is stable.
+// checkContentModelConsistent collects every element declaration reachable in mg
+// (including substitution-group members implied by each element term), grouped
+// by expanded name, and reports the first inconsistent pair found per name. The
+// diagnostic is attributed to a complexType component.
+func (c *compiler) checkContentModelConsistent(ctx context.Context, mg *ModelGroup, line int, component string) {
+	byName := c.collectModelGroupElements(mg)
+	for _, qn := range sortedNames(byName) {
+		decls := byName[qn]
+		if len(decls) < 2 {
+			continue
+		}
+		if !c.declsConsistent(decls) {
+			msg := fmt.Sprintf("Two elements with the same name '%s' and namespace '%s', but different type definitions, appear in the content model.", qn.Local, qn.NS)
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "complexType", component, msg), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+	}
+}
+
+// checkNamedGroupConsistent runs the consistency check over a standalone named
+// model group definition, reporting against the declaring file with a group
+// component label.
+func (c *compiler) checkNamedGroupConsistent(ctx context.Context, mg *ModelGroup, src groupSource, component string) {
+	byName := c.collectModelGroupElements(mg)
+	for _, qn := range sortedNames(byName) {
+		decls := byName[qn]
+		if len(decls) < 2 {
+			continue
+		}
+		if !c.declsConsistent(decls) {
+			msg := fmt.Sprintf("Two elements with the same name '%s' and namespace '%s', but different type definitions, appear in the content model.", qn.Local, qn.NS)
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(src.source, src.line, "group", component, msg), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+	}
+}
+
+// collectModelGroupElements returns every element declaration reachable in mg
+// keyed by expanded name, folding in each element term's substitution-group
+// members as implicitly-containable declarations.
+func (c *compiler) collectModelGroupElements(mg *ModelGroup) map[QName][]*ElementDecl {
+	byName := make(map[QName][]*ElementDecl)
+	c.collectContentModelElements(mg, byName, make(map[*ModelGroup]struct{}))
+	return byName
+}
+
+// declsConsistent reports whether all declarations sharing an expanded name have
+// the same substitution-group-aware {type definition}. It compares each later
+// declaration against the first; only a genuinely different type is inconsistent.
+func (c *compiler) declsConsistent(decls []*ElementDecl) bool {
+	firstType := c.resolveDeclaredType(decls[0])
+	for _, other := range decls[1:] {
+		if !elementTypesConsistent(firstType, c.resolveDeclaredType(other)) {
+			return false
+		}
+	}
+	return true
+}
+
+// sortedNames returns the keys of byName in a deterministic (namespace, local)
+// order so reported errors are stable.
+func sortedNames(byName map[QName][]*ElementDecl) []QName {
 	names := make([]QName, 0, len(byName))
 	for qn := range byName {
 		names = append(names, qn)
@@ -80,36 +186,18 @@ func (c *compiler) checkModelGroupElementConsistent(ctx context.Context, td *Typ
 		}
 		return names[i].Local < names[j].Local
 	})
-
-	for _, qn := range names {
-		decls := byName[qn]
-		if len(decls) < 2 {
-			continue
-		}
-		first := decls[0]
-		firstType := c.resolveDeclaredType(first)
-		for _, other := range decls[1:] {
-			if elementTypesConsistent(firstType, c.resolveDeclaredType(other)) {
-				continue
-			}
-			component := componentLocalComplexType
-			if !src.isLocal {
-				component = td.Name.Local
-			}
-			msg := fmt.Sprintf("Two elements with the same name '%s' and namespace '%s', but different type definitions, appear in the content model.", qn.Local, qn.NS)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
-			c.errorCount++
-			// One diagnostic per name is enough; move on to the next name.
-			break
-		}
-	}
+	return names
 }
 
 // collectContentModelElements walks a model group recursively, appending every
-// element declaration term to byName keyed by its expanded name. The visited
-// set bounds shared/recursive model-group structures (e.g. a group referenced
-// from multiple places resolves to a shared *ModelGroup).
-func collectContentModelElements(mg *ModelGroup, byName map[QName][]*ElementDecl, visited map[*ModelGroup]struct{}) {
+// element declaration term to byName keyed by its expanded name. For each
+// element term it also folds in the term's substitution-group MEMBERS (the
+// declarations the term's particle implicitly stands in for), keyed by each
+// member's own name, so a head reference colliding by name with a different-typed
+// same-named element elsewhere in the model is detected. The visited set bounds
+// shared/recursive model-group structures (e.g. a group referenced from multiple
+// places resolves to a shared *ModelGroup).
+func (c *compiler) collectContentModelElements(mg *ModelGroup, byName map[QName][]*ElementDecl, visited map[*ModelGroup]struct{}) {
 	if mg == nil {
 		return
 	}
@@ -133,8 +221,15 @@ func collectContentModelElements(mg *ModelGroup, byName map[QName][]*ElementDecl
 		switch term := p.Term.(type) {
 		case *ElementDecl:
 			byName[term.Name] = append(byName[term.Name], term)
+			// Fold in the term's substitution-group members: a head's particle
+			// implicitly contains its members, so a member declaration is
+			// effectively present in this content model under its own name. An
+			// abstract head is itself never present, but its members still are.
+			for _, member := range c.schema.substGroups[term.Name] {
+				byName[member.Name] = append(byName[member.Name], member)
+			}
 		case *ModelGroup:
-			collectContentModelElements(term, byName, visited)
+			c.collectContentModelElements(term, byName, visited)
 		}
 	}
 }
@@ -170,7 +265,7 @@ func (c *compiler) resolveDeclaredType(decl *ElementDecl) *TypeDef {
 	}
 	// No explicit type and no resolvable substitution-group head type: the
 	// declaration's {type definition} defaults to xs:anyType.
-	return c.schema.types[QName{Local: "anyType", NS: lexicon.NamespaceXSD}]
+	return c.schema.types[QName{Local: typeAnyType, NS: lexicon.NamespaceXSD}]
 }
 
 // elementTypesConsistent reports whether two element declarations sharing an

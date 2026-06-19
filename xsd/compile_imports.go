@@ -595,6 +595,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		elemRefSources:           make(map[*ElementDecl]elemRefSource),
 		groupRefs:                make(map[*ModelGroup]QName),
 		groupRefSources:          make(map[*ModelGroup]groupRefSource),
+		groupSources:             make(map[QName]groupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
@@ -704,6 +705,14 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	c.nextTypeDefOrdinal = base + impC.nextTypeDefOrdinal
 	maps.Copy(c.groupRefs, impC.groupRefs)
 	maps.Copy(c.groupRefSources, impC.groupRefSources)
+	// Merge named-group source info, but only for groups the parent does not
+	// already define (mirroring the schema.groups merge above): a group present
+	// in both keeps the parent's declaration and source.
+	for qn, src := range impC.groupSources {
+		if _, exists := c.groupSources[qn]; !exists {
+			c.groupSources[qn] = src
+		}
+	}
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
 	maps.Copy(c.globalElemSources, impC.globalElemSources)
 	maps.Copy(c.itemTypeRefs, impC.itemTypeRefs)
