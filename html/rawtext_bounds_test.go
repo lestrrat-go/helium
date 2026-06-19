@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/html"
 	"github.com/stretchr/testify/require"
 )
@@ -430,16 +431,19 @@ func TestRawTextChunkSlicesAreIndependent(t *testing.T) {
 }
 
 // TestRCDATAUnknownEntityChunked is the regression for the RCDATA char-ref
-// bypass: with a tiny MaxContentSize, an unresolved entity reference such as
-// `<title>&aaaa...(huge)...</title>` must NOT be scanned into one string and
+// bypass: with a tiny MaxContentSize, an unresolved NAMED entity reference such
+// as `<title>&aaaa...(huge)...</title>` must NOT be scanned into one string and
 // emitted as a single giant Characters event. The leading '&' plus the runaway
 // name must be flushed as literal text in capped chunks, the full content must
 // still be preserved, and no chunk may exceed the cap by more than a small
-// terminator slack. Covers both RCDATA elements (title, textarea) and both the
-// named-entity and numeric-reference paths.
+// terminator slack. Covers both RCDATA elements (title, textarea).
+//
+// Numeric references are handled separately by TestRCDATANumericEntityNormalized
+// because, unlike an unknown name, an overlong numeric reference still resolves
+// (to U+FFFD on overflow) rather than being echoed as literal text.
 func TestRCDATAUnknownEntityChunked(t *testing.T) {
 	const limit = 4
-	const runLen = 4096 // far larger than any valid entity name / numeric ref
+	const runLen = 4096 // far larger than any valid entity name
 
 	cases := []struct {
 		name string
@@ -447,8 +451,6 @@ func TestRCDATAUnknownEntityChunked(t *testing.T) {
 	}{
 		{"named", "&" + strings.Repeat("a", runLen)},
 		{"named_semicolon", "&" + strings.Repeat("a", runLen) + ";"},
-		{"numeric_dec", "&#" + strings.Repeat("9", runLen)},
-		{"numeric_hex", "&#x" + strings.Repeat("f", runLen)},
 	}
 
 	for _, elem := range []string{"title", tagTextarea} {
@@ -486,5 +488,116 @@ func TestRCDATAUnknownEntityChunked(t *testing.T) {
 					"runaway RCDATA entity must be split into multiple chunks")
 			})
 		}
+	}
+}
+
+// TestRCDATANumericEntityNormalized verifies that the bounded RCDATA char-ref
+// scanner makes the SAME entity-resolution decision as the normal-text scanner
+// for numeric references, even with a tiny MaxContentSize: an overlong numeric
+// reference resolves (to U+FFFD on overflow) rather than being emitted as
+// literal text, and a long leading-zero reference still resolves to its value.
+func TestRCDATANumericEntityNormalized(t *testing.T) {
+	const limit = 4
+	const runLen = 4096
+
+	cases := []struct {
+		name string
+		body string // RCDATA content
+		want string // expected concatenated Characters output
+	}{
+		// Overlong decimal/hex runs overflow U+10FFFF and normalize to U+FFFD,
+		// matching parseNumericCharRef in the unbounded path.
+		{"overflow_dec", "&#" + strings.Repeat("9", runLen) + ";", "�"},
+		{"overflow_hex", "&#x" + strings.Repeat("f", runLen) + ";", "�"},
+		{"overflow_dec_no_semi", "&#" + strings.Repeat("9", runLen), "�"},
+		// Long leading-zero runs are valid: a zero-padded reference resolves to
+		// its actual code point (U+0041 'A' here) instead of being treated as
+		// unresolved literal text.
+		{"leading_zero_dec", "&#" + strings.Repeat("0", runLen) + "65;", "A"},
+		{"leading_zero_hex", "&#x" + strings.Repeat("0", runLen) + "41;", "A"},
+	}
+
+	for _, elem := range []string{"title", tagTextarea} {
+		for _, tc := range cases {
+			t.Run(elem+"_"+tc.name, func(t *testing.T) {
+				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
+
+				var got strings.Builder
+				record := html.CharactersFunc(func(data []byte) error {
+					got.Write(data)
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				require.NoError(t, err,
+					"over-cap numeric reference in RCDATA must parse, not error")
+				require.Equal(t, tc.want, got.String(),
+					"bounded numeric char-ref must normalize like the unbounded path")
+			})
+		}
+	}
+}
+
+// TestIndivisibleNodeCancellationNoPartialEmit verifies that cancelling the
+// context WHILE the parser is scanning an indivisible node (comment, bogus
+// comment, or processing instruction) aborts WITHOUT emitting a truncated node.
+// These constructs map to a single SAX Comment event / DOM node; emitting the
+// bytes scanned so far would publish a partial comment whose remainder leaks as
+// stray text. The parse must return context.Canceled and no Comment node may
+// land in the resulting tree.
+func TestIndivisibleNodeCancellationNoPartialEmit(t *testing.T) {
+	const reps = 1 << 16 // long, unterminated body so the scan is still running
+	body := strings.Repeat("a", reps)
+
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{"comment", "<!--" + body},                  // parseComment
+		{"bogus_comment", "<!" + body},              // parseBogusComment
+		{"processing_instruction", "<?php " + body}, // parsePI
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+
+			// Cancel a few bytes into the (still-unterminated) indivisible node so
+			// the scan loop observes ctx.Err() mid-construct.
+			r := &cancelAfterReader{data: []byte(tc.input), after: 32, cancel: cancel}
+
+			done := make(chan struct {
+				doc *helium.Document
+				err error
+			}, 1)
+			go func() {
+				doc, err := html.NewParser().ParseReader(ctx, r)
+				done <- struct {
+					doc *helium.Document
+					err error
+				}{doc, err}
+			}()
+
+			select {
+			case res := <-done:
+				require.ErrorIs(t, res.err, context.Canceled,
+					"mid-scan cancellation should return context.Canceled")
+				if res.doc == nil {
+					return // no tree at all → trivially no partial comment node
+				}
+				_ = helium.Walk(res.doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+					require.NotEqual(t, helium.CommentNode, n.Type(),
+						"no partial comment/PI node after mid-scan cancellation")
+					return nil
+				}))
+			case <-time.After(10 * time.Second):
+				t.Fatal("parse did not abort promptly on context cancellation")
+			}
+		})
 	}
 }

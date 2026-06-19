@@ -699,6 +699,13 @@ func (p *parser) parseComment(ctx context.Context) {
 		n++
 	}
 
+	// The loop also exits on cancellation mid-scan. A comment is an indivisible
+	// node, so emitting the bytes scanned so far would publish a truncated
+	// comment with the remainder leaking as stray text. Abort without emitting.
+	if ctx.Err() != nil {
+		return
+	}
+
 	// Unterminated comment reaching EOF — emit everything as comment. (n is
 	// bounded by limit, so this allocation is bounded.)
 	data := p.cur.PeekString(n)
@@ -728,6 +735,10 @@ func (p *parser) parseBogusComment(ctx context.Context) {
 			return
 		}
 		n++
+	}
+	// Cancellation mid-scan must not publish a truncated (indivisible) comment.
+	if ctx.Err() != nil {
+		return
 	}
 	data := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
@@ -768,6 +779,10 @@ func (p *parser) parsePI(ctx context.Context) {
 			return
 		}
 		n++
+	}
+	// Cancellation mid-scan must not publish a truncated (indivisible) PI/comment.
+	if ctx.Err() != nil {
+		return
 	}
 	data := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
@@ -935,6 +950,58 @@ func parseNumericCharRef(digits string, base int) (int, bool) {
 	return int(v), true
 }
 
+// emitNumericCharRef emits the normalized output of a numeric character
+// reference. codepoint/haveDigits come from parsing the digit run (decimal or
+// hex). Per HTML5 a U+0000 reference, an overflowing/out-of-range value, or a
+// surrogate maps to U+FFFD via normalizeNumericCharRef rather than being
+// dropped; nothing is emitted only when no digits were present at all.
+func (p *parser) emitNumericCharRef(codepoint int, haveDigits bool) {
+	if !haveDigits {
+		return
+	}
+	cp := normalizeNumericCharRef(codepoint)
+	var buf [4]byte
+	n := utf8.EncodeRune(buf[:], cp)
+	_ = p.emitCharacters(buf[:n])
+}
+
+// resolveNamedEntity applies the HTML5 named-character-reference matching rules
+// to an already-scanned entity name (without the leading '&' or trailing ';').
+// hasSemicolon reports whether a ';' followed the name. It returns the resolved
+// replacement bytes and true when the name (or a legacy prefix of it) resolves;
+// the remainder string holds any unmatched suffix that follows a legacy-prefix
+// match and must be emitted as literal text after the replacement. When nothing
+// resolves it returns ok==false and the caller emits the run as literal text.
+func resolveNamedEntity(name string, hasSemicolon bool) (val, remainder string, ok bool) {
+	if name == "" {
+		return "", "", false
+	}
+	if v, found := lookupEntity(name); found {
+		if hasSemicolon {
+			return v, "", true
+		}
+		// Without semicolon — only resolve legacy (HTML4) entities.
+		// HTML5-only entities require a trailing semicolon.
+		if isLegacyEntity(name) {
+			return v, "", true
+		}
+	}
+	// No semicolon and full name is not a legacy entity.
+	// Try prefix matching: find the longest legacy entity prefix.
+	if !hasSemicolon {
+		for i := len(name) - 1; i > 0; i-- {
+			prefix := name[:i]
+			if !isLegacyEntity(prefix) {
+				continue
+			}
+			if v, found := lookupEntity(prefix); found {
+				return v, name[i:], true
+			}
+		}
+	}
+	return "", "", false
+}
+
 // parseCharRef handles entity references (&name; or &#num; or &#xhex;).
 // Emits the resolved value as a Characters SAX event (entity splitting behavior).
 func (p *parser) parseCharRef() {
@@ -958,15 +1025,7 @@ func (p *parser) parseCharRef() {
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
 		}
-		// Per HTML5, a U+0000 numeric character reference (&#0; / &#x0;) is a
-		// parse error that maps to U+FFFD rather than being dropped. Only emit
-		// nothing when no digits were present at all (a bare "&#" / "&#x").
-		if haveDigits {
-			cp := normalizeNumericCharRef(codepoint)
-			var buf [4]byte
-			n := utf8.EncodeRune(buf[:], cp)
-			_ = p.emitCharacters(buf[:n])
-		}
+		p.emitNumericCharRef(codepoint, haveDigits)
 		return
 	}
 
@@ -978,34 +1037,12 @@ func (p *parser) parseCharRef() {
 		_ = p.cur.Advance(1)
 	}
 
-	if name != "" {
-		if val, ok := lookupEntity(name); ok {
-			if hasSemicolon {
-				_ = p.emitCharacters([]byte(val))
-				return
-			}
-			// Without semicolon — only resolve legacy (HTML4) entities.
-			// HTML5-only entities require a trailing semicolon.
-			if isLegacyEntity(name) {
-				_ = p.emitCharacters([]byte(val))
-				return
-			}
+	if val, remainder, ok := resolveNamedEntity(name, hasSemicolon); ok {
+		_ = p.emitCharacters([]byte(val))
+		if remainder != "" {
+			_ = p.emitCharacters([]byte(remainder))
 		}
-		// No semicolon and full name is not a legacy entity.
-		// Try prefix matching: find the longest legacy entity prefix.
-		if !hasSemicolon {
-			for i := len(name) - 1; i > 0; i-- {
-				prefix := name[:i]
-				if isLegacyEntity(prefix) {
-					if val, ok := lookupEntity(prefix); ok {
-						_ = p.emitCharacters([]byte(val))
-						remainder := name[i:]
-						_ = p.emitCharacters([]byte(remainder))
-						return
-					}
-				}
-			}
-		}
+		return
 	}
 
 	// Unknown entity — emit as literal text
@@ -1024,11 +1061,14 @@ const maxEntityNameLen = 32
 
 // parseCharRefBounded handles an entity reference inside cap-aware content
 // (RCDATA: title/textarea) where the surrounding text is flushed to SAX in
-// chunks no larger than limit. Unlike parseCharRef it never scans an unbounded
-// name or numeric-digit run into one string and never emits one giant
-// Characters event for an unresolved reference: the leading '&' plus the bytes
-// that cannot form a valid reference are flushed as literal text in capped
-// chunks. Valid/known references under the cap behave exactly as parseCharRef.
+// chunks no larger than limit. It makes the SAME entity-resolution decisions as
+// parseCharRef — numeric references (including overlong/leading-zero/overflow
+// runs) normalize to their HTML5 output (U+FFFD on overflow/invalid), and named
+// references resolve identically including legacy-prefix matching. The only
+// difference is memory: an unbounded digit run is consumed in fixed-size chunks
+// while tracking value/overflow rather than buffered whole, and an unresolved
+// reference is flushed as literal text in capped chunks rather than one giant
+// Characters event.
 func (p *parser) parseCharRefBounded(limit int) {
 	// Entity content is non-whitespace — ensure implied elements.
 	p.htmlStartCharData()
@@ -1037,103 +1077,124 @@ func (p *parser) parseCharRefBounded(limit int) {
 
 	if p.cur.Peek() == '#' {
 		_ = p.cur.Advance(1) // skip '#'
-		var codepoint int
-		var haveDigits bool
-		var hex bool
-		var digits string
+		base := 10
+		pred := isDigit
 		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
-			hex = true
+			base = 16
+			pred = isHexDigit
 			_ = p.cur.Advance(1) // skip 'x'
-			// Bound the hex-digit run: a numeric reference far longer than a
-			// codepoint's worth of digits is invalid (overflows), so a run that
-			// reaches maxNumericRefLen cannot resolve and the whole construct is
-			// flushed as literal text in capped chunks below.
-			digits = p.parseWhileMax(isHexDigit, maxNumericRefLen)
-			codepoint, haveDigits = parseNumericCharRef(digits, 16)
-		} else {
-			digits = p.parseWhileMax(isDigit, maxNumericRefLen)
-			codepoint, haveDigits = parseNumericCharRef(digits, 10)
 		}
-		// A digit run at the cap means more digits follow than any valid
-		// reference can hold: treat the whole construct as unresolved literal.
-		if len(digits) >= maxNumericRefLen {
-			prefix := "&#"
-			if hex {
-				prefix = "&#x"
-			}
-			p.emitLiteralChunked(prefix+digits, limit)
-			p.flushAlnumLiteral(isHexOrDecDigit(hex), limit)
-			return
-		}
+		// Consume the digit run in bounded chunks, accumulating the code point
+		// with overflow saturation so an arbitrarily long (e.g. leading-zero or
+		// overflowing) run never materializes as one string. The result matches
+		// parseNumericCharRef: a value above U+10FFFF maps to U+FFFD via
+		// emitNumericCharRef, and a leading-zero run still resolves to its value.
+		codepoint, haveDigits := p.consumeNumericCharRefBounded(pred, base, limit)
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
 		}
-		if haveDigits {
-			cp := normalizeNumericCharRef(codepoint)
-			var buf [4]byte
-			n := utf8.EncodeRune(buf[:], cp)
-			_ = p.emitCharacters(buf[:n])
-		}
+		p.emitNumericCharRef(codepoint, haveDigits)
 		return
 	}
 
-	// Named entity — bound the name scan at maxEntityNameLen.
+	// Named entity — bound the name scan at maxEntityNameLen. The longest known
+	// entity is 31 chars, so maxEntityNameLen captures every name that could
+	// match (and every legacy prefix), while still bounding the scan.
 	name := p.parseWhileMax(isAlphanumeric, maxEntityNameLen)
 
-	// A name at the cap cannot match any known entity (the longest is 31
-	// chars). Flush "&" + the scanned name plus the rest of the alphanumeric
-	// run as literal text in capped chunks rather than buffering it whole.
-	if len(name) >= maxEntityNameLen {
-		p.emitLiteralChunked("&"+name, limit)
-		p.flushAlnumLiteral(isAlphanumeric, limit)
-		return
-	}
+	// More alphanumeric bytes may follow when the run hit the cap; they are not
+	// part of any entity name and are left in the stream to be emitted as normal
+	// text by the caller. resolveNamedEntity still runs on the bounded name so a
+	// legacy prefix (e.g. "&ampxxxx…") resolves exactly as in parseCharRef.
+	overCap := len(name) >= maxEntityNameLen
 
 	hasSemicolon := false
-	if p.cur.Peek() == ';' {
+	if !overCap && p.cur.Peek() == ';' {
 		hasSemicolon = true
 		_ = p.cur.Advance(1)
 	}
 
-	if name != "" {
-		if val, ok := lookupEntity(name); ok {
-			if hasSemicolon {
-				_ = p.emitCharacters([]byte(val))
-				return
-			}
-			if isLegacyEntity(name) {
-				_ = p.emitCharacters([]byte(val))
-				return
-			}
+	if val, remainder, ok := resolveNamedEntity(name, hasSemicolon); ok {
+		_ = p.emitCharacters([]byte(val))
+		if remainder != "" {
+			// remainder is ASCII (alphanumeric tail of the run); chunk it so it
+			// is never emitted as one oversized Characters event.
+			p.emitLiteralChunked(remainder, limit)
 		}
-		if !hasSemicolon {
-			for i := len(name) - 1; i > 0; i-- {
-				prefix := name[:i]
-				if isLegacyEntity(prefix) {
-					if val, ok := lookupEntity(prefix); ok {
-						_ = p.emitCharacters([]byte(val))
-						_ = p.emitCharacters([]byte(name[i:]))
-						return
-					}
-				}
-			}
-		}
+		return
 	}
 
-	// Unknown entity — emit as literal text (already bounded by the name cap).
+	// Unknown entity — emit "&" + name (and any ';') as literal text in capped
+	// chunks. When the run overflowed the cap, drain the remaining alphanumeric
+	// bytes as literal text too.
 	text := "&" + name
 	if hasSemicolon {
 		text += ";"
 	}
-	_ = p.emitCharacters([]byte(text))
+	p.emitLiteralChunked(text, limit)
+	if overCap {
+		p.flushAlnumLiteral(isAlphanumeric, limit)
+	}
 }
 
-// maxNumericRefLen is one past the maximum number of digits a valid numeric
-// character reference can hold. The largest Unicode code point is U+10FFFF: 7
-// decimal digits or 6 hex digits, with leading zeros tolerated. A run reaching
-// this length is well past any value parseNumericCharRef accepts, so it is
-// treated as unresolved literal text. The bound only governs chunking — it is
-// generous so legitimate (zero-padded) references still resolve.
+// consumeNumericCharRefBounded reads a numeric character reference's digit run
+// (digits matching pred, interpreted in the given base) in chunks no larger
+// than limit, accumulating the code-point value with overflow saturation so an
+// arbitrarily long run is never buffered whole. It returns the accumulated code
+// point and whether any digits were present. A value that exceeds U+10FFFF (or
+// otherwise overflows) saturates above the valid range so emitNumericCharRef
+// maps it to U+FFFD, matching parseNumericCharRef; leading zeros are tolerated.
+func (p *parser) consumeNumericCharRefBounded(pred func(byte) bool, base, limit int) (int, bool) {
+	chunkSize := limit
+	if chunkSize <= 0 {
+		chunkSize = maxNumericRefLen
+	}
+	const overflow = 0x110000 // one past U+10FFFF — normalizes to U+FFFD
+	value := 0
+	haveDigits := false
+	saturated := false
+	for {
+		chunk := p.parseWhileMax(pred, chunkSize)
+		if chunk == "" {
+			break
+		}
+		haveDigits = true
+		if saturated {
+			continue // value already pinned above the valid range
+		}
+		for i := range len(chunk) {
+			value = value*base + digitValue(chunk[i], base)
+			if value > overflow {
+				value = overflow
+				saturated = true
+				break
+			}
+		}
+	}
+	if !haveDigits {
+		return 0, false
+	}
+	return value, true
+}
+
+// digitValue returns the numeric value of an ASCII hex/decimal digit byte for
+// the given base. The byte is assumed to satisfy the matching digit predicate.
+func digitValue(b byte, base int) int {
+	switch {
+	case b >= '0' && b <= '9':
+		return int(b - '0')
+	case base == 16 && b >= 'a' && b <= 'f':
+		return int(b-'a') + 10
+	case base == 16 && b >= 'A' && b <= 'F':
+		return int(b-'A') + 10
+	}
+	return 0
+}
+
+// maxNumericRefLen is the fallback chunk size for draining a numeric digit run
+// when no positive content limit is configured. It is generous so legitimate
+// (zero-padded) references still resolve while keeping per-chunk allocations
+// bounded.
 const maxNumericRefLen = 32
 
 // flushAlnumLiteral consumes the remainder of an over-cap character-reference
@@ -1169,15 +1230,6 @@ func (p *parser) emitLiteralChunked(s string, limit int) {
 	if len(s) > 0 {
 		_ = p.emitCharacters([]byte(s))
 	}
-}
-
-// isHexOrDecDigit returns the digit predicate for a numeric character
-// reference: hex digits when hex is true, decimal digits otherwise.
-func isHexOrDecDigit(hex bool) func(byte) bool {
-	if hex {
-		return isHexDigit
-	}
-	return isDigit
 }
 
 // emitError fires a SAX Error event unless suppressed by WithNoError.
