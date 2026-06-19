@@ -679,7 +679,10 @@ func (c *compiler) parseElement(ctx context.Context, node *helium.Element) *patt
 
 	name := getAttr(node, "name")
 	if name != "" {
-		localName, ns := resolveQName(node, name)
+		localName, ns, ok := resolveQName(node, name)
+		if !ok {
+			c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: no namespace for prefix %s", qnamePrefix(name)))
+		}
 		p.nameClass = &nameClass{kind: ncName, name: localName, ns: ns}
 		p.name = localName
 		p.ns = ns
@@ -759,7 +762,10 @@ func (c *compiler) parseAttribute(ctx context.Context, node *helium.Element) *pa
 
 	name := getAttr(node, "name")
 	if name != "" {
-		localName, ns := resolveQName(node, name)
+		localName, ns, ok := resolveQName(node, name)
+		if !ok {
+			c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: no namespace for prefix %s", qnamePrefix(name)))
+		}
 		// For attributes, the default namespace is "" (not inherited),
 		// unless an explicit ns attribute is provided.
 		if !strings.Contains(name, ":") {
@@ -955,7 +961,10 @@ func (c *compiler) parseNameClass(ctx context.Context, node *helium.Element) *na
 		ns, hasNS := getAttrOpt(node, "ns")
 		name := qname
 		if strings.Contains(qname, ":") {
-			localName, resolvedNS := resolveQName(node, qname)
+			localName, resolvedNS, ok := resolveQName(node, qname)
+			if !ok {
+				c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: no namespace for prefix %s", qnamePrefix(qname)))
+			}
 			name = localName
 			if !hasNS {
 				ns = resolvedNS
@@ -1236,8 +1245,14 @@ func containsElement(p *pattern) bool {
 // and namespace URI. If the name contains a prefix (e.g. "ex1:bar1"), the prefix
 // is resolved using the namespace declarations in scope on the schema element.
 // If the name has no prefix, the ns is determined by the "ns" attribute (inherited).
-func resolveQName(schemaElem *helium.Element, qname string) (localName, ns string) {
-	if prefix, ln, ok := strings.Cut(qname, ":"); ok {
+//
+// The returned ok is false when the QName carries a prefix that is not bound to
+// any in-scope namespace declaration (other than the implicit xml prefix). An
+// unbound prefix must be a fatal compile error rather than silently treated as
+// the empty namespace, which would let a schema name match an unintended set of
+// instance elements.
+func resolveQName(schemaElem *helium.Element, qname string) (localName, ns string, ok bool) {
+	if prefix, ln, hasPrefix := strings.Cut(qname, ":"); hasPrefix {
 		localName = ln
 		// Walk the schema element and ancestors to find the namespace URI for this prefix.
 		var node helium.Node = schemaElem
@@ -1245,7 +1260,7 @@ func resolveQName(schemaElem *helium.Element, qname string) (localName, ns strin
 			if el, ok := node.(*helium.Element); ok {
 				for _, nsdecl := range el.Namespaces() {
 					if nsdecl.Prefix() == prefix {
-						return localName, nsdecl.URI()
+						return localName, nsdecl.URI(), true
 					}
 				}
 				node = el.Parent()
@@ -1255,13 +1270,22 @@ func resolveQName(schemaElem *helium.Element, qname string) (localName, ns strin
 		}
 		// The xml prefix is always bound to the XML namespace by definition.
 		if prefix == lexicon.PrefixXML {
-			return localName, lexicon.NamespaceXML
+			return localName, lexicon.NamespaceXML, true
 		}
-		// Prefix not found — return as-is
-		return localName, ""
+		// Prefix not bound to any in-scope namespace declaration.
+		return localName, "", false
 	}
 	// No prefix — use the "ns" attribute (inherited from ancestors).
-	return qname, getInheritedNS(schemaElem)
+	return qname, getInheritedNS(schemaElem), true
+}
+
+// qnamePrefix returns the prefix portion of a QName (the text before the first
+// colon), or the empty string when the QName carries no prefix.
+func qnamePrefix(qname string) string {
+	if prefix, _, ok := strings.Cut(qname, ":"); ok {
+		return prefix
+	}
+	return ""
 }
 
 // getInheritedNS returns the ns attribute value, inheriting from ancestors.
