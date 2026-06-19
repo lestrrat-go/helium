@@ -529,6 +529,12 @@ func (pctx *parserCtx) errorAtLevel(ctx context.Context, err error, level ErrorL
 	if errors.Is(err, errParserStopped) {
 		return errParserStopped
 	}
+	// Context cancellation/deadline is not a genuine parse failure; pass it
+	// through unchanged so callers see the context error and SAX error
+	// handlers are not fired as if the document was malformed.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	// If it's wrapped, just return as is
 	if _, ok := err.(ErrParseError); ok {
 		return err
