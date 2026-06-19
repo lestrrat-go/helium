@@ -6,6 +6,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -401,6 +402,9 @@ func isPubidChar(r rune) bool {
 // validatePubid reports whether s consists solely of PubidChars, so it cannot
 // inject markup or be unrepresentable when emitted as a DTD public identifier.
 func validatePubid(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
 	for _, r := range s {
 		if !isPubidChar(r) {
 			return false
@@ -415,6 +419,9 @@ func validatePubid(s string) bool {
 // contain markup-significant '<' or '>'.
 func validateSystemID(s string) bool {
 	if strings.Contains(s, "'") && strings.Contains(s, `"`) {
+		return false
+	}
+	if !utf8.ValidString(s) {
 		return false
 	}
 	for _, r := range s {
@@ -432,6 +439,9 @@ func validateSystemID(s string) bool {
 // kind shapes the error message. It is used to reject control characters
 // (e.g. NUL) from text, attribute, comment, PI, and CDATA output.
 func validateXMLChars(kind, s string) error {
+	if !utf8.ValidString(s) {
+		return fmt.Errorf("stream: invalid UTF-8 byte sequence in %s content", kind)
+	}
 	for _, r := range s {
 		if !xmlchar.IsChar(r) {
 			return fmt.Errorf("stream: invalid XML character %#U in %s content", r, kind)

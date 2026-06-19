@@ -1593,3 +1593,22 @@ func TestInvalidXMLCharRejection(t *testing.T) {
 		require.NoError(t, w.EndElement())
 	})
 }
+
+func TestInvalidUTF8Rejection(t *testing.T) {
+	t.Parallel()
+	bad := string([]byte{0xff})
+	t.Run("text content rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteString(bad))
+	})
+	t.Run("system id rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.Error(t, w.StartDTD("root", "", "sys"+bad))
+	})
+}
