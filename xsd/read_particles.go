@@ -86,6 +86,7 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 }
 
 func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, compositor ModelGroupKind) (*ModelGroup, error) {
+	c.validateOccursAttrs(ctx, elem)
 	minOccurs, maxOccurs := parseParticleOccurs(elem)
 	mg := &ModelGroup{
 		Compositor: compositor,
@@ -144,6 +145,7 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 		case isXSDElement(ce, elemGroup):
 			ref := getAttr(ce, attrRef)
 			if ref != "" {
+				c.validateOccursAttrs(ctx, ce)
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				// Group reference — create a placeholder model group.
 				placeholder := &ModelGroup{
