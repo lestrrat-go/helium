@@ -122,12 +122,48 @@ func newPendingOutput(dest string) (*pendingOutput, error) {
 		target = resolved
 	}
 
+	// When the resolved target already exists, Commit will rename the temp file
+	// onto it. os.Rename replaces the destination regardless of its mode, so a
+	// read-only (e.g. 0444) existing file would be silently overwritten and the
+	// command would still exit 0. Refuse up front unless the existing target is a
+	// regular, writable file, matching what os.Create would have been able to do.
+	if err := checkExistingTargetWritable(target); err != nil {
+		return nil, err
+	}
+
 	dir := filepath.Dir(target)
 	tmp, err := newTempFile(dir)
 	if err != nil {
 		return nil, err
 	}
 	return &pendingOutput{f: tmp.f, tmp: tmp.name, dest: target}, nil
+}
+
+// checkExistingTargetWritable verifies that an already-existing output target can
+// be replaced. It is a no-op when target does not exist (the common create
+// case). When target exists it must be a regular file (refusing directories,
+// devices, fifos, etc.) and must be writable: os.Rename would otherwise
+// overwrite a read-only file and the command would exit 0, masking the failure.
+// Writability is probed with an O_WRONLY open (closed immediately) rather than
+// inferred from the mode bits, so it honors ownership and ACLs the way the
+// subsequent write would.
+func checkExistingTargetWritable(target string) error {
+	fi, err := os.Stat(target)
+	if err != nil {
+		// Does not exist (or cannot be stat'd): nothing to protect. A real
+		// permission problem on the parent directory surfaces later at temp-file
+		// creation or rename time.
+		return nil //nolint:nilerr // missing target is the normal create path
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("refusing to overwrite %q: not a regular file", target)
+	}
+	f, err := os.OpenFile(target, os.O_WRONLY, 0) //nolint:gosec // CLI output path is user supplied
+	if err != nil {
+		return fmt.Errorf("cannot write to %q: %w", target, err)
+	}
+	_ = f.Close()
+	return nil
 }
 
 // maxSymlinkHops bounds how many links resolveSymlinkTarget will follow before

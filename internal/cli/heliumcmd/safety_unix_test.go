@@ -134,6 +134,30 @@ func TestLintOutputNewFileModeRespectsUmask(t *testing.T) {
 	require.Equal(t, os.FileMode(0o644), fi.Mode().Perm())
 }
 
+func TestLintOutputReadOnlyExistingFileRejected(t *testing.T) {
+	// A pre-existing read-only (0444) --output target must NOT be silently
+	// overwritten via os.Rename. The command must fail with a non-zero exit and
+	// the original file's content must be left intact. (root bypasses the file
+	// mode check, so skip there.)
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses file permission checks")
+	}
+
+	dir := t.TempDir()
+	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>x</root>`)
+	outFile := filepath.Join(dir, "out.xml")
+	require.NoError(t, os.WriteFile(outFile, []byte("KEEP"), 0o444))
+
+	_, errOut, code := executeArgs(t, strings.NewReader(""), "lint", "--output", outFile, xmlFile)
+	require.NotEqual(t, heliumcmd.ExitOK, code)
+	require.Contains(t, errOut, "cannot write to")
+
+	// The read-only file must be untouched.
+	got, err := os.ReadFile(outFile)
+	require.NoError(t, err)
+	require.Equal(t, "KEEP", string(got))
+}
+
 func TestLintOutputExistingFileModePreserved(t *testing.T) {
 	dir := t.TempDir()
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>x</root>`)

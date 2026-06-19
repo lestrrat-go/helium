@@ -67,7 +67,8 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 File output (`--output`/`-o`, not stdout and not `--noout`) is written through a write-to-temp-then-atomic-rename scheme (`pendingOutput` in `safety.go`):
 
 - A temp file (`.helium-out-*`) is created (via `os.OpenFile` with `O_CREATE|O_EXCL`, mode `0666` so the kernel applies umask) in the SAME directory as the target; output is written there, and `os.Rename`d onto the target ONLY after all inputs are processed successfully.
-- When the target is a symlink, the rename target is the resolved real file (`os.Lstat` + `filepath.EvalSymlinks`), so output is written THROUGH the link (matching `os.Create`) instead of replacing the link with a regular file.
+- When the target is a symlink, the rename target is the resolved real file (`os.Lstat` + `resolveSymlinkTarget`, which follows the chain with `os.Readlink` so even a DANGLING link resolves to its would-be target rather than failing like `filepath.EvalSymlinks`), so output is written THROUGH the link (matching `os.Create`) instead of replacing the link with a regular file.
+- If the resolved target already exists, `newPendingOutput` requires it to be a regular, writable file (probed via `os.Stat` + `os.OpenFile(O_WRONLY)`) before proceeding; a read-only (`0444`) or non-regular target is rejected with `ExitErr` and left untouched, since `os.Rename` would otherwise replace it regardless of mode and exit 0.
 - This closes a truncate-before-read hole: `os.Create` on the target would truncate it up front, destroying a resource the same path is read from LATER — e.g. a DTD/entity resolved via `--path` during validation (lint), or a stylesheet read at transform time via `fn:transform(map{'stylesheet-location':...})` through the retained `URIResolver` (xslt).
 - On any non-OK exit code the temp file is removed (`Cleanup`) and the target is left untouched.
 - A failed commit (flush/close/rename) folds `ExitErr` into the exit status, so an incomplete write is never reported as success.
@@ -136,8 +137,9 @@ Primary file: `internal/cli/heliumcmd/xsd_validate.go`
 
 - Usage: `helium xsd validate [--timing] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
-- Schema compiled once with `xsd.NewCompiler().CompileFile()`
-- Each XML input parsed with `helium.NewParser()` + validated with `xsd.NewValidator(schema).Validate()`
+- Schema compiled once with `xsd.NewCompiler().Label(schema).ErrorHandler(...).CompileFile(ctx, schema)`; a `compileErrorHandler` streams compilation diagnostics (file/line/detail) to stderr and records whether any FATAL diagnostic was seen
+- The xsd compiler may return a non-nil schema with a nil error for a malformed schema; the CLI folds that into a failure (`errSchemaCompilation`) when the handler saw a fatal diagnostic, so it never validates against a bad schema. Compilation failure → `ExitSchemaComp`
+- Each XML input parsed with `helium.NewParser()` (file inputs get `.BaseURI(name)`) + validated with `xsd.NewValidator(schema).ErrorHandler(...).Validate(ctx, doc)`, diagnostics streamed to stderr via a `writerErrorHandler`
 
 ## `helium relaxng validate`
 
