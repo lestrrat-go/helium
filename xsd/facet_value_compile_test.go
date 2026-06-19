@@ -131,6 +131,46 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
 	})
 
+	t.Run("namespace-prefixed bound on QName-bearing union base resolves", func(t *testing.T) {
+		t.Parallel()
+		// The base is a union whose member is xs:QName, so the range-facet bound
+		// "p:a" is a QName value whose prefix must be resolved using the in-scope
+		// namespaces captured at the facet element. With the namespace context
+		// threaded through, "p:a" resolves and the schema compiles cleanly;
+		// previously the bound was validated with a nil namespace map, so the
+		// resolvable prefix was wrongly reported invalid.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:simpleType name="qn">
+    <xs:union memberTypes="xs:QName"/>
+  </xs:simpleType>
+  <xs:simpleType name="bounded">
+    <xs:restriction base="qn">
+      <xs:minInclusive value="p:a"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bounded"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), wantMsg)
+	})
+
+	t.Run("unbound-prefix bound on QName-bearing union base still errors", func(t *testing.T) {
+		t.Parallel()
+		// The prefix "q" is not declared anywhere in scope, so the bound "q:a" is
+		// not a valid QName and the bound-value check must still flag it.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p">
+  <xs:simpleType name="qn">
+    <xs:union memberTypes="xs:QName"/>
+  </xs:simpleType>
+  <xs:simpleType name="bounded">
+    <xs:restriction base="qn">
+      <xs:minInclusive value="q:a"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bounded"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML), wantMsg)
+	})
+
 	t.Run("valid numeric bound still compiles", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

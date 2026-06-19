@@ -109,7 +109,7 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 		// means the bound is not a valid instance of the base type, so the
 		// restriction is in error.
 		sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
-		if validateValue(ctx, *rf.value, nil, base, "", "", 0, sub) == nil {
+		if validateValue(ctx, *rf.value, fs.RangeNS, base, "", "", 0, sub) == nil {
 			continue
 		}
 		msg := fmt.Sprintf("The value '%s' of the facet '%s' is not a valid value of the base type '%s'.",

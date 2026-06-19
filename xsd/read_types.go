@@ -522,21 +522,25 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 				fs = &FacetSet{}
 			}
 			fs.MinInclusive = &val
+			captureRangeNS(fs, ce)
 		case "maxInclusive":
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MaxInclusive = &val
+			captureRangeNS(fs, ce)
 		case "minExclusive":
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MinExclusive = &val
+			captureRangeNS(fs, ce)
 		case "maxExclusive":
 			if fs == nil {
 				fs = &FacetSet{}
 			}
 			fs.MaxExclusive = &val
+			captureRangeNS(fs, ce)
 		case "totalDigits":
 			if fs == nil {
 				fs = &FacetSet{}
@@ -596,4 +600,19 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 	}
 
 	return fs
+}
+
+// captureRangeNS records the in-scope namespace bindings at a range-facet
+// element so a namespace-sensitive bound value (e.g. a prefixed xs:QName)
+// can be resolved later when the bound is validated against its base type.
+// All range facets within one <xs:restriction> share the same in-scope
+// context, so the first capture wins and subsequent ones are no-ops.
+func captureRangeNS(fs *FacetSet, ce *helium.Element) {
+	if fs.RangeNS != nil {
+		return
+	}
+	nsCtx := collectNSContext(ce)
+	nsCopy := make(map[string]string, len(nsCtx))
+	maps.Copy(nsCopy, nsCtx)
+	fs.RangeNS = nsCopy
 }
