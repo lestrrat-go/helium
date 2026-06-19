@@ -175,29 +175,48 @@ engine, which RE2 cannot. A pattern that is not a valid XSD regular expression i
 reported as a schema parser error (`The value '…' is not a valid regular
 expression.`); its `compiledPatterns` entry stays nil and is skipped at validation.
 
-**Compile-time IDC checks:** a malformed `xs:selector`/`xs:field` `@xpath` is a fatal schema parser error (`parseIDConstraint` → `reportIDCXPathError`) rather than a silently-dropped `xpath1.Compile` failure that would disable the whole constraint. After all elements are parsed, `checkKeyRefRefers` (in `compileSchema`) resolves every `xs:keyref/@refer` against a schema-wide set of key/unique constraint names (identity-constraint names share one symbol space) and raises a fatal error for an unknown/empty refer. The registry is built by `collectAllIDCs`, which walks EVERY element declaration — not just `schema.elements` (globals) — by recursively descending each global element's/type's/named-group's content model (`idcWalker`, with visited sets on `*ElementDecl`/`*ModelGroup`/`*TypeDef` to bound shared/recursive/circular structures), so a keyref (or the key it refers to) declared on a LOCAL element buried in a content model is checked too. **@refer resolution is schema-wide (the symbol space); keyref VALUE resolution is occurrence-scoped** — the two are distinct (see Pass 2 below). At validation time, an IDC whose selector/field XPath fails to evaluate is reported as a validity error (`Failed to evaluate identity-constraint '…'`), not swallowed.
+**Compile-time IDC checks:** a malformed `xs:selector`/`xs:field` `@xpath` is a fatal schema parser error (`parseIDConstraint` → `reportIDCXPathError`) rather than a silently-dropped `xpath1.Compile` failure that would disable the whole constraint. After all elements are parsed, `checkKeyRefRefers` (in `compileSchema`) resolves every `xs:keyref/@refer` against a schema-wide set of key/unique constraint names (identity-constraint names share one symbol space) and raises a fatal error for an unknown/empty refer. The registry is built by `collectAllIDCs`, which walks EVERY element declaration — not just `schema.elements` (globals) — by recursively descending each global element's/type's/named-group's content model (`idcWalker`, with visited sets on `*ElementDecl`/`*ModelGroup`/`*TypeDef` to bound shared/recursive/circular structures), so a keyref (or the key it refers to) declared on a LOCAL element buried in a content model is checked too. **@refer resolution is schema-wide (the symbol space); keyref VALUE resolution is subtree-scoped** — the two are distinct (see Pass 2 below). A deferred `@refer` error is reported against the constraint's DECLARING file: `IDConstraint.Source` is pinned at parse time in `parseIDConstraint` (`c.includeFile` if inside an include/redefine, else `c.filename` — for an import sub-compiler that is the imported file's display location), and `checkKeyRefRefers` reports with `idc.Source`+`idc.Line` rather than the top-level compiler's filename, so an IMPORTED keyref's dangling-refer error cites the imported schema (where its line number is meaningful), not the importing schema. At validation time, an IDC whose selector/field XPath fails to evaluate is reported as a validity error (`Failed to evaluate identity-constraint '…'`), not swallowed.
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
+- **Host declaration resolution** (`idcHostDecl`): the declaration whose IDCs apply
+  to an element instance is the non-ref declaration recorded during pass-1 if one is
+  present — used even when it carries ZERO IDCs, because a local element that merely
+  shadows a same-named global must NOT inherit the global's IDCs. It falls back to the
+  GLOBAL lookup (`lookupElemDecl`) only when no declaration was recorded OR the recorded
+  declaration is a ref (`IsRef`). Pass-1 records the matched
+  `*ElementDecl` for every element instance in `validationContext.actualElemDecl`
+  (`recordElemDecl`, called at the content-model match sites alongside
+  `annotateElement` and at the validation root), so an `xs:key`/`xs:unique`/`xs:keyref`
+  declared on a LOCAL element buried in a content model is EVALUATED rather than
+  silently skipped — `lookupElemDecl` finds only globals. The ref fallback exists
+  because an `<xs:element ref="g">` matches a ref declaration that does NOT copy the
+  global's IDCs (IDCs are a property of the referenced global declaration), so for a
+  `ref` the global lookup is the one carrying the constraints.
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):
   1. Evaluate selector XPath → node set
   2. For each selected node, evaluate field XPaths → collect key-sequences
   3. Check unique/key: all key-sequences must be unique
   4. Check keyref: all key-sequences must exist in referenced constraint table.
-     **Keyref tables are OCCURRENCE-SCOPED** (XSD identity-constraint scope,
-     matching xmllint): the key/unique tables a keyref resolves against are those
-     built for the SAME host-element OCCURRENCE that declares the keyref
-     (`validateIDConstraints` builds a per-occurrence `keyTables map[QName]*idcTable`
-     and resolves that occurrence's keyrefs against it after every key/unique on
-     the occurrence is evaluated, so a keyref declared before its key still
-     resolves). A keyref whose referenced key/unique is declared on a DIFFERENT
-     element (a sibling, or a repeating host's other occurrence) resolves against
-     an EMPTY key space → every key-sequence is a "no match" failure. This is
-     deliberate: two sibling occurrences of a repeating host never leak key spaces
-     into each other (a doc-wide merged table would falsely accept a cross-scope
-     reference), and a key on a sibling element is out of the keyref's scope just
-     as xmllint enforces. Note this means a genuine cross-host keyref (key on
-     element A, keyref on element B≠A) is conservatively rejected — xmllint rejects
-     it too, so there are no false accepts.
+     **Keyref tables are SUBTREE-SCOPED** (XSD identity-constraint scope, matching
+     xmllint): the key/unique table a keyref resolves against is the one in scope
+     for the keyref's host OCCURRENCE — the constraints declared directly on the
+     host (`validateIDConstraints` builds a per-occurrence `keyTables
+     map[QName]*idcTable` and resolves the occurrence's keyrefs against it after
+     every key/unique on the occurrence is evaluated, so a keyref declared before
+     its key still resolves) PLUS key/unique tables that PROPAGATE UP from the
+     host's DESCENDANT subtree (`collectSubtreeKeyTable` walks the host's children
+     recursively, gathering — via `idcHostDecl` per descendant — every key/unique of
+     the referenced QName and merging their key-sequences; descendant evaluation is
+     done under `suppressDepth` so cvc field/key-missing diagnostics are reported
+     only once, by that descendant's own pass-2 walk). So a key on a CHILD element
+     satisfies a keyref on an ancestor host (bug322411). A keyref whose referenced
+     key/unique is declared OUTSIDE the host's subtree — on a SIBLING, or on a
+     different occurrence of a repeating host — resolves against an EMPTY key space →
+     every key-sequence is a "no match" failure. This is deliberate and matches
+     xmllint: two sibling occurrences of a repeating host never leak key spaces into
+     each other (a doc-wide merged table would falsely accept a cross-scope
+     reference), and a key on a sibling element is out of the keyref's scope. No
+     false accepts.
   - Field presence (cvc-identity-constraint.4.2.1): an `xs:key` requires every
     field to evaluate to a node for each selected node; an absent field is a
     validity error (`Not all fields of key identity-constraint '…' evaluate to a
@@ -296,7 +315,7 @@ Schema { elements, types, groups, attrGroups, globalAttrs, substGroups maps }
 ElementDecl { Name QName, Type *TypeDef, MinOccurs/MaxOccurs, Abstract/Nillable, IDCs, Default/Fixed }
 TypeDef { ContentType (Empty|Simple|ElementOnly|Mixed), ContentModel *ModelGroup, BaseType, Attributes []*AttrUse, Facets, Variety (Atomic|List|Union) }
 ModelGroup { Compositor (Sequence|Choice|All), Particles []*Particle }
-IDConstraint { Kind (Unique|Key|KeyRef), Selector/Fields XPath, Refer, Namespaces }
+IDConstraint { Kind (Unique|Key|KeyRef), Selector/Fields XPath, Refer, Namespaces, Line, Source (declaring file) }
 ```
 
 ## RELAX NG
