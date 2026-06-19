@@ -856,6 +856,38 @@ func TestParseExternalDTDMalformedDeclTerminates(t *testing.T) {
 	}
 }
 
+func TestParseExternalDTDParameterEntityExpands(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE r SYSTEM "pe.dtd">
+<r/>`
+
+	// The external subset declares a parameter entity whose replacement text is
+	// a markup declaration, then references it. The reference must be expanded
+	// (not merely validated and skipped) so the <!ATTLIST> takes effect and the
+	// default attribute is applied to <r/>. A trailing newline after the
+	// reference exercises the progress guard: it must not misfire on valid
+	// PE-expanding input.
+	const dtd = `<!ELEMENT r EMPTY>
+<!ENTITY % defaults "<!ATTLIST r x CDATA 'default'>">
+%defaults;
+`
+	fsys := fstest.MapFS{"pe.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err, "valid external-subset parameter-entity reference must parse")
+	require.NotNil(t, doc, "document must be returned")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element must be available")
+
+	val, ok := root.GetAttribute("x")
+	require.True(t, ok, "default attribute from expanded PE must be present")
+	require.Equal(t, "default", val, "expanded PE must apply the default attribute value")
+}
+
 func TestParseExternalEntityValidEncoding(t *testing.T) {
 	t.Parallel()
 

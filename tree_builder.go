@@ -491,21 +491,13 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 			break
 		}
 
-		ctx.skipBlanks(ctxif)
-
-		if ctx.inputTab.Len() <= baseLen {
-			break
-		}
-		top = ctx.adaptCursor(ctx.inputTab.PeekOne())
-		if top == nil || top.Done() {
-			break
-		}
-
+		// Snapshot the cursor position BEFORE consuming blanks so the progress
+		// guard below counts everything this iteration does — whitespace, a markup
+		// declaration, AND a parameter-entity reference — as forward progress.
+		// This mirrors parseInternalSubset, which also snapshots before its blank
+		// skip. The guard must still fire when an iteration makes no progress at
+		// all (e.g. a malformed "<!BOGUS" that parseMarkupDecl ignores).
 		cur := ctx.getCursor()
-		// Snapshot the cursor position so an iteration that consumes nothing is
-		// detected. Without this guard a malformed declaration (e.g. "<!BOGUS")
-		// that parseMarkupDecl neither advances nor errors on would spin
-		// forever.
 		startCur := cur
 		var startLine, startCol int
 		var startByte byte
@@ -515,6 +507,37 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 			startByte = cur.Peek()
 		}
 
+		// Skip blanks WITHOUT the parameter-entity handling that skipBlanks would
+		// otherwise perform here. In the external subset, skipBlanks calls
+		// handlePEReference, which CONSUMES a "%pe;" reference while only
+		// validating it — it does not expand the replacement text. That swallows
+		// the reference before parsePEReference (below) can push the PE content
+		// onto the input stack, so the PE's declarations are never parsed.
+		// parseInternalSubset does not hit this because handlePEReference is a
+		// no-op for the internal subset (!pctx.external). Advancing past blanks
+		// only, and leaving any "%" for parsePEReference, keeps the two subset
+		// loops aligned.
+		if c := ctx.getCursor(); c != nil {
+			n := 0
+			for b := c.PeekAt(n); isBlankByte(b) && !c.Done(); b = c.PeekAt(n) {
+				n++
+			}
+			if n > 0 {
+				if err := c.Advance(n); err != nil {
+					return err
+				}
+			}
+		}
+
+		if ctx.inputTab.Len() <= baseLen {
+			break
+		}
+		top = ctx.adaptCursor(ctx.inputTab.PeekOne())
+		if top == nil || top.Done() {
+			break
+		}
+
+		cur = ctx.getCursor()
 		if cur != nil && cur.Peek() == '<' && cur.PeekAt(1) == '!' && cur.PeekAt(2) == '[' {
 			// Conditional-section recovery is deliberately tolerant: a
 			// per-section error stops the loop without failing the whole parse,
@@ -530,8 +553,18 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 			return err
 		}
 
-		// Guard against a markup declaration that neither advanced the cursor
-		// nor reported an error, which would otherwise loop forever.
+		// Expand a parameter-entity reference at the cursor. parseMarkupDecl does
+		// not handle top-level "%pe;" references in the external subset, so this
+		// pushes the PE replacement text onto the input stack and lets its
+		// declarations be parsed by subsequent loop iterations, mirroring
+		// parseInternalSubset.
+		if err := ctx.parsePEReference(ctxif); err != nil {
+			return err
+		}
+
+		// Guard against an iteration that neither advanced the cursor nor
+		// reported an error, which would otherwise loop forever (e.g. the
+		// malformed "<!BOGUS" declaration that parseMarkupDecl ignores).
 		cur = ctx.getCursor()
 		if cur == startCur && cur != nil && cur.LineNumber() == startLine && cur.Column() == startCol && cur.Peek() == startByte {
 			return ErrDocTypeNotFinished
