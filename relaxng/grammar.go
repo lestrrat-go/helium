@@ -73,6 +73,11 @@ const (
 	ncAnyName
 	ncNsName
 	ncChoice
+	// ncNoMatch never matches any name. It is installed for a schema name
+	// whose prefix is unbound or whose lexical form is not a valid NCName, so
+	// that even on the default (no error collector) compile path validation
+	// cannot spuriously succeed against an unintended no-namespace name.
+	ncNoMatch
 )
 
 // nameClass represents an element/attribute name class for matching.

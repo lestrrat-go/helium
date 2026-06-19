@@ -12,6 +12,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 const (
@@ -679,13 +680,11 @@ func (c *compiler) parseElement(ctx context.Context, node *helium.Element) *patt
 
 	name := getAttr(node, "name")
 	if name != "" {
-		localName, ns, ok := resolveQName(node, name)
-		if !ok {
-			c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: no namespace for prefix %s", qnamePrefix(name)))
+		if nc := c.resolveNameAttr(ctx, node, name, false); nc != nil {
+			p.nameClass = nc
+			p.name = nc.name
+			p.ns = nc.ns
 		}
-		p.nameClass = &nameClass{kind: ncName, name: localName, ns: ns}
-		p.name = localName
-		p.ns = ns
 	}
 
 	// Parse children: first child may be name class, rest are content patterns
@@ -762,18 +761,11 @@ func (c *compiler) parseAttribute(ctx context.Context, node *helium.Element) *pa
 
 	name := getAttr(node, "name")
 	if name != "" {
-		localName, ns, ok := resolveQName(node, name)
-		if !ok {
-			c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: no namespace for prefix %s", qnamePrefix(name)))
+		if nc := c.resolveNameAttr(ctx, node, name, true); nc != nil {
+			p.nameClass = nc
+			p.name = nc.name
+			p.ns = nc.ns
 		}
-		// For attributes, the default namespace is "" (not inherited),
-		// unless an explicit ns attribute is provided.
-		if !strings.Contains(name, ":") {
-			ns = getAttr(node, "ns")
-		}
-		p.nameClass = &nameClass{kind: ncName, name: localName, ns: ns}
-		p.name = localName
-		p.ns = ns
 	}
 
 	// Parse children
@@ -965,10 +957,15 @@ func (c *compiler) parseNameClass(ctx context.Context, node *helium.Element) *na
 		qname := trimXMLSpace(textContent(node))
 		ns, hasNS := getAttrOpt(node, "ns")
 		name := qname
+		if !xmlchar.IsValidQName(qname) {
+			c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: %q is not a valid QName", qname))
+			return &nameClass{kind: ncNoMatch}
+		}
 		if strings.Contains(qname, ":") {
 			localName, resolvedNS, ok := resolveQName(node, qname)
 			if !ok {
 				c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: no namespace for prefix %s", qnamePrefix(qname)))
+				return &nameClass{kind: ncNoMatch}
 			}
 			name = localName
 			if !hasNS {
@@ -1291,6 +1288,36 @@ func resolveQName(schemaElem *helium.Element, qname string) (localName, ns strin
 	}
 	// No prefix — use the "ns" attribute (inherited from ancestors).
 	return qname, getInheritedNS(schemaElem), true
+}
+
+// resolveNameAttr builds the name class for an <element>/<attribute> "name"
+// attribute value (already XML-space trimmed). It validates the lexical form,
+// resolves the prefix, and returns nil when no name class should be installed.
+//
+// On any error (invalid QName lexical form, or an unbound prefix) it records a
+// fatal compile error AND returns a never-matching name class (ncNoMatch). This
+// matters on the DEFAULT compile path, which has no error collector: returning
+// a plain ncName with an empty namespace would let an unbound-prefix schema
+// name spuriously match a no-namespace instance element.
+func (c *compiler) resolveNameAttr(ctx context.Context, node *helium.Element, name string, forAttribute bool) *nameClass {
+	if !xmlchar.IsValidQName(name) {
+		c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: %q is not a valid QName", name))
+		return &nameClass{kind: ncNoMatch}
+	}
+
+	localName, ns, ok := resolveQName(node, name)
+	if !ok {
+		c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: no namespace for prefix %s", qnamePrefix(name)))
+		return &nameClass{kind: ncNoMatch}
+	}
+
+	// For attributes, the default namespace is "" (not inherited) for an
+	// unprefixed name, unless an explicit ns attribute is provided.
+	if forAttribute && !strings.Contains(name, ":") {
+		ns = getAttr(node, "ns")
+	}
+
+	return &nameClass{kind: ncName, name: localName, ns: ns}
 }
 
 // qnamePrefix returns the prefix portion of a QName (the text before the first

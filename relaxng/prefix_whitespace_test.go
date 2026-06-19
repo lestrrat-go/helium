@@ -63,6 +63,31 @@ func TestUnboundPrefixInNameIsCompileError(t *testing.T) {
 			"unbound prefix in <name> name class must be a fatal compile error")
 	})
 
+	t.Run("default handler: unbound prefix does not spuriously validate", func(t *testing.T) {
+		t.Parallel()
+		// Regression for D-RNG-002: the DEFAULT compile path has no error
+		// collector, so a fatal diagnostic is dropped and Compile still returns
+		// a non-nil grammar with a nil error. An unbound prefix must therefore
+		// install a never-matching name class so that validation of a
+		// no-namespace <admin/> still fails (it must NOT match name="p:admin").
+		schema := `<element name="p:admin" xmlns="http://relaxng.org/ns/structure/1.0">
+  <empty/>
+</element>`
+
+		schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err, "schema should parse")
+
+		grammar, err := relaxng.NewCompiler().Compile(t.Context(), schemaDoc)
+		require.NoError(t, err, "default Compile returns a nil hard error")
+		require.NotNil(t, grammar, "default Compile still returns a grammar")
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<admin/>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"an unbound-prefix schema name must not spuriously match a no-namespace element")
+	})
+
 	t.Run("bound prefix compiles cleanly", func(t *testing.T) {
 		t.Parallel()
 		schema := `<element name="p:admin"
@@ -200,15 +225,16 @@ func TestSchemaAttrNBSPNotTrimmed(t *testing.T) {
 			"trimmed name 'a' must match a no-namespace <a/>")
 	})
 
-	t.Run("leading NBSP on name is significant", func(t *testing.T) {
+	t.Run("leading NBSP on name is an invalid NCName", func(t *testing.T) {
 		t.Parallel()
-		// A leading NBSP is not XML whitespace, so the element name is
-		// "<NBSP>a" rather than "a" and must NOT match a plain <a/>.
+		// A leading NBSP is not XML whitespace, so after XML-space trimming the
+		// element name is still "<NBSP>a", which is not a valid NCName. The
+		// schema must therefore fail to compile.
 		schema := `<element name="root" xmlns="http://relaxng.org/ns/structure/1.0">
   <element name="` + nbsp + `a"><empty/></element>
 </element>`
-		require.Error(t, validateWith(t, schema, `<root><a/></root>`),
-			"a leading NBSP in the schema name must not be trimmed, so it must not match plain <a/>")
+		require.NotEmpty(t, compileErrorsFor(t, schema),
+			"a leading NBSP makes the name an invalid NCName, which must be a fatal compile error")
 	})
 
 	t.Run("trailing NBSP on datatype name is significant", func(t *testing.T) {
