@@ -957,7 +957,12 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 func (c *compiler) parseNameClass(ctx context.Context, node *helium.Element) *nameClass {
 	switch node.LocalName() {
 	case "name":
-		qname := textContent(node)
+		// Per RELAX NG simplification (spec §4.2), leading and trailing XML
+		// whitespace is removed from <name> content before it is parsed as a
+		// QName. Trim XML whitespace only (#x20, #x9, #xA, #xD) so that an NBSP
+		// stays significant, but a bound prefix surrounded by ordinary spaces
+		// (e.g. <name> p:admin </name>) still resolves correctly.
+		qname := trimXMLSpace(textContent(node))
 		ns, hasNS := getAttrOpt(node, "ns")
 		name := qname
 		if strings.Contains(qname, ":") {
@@ -1125,12 +1130,21 @@ func isNameClassElement(elem *helium.Element) bool {
 	return false
 }
 
+// trimXMLSpace trims leading and trailing XML whitespace (#x20, #x9, #xA, #xD)
+// only, unlike strings.TrimSpace which also strips other Unicode whitespace such
+// as NBSP. RELAX NG whitespace is defined as XML whitespace, so NBSP is
+// significant content and must be preserved in attribute values and <name>
+// content.
+func trimXMLSpace(s string) string {
+	return strings.TrimFunc(s, isXMLSpace)
+}
+
 func getAttr(elem *helium.Element, name string) string {
 	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
 	if !ok {
 		return ""
 	}
-	return strings.TrimSpace(attr.Value())
+	return trimXMLSpace(attr.Value())
 }
 
 // getAttrOpt returns the value and presence of an attribute.
@@ -1139,7 +1153,7 @@ func getAttrOpt(elem *helium.Element, name string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return strings.TrimSpace(attr.Value()), true
+	return trimXMLSpace(attr.Value()), true
 }
 
 // getUnqualifiedAttrOpt returns the value and presence of an UNQUALIFIED
@@ -1154,7 +1168,7 @@ func getUnqualifiedAttrOpt(elem *helium.Element, name string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return strings.TrimSpace(attr.Value()), true
+	return trimXMLSpace(attr.Value()), true
 }
 
 // getAncestorNS walks up the RNG element tree to find the ns attribute.

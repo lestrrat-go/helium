@@ -136,3 +136,92 @@ func TestNBSPNotXMLWhitespace(t *testing.T) {
 		require.Error(t, err, "NBSP attribute value is significant and must not match <empty/>")
 	})
 }
+
+// TestNameContentXMLWhitespaceTrim covers D-RNG-002 follow-up: <name> content
+// is QName-parsed only AFTER leading/trailing XML whitespace is removed (spec
+// §4.2). A bound prefix surrounded by ordinary spaces must therefore compile,
+// while an NBSP is significant and must keep the prefix unbound (rejected).
+func TestNameContentXMLWhitespaceTrim(t *testing.T) {
+	t.Parallel()
+
+	const nbsp = " "
+
+	t.Run("bound prefix with surrounding spaces compiles", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="a"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    xmlns:p="urn:example:p">
+  <element>
+    <name> p:admin </name>
+    <empty/>
+  </element>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"surrounding XML whitespace must be trimmed before QName parsing")
+	})
+
+	t.Run("NBSP before prefix keeps prefix unbound", func(t *testing.T) {
+		t.Parallel()
+		// A leading NBSP is not XML whitespace, so it stays part of the QName.
+		// The token "<NBSP>p" is then an unbound prefix and must be rejected.
+		schema := `<element name="a"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    xmlns:p="urn:example:p">
+  <element>
+    <name>` + nbsp + `p:admin</name>
+    <empty/>
+  </element>
+</element>`
+		require.NotEmpty(t, compileErrorsFor(t, schema),
+			"NBSP is significant, so the prefix '<NBSP>p' is unbound and must be a fatal compile error")
+	})
+}
+
+// TestSchemaAttrNBSPNotTrimmed covers the schema-attribute side of the XML
+// whitespace rule: name/type/combine attribute values are trimmed of XML
+// whitespace only, so a leading/trailing NBSP is significant and must NOT be
+// silently stripped (which would otherwise turn an invalid value into a valid
+// one).
+func TestSchemaAttrNBSPNotTrimmed(t *testing.T) {
+	t.Parallel()
+
+	const nbsp = " "
+
+	t.Run("leading XML space on name is trimmed", func(t *testing.T) {
+		t.Parallel()
+		// A leading ordinary space on element name is XML whitespace and must
+		// be trimmed, leaving a valid NCName so the schema compiles and matches.
+		schema := `<element name="root" xmlns="http://relaxng.org/ns/structure/1.0">
+  <element name=" a"><empty/></element>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"leading XML whitespace on name must be trimmed")
+		require.NoError(t, validateWith(t, schema, `<root><a/></root>`),
+			"trimmed name 'a' must match a no-namespace <a/>")
+	})
+
+	t.Run("leading NBSP on name is significant", func(t *testing.T) {
+		t.Parallel()
+		// A leading NBSP is not XML whitespace, so the element name is
+		// "<NBSP>a" rather than "a" and must NOT match a plain <a/>.
+		schema := `<element name="root" xmlns="http://relaxng.org/ns/structure/1.0">
+  <element name="` + nbsp + `a"><empty/></element>
+</element>`
+		require.Error(t, validateWith(t, schema, `<root><a/></root>`),
+			"a leading NBSP in the schema name must not be trimmed, so it must not match plain <a/>")
+	})
+
+	t.Run("trailing NBSP on datatype name is significant", func(t *testing.T) {
+		t.Parallel()
+		// "integer " (trailing NBSP) is not a known XSD datatype after
+		// XML-whitespace trimming, so the data type must not be recognized as
+		// xs:integer and must reject a valid integer value.
+		schema := `<element name="root"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <element name="a"><data type="integer` + nbsp + `"/></element>
+</element>`
+		require.Error(t, validateWith(t, schema, `<root><a>42</a></root>`),
+			"a trailing NBSP on the type name must not be trimmed, so 'integer ' is not xs:integer")
+	})
+}
