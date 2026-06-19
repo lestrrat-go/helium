@@ -25,6 +25,11 @@ func TestElementConsistent(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
 		require.NoError(t, err)
+		// Close the collector before reading so the async sink is fully drained
+		// and the read is not flaky under parallel/-race load (mirrors
+		// compileErrorsExact). Without this, the cos-element-consistent diagnostic
+		// can still be in flight when Errors() is read.
+		require.NoError(t, collector.Close())
 		_, errors := partitionCompileErrors(collector.Errors())
 		return errors
 	}
