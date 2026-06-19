@@ -89,7 +89,7 @@ func (c *compiler) checkFacetConsistency(ctx context.Context) {
 			c.checkFacetValueAgainstBase(ctx, td, fs, line, component)
 		}
 		c.checkFacetMutualExclusion(ctx, fs, line, component)
-		c.checkFacetSameTypeConsistency(ctx, fs, line, component)
+		c.checkFacetSameTypeConsistency(ctx, td, fs, line, component)
 		c.checkFacetBaseRestriction(ctx, td, fs, line, component)
 	}
 }
@@ -131,6 +131,25 @@ var stringDerivedTypes = map[string]struct{}{
 	"normalizedString": {}, "token": {}, "language": {},
 	"Name": {}, "NCName": {}, "ID": {}, "IDREF": {}, "IDREFS": {},
 	"ENTITY": {}, "ENTITIES": {}, "NMTOKEN": {}, "NMTOKENS": {},
+}
+
+// lengthApplicableTypes is the set of builtin base locals on whose atomic value
+// space the length facets (length, minLength, maxLength) are applicable. Per XSD
+// §3.16 length measures the number of characters (string family), octets (the
+// binary types) or characters of the lexical/canonical form for anyURI, QName and
+// NOTATION. It is INAPPLICABLE to the decimal/numeric family, boolean, float,
+// double and the date/time/duration family — libxml2 rejects a length facet
+// there. The string-derived family is enumerated explicitly (it mirrors
+// stringDerivedTypes, plus "string" itself) so the gate does not depend on the
+// primitive-collapsing in atomicPrimitiveLocal.
+var lengthApplicableTypes = map[string]struct{}{
+	// String and its derivations.
+	lexicon.TypeString: {}, "normalizedString": {}, lexicon.TypeToken: {}, "language": {},
+	"Name": {}, "NCName": {}, "ID": {}, lexicon.TypeIDREF: {}, "IDREFS": {},
+	"ENTITY": {}, "ENTITIES": {}, "NMTOKEN": {}, "NMTOKENS": {},
+	// anyURI, QName, NOTATION (own primitives) and the binary types.
+	lexicon.TypeAnyURI: {}, lexicon.TypeQName: {}, lexicon.TypeNotation: {},
+	"hexBinary": {}, "base64Binary": {},
 }
 
 // atomicPrimitiveLocal returns the local name of the XSD PRIMITIVE built-in that
@@ -232,10 +251,12 @@ func (c *compiler) checkListUnionFacetApplicability(ctx context.Context, td *Typ
 }
 
 // checkAtomicFacetApplicability rejects range facets on a non-ordered atomic
-// primitive and digit facets on a non-decimal atomic primitive. It returns false
-// (so the caller skips the value-against-base bound check) only when an
-// inapplicable RANGE facet was reported — on a non-ordered base that bound check
-// is a no-op and must not run. Otherwise it returns true.
+// primitive, digit facets on a non-decimal atomic primitive, and length-family
+// facets (length, minLength, maxLength) on a primitive outside the
+// length-applicable set (string-derived, the binary types, anyURI, QName,
+// NOTATION). It returns false (so the caller skips the value-against-base bound
+// check) only when an inapplicable RANGE facet was reported — on a non-ordered
+// base that bound check is a no-op and must not run. Otherwise it returns true.
 func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDef, fs *FacetSet, line int) bool {
 	builtinLocal := builtinBaseLocal(td)
 	if builtinLocal == "" {
@@ -252,6 +273,7 @@ func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDe
 
 	_, ordered := orderedRangeFacetTypes[builtinLocal]
 	_, decimal := decimalFamilyTypes[builtinLocal]
+	_, lengthOK := lengthApplicableTypes[builtinLocal]
 
 	report := func(facet string) {
 		msg := fmt.Sprintf("The facet '%s' is not allowed on types derived from the type %s.", facet, primitive)
@@ -289,6 +311,23 @@ func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDe
 		}
 		if fs.FractionDigits != nil {
 			report("fractionDigits")
+		}
+	}
+
+	// Length facets are applicable only to the string-derived family, the binary
+	// types, anyURI, QName and NOTATION (lengthApplicableTypes). On a numeric,
+	// boolean, float/double or date/time/duration atomic they are meaningless, so
+	// libxml2 rejects them. Their rejection is independent of the range-bound
+	// check, so it never flips the returned verdict.
+	if !lengthOK {
+		if fs.Length != nil {
+			report("length")
+		}
+		if fs.MinLength != nil {
+			report("minLength")
+		}
+		if fs.MaxLength != nil {
+			report("maxLength")
 		}
 	}
 
@@ -688,21 +727,41 @@ func (c *compiler) checkFacetMutualExclusion(ctx context.Context, fs *FacetSet, 
 }
 
 // checkFacetSameTypeConsistency checks consistency of facets within the same type.
-func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, fs *FacetSet, line int, component string) {
+func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
 	if fs.MinLength != nil && fs.MaxLength != nil && *fs.MinLength > *fs.MaxLength {
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for the value of 'minLength' to be greater than the value of 'maxLength'."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
+
+	// Range-bound consistency is compared in the restricted type's ORDERED VALUE
+	// SPACE, not lexically: for a non-decimal ordered atomic (date/time/duration,
+	// float, double) compareDecimal would treat the bounds as incomparable and let
+	// an inconsistent pair (e.g. minInclusive 2021-01-01 > maxInclusive
+	// 2020-01-01) compile. compareFacetBounds resolves the builtin primitive and
+	// uses the same value-space comparison the instance validator uses, falling
+	// back to compareDecimal only when the type carries no resolvable ordered
+	// primitive.
+	builtinLocal := builtinBaseLocal(td)
+	cmp := func(a, b string) (int, bool) {
+		if v, ok := compareForRangeFacet(a, b, builtinLocal); ok {
+			return v, true
+		}
+		if v := compareDecimal(a, b); v != -2 {
+			return v, true
+		}
+		return 0, false
+	}
+
 	if fs.MinInclusive != nil && fs.MaxInclusive != nil {
-		if compareDecimal(*fs.MinInclusive, *fs.MaxInclusive) > 0 {
+		if v, ok := cmp(*fs.MinInclusive, *fs.MaxInclusive); ok && v > 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && fs.MaxExclusive != nil {
-		if compareDecimal(*fs.MinExclusive, *fs.MaxExclusive) >= 0 {
+		if v, ok := cmp(*fs.MinExclusive, *fs.MaxExclusive); ok && v >= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'."), helium.ErrorLevelFatal))
 			c.errorCount++
@@ -714,14 +773,14 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, fs *FacetS
 		c.errorCount++
 	}
 	if fs.MinExclusive != nil && fs.MaxInclusive != nil {
-		if compareDecimal(*fs.MinExclusive, *fs.MaxInclusive) >= 0 {
+		if v, ok := cmp(*fs.MinExclusive, *fs.MaxInclusive); ok && v >= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxInclusive'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && fs.MaxExclusive != nil {
-		if compareDecimal(*fs.MinInclusive, *fs.MaxExclusive) >= 0 {
+		if v, ok := cmp(*fs.MinInclusive, *fs.MaxExclusive); ok && v >= 0 {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				"It is an error for the value of 'minInclusive' to be greater than or equal to the value of 'maxExclusive'."), helium.ErrorLevelFatal))
 			c.errorCount++

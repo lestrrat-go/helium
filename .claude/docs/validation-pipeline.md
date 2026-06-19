@@ -157,7 +157,18 @@ boolean and the binary types (that order exists only so enumeration can use
 For the ordered leaves the actual ordering is deferred to `value.Compare`. So a
 numeric-looking string/boolean like `5` under `minInclusive` on a string, boolean,
 binary, or list/union leaf is no longer wrongly rejected, and there is no
-empty-`builtinLocal` decimal fallback.
+empty-`builtinLocal` decimal fallback. `checkAtomicFacetApplicability` also rejects
+the length family (`length`/`minLength`/`maxLength`) on any atomic primitive
+OUTSIDE `lengthApplicableTypes` (string-derived, the binary types, anyURI, QName,
+NOTATION); on a numeric/decimal, boolean, float/double or date/time/duration atomic
+the length facets are inapplicable and are reported at COMPILE time (`The facet '…'
+is not allowed on types derived from the type xs:…`), so e.g. `xs:int`+`length` is a
+schema error rather than a runtime no-op. `checkFacetSameTypeConsistency` compares
+same-type range bounds (`min`/`maxInclusive`, `min`/`maxExclusive`) in the restricted
+type's ORDERED VALUE SPACE via `compareForRangeFacet` (decimal fallback only when the
+type carries no ordered primitive), so an inconsistent non-decimal pair like
+`minInclusive 2021-01-01 > maxInclusive 2020-01-01` on `xs:date` is rejected, not just
+the decimal case.
 
 Pattern facets are stored per restriction step as `FacetSet.Patterns []string`,
 compiled once into `FacetSet.compiledPatterns` (`[]*xsdregex.Regexp`) at schema

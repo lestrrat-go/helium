@@ -292,4 +292,125 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 </xs:schema>`
 		require.NotContains(t, compileErrors(t, schemaXML), wantMsg)
 	})
+
+	t.Run("length facet on numeric atomic base is not allowed", func(t *testing.T) {
+		t.Parallel()
+		// length/minLength/maxLength apply only to the string-derived, binary,
+		// anyURI, QName and NOTATION primitives. On a numeric (decimal-family)
+		// atomic such as xs:int the length facets are inapplicable; xmllint rejects
+		// them naming the xs:decimal primitive ancestor.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:int">
+      <xs:length value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The facet 'length' is not allowed on types derived from the type xs:decimal.")
+	})
+
+	t.Run("minLength facet on float atomic base is not allowed", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:float">
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The facet 'minLength' is not allowed on types derived from the type xs:float.")
+	})
+
+	t.Run("length facet on date atomic base is not allowed", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:date">
+      <xs:maxLength value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"The facet 'maxLength' is not allowed on types derived from the type xs:date.")
+	})
+
+	t.Run("length facet on string atomic base is allowed", func(t *testing.T) {
+		t.Parallel()
+		// length IS applicable to string-derived primitives, so a string restriction
+		// adding it must still compile cleanly.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ok">
+    <xs:restriction base="xs:string">
+      <xs:length value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="ok"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), "is not allowed")
+	})
+
+	t.Run("length facet on hexBinary atomic base is allowed", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ok">
+    <xs:restriction base="xs:hexBinary">
+      <xs:length value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="ok"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), "is not allowed")
+	})
+
+	t.Run("inconsistent date range bounds are rejected", func(t *testing.T) {
+		t.Parallel()
+		// minInclusive > maxInclusive in the xs:date value space is inconsistent;
+		// xmllint rejects it. Previously the decimal-only comparison treated the
+		// non-numeric date bounds as incomparable and let it compile.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:date">
+      <xs:minInclusive value="2021-01-01"/>
+      <xs:maxInclusive value="2020-01-01"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.")
+	})
+
+	t.Run("consistent date range bounds still compile", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="ok">
+    <xs:restriction base="xs:date">
+      <xs:minInclusive value="2020-01-01"/>
+      <xs:maxInclusive value="2021-01-01"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="ok"/>
+</xs:schema>`
+		require.NotContains(t, compileErrors(t, schemaXML), "It is an error for the value of")
+	})
+
+	t.Run("inconsistent dateTime exclusive bounds are rejected", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="bad">
+    <xs:restriction base="xs:dateTime">
+      <xs:minExclusive value="2021-01-01T00:00:00"/>
+      <xs:maxExclusive value="2021-01-01T00:00:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root" type="bad"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schemaXML),
+			"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'.")
+	})
 }
