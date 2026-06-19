@@ -359,14 +359,50 @@ func localFilePath(uri string) (string, error) {
 	}
 
 	// u.Path is already percent-decoded by url.Parse.
-	path := u.Path
-	if filepath.Separator == '\\' {
-		// Windows: "file:///C:/x" parses to Path "/C:/x"; drop the leading
-		// slash and normalize separators.
-		path = strings.TrimPrefix(path, "/")
-		path = filepath.FromSlash(path)
+	return fileURIPathToLocal(u.Path, filepath.Separator == '\\'), nil
+}
+
+// fileURIPathToLocal converts the (already percent-decoded) path component of a
+// "file:" URI into a local filesystem path. The windows argument selects the
+// host platform's conventions so the logic can be unit-tested for both.
+//
+// On Windows a URI like "file:///C:/x" parses to path "/C:/x"; the leading
+// slash before the drive letter must be dropped and separators normalized so it
+// becomes "C:\\x". A rooted, non-drive path such as "/tmp/x" must keep its
+// leading slash so it stays absolute (and not become the relative "tmp\\x").
+// On non-Windows the path passes through unchanged: "/tmp/x" stays "/tmp/x".
+func fileURIPathToLocal(path string, windows bool) string {
+	if !windows {
+		return path
 	}
-	return path, nil
+	if isDriveLetterPath(path) {
+		path = strings.TrimPrefix(path, "/")
+	}
+	// Normalize to backslashes explicitly: filepath.FromSlash is a no-op when
+	// the host is not Windows, so the conversion must not depend on GOOS here.
+	return strings.ReplaceAll(path, "/", `\`)
+}
+
+// isDriveLetterPath reports whether path has the leading-slash drive-letter form
+// "/X:/..." or "/X:" produced by parsing a Windows "file:" URI.
+func isDriveLetterPath(path string) bool {
+	if len(path) < 3 {
+		return false
+	}
+	if path[0] != '/' {
+		return false
+	}
+	c := path[1]
+	isAlpha := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+	if !isAlpha {
+		return false
+	}
+	if path[2] != ':' {
+		return false
+	}
+	// Either "/X:" exactly, or "/X:/..." — a bare colon not followed by a
+	// separator (e.g. "/X:foo") is not a valid rooted drive path.
+	return len(path) == 3 || path[3] == '/'
 }
 
 // hasURIScheme reports whether uri begins with an RFC 3986 scheme followed by

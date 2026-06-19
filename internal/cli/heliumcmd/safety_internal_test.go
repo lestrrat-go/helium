@@ -2,6 +2,7 @@ package heliumcmd
 
 import (
 	"math"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -49,6 +50,53 @@ func TestLocalFilePath(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "scheme")
 	})
+	t.Run("file URI drive letter on Windows", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("Windows-specific drive-letter handling")
+		}
+		got, err := localFilePath("file:///C:/tmp/mod.xsl")
+		require.NoError(t, err)
+		require.Equal(t, `C:\tmp\mod.xsl`, got)
+	})
+}
+
+func TestFileURIPathToLocal(t *testing.T) {
+	// The decode logic is platform-independent: drive the windows flag
+	// explicitly so both host conventions are exercised on any GOOS.
+	t.Run("non-windows passes through", func(t *testing.T) {
+		require.Equal(t, "/tmp/mod.xsl", fileURIPathToLocal("/tmp/mod.xsl", false))
+		require.Equal(t, "/C:/tmp/x", fileURIPathToLocal("/C:/tmp/x", false))
+	})
+	t.Run("windows drive letter strips leading slash", func(t *testing.T) {
+		require.Equal(t, `C:\tmp\mod.xsl`, fileURIPathToLocal("/C:/tmp/mod.xsl", true))
+		require.Equal(t, `c:\x`, fileURIPathToLocal("/c:/x", true))
+		require.Equal(t, `C:`, fileURIPathToLocal("/C:", true))
+	})
+	t.Run("windows rooted non-drive keeps leading slash", func(t *testing.T) {
+		// Must stay rooted, not become relative "tmp\\x".
+		require.Equal(t, `\tmp\x`, fileURIPathToLocal("/tmp/x", true))
+		require.Equal(t, `\share\mod.xsl`, fileURIPathToLocal("/share/mod.xsl", true))
+	})
+}
+
+func TestIsDriveLetterPath(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/C:/x", true},
+		{"/c:/x", true},
+		{"/C:", true},
+		{"/tmp/x", false},
+		{"/C:foo", false}, // colon not followed by separator
+		{"C:/x", false},   // no leading slash
+		{"/1:/x", false},  // non-alpha drive
+		{"/", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		require.Equalf(t, tc.want, isDriveLetterPath(tc.path), "path=%q", tc.path)
+	}
 }
 
 func TestReadInputMaxInt64NoOverflow(t *testing.T) {

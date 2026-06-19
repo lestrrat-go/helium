@@ -1,6 +1,7 @@
 package heliumcmd_test
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,8 +41,10 @@ func TestXSLTIncludeFileURIResolves(t *testing.T) {
 </xsl:stylesheet>`)
 
 	// A file: URI href must resolve to the local module rather than being
-	// handed verbatim to os.Open.
-	modURI := "file://" + filepath.ToSlash(filepath.Join(dir, "mod.xsl"))
+	// handed verbatim to os.Open. Build the URI via url.URL so it is correct
+	// cross-platform (string concatenation yields "file://C:/..." on Windows,
+	// which parses with host "C:" and is rejected).
+	modURI := (&url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(dir, "mod.xsl"))}).String()
 	ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:include href="`+modURI+`"/>
