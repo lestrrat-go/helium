@@ -241,7 +241,10 @@ func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.E
 
 func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wildcard {
 	namespace := getAttr(elem, attrNamespace)
-	if namespace == "" {
+	if !hasAttr(elem, attrNamespace) {
+		// ABSENT namespace defaults to ##any. A present-but-empty
+		// namespace="" is preserved: it is a (degenerate) namespace list
+		// that matches nothing, which is distinct from the ##any default.
 		namespace = WildcardNSAny
 	} else {
 		c.validateWildcardNamespace(ctx, elem, namespace)
@@ -602,8 +605,11 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 	if ref := getAttr(elem, attrRef); ref != "" {
 		qn := c.resolveQName(ctx, elem, ref)
 		au := &AttrUse{Name: qn}
-		if getAttr(elem, attrUse) == attrValRequired {
+		switch getAttr(elem, attrUse) {
+		case attrValRequired:
 			au.Required = true
+		case attrValProhibited:
+			au.Prohibited = true
 		}
 		if hasAttr(elem, attrDefault) {
 			v := getAttr(elem, attrDefault)

@@ -274,6 +274,24 @@ func TestDuplicateAttributeUse(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
+	// A prohibited attribute ref="..." use="prohibited" contributes no
+	// attribute use, so it must not collide with a real use of the same
+	// attribute. Before the fix the ref path never set Prohibited, so the
+	// duplicate-use check rejected schemas libxml2 accepts.
+	t.Run("accepts prohibited ref beside the same real use", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:t="urn:t" targetNamespace="urn:t" attributeFormDefault="unqualified">
+  <xs:attribute name="a" type="xs:string"/>
+  <xs:complexType name="T">
+    <xs:attribute ref="t:a"/>
+    <xs:attribute ref="t:a" use="prohibited"/>
+  </xs:complexType>
+  <xs:element name="root" type="t:T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
 	t.Run("rejects same expanded QName across base and extension", func(t *testing.T) {
 		t.Parallel()
 		// Both the base and the extension reference the same global attribute
@@ -362,5 +380,34 @@ func TestWildcardConstraintValidation(t *testing.T) {
 				require.Empty(t, compileFatalErrors(t, wildcardSchema(w)))
 			})
 		}
+	})
+
+	// A present-but-empty namespace="" is a (degenerate) namespace list that
+	// matches nothing; it is distinct from an ABSENT namespace which defaults
+	// to ##any. Before the fix readWildcard rewrote "" to ##any, so a skip
+	// wildcard with namespace="" wrongly accepted any child.
+	t.Run("empty namespace matches nothing", func(t *testing.T) {
+		t.Parallel()
+		validates := func(t *testing.T, schema, instanceXML string) error {
+			t.Helper()
+			sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+			require.NoError(t, err)
+			s, err := xsd.NewCompiler().Compile(t.Context(), sdoc)
+			require.NoError(t, err)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+			require.NoError(t, err)
+			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+			return xsd.NewValidator(s).ErrorHandler(collector).Validate(t.Context(), doc)
+		}
+
+		emptyNS := wildcardSchema(`<xs:any namespace="" processContents="skip"/>`)
+		require.Empty(t, compileFatalErrors(t, emptyNS))
+		require.Error(t, validates(t, emptyNS, `<root><child/></root>`),
+			`namespace="" must match no child`)
+
+		absentNS := wildcardSchema(`<xs:any processContents="skip"/>`)
+		require.Empty(t, compileFatalErrors(t, absentNS))
+		require.NoError(t, validates(t, absentNS, `<root><child/></root>`),
+			"absent namespace defaults to ##any and must accept any child")
 	})
 }
