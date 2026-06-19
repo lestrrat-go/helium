@@ -69,7 +69,7 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 | Parser | `--recover`, `--noent`, `--loaddtd`, `--dtdattr`, `--valid`, `--nowarning`, `--pedantic`, `--noblanks`, `--nsclean`, `--nocdata`, `--nonet`, `--huge`, `--noenc`, `--noxincludenode`, `--nofixup-base-uris` |
 | Features | `--xinclude`, `--schema FILE`, `--xpath EXPR`, `--catalogs`, `--nocatalogs`, `--path DIRS` |
 | Output | `--noout`, `--format`, `--pretty N`, `--encode ENC`, `--output FILE`, `--c14n`, `--c14n11`, `--exc-c14n`, `--dropdtd` |
-| Behavior | `--quiet`, `--timing`, `--repeat N`, `--version` |
+| Behavior | `--quiet`, `--timing`, `--repeat N`, `--max-input-bytes N`, `--version` |
 
 ### Cascades
 
@@ -77,6 +77,15 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 - `--valid` → also sets `--loaddtd`
 - `--xpath EXPR` → also sets `--noout`
 - `--pretty N>=1` → also sets `--format`
+
+### Output / Input Safety
+
+- `--output FILE` refers to the same file as an XML input or the `--schema` → rejected (`would overwrite input/schema`, `ExitErr`) before any file is truncated. Same-file detection uses absolute-path equality plus `os.SameFile` (catches `./` prefixes and symlinks).
+- `--output FILE` combined with `--noout` → rejected (`--output cannot be combined with --noout`). Exception: `--xpath` (which also sets `--noout` internally) still writes its result, so it is allowed.
+- The output file is closed explicitly after processing; a close error is folded into the exit status (`ExitErr`).
+- `--max-input-bytes N` caps the bytes read per input (file or stdin); default `DefaultMaxInputBytes` (100 MiB). `0` disables the cap. Exceeding it fails with `input exceeds maximum size` and `ExitReadFile`.
+- `--quiet` suppresses informational output: timing messages are silenced and parser/validator warnings are suppressed.
+- `--path DIRS` (colon-separated) is wired into DTD/entity resolution: a `pathSearchFS` falls back to each listed directory (by base name) when the default loader cannot open a referenced resource.
 
 ### Output Modes
 
@@ -96,8 +105,9 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 
 Primary file: `internal/cli/heliumcmd/xpath.go`
 
-- Usage: `helium xpath [--engine 1|3] EXPR [XMLfiles ...]`
+- Usage: `helium xpath [--engine 1|3] [--max-input-bytes N] EXPR [XMLfiles ...]`
 - Default engine: `3`
+- `--max-input-bytes N` caps bytes read per input (default 100 MiB; `0` = unlimited)
 - `EXPR` mandatory + non-empty
 - Engine `1` → `xpath1`
 - Engine `3` → `xpath3`
@@ -141,7 +151,9 @@ Primary file: `internal/cli/heliumcmd/xslt.go`
 
 - Usage: `helium xslt [options] STYLESHEET [XMLfiles ...]`
 - Stylesheet path mandatory positional arg
-- Stylesheet parsed with `helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)`, compiled once with `xslt3.NewCompiler().Compile()`
+- Stylesheet parsed with `helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)`, compiled once with `xslt3.NewCompiler().URIResolver(fileResolver{}).Compile()`
+- A filesystem `URIResolver` is installed so local `xsl:include`/`xsl:import` modules load (the compiler default-denies module loading without one)
 - Each XML input parsed with `helium.NewParser()`, transformed with `ss.Transform(doc).WriteTo(ctx, out)`
-- Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--version`
+- Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--max-input-bytes N`, `--version`
 - Parameters passed via `inv.GlobalParameters()`
+- Same output safety as `helium lint`: `--output` is rejected when it matches an input or the stylesheet, or when combined with `--noout`; close errors fold into the exit status; inputs are read under the `--max-input-bytes` cap

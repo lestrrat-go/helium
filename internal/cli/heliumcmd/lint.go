@@ -53,6 +53,8 @@ type config struct {
 	dropdtd bool
 	repeat  int
 
+	maxInputBytes int64
+
 	version bool
 }
 
@@ -95,6 +97,14 @@ func (c *command) runContext(ctx context.Context, args []string) int {
 		cfg.format = true
 	}
 
+	// --quiet suppresses non-error informational output. Timing messages are
+	// purely informational, so silence them; parser/validator warnings are
+	// suppressed via the parser's own SuppressWarnings option.
+	if cfg.quiet {
+		cfg.timing = false
+		cfg.parser = cfg.parser.SuppressWarnings(true)
+	}
+
 	var inputs []namedInput
 	switch {
 	case len(files) > 0:
@@ -132,13 +142,22 @@ func (c *command) runContext(ctx context.Context, args []string) int {
 	}
 
 	out := c.stdout
+	var outFile *os.File
 	if cfg.outputFile != "" {
+		// Refuse to write output over any input or the schema. os.Create
+		// truncates before the inputs are read, so without this check
+		// `helium lint --output doc.xml doc.xml` would destroy the input
+		// before it is parsed.
+		if code := c.checkOutputCollision(cfg, inputs); code != ExitOK {
+			return code
+		}
+
 		f, err := os.Create(cfg.outputFile) //nolint:gosec // CLI output path is user supplied
 		if err != nil {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}
-		defer func() { _ = f.Close() }()
+		outFile = f
 		out = f
 	}
 
@@ -147,7 +166,36 @@ func (c *command) runContext(ctx context.Context, args []string) int {
 		code := c.processInput(ctx, cfg, input, cat, schema, out)
 		exitCode = mergeExitCode(exitCode, code)
 	}
+
+	// Fold the close error into the exit status: a failed flush/close means
+	// the output may be incomplete, which must not be reported as success.
+	if outFile != nil {
+		if err := outFile.Close(); err != nil {
+			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+			exitCode = mergeExitCode(exitCode, ExitErr)
+		}
+	}
+
 	return exitCode
+}
+
+// checkOutputCollision reports a non-OK exit code if the configured output
+// file refers to the same file as any XML input or the schema.
+func (c *command) checkOutputCollision(cfg *config, inputs []namedInput) int {
+	for _, input := range inputs {
+		if input.stdin {
+			continue
+		}
+		if samePath(cfg.outputFile, input.name) {
+			_, _ = fmt.Fprintf(c.stderr, "%s: --output %q would overwrite input %q\n", c.prog, cfg.outputFile, input.name)
+			return ExitErr
+		}
+	}
+	if cfg.schemaFile != "" && samePath(cfg.outputFile, cfg.schemaFile) {
+		_, _ = fmt.Fprintf(c.stderr, "%s: --output %q would overwrite schema %q\n", c.prog, cfg.outputFile, cfg.schemaFile)
+		return ExitErr
+	}
+	return ExitOK
 }
 
 func (c *command) showVersion() {
@@ -191,14 +239,16 @@ func (c *command) showUsage() {
 	--timing : print timing information to stderr
 	--dropdtd : remove the DOCTYPE of the result
 	--repeat N : parse N times for benchmarking
+	--max-input-bytes N : cap bytes read per input (0 = unlimited)
 `, c.prog)
 }
 
 func (c *command) parseArgs(args []string) (*config, []string) {
 	cfg := &config{
-		parser: helium.NewParser(),
-		pretty: -1,
-		repeat: 1,
+		parser:        helium.NewParser(),
+		pretty:        -1,
+		repeat:        1,
+		maxInputBytes: DefaultMaxInputBytes,
 	}
 	var files []string
 
@@ -337,6 +387,18 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 				return nil, nil
 			}
 			cfg.repeat = n
+		case "--max-input-bytes":
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-input-bytes requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.ParseInt(args[i], 10, 64) //nolint:gosec // bounds checked above
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-input-bytes: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
+				return nil, nil
+			}
+			cfg.maxInputBytes = n
 		default:
 			if strings.HasPrefix(arg, "--") {
 				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg) //nolint:gosec // CLI diagnostic output
@@ -351,6 +413,15 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	// on that path. Reject the combination instead of silently ignoring it.
 	if cfg.encode != "" && cfg.xpathExpr != "" {
 		_, _ = fmt.Fprintf(c.stderr, "%s: --encode cannot be combined with --xpath\n", c.prog)
+		return nil, nil
+	}
+
+	// --noout suppresses all writing, so opening (and thus truncating) the
+	// output file would silently destroy its contents. Reject the combination
+	// rather than clobber the file. --xpath also sets noout but still writes
+	// its result to the output destination, so it is exempt.
+	if cfg.outputFile != "" && cfg.noout && cfg.xpathExpr == "" {
+		_, _ = fmt.Fprintf(c.stderr, "%s: --output cannot be combined with --noout\n", c.prog)
 		return nil, nil
 	}
 
@@ -400,6 +471,21 @@ func (c *command) loadCatalogFromEnv(ctx context.Context) helium.CatalogResolver
 	return chain
 }
 
+// pathDirs splits cfg.pathDirs (colon-separated, xmllint style) into a list of
+// non-empty search directories for DTD/entity lookup.
+func (c *command) pathDirs(cfg *config) []string {
+	if cfg.pathDirs == "" {
+		return nil
+	}
+	var dirs []string
+	for _, d := range strings.Split(cfg.pathDirs, ":") {
+		if d != "" {
+			dirs = append(dirs, d)
+		}
+	}
+	return dirs
+}
+
 func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
 	schema, err := xsd.NewCompiler().CompileFile(ctx, cfg.schemaFile)
 	if err != nil {
@@ -412,9 +498,9 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 	var buf []byte
 	var err error
 	if input.stdin {
-		buf, err = io.ReadAll(c.stdin)
+		buf, err = readInput(c.stdin, "-", cfg.maxInputBytes)
 	} else {
-		buf, err = os.ReadFile(input.name)
+		buf, err = readInputFile(input.name, cfg.maxInputBytes)
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
@@ -434,6 +520,9 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 		if cat != nil {
 			p = p.Catalog(cat)
+		}
+		if dirs := c.pathDirs(cfg); len(dirs) > 0 {
+			p = p.FS(pathSearchFS{base: iofsPermissiveRoot(), dirs: dirs})
 		}
 
 		doc, err = p.Parse(ctx, buf)

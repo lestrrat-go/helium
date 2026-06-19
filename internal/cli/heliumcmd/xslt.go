@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/lestrrat-go/helium"
@@ -22,6 +23,7 @@ type xsltConfig struct {
 	noout          bool
 	version        bool
 	params         []xsltParam
+	maxInputBytes  int64
 }
 
 type xsltParam struct {
@@ -79,7 +81,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 	}
 
 	// Compile the stylesheet.
-	ssBuf, err := os.ReadFile(cfg.stylesheetFile)
+	ssBuf, err := readInputFile(cfg.stylesheetFile, cfg.maxInputBytes)
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: failed to read stylesheet: %s\n", c.prog, err)
 		return ExitReadFile
@@ -100,8 +102,12 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 		return ExitXSLT
 	}
 
+	// Install a filesystem URIResolver rooted at the stylesheet so local
+	// xsl:include/xsl:import modules load. Without one, the compiler
+	// default-denies module loading and local stylesheets fail to compile.
 	ss, err := xslt3.NewCompiler().
 		BaseURI(cfg.stylesheetFile).
+		URIResolver(fileResolver{}).
 		Compile(ctx, ssDoc)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling stylesheet took %s\n", time.Since(t0))
@@ -120,13 +126,20 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 
 	// Determine output destination.
 	out := c.stdout
+	var outFile *os.File
 	if cfg.outputFile != "" {
+		// Refuse to overwrite any input or the stylesheet: os.Create
+		// truncates before inputs are read.
+		if code := c.checkOutputCollision(cfg, inputs); code != ExitOK {
+			return code
+		}
+
 		f, err := os.Create(cfg.outputFile)
 		if err != nil {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}
-		defer f.Close()
+		outFile = f
 		out = f
 	}
 
@@ -135,7 +148,36 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 		code := c.processInput(ctx, cfg, input, ss, params, out)
 		exitCode = mergeExitCode(exitCode, code)
 	}
+
+	// Fold the close error into the exit status: a failed flush/close means
+	// the output may be incomplete.
+	if outFile != nil {
+		if err := outFile.Close(); err != nil {
+			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+			exitCode = mergeExitCode(exitCode, ExitErr)
+		}
+	}
+
 	return exitCode
+}
+
+// checkOutputCollision reports a non-OK exit code if the configured output
+// file refers to the same file as any XML input or the stylesheet.
+func (c *xsltCommand) checkOutputCollision(cfg *xsltConfig, inputs []xsltInput) int {
+	for _, input := range inputs {
+		if input.stdin {
+			continue
+		}
+		if samePath(cfg.outputFile, input.name) {
+			_, _ = fmt.Fprintf(c.stderr, "%s: --output %q would overwrite input %q\n", c.prog, cfg.outputFile, input.name)
+			return ExitErr
+		}
+	}
+	if samePath(cfg.outputFile, cfg.stylesheetFile) {
+		_, _ = fmt.Fprintf(c.stderr, "%s: --output %q would overwrite stylesheet %q\n", c.prog, cfg.outputFile, cfg.stylesheetFile)
+		return ExitErr
+	}
+	return ExitOK
 }
 
 func (c *xsltCommand) buildParams(ctx context.Context, cfg *xsltConfig) (*xslt3.Parameters, error) {
@@ -168,9 +210,9 @@ func (c *xsltCommand) processInput(ctx context.Context, cfg *xsltConfig, input x
 	var buf []byte
 	var err error
 	if input.stdin {
-		buf, err = io.ReadAll(c.stdin)
+		buf, err = readInput(c.stdin, "-", cfg.maxInputBytes)
 	} else {
-		buf, err = os.ReadFile(input.name)
+		buf, err = readInputFile(input.name, cfg.maxInputBytes)
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
@@ -234,12 +276,13 @@ Options:
 	--stringparam NAME VAL : pass string parameter
 	--noout          : suppress output
 	--timing         : print timing information to stderr
+	--max-input-bytes N : cap bytes read per input (0 = unlimited)
 	--version        : display the version of the XML library used
 `, c.prog)
 }
 
 func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
-	cfg := &xsltConfig{}
+	cfg := &xsltConfig{maxInputBytes: DefaultMaxInputBytes}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -272,6 +315,18 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 			}
 			cfg.params = append(cfg.params, xsltParam{name: args[i+1], value: args[i+2], isExpr: false})
 			i += 2
+		case "--max-input-bytes":
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-input-bytes requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.ParseInt(args[i], 10, 64)
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-input-bytes: invalid argument %q\n", c.prog, args[i])
+				return nil, nil
+			}
+			cfg.maxInputBytes = n
 		default:
 			if len(arg) > 0 && arg[0] == '-' {
 				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)
@@ -283,6 +338,13 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 
 	if cfg.version {
 		return cfg, positional
+	}
+
+	// --noout suppresses writing, so opening (truncating) the output file would
+	// silently destroy its contents. Reject the combination.
+	if cfg.outputFile != "" && cfg.noout {
+		_, _ = fmt.Fprintf(c.stderr, "%s: --output cannot be combined with --noout\n", c.prog)
+		return nil, nil
 	}
 
 	if len(positional) == 0 {

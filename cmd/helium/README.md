@@ -76,6 +76,12 @@ it.
 | `--output FILE` / `-o FILE` | Write output to FILE |
 | `--param NAME VALUE` | Set stylesheet parameter to XPath expression |
 | `--stringparam NAME VALUE` | Set stylesheet parameter to string value |
-| `--noout` | Run transformation without producing output |
+| `--noout` | Run transformation without producing output (rejected with `--output`) |
 | `--timing` | Print compile/parse/transform timing to stderr |
+| `--max-input-bytes N` | Cap bytes read per input (default 100 MiB; `0` = unlimited) |
 | `--version` | Display version |
+
+`--output` is refused when it names an input or the stylesheet, or when
+combined with `--noout`, so it never truncates a file the command still needs
+to read. Local `xsl:include`/`xsl:import` modules resolve relative to the
+stylesheet's directory.
