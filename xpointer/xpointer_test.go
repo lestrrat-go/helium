@@ -308,6 +308,259 @@ func TestBareNameChildSequence(t *testing.T) {
 	})
 }
 
+func TestElementChildIndexBounds(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="r"><child>text</child></root>`))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{"zero index", "element(/0)"},
+		{"negative index", "element(/-1)"},
+		{"zero index mid-sequence", "element(/1/0)"},
+		{"zero index from id", "element(r/0)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// A child-sequence index < 1 is malformed: it must be an error,
+			// not a silent empty result (which would unlink an XInclude node).
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
+			require.Error(t, err, "expr %q must be rejected", tt.expr)
+			require.Nil(t, nodes)
+		})
+	}
+}
+
+func TestElementChildIndexOverflow(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="r"><child>text</child></root>`))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		// 18446744073709551617 == math.MaxUint64+2. Naive base-10 accumulation
+		// into an int wraps this to 1 and would silently select the first child.
+		{"absolute overflow", "element(/18446744073709551617)"},
+		{"overflow then index", "element(/18446744073709551617/1)"},
+		{"index then overflow", "element(/1/18446744073709551617)"},
+		{"overflow from id", "element(r/99999999999999999999)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// An index that exceeds the int range must be reported as a syntax
+			// error, never wrapped to a small in-range value (which would select
+			// the wrong node) or coerced to a silent empty result.
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
+			require.Error(t, err, "expr %q must be rejected as out of range", tt.expr)
+			require.Nil(t, nodes)
+		})
+	}
+}
+
+func TestShorthandAfterSchemeRejected(t *testing.T) {
+	t.Parallel()
+
+	// Parse with NewParser so xml:id registers in the ID table.
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root><target xml:id="fallback">found</target></root>`))
+	require.NoError(t, err)
+
+	// A bare shorthand appended after a scheme-based part is invalid; it must
+	// not select the "fallback" element. The whole pointer must fail to parse.
+	nodes, err := xpointer.Evaluate(t.Context(), doc, "xpointer(//missing)fallback")
+	require.Error(t, err)
+	require.Nil(t, nodes)
+
+	// Sanity check: the same shorthand on its own still resolves the ID.
+	nodes, err = xpointer.Evaluate(t.Context(), doc, "fallback")
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	require.Equal(t, "target", nodes[0].(*helium.Element).LocalName())
+}
+
+func TestTrailingChildSequenceAfterSchemeRejected(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root><target xml:id="fallback">found</target></root>`))
+	require.NoError(t, err)
+
+	// A trailing bare child-sequence appended after a scheme-based part is
+	// malformed: it must be rejected, not silently ignored. Silently ignoring
+	// it would let XInclude unlink the include node instead of reporting the
+	// malformed pointer.
+	for _, expr := range []string{
+		"xpointer(//missing)r/1",
+		"xpointer(//missing)/1",
+	} {
+		nodes, err := xpointer.Evaluate(t.Context(), doc, expr)
+		require.Error(t, err, "expr %q must be rejected", expr)
+		require.Nil(t, nodes, "expr %q", expr)
+	}
+
+	// The tolerated compatibility exception: a lone unbalanced ")" left over
+	// from a scheme body (libxml2 parity / xinclude coalesce.xml golden test).
+	nodes, err := xpointer.Evaluate(t.Context(), doc, "xpointer(//missing))")
+	require.NoError(t, err, "lone trailing ) must remain tolerated")
+	require.Nil(t, nodes)
+}
+
+func TestInvalidSchemeNameRejected(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root><target xml:id="x">found</target></root>`))
+	require.NoError(t, err)
+
+	// A scheme name is a QName per the XPointer framework. A malformed scheme
+	// name must be a syntax error, NOT an unknown-scheme cascade — otherwise a
+	// later well-formed part (element(/1)) could succeed and silently bypass
+	// the malformed leading part. libxml2 rejects these.
+	for _, expr := range []string{
+		"1bad(/x)",
+		"xpointer(//missing)1bad(/x)element(/1)",
+		"-bad(/x)",
+		"bad name(/x)",
+		":bad(/x)",
+	} {
+		nodes, err := xpointer.Evaluate(t.Context(), doc, expr)
+		require.Error(t, err, "expr %q must be rejected as a syntax error", expr)
+		require.Nil(t, nodes, "expr %q", expr)
+	}
+
+	// A syntactically valid but unsupported scheme name is a QName, so it must
+	// continue to cascade as an unknown scheme rather than abort parsing. Here
+	// the unknown "foo" scheme yields no nodes and the following element() part
+	// resolves the target.
+	nodes, err := xpointer.Evaluate(t.Context(), doc, "foo(/x)element(x)")
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	require.Equal(t, "target", nodes[0].(*helium.Element).LocalName())
+}
+
+func TestElementBodyValidatedBeforeLookup(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="r"><child>text</child></root>`))
+	require.NoError(t, err)
+
+	// A malformed element() body must be reported as a syntax error regardless
+	// of whether the leading ID exists. element(0) has an invalid leading token
+	// (a bare "0" is neither an NCName nor an absolute child sequence), and
+	// element(missing/0) has an out-of-range index whose ID does not exist.
+	for _, expr := range []string{
+		"element(0)",
+		"element(missing/0)",
+	} {
+		nodes, err := xpointer.Evaluate(t.Context(), doc, expr)
+		require.Error(t, err, "expr %q must be rejected", expr)
+		require.Nil(t, nodes, "expr %q", expr)
+	}
+}
+
+func TestElementGrammarStrictness(t *testing.T) {
+	t.Parallel()
+
+	// Document with an NCName id "id" and nested structure for the valid cases.
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="id"><a><b>found</b></a></root>`))
+	require.NoError(t, err)
+
+	rejected := []struct {
+		name string
+		expr string
+	}{
+		// Empty child-sequence segments (trailing slash, doubled slash).
+		{"trailing slash absolute", "element(/)"},
+		{"doubled slash absolute", "element(/1//2)"},
+		{"trailing slash from id", "element(r/)"},
+		// Index lexeme grammar [1-9][0-9]*.
+		{"zero absolute", "element(/0)"},
+		{"bare zero token", "element(0)"},
+		{"plus-signed index", "element(+1)"},
+		{"leading-zero index", "element(01)"},
+		{"negative index", "element(/-1)"},
+		// Missing/out-of-range index whose ID does not exist.
+		{"missing id with zero index", "element(missing/0)"},
+		{"id with trailing slash", "element(id/)"},
+	}
+	for _, tt := range rejected {
+		t.Run("reject/"+tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
+			require.Error(t, err, "expr %q must be rejected", tt.expr)
+			require.Nil(t, nodes, "expr %q", tt.expr)
+		})
+	}
+
+	valid := []struct {
+		name     string
+		expr     string
+		wantName string
+	}{
+		{"id plus sequence", "element(id/1/1)", "b"},
+		{"absolute sequence", "element(/1/1)", "a"},
+		{"absolute single", "element(/1)", "root"},
+		{"id alone", "element(id)", "root"},
+	}
+	for _, tt := range valid {
+		t.Run("accept/"+tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
+			require.NoError(t, err, "expr %q must be accepted", tt.expr)
+			require.Len(t, nodes, 1, "expr %q", tt.expr)
+			require.Equal(t, tt.wantName, nodes[0].(*helium.Element).LocalName())
+		})
+	}
+}
+
+func TestShorthandNCNameStrictness(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="good">found</root>`))
+	require.NoError(t, err)
+
+	t.Run("valid NCName resolves", func(t *testing.T) {
+		t.Parallel()
+
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "good")
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, "root", nodes[0].(*helium.Element).LocalName())
+	})
+
+	// A shorthand pointer that is not a valid NCName must be a syntax error,
+	// not a silent empty result. Includes a colon (NCNames are non-colonized),
+	// a leading digit, and invalid UTF-8.
+	for _, expr := range []string{"1bad", "a:b", "bad name", "\xff\xfe"} {
+		t.Run("reject/"+expr, func(t *testing.T) {
+			t.Parallel()
+
+			nodes, err := xpointer.Evaluate(t.Context(), doc, expr)
+			require.Error(t, err, "expr %q must be rejected", expr)
+			require.Nil(t, nodes, "expr %q", expr)
+		})
+	}
+}
+
 func TestMultiSchemeExpressionsTable(t *testing.T) {
 	t.Parallel()
 
