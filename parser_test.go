@@ -1059,11 +1059,12 @@ func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
 	// instead of hanging the whole suite. The external subset is tolerant of
 	// conditional-section errors (it stops scanning without failing the parse),
 	// so the requirement here is PROMPT completion, not a surfaced error.
+	ctx := t.Context()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
-		_, _ = p.Parse(context.Background(), []byte(input))
+		_, _ = p.Parse(ctx, []byte(input))
 	}()
 
 	select {
