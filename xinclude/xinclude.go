@@ -1388,6 +1388,18 @@ type normalizingFS struct {
 
 // Open implements [fs.FS].
 func (n normalizingFS) Open(name string) (fs.File, error) {
+	// An included document parsed with BaseURI("file:///...") resolves its own
+	// external DTDs/entities against that base, yielding "file:" URIs (e.g.
+	// "file:///dir/decl.dtd") rather than plain paths. Convert those to a local
+	// path here, mirroring fsResolver.Resolve, so nested external-DTD/entity
+	// resolution succeeds uniformly. Non-local-host file URIs are rejected.
+	if isFileURI(name) {
+		p, err := iofs.FileURIToPath(name)
+		if err != nil {
+			return nil, fmt.Errorf("xinclude: %w", err)
+		}
+		return n.fsys.Open(filepath.ToSlash(p)) //nolint:wrapcheck // passthrough; underlying FS errors propagate verbatim
+	}
 	return n.fsys.Open(path.Clean(filepath.ToSlash(name))) //nolint:wrapcheck // passthrough; underlying FS errors propagate verbatim
 }
 

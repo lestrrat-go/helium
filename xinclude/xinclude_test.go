@@ -1678,6 +1678,49 @@ func TestXIncludeFileURIHref(t *testing.T) {
 	require.True(t, found, "loaded element from file URI not found")
 }
 
+func TestXIncludeFileURINestedExternalDTD(t *testing.T) {
+	t.Parallel()
+
+	// Regression: a file:// XInclude whose included document references an
+	// external DTD that defines a general entity. The included doc is parsed
+	// with BaseURI("file:///.../inc.xml"), so the DTD SYSTEM ref resolves to a
+	// "file:" URI handed to the inner parser's FS (normalizingFS). That FS must
+	// convert the file: URI to a local path too, or the nested external DTD is
+	// never found and its entity is silently missed. The entity-merge step then
+	// surfaces the entity into the target's internal subset, proving the nested
+	// DTD was actually located and parsed.
+	dir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "inc.dtd"),
+		[]byte(`<!ENTITY greet "hello from nested dtd">`), 0o600))
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "inc.xml"),
+		[]byte(`<?xml version="1.0"?>`+
+			`<!DOCTYPE chapter SYSTEM "inc.dtd">`+
+			`<chapter>text</chapter>`), 0o600))
+
+	fileURI := (&url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(dir, "inc.xml"))}).String()
+
+	doc := parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="%s"/>
+	</root>`, fileURI))
+
+	count, err := xinclude.NewProcessor().
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	// The entity defined in the included document's EXTERNAL DTD must have been
+	// merged into the target's internal subset. This only happens if the nested
+	// "file:" DTD reference was converted to a local path and successfully read.
+	intSub := doc.IntSubset()
+	require.NotNil(t, intSub, "target should have a merged internal subset")
+	greet, ok := intSub.LookupEntity("greet")
+	require.True(t, ok, "entity from nested external DTD must be merged, proving the file: DTD URI was resolved")
+	require.Equal(t, "hello from nested dtd", string(greet.Content()))
+}
+
 func TestXIncludeFileURINonLocalHost(t *testing.T) {
 	t.Parallel()
 
