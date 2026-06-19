@@ -216,12 +216,12 @@ type TypeDef struct {
 
 // FacetSet holds facet constraints for a simple type restriction.
 type FacetSet struct {
-	Enumeration    []string
-	EnumerationNS  []map[string]string
-	MinInclusive   *string
-	MaxInclusive   *string
-	MinExclusive   *string
-	MaxExclusive   *string
+	Enumeration   []string
+	EnumerationNS []map[string]string
+	MinInclusive  *string
+	MaxInclusive  *string
+	MinExclusive  *string
+	MaxExclusive  *string
 	// RangeNS holds the in-scope namespace bindings (prefix → URI) captured at
 	// the point a min/max range-facet bound was declared in the schema document.
 	// It mirrors EnumerationNS for the range facets: a namespace-sensitive base
@@ -229,7 +229,7 @@ type FacetSet struct {
 	// a prefixed bound value like <xs:minInclusive value="p:a"/>. All range
 	// facets in a single <xs:restriction> step share the same in-scope context,
 	// so one map suffices for the whole FacetSet.
-	RangeNS map[string]string
+	RangeNS        map[string]string
 	TotalDigits    *int
 	FractionDigits *int
 	Length         *int
