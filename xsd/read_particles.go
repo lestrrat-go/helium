@@ -86,7 +86,18 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 }
 
 func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, compositor ModelGroupKind) (*ModelGroup, error) {
-	c.validateOccursAttrs(ctx, elem)
+	// An xs:all compositor has special occurrence constraints (XSD Part 1
+	// §3.8.6 / cos-all-limited): its own minOccurs must be 0 or 1, its maxOccurs
+	// must be 1, and each element particle directly inside it must have
+	// minOccurs/maxOccurs of 0 or 1. libxml2 reports these with all-specific
+	// wording instead of the generic xs:nonNegativeInteger/xs:allNNI diagnostics,
+	// so the all compositor is validated by validateAllOccurs, not the generic
+	// validateOccursAttrs.
+	if compositor == CompositorAll {
+		c.validateAllOccurs(ctx, elem)
+	} else {
+		c.validateOccursAttrs(ctx, elem)
+	}
 	minOccurs, maxOccurs := parseParticleOccurs(elem)
 	mg := &ModelGroup{
 		Compositor: compositor,
@@ -107,6 +118,13 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 			p, err := c.parseLocalElement(ctx, ce)
 			if err != nil {
 				return nil, err
+			}
+			// An element particle directly inside an xs:all may repeat at most
+			// once: both minOccurs and maxOccurs must be 0 or 1 (cos-all-limited).
+			// checkLocalElement has already emitted the generic occurs ordering
+			// (e.g. min>max), so this only adds the all-specific diagnostic.
+			if compositor == CompositorAll {
+				c.checkAllElementParticleOccurs(ctx, ce)
 			}
 			mg.Particles = append(mg.Particles, p)
 		case isXSDElement(ce, elemSequence):
@@ -154,6 +172,15 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				}
 				qn := c.resolveQName(ctx, ce, ref)
 				c.groupRefs[placeholder] = qn
+				// Nested reference: this group ref is contained inside another
+				// model group (xs:sequence/xs:choice/xs:all), so a resolved 'all'
+				// model group is forbidden here.
+				c.groupRefSources[placeholder] = groupRefSource{
+					line:         ce.Line(),
+					local:        ce.LocalName(),
+					nested:       true,
+					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+				}
 				mg.Particles = append(mg.Particles, &Particle{
 					MinOccurs: placeholder.MinOccurs,
 					MaxOccurs: placeholder.MaxOccurs,

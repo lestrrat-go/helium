@@ -208,7 +208,7 @@ func (c *Catalog) resolveURI(ctx context.Context, uri string) string {
 				rewrite = e
 				lenRewrite = len(e.Name)
 			}
-		case EntryDelegateURI, EntryDelegateSystem:
+		case EntryDelegateURI:
 			if strings.HasPrefix(uri, e.Name) {
 				haveDelegate++
 			}
@@ -307,13 +307,13 @@ func (c *Catalog) resolveDelegatePublic(ctx context.Context, pubID string) strin
 	return ""
 }
 
-// resolveDelegateURI tries all matching delegateURI and delegateSystem entries.
+// resolveDelegateURI tries all matching delegateURI entries.
 func (c *Catalog) resolveDelegateURI(ctx context.Context, uri string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
 	for i := range c.Entries {
 		e := &c.Entries[i]
-		if e.Type != EntryDelegateURI && e.Type != EntryDelegateSystem {
+		if e.Type != EntryDelegateURI {
 			continue
 		}
 		if !strings.HasPrefix(uri, e.Name) {

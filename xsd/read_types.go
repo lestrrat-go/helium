@@ -138,6 +138,15 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
 				qn := c.resolveQName(ctx, ce, ref)
 				c.groupRefs[placeholder] = qn
+				// Direct reference: this group ref is the sole top-level particle
+				// of the complex type's content, so a resolved 'all' model group
+				// is permitted here (subject to maxOccurs == 1).
+				c.groupRefSources[placeholder] = groupRefSource{
+					line:         ce.Line(),
+					local:        ce.LocalName(),
+					nested:       false,
+					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+				}
 				td.ContentModel = placeholder
 				if td.ContentType != ContentTypeMixed {
 					td.ContentType = ContentTypeElementOnly

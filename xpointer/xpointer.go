@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -129,7 +130,15 @@ func (e *Expression) evaluatePart(ctx context.Context, doc *helium.Document, p x
 		if strings.ContainsRune(p.body, '/') {
 			// Bare child sequence (/1/2/3) or name+child sequence (name/1/2).
 			// libxml2 supports these at top level without element() wrapper.
+			// evaluateElement validates the leading NCName and every index.
 			return evaluateElement(doc, p.body)
+		}
+		// A shorthand pointer must be a valid XML NCName per the XPointer
+		// framework. Reject malformed names (invalid NCName chars, invalid
+		// UTF-8) as syntax errors rather than silently resolving to no node,
+		// which would let XInclude unlink the include node.
+		if !xmlchar.IsValidNCName(p.body) {
+			return nil, fmt.Errorf("xpointer: invalid shorthand pointer %q (not an NCName)", p.body)
 		}
 		elem := doc.GetElementByID(p.body)
 		if elem == nil {
@@ -200,6 +209,36 @@ func parseParts(expr string) ([]xptrPart, error) {
 			return nil, err
 		}
 
+		// The XPointer framework defines SchemeName as a QName. A non-empty
+		// scheme name that is not a valid QName is a syntax error, NOT an
+		// unknown scheme: rejecting it here prevents a malformed scheme (e.g.
+		// "1bad(/x)") from being skipped via the unknown-scheme cascade and
+		// letting a later well-formed part succeed, which would bypass the
+		// trailing-text rejection below. A syntactically valid but unsupported
+		// scheme (e.g. "foo(...)") is still a valid QName and continues to
+		// cascade as an unknown scheme during evaluation.
+		if scheme != "" && !xmlchar.IsValidQName(scheme) {
+			return nil, fmt.Errorf("xpointer: invalid scheme name %q (not a QName)", scheme)
+		}
+
+		// A non-scheme trailing token is only valid as the entire pointer on
+		// its own. Once scheme-based parsing has started, every remaining part
+		// must be a scheme(...) part. Any trailing non-scheme text — a barename
+		// (e.g. "foo") OR a child-sequence (e.g. "/1" or "r/1") — appended after
+		// a scheme part is malformed and must not be silently ignored, since an
+		// ignored-but-malformed pointer would let XInclude unlink the include
+		// node instead of reporting the error.
+		//
+		// The single tolerated exception is a lone unbalanced ")" left over from
+		// a scheme body (e.g. "xpointer(/t1))"), which libxml2 accepts and the
+		// xinclude coalesce.xml golden test relies on.
+		if scheme == "" && len(parts) > 0 {
+			if body == ")" {
+				break
+			}
+			return nil, fmt.Errorf("xpointer: trailing non-scheme text %q is not allowed after scheme-based parts", body)
+		}
+
 		parts = append(parts, xptrPart{scheme: scheme, body: body})
 
 		// Bare name (no scheme) consumes everything
@@ -262,30 +301,48 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 
 	parts := strings.Split(body, "/")
 
-	var cur helium.Node = doc
-	startIdx := 0
+	// Validate the ENTIRE body syntactically BEFORE any document lookup, so that
+	// a malformed pointer is reported as an error regardless of whether the
+	// initial ID exists. A silent empty result would let XInclude unlink the
+	// include node instead of surfacing the syntax error.
+	//
+	// A non-empty leading token must be a valid NCName (the shorthand ID); an
+	// empty leading token denotes an absolute "/..." child sequence. Only the
+	// very first segment may be empty (the leading "/" of an absolute sequence
+	// like "/1/2"). Every child-sequence segment after the first must be a
+	// non-empty 1-based integer index matching [1-9][0-9]* (no sign, no leading
+	// zero). An empty segment anywhere else is a trailing/doubled slash and is a
+	// syntax error.
+	if parts[0] != "" && !xmlchar.IsValidNCName(parts[0]) {
+		return nil, fmt.Errorf("xpointer: invalid element() id %q (not an NCName)", parts[0])
+	}
+	childIndexes := make([]int, 0, len(parts)-1)
+	for _, part := range parts[1:] {
+		if part == "" {
+			return nil, fmt.Errorf("xpointer: empty child-sequence segment in element() scheme (trailing or doubled %q)", "/")
+		}
+		if !isChildIndex(part) {
+			return nil, fmt.Errorf("xpointer: invalid child index %q in element() scheme (must match [1-9][0-9]*)", part)
+		}
+		idx, err := childIndexValue(part)
+		if err != nil {
+			return nil, err
+		}
+		childIndexes = append(childIndexes, idx)
+	}
 
-	if parts[0] == "" {
-		// Starts with "/" — absolute child sequence from document
-		startIdx = 1
-	} else {
-		// Starts with an NCName — look up element by ID first
+	var cur helium.Node = doc
+
+	if parts[0] != "" {
+		// Starts with an NCName — look up element by ID.
 		elem := doc.GetElementByID(parts[0])
 		if elem == nil {
 			return nil, nil
 		}
 		cur = elem
-		startIdx = 1
 	}
 
-	for _, part := range parts[startIdx:] {
-		if part == "" {
-			continue
-		}
-		childIdx, err := strconv.Atoi(part)
-		if err != nil {
-			return nil, fmt.Errorf("xpointer: invalid child index %q in element() scheme", part)
-		}
+	for _, childIdx := range childIndexes {
 		cur = nthElementChild(cur, childIdx)
 		if cur == nil {
 			return nil, nil
@@ -296,6 +353,39 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 		return nil, nil
 	}
 	return []helium.Node{cur}, nil
+}
+
+// isChildIndex reports whether s is a valid XPointer element() child-sequence
+// index: it must match [1-9][0-9]* exactly. That rejects the empty string, a
+// leading sign ("+1", "-1"), a leading zero ("01"), zero itself ("0"), and any
+// non-digit lexeme, all of which Atoi would otherwise silently accept or coerce.
+func isChildIndex(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s[0] < '1' || s[0] > '9' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// childIndexValue converts a child-sequence index already validated by
+// isChildIndex into an int. isChildIndex guarantees the lexical form, but an
+// arbitrarily long digit string can still exceed the platform int range (e.g.
+// "18446744073709551617"). strconv.Atoi reports such a value as a range error,
+// which we surface as a syntax error rather than letting the index wrap around
+// and silently select the wrong node.
+func childIndexValue(s string) (int, error) {
+	idx, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("xpointer: child index %q in element() scheme is out of range", s)
+	}
+	return idx, nil
 }
 
 // nthElementChild returns the n-th element child (1-based) of the given node.
