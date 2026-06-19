@@ -279,6 +279,43 @@ func TestStartAttributeNSRejectsInvalidParts(t *testing.T) {
 	require.Error(t, w.StartAttributeNS("p", "bad local", "urn:x"))
 }
 
+func TestNamespaceURIRejectsInvalidChars(t *testing.T) {
+	t.Parallel()
+	badUTF8 := string([]byte{0xff})
+	t.Run("element NS NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartElementNS("", "a", "x\x00"))
+		require.Empty(t, buf.String())
+	})
+	t.Run("element NS invalid UTF-8 rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartElementNS("p", "a", "urn:"+badUTF8))
+		require.Empty(t, buf.String())
+	})
+	t.Run("attribute NS NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.StartAttributeNS("p", "a", "x\x00"))
+		require.Empty(t, buf.String())
+	})
+	t.Run("attribute NS invalid UTF-8 rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.StartAttributeNS("p", "a", "urn:"+badUTF8))
+		require.Empty(t, buf.String())
+	})
+}
+
 func TestAttributeEscaping(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
@@ -776,6 +813,23 @@ func TestNamespaceNotRedeclared(t *testing.T) {
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndElement())
 	require.Equal(t, `<ns:root xmlns:ns="http://example.com"><ns:child/></ns:root>`, buf.String())
+}
+
+func TestStartAttributeNSAfterTagCloseLeavesNamespaceUnmutated(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElement("root"))
+	// Write text to close the start tag so the writer is no longer in
+	// stateName. A StartAttributeNS call now must be rejected.
+	require.NoError(t, w.WriteString("x"))
+	require.Error(t, w.StartAttributeNS("ns", "attr", "http://example.com"))
+	// The rejected call must not have recorded the ns:->uri declaration, so a
+	// child element with the same prefix still emits its xmlns:ns binding.
+	require.NoError(t, w.StartElementNS("ns", "child", "http://example.com"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root>x<ns:child xmlns:ns="http://example.com"/></root>`, buf.String())
 }
 
 func TestNamespaceRedeclaredDifferentURI(t *testing.T) {
@@ -1458,4 +1512,409 @@ type flushableBuffer struct {
 func (fb *flushableBuffer) Flush() error {
 	fb.flushed = true
 	return nil
+}
+
+func TestStartDocumentVersionStandaloneValidation(t *testing.T) {
+	t.Parallel()
+	t.Run("version injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		err := w.StartDocument(`1.0"?><x/>`, "", "")
+		require.Error(t, err)
+		require.Empty(t, buf.String())
+	})
+	t.Run("non-1.x version rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartDocument("2.0", "", ""))
+	})
+	t.Run("valid 1.1 accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("1.1", "", ""))
+	})
+	t.Run("invalid standalone rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		err := w.StartDocument("1.0", "", `yes"?><x/>`)
+		require.Error(t, err)
+		require.Empty(t, buf.String())
+	})
+	t.Run("standalone yes/no accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("1.0", "", "yes"))
+		require.Contains(t, buf.String(), `standalone="yes"`)
+	})
+}
+
+func TestDTDIdentifierValidation(t *testing.T) {
+	t.Parallel()
+	t.Run("name injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.Error(t, w.StartDTD(`x><!ENTITY e "pwn">`, "", ""))
+	})
+	t.Run("sysid with both quotes rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.Error(t, w.StartDTD("root", "", `a'b"c`))
+	})
+	t.Run("sysid with angle brackets accepted", func(t *testing.T) {
+		t.Parallel()
+		// A SystemLiteral may contain any XML char except the delimiting
+		// quote, so '<' and '>' are valid and must round-trip.
+		for _, sysid := range []string{"a>b", "a<b"} {
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			require.NoError(t, w.StartDocument("", "", ""))
+			require.NoError(t, w.StartDTD("root", "", sysid))
+			require.NoError(t, w.EndDTD())
+			require.NoError(t, w.StartElement("root"))
+			require.NoError(t, w.EndElement())
+			require.NoError(t, w.EndDocument())
+			require.Contains(t, buf.String(), `SYSTEM "`+sysid+`"`)
+		}
+	})
+	t.Run("pubid invalid char rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.Error(t, w.StartDTD("root", "pub<id", "sys"))
+	})
+	t.Run("notation identifiers validated", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", "sys"))
+		require.Error(t, w.WriteDTDNotation("n", "", `a'b"c`))
+	})
+	t.Run("valid dtd accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "-//W3C//DTD//EN", "http://example.com/x.dtd"))
+		require.NoError(t, w.EndDTD())
+	})
+}
+
+func TestInvalidXMLCharRejection(t *testing.T) {
+	t.Parallel()
+	t.Run("text NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteString("x\x00y"))
+	})
+	t.Run("attribute NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteAttribute("k", "v\x00"))
+	})
+	t.Run("comment control char rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteComment("c\x01"))
+	})
+	t.Run("PI control char rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WritePI("tgt", "d\x00"))
+	})
+	t.Run("CDATA NUL rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteCDATA("c\x00d"))
+	})
+	t.Run("valid chars accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.NoError(t, w.WriteString("hello\tworld\n"))
+		require.NoError(t, w.EndElement())
+	})
+}
+
+func TestInvalidUTF8Rejection(t *testing.T) {
+	t.Parallel()
+	bad := string([]byte{0xff})
+	t.Run("text content rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("a"))
+		require.Error(t, w.WriteString(bad))
+	})
+	t.Run("system id rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.Error(t, w.StartDTD("root", "", "sys"+bad))
+	})
+}
+
+func TestDTDFragmentInjectionRejected(t *testing.T) {
+	t.Parallel()
+	t.Run("element contentspec injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDElement("root", `ANY><!ENTITY e "pwn"`))
+		require.NotContains(t, buf.String(), "ENTITY")
+	})
+	t.Run("element contentspec less-than rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDElement("root", `<!ELEMENT x ANY`))
+	})
+	t.Run("attlist body injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDAttlist("root", `id CDATA #IMPLIED><!ENTITY e "pwn"`))
+		require.NotContains(t, buf.String(), "ENTITY")
+	})
+	t.Run("attlist unquoted greater-than injection rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDAttlist("root", `x CDATA "v"> <!ENTITY e "pwn"`))
+		require.NotContains(t, buf.String(), "ENTITY")
+	})
+	t.Run("attlist quoted greater-than accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.NoError(t, w.WriteDTDAttlist("root", `a CDATA "a>b"`))
+		require.NoError(t, w.EndDTD())
+		require.Contains(t, buf.String(), `<!ATTLIST root a CDATA "a>b">`)
+	})
+	t.Run("attlist quoted less-than rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		// '<' is forbidden in an AttValue even inside a quoted literal.
+		require.Error(t, w.WriteDTDAttlist("root", `a CDATA "<"`))
+		require.NotContains(t, buf.String(), "ATTLIST")
+	})
+	t.Run("attlist unterminated literal trailing greater-than rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		// The opening quote is never closed; malformed (unterminated)
+		// quoting is rejected, so the trailing '>' cannot smuggle markup.
+		require.Error(t, w.WriteDTDAttlist("root", `a CDATA "unterminated literal >`))
+		require.NotContains(t, buf.String(), "ATTLIST")
+	})
+	t.Run("valid contentspec and attlist still accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.NoError(t, w.WriteDTDElement("root", "(a|b)*"))
+		require.NoError(t, w.WriteDTDElement("a", "(#PCDATA)"))
+		require.NoError(t, w.WriteDTDElement("b", "EMPTY"))
+		require.NoError(t, w.WriteDTDAttlist("a", `id ID #REQUIRED kind CDATA #IMPLIED`))
+		require.NoError(t, w.EndDTD())
+	})
+}
+
+func TestOneShotHelpersPreValidateBeforeMutation(t *testing.T) {
+	t.Parallel()
+	bad := "x\x00"
+	t.Run("WriteComment", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WriteComment(bad))
+		require.Empty(t, buf.String())
+	})
+	t.Run("WritePI", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WritePI("target", bad))
+		require.Empty(t, buf.String())
+	})
+	t.Run("WriteCDATA", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WriteCDATA(bad))
+		require.Empty(t, buf.String())
+	})
+	t.Run("WriteAttribute", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WriteAttribute("attr", bad))
+		require.Empty(t, buf.String())
+	})
+	t.Run("WriteElement", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.WriteElement("child", bad))
+		require.Empty(t, buf.String())
+	})
+}
+
+func TestStartDocumentRejectsMalformedEncName(t *testing.T) {
+	t.Parallel()
+	// A value that is not a valid XML EncName (contains a space) must be rejected
+	// before any output is written, even though the lenient encoding.Load would
+	// otherwise normalize and accept it.
+	for _, bad := range []string{"utf 8", "1utf8", "utf8\"?><x/>", "utf+8"} {
+		t.Run(bad, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			err := w.StartDocument("1.0", bad, "")
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "invalid encoding name")
+			require.Empty(t, buf.String(), "writer must be unmutated on rejection")
+		})
+	}
+}
+
+func TestStartDocumentUnsupportedEncNameLeavesWriterUnmutated(t *testing.T) {
+	t.Parallel()
+	// A syntactically valid but unsupported EncName must be rejected before the
+	// XML-declaration prefix is written.
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	err := w.StartDocument("1.0", "BOGUS-999", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported encoding")
+	require.Empty(t, buf.String(), "writer must be unmutated on rejection")
+}
+
+func TestWriteDTDEntityRejectsColonizedName(t *testing.T) {
+	t.Parallel()
+	// Entity names are NCNames in helium's parser (colons are forbidden), so a
+	// "p:e" name must be rejected without mutating the writer.
+	t.Run("internal", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		buf.Reset()
+		err := w.WriteDTDEntity(false, "p:e", "v")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid DTD entity name")
+		require.Empty(t, buf.String(), "writer must be unmutated on rejection")
+	})
+	t.Run("external", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		buf.Reset()
+		err := w.WriteDTDExternalEntity(false, "p:e", "", "ext.dtd", "")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid DTD entity name")
+		require.Empty(t, buf.String(), "writer must be unmutated on rejection")
+	})
+}
+
+func TestWriteDTDEntityAcceptsNCName(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.StartDTD("root", "", ""))
+	require.NoError(t, w.WriteDTDEntity(false, "ent", "v"))
+	require.NoError(t, w.WriteDTDExternalEntity(false, "logo", "", "logo.gif", "gif"))
+}
+
+// DTD element/attlist/notation/doctype/NDATA names follow the XML Name
+// production, which is broader than QName: a Name may contain multiple colons
+// (or leading/trailing colons). Such names must be accepted, while genuinely
+// malformed names (injection, empty) must still be rejected.
+func TestDTDNamesUseXMLNameProduction(t *testing.T) {
+	t.Parallel()
+	t.Run("multi-colon names accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		// "a:b:c" is a valid Name but NOT a valid QName.
+		require.NoError(t, w.StartDTD("a:b:c", "", ""))
+		require.NoError(t, w.WriteDTDElement("a:b:c", "(#PCDATA)"))
+		require.NoError(t, w.WriteDTDAttlist("a:b:c", "x CDATA #IMPLIED"))
+		require.NoError(t, w.WriteDTDNotation("n:o:t", "", "sys"))
+		require.NoError(t, w.WriteDTDExternalEntity(false, "img", "", "img.gif", "g:i:f"))
+		require.NoError(t, w.EndDTD())
+		out := buf.String()
+		require.Contains(t, out, "<!DOCTYPE a:b:c")
+		require.Contains(t, out, "<!ELEMENT a:b:c")
+		require.Contains(t, out, "<!ATTLIST a:b:c")
+		require.Contains(t, out, "<!NOTATION n:o:t")
+		require.Contains(t, out, "NDATA g:i:f")
+	})
+	t.Run("invalid names still rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.StartDTD("root", "", ""))
+		require.Error(t, w.WriteDTDElement("a b", "(#PCDATA)"), "space not a NameChar")
+		require.Error(t, w.WriteDTDElement(`x><!ENTITY e "pwn">`, "(#PCDATA)"), "injection")
+		require.Error(t, w.WriteDTDElement("", "(#PCDATA)"), "empty")
+		require.Error(t, w.WriteDTDElement("1bad", "(#PCDATA)"), "bad start char")
+		require.Error(t, w.WriteDTDAttlist("a b", "x CDATA #IMPLIED"), "space not a NameChar")
+		require.Error(t, w.WriteDTDNotation("n>x", "", "sys"), "injection")
+		require.Error(t, w.WriteDTDExternalEntity(false, "img", "", "img.gif", "g h"), "bad NDATA")
+	})
 }

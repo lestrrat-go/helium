@@ -137,6 +137,46 @@ func TestRelaxNGValidateMultipleFiles(t *testing.T) {
 	require.Equal(t, heliumcmd.ExitValidation, code)
 }
 
+func TestRelaxNGValidateMaxInputBytes(t *testing.T) {
+	dir := t.TempDir()
+	schemaFile := writeFile(t, dir, "schema.rng", `<?xml version="1.0"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root"><text/></element>
+  </start>
+</grammar>`)
+	xml := `<?xml version="1.0"?><root>ok</root>`
+
+	t.Run("file over cap rejected", func(t *testing.T) {
+		xmlFile := writeFile(t, dir, "over.xml", xml)
+		var stderr bytes.Buffer
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, flagMaxInput, "5", schemaFile, xmlFile})
+		require.Equal(t, heliumcmd.ExitReadFile, code)
+		require.Contains(t, stderr.String(), "exceeds maximum size")
+	})
+
+	t.Run("stdin over cap rejected", func(t *testing.T) {
+		var stderr bytes.Buffer
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(xml), io.Discard, &stderr)
+
+		code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, flagMaxInput, "5", schemaFile})
+		require.Equal(t, heliumcmd.ExitReadFile, code)
+		require.Contains(t, stderr.String(), "exceeds maximum size")
+	})
+
+	t.Run("within cap ok", func(t *testing.T) {
+		xmlFile := writeFile(t, dir, "within.xml", xml)
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdRelaxNG, cmdValidate, flagMaxInput, "100000", schemaFile, xmlFile})
+		require.Equal(t, heliumcmd.ExitOK, code)
+	})
+}
+
 func TestRelaxNGValidateStdIn(t *testing.T) {
 	dir := t.TempDir()
 	schemaFile := writeFile(t, dir, "schema.rng", `<?xml version="1.0"?>

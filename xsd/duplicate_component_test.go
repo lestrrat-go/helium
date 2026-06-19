@@ -19,7 +19,7 @@ func compileErrorsExact(t *testing.T, schemaXML string) string {
 	require.NoError(t, err)
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
-	require.NoError(t, err)
+	requireCompileResultErr(t, err)
 	require.NoError(t, collector.Close())
 	_, errors := partitionCompileErrors(collector.Errors())
 	return errors

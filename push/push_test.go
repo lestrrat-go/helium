@@ -170,7 +170,7 @@ func TestStreamReadEOFAfterClose(t *testing.T) {
 	t.Parallel()
 
 	s := newStream(t.Context())
-	require.NoError(t, s.close())
+	s.close()
 
 	p := make([]byte, 16)
 	n, err := s.Read(p)
@@ -186,7 +186,7 @@ func TestStreamReadDrainsBeforeEOF(t *testing.T) {
 	s := newStream(t.Context())
 	_, err := s.Write([]byte("tail"))
 	require.NoError(t, err)
-	require.NoError(t, s.close())
+	s.close()
 
 	p := make([]byte, 16)
 	n, err := s.Read(p)
