@@ -31,6 +31,29 @@ func TestXSLTIncludeResolves(t *testing.T) {
 	require.Contains(t, out, "<out>hello</out>")
 }
 
+func TestXSLTIncludeFileURIResolves(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile(t, dir, "mod.xsl", `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root"><out><xsl:value-of select="."/></out></xsl:template>
+</xsl:stylesheet>`)
+
+	// A file: URI href must resolve to the local module rather than being
+	// handed verbatim to os.Open.
+	modURI := "file://" + filepath.ToSlash(filepath.Join(dir, "mod.xsl"))
+	ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:include href="`+modURI+`"/>
+</xsl:stylesheet>`)
+
+	xmlFile := writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root>hello</root>`)
+
+	out, errOut, code := executeArgs(t, strings.NewReader(""), "xslt", ssFile, xmlFile)
+	require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+	require.Contains(t, out, "<out>hello</out>")
+}
+
 func TestXSLTOutputNoOutRejected(t *testing.T) {
 	dir := t.TempDir()
 	ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>

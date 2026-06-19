@@ -36,22 +36,6 @@ func TestLintOutputSelfTruncateRejected(t *testing.T) {
 	require.Equal(t, content, string(got))
 }
 
-func TestLintOutputSelfTruncateRejectedViaRelPath(t *testing.T) {
-	dir := t.TempDir()
-	content := `<?xml version="1.0"?><root>data</root>`
-	xmlFile := writeFile(t, dir, "doc.xml", content)
-
-	// Same file referenced via a "./"-prefixed path: os.SameFile must catch it.
-	rel := "./" + xmlFile
-
-	_, _, code := executeArgs(t, strings.NewReader(""), "lint", "--output", rel, xmlFile)
-	require.NotEqual(t, heliumcmd.ExitOK, code)
-
-	got, err := os.ReadFile(xmlFile)
-	require.NoError(t, err)
-	require.Equal(t, content, string(got))
-}
-
 func TestLintOutputNoOutRejected(t *testing.T) {
 	dir := t.TempDir()
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root/>`)

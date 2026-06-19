@@ -72,6 +72,7 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 - A failed commit (flush/close/rename) folds `ExitErr` into the exit status, so an incomplete write is never reported as success.
 - The pre-flight same-file rejection (`checkOutputCollision`) is kept as a fast/friendly error for the obvious `--output X X` case, but the temp+rename is what actually protects later-resolved reads.
 - stdout output and `--noout` are unaffected (no temp file is created).
+- Output file mode: `os.CreateTemp` makes the temp `0600`, so before the rename `Commit` restores the expected permissions — an EXISTING destination keeps its current mode (`os.Stat` + `chmod`), a NEW destination gets `0666 &^ umask` (matching `os.Create`). umask is read via a platform-split helper (`umask_unix.go` uses `syscall.Umask`; `umask_other.go` returns 0 on Windows/plan9).
 
 ### Flag Groups
 
@@ -164,6 +165,7 @@ Primary file: `internal/cli/heliumcmd/xslt.go`
 - Stylesheet path mandatory positional arg
 - Stylesheet parsed with `helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)`, compiled once with `xslt3.NewCompiler().URIResolver(fileResolver{}).Compile()`
 - A filesystem `URIResolver` is installed so local `xsl:include`/`xsl:import` modules load (the compiler default-denies module loading without one)
+- `fileResolver.Resolve` accepts plain relative/absolute paths AND `file:` URIs (`localFilePath` in `safety.go`): a `file:` URI is parsed, only an empty or `localhost` host is accepted, the path is percent-decoded (and de-slashed before a Windows drive letter); any other scheme (`http`/`https`/...) is rejected so the resolver never reaches the network. A bare Windows drive path (`C:\...`) is not mistaken for a scheme.
 - Each XML input parsed with `helium.NewParser()`, transformed with `ss.Transform(doc).WriteTo(ctx, out)`
 - Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--max-input-bytes N`, `--version`
 - Parameters passed via `inv.GlobalParameters()`

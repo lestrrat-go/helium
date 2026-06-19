@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lestrrat-go/helium/internal/iofs"
 )
@@ -46,14 +48,20 @@ func readInput(r io.Reader, name string, maxBytes int64) ([]byte, error) {
 		return buf, nil
 	}
 
-	// Read one extra byte so we can distinguish "exactly at cap" from
-	// "over cap".
-	buf, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
+	// Read up to the cap, then probe for one more byte to distinguish
+	// "exactly at cap" from "over cap". Probing separately (rather than
+	// reading maxBytes+1) avoids overflow when maxBytes == math.MaxInt64.
+	buf, err := io.ReadAll(io.LimitReader(r, maxBytes))
 	if err != nil {
 		return nil, err //nolint:wrapcheck // caller reports raw error
 	}
-	if int64(len(buf)) > maxBytes {
+	var probe [1]byte
+	n, err := r.Read(probe[:])
+	if n > 0 {
 		return nil, &inputTooLargeError{name: name, max: maxBytes}
+	}
+	if err != nil && err != io.EOF {
+		return nil, err //nolint:wrapcheck // caller reports raw error
 	}
 	return buf, nil
 }
@@ -105,6 +113,12 @@ func (p *pendingOutput) File() *os.File { return p.f }
 // Commit closes the temp file and atomically renames it onto the destination.
 // It must be called only after all output has been written and all inputs have
 // been read. A non-nil error means the destination was left untouched.
+//
+// os.CreateTemp opens the temp file with mode 0600, which would silently make
+// --output files more restrictive than the usual os.Create default. Before the
+// rename we restore the expected permissions: an existing destination keeps its
+// current mode, and a new destination gets 0666 masked by the process umask
+// (matching os.Create semantics, since chmod is not itself umask-filtered).
 func (p *pendingOutput) Commit() error {
 	if p.done {
 		return nil
@@ -114,11 +128,25 @@ func (p *pendingOutput) Commit() error {
 		_ = os.Remove(p.tmp)
 		return err //nolint:wrapcheck // caller reports raw error
 	}
+	if err := os.Chmod(p.tmp, p.destMode()); err != nil {
+		_ = os.Remove(p.tmp)
+		return err //nolint:wrapcheck // caller reports raw error
+	}
 	if err := os.Rename(p.tmp, p.dest); err != nil {
 		_ = os.Remove(p.tmp)
 		return err //nolint:wrapcheck // caller reports raw error
 	}
 	return nil
+}
+
+// destMode returns the file mode the committed output should carry. If the
+// destination already exists its current mode is preserved; otherwise the
+// os.Create default (0666 with the process umask applied) is used.
+func (p *pendingOutput) destMode() os.FileMode {
+	if fi, err := os.Stat(p.dest); err == nil {
+		return fi.Mode().Perm()
+	}
+	return 0o666 &^ os.FileMode(currentUmask())
 }
 
 // Cleanup closes and removes the temp file without touching the destination. It
@@ -162,11 +190,76 @@ func samePath(a, b string) bool {
 type fileResolver struct{}
 
 func (fileResolver) Resolve(uri string) (io.ReadCloser, error) {
-	f, err := os.Open(uri) //nolint:gosec // CLI stylesheet path is user supplied
+	path, err := localFilePath(uri)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(path) //nolint:gosec // CLI stylesheet path is user supplied
 	if err != nil {
 		return nil, err //nolint:wrapcheck // compiler wraps the resolve error
 	}
 	return f, nil
+}
+
+// localFilePath converts a stylesheet href into a local filesystem path. Plain
+// relative or absolute paths pass through unchanged. A "file:" URI is parsed
+// and converted to a filesystem path: only an empty or "localhost" host is
+// accepted, the percent-encoded path is decoded, and on Windows a leading slash
+// before a drive letter is stripped. Any other scheme (http, https, ftp, ...)
+// is rejected so the resolver never reaches across the network.
+func localFilePath(uri string) (string, error) {
+	// A bare path with no scheme is the common case: relative or absolute
+	// filesystem path. Detect a scheme only when it looks like "<scheme>:".
+	if !hasURIScheme(uri) {
+		return uri, nil
+	}
+
+	u, err := url.Parse(uri)
+	if err != nil {
+		return "", fmt.Errorf("invalid URI %q: %w", uri, err)
+	}
+	if u.Scheme != "file" {
+		return "", fmt.Errorf("unsupported URI scheme %q: only file: and local paths are allowed", u.Scheme)
+	}
+	if u.Host != "" && u.Host != "localhost" {
+		return "", fmt.Errorf("unsupported file URI host %q: only local files are allowed", u.Host)
+	}
+
+	// u.Path is already percent-decoded by url.Parse.
+	path := u.Path
+	if filepath.Separator == '\\' {
+		// Windows: "file:///C:/x" parses to Path "/C:/x"; drop the leading
+		// slash and normalize separators.
+		path = strings.TrimPrefix(path, "/")
+		path = filepath.FromSlash(path)
+	}
+	return path, nil
+}
+
+// hasURIScheme reports whether uri begins with an RFC 3986 scheme followed by
+// ":". A single Windows drive letter ("C:\\...") is NOT treated as a scheme.
+func hasURIScheme(uri string) bool {
+	colon := strings.IndexByte(uri, ':')
+	if colon <= 0 {
+		return false
+	}
+	scheme := uri[:colon]
+	// A single-character "scheme" is almost certainly a Windows drive letter.
+	if len(scheme) == 1 {
+		return false
+	}
+	for i, c := range []byte(scheme) {
+		isAlpha := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+		isDigit := c >= '0' && c <= '9'
+		isOther := c == '+' || c == '-' || c == '.'
+		if i == 0 && !isAlpha {
+			return false
+		}
+		if !isAlpha && !isDigit && !isOther {
+			return false
+		}
+	}
+	return true
 }
 
 // pathSearchFS wraps a base fs.FS with a list of additional search directories.
