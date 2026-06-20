@@ -95,25 +95,15 @@ func (ec *execContext) validateGlobalContextItem(source *helium.Document) error 
 	if gci.As == "" {
 		return nil
 	}
-	// Parse "document-node(element(name))" pattern
-	as := gci.As
-	if strings.HasPrefix(as, "document-node(element(") && strings.HasSuffix(as, "))") {
-		inner := as[len("document-node(element(") : len(as)-2]
-		// Strip namespace prefix if present
-		if idx := strings.IndexByte(inner, ':'); idx >= 0 {
-			inner = inner[idx+1:]
-		}
-		// Check document element name
-		root := source.DocumentElement()
-		if root == nil {
-			return dynamicError(errCodeXTTE0590,
-				"global-context-item requires document-node(element(%s)) but document has no element", inner)
-		}
-		if root.LocalName() != inner {
-			return dynamicError(errCodeXTTE0590,
-				"global-context-item requires document-node(element(%s)) but found element %q",
-				inner, root.LocalName())
-		}
+	// Validate the supplied global context item (the source document node)
+	// against the declared sequence type using the namespace-aware type
+	// machinery, so that prefixed element tests like
+	// document-node(element(p:root)) compare both local name and namespace
+	// rather than local name alone.
+	st := parseSequenceType(gci.As)
+	seq := xpath3.ItemSlice{xpath3.NodeItem{Node: source}}
+	if _, err := checkSequenceType(context.Background(), seq, st, errCodeXTTE0590, "global-context-item", ec); err != nil {
+		return err
 	}
 	return nil
 }

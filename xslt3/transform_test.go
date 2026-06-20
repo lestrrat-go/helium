@@ -372,3 +372,30 @@ func TestIterateAtomicClearsNodeContext(t *testing.T) {
 	require.Contains(t, result, "<out>x</out>")
 	require.NotContains(t, result, "<doc/>")
 }
+
+// TestGlobalContextItemNamespaceAwareType verifies that an xsl:global-context-item
+// declared as="document-node(element(p:root))" is validated namespace-aware: a
+// document whose root is in the wrong namespace is rejected (XTTE0590) and one
+// with the correctly-namespaced root is accepted.
+func TestGlobalContextItemNamespaceAwareType(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:p="urn:right">
+  <xsl:global-context-item as="document-node(element(p:root))"/>
+  <xsl:template match="/">
+    <out><xsl:value-of select="name(/*)"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	wrong, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns="urn:wrong"/>`))
+	require.NoError(t, err)
+	_, err = xslt3.TransformString(t.Context(), wrong, ss)
+	require.Error(t, err, "wrong-namespace root must be rejected")
+
+	right, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns="urn:right"/>`))
+	require.NoError(t, err)
+	result, err := xslt3.TransformString(t.Context(), right, ss)
+	require.NoError(t, err, "correctly-namespaced root must be accepted")
+	require.Contains(t, result, "root")
+}
