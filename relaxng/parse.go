@@ -308,6 +308,16 @@ func (c *compiler) findCycleInPattern(pat *pattern, visiting map[*pattern]bool) 
 
 // parseGrammarContent parses children of a <grammar> element.
 func (c *compiler) parseGrammarContent(ctx context.Context, grammarElem *helium.Element) {
+	c.parseGrammarContentSkipping(ctx, grammarElem, nil)
+}
+
+// parseGrammarContentSkipping parses children of a <grammar> element, skipping
+// any top-level <start>/<define> whose override name is in skip. Used by the
+// <include> path so a start/define overridden by the include body is removed
+// (never parsed) per RELAX NG include semantics. <div> is transparent, so the
+// skip set applies through nested <div> wrappers as well — matching how
+// collectOverrideNames descends into <div>.
+func (c *compiler) parseGrammarContentSkipping(ctx context.Context, grammarElem *helium.Element, skip map[string]struct{}) {
 	for child := range helium.Children(grammarElem) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
@@ -319,13 +329,20 @@ func (c *compiler) parseGrammarContent(ctx context.Context, grammarElem *helium.
 
 		switch elem.LocalName() {
 		case "start":
+			if _, overridden := skip["##start"]; overridden {
+				continue
+			}
 			c.parseStart(ctx, elem)
 		case "define":
+			name := getUnqualifiedAttr(elem, "name")
+			if _, overridden := skip[name]; overridden {
+				continue
+			}
 			c.parseDefine(ctx, elem)
 		case "include":
 			c.parseInclude(ctx, elem)
 		case "div": // <div> is transparent — recurse into its children
-			c.parseGrammarContent(ctx, elem)
+			c.parseGrammarContentSkipping(ctx, elem, skip)
 		}
 	}
 }
@@ -634,19 +651,34 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 		return
 	}
 
-	// Parse the included grammar content
+	// Collect the override names BEFORE parsing the included grammar. Per RELAX
+	// NG include semantics, a start/define overridden by the <include> body is
+	// REMOVED from the included grammar; its content (including any ref it
+	// holds) must never be parsed, recorded, or resolved. Skipping the
+	// overridden components here avoids recording pendingRefs for refs that live
+	// only inside a removed component — which would otherwise be reported as
+	// fatal unresolved refs by resolveScopedRefs even though the schema is valid.
+	overrideNames := c.collectOverrideNames(ctx, elem)
+	skip := make(map[string]struct{}, len(overrideNames))
+	for _, name := range overrideNames {
+		skip[name] = struct{}{}
+	}
+
+	// Parse the included grammar content, skipping overridden components.
 	oldBaseDir := c.baseDir
 	c.baseDir = filepath.Dir(path)
-	c.parseGrammarContent(ctx, root)
+	c.parseGrammarContentSkipping(ctx, root, skip)
 	c.baseDir = oldBaseDir
 
-	// Collect override names from <include> children, then delete them from
-	// the current grammar scope so the overrides replace (not combine with)
-	// the included definitions.
-	overrideNames := c.collectOverrideNames(ctx, elem)
+	// Clear the overridden names from the current grammar scope before applying
+	// the overrides. Skipping above already prevents the included grammar's own
+	// overridden start/define from being parsed, but a nested <include> inside
+	// the included grammar may have left an overridden-named entry in this scope;
+	// deleting here ensures each override starts from a clean slate (replace, not
+	// combine).
 	g := c.currentGrammar(ctx)
 	if g != nil {
-		for _, name := range overrideNames {
+		for name := range skip {
 			delete(g.defines, name)
 		}
 	}
