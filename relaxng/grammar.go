@@ -73,6 +73,11 @@ const (
 	ncAnyName
 	ncNsName
 	ncChoice
+	// ncNoMatch never matches any name. It is installed for a schema name
+	// whose prefix is unbound or whose lexical form is not a valid NCName, so
+	// that even on the default (no error collector) compile path validation
+	// cannot spuriously succeed against an unintended no-namespace name.
+	ncNoMatch
 )
 
 // nameClass represents an element/attribute name class for matching.
@@ -171,6 +176,25 @@ func nameClassesOverlap(a, b *nameClass) bool {
 		return a.name == b.name && a.ns == b.ns
 	}
 
+	return false
+}
+
+// nameClassContainsNoMatch reports whether the name class tree contains a
+// poisoned (ncNoMatch) leaf. It is used to detect an invalid name class nested
+// inside an <except>, which must poison the enclosing anyName/nsName rather than
+// be silently treated as an empty exclusion.
+func nameClassContainsNoMatch(nc *nameClass) bool {
+	if nc == nil {
+		return false
+	}
+	switch nc.kind {
+	case ncNoMatch:
+		return true
+	case ncChoice:
+		return nameClassContainsNoMatch(nc.left) || nameClassContainsNoMatch(nc.right)
+	case ncAnyName, ncNsName:
+		return nameClassContainsNoMatch(nc.except)
+	}
 	return false
 }
 
