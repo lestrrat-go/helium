@@ -14,7 +14,18 @@ func (c Compiler) CompileExpr(ast Expr) (*Expression, error)
 // Evaluator
 func NewEvaluator(opts EvaluatorOptions) Evaluator
 func (e Evaluator) Evaluate(ctx, expr, node) (*Result, error)
+func (e Evaluator) MaxResourceBytes(n int64) Evaluator
 ```
+
+`MaxResourceBytes` caps the bytes read from a single external resource fetched
+through the `URIResolver` / `HTTPClient` by `fn:unparsed-text`,
+`fn:unparsed-text-lines`, `fn:unparsed-text-available`, `fn:doc`,
+`fn:doc-available`, and `fn:json-doc`. `0` selects the default cap; a negative
+value disables the bound. Reads exceeding the cap fail rather than buffering an
+unbounded body: `fn:unparsed-text` / `fn:unparsed-text-lines` surface the
+over-cap error as `FOUT1170` (`fn:unparsed-text-available` returns false), while
+`fn:doc` / `fn:json-doc` surface it as a retrieval error `FODC0002` (`fn:doc-available`
+returns false). Clone-on-write like the other `Evaluator` setters.
 
 ## Expression
 

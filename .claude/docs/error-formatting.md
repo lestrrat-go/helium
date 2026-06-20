@@ -125,7 +125,7 @@ matches any joined sentinel (see `dynamicErrorCause`).
 | `dynamicErrorCause(code, cause, fmt, args...)` | Like `dynamicError` but `Cause = errors.Join(ErrDynamicError, cause)` so a distinguishable sentinel (e.g. `ErrResourceTooLarge`) stays observable via `errors.Is` |
 
 **Sentinel errors** (exported):
-- `ErrStaticError`, `ErrDynamicError`, `ErrCircularRef`, `ErrNoTemplate`, `ErrTerminated`, `ErrInvalidOutput`
+- `ErrStaticError`, `ErrDynamicError`, `ErrCircularRef`, `ErrNoTemplate`, `ErrTerminated`, `ErrInvalidOutput`, `ErrResourceTooLarge`
 
 **Internal sentinels**:
 - `errNilStylesheet` — returned by convenience wrappers (`Transform`, `TransformString`, `TransformToWriter`) when `*Stylesheet` is nil; prevents nil-pointer panic
