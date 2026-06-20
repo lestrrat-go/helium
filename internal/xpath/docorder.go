@@ -264,9 +264,15 @@ func sortByPrecomputedKeys(result []helium.Node, keys []sortKey) {
 // maxNodes+1): never more than one slot past the limit (the extra slot lets the
 // callers detect overflow before returning ErrNodeSetLimit).
 //
-// maxNodes <= 0 means "unlimited" (matching maxNodes semantics elsewhere in this
-// file), so no cap is applied and n is returned as-is. maxNodes+1 is guarded
-// against integer overflow.
+// This bounds allocation only; it does not enforce the limit. Enforcement is the
+// caller's job via the len(result) > maxNodes checks below, which reject any
+// result that exceeds the limit. Every caller of DeduplicateNodes,
+// DeduplicateNodesPreserveOrder, and MergeNodeSets passes a positive maxNodes
+// (DefaultMaxNodeSetLength or a config override), so the limit is always active.
+// maxNodes <= 0 is treated as "no allocation cap" here purely as a defensive
+// fallback for sizing; it is not a supported "unlimited" mode, because the
+// enforcement checks below would reject a non-empty result in that case.
+// maxNodes+1 is guarded against integer overflow.
 func boundedCap(n, maxNodes int) int {
 	if maxNodes <= 0 {
 		return n
