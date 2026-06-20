@@ -48,22 +48,26 @@ func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 		return encNone, ErrByteCursorRequired
 	}
 
-	if cur.Consume(patUCS4BE) {
+	// The UCS-4 patterns are the encoded form of the first '<' character
+	// (e.g. 0x00 0x00 0x00 0x3C is '<' in UCS-4 BE), NOT a byte-order mark.
+	// Detection must PEEK them, never consume, or the leading '<' is lost
+	// and the decoded document fails with "start tag expected".
+	if cur.HasPrefix(patUCS4BE) {
 		encoding = encUCS4BE
 		return
 	}
 
-	if cur.Consume(patUCS4LE) {
+	if cur.HasPrefix(patUCS4LE) {
 		encoding = encUCS4LE
 		return
 	}
 
-	if cur.Consume(patUCS42143) {
+	if cur.HasPrefix(patUCS42143) {
 		encoding = encUCS42143
 		return
 	}
 
-	if cur.Consume(patUCS43412) {
+	if cur.HasPrefix(patUCS43412) {
 		encoding = encUCS43412
 		return
 	}
