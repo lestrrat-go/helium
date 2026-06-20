@@ -83,8 +83,13 @@ func compilePattern(s string, elem *helium.Element, xpathDefaultNS string) (*pat
 			return nil, staticError(errCodeXTSE0500, "invalid pattern %q: %v", alt, err)
 		}
 		// Run static validation (prefix checks) against the stylesheet
-		// namespace bindings.
-		if valErr := compiled.Validate(nsBindings); valErr != nil {
+		// namespace bindings. Use the same sanitized map the runtime evaluator
+		// applies for pattern matching: a stylesheet xmlns="..." default
+		// namespace (the "" key) must NOT become the XPath default element
+		// namespace for unprefixed names unless xpath-default-namespace is set.
+		// This keeps compile-time and runtime prefix resolution symmetric.
+		validateNS := patternValidateNamespaces(nsBindings, xpathDefaultNS)
+		if valErr := compiled.Validate(validateNS); valErr != nil {
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %v", alt, valErr)
 		}
 		ast := compiled.AST()
@@ -137,6 +142,26 @@ func compilePattern(s string, elem *helium.Element, xpathDefaultNS string) (*pat
 		}
 	}
 	return p, nil
+}
+
+// patternValidateNamespaces builds the prefix→URI map used to statically
+// validate a pattern. It mirrors the runtime evaluator overlay: only non-empty
+// prefixes from the lexical snapshot are kept, and the "" (default element
+// namespace) binding is applied only when xpath-default-namespace is declared.
+// An XML default namespace (xmlns="...") must not govern unprefixed pattern
+// names; they default to no-namespace.
+func patternValidateNamespaces(nsBindings map[string]string, xpathDefaultNS string) map[string]string {
+	ns := make(map[string]string, len(nsBindings)+1)
+	for prefix, uri := range nsBindings {
+		if prefix == "" {
+			continue
+		}
+		ns[prefix] = uri
+	}
+	if xpathDefaultNS != "" {
+		ns[""] = xpathDefaultNS
+	}
+	return ns
 }
 
 // validatePatternExpr validates that a parsed XPath expression is a valid

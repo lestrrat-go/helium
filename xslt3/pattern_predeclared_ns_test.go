@@ -298,6 +298,67 @@ func TestPatternLexicalNamespaceSnapshot(t *testing.T) {
 		"a local xmlns:math override must bind math: to urn:x, making math:pi() an unknown function")
 }
 
+// TestPatternDefaultNamespaceNotElementDefault verifies that a stylesheet
+// xmlns="..." default namespace does NOT become the XPath default element
+// namespace for unprefixed names inside a pattern, unless
+// xpath-default-namespace is explicitly set. Per XSLT 3.0 the XML default
+// namespace governs literal result elements, not unprefixed XPath/pattern
+// names — those default to no-namespace unless xpath-default-namespace says
+// otherwise.
+func TestPatternDefaultNamespaceNotElementDefault(t *testing.T) {
+	t.Parallel()
+
+	// Source has no-namespace <a> and <b>. The stylesheet declares a default
+	// namespace xmlns="urn:x" but NOT xpath-default-namespace, so the predicate
+	// "b" in match="a[b]" must resolve to no-namespace and therefore match.
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a><b/></a></root>`))
+	require.NoError(t, err)
+
+	t.Run("default-ns-does-not-leak-into-predicate", func(t *testing.T) {
+		t.Parallel()
+
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns="urn:x">
+  <xsl:template match="/"><out xmlns=""><xsl:apply-templates select="root/a"/></out></xsl:template>
+  <xsl:template match="a[b]"><xsl:text>[matched]</xsl:text></xsl:template>
+</xsl:stylesheet>`
+
+		doc, perr := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+		require.NoError(t, perr)
+		ss, cerr := xslt3.CompileStylesheet(t.Context(), doc)
+		require.NoError(t, cerr)
+
+		s, perr := helium.NewParser().Parse(t.Context(), []byte(`<root><a><b/></a></root>`))
+		require.NoError(t, perr)
+		out, terr := ss.Transform(s).Serialize(t.Context())
+		require.NoError(t, terr)
+		require.Contains(t, out, "[matched]",
+			"unprefixed predicate name must resolve to no-namespace under an XML default namespace")
+	})
+
+	t.Run("xpath-default-namespace-applies", func(t *testing.T) {
+		t.Parallel()
+
+		// With xpath-default-namespace="urn:x", unprefixed pattern names DO
+		// resolve to urn:x, so match="a" should NOT match the no-namespace <a>.
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xpath-default-namespace="urn:x">
+  <xsl:template match="/"><out><xsl:apply-templates select="root/*"/></out></xsl:template>
+  <xsl:template match="a"><xsl:text>[matched]</xsl:text></xsl:template>
+</xsl:stylesheet>`
+
+		doc, perr := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+		require.NoError(t, perr)
+		ss, cerr := xslt3.CompileStylesheet(t.Context(), doc)
+		require.NoError(t, cerr)
+
+		out, terr := ss.Transform(src).Serialize(t.Context())
+		require.NoError(t, terr)
+		require.NotContains(t, out, "[matched]",
+			"with xpath-default-namespace=urn:x, unprefixed name must resolve to urn:x and not match no-namespace <a>")
+	})
+}
+
 // TestPatternFnCurrentCompiles verifies fn:current() is accepted (not rejected
 // as XPST0017) inside a pattern predicate.
 func TestPatternFnCurrentCompiles(t *testing.T) {

@@ -1068,7 +1068,17 @@ func (ec *execContext) effectiveXPathNamespaces() map[string]string {
 		// Seed the predeclared bindings first so the pattern's explicit lexical
 		// declarations below override them.
 		maps.Copy(ns, xpath3.PredeclaredNamespaces())
-		maps.Copy(ns, ec.patternNamespaces)
+		// Copy only NON-EMPTY prefixes from the pattern's lexical snapshot. A
+		// stylesheet xmlns="..." default namespace lands in the snapshot under
+		// the "" key, but the XML default namespace must NOT become the XPath
+		// default ELEMENT namespace for unprefixed pattern names. Unprefixed
+		// names default to no-namespace unless xpath-default-namespace is set.
+		for prefix, uri := range ec.patternNamespaces {
+			if prefix == "" {
+				continue
+			}
+			ns[prefix] = uri
+		}
 		if ec.hasXPathDefaultNS {
 			ns[""] = ec.xpathDefaultNS
 		}
