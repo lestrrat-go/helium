@@ -34,7 +34,7 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 	ec.cachedFnsNS = make(map[xpath3.QualifiedName]xpath3.Function, len(ec.stylesheet.functions)+1)
 
 	// Register XSLT document() in the fn: namespace so fn:document() works.
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "document"}] = &xsltFunc{min: 1, max: 2, fn: ec.fnDocument}
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameDocument}] = &xsltFunc{min: 1, max: 2, fn: ec.fnDocument}
 
 	// Override fn:doc to preserve source document identity and apply
 	// xsl:strip-space rules to loaded documents.
@@ -46,7 +46,7 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 		&xsltFunc{min: 1, max: 1, fn: ec.fnSystemProperty}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: funcAvailableSystemProperties}] =
 		&xsltFunc{min: 0, max: 0, fn: ec.fnAvailableSystemProperties}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "current-output-uri"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameCurrentOutputURI}] =
 		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrentOutputURI}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "stream-available"}] =
 		&xsltFunc{min: 1, max: 1, fn: ec.fnStreamAvailable}
@@ -58,17 +58,17 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 		&xsltFunc{min: 2, max: 3, fn: ec.fnKey}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "generate-id"}] =
 		&xsltFunc{min: 0, max: 1, fn: ec.fnGenerateID}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "element-available"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameElementAvailable}] =
 		&xsltFunc{min: 1, max: 1, fn: ec.fnElementAvailable}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "function-available"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameFunctionAvailable}] =
 		&xsltFunc{min: 1, max: 2, fn: ec.fnFunctionAvailable}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "type-available"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameTypeAvailable}] =
 		&xsltFunc{min: 1, max: 1, fn: ec.fnTypeAvailable}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "current"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameCurrent}] =
 		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrent}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "current-group"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameCurrentGroup}] =
 		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup, noDynRef: true, dynRefError: errCodeXTDE1061}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "current-grouping-key"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameCurrentGroupingKey}] =
 		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey, noDynRef: true, dynRefError: errCodeXTDE1071}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "current-merge-group"}] =
 		&xsltFunc{min: 0, max: 1, fn: ec.fnCurrentMergeGroup}
@@ -88,11 +88,11 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 				return ec.accumulatorAfterByNode, ec.accumulatorAfterErrorByNode
 			})
 		}}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "copy-of"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameCopyOf}] =
 		&xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: funcSnapshot}] =
 		&xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot}
-	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "transform"}] =
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameTransform}] =
 		&xsltFunc{min: 1, max: 1, fn: ec.fnTransform}
 
 	ec.registerSchemaConstructors(ec.cachedFnsNS)

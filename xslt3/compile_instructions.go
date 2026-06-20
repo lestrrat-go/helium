@@ -488,8 +488,8 @@ func (c *compiler) useWhenFunctionAvailable(_ context.Context, args []xpath3.Seq
 	// Runtime-only functions (current, key, document, generate-id, etc.)
 	// are NOT available in the use-when static context per XSLT 3.0 spec 3.4.6.
 	switch name {
-	case "function-available", funcSystemProperty, "type-available",
-		"element-available", funcAvailableSystemProperties:
+	case fnNameFunctionAvailable, funcSystemProperty, fnNameTypeAvailable,
+		fnNameElementAvailable, funcAvailableSystemProperties:
 		return xpath3.SingleBoolean(true), nil
 	}
 

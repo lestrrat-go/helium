@@ -123,7 +123,7 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 			case lexicon.FnCurrentGroup:
 				// Any reference to current-group() is consuming in streaming
 				return 1
-			case "current-grouping-key":
+			case fnNameCurrentGroupingKey:
 				// current-grouping-key() is motionless — it doesn't consume the stream
 				return 0
 			}

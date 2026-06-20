@@ -935,7 +935,7 @@ func (c *compiler) resolveSingleShadowAttribute(ctx context.Context, elem *heliu
 // evaluation can invoke dynamic transforms (used by use-when patterns).
 func (c *compiler) staticEvaluator(_ context.Context) xpath3.Evaluator {
 	fns := map[string]xpath3.Function{
-		"transform": &xsltFunc{min: 1, max: 1, fn: c.staticFnTransform},
+		fnNameTransform: &xsltFunc{min: 1, max: 1, fn: c.staticFnTransform},
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
@@ -1008,10 +1008,10 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 // (system-property, function-available, type-available, element-available).
 func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	fns := map[string]xpath3.Function{
-		"function-available": &xsltFunc{min: 1, max: 2, fn: c.useWhenFunctionAvailable},
-		funcSystemProperty:   &xsltFunc{min: 1, max: 1, fn: c.useWhenSystemProperty},
-		"type-available":     &xsltFunc{min: 1, max: 1, fn: c.useWhenTypeAvailable},
-		"element-available":  &xsltFunc{min: 1, max: 1, fn: c.useWhenElementAvailable},
+		fnNameFunctionAvailable: &xsltFunc{min: 1, max: 2, fn: c.useWhenFunctionAvailable},
+		funcSystemProperty:      &xsltFunc{min: 1, max: 1, fn: c.useWhenSystemProperty},
+		fnNameTypeAvailable:     &xsltFunc{min: 1, max: 1, fn: c.useWhenTypeAvailable},
+		fnNameElementAvailable:  &xsltFunc{min: 1, max: 1, fn: c.useWhenElementAvailable},
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
