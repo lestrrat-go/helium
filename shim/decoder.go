@@ -49,6 +49,7 @@ type Decoder struct {
 	// DefaultSpace sets the default namespace for elements without an explicit namespace.
 	DefaultSpace string
 
+	initErr         error // permanent construction error (e.g. nil reader); returned by every read
 	tokenReader     TokenReader
 	events          chan tokenEvent
 	done            <-chan struct{} // cancellation signal from cancel context; avoids storing context.Context
@@ -72,6 +73,16 @@ type Decoder struct {
 }
 
 func newDecoderFromReader(ctx context.Context, r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
+	// A nil reader cannot be read from; rather than panicking on the first
+	// read, construct a decoder that returns a clear error from every read.
+	if r == nil {
+		return &Decoder{
+			Strict:  true,
+			line:    1,
+			column:  1,
+			initErr: errors.New("xml: NewDecoder called with nil io.Reader"),
+		}, nil
+	}
 	// Pre-scan the prolog to extract Directive, ProcInst, Comment, and
 	// CharData tokens. The SAX parser does not emit these for the prolog,
 	// so we handle them ourselves. The combined reader replays the full
@@ -99,6 +110,17 @@ func newDecoderFromReader(ctx context.Context, r io.Reader) (*Decoder, error) { 
 }
 
 func newDecoderFromTokenReader(_ context.Context, tr TokenReader) *Decoder {
+	// A nil TokenReader has nowhere to read tokens from. Without the SAX
+	// reader path set up either, a read would dereference a nil startSAX and
+	// panic; return a clear error from every read instead.
+	if tr == nil {
+		return &Decoder{
+			Strict:  true,
+			line:    1,
+			column:  1,
+			initErr: errors.New("xml: NewTokenDecoder called with nil TokenReader"),
+		}
+	}
 	return &Decoder{
 		Strict:      true,
 		tokenReader: tr,
@@ -393,6 +415,12 @@ func (d *Decoder) RawToken() (Token, error) {
 }
 
 func (d *Decoder) readToken(raw bool) (Token, error) {
+	// A permanent construction error (e.g. nil reader/TokenReader) is returned
+	// from every read.
+	if d.initErr != nil {
+		return nil, d.initErr
+	}
+
 	// Drain pre-scanned prolog tokens first.
 	if d.prologIdx < len(d.prologTokens) {
 		tok := stdxml.CopyToken(d.prologTokens[d.prologIdx])
@@ -456,22 +484,27 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 			d.savedErr = nil
 			return nil, err
 		}
-		for {
-			nextTok, err := d.tokenReader.Token()
-			if nextTok == nil && err == nil {
-				continue
-			}
-			if err != nil {
-				if nextTok != nil {
-					d.savedErr = err
-					tok = nextTok
-					break
-				}
-				return nil, err
-			}
-			tok = nextTok
-			break
+		nextTok, err := d.tokenReader.Token()
+		// Pass (nil, nil) straight through to match encoding/xml exactly.
+		// Per the TokenReader contract, (nil, nil) means "nothing happened"
+		// (e.g. a polling/non-blocking reader with no token available yet) and
+		// is NOT EOF; stdlib's Decoder.Token() returns it verbatim to the
+		// caller rather than retrying or erroring. Diverging here would break
+		// drop-in stdlib compatibility. The shim's own internal driving loops
+		// (Decode/populateElement, Skip) carry a bounded no-progress guard so
+		// the shim itself can never hang on a pathological reader.
+		if nextTok == nil && err == nil {
+			return nil, nil //nolint:nilnil // stdlib parity: (nil, nil) means "nothing happened"
 		}
+		if err != nil && nextTok == nil {
+			return nil, err
+		}
+		// Token came back with a trailing error: return the token now and
+		// surface the error on the next read (the general TokenReader case).
+		if err != nil {
+			d.savedErr = err
+		}
+		tok = nextTok
 	} else {
 		event, ok := d.nextEvent()
 		if !ok {
@@ -628,6 +661,30 @@ func (d *Decoder) mergeCharData(first tokenEvent, _ bool) tokenEvent {
 	return merged
 }
 
+// maxNoProgress bounds how many consecutive (nil, nil) "nothing happened"
+// reads the shim's own internal driving loops tolerate before giving up.
+// Token() passes (nil, nil) straight through to the caller for stdlib parity,
+// but loops that drive the decoder internally (Decode/populateElement, Skip)
+// expect forward progress; without this bound a pathological TokenReader that
+// always returns (nil, nil) would hang the shim itself.
+const maxNoProgress = 10_000
+
+// driveToken reads the next token for an internal driving loop. A (nil, nil)
+// "nothing happened" result is retried up to maxNoProgress times before the
+// loop is failed with io.ErrNoProgress, so the shim can never hang internally.
+func (d *Decoder) driveToken() (Token, error) {
+	for range maxNoProgress {
+		tok, err := d.Token()
+		if err != nil {
+			return nil, err
+		}
+		if tok != nil {
+			return tok, nil
+		}
+	}
+	return nil, io.ErrNoProgress
+}
+
 func (d *Decoder) Skip() error {
 	if d.lastToken == nil {
 		return errors.New("shim: Skip called before reading start element")
@@ -638,7 +695,7 @@ func (d *Decoder) Skip() error {
 
 	depth := 1
 	for depth > 0 {
-		tok, err := d.Token()
+		tok, err := d.driveToken()
 		if err != nil {
 			return err
 		}
@@ -668,7 +725,7 @@ func (d *Decoder) Decode(v any) error {
 		return err
 	}
 	for {
-		tok, err := d.Token()
+		tok, err := d.driveToken()
 		if err != nil {
 			return err
 		}
@@ -739,7 +796,7 @@ func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, 
 	}
 	defer func() { d.nestDepth-- }()
 	for {
-		tok, err := d.Token()
+		tok, err := d.driveToken()
 		if err != nil {
 			if err == io.EOF {
 				return io.ErrUnexpectedEOF

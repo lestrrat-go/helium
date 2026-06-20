@@ -187,6 +187,11 @@ func (enc *Encoder) writeStartElement(se StartElement) error {
 	}
 
 	// Write attributes, interleaving xmlns declarations as needed.
+	// NOTE: encoding/xml itself emits a duplicate xmlns declaration when
+	// Name.Space is set and a bare "xmlns" attribute is also supplied (see
+	// marshal_stdlib_test.go cases #31/#32/#35). The shim is a drop-in
+	// replacement, so it deliberately reproduces that behavior rather than
+	// de-duplicating, to keep byte-for-byte parity with stdlib output.
 	for _, attr := range se.Attr {
 		name := attr.Name
 		if name.Local == "" {
