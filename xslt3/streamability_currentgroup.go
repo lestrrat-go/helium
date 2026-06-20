@@ -118,7 +118,7 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 		}
 		count += countCurrentGroupConsumingInExpr(e.Right)
 	case xpath3.FunctionCall:
-		if e.Prefix == "" {
+		if isFnNamespacePrefix(e.Prefix) {
 			switch e.Name {
 			case lexicon.FnCurrentGroup:
 				// Any reference to current-group() is consuming in streaming
@@ -185,7 +185,7 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 // isCurrentGroupCall returns true if expr is a call to current-group().
 func isCurrentGroupCall(expr xpath3.Expr) bool {
 	fc, ok := expr.(xpath3.FunctionCall)
-	return ok && fc.Prefix == "" && fc.Name == lexicon.FnCurrentGroup
+	return ok && isFnNamespacePrefix(fc.Prefix) && fc.Name == lexicon.FnCurrentGroup
 }
 
 // pathHasDownwardStep returns true if a LocationPath has any child or
