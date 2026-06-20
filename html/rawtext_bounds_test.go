@@ -1077,3 +1077,97 @@ func TestIndivisibleNodeCancellationNoPartialEmit(t *testing.T) {
 		})
 	}
 }
+
+// countingReader streams a fixed body and records how many bytes have actually
+// been read from it. It lets a test assert that the parser ABORTED an over-cap
+// run without first draining the whole (possibly unbounded) tail — bounding WORK,
+// not just retained memory.
+type countingReader struct {
+	data []byte
+	pos  int
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.data[r.pos:])
+	r.pos += n
+	return n, nil
+}
+
+// TestRCDATAOverCapNonLegacyAbortsWithoutDrainingTail is the WORK-bound
+// regression for parseSaturatedCharRefLiteral: a very long UNRESOLVED named
+// reference whose run neither matches a known entity nor begins with a legacy
+// prefix (so it can never resolve) must hard-fail with ErrContentSizeExceeded as
+// soon as the run exceeds MaxContentSize — WITHOUT reading the rest of the run.
+// Over a streaming reader the tail can be arbitrarily long; the prior code kept
+// draining the entire alphanumeric tail to reach the trailing-';' check even
+// though the literal had already blown the cap, bounding retained memory but not
+// READ/WORK. The byte-counting reader proves only a small bounded prefix of the
+// multi-megabyte run is consumed before the abort.
+func TestRCDATAOverCapNonLegacyAbortsWithoutDrainingTail(t *testing.T) {
+	const limit = 8
+	const runLen = 4 << 20 // 4 MiB run: "zzzz..." matches no entity / legacy prefix
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			// 'z' begins no legacy prefix and no known entity, so the whole run is
+			// an unresolved literal. The run far exceeds maxEntityNameLen so the
+			// saturated-literal path is taken. A <meta charset="utf-8"> declaration
+			// selects the STREAMING sanitize reader so reads stay bounded — the
+			// default deferred-Latin-1 path must buffer the whole stream to settle
+			// the encoding, which would mask the parser-side WORK bound under test.
+			input := []byte(`<meta charset="utf-8"><` + elem + ">&" +
+				strings.Repeat("z", runLen) + "</" + elem + ">")
+			r := &countingReader{data: input}
+
+			_, err := html.NewParser().MaxContentSize(limit).ParseReader(t.Context(), r)
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"over-cap non-legacy run must hard-fail with ErrContentSizeExceeded")
+
+			// Only a bounded prefix may have been read: the meta + open tag, '&', a
+			// small multiple of the cap, plus reader/decoder buffering slack — NOT
+			// the whole multi-megabyte run.
+			require.Less(t, r.pos, runLen/2,
+				"abort must not drain the whole tail (read %d of %d run bytes)", r.pos, runLen)
+		})
+	}
+}
+
+// TestRCDATASaturatedRefContextCancellation verifies that a context cancelled
+// WHILE parseSaturatedCharRefLiteral drains a long alphanumeric run (the
+// legacy-prefix streaming path, which must drain to find a possible ';') aborts
+// promptly with context.Canceled instead of consuming the entire run. The reader
+// cancels a few bytes into the run; the drain loop observes ctx.Err() between
+// bounded chunks and unwinds.
+func TestRCDATASaturatedRefContextCancellation(t *testing.T) {
+	const reps = 1 << 16 // long run so the drain is still in progress
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+
+			// "&amp" + a long no-';' tail: the saturated path streams the tail
+			// (legacy "amp" resolves) and must keep draining to learn whether a ';'
+			// terminates it — exactly the loop that must honor cancellation.
+			input := []byte("<" + elem + ">&amp" + strings.Repeat("x", reps))
+			r := &cancelAfterReader{data: input, after: len(elem) + 16, cancel: cancel}
+
+			done := make(chan error, 1)
+			go func() {
+				_, err := html.NewParser().MaxContentSize(8).ParseReader(ctx, r)
+				done <- err
+			}()
+
+			select {
+			case err := <-done:
+				require.ErrorIs(t, err, context.Canceled,
+					"cancelled mid-saturated-run parse should return context.Canceled")
+			case <-time.After(10 * time.Second):
+				t.Fatal("parse did not abort promptly on saturated-run cancellation")
+			}
+		})
+	}
+}

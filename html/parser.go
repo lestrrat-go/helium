@@ -1185,7 +1185,7 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	// never be a named-entity match; the only resolution it could ever produce is
 	// a legacy prefix, and that applies only when there is no semicolon.
 	if len(name) >= maxEntityNameLen && isAlphanumeric(p.cur.Peek()) {
-		p.parseSaturatedCharRefLiteral(name, limit)
+		p.parseSaturatedCharRefLiteral(ctx, name, limit)
 		return
 	}
 
@@ -1257,7 +1257,13 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 // knowing whether a terminator ends the run. We therefore peek the tail just far
 // enough to settle that: if head has a legacy prefix we optimistically take the
 // no-';' path UNLESS a ';' is found, in which case the run is literal.
-func (p *parser) parseSaturatedCharRefLiteral(head string, limit int) {
+//
+// Bounded WORK, not just bounded MEMORY: when the run already exceeds the cap and
+// head does NOT legacy-resolve, the outcome is ErrContentSizeExceeded regardless
+// of any trailing ';', so the function fails IMMEDIATELY instead of draining the
+// rest of the (possibly unbounded) tail. ctx is also checked between bounded
+// chunks so a cancelled parse aborts promptly without consuming the whole run.
+func (p *parser) parseSaturatedCharRefLiteral(ctx context.Context, head string, limit int) {
 	sizeCap := limit
 	if sizeCap <= 0 {
 		sizeCap = defaultMaxContentSize
@@ -1294,6 +1300,12 @@ func (p *parser) parseSaturatedCharRefLiteral(head string, limit int) {
 	var tail strings.Builder
 	legacyHeadEmitted := false // val + head's leftover emitted (over-cap legacy path)
 	for {
+		// Abort promptly on context cancellation so a cancelled parse never has
+		// to drain a long (possibly unbounded) run. The outer parse loop
+		// re-checks ctx.Err() and surfaces context.Canceled.
+		if ctx.Err() != nil {
+			return
+		}
 		chunk := p.parseWhileMax(isAlphanumeric, sizeCap)
 		if chunk == "" {
 			break
@@ -1321,9 +1333,19 @@ func (p *parser) parseSaturatedCharRefLiteral(head string, limit int) {
 				legacyHeadEmitted = true
 			}
 			p.emitLiteralChunked(chunk, limit)
+		default:
+			// Over cap and head does NOT legacy-resolve: the run is an
+			// unresolved literal no matter whether a ';' eventually terminates
+			// it (parseCharRef would not legacy-resolve a non-prefix run, and a
+			// ';'-terminated unknown name is literal too). Since it already
+			// exceeds the cap, the result is a hard failure regardless of the
+			// untouched tail. Fail NOW instead of draining the rest of the run:
+			// over a streaming reader the tail can be arbitrarily long, and
+			// reading it would be unbounded WORK even though retained memory
+			// stays bounded.
+			p.fatalErr = fmt.Errorf("unresolved character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
+			return
 		}
-		// Over cap and not legacy: keep draining without retaining; the run is a
-		// literal that will fail the cap check below.
 	}
 
 	hasSemicolon := false
