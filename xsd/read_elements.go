@@ -393,7 +393,7 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 	// no-type declarations the same as for typed ones. Substitution-group
 	// members are left untyped so they can inherit the head's type at validation.
 	if decl.Type == nil && decl.SubstitutionGroup == (QName{}) {
-		decl.Type = c.schema.types[QName{Local: "anyType", NS: lexicon.NamespaceXSD}]
+		decl.Type = c.schema.types[QName{Local: typeAnyType, NS: lexicon.NamespaceXSD}]
 	}
 
 	return nil
