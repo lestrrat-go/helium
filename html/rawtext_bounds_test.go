@@ -572,6 +572,55 @@ func TestRCDATAWithinCapNamedEntity(t *testing.T) {
 	}
 }
 
+// TestRCDATALongWithinCapNamedEntityPreserved pins the convergent bound: the
+// memory limit tracks the user's MaxContentSize, NOT the fixed 32-byte
+// maxEntityNameLen. A named-entity alphanumeric run that is longer than every
+// known entity (so it can never resolve) but still fits within MaxContentSize
+// must be PRESERVED literally — identical to the normal-text path — instead of
+// being rejected. Only a run that genuinely exceeds the cap hard-fails.
+func TestRCDATALongWithinCapNamedEntityPreserved(t *testing.T) {
+	const limit = 100
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		// A 40-char unknown name: longer than maxEntityNameLen (32) yet well
+		// within MaxContentSize(100). Must be echoed verbatim, no error.
+		t.Run(elem+"_within_cap_preserved", func(t *testing.T) {
+			run := strings.Repeat("a", 40)
+			body := "&" + run
+			input := "<" + elem + ">" + body + "</" + elem + ">"
+
+			var got strings.Builder
+			record := html.CharactersFunc(func(data []byte) error {
+				got.Write(data)
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			err := html.NewParser().MaxContentSize(limit).
+				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.NoError(t, err,
+				"a within-cap named-entity run must be preserved, not rejected")
+			require.Equal(t, body, got.String(),
+				"within-cap unresolved run must be echoed literally like normal text")
+		})
+
+		// The same construction but with a run that genuinely exceeds the cap
+		// still hard-fails — the failure is scoped to over-cap runs only.
+		t.Run(elem+"_over_cap_fails", func(t *testing.T) {
+			run := strings.Repeat("a", limit+50)
+			body := "&" + run
+			input := "<" + elem + ">" + body + "</" + elem + ">"
+
+			_, err := html.NewParser().MaxContentSize(limit).
+				Parse(t.Context(), []byte(input))
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"a named-entity run exceeding the cap must still hard-fail")
+		})
+	}
+}
+
 // TestRCDATANumericEntityNormalized verifies that the bounded RCDATA char-ref
 // scanner makes the SAME entity-resolution decision as the normal-text scanner
 // for numeric references, even with a tiny MaxContentSize: an overlong numeric

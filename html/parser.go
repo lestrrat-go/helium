@@ -1094,10 +1094,13 @@ const maxEntityNameLen = 32
 // difference is memory: an unbounded digit run is consumed in fixed-size chunks
 // while tracking value/overflow rather than buffered whole; an unresolved
 // (within-cap) reference is flushed as literal text in capped chunks rather than
-// one giant Characters event; and a named reference whose name exceeds the
-// content cap — which can never be a known entity and whose resolution would
-// require retaining the whole tail to find its terminator — fails the parse with
-// ErrContentSizeExceeded so peak retained memory stays bounded by the cap.
+// one giant Characters event; and a named-entity alphanumeric run that EXCEEDS
+// the content cap — whose resolution would require retaining the whole tail to
+// find its terminator — fails the parse with ErrContentSizeExceeded so peak
+// retained memory stays bounded by the user's cap. The cap, not the fixed
+// maxEntityNameLen, governs failure: within-cap content is preserved identically
+// to the normal-text path whether it resolves to a known entity, a legacy
+// prefix, or stays literal.
 func (p *parser) parseCharRefBounded(limit int) {
 	// Entity content is non-whitespace — ensure implied elements.
 	p.htmlStartCharData()
@@ -1126,26 +1129,39 @@ func (p *parser) parseCharRefBounded(limit int) {
 		return
 	}
 
-	// Named entity — bound the name scan at maxEntityNameLen. The longest known
-	// entity is 31 chars, so maxEntityNameLen captures every name that could
-	// match (and every legacy prefix), while still bounding the scan.
-	name := p.parseWhileMax(isAlphanumeric, maxEntityNameLen)
+	// Named entity — bound the alphanumeric run scan by the user's actual
+	// content-size limit, not the fixed maxEntityNameLen. Memory is charged
+	// against the real MaxContentSize: a run that fits inside the cap is
+	// preserved identically to the normal-text path (resolved or literal); only
+	// a run that genuinely EXCEEDS the cap — whose terminator could be an
+	// arbitrary distance away and whose ordered resolution would require
+	// retaining the whole tail with a forward-only cursor — fails the parse.
+	sizeCap := limit
+	if sizeCap <= 0 {
+		sizeCap = defaultMaxContentSize
+	}
+	name := p.parseWhileMax(isAlphanumeric, sizeCap)
 
-	// When the alphanumeric run reaches the cap it is longer than every known
-	// entity name, so the over-long name itself can never match a full entity.
-	// Whether it resolves at all then hinges on a single bit — whether a ';'
-	// eventually terminates the run (no ';' resolves the longest legacy prefix;
-	// a ';' resolves nothing and is echoed literally). That terminator can be an
-	// arbitrary distance away, and the resolved head ("&" vs the legacy value)
-	// must be emitted in source order BEFORE the tail. With a forward-only
-	// cursor the only way to learn the terminator while preserving order is to
-	// retain the whole tail until it is found, which is exactly the unbounded
-	// growth MaxContentSize exists to prevent. So instead of buffering the tail
-	// we fail the parse: a named character reference whose name exceeds the
-	// content cap (and therefore cannot be a known entity) is rejected with
-	// ErrContentSizeExceeded, keeping peak retained memory bounded by the cap.
-	if len(name) >= maxEntityNameLen {
-		p.fatalErr = fmt.Errorf("named character reference exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+	// If the run filled the cap and another alphanumeric byte still follows, the
+	// run exceeds the content-size limit. Resolving it would require buffering
+	// the unbounded tail to find the terminator, which is exactly the growth
+	// MaxContentSize exists to prevent, so fail the parse.
+	if len(name) >= sizeCap && isAlphanumeric(p.cur.Peek()) {
+		p.fatalErr = fmt.Errorf("named character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
+		return
+	}
+
+	// The run is within the content cap. maxEntityNameLen governs only whether
+	// to ATTEMPT resolution: a name longer than every known entity (and legacy
+	// prefix) can never match, so emit it literally; otherwise resolve it
+	// exactly like the normal-text path.
+	if len(name) > maxEntityNameLen {
+		text := "&" + name
+		if p.cur.Peek() == ';' {
+			_ = p.cur.Advance(1)
+			text += ";"
+		}
+		p.emitLiteralChunked(text, limit)
 		return
 	}
 

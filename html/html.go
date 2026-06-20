@@ -92,12 +92,22 @@ func (p Parser) Strict(v bool) Parser {
 // MaxContentSize bounds, in bytes, the size of a single content section.
 //
 // For raw-text (script/style), RCDATA (title/textarea), and plaintext content
-// it is an approximate soft cap: the parser flushes accumulated content to SAX
-// in chunks that target this size, so a gigantic or unterminated section is
-// bounded in memory while still parsing successfully. A chunk may slightly
-// exceed the cap because an indivisible token is never split across chunks: a
-// whole multi-byte UTF-8 rune (or a resolved character reference) is always
-// emitted intact, so a single rune larger than the cap is emitted whole.
+// it bounds the streaming scanner's per-chunk working set: the parser flushes
+// accumulated content to SAX in temporary chunks that target this size, so the
+// scanner's own peak memory stays bounded even for a gigantic or unterminated
+// section, which still parses successfully. A chunk may slightly exceed the cap
+// because an indivisible token is never split: a whole multi-byte UTF-8 rune (or
+// a resolved character reference) is always emitted intact, so a single rune
+// larger than the cap is emitted whole. A single indivisible run that genuinely
+// exceeds the cap — an unterminated named-entity alphanumeric run whose ordered
+// resolution would require buffering the unbounded tail — hard-fails with
+// [ErrContentSizeExceeded].
+//
+// This bounds only the streaming scanner / SAX chunk size. DOM construction via
+// [Parser.Parse] necessarily merges every chunk back into the document tree
+// (treeBuilder.AppendText), so the resulting [helium.Document] still retains the
+// full content; MaxContentSize does not make DOM parsing memory-bounded for
+// large documents. Use a SAX-only consumer to benefit from the streaming bound.
 //
 // For comments, bogus comments, and processing instructions it is a HARD cap:
 // these constructs map to a single indivisible SAX event and DOM node and
