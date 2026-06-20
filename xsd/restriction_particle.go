@@ -208,25 +208,34 @@ func elementRestrictsElement(r *Particle, rt *ElementDecl, b *Particle, bt *Elem
 // requires the derived group's occurrence range to be a valid restriction of the
 // base's, then dispatches on compositor.
 func groupRestrictsGroup(r *Particle, rg *ModelGroup, b *Particle, bg *ModelGroup) bool {
-	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
-		return false
-	}
 	switch {
 	case rg.Compositor == CompositorSequence && bg.Compositor == CompositorSequence:
+		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+			return false
+		}
 		return recurseOrdered(rg.Particles, bg.Particles)
 	case rg.Compositor == CompositorAll && bg.Compositor == CompositorAll:
+		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+			return false
+		}
 		return recurseAll(rg.Particles, bg.Particles)
 	case rg.Compositor == CompositorChoice && bg.Compositor == CompositorChoice:
+		if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+			return false
+		}
 		return recurseChoiceUnordered(rg.Particles, bg.Particles)
 	case rg.Compositor == CompositorSequence && bg.Compositor == CompositorChoice:
 		// MapAndSum (XSD §3.9.6): a derived SEQUENCE restricting a base CHOICE. Every
 		// member of the derived sequence must be a valid restriction of SOME branch
 		// of the base choice, AND the total number of elements the derived sequence
 		// can emit must be within the base choice particle's occurrence range — a
-		// choice that can match at most N items must not be restricted by a sequence
-		// that can emit more than N. Without the cardinality bound, base choice(a)
-		// (one item max) would wrongly accept derived sequence(a,b) which admits two
-		// items the base rejects.
+		// base choice{bMin,bMax} accepts between bMin and bMax elements (each one
+		// matching a branch), so a derived sequence that emits [dMin,dMax] elements
+		// is valid iff bMin <= dMin and dMax <= bMax. The comparison is on the
+		// derived's TOTAL element-emission range, NOT the derived group's raw
+		// occurrence range (always 1,1 for a top-level sequence): base choice{2,2}
+		// must accept sequence(a,b) (emits 2), while base choice(a){1,1} must still
+		// reject sequence(a,b) (emits 2 > 1).
 		dMin, dMax := particleElementRange(r)
 		bMin, bMax := particleElementRange(b)
 		if !occurrenceValidRestriction(dMin, dMax, bMin, bMax) {
@@ -493,38 +502,42 @@ func maxOccursAdd(a, b int) int {
 // genuinely undecidable) it stays conservative (accepts). The base wildcard
 // itself is reached through the base particle b (b.Term).
 func groupRestrictsWildcard(r *Particle, rg *ModelGroup, b *Particle) bool {
-	// The whole derived group particle's occurrence range must be within the base
-	// wildcard particle's range.
-	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
-		return false
-	}
 	// The TOTAL number of elements the derived group can emit must be within the
-	// base wildcard particle's occurrence range. A single <xs:any maxOccurs="1">
-	// matches at most one element, so a derived group that can emit two-or-more
-	// elements (e.g. sequence(a,b)) is not a valid restriction even though each
-	// leaf individually fits the wildcard. Checking per-leaf cardinality alone
-	// (below) misses this because every leaf can have maxOccurs 1 while the group's
-	// total emission exceeds the wildcard's maximum.
+	// base wildcard particle's occurrence range. This is the cardinality bound that
+	// matters — NOT the derived group's raw occurrence range (always 1,1 for a
+	// top-level sequence), which would wrongly reject a two-element sequence
+	// restricting <xs:any minOccurs="2" maxOccurs="2"> (raw 1,1 not within 2,2) even
+	// though it emits exactly the two elements the base wildcard requires.
+	//
+	// A single <xs:any maxOccurs="1"> matches at most one element, so a derived
+	// group that can emit two-or-more elements (e.g. sequence(a,b)) is still not a
+	// valid restriction even though each leaf individually fits the wildcard.
+	// Checking per-leaf cardinality alone (below) misses this because every leaf can
+	// have maxOccurs 1 while the group's total emission exceeds the wildcard's
+	// maximum.
 	dMin, dMax := particleElementRange(r)
 	if !occurrenceValidRestriction(dMin, dMax, b.MinOccurs, b.MaxOccurs) {
 		return false
 	}
 	// Each leaf inside the derived group must be admitted by the wildcard, and its
-	// effective occurrence (folding in the enclosing group ranges) must be within
-	// the base wildcard particle's range.
-	return groupLeavesWithinWildcard(rg, r.MinOccurs, r.MaxOccurs, b)
+	// effective occurrence maximum (folding in the enclosing group ranges) must not
+	// exceed the base wildcard particle's maximum.
+	return groupLeavesWithinWildcard(rg, r.MaxOccurs, b)
 }
 
 // groupLeavesWithinWildcard walks the derived group's particles, threading the
 // accumulated effective occurrence range (encMin/encMax = the product of the
 // enclosing groups' occurrence ranges), and checks every element/wildcard leaf
 // against the base wildcard particle bw: the leaf's namespace must be admitted
-// and its effective occurrence range (enclosing × the leaf's own) must be a
-// valid restriction of the base wildcard particle's range. Returns false on the
-// first clear violation.
-func groupLeavesWithinWildcard(rg *ModelGroup, encMin, encMax int, bw *Particle) bool {
+// and its effective occurrence MAXIMUM (enclosing × the leaf's own) must not
+// exceed the base wildcard particle's maximum. Only the UPPER bound is checked
+// per leaf — the lower bound is a property of the group's TOTAL emission (already
+// verified by the caller against bw.MinOccurs), so a single leaf emitting fewer
+// than bw.MinOccurs is not a violation when sibling leaves make up the total
+// (e.g. sequence(g1,g2) each emitting 1 validly restricts <xs:any minOccurs="2">).
+// Returns false on the first clear violation.
+func groupLeavesWithinWildcard(rg *ModelGroup, encMax int, bw *Particle) bool {
 	for _, p := range rg.Particles {
-		leafMin := mulOccurs(encMin, p.MinOccurs)
 		leafMax := mulOccurs(encMax, p.MaxOccurs)
 		switch t := p.Term.(type) {
 		case *ElementDecl:
@@ -535,7 +548,7 @@ func groupLeavesWithinWildcard(rg *ModelGroup, encMin, encMax int, bw *Particle)
 			if !wildcardAllowsName(wc, t.Name) {
 				return false
 			}
-			if !occurrenceValidRestriction(leafMin, leafMax, bw.MinOccurs, bw.MaxOccurs) {
+			if !occurrenceValidRestriction(0, leafMax, 0, bw.MaxOccurs) {
 				return false
 			}
 		case *Wildcard:
@@ -544,18 +557,19 @@ func groupLeavesWithinWildcard(rg *ModelGroup, encMin, encMax int, bw *Particle)
 				return true
 			}
 			// A derived wildcard leaf must be a namespace subset of the base
-			// wildcard, with at-least-as-strong processContents and within range.
+			// wildcard, with at-least-as-strong processContents and within the
+			// wildcard's maximum.
 			if processContentsStrength(t.ProcessContents) < processContentsStrength(bwc.ProcessContents) {
 				return false
 			}
 			if !wildcardConstraintSubset(t, bwc) {
 				return false
 			}
-			if !occurrenceValidRestriction(leafMin, leafMax, bw.MinOccurs, bw.MaxOccurs) {
+			if !occurrenceValidRestriction(0, leafMax, 0, bw.MaxOccurs) {
 				return false
 			}
 		case *ModelGroup:
-			if !groupLeavesWithinWildcard(t, leafMin, leafMax, bw) {
+			if !groupLeavesWithinWildcard(t, leafMax, bw) {
 				return false
 			}
 		}

@@ -607,6 +607,35 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
 
+	t.Run("accepts sequence restricting fixed-count choice", func(t *testing.T) {
+		t.Parallel()
+		// Base choice {2,2} accepts exactly two elements (each matching a branch);
+		// derived sequence(a,b) emits exactly two elements, each restricting a base
+		// branch — a valid restriction. The check must compare the derived sequence's
+		// TOTAL element-emission range (2,2) against the base choice's range (2,2), not
+		// the derived group's raw occurrence range (1,1).
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:choice minOccurs="2" maxOccurs="2">
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="b" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
 	t.Run("accepts sequence restricting multi-item choice", func(t *testing.T) {
 		t.Parallel()
 		// Base choice (a|b) with maxOccurs 2 matches up to two items; derived
@@ -720,6 +749,38 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
   <xs:element name="root" type="t:Derived"/>
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts sequence restricting fixed-count wildcard", func(t *testing.T) {
+		t.Parallel()
+		// Base <xs:any minOccurs="2" maxOccurs="2"> accepts exactly two elements; the
+		// derived two-element sequence emits exactly two in-namespace elements. The
+		// check must compare the derived sequence's TOTAL element-emission range (2,2)
+		// against the base wildcard's range (2,2), not the derived group's raw
+		// occurrence range (1,1).
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:any namespace="##any" processContents="lax" minOccurs="2" maxOccurs="2"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="g1" type="xs:string"/>
+  <xs:element name="g2" type="xs:string"/>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence>
+          <xs:sequence>
+            <xs:element ref="t:g1"/>
+            <xs:element ref="t:g2"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
 	t.Run("accepts group restricting two-occurrence wildcard with two elements", func(t *testing.T) {
