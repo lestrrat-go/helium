@@ -157,6 +157,84 @@ func TestDecryptContent_DetachedNoShadowing(t *testing.T) {
 		"detached EncryptedData's own xmlns must not shadow the decrypted content")
 }
 
+// D-ENC-005: encrypting then decrypting an ELEMENT whose tag uses a namespace
+// prefix declared only on an ANCESTOR must round-trip. The serialized plaintext
+// (<saml:NameID>...</saml:NameID>) carries no xmlns:saml declaration, so parsing
+// it as a standalone document fails on the unbound prefix. The decryption must
+// parse it in the in-scope-namespace context of EncryptedData's parent instead.
+func TestEncryptDecryptElement_AncestorNamespace(t *testing.T) {
+	const samlNS = "urn:oasis:names:tc:SAML:2.0:assertion"
+	doc := mustParseXML(t,
+		`<root xmlns:saml="`+samlNS+`"><saml:NameID>user@example.com</saml:NameID></root>`)
+
+	key := generateRSAKey(t)
+	target := doc.DocumentElement().FirstChild().(*helium.Element)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+		RecipientPublicKey(&key.PublicKey)
+
+	edElem, err := encryptor.EncryptElement(t.Context(), target)
+	require.NoError(t, err)
+	require.NotNil(t, edElem)
+
+	// EncryptedData now sits where saml:NameID was, so saml: is in-scope via
+	// its parent <root>.
+	require.NotNil(t, edElem.Parent())
+
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	nodes, err := decryptor.Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+
+	elem, ok := nodes[0].(*helium.Element)
+	require.True(t, ok, "decrypted node should be an element")
+	require.Equal(t, "NameID", elem.LocalName())
+	require.Equal(t, samlNS, elem.URI(),
+		"saml: prefix declared on the ancestor must resolve")
+}
+
+// D-ENC-006: decrypting an ELEMENT for a DETACHED EncryptedData (no parent)
+// whose own default xmlns is the XML-Encryption namespace must NOT let that
+// declaration shadow the decrypted element. An unprefixed plaintext element
+// must resolve to NO namespace.
+func TestDecryptElement_DetachedNoShadowing(t *testing.T) {
+	sessionKey := make([]byte, 32)
+	_, err := rand.Read(sessionKey)
+	require.NoError(t, err)
+
+	algorithm := xmlenc1.AES256GCM
+
+	plaintext := []byte(`<child>v</child>`)
+	cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, plaintext)
+	require.NoError(t, err)
+
+	doc := mustParseXML(t, `<root/>`)
+
+	ed := &xmlenc1.EncryptedData{
+		Type:             xmlenc1.TypeElement,
+		EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: algorithm},
+		CipherValue:      cipher,
+	}
+	edElem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+	require.NoError(t, err)
+
+	require.NoError(t, edElem.DeclareNamespace("", xmlenc1.NamespaceXMLEnc))
+	require.Nil(t, edElem.Parent(), "EncryptedData must be detached for this test")
+
+	decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)
+	nodes, err := decryptor.Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+
+	elem, ok := nodes[0].(*helium.Element)
+	require.True(t, ok, "decrypted node should be an element")
+	require.Equal(t, "child", elem.LocalName())
+	require.Equal(t, "", elem.URI(),
+		"detached EncryptedData's own xmlns must not shadow the decrypted element")
+}
+
 // D-ENC-003: a payload prefix declared on EncryptedData's parent ancestor
 // still resolves when the content is parsed in the parent's context.
 func TestDecryptContent_PrefixOnParentAncestor(t *testing.T) {
