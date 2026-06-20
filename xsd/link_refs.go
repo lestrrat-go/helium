@@ -1488,7 +1488,7 @@ func (c *compiler) markChameleonEligible(owner any, elem *helium.Element, ref st
 
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName
 // using the namespace declarations in scope on the given element.
-func (c *compiler) resolveQName(_ context.Context, elem *helium.Element, ref string) QName {
+func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, ref string) QName {
 	local := ref
 	ns := c.schema.targetNamespace
 
@@ -1497,6 +1497,15 @@ func (c *compiler) resolveQName(_ context.Context, elem *helium.Element, ref str
 			prefix := ref[:i]
 			local = ref[i+1:]
 			ns = lookupNS(elem, prefix)
+			// A prefixed QName whose prefix is not bound in scope must be a fatal
+			// schema error (src-resolve): otherwise it silently maps to the empty
+			// namespace, letting an invalid schema compile and an unbound-prefix
+			// typo resolve to an unrelated no-namespace declaration. lookupNS
+			// always returns the XML namespace for the predeclared "xml" prefix,
+			// so that case is never flagged here.
+			if ns == "" && prefix != "" {
+				c.reportUnboundQNamePrefix(ctx, elem, ref, prefix)
+			}
 			return QName{Local: local, NS: ns}
 		}
 	}
@@ -1510,4 +1519,18 @@ func (c *compiler) resolveQName(_ context.Context, elem *helium.Element, ref str
 	}
 
 	return QName{Local: local, NS: ns}
+}
+
+// reportUnboundQNamePrefix emits a fatal schema-compilation error for a prefixed
+// QName-valued attribute (e.g. @type, @ref, @base, @itemType) whose prefix is not
+// bound in scope. Mirrors the wording used for an unbound xs:keyref/@refer prefix.
+func (c *compiler) reportUnboundQNamePrefix(ctx context.Context, elem *helium.Element, ref, prefix string) {
+	if c.filename == "" {
+		return
+	}
+	msg := fmt.Sprintf("The QName value '%s' uses the namespace prefix '%s', which is not bound to a namespace.", ref, prefix)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(
+		schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), "QName value", msg),
+		helium.ErrorLevelFatal))
+	c.errorCount++
 }
