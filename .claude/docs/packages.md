@@ -294,7 +294,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 - Digests: SHA-1, SHA-256, SHA-384, SHA-512
 - **SHA-1 rejected by default** (rsa-sha1/hmac-sha1/sha1) on both sign and verify → `ErrWeakAlgorithm`; opt in with `Signer.AllowSHA1(true)` / `Verifier.AllowSHA1(true)` for legacy interop. SHA-256+ unaffected.
 - Errors: `ErrNoKeySource` sentinel — returned by verify when no usable KeySource is configured (nil cfg, untyped-nil, or typed-nil KeySource/func); `ErrWeakAlgorithm` — SHA-1 used without opt-in
-- Files: `xmldsig1.go` (API), `constants.go`, `algorithms.go`, `sign.go`, `verify.go`, `transforms.go`, `keyinfo.go`, `errors.go`
+- Files: `xmldsig1.go` (API), `constants.go`, `algorithms.go`, `weak_algorithm.go`, `sign.go`, `verify.go`, `transforms.go`, `keyinfo.go`, `errors.go`
 - Imports: helium, c14n/
 
 ## xmlenc1/
