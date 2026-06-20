@@ -576,6 +576,105 @@ func TestSchemaAttrNBSPNotTrimmed(t *testing.T) {
 	})
 }
 
+// TestInvalidCombineValueIsCompileError covers the combine-attribute value
+// check: the combine attribute on <start>/<define> may only be "", "choice",
+// or "interleave" after XML-space trimming (spec §4.17). A non-empty invalid
+// value — including a leading-NBSP " choice" that survives XML-space trimming —
+// must be a fatal compile error rather than silently falling through to the
+// default group combine.
+func TestInvalidCombineValueIsCompileError(t *testing.T) {
+	t.Parallel()
+
+	const nbsp = " "
+
+	t.Run("invalid combine on define is a fatal compile error", func(t *testing.T) {
+		t.Parallel()
+		schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="a"/></start>
+  <define name="a" combine="bogus"><element name="a"><empty/></element></define>
+  <define name="a"><element name="a"><empty/></element></define>
+</grammar>`
+		require.NotEmpty(t, compileErrorsFor(t, schema),
+			"an invalid combine value on <define> must be a fatal compile error")
+	})
+
+	t.Run("NBSP-prefixed combine on define is a fatal compile error", func(t *testing.T) {
+		t.Parallel()
+		// The leading NBSP is not XML whitespace, so after XML-space trimming the
+		// value is still "<NBSP>choice", which is not a valid combine value.
+		schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="a"/></start>
+  <define name="a" combine="` + nbsp + `choice"><element name="a"><empty/></element></define>
+  <define name="a"><element name="a"><empty/></element></define>
+</grammar>`
+		require.NotEmpty(t, compileErrorsFor(t, schema),
+			"an NBSP-prefixed combine value on <define> must be a fatal compile error")
+	})
+
+	t.Run("NBSP-prefixed combine on start is a fatal compile error", func(t *testing.T) {
+		t.Parallel()
+		schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start combine="` + nbsp + `choice"><element name="a"><empty/></element></start>
+  <start><element name="b"><empty/></element></start>
+  <define name="unused"><empty/></define>
+</grammar>`
+		require.NotEmpty(t, compileErrorsFor(t, schema),
+			"an NBSP-prefixed combine value on <start> must be a fatal compile error")
+	})
+
+	t.Run("default handler: invalid combine fails closed", func(t *testing.T) {
+		t.Parallel()
+		// On the DEFAULT compile path (no error collector) the fatal diagnostic is
+		// dropped, so the invalid combine must still fail the grammar closed.
+		schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="a"/></start>
+  <define name="a" combine="bogus"><element name="a"><empty/></element></define>
+  <define name="a"><element name="a"><empty/></element></define>
+</grammar>`
+
+		grammar := compileWithDefaultHandler(t, schema)
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<a/>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"an invalid combine value must fail the grammar closed")
+	})
+
+	t.Run("valid choice combine compiles", func(t *testing.T) {
+		t.Parallel()
+		schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="a"/></start>
+  <define name="a" combine="choice"><element name="a"><empty/></element></define>
+  <define name="a" combine="choice"><element name="b"><empty/></element></define>
+</grammar>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"a valid choice combine must compile cleanly")
+		require.NoError(t, validateWith(t, schema, `<a/>`),
+			"the choice-combined grammar must validate a matching instance")
+		require.NoError(t, validateWith(t, schema, `<b/>`),
+			"the choice-combined grammar must validate either branch")
+	})
+
+	t.Run("valid interleave combine compiles", func(t *testing.T) {
+		t.Parallel()
+		schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="root"/></start>
+  <define name="root">
+    <element name="root">
+      <ref name="body"/>
+    </element>
+  </define>
+  <define name="body" combine="interleave"><element name="a"><empty/></element></define>
+  <define name="body" combine="interleave"><element name="b"><empty/></element></define>
+</grammar>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"a valid interleave combine must compile cleanly")
+		require.NoError(t, validateWith(t, schema, `<root><a/><b/></root>`),
+			"the interleave-combined grammar must validate a matching instance")
+	})
+}
+
 // TestPrefixedNameOverridesNSAttr covers RELAX NG §4.10: resolving a prefixed
 // <name> QName replaces any existing ns attribute (inherited or explicit) with
 // the prefix's namespace. A <name ns="urn:wrong">p:admin</name> with a bound

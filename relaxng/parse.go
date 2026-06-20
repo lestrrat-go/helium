@@ -238,6 +238,7 @@ func (c *compiler) parseGrammarContent(ctx context.Context, grammarElem *helium.
 // parseStart parses a <start> element.
 func (c *compiler) parseStart(ctx context.Context, elem *helium.Element) {
 	combine := getUnqualifiedAttr(elem, "combine")
+	c.validateCombineValue(ctx, combine)
 	pat := c.parseChildren(ctx, elem)
 	if pat == nil {
 		return
@@ -284,6 +285,7 @@ func (c *compiler) parseDefine(ctx context.Context, elem *helium.Element) {
 		return
 	}
 	combine := getUnqualifiedAttr(elem, "combine")
+	c.validateCombineValue(ctx, combine)
 	pat := c.parseChildren(ctx, elem)
 	if pat == nil {
 		pat = &pattern{kind: patternEmpty}
@@ -323,6 +325,22 @@ func (c *compiler) parseDefine(ctx context.Context, elem *helium.Element) {
 	if combineMode != "" {
 		existing.combine = combineMode
 	}
+}
+
+// validateCombineValue rejects an invalid combine attribute value. The combine
+// attribute (on <start>/<define>) may only be absent (""), "choice", or
+// "interleave" after XML-space trimming (spec §4.17). Any other non-empty value
+// (e.g. a leading-NBSP " choice" that survives XML-space trimming) is a fatal
+// compile error; without this guard such a value silently falls through to the
+// default group combine, accepting a malformed schema.
+func (c *compiler) validateCombineValue(ctx context.Context, combine string) {
+	switch combine {
+	case "", combineChoice, combineInterleave:
+		return
+	}
+	msg := fmt.Sprintf("Invalid combine value %q", combine)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 // combinePatterns combines two patterns with the given combine mode.
