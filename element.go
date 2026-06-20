@@ -169,9 +169,18 @@ func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) (*Eleme
 		return n, nil
 	}
 
+	var nsURI string
+	if ns != nil {
+		nsURI = ns.URI()
+	}
+
 	var last *Attribute
 	for ; p != nil; p = p.NextAttribute() {
-		if p.LocalName() == localname && p.ns == ns {
+		// Two attributes are duplicates when they share the same local
+		// name and namespace URI, per XML rules. Compare by URI value
+		// rather than *Namespace pointer identity so that distinct
+		// namespace declarations carrying the same URI still collide.
+		if p.LocalName() == localname && p.URI() == nsURI {
 			return nil, ErrDuplicateAttribute
 		}
 		last = p
