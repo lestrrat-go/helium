@@ -13,6 +13,8 @@ import (
 const (
 	tcArrayForEach     = "array-for-each"
 	tcArrayForEachPair = "array-for-each-pair"
+	tcArrayJoin        = "array-join"
+	tcArrayFlatMap     = "array-flat-map"
 )
 
 // panicOnMaterializeSeq is a Sequence of n items where realizing the WHOLE
@@ -115,9 +117,9 @@ func TestHOFMaterializationLimit(t *testing.T) {
 		// array:join concatenating two 600-member arrays -> 1200 members > 1000.
 		// Inputs stay within the limit; only array:join's accumulated member list
 		// overflows it.
-		{name: "array-join", expr: `array:join((array { 1 to 600 }, array { 1 to 600 }))`},
+		{name: tcArrayJoin, expr: `array:join((array { 1 to 600 }, array { 1 to 600 }))`},
 		// array:flat-map producing 2 members per input member.
-		{name: "array-flat-map", expr: `array:flat-map(array { 1 to 600 }, function($x) { [$x, $x] })`},
+		{name: tcArrayFlatMap, expr: `array:flat-map(array { 1 to 600 }, function($x) { [$x, $x] })`},
 		// array:flatten over a wide (variable-bound) array whose flattened size
 		// exceeds the limit. The array is bound as a variable so its construction
 		// does not trip the `1 to N` range guard before array:flatten runs.
@@ -361,14 +363,14 @@ func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
 		},
 		// array:join bulk-appends one array's wide member list.
 		{
-			name: "array-join",
+			name: tcArrayJoin,
 			expr: `array:join($arr)`,
 			vars: varsSet("arr", wideArrayVal(wide)),
 		},
 		// array:flat-map's callback returns a wide array whose members are
 		// bulk-appended.
 		{
-			name: "array-flat-map",
+			name: tcArrayFlatMap,
 			expr: `array:flat-map(array { 1 }, function($x) { $arr })`,
 			vars: varsSet("arr", wideArrayVal(wide)),
 		},
@@ -514,10 +516,10 @@ func TestArrayMemberSeqLenOpLimit(t *testing.T) {
 	}{
 		// array:join over a single 1-member array whose member holds many items.
 		// The op-charge on that member's seqLen must fire before NewArray clones it.
-		{name: "array-join", expr: `array:join([ 1 to 5000 ])`},
+		{name: tcArrayJoin, expr: `array:join([ 1 to 5000 ])`},
 		// array:flat-map's callback returns a 1-member array whose member holds
 		// `wide` items; the per-member seqLen op-charge must fire first.
-		{name: "array-flat-map", expr: `array:flat-map(array { 1 }, function($x) { [ 1 to 5000 ] })`},
+		{name: tcArrayFlatMap, expr: `array:flat-map(array { 1 }, function($x) { [ 1 to 5000 ] })`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -564,10 +566,10 @@ func TestArrayMemberSeqLenNodeLimit(t *testing.T) {
 	}{
 		// array:join over a single 1-member array whose member holds 1100 items.
 		// The member-count check (1 <= 1000) passes; only the item-count bound fires.
-		{name: "array-join", expr: `array:join($arr)`, vars: varsSet("arr", wideMemberArray(1100))},
+		{name: tcArrayJoin, expr: `array:join($arr)`, vars: varsSet("arr", wideMemberArray(1100))},
 		// array:flat-map's callback returns a 1-member array whose member holds
 		// 1100 items; same — only the per-member item-count bound trips the limit.
-		{name: "array-flat-map", expr: `array:flat-map(array { 1 }, function($x) { $arr })`, vars: varsSet("arr", wideMemberArray(1100))},
+		{name: tcArrayFlatMap, expr: `array:flat-map(array { 1 }, function($x) { $arr })`, vars: varsSet("arr", wideMemberArray(1100))},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -579,6 +581,130 @@ func TestArrayMemberSeqLenNodeLimit(t *testing.T) {
 				MaxNodesForTesting(limit).
 				Evaluate(t.Context(), compiled, nil)
 			require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+		})
+	}
+}
+
+// TestArrayFilterSelectedItemBound proves array:filter bounds the total ITEM
+// count of the members it SELECTS against maxNodes (not merely the selected
+// member COUNT) before NewArray clones/materializes them. The input array holds
+// a single member whose item count alone exceeds maxNodes and the callback
+// selects it, so a regression that checked only the selected member count
+// (= 1 <= maxNodes) would clone the oversized member; only the per-member
+// item-count bound trips ErrNodeSetLimit. The wide member is bound via a
+// variable under EvalBorrowing so the input construction does not trip the
+// `1 to N` range guard first.
+func TestArrayFilterSelectedItemBound(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+
+	wideSeq := func(n int) xpath3.Sequence {
+		items := make([]xpath3.Item, n)
+		for i := range items {
+			items[i] = xpath3.SingleInteger(int64(i + 1)).Get(0)
+		}
+		return xpath3.ItemSlice(items)
+	}
+	// wideMemberArray builds an array with ONE member: a wide sequence of n items.
+	vars := varsSet("arr", xpath3.ItemSlice{xpath3.NewArray([]xpath3.Sequence{wideSeq(1100)})})
+
+	compiled, err := xpath3.NewCompiler().Compile(`array:filter($arr, function($x) { true() })`)
+	require.NoError(t, err)
+
+	_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+		Variables(vars).
+		MaxNodesForTesting(limit).
+		Evaluate(t.Context(), compiled, nil)
+	require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+}
+
+// TestArrayJoinFlatMapEmptyMemberCountBound proves array:join and array:flat-map
+// bound the result MEMBER count independently of the item count. A member that
+// is an EMPTY sequence adds zero items but still adds a member, so without a
+// member-count bound many empty members could build an array with more than
+// maxNodes members while the item total stays at zero. Each case drives the
+// member count past the limit with empty members and must be rejected with
+// ErrNodeSetLimit.
+func TestArrayJoinFlatMapEmptyMemberCountBound(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+
+	// emptyMemberArray builds an array with n EMPTY members.
+	emptyMemberArray := func(n int) xpath3.Sequence {
+		members := make([]xpath3.Sequence, n)
+		for i := range members {
+			members[i] = xpath3.ItemSlice{}
+		}
+		return xpath3.ItemSlice{xpath3.NewArray(members)}
+	}
+
+	cases := []struct {
+		name string
+		expr string
+		vars *xpath3.Variables
+	}{
+		// array:join over a single array with 1100 empty members -> 1100 members,
+		// 0 items > 1000. Only the member-count bound can fire.
+		{name: tcArrayJoin, expr: `array:join($arr)`, vars: varsSet("arr", emptyMemberArray(1100))},
+		// array:flat-map's callback returns a 1100-empty-member array; same — only
+		// the member-count bound trips the limit.
+		{name: tcArrayFlatMap, expr: `array:flat-map(array { 1 }, function($x) { $arr })`, vars: varsSet("arr", emptyMemberArray(1100))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(tc.vars).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+		})
+	}
+}
+
+// TestArrayJoinFlatMapEmptyMemberOpLimit proves array:join and array:flat-map
+// charge at least one op per appended member even when the member is an EMPTY
+// sequence (item length 0). A regression that charged only seqLen(member) would
+// let many empty members run unbounded because fnCountOps(...,0) never trips
+// OpLimit. With NO node-set limit (so only the op-counter can fire) and a low
+// op-limit, the wide list of empty members must trip ErrOpLimit. The wide array
+// is bound via a variable under EvalBorrowing so producing it costs no ops.
+func TestArrayJoinFlatMapEmptyMemberOpLimit(t *testing.T) {
+	t.Parallel()
+
+	const opLimit = 1000
+	const wide = 5000
+
+	emptyMemberArray := func(n int) xpath3.Sequence {
+		members := make([]xpath3.Sequence, n)
+		for i := range members {
+			members[i] = xpath3.ItemSlice{}
+		}
+		return xpath3.ItemSlice{xpath3.NewArray(members)}
+	}
+
+	cases := []struct {
+		name string
+		expr string
+		vars *xpath3.Variables
+	}{
+		{name: tcArrayJoin, expr: `array:join($arr)`, vars: varsSet("arr", emptyMemberArray(wide))},
+		{name: tcArrayFlatMap, expr: `array:flat-map(array { 1 }, function($x) { $arr })`, vars: varsSet("arr", emptyMemberArray(wide))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(tc.vars).
+				OpLimit(opLimit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrOpLimit)
 		})
 	}
 }

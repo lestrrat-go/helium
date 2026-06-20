@@ -252,6 +252,13 @@ func fnArrayJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		members := a.members0()
 		for _, member := range members {
+			// Bound the result MEMBER count independently of the item count: an
+			// EMPTY member adds zero items (totalItems unchanged) but still adds a
+			// member, so many empty members could otherwise build an array with
+			// more than maxNodes members while the item total stays at zero.
+			if maxNodes > 0 && len(allMembers)+1 > maxNodes {
+				return nil, ErrNodeSetLimit
+			}
 			// Bound the total member item count before appending so NewArray's
 			// clone cannot materialize a member that pushes the accumulated item
 			// count past maxNodes. The subtraction is overflow-safe.
@@ -259,12 +266,12 @@ func fnArrayJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 			if maxNodes > 0 && mLen > maxNodes-totalItems {
 				return nil, ErrNodeSetLimit
 			}
-			// Charge the member item count against the op-counter before the
-			// append. NewArray clones each member sequence, so charge each
-			// member's item length (not just one per member): a single member
-			// with many items below maxNodes but above OpLimit must still be
-			// rejected.
-			if err := fnCountOps(ctx, ec, mLen); err != nil {
+			// Charge at least one op per appended member (max with the member's
+			// item length): NewArray clones each member sequence, so a single
+			// member with many items below maxNodes but above OpLimit must still be
+			// rejected, AND many EMPTY members (mLen == 0) must each cost an op so
+			// they cannot bypass OpLimit.
+			if err := fnCountOps(ctx, ec, max(mLen, 1)); err != nil {
 				return nil, err
 			}
 			totalItems += mLen
@@ -397,6 +404,13 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 			}
 			if ra, ok := item.(ArrayItem); ok {
 				for _, member := range ra.members0() {
+					// Bound the result MEMBER count independently of the item count:
+					// an EMPTY member adds zero items but still adds a member, so many
+					// empty members could otherwise build an array with more than
+					// maxNodes members while the item total stays at zero.
+					if maxNodes > 0 && len(allMembers)+1 > maxNodes {
+						return nil, ErrNodeSetLimit
+					}
 					// Bound the total member item count before appending so
 					// NewArray's clone cannot materialize a member that pushes the
 					// accumulated item count past maxNodes. The subtraction is
@@ -405,10 +419,12 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 					if maxNodes > 0 && mLen > maxNodes-totalItems {
 						return nil, ErrNodeSetLimit
 					}
-					// NewArray clones each member sequence, so charge its item
-					// length (not just one per member): a single member with many
-					// items below maxNodes but above OpLimit must still be rejected.
-					if err := fnCountOps(ctx, ec, mLen); err != nil {
+					// Charge at least one op per appended member (max with the
+					// member's item length): NewArray clones each member sequence, so
+					// a single member with many items below maxNodes but above OpLimit
+					// must still be rejected, AND many EMPTY members (mLen == 0) must
+					// each cost an op so they cannot bypass OpLimit.
+					if err := fnCountOps(ctx, ec, max(mLen, 1)); err != nil {
 						return nil, err
 					}
 					totalItems += mLen
@@ -438,6 +454,11 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 	ec := getFnContext(ctx)
 	maxNodes := fnMaxNodes(ec)
 	var result []Sequence
+	// totalItems counts items already accumulated across all selected member
+	// sequences so NewArray's per-member clone cannot materialize more than
+	// maxNodes items: a single selected member with a huge lazy sequence must be
+	// rejected before it is cloned, not just the member COUNT bounded.
+	totalItems := 0
 	for _, m := range a.members0() {
 		if err := fnCountOp(ctx, ec); err != nil {
 			return nil, err
@@ -454,12 +475,25 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 		if !ok || av.TypeName != TypeBoolean {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array:filter callback must return xs:boolean"}
 		}
-		if av.BooleanVal() {
-			if maxNodes > 0 && len(result)+1 > maxNodes {
-				return nil, ErrNodeSetLimit
-			}
-			result = append(result, m)
+		if !av.BooleanVal() {
+			continue
 		}
+		// Bound the total selected item count before appending so NewArray's
+		// clone cannot materialize a member that pushes the accumulated item count
+		// past maxNodes. The subtraction is overflow-safe.
+		mLen := seqLen(m)
+		if maxNodes > 0 && mLen > maxNodes-totalItems {
+			return nil, ErrNodeSetLimit
+		}
+		// Charge the selected member's item length against the op-counter before
+		// the append. NewArray clones each member sequence, so charge each
+		// member's item length (not just one per member): a single member with
+		// many items below maxNodes but above OpLimit must still be rejected.
+		if err := fnCountOps(ctx, ec, mLen); err != nil {
+			return nil, err
+		}
+		totalItems += mLen
+		result = append(result, m)
 	}
 	return ItemSlice{NewArray(result)}, nil
 }
