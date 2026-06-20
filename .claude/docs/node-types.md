@@ -95,7 +95,7 @@ A `ProcessingInstruction` stores its content in the `data` string field (mirrors
 - Entities: `name` (flat)
 
 ### Document ID Lookup
-`Document.GetElementByID(id)` — O(1) via `ids map[string]*Element` (populated during parse). Falls back to O(n) tree walk if map empty.
+`Document.GetElementByID(id)` — O(1) via `ids map[string]*Element` (populated during parse). Falls back to O(n) tree walk if map empty, unless `idsSkip` is set (returns nil immediately). `Document.SkipIDs()`/`SetSkipIDs(bool)` read/write that flag (set from parser `SkipIDs(true)`); carry it onto derived docs so id() semantics match the source.
 
 ### Content() Default
 `docnode.Content()` walks children and concatenates (returns a fresh buffer). Overridden by Text, CDATA, Comment, PI, EntityRef.

@@ -22,9 +22,16 @@ import (
 //     preflight that AddChild runs (the tree is freshly constructed and provably
 //     acyclic and duplicate-free).
 //
-// The document URI and DTD are preserved exactly as helium.CopyDoc would. The
-// result serializes byte-for-byte identically to copy+prune+strip on the same
-// rules, while the caller's source DOM is never mutated.
+// The document URI and DTD are preserved exactly as helium.CopyDoc would. In
+// addition, document-level state that the copy stands in for the source on is
+// carried over: the version/encoding/standalone (via NewDocument), the property
+// flags, and the ID-skip state. The latter matters because the copy replaces the
+// source for the duration of the transform; without it, a source parsed with
+// SkipIDs(true) would lose that flag and id()/GetElementByID on the copy would
+// wrongly resolve xml:id/ID attributes that the original source omitted.
+//
+// The result serializes byte-for-byte identically to copy+prune+strip on the
+// same rules, while the caller's source DOM is never mutated.
 //
 // strip and preserve are the effective xsl:strip-space / xsl:preserve-space
 // nameTests. At this point in the transform (before the exec context exists) the
@@ -33,6 +40,15 @@ import (
 // applied later.
 func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap bool) (*helium.Document, map[helium.Node]helium.Node, error) {
 	dst := helium.NewDocument(src.Version(), src.Encoding(), src.Standalone())
+
+	// Carry over the remaining document-level state that the copy stands in for
+	// the source on. Properties record how the source was produced (e.g.
+	// DocHTML, well-formedness); idsSkip preserves ID semantics so id() and
+	// GetElementByID on the copy behave exactly as on the original source. The
+	// ID table itself is intentionally NOT copied: it points at the original
+	// source's elements, and a SkipIDs source has none anyway.
+	dst.SetProperties(src.Properties())
+	dst.SetSkipIDs(src.SkipIDs())
 
 	// Deep-copy the DTD first (metadata + entities/elements/attributes/notations),
 	// matching helium.CopyDoc's ordering so the copy round-trips identically.

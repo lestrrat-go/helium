@@ -169,6 +169,20 @@ func (d *Document) Standalone() DocumentStandaloneType {
 	return d.standalone
 }
 
+// SkipIDs reports whether ID attribute interning was skipped when this
+// document was produced (mirrors the parser's SkipIDs option). When true,
+// GetElementByID and fn:id always return no match without an O(n) tree walk.
+func (d *Document) SkipIDs() bool {
+	return d.idsSkip
+}
+
+// SetSkipIDs sets the document's ID-skip state. This is used when producing a
+// derived document (e.g. an xsl:strip-space copy) that must mirror the source's
+// ID semantics.
+func (d *Document) SetSkipIDs(v bool) {
+	d.idsSkip = v
+}
+
 func (d *Document) Version() string {
 	return d.version
 }
