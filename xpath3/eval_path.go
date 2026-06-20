@@ -387,6 +387,9 @@ func appendAxisNodeMatches(ctx context.Context, dst []helium.Node, ec *evalConte
 		}
 		traversed := 0
 		for child := range helium.Children(node) {
+			if err := ctx.Err(); err != nil {
+				return nil, 0, err
+			}
 			if !ixpath.IsXDMChild(child) {
 				continue
 			}
@@ -401,14 +404,25 @@ func appendAxisNodeMatches(ctx context.Context, dst []helium.Node, ec *evalConte
 		if !ok {
 			return dst, 0, nil
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
 		traversed := 0
+		var iterErr error
 		elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+			if err := ctx.Err(); err != nil {
+				iterErr = err
+				return false
+			}
 			traversed++
 			if matchNodeTest(nodeTest, attr, axis, ec) {
 				dst = append(dst, attr)
 			}
 			return true
 		})
+		if iterErr != nil {
+			return nil, 0, iterErr
+		}
 		return dst, traversed, nil
 	case AxisSelf:
 		if matchNodeTest(nodeTest, node, axis, ec) {
