@@ -303,6 +303,87 @@ func TestGetAttributeNodeNS(t *testing.T) {
 	require.Nil(t, attr)
 }
 
+func TestSetAttributeNSDuplicate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("same namespace URI via different Namespace pointers is a duplicate", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		e := doc.CreateElement("root")
+
+		// Two distinct *Namespace values that share the same URI. Per XML
+		// rules an element may not carry two attributes with the same
+		// (namespace URI, local name), regardless of which namespace
+		// declaration (pointer) they reference.
+		ns1 := helium.NewNamespace("a", "http://example.com/ns")
+		ns2 := helium.NewNamespace("b", "http://example.com/ns")
+
+		_, err := e.SetAttributeNS("attr", "first", ns1)
+		require.NoError(t, err)
+
+		_, err = e.SetAttributeNS("attr", "second", ns2)
+		require.ErrorIs(t, err, helium.ErrDuplicateAttribute)
+	})
+
+	t.Run("genuinely different namespaces are not duplicates", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		e := doc.CreateElement("root")
+
+		ns1 := helium.NewNamespace("a", "http://example.com/ns1")
+		ns2 := helium.NewNamespace("b", "http://example.com/ns2")
+
+		_, err := e.SetAttributeNS("attr", "first", ns1)
+		require.NoError(t, err)
+
+		_, err = e.SetAttributeNS("attr", "second", ns2)
+		require.NoError(t, err)
+		require.Len(t, e.Attributes(), 2)
+	})
+}
+
+func TestSetLiteralAttributeNSDuplicate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("same namespace URI via different prefixes replaces in place", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		e := doc.CreateElement("root")
+
+		// Two distinct *Namespace values that share the same URI but differ
+		// in prefix. SetLiteralAttributeNS routes through addProperty, which
+		// must treat these as the SAME attribute (expanded name {urn:x}a)
+		// and replace in place rather than creating a second property that
+		// serializes to a different QName (p:a vs q:a) yet has an identical
+		// expanded name.
+		ns1 := helium.NewNamespace("p", "urn:x")
+		ns2 := helium.NewNamespace("q", "urn:x")
+
+		require.NoError(t, e.SetLiteralAttributeNS("a", "first", ns1))
+		require.NoError(t, e.SetLiteralAttributeNS("a", "second", ns2))
+
+		attrs := e.Attributes()
+		require.Len(t, attrs, 1)
+		require.Equal(t, "second", attrs[0].Value())
+		v, ok := e.GetAttributeNS("a", "urn:x")
+		require.True(t, ok)
+		require.Equal(t, "second", v)
+	})
+
+	t.Run("genuinely different namespaces coexist", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		e := doc.CreateElement("root")
+
+		ns1 := helium.NewNamespace("p", "urn:x")
+		ns2 := helium.NewNamespace("q", "urn:y")
+
+		require.NoError(t, e.SetLiteralAttributeNS("a", "first", ns1))
+		require.NoError(t, e.SetLiteralAttributeNS("a", "second", ns2))
+		require.Len(t, e.Attributes(), 2)
+	})
+}
+
 func TestRemoveAttribute(t *testing.T) {
 	t.Parallel()
 

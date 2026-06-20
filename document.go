@@ -587,6 +587,9 @@ func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
 			}
 		}()
 	}
+	if d == nil {
+		return nil, false
+	}
 	if ints := d.intSubset; ints != nil {
 		if pdebug.Enabled {
 			pdebug.Printf("Looking into internal subset...")
@@ -757,7 +760,16 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			}
 
 			val := entbuf.String()
-			ent, ok := d.GetEntity(val)
+
+			// Predefined entities (amp, lt, gt, apos, quot) are not
+			// document-dependent, so resolve them up front. This ensures
+			// they inline correctly even when the document (and thus its
+			// internal/external subset) is nil.
+			ent, err2 := resolvePredefinedEntity(val)
+			ok := err2 == nil
+			if !ok {
+				ent, ok = d.GetEntity(val)
+			}
 
 			// Predefined entities are inlined; all others (resolved or not)
 			// become entity reference nodes. This matches libxml2's
@@ -859,18 +871,24 @@ func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
 		return nil, errors.New("empty name")
 	}
 
-	n := newEntityRef()
-	n.doc = d
+	var decoded string
 	if name[0] != '&' {
-		n.name = name
+		decoded = name
 	} else {
 		// the name should be everything but '&' and ';'
 		if name[len(name)-1] == ';' {
-			n.name = name[1 : len(name)-1]
+			decoded = name[1 : len(name)-1]
 		} else {
-			n.name = name[1:]
+			decoded = name[1:]
 		}
 	}
+	if decoded == "" {
+		return nil, fmt.Errorf("char ref %q has an empty name", name)
+	}
+
+	n := newEntityRef()
+	n.doc = d
+	n.name = decoded
 	return n, nil
 }
 
