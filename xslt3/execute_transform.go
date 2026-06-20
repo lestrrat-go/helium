@@ -23,7 +23,15 @@ import (
 // The correspondence is established by a parallel pre-order walk of orig and
 // copyDoc: CopyDoc reproduces children in document order, so the two trees have
 // identical shape and the i-th node visited in orig matches the i-th node in
-// copyDoc.
+// copyDoc. Attributes are not part of the FirstChild/NextSibling spine, so for
+// each matching element pair their attributes are mapped separately by expanded
+// (URI, local) name. Namespace nodes are wrappers that are likewise off the
+// child spine; a selected *helium.NamespaceNodeWrapper is remapped by locating
+// the mapped owner element and rebuilding an equivalent wrapper bound to a
+// matching namespace declaration in scope on the copy. This ensures every
+// selected node (element, text, comment, PI, attribute, namespace) points into
+// the stripped copy, so XPath navigation from a matched template observes the
+// same tree as the context node.
 func remapSelectionToCopy(sel xpath3.Sequence, orig, copyDoc *helium.Document) xpath3.Sequence {
 	nodeMap := make(map[helium.Node]helium.Node)
 	var walk func(a, b helium.Node)
@@ -32,6 +40,14 @@ func remapSelectionToCopy(sel xpath3.Sequence, orig, copyDoc *helium.Document) x
 			return
 		}
 		nodeMap[a] = b
+		// Attributes hang off the element's property list, not the child spine,
+		// so map them here. CopyDoc preserves attribute identity by expanded
+		// name, which is unique per element, so match on (URI, local).
+		if ea, ok := a.(*helium.Element); ok {
+			if eb, ok := b.(*helium.Element); ok {
+				mapElementAttributes(nodeMap, ea, eb)
+			}
+		}
 		ca := a.FirstChild()
 		cb := b.FirstChild()
 		for ca != nil && cb != nil {
@@ -50,6 +66,16 @@ func remapSelectionToCopy(sel xpath3.Sequence, orig, copyDoc *helium.Document) x
 			items = append(items, item)
 			continue
 		}
+		// Namespace nodes are wrappers off the child spine: remap by relocating
+		// the owner element onto the copy and rebuilding an equivalent wrapper.
+		if nsw, ok := ni.Node.(*helium.NamespaceNodeWrapper); ok {
+			if mapped := remapNamespaceWrapper(nodeMap, nsw); mapped != nil {
+				items = append(items, xpath3.NodeItem{Node: mapped})
+				continue
+			}
+			items = append(items, item)
+			continue
+		}
 		if mapped, found := nodeMap[ni.Node]; found {
 			items = append(items, xpath3.NodeItem{Node: mapped})
 			continue
@@ -57,6 +83,54 @@ func remapSelectionToCopy(sel xpath3.Sequence, orig, copyDoc *helium.Document) x
 		items = append(items, item)
 	}
 	return items
+}
+
+// mapElementAttributes records the correspondence between the attributes of an
+// original element and those of its copy, keyed by expanded (URI, local) name
+// (unique within a single element).
+func mapElementAttributes(nodeMap map[helium.Node]helium.Node, ea, eb *helium.Element) {
+	copyAttrs := make(map[string]*helium.Attribute)
+	for _, attr := range eb.Attributes() {
+		copyAttrs[helium.ClarkName(attr.URI(), attr.LocalName())] = attr
+	}
+	for _, attr := range ea.Attributes() {
+		if dst, ok := copyAttrs[helium.ClarkName(attr.URI(), attr.LocalName())]; ok {
+			nodeMap[attr] = dst
+		}
+	}
+}
+
+// remapNamespaceWrapper rebuilds an initial-selection namespace node so that it
+// belongs to the copied tree. It maps the wrapper's owner element onto the copy,
+// then locates a namespace declaration in scope on the copied element with the
+// same prefix and URI and returns a fresh wrapper bound to it. Returns nil if
+// the owner could not be mapped or no matching declaration was found.
+func remapNamespaceWrapper(nodeMap map[helium.Node]helium.Node, nsw *helium.NamespaceNodeWrapper) helium.Node {
+	owner := nsw.Parent()
+	if owner == nil {
+		return nil
+	}
+	mappedOwner, ok := nodeMap[owner]
+	if !ok {
+		return nil
+	}
+	prefix := nsw.Name()
+	uri := string(nsw.Content())
+	// Walk the copied owner and its ancestors for the in-scope declaration that
+	// matches the original wrapper's (prefix, URI). Namespace nodes can be
+	// reported on a descendant of the element that declares them.
+	for n := mappedOwner; n != nil; n = n.Parent() {
+		nc, ok := n.(helium.NamespaceContainer)
+		if !ok {
+			continue
+		}
+		for _, ns := range nc.Namespaces() {
+			if ns.Prefix() == prefix && ns.URI() == uri {
+				return helium.NewNamespaceNodeWrapper(ns, mappedOwner)
+			}
+		}
+	}
+	return nil
 }
 
 // pruneRedundantNamespaceDecls removes namespace declarations on copied elements
@@ -75,9 +149,7 @@ func pruneRedundantNamespaceDecls(doc *helium.Document) {
 		// declarations. Build it as a private copy so sibling subtrees do not
 		// observe each other's declarations.
 		childScope := make(map[string]string, len(inScope)+len(elem.Namespaces()))
-		for k, v := range inScope {
-			childScope[k] = v
-		}
+		maps.Copy(childScope, inScope)
 		var redundant []string
 		for _, ns := range elem.Namespaces() {
 			if inScope[ns.Prefix()] == ns.URI() {
