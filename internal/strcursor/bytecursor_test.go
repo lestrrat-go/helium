@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -44,6 +45,31 @@ func TestByteCursorSurfacesErrorReturnedWithData(t *testing.T) {
 	// rather than silently treating the stream as cleanly terminated.
 	require.True(t, cur.Done(), "Done should be true after buffer drains")
 	require.ErrorIs(t, cur.Err(), wantErr, "the non-EOF read error must be surfaced after the buffered bytes are consumed")
+}
+
+// zeroProgressReader always returns (0, nil) for a non-empty request, never
+// advancing and never erroring. A naive fill loop spins on it forever.
+type zeroProgressReader struct{}
+
+func (zeroProgressReader) Read(p []byte) (int, error) {
+	return 0, nil
+}
+
+func TestByteCursorZeroProgressReaderDoesNotHang(t *testing.T) {
+	cur := NewByteCursor(zeroProgressReader{})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		require.True(t, cur.Done(), "a zero-progress reader must terminate fill, not spin")
+		require.ErrorIs(t, cur.Err(), io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress")
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ByteCursor fillBuffer hung on a zero-progress reader")
+	}
 }
 
 func TestByteCursorTreatsEOFWithDataAsCleanEnd(t *testing.T) {

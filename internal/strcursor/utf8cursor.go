@@ -161,6 +161,13 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 	for c.buflen-c.bufpos < minBytes {
 		n, err := c.in.Read(c.buf[c.buflen:])
 		c.buflen += n
+		// A reader that returns (0, nil) for a non-empty request makes no
+		// progress. Looping on repeated (0, nil) would spin forever, so bail
+		// with io.ErrNoProgress to fail fast instead of hanging the parser.
+		if n == 0 && err == nil {
+			c.readErr = io.ErrNoProgress
+			return io.ErrNoProgress
+		}
 		if err != nil {
 			// Remember a genuine decode/transcoding error (anything other than
 			// a clean EOF) so the parser can distinguish malformed input from a

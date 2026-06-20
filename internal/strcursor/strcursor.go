@@ -660,6 +660,14 @@ func (c *ByteCursor) fillBuffer(n int) error {
 	for c.buflen < n {
 		nread, err := c.in.Read(c.buf[c.buflen:])
 		c.buflen += nread
+		// A reader that returns (0, nil) for a non-empty request makes no
+		// progress. Per io.Reader, callers should treat repeated (0, nil) as a
+		// no-op, but looping on it spins forever. Bail with io.ErrNoProgress so
+		// a pathological reader fails fast instead of hanging the parser.
+		if nread == 0 && err == nil {
+			c.readErr = io.ErrNoProgress
+			return io.ErrNoProgress
+		}
 		if err != nil {
 			// Remember a genuine read error (anything other than a clean EOF)
 			// so it survives even when this Read also returned data (n > 0),

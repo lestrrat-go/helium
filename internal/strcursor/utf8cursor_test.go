@@ -4,9 +4,27 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestUTF8CursorZeroProgressReaderDoesNotHang(t *testing.T) {
+	cur := NewUTF8Cursor(zeroProgressReader{})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		require.True(t, cur.Done(), "a zero-progress reader must terminate fill, not spin")
+		require.ErrorIs(t, cur.Err(), io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress")
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("UTF8Cursor fillBuffer hung on a zero-progress reader")
+	}
+}
 
 type chunkedReader struct {
 	data  []byte
