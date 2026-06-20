@@ -43,8 +43,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 			return dynamicErrorCause(errCodeFODC0002, err, "xsl:source-document cannot load %q: %v", uri, err)
 		}
 
-		p := helium.NewParser().BaseURI(resolvedURI)
-		doc, err = p.Parse(ctx, data)
+		doc, err = parseExternalXML(ctx, data, resolvedURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes, nil)
 		if err != nil {
 			return dynamicError(errCodeFODC0002, "xsl:source-document cannot parse %q: %v", uri, err)
 		}
@@ -1288,8 +1287,7 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 		return nil, dynamicErrorCause(errCodeFODC0002, readErr, "xsl:merge cannot load %q: %v", uri, readErr)
 	}
 
-	p := helium.NewParser().BaseURI(resolvedURI)
-	doc, parseErr := p.Parse(ctx, data)
+	doc, parseErr := parseExternalXML(ctx, data, resolvedURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes, nil)
 	if parseErr != nil {
 		return nil, dynamicError(errCodeFODC0002, "xsl:merge cannot parse %q: %v", uri, parseErr)
 	}

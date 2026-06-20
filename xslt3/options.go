@@ -31,6 +31,10 @@ type compileConfig struct {
 	importSchemas    []*xsd.Schema              // pre-compiled schemas for xsl:import-schema resolution
 	isSubPackage     bool                       // true when compiling a sub-package (via xsl:use-package)
 	maxResourceBytes int64                      // per-resource read cap; 0 = MaxResourceBytes default, <0 = unbounded
+	// allowExternalEntities opts into the legacy permissive parse of external
+	// stylesheet modules (resolver-mediated external entity / DTD loading).
+	// Default false: XXE is blocked.
+	allowExternalEntities bool
 }
 
 // --- Transform configuration (internal) ---
@@ -64,6 +68,11 @@ type transformConfig struct {
 	resolvedOutputDef     *OutputDef    // resolved primary output def (set by executeTransform)
 	globalContextSelect   string        // XPath for global context item (evaluated after strip-space)
 	maxResourceBytes      int64         // per-resource read cap; 0 = MaxResourceBytes default, <0 = unbounded
+	// allowExternalEntities opts into the legacy permissive parse of runtime
+	// documents loaded via fn:doc/document()/xsl:source-document/xsl:merge
+	// (resolver-mediated external entity / DTD loading). Default false: XXE is
+	// blocked.
+	allowExternalEntities bool
 }
 
 // MessageHandler handles xsl:message output during transformation.
