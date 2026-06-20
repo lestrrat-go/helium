@@ -1195,4 +1195,13 @@ func TestValidateNilSchema(t *testing.T) {
 		})
 		require.ErrorIs(t, verr, schematron.ErrNoSchema)
 	})
+
+	t.Run("empty Schema with no patterns", func(t *testing.T) {
+		t.Parallel()
+		var verr error
+		require.NotPanics(t, func() {
+			verr = schematron.NewValidator(&schematron.Schema{}).Validate(t.Context(), doc)
+		})
+		require.ErrorIs(t, verr, schematron.ErrNoSchema)
+	})
 }

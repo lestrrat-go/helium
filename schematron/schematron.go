@@ -199,7 +199,7 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	// leaked.
 	defer v.closeHandler()
 
-	if v.schema == nil {
+	if v.schema == nil || len(v.schema.patterns) == 0 {
 		return ErrNoSchema
 	}
 
