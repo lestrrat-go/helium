@@ -183,6 +183,63 @@ func TestComplexTypeContentModelExclusivity(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	// The same "at most one content model particle" rule applies inside a
+	// complexContent extension; a second model group must not silently
+	// overwrite ContentModel.
+	t.Run("rejects two model groups in extension", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base">
+        <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+        <xs:choice><xs:element name="b" type="xs:string"/></xs:choice>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "more than one content model particle")
+	})
+
+	// And inside a complexContent restriction.
+	t.Run("rejects two model groups in restriction", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+        <xs:choice><xs:element name="b" type="xs:string"/></xs:choice>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "more than one content model particle")
+	})
+
+	t.Run("accepts single model group in extension", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base">
+        <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+        <xs:attribute name="x" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
 }
 
 // TestDuplicateAttributeUse (C-010) verifies that two attribute uses with the
@@ -312,6 +369,61 @@ func TestDuplicateAttributeUse(t *testing.T) {
   <xs:element name="root" type="t:Derived"/>
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), dup)
+	})
+
+	// A simpleContent extension that redeclares an attribute its base already
+	// declares is a duplicate use. Before the fix the simpleContent branch
+	// inherited base attributes and returned BEFORE the base-vs-derived check,
+	// so the redeclaration compiled clean.
+	t.Run("rejects simpleContent extension redeclaring a base attribute", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="a" type="xs:string"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:simpleContent>
+      <xs:extension base="Base">
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), dup)
+	})
+
+	// A prohibited attribute use (here pulled in via an attribute group on the
+	// base) contributes no attribute use, so the same attribute really used by
+	// the extension must NOT false-trigger a duplicate. Before the fix the
+	// base-vs-derived check counted prohibited uses (unlike checkDuplicateAttrUses).
+	t.Run("accepts prohibited base attr via group beside extension use", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:t="urn:t" targetNamespace="urn:t" attributeFormDefault="unqualified">
+  <xs:attribute name="a" type="xs:string"/>
+  <xs:attributeGroup name="g">
+    <xs:attribute ref="t:a" use="prohibited"/>
+  </xs:attributeGroup>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attributeGroup ref="t:g"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="t:Base">
+        <xs:sequence/>
+        <xs:attribute ref="t:a"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
 	})
 }
 

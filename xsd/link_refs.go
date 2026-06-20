@@ -292,7 +292,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// filtered to extension types with a base, so no per-item guard is needed.
 	for _, td := range extensionTypes {
 		if td.ContentType == ContentTypeSimple {
-			// simpleContent extension — inherit attributes and wildcard from base.
+			// simpleContent extension — check for base-vs-derived duplicate
+			// attributes BEFORE inheriting the base attributes, then merge.
+			c.checkExtensionAttrDuplicates(ctx, td)
 			if td.BaseType.Attributes != nil {
 				td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
 			}
@@ -340,25 +342,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			td.ContentType = td.BaseType.ContentType
 		}
 		// Check for duplicate attributes before merging base type attributes.
-		if td.BaseType.Attributes != nil && td.Attributes != nil && c.filename != "" {
-			baseAttrNames := make(map[QName]bool, len(td.BaseType.Attributes))
-			for _, au := range td.BaseType.Attributes {
-				baseAttrNames[au.Name] = true
-			}
-			for _, au := range td.Attributes {
-				if baseAttrNames[au.Name] {
-					if src, ok := c.typeDefSources[td]; ok {
-						component := componentLocalComplexType
-						if !src.isLocal {
-							component = td.Name.Local
-						}
-						msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-						c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
-						c.errorCount++
-					}
-				}
-			}
-		}
+		c.checkExtensionAttrDuplicates(ctx, td)
 		// Inherit attributes from base.
 		if td.BaseType.Attributes != nil {
 			td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
@@ -398,6 +382,47 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				c.checkUPA(ctx, td, src)
 			}
 		}
+	}
+}
+
+// checkExtensionAttrDuplicates reports an attribute use redeclared by a
+// (simpleContent or complexContent) extension type that its base type already
+// declares. Prohibited uses do not contribute an attribute use and are skipped
+// on both sides (mirroring checkDuplicateAttrUses), so a prohibited use carried
+// in via an attribute group does not falsely trigger a duplicate diagnostic.
+// Must run BEFORE the base attributes are merged into td.Attributes.
+func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef) {
+	if c.filename == "" || td.BaseType == nil {
+		return
+	}
+	if td.BaseType.Attributes == nil || td.Attributes == nil {
+		return
+	}
+	baseAttrNames := make(map[QName]bool, len(td.BaseType.Attributes))
+	for _, au := range td.BaseType.Attributes {
+		if au.Prohibited {
+			continue
+		}
+		baseAttrNames[au.Name] = true
+	}
+	for _, au := range td.Attributes {
+		if au.Prohibited {
+			continue
+		}
+		if !baseAttrNames[au.Name] {
+			continue
+		}
+		src, ok := c.typeDefSources[td]
+		if !ok {
+			continue
+		}
+		component := componentLocalComplexType
+		if !src.isLocal {
+			component = td.Name.Local
+		}
+		msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+		c.errorCount++
 	}
 }
 

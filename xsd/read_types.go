@@ -260,6 +260,10 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		c.markChameleonEligible(td, elem, baseRef)
 	}
 
+	// At most one model-group particle (sequence|choice|all) is permitted; a
+	// second one would silently overwrite td.ContentModel. Track the first seen.
+	var contentModelChild string
+
 	// Parse child model groups and attributes.
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -268,6 +272,18 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
+		}
+		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) {
+			if contentModelChild != "" {
+				if c.filename != "" {
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, ce.Line(),
+						elem.LocalName(), componentLocalComplexType,
+						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)), helium.ErrorLevelFatal))
+					c.errorCount++
+				}
+				continue
+			}
+			contentModelChild = ce.LocalName()
 		}
 		switch {
 		case isXSDElement(ce, elemSequence):
@@ -320,6 +336,10 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		c.typeRefs[td] = qn
 		c.markChameleonEligible(td, elem, baseRef)
 	}
+	// At most one model-group particle (sequence|choice|all) is permitted; a
+	// second one would silently overwrite td.ContentModel. Track the first seen.
+	var contentModelChild string
+
 	// Parse child content model (if any).
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -328,6 +348,18 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
+		}
+		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) {
+			if contentModelChild != "" {
+				if c.filename != "" {
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, ce.Line(),
+						elem.LocalName(), componentLocalComplexType,
+						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)), helium.ErrorLevelFatal))
+					c.errorCount++
+				}
+				continue
+			}
+			contentModelChild = ce.LocalName()
 		}
 		switch {
 		case isXSDElement(ce, elemSequence):
