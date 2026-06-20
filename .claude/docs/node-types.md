@@ -71,7 +71,7 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 | Text | `Text` | node | ✗ (merges) | ✓ content | ✓ | Adjacent text nodes auto-merge |
 | CDATASection | `CDATASection` | node | ✗ | ✓ content | ✓ | — |
 | Comment | `Comment` | node | ✗ | ✓ content | ✓ | — |
-| PI | `ProcessingInstruction` | docnode | ✓ | data field | ✓ | target, data (Name() returns target) |
+| PI | `ProcessingInstruction` | docnode | ✗ | data field | ✓ | target, data (Name() returns target). AddChild/AppendText route text into `data`; non-text children rejected |
 | EntityRef | `EntityRef` | node | ✓ (if expanded) | ✓ (if resolved) | ✓ | References Entity by name |
 | Entity | `Entity` | node | ✓ (parsed) | ✓ content | ✓ | entityType, externalID, systemID, uri, checked, expanding, expandedSize |
 | DTD | `DTD` | docnode | ✓ (decls) | — | ✓ | attributes/elements/entities/pentities/notations maps, externalID, systemID |
@@ -85,6 +85,9 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 
 ### Text Node Consolidation
 `Text.AddSibling(Text)` → content merged instead of creating sibling. Prevents whitespace node bloat. Mirrors libxml2 TEXT consolidation.
+
+### PI Content Is A String, Not Children
+A `ProcessingInstruction` stores its content in the `data` string field (mirrors libxml2's XML_PI_NODE, whose content is the node's content string). It has NO element/text children. `AppendText` and an `AddChild` of a Text/CDATA node append the text to `data`; `AddChild` of any other node type is rejected (so the tree cannot be corrupted and serialization stays `<?target data?>`). The serializer reads `pi.data` directly.
 
 ### DTD Map Keys
 - Elements: `name:prefix`

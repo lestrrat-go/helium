@@ -65,10 +65,13 @@ func leafCases() []leafCase {
 			addChildSelfErr: helium.ErrInvalidOperation.Error(),
 		},
 		{
-			name:               "ProcessingInstruction",
-			new:                func(t *testing.T, doc *helium.Document) helium.MutableNode { return mustCreatePI(t, doc) },
-			canContainChildren: true,
-			addChildSelfErr:    errAddChildCycle,
+			// A PI carries its content as a string, not as element/text
+			// children, so its AddChild rejects a foreign (non-text) node
+			// before the shared cycle guard, just like CDATASection. A PI is
+			// not a text node, so PI.AddChild(self) hits that rejection.
+			name:            "ProcessingInstruction",
+			new:             func(t *testing.T, doc *helium.Document) helium.MutableNode { return mustCreatePI(t, doc) },
+			addChildSelfErr: errPIAddChild,
 		},
 		{
 			name:               "EntityRef",
@@ -82,6 +85,7 @@ func leafCases() []leafCase {
 const (
 	errAddChildCycle   = "cannot add a node as a child of itself or one of its descendants"
 	errAddSiblingCycle = "cannot add a node as a sibling of itself or one of its descendants"
+	errPIAddChild      = "helium: cannot add ProcessingInstructionNode as a child of a processing instruction"
 )
 
 // TestLeafAddChildGuards exercises every leaf-type AddChild override against the
@@ -460,6 +464,74 @@ func TestTextAddSiblingNonTextFallback(t *testing.T) {
 			requireNoCycle(t, src)
 		})
 	}
+}
+
+// TestPIContentIsStringNotChildren verifies that a processing instruction
+// carries its content as a string (the "data" portion), not as child nodes.
+// AppendText and a Text/CDATA AddChild route into the PI data; any other node
+// type is rejected. A PI must never gain element/text children, and must
+// serialize as "<?target data?>".
+func TestPIContentIsStringNotChildren(t *testing.T) {
+	t.Parallel()
+
+	t.Run("AppendText routes into data and creates no children", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		pi := doc.CreatePI("target", "")
+
+		require.NoError(t, pi.AppendText([]byte("hello")), "AppendText must succeed")
+		require.NoError(t, pi.AppendText([]byte(" world")), "second AppendText must succeed")
+
+		require.Nil(t, pi.FirstChild(), "PI must not gain child nodes")
+		require.Nil(t, pi.LastChild(), "PI must not gain child nodes")
+		require.Equal(t, "hello world", string(pi.Content()), "PI data must hold the appended text")
+	})
+
+	t.Run("AddChild of text/cdata routes into data and creates no children", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		pi := doc.CreatePI("target", "a")
+
+		require.NoError(t, pi.AddChild(doc.CreateText([]byte("b"))), "Text AddChild must succeed")
+		require.NoError(t, pi.AddChild(doc.CreateCDATASection([]byte("c"))), "CDATA AddChild must succeed")
+
+		require.Nil(t, pi.FirstChild(), "PI must not gain child nodes")
+		require.Equal(t, "abc", string(pi.Content()), "PI data must absorb text/cdata content")
+	})
+
+	t.Run("AddChild of a non-text node is rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		pi := doc.CreatePI("target", "data")
+
+		err := pi.AddChild(mustCreateElement(t, doc, "child"))
+		require.Error(t, err, "adding an element child to a PI must be rejected")
+		require.Nil(t, pi.FirstChild(), "PI must not gain a child")
+		require.Equal(t, "data", string(pi.Content()), "PI data must be unchanged")
+	})
+
+	t.Run("AddChild rejects a nil operand", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		pi := doc.CreatePI("target", "data")
+
+		require.ErrorIs(t, pi.AddChild(nil), helium.ErrNilNode, "nil operand must be rejected")
+	})
+
+	t.Run("PI serializes as <?target data?>", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		pi := doc.CreatePI("target", "")
+		require.NoError(t, pi.AppendText([]byte("data")), "AppendText must succeed")
+		require.NoError(t, root.AddChild(pi), "PI must attach under root")
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, "<?target data?>", "PI must serialize from its data string")
+	})
 }
 
 // TestAddChildNonMutableOperand verifies that inserting an already-linked
