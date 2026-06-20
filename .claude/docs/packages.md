@@ -214,7 +214,9 @@ Schematron schema compilation and validation.
 
 - **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.Label(s)` / `.ErrorHandler(h)` → `.Compile(ctx, doc)` or `.CompileFile(ctx, path)`
 - **Validator** (fluent, clone-on-write): `NewValidator(schema)` → `.Label(s)` / `.Quiet()` / `.ErrorHandler(h)` → `.Validate(ctx, doc)`
-- `ErrValidationFailed` — sentinel error returned on validation failure; individual `*ValidationError` delivered to ErrorHandler
+- `ErrValidationFailed` — sentinel returned by `Validator.Validate` on validation failure; individual `*ValidationError` delivered to ErrorHandler
+- `ErrNoSchema` — sentinel returned by `Validator.Validate` when the Validator has no compiled schema
+- `ErrCompileFailed` — sentinel returned by `Compiler.Compile`/`CompileFile` when compilation fails
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
 - Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go` (validation), `errors.go` (error types + formatting)

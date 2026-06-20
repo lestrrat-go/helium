@@ -470,11 +470,22 @@ Three-phase parsing:
 
 Message content parsed into `[]messagePart`: text literals, `<name path="..."/>` (element name), `<value-of select="..."/>` (XPath value).
 
+**Namespace gating:** structural elements are only recognized when in the detected Schematron namespace (`isSchematronElement`/`elementInNamespace`). Foreign-namespaced elements are handled differently depending on position:
+- **Required structural position → fatal/rejected.** Where a specific Schematron element is expected (e.g. a `<rule>` under `<pattern>`, checked via `isSchematronElement(elem, schNS, "rule")` in `compilePattern`), a foreign element like `<x:rule>` does NOT satisfy the requirement and is rejected with a fatal `Expecting a rule element instead of ...` diagnostic. The same applies at the top level (`Expecting a pattern element instead of ...`).
+- **Free-content children → ignored.** Foreign-namespaced children inside rules, asserts, and reports are skipped as free content. `compileRuleChild` returns early when `!elementInNamespace(...)`, so e.g. `<x:assert>` inside a `<rule>` is not executed; likewise foreign `<name>`/`<value-of>` inside message content (`parseMessageElement`) are ignored, not interpolated.
+
+Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri`, `value`, `path`) are read unqualified-only via `getStructuralAttr` (`NSPredicate{..., NamespaceURI: ""}`); a prefixed `x:test` is not read as Schematron.
+
+**Fatal compile errors:** `compileSchema` wraps the configured handler in a `fatalTrackingHandler`. If any `ErrorLevelFatal` diagnostic is emitted (no pattern, pattern with no rule, rule with no test, etc.), `Compile`/`CompileFile` return `ErrCompileFailed` with a **nil** `*Schema` — even when no error handler is configured, so a broken schema can never validate as success.
+
 ### Validate: Document + Schema → Errors
+
+`Validate` returns `ErrNoSchema` (typed) when the Validator has no compiled schema (`NewValidator(nil)` or zero-value), guarding against a nil-deref panic.
 
 1. Create XPath context with schema's namespaces
 2. For each pattern/rule: evaluate `contextExpr` against document root → node set
    - If the context XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and mark the document invalid (the rule's assertions can't be checked, so it is not silently skipped)
+   - **First-match-only (ISO Schematron):** within a pattern, each node is processed by only the FIRST rule whose context matches it. A per-pattern `map[helium.Node]bool` (reset each pattern) skips nodes already claimed by an earlier rule. Scope is per pattern, so a later pattern still fires for the same node.
 3. For each context node:
    - Bind `<let>` variables in **document order** (accumulated, so a later let sees earlier ones, e.g. `<let name="b" value="$a"/>` after `a`). A let whose expression **errors at evaluation** surfaces an `XPath error : ...` diagnostic rather than being silently dropped.
    - Create rule-specific XPath context with variables
