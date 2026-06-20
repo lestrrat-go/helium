@@ -153,19 +153,19 @@ func TestDeduplicateNodes_ExceedsLimit(t *testing.T) {
 
 // buildWideDoc creates a document whose root has childCount element children,
 // returning the children in document order.
-func buildWideDoc(t *testing.T, childCount int) (*helium.Document, []helium.Node) {
+func buildWideDoc(t *testing.T, childCount int) []helium.Node {
 	t.Helper()
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
 	children := make([]helium.Node, 0, childCount)
-	for i := 0; i < childCount; i++ {
+	for range childCount {
 		child := doc.CreateElement("child")
 		require.NoError(t, root.AddChild(child))
 		children = append(children, child)
 	}
-	return doc, children
+	return children
 }
 
 // dupHeavyInput returns a slice of length inputSize built by repeating a small
@@ -174,7 +174,7 @@ func buildWideDoc(t *testing.T, childCount int) (*helium.Document, []helium.Node
 // the result is small.
 func dupHeavyInput(distinct []helium.Node, inputSize int) []helium.Node {
 	out := make([]helium.Node, 0, inputSize)
-	for i := 0; i < inputSize; i++ {
+	for i := range inputSize {
 		out = append(out, distinct[i%len(distinct)])
 	}
 	return out
@@ -188,7 +188,7 @@ func dupHeavyInput(distinct []helium.Node, inputSize int) []helium.Node {
 func TestDeduplicateNodes_CapBoundedByMaxNodes(t *testing.T) {
 	const inputSize = 1000
 	const maxNodes = 4
-	_, children := buildWideDoc(t, maxNodes)
+	children := buildWideDoc(t, maxNodes)
 	cache := &ixpath.DocOrderCache{}
 
 	nodes := dupHeavyInput(children, inputSize)
@@ -208,7 +208,7 @@ func TestDeduplicateNodes_CapBoundedByMaxNodes(t *testing.T) {
 func TestDeduplicateNodes_ExceedsLimitLargeInput(t *testing.T) {
 	const inputSize = 1000
 	const maxNodes = 4
-	_, children := buildWideDoc(t, inputSize)
+	children := buildWideDoc(t, inputSize)
 	cache := &ixpath.DocOrderCache{}
 
 	result, err := ixpath.DeduplicateNodes(children, cache, maxNodes)
@@ -219,7 +219,7 @@ func TestDeduplicateNodes_ExceedsLimitLargeInput(t *testing.T) {
 func TestDeduplicateNodesPreserveOrder_CapBoundedByMaxNodes(t *testing.T) {
 	const inputSize = 1000
 	const maxNodes = 4
-	_, children := buildWideDoc(t, maxNodes)
+	children := buildWideDoc(t, maxNodes)
 
 	nodes := dupHeavyInput(children, inputSize)
 	result, err := ixpath.DeduplicateNodesPreserveOrder(nodes, maxNodes)
@@ -235,9 +235,56 @@ func TestDeduplicateNodesPreserveOrder_CapBoundedByMaxNodes(t *testing.T) {
 func TestDeduplicateNodesPreserveOrder_ExceedsLimitLargeInput(t *testing.T) {
 	const inputSize = 1000
 	const maxNodes = 4
-	_, children := buildWideDoc(t, inputSize)
+	children := buildWideDoc(t, inputSize)
 
 	result, err := ixpath.DeduplicateNodesPreserveOrder(children, maxNodes)
+	require.ErrorIs(t, err, ixpath.ErrNodeSetLimit)
+	require.Nil(t, result)
+}
+
+// TestMergeNodeSets_CapBoundedByMaxNodes verifies that a large, duplicate-heavy
+// input split across the two merge inputs does not cause MergeNodeSets to grow
+// the result buffer past the bound. maxNodes is chosen as a non-power-of-two so
+// that lazy append-doubling (the pre-fix behavior, with no preallocation) would
+// overshoot to cap 8 for 5 distinct nodes, failing the bound; the preallocated,
+// bounded buffer stays at maxNodes+1.
+func TestMergeNodeSets_CapBoundedByMaxNodes(t *testing.T) {
+	const inputSize = 1000
+	const maxNodes = 5
+	children := buildWideDoc(t, maxNodes)
+	cache := &ixpath.DocOrderCache{}
+
+	// Split a duplicate-heavy input across the two merge inputs. After dedup
+	// only the maxNodes distinct children remain.
+	all := dupHeavyInput(children, inputSize)
+	a := all[:inputSize/2]
+	b := all[inputSize/2:]
+
+	result, err := ixpath.MergeNodeSets(a, b, cache, maxNodes)
+	require.NoError(t, err)
+	require.Len(t, result, maxNodes)
+	// Output order/content unchanged: document order of the distinct children.
+	for i := range children {
+		require.Equal(t, children[i], result[i])
+	}
+	require.LessOrEqual(t, cap(result), maxNodes+1,
+		"result capacity should be bounded by maxNodes, not the input size")
+}
+
+// TestMergeNodeSets_ExceedsLimitEarlyExit verifies MergeNodeSets returns
+// ErrNodeSetLimit (no silent truncation) and that it does so via early-exit:
+// the result buffer never grows past the bounded capacity even when the inputs
+// are far larger than the limit.
+func TestMergeNodeSets_ExceedsLimitEarlyExit(t *testing.T) {
+	const inputSize = 1000
+	const maxNodes = 4
+	children := buildWideDoc(t, inputSize)
+	cache := &ixpath.DocOrderCache{}
+
+	a := children[:inputSize/2]
+	b := children[inputSize/2:]
+
+	result, err := ixpath.MergeNodeSets(a, b, cache, maxNodes)
 	require.ErrorIs(t, err, ixpath.ErrNodeSetLimit)
 	require.Nil(t, result)
 }
