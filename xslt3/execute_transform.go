@@ -76,9 +76,19 @@ func mapElementAttributes(nodeMap map[helium.Node]helium.Node, ea, eb *helium.El
 
 // remapNamespaceWrapper rebuilds an initial-selection namespace node so that it
 // belongs to the copied tree. It maps the wrapper's owner element onto the copy,
-// then locates a namespace declaration in scope on the copied element with the
-// same prefix and URI and returns a fresh wrapper bound to it. Returns nil if
-// the owner could not be mapped or no matching declaration was found.
+// then returns a fresh wrapper bound to a matching namespace, with the COPIED
+// owner as parent. Returns nil only if the owner element could not be mapped.
+//
+// The wrapper is re-bound by preference to an in-scope declaration on the copied
+// owner (or an ancestor) with the same prefix and URI, since namespace nodes can
+// be reported on a descendant of the element that declares them. When no such
+// declaration exists, the namespace is one the XPath axis SYNTHESIZES rather than
+// one stored in Namespaces() — most notably the implicit `xml` binding, which the
+// namespace axis fabricates and which never appears in any element's declarations
+// (see internal/xpath/axes.go CollectNamespaceNodes). For those, synthesize an
+// equivalent Namespace bound to the copied owner, mirroring the axis, so the
+// wrapper still points into the stripped copy instead of falling back to the
+// unstripped original.
 func remapNamespaceWrapper(nodeMap map[helium.Node]helium.Node, nsw *helium.NamespaceNodeWrapper) helium.Node {
 	owner := nsw.Parent()
 	if owner == nil {
@@ -90,9 +100,8 @@ func remapNamespaceWrapper(nodeMap map[helium.Node]helium.Node, nsw *helium.Name
 	}
 	prefix := nsw.Name()
 	uri := string(nsw.Content())
-	// Walk the copied owner and its ancestors for the in-scope declaration that
-	// matches the original wrapper's (prefix, URI). Namespace nodes can be
-	// reported on a descendant of the element that declares them.
+	// Prefer an actual in-scope declaration on the copied owner or an ancestor
+	// that matches the original wrapper's (prefix, URI).
 	for n := mappedOwner; n != nil; n = n.Parent() {
 		nc, ok := n.(helium.NamespaceContainer)
 		if !ok {
@@ -104,7 +113,10 @@ func remapNamespaceWrapper(nodeMap map[helium.Node]helium.Node, nsw *helium.Name
 			}
 		}
 	}
-	return nil
+	// No stored declaration matches: the namespace is synthesized by the axis
+	// (e.g. the implicit `xml` binding). Re-synthesize it against the copied
+	// owner so the wrapper still belongs to the stripped copy.
+	return helium.NewNamespaceNodeWrapper(helium.NewNamespace(prefix, uri), mappedOwner)
 }
 
 // cloneOutputDef returns a deep copy of an OutputDef. All pointer, slice, and

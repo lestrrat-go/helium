@@ -93,3 +93,45 @@ func TestStripSpaceRemapsNamespaceSelection(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, out)
 }
+
+// TestStripSpaceRemapsImplicitXMLNamespaceSelection verifies that the
+// SYNTHESIZED implicit `xml` namespace node (which the XPath namespace axis
+// fabricates and which is NOT present in the owner element's Namespaces())
+// is remapped onto the stripped copy. A template matched on it that navigates
+// to its owner element's text() must observe the STRIPPED parent (0 text nodes),
+// matching the declared-namespace case. See finding 664-perf.
+func TestStripSpaceRemapsImplicitXMLNamespaceSelection(t *testing.T) {
+	t.Parallel()
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*"/>
+  <xsl:output method="xml" omit-xml-declaration="yes"/>
+  <xsl:template match="namespace-node()"><out><xsl:value-of select="count(../text())"/></out></xsl:template>
+  <xsl:template match="node()|@*"/>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	// The root element has two whitespace-only text nodes around <child>. Without
+	// remapping, the implicit xml namespace node's owner points at the unstripped
+	// original, so count(../text()) would be 2.
+	source, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root>`+"\n  <child/>\n"+`</root>`))
+	require.NoError(t, err)
+
+	sel := evalSelection(t, "/*/namespace::xml", source)
+	require.Equal(t, 1, sel.Len(), "fixture must select exactly the implicit xml namespace node")
+
+	out, err := ss.ApplyTemplates(source).
+		Selection(sel).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "<out>0</out>",
+		"implicit xml namespace selection must remap to the stripped copy; got %q", out)
+	require.NotContains(t, out, "<out>2</out>",
+		"implicit xml namespace selection must not see the unstripped original owner; got %q", out)
+}
