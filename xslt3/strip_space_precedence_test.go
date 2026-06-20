@@ -86,6 +86,48 @@ func TestStripSpaceSamePrecedenceConflict(t *testing.T) {
 	require.Contains(t, err.Error(), "XTSE0270")
 }
 
+// TestStripSpaceLowerPrecedenceConflictNotMasked verifies that a genuine
+// same-precedence strip/preserve conflict in a LOWER-precedence imported module
+// is still reported, even when the importing (higher-precedence) module adds an
+// UNRELATED higher-precedence strip-space rule. The higher-precedence rule for
+// name "b" does not overlap the "a" conflict and therefore must not suppress it.
+// Previously the check filtered by each kind's globally-highest precedence, so
+// the higher "strip b" raised the strip threshold and the real "a" vs "a"
+// conflict at the lower precedence was silently dropped.
+func TestStripSpaceLowerPrecedenceConflictNotMasked(t *testing.T) {
+	t.Parallel()
+
+	// Imported module: a genuine same-precedence conflict over "a".
+	imported := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="a"/>
+  <xsl:preserve-space elements="a"/>
+</xsl:stylesheet>`
+
+	// Importing module adds a higher-precedence, unrelated strip-space for "b".
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:import href="mem:/imported.xsl"/>
+  <xsl:strip-space elements="b"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	resolver := &memResolver{files: map[string]string{
+		"mem:/imported.xsl": imported,
+	}}
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+
+	_, err = xslt3.NewCompiler().
+		BaseURI("mem:/main.xsl").
+		URIResolver(resolver).
+		Compile(t.Context(), doc)
+	require.Error(t, err,
+		"same-precedence strip/preserve conflict over \"a\" must still raise XTSE0270 despite an unrelated higher-precedence strip-space for \"b\"")
+	require.Contains(t, err.Error(), "XTSE0270")
+}
+
 // TestStripSpacePrefixNamespaceContext verifies that a prefixed element name in
 // a strip-space rule is resolved using the namespace context in scope at the
 // declaration, not by local name alone. The same prefix "p" is bound to a

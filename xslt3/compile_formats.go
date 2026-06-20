@@ -1268,37 +1268,25 @@ func nameTestsOverlap(a, b nameTest) bool {
 
 // checkSpaceConflicts detects NameTests that appear in both xsl:strip-space and
 // xsl:preserve-space. Conflicts are resolved by import precedence and match
-// priority: a rule at a higher import precedence (or, at equal precedence, a
-// higher priority) overrides the other. XTSE0270 is raised only when a strip and
-// a preserve rule at the SAME highest import precedence AND SAME match priority
-// have OVERLAPPING NameTest sets — i.e. some expanded name they could both match.
+// priority: an XSLT override only suppresses a LOWER-precedence rule for the SAME
+// overlapping NameTest set. XTSE0270 is raised whenever a strip and a preserve
+// rule share the SAME import precedence AND SAME match priority AND have
+// OVERLAPPING NameTest sets — i.e. some expanded name they could both match.
+//
+// The conflict check must NOT be filtered by each kind's globally-highest
+// precedence: an unrelated higher-precedence rule (e.g. a higher-precedence
+// strip-space for name "b") does not cancel a genuine same-precedence
+// strip-space/preserve-space conflict over name "a". Such a higher rule only
+// overrides lower rules whose NameTest set it overlaps, not every rule globally.
 func (c *compiler) checkSpaceConflicts(_ context.Context) error {
 	if len(c.stylesheet.stripSpace) == 0 || len(c.stylesheet.preserveSpace) == 0 {
 		return nil
 	}
-	// Highest import precedence at which any strip / preserve rule appears.
-	highestStrip, highestPreserve := 0, 0
-	for i, nt := range c.stylesheet.stripSpace {
-		if i == 0 || nt.ImportPrec > highestStrip {
-			highestStrip = nt.ImportPrec
-		}
-	}
-	for i, nt := range c.stylesheet.preserveSpace {
-		if i == 0 || nt.ImportPrec > highestPreserve {
-			highestPreserve = nt.ImportPrec
-		}
-	}
-	// A conflict can only be genuine at a precedence that is the highest for both
-	// kinds; otherwise the higher-precedence kind wins outright. Compare only the
-	// rules at each kind's own highest precedence, and require equal precedence.
+	// Scan every strip/preserve pair. A pair is a genuine conflict when its rules
+	// carry equal import precedence, equal match priority, and overlapping
+	// NameTest sets.
 	for _, sNT := range c.stylesheet.stripSpace {
-		if sNT.ImportPrec != highestStrip {
-			continue
-		}
 		for _, pNT := range c.stylesheet.preserveSpace {
-			if pNT.ImportPrec != highestPreserve {
-				continue
-			}
 			if sNT.ImportPrec != pNT.ImportPrec {
 				continue
 			}
