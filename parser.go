@@ -1,7 +1,6 @@
 package helium
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -20,6 +19,14 @@ import (
 // pseudoRootName is the internal element name used for the synthetic root
 // wrapping fragment content during entity/external-subset parsing.
 const pseudoRootName = "pseudoroot"
+
+// readerReturningErr always returns its stored error (and no bytes). It
+// re-delivers a non-EOF read error that arrived together with the EBCDIC-sniff
+// prefix bytes, so the error is surfaced once the buffered prefix drains
+// instead of being lost.
+type readerReturningErr struct{ err error }
+
+func (r readerReturningErr) Read([]byte) (int, error) { return 0, r.err }
 
 type stopFuncKey struct{}
 
@@ -620,24 +627,73 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 		defer g.IRelease("=== END Parser.ParseReader ===")
 	}
 
-	// Peek the leading bytes to detect EBCDIC, which is not ASCII-compatible
+	// Honor an already-cancelled context BEFORE touching r: the EBCDIC sniff
+	// below reads from r, and r may be a non-context-aware reader that blocks
+	// indefinitely. Checking ctx first preserves the "cancelled before any
+	// blocking read" contract — a cancellation observed up front never depends
+	// on the reader making progress.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Read the leading bytes to detect EBCDIC, which is not ASCII-compatible
 	// and whose detection/decode requires the original raw bytes (the
 	// streaming path cannot replay them). When detected, read the whole input
 	// and route through the byte-slice path so behavior matches Parse exactly.
-	// bufio.Peek leaves the bytes (and any error returned alongside them) in
-	// place so the non-EBCDIC streaming path is unaffected.
-	br := bufio.NewReader(r)
-	head, perr := br.Peek(len(patEBCDIC))
-	if perr == nil && bytes.Equal(head, patEBCDIC) {
-		b, rerr := io.ReadAll(br)
+	//
+	// Read the head with a small loop (not bufio.Peek) so ctx is re-checked
+	// between reads: a slow reader that delivers the prefix one byte at a time
+	// is interrupted as soon as the parser regains control, instead of blocking
+	// inside Peek until the whole prefix arrives. The scratch buffer is larger
+	// than the EBCDIC prefix so a reader that returns more bytes than requested
+	// in one Read is captured in full rather than truncated; all captured bytes
+	// are prepended to the remaining stream so the non-EBCDIC path is
+	// unaffected, and any non-EOF error returned alongside the bytes is
+	// preserved and surfaced once the buffered head drains.
+	var scratch [512]byte
+	var hn int
+	var perr error
+	for hn < len(patEBCDIC) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		m, err := r.Read(scratch[hn:])
+		hn += m
+		if err != nil {
+			perr = err
+			break
+		}
+		if m == 0 {
+			break
+		}
+	}
+	head := scratch[:hn]
+
+	if perr == nil && hn >= len(patEBCDIC) && bytes.Equal(head[:len(patEBCDIC)], patEBCDIC) {
+		b, rerr := io.ReadAll(r)
 		if rerr != nil {
 			return nil, rerr
 		}
-		return p.Parse(ctx, b)
+		// Prepend the EBCDIC head bytes already consumed from r.
+		return p.Parse(ctx, append(append([]byte(nil), head...), b...))
+	}
+
+	// Reconstruct the stream: head bytes + remainder (+ any non-EOF error from
+	// the head read, re-delivered once the buffered head drains so a reader that
+	// returned data alongside an error is not silently truncated). io.EOF is the
+	// normal terminator and is not re-delivered.
+	var stream io.Reader
+	switch {
+	case perr != nil && perr != io.EOF:
+		stream = io.MultiReader(bytes.NewReader(head), readerReturningErr{err: perr})
+	case hn > 0:
+		stream = io.MultiReader(bytes.NewReader(head), r)
+	default:
+		stream = r
 	}
 
 	pctx := &parserCtx{baseURI: p.cfg.baseURI}
-	if err := pctx.init(p.cfg, br); err != nil {
+	if err := pctx.init(p.cfg, stream); err != nil {
 		return nil, err
 	}
 	// init seeds inputSize from rawInput (nil here, so 0). When the caller

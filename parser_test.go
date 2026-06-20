@@ -2535,6 +2535,62 @@ func TestParseReaderSurfacesErrorReturnedWithData(t *testing.T) {
 	require.ErrorIs(t, err, wantErr, "a reader error returned alongside the final bytes must not be swallowed")
 }
 
+// blockingReader blocks forever inside Read until its done channel is closed,
+// then returns io.EOF. It models a non-context-aware reader (e.g. a slow
+// network stream) whose Read cannot be interrupted generically.
+type blockingReader struct {
+	done    chan struct{}
+	entered chan struct{} // closed the first time Read is entered
+	once    sync.Once
+}
+
+func (r *blockingReader) Read([]byte) (int, error) {
+	r.once.Do(func() { close(r.entered) })
+	<-r.done
+	return 0, io.EOF
+}
+
+// TestParseReaderCancelledUpFrontDoesNotBlock guards the "cancelled before any
+// blocking read" contract: when the context is already cancelled, ParseReader
+// must return the context error promptly WITHOUT ever entering the underlying
+// reader's Read (the EBCDIC sniff must check ctx first).
+func TestParseReaderCancelledUpFrontDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	r := &blockingReader{done: make(chan struct{}), entered: make(chan struct{})}
+	// Never unblock the reader: if ParseReader touches it, the test deadlocks
+	// and is caught by the timeout below.
+	defer close(r.done)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled before the call
+
+	type result struct {
+		doc *helium.Document
+		err error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		doc, err := helium.NewParser().ParseReader(ctx, r)
+		resCh <- result{doc, err}
+	}()
+
+	select {
+	case res := <-resCh:
+		require.ErrorIs(t, res.err, context.Canceled,
+			"a context cancelled before any read must surface as context.Canceled")
+		require.Nil(t, res.doc, "a cancelled parse must not return a document")
+	case <-time.After(2 * time.Second):
+		t.Fatal("ParseReader blocked on a non-context-aware reader despite an already-cancelled context")
+	}
+
+	select {
+	case <-r.entered:
+		t.Fatal("ParseReader read from the underlying reader despite an already-cancelled context")
+	default:
+	}
+}
+
 func TestParseFileParsesNormalFile(t *testing.T) {
 	t.Parallel()
 

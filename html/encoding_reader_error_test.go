@@ -178,3 +178,94 @@ func TestParseReaderSurfacesReadErrorAfterLatin1Switch(t *testing.T) {
 	require.ErrorIs(t, err, sentinel,
 		"the underlying non-EOF read error must surface out of ParseReader")
 }
+
+// noReReadReader delivers each scripted chunk once. The chunk that carries a
+// non-nil error is the LAST chunk it will ever serve: any Read after that error
+// has been returned records reReadAfterErr. This pins the contract that once a
+// non-EOF error has been surfaced alongside data, the parser must NOT read the
+// underlying stream again — re-reading a failed reader is wrong and, for a
+// reader whose error is observable only once, would drop the error entirely.
+type noReReadReader struct {
+	chunks         []chunk
+	pos            int
+	off            int
+	erred          bool
+	reReadAfterErr bool
+}
+
+func (r *noReReadReader) Read(p []byte) (int, error) {
+	if r.erred {
+		r.reReadAfterErr = true
+		return 0, io.EOF
+	}
+	if r.pos >= len(r.chunks) {
+		return 0, io.EOF
+	}
+	c := r.chunks[r.pos]
+	n := copy(p, c.data[r.off:])
+	r.off += n
+	if r.off < len(c.data) {
+		return n, nil
+	}
+	r.pos++
+	r.off = 0
+	if c.err != nil {
+		r.erred = true
+	}
+	return n, c.err
+}
+
+// TestParseReaderSniffErrorDoesNotReReadStream verifies the charset-sniff path:
+// when the first (sniff) read returns data together with a non-EOF error, the
+// parser surfaces the error and never reads the underlying stream again.
+func TestParseReaderSniffErrorDoesNotReReadStream(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("sniff-phase failure")
+
+	r := &noReReadReader{
+		chunks: []chunk{
+			{data: []byte("<html><body><p>hi</p></body></html>"), err: sentinel},
+		},
+	}
+
+	_, err := html.NewParser().ParseReader(t.Context(), r)
+	require.ErrorIs(t, err, sentinel,
+		"the sniff-phase non-EOF read error must surface")
+	require.False(t, r.reReadAfterErr,
+		"parser must not read the underlying stream again after a sniff-phase error")
+}
+
+// TestParseReaderLatin1SwitchErrorDoesNotReReadStream verifies the
+// post-Latin1-switch path: after the stream flips to Latin-1, a later read that
+// returns data together with a non-EOF error must surface the error WITHOUT the
+// reader being read again once the converted bytes drain.
+func TestParseReaderLatin1SwitchErrorDoesNotReReadStream(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("post-switch failure")
+
+	// Head larger than the 1024-byte detection window keeps the switch and the
+	// error in the streaming (fillLatin1) phase rather than the sniff phase.
+	var head []byte
+	head = append(head, []byte("<html><body>")...)
+	for len(head) < 2048 {
+		head = append(head, []byte("<p>filler text line</p>\n")...)
+	}
+	switchChunk := []byte("<p>caf\xE9 latin one</p>")
+	errChunk := []byte("<p>r\xE9sum\xE9</p></body></html>")
+
+	r := &noReReadReader{
+		chunks: []chunk{
+			{data: head},
+			{data: switchChunk},
+			{data: errChunk, err: sentinel},
+		},
+	}
+
+	_, err := html.NewParser().ParseReader(t.Context(), r)
+	require.ErrorIs(t, err, sentinel,
+		"the post-switch non-EOF read error must surface")
+	require.False(t, r.reReadAfterErr,
+		"parser must not read the underlying stream again after a post-switch error")
+}

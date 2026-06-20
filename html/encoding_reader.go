@@ -412,12 +412,23 @@ func (dr *deferredLatin1Reader) decide() bool {
 // fillLatin1 converts raw bytes from the underlying reader as Latin-1/Windows
 // -1252 directly into p (used once the reader has switched).
 func (dr *deferredLatin1Reader) fillLatin1(p []byte) (int, error) {
+	// A sticky non-EOF error was already recorded on a previous read that also
+	// returned bytes. Those converted bytes have now drained (we only reach
+	// fillLatin1 with empty output), so surface the error WITHOUT reading dr.r
+	// again — re-reading a reader that already failed is wrong and could even
+	// drop an error that is observable only once.
+	if dr.readErr != nil {
+		e := dr.readErr
+		dr.readErr = nil
+		return 0, e
+	}
+
 	var buf [2048]byte
 	n, err := dr.r.Read(buf[:])
 	// io.Reader may deliver data together with a non-EOF error. Remember the
 	// error as sticky and convert any bytes we did get; the error is surfaced
 	// once the converted output has drained.
-	if err != nil && err != io.EOF && dr.readErr == nil {
+	if err != nil && err != io.EOF {
 		dr.readErr = err
 	}
 	if n == 0 {
@@ -561,14 +572,20 @@ func wrapReaderForHTML(r io.Reader) (io.Reader, string, *utf8SanitizeReader, *de
 
 	// Reconstruct full reader: peeked bytes + remainder (+ any sticky peek
 	// error to surface once the buffered bytes drain).
+	//
+	// When the sniff read returned a non-EOF error, the underlying reader r has
+	// already failed; reading it AGAIN would re-invoke a reader that errored
+	// (and, for a reader whose error is observable only once, could even drop
+	// the error). So when peekErr != nil we replay ONLY the bytes already read
+	// (head[:n]) and then the errReader — never r again.
 	var full io.Reader
 	switch {
-	case n > 0 && peekErr != nil:
-		full = io.MultiReader(bytes.NewReader(head), r, &errReader{err: peekErr})
+	case peekErr != nil && n > 0:
+		full = io.MultiReader(bytes.NewReader(head), &errReader{err: peekErr})
+	case peekErr != nil:
+		full = &errReader{err: peekErr}
 	case n > 0:
 		full = io.MultiReader(bytes.NewReader(head), r)
-	case peekErr != nil:
-		full = io.MultiReader(r, &errReader{err: peekErr})
 	default:
 		full = r
 	}
