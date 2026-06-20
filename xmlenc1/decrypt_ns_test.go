@@ -110,6 +110,53 @@ func TestDecryptContent_ParentDefaultNamespace(t *testing.T) {
 		"unprefixed element must resolve in the parent's default namespace, not XMLENC")
 }
 
+// D-ENC-004: decrypting TypeContent for a DETACHED EncryptedData (no parent)
+// whose own default xmlns is the XML-Encryption namespace must NOT let that
+// declaration shadow the decrypted content. Unprefixed plaintext <child/> must
+// resolve to NO namespace, not the XML-Encryption namespace, because a detached
+// element has no replacement context and its own xmlns decls are irrelevant to
+// the fragment's namespace resolution.
+func TestDecryptContent_DetachedNoShadowing(t *testing.T) {
+	sessionKey := make([]byte, 32)
+	_, err := rand.Read(sessionKey)
+	require.NoError(t, err)
+
+	algorithm := xmlenc1.AES256GCM
+
+	plaintext := []byte(`<child/>`)
+	cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, plaintext)
+	require.NoError(t, err)
+
+	// Owning document exists but EncryptedData is never attached to it.
+	doc := mustParseXML(t, `<root/>`)
+
+	ed := &xmlenc1.EncryptedData{
+		Type:             xmlenc1.TypeContent,
+		EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: algorithm},
+		CipherValue:      cipher,
+	}
+	edElem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+	require.NoError(t, err)
+
+	// EncryptedData declares its OWN default namespace (the XML-Encryption
+	// namespace) and remains DETACHED (no parent). Using EncryptedData itself
+	// as the parse context would wrongly resolve <child/> into XMLENC; with no
+	// replacement parent the content must resolve in no namespace.
+	require.NoError(t, edElem.DeclareNamespace("", xmlenc1.NamespaceXMLEnc))
+	require.Nil(t, edElem.Parent(), "EncryptedData must be detached for this test")
+
+	decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)
+	nodes, err := decryptor.Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+
+	elem, ok := nodes[0].(*helium.Element)
+	require.True(t, ok, "decrypted node should be an element")
+	require.Equal(t, "child", elem.LocalName())
+	require.Equal(t, "", elem.URI(),
+		"detached EncryptedData's own xmlns must not shadow the decrypted content")
+}
+
 // D-ENC-003: a payload prefix declared on EncryptedData's parent ancestor
 // still resolves when the content is parsed in the parent's context.
 func TestDecryptContent_PrefixOnParentAncestor(t *testing.T) {

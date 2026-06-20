@@ -387,11 +387,20 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		// as the replacement position requires and avoids any manual splicing
 		// of attacker-controlled namespace strings.
 		//
-		// If EncryptedData is detached (no parent), fall back to its own
-		// in-scope context so ancestor-declared prefixes still resolve.
-		contextNode := elem.Parent()
+		// If EncryptedData is detached (no parent), there is no replacement
+		// position whose in-scope namespaces should apply, and EncryptedData's
+		// OWN declarations must not be used as context — a detached element
+		// carrying its own default xmlns (e.g. the XML-Encryption namespace)
+		// would otherwise wrongly shadow the decrypted content. Use a NEUTRAL
+		// context (the owning document, or a fresh empty document) so no
+		// spurious default-ns or prefix bindings leak into the fragment.
+		var contextNode helium.Node = elem.Parent()
 		if contextNode == nil {
-			contextNode = elem
+			if doc := elem.OwnerDocument(); doc != nil {
+				contextNode = doc
+			} else {
+				contextNode = helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+			}
 		}
 		first, err := parser.ParseInNodeContext(ctx, contextNode, plaintext)
 		if err != nil {
