@@ -16,13 +16,30 @@ func TestUTF8CursorZeroProgressReaderDoesNotHang(t *testing.T) {
 	go func() {
 		defer close(done)
 		require.True(t, cur.Done(), "a zero-progress reader must terminate fill, not spin")
-		require.ErrorIs(t, cur.Err(), io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress")
+		require.ErrorIs(t, cur.Err(), io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress after the bounded retry count")
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("UTF8Cursor fillBuffer hung on a zero-progress reader")
+	}
+}
+
+func TestUTF8CursorSlowSplitReaderMakesProgress(t *testing.T) {
+	cur := NewUTF8Cursor(&slowSplitReader{data: []byte("héllo")})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		require.Equal(t, "héllo", cur.PeekString(len("héllo")), "a slow reader that emits (0, nil) between bytes must still be consumed")
+		require.NoError(t, cur.Err(), "a progressing reader must not surface io.ErrNoProgress")
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("UTF8Cursor fillBuffer hung on a slow split reader")
 	}
 }
 

@@ -67,6 +67,15 @@ func (u *Unused) Read(b []byte) (int, error) {
 const defaultRuneBufSize = 4096
 const defaultByteBufSize = 4096
 
+// maxZeroProgressReads bounds how many CONSECUTIVE (0, nil) reads a fill loop
+// tolerates before declaring the underlying reader stuck and returning
+// io.ErrNoProgress. A single zero-progress read is legitimate (a streaming
+// wrapper may withhold an incomplete multibyte rune at a chunk boundary), so
+// the loop retries; the bound still guarantees termination for a reader that
+// returns (0, nil) forever. The value mirrors the spirit of io.ErrNoProgress
+// (the stdlib bufio uses 100 consecutive empty reads).
+const maxZeroProgressReads = 100
+
 // runeEntry stores a decoded rune and its byte width.
 type runeEntry struct {
 	val   rune
@@ -657,17 +666,27 @@ func (c *ByteCursor) fillBuffer(n int) error {
 	// delivers each pushed chunk as soon as it arrives. Looping here keeps a
 	// slow producer that splits a token (e.g. the XML declaration) across
 	// pushes from being mistaken for end-of-input, matching UTF8Cursor.
+	zeroProgress := 0
 	for c.buflen < n {
 		nread, err := c.in.Read(c.buf[c.buflen:])
 		c.buflen += nread
-		// A reader that returns (0, nil) for a non-empty request makes no
-		// progress. Per io.Reader, callers should treat repeated (0, nil) as a
-		// no-op, but looping on it spins forever. Bail with io.ErrNoProgress so
-		// a pathological reader fails fast instead of hanging the parser.
+		// A single (0, nil) read is not fatal: io.Reader permits a reader to
+		// return no data and no error while it waits for more input, as a slow
+		// producer that splits a token across pushes does. Only a reader stuck
+		// for many CONSECUTIVE reads is genuinely making no progress, so retry
+		// up to maxZeroProgressReads and reset the counter whenever any bytes
+		// arrive; bail with io.ErrNoProgress once the bound is hit so a
+		// pathological (0, nil)-forever reader fails fast instead of hanging the
+		// parser.
 		if nread == 0 && err == nil {
-			c.readErr = io.ErrNoProgress
-			return io.ErrNoProgress
+			zeroProgress++
+			if zeroProgress >= maxZeroProgressReads {
+				c.readErr = io.ErrNoProgress
+				return io.ErrNoProgress
+			}
+			continue
 		}
+		zeroProgress = 0
 		if err != nil {
 			// Remember a genuine read error (anything other than a clean EOF)
 			// so it survives even when this Read also returned data (n > 0),

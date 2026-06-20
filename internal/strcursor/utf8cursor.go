@@ -158,16 +158,28 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 	}
 
 	// Read until we have enough.
+	zeroProgress := 0
 	for c.buflen-c.bufpos < minBytes {
 		n, err := c.in.Read(c.buf[c.buflen:])
 		c.buflen += n
-		// A reader that returns (0, nil) for a non-empty request makes no
-		// progress. Looping on repeated (0, nil) would spin forever, so bail
-		// with io.ErrNoProgress to fail fast instead of hanging the parser.
+		// A single (0, nil) read is not fatal: io.Reader permits a reader to
+		// return no data and no error while it waits for more input. A
+		// streaming wrapper that holds an incomplete multibyte rune at a chunk
+		// boundary (e.g. html's utf8SanitizeReader) legitimately does this.
+		// Only a reader that makes no progress for many CONSECUTIVE reads is
+		// genuinely stuck, so retry up to maxZeroProgressReads and reset the
+		// counter whenever any bytes arrive; bail with io.ErrNoProgress once the
+		// bound is hit so a pathological (0, nil)-forever reader fails fast
+		// instead of hanging the parser.
 		if n == 0 && err == nil {
-			c.readErr = io.ErrNoProgress
-			return io.ErrNoProgress
+			zeroProgress++
+			if zeroProgress >= maxZeroProgressReads {
+				c.readErr = io.ErrNoProgress
+				return io.ErrNoProgress
+			}
+			continue
 		}
+		zeroProgress = 0
 		if err != nil {
 			// Remember a genuine decode/transcoding error (anything other than
 			// a clean EOF) so the parser can distinguish malformed input from a

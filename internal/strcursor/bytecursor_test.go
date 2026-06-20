@@ -48,7 +48,8 @@ func TestByteCursorSurfacesErrorReturnedWithData(t *testing.T) {
 }
 
 // zeroProgressReader always returns (0, nil) for a non-empty request, never
-// advancing and never erroring. A naive fill loop spins on it forever.
+// advancing and never erroring. A naive fill loop spins on it forever; the
+// bounded-retry fill loop must give up after maxZeroProgressReads.
 type zeroProgressReader struct{}
 
 func (zeroProgressReader) Read(p []byte) (int, error) {
@@ -62,13 +63,56 @@ func TestByteCursorZeroProgressReaderDoesNotHang(t *testing.T) {
 	go func() {
 		defer close(done)
 		require.True(t, cur.Done(), "a zero-progress reader must terminate fill, not spin")
-		require.ErrorIs(t, cur.Err(), io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress")
+		require.ErrorIs(t, cur.Err(), io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress after the bounded retry count")
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("ByteCursor fillBuffer hung on a zero-progress reader")
+	}
+}
+
+// slowSplitReader emits its payload one byte per Read, returning a single
+// (0, nil) "waiting" read before each real byte. A fill loop that treats the
+// first (0, nil) as fatal would reject this legitimate slow producer.
+type slowSplitReader struct {
+	data    []byte
+	pos     int
+	pending bool // true after a (0, nil) stall, so the next Read yields a byte
+}
+
+func (r *slowSplitReader) Read(p []byte) (int, error) {
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if !r.pending {
+		r.pending = true
+		return 0, nil // stall once before delivering the next byte
+	}
+	r.pending = false
+	p[0] = r.data[r.pos]
+	r.pos++
+	return 1, nil
+}
+
+func TestByteCursorSlowSplitReaderMakesProgress(t *testing.T) {
+	cur := NewByteCursor(&slowSplitReader{data: []byte("<root/>")})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		require.True(t, cur.HasPrefix([]byte("<root/>")), "a slow reader that emits (0, nil) between bytes must still be consumed")
+		require.NoError(t, cur.Err(), "a progressing reader must not surface io.ErrNoProgress")
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ByteCursor fillBuffer hung on a slow split reader")
 	}
 }
 
