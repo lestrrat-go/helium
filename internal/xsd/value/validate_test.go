@@ -555,6 +555,11 @@ func TestIsFloatNaN(t *testing.T) {
 	require.True(t, value.IsFloatNaN(lexicon.FloatNaN), "bare NaN is NaN")
 	require.False(t, value.IsFloatNaN("+NaN"), "+NaN is not a valid NaN form")
 	require.False(t, value.IsFloatNaN("-NaN"), "-NaN is not a valid NaN form")
+	// strconv.ParseFloat accepts these lenient spellings, but they are not valid
+	// XSD lexical forms for NaN, so IsFloatNaN must reject them.
+	require.False(t, value.IsFloatNaN("nan"), "lowercase nan is not a valid NaN form")
+	require.False(t, value.IsFloatNaN("NAN"), "uppercase NAN is not a valid NaN form")
+	require.False(t, value.IsFloatNaN("Infinity"), "Infinity is not a valid NaN form")
 	require.False(t, value.IsFloatNaN(lexicon.FloatINF), "INF is not NaN")
 	require.False(t, value.IsFloatNaN("1.5"), "finite value is not NaN")
 }

@@ -532,6 +532,13 @@ func parseXSDFloat(s string) (float64, bool) {
 	if err != nil {
 		return 0, false
 	}
+	// strconv.ParseFloat is lenient: it accepts non-XSD spellings such as "nan",
+	// "NAN", "inf", and "Infinity". The only valid XSD lexicals denoting NaN/±INF
+	// are the exact forms handled in the switch above, so any NaN/Inf reaching
+	// here came from one of those lenient spellings and must be rejected.
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, false
+	}
 	return f, true
 }
 
