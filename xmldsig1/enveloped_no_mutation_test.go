@@ -100,7 +100,7 @@ func TestVerifyEnvelopedIdempotent(t *testing.T) {
 	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := verifier.Verify(t.Context(), doc)
 		require.NoErrorf(t, err, "verify #%d", i)
 	}
@@ -140,4 +140,56 @@ func TestVerifyEnvelopedFragmentDoesNotMutateDOM(t *testing.T) {
 	after, err := helium.WriteString(doc)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "Verify must not mutate the caller's DOM for fragment references")
+}
+
+// TestVerifyEnvelopedFragmentSignatureBeforeTarget is the regression guard for
+// D-SIG-002: when the ds:Signature is a SIBLING that precedes the referenced
+// target element, unlinking the cloned Signature shifts the target's child
+// index. The enveloped c14n must resolve the cloned target by its pre-unlink
+// path (before detaching the Signature), or it resolves the wrong/nil subtree
+// and verification fails with "reference target in canonicalization copy is not
+// an element". The live DOM must also remain unmutated.
+func TestVerifyEnvelopedFragmentSignatureBeforeTarget(t *testing.T) {
+	key := generateRSAKey(t)
+
+	signDoc := mustParseXML(t, `<root><x Id="x"><v>hello</v></x></root>`)
+	root := signDoc.DocumentElement()
+	xElem := findElementByLocalName(root, "x")
+	require.NotNil(t, xElem)
+
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "#x",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
+		})
+	// Place the Signature as a child of root; it is appended AFTER <x>.
+	require.NoError(t, signer.SignEnveloped(t.Context(), signDoc, root, key))
+
+	// Reorder so the Signature precedes <x> as an earlier sibling. Moving <x>
+	// past the Signature does not change <x>'s content or the enveloped omit
+	// set, so the digest stays valid — but it forces the unlink-shifts-index
+	// condition the fix guards against.
+	helium.UnlinkNode(xElem)
+	require.NoError(t, root.AddChild(xElem))
+
+	sigElem := findSignatureElement(root)
+	require.NotNil(t, sigElem)
+	require.Same(t, sigElem, root.FirstChild(), "Signature must now be the first child")
+
+	signed, err := helium.WriteString(signDoc)
+	require.NoError(t, err)
+
+	doc := mustParseXML(t, signed)
+	before, err := helium.WriteString(doc)
+	require.NoError(t, err)
+
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+	_, err = verifier.Verify(t.Context(), doc)
+	require.NoError(t, err, "verify must resolve the shifted-index target")
+
+	after, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "Verify must not mutate the caller's DOM")
 }

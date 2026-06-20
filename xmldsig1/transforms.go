@@ -110,21 +110,46 @@ func canonicalizeEnveloped(method string, doc *helium.Document, target, sigElem 
 		return nil, err
 	}
 
-	// Locate the Signature's twin in the clone by replaying the child-index
-	// path from the document down to the live Signature, then unlink it from
-	// the throwaway clone. CopyDoc preserves child order, so the path is stable.
+	// Resolve the Signature's twin in the clone by replaying the child-index
+	// path from the document down to the live Signature. CopyDoc preserves
+	// child order, so the path is stable.
 	//
 	// If the Signature is not attached to the document (e.g. an enveloped
 	// transform requested on a detached/enveloping signature that lives outside
 	// the tree), there is nothing in the canonical input to omit, so we
 	// canonicalize the copy unchanged — matching the pre-clone behavior where
 	// unlinking a detached node was a no-op.
-	if sigPath := childIndexPath(doc, sigElem); sigPath != nil {
+	var cloneSigMut helium.MutableNode
+	if sigPath := childIndexPath(sigElem); sigPath != nil {
 		cloneSig := nodeAtPath(clone, sigPath)
-		cloneSigMut, ok := cloneSig.(helium.MutableNode)
+		mut, ok := cloneSig.(helium.MutableNode)
 		if !ok {
 			return nil, fmt.Errorf("xmldsig1: could not locate Signature element in canonicalization copy")
 		}
+		cloneSigMut = mut
+	}
+
+	// Resolve the cloned target BEFORE unlinking the cloned Signature. Both
+	// paths are computed against the live (un-unlinked) tree, so they must be
+	// applied to the clone while it still mirrors that structure. If we unlinked
+	// first, a Signature that precedes the target as a sibling would shift the
+	// target's child index and nodeAtPath would resolve the wrong subtree.
+	var cloneTarget *helium.Element
+	if !wholeDoc {
+		targetPath := childIndexPath(target)
+		if targetPath == nil {
+			return nil, fmt.Errorf("xmldsig1: could not locate reference target for enveloped transform")
+		}
+		t, ok := helium.AsNode[*helium.Element](nodeAtPath(clone, targetPath))
+		if !ok {
+			return nil, fmt.Errorf("xmldsig1: reference target in canonicalization copy is not an element")
+		}
+		cloneTarget = t
+	}
+
+	// Now it is safe to unlink the cloned Signature: the cloneTarget pointer is
+	// already held and survives the structural change.
+	if cloneSigMut != nil {
 		helium.UnlinkNode(cloneSigMut)
 	}
 
@@ -135,25 +160,17 @@ func canonicalizeEnveloped(method string, doc *helium.Document, target, sigElem 
 
 	// Fragment reference: canonicalize the cloned subtree corresponding to the
 	// live target element.
-	targetPath := childIndexPath(doc, target)
-	if targetPath == nil {
-		return nil, fmt.Errorf("xmldsig1: could not locate reference target for enveloped transform")
-	}
-	cloneTarget, ok := helium.AsNode[*helium.Element](nodeAtPath(clone, targetPath))
-	if !ok {
-		return nil, fmt.Errorf("xmldsig1: reference target in canonicalization copy is not an element")
-	}
 	return canonicalizeSubtree(method, cloneTarget, prefixes)
 }
 
 // childIndexPath returns the sequence of child indices that locate n starting
-// from doc's children (index 0 = document's first child). It returns nil if n
-// is not reachable from the document root. The path indexes every node type
-// (text, comment, PI, element), so it survives a faithful deep copy that
+// from its document's children (index 0 = document's first child). It returns
+// nil if n is not reachable from the document root. The path indexes every node
+// type (text, comment, PI, element), so it survives a faithful deep copy that
 // preserves child ordering.
-func childIndexPath(doc *helium.Document, n helium.Node) []int {
+func childIndexPath(n helium.Node) []int {
 	var rev []int
-	for cur := helium.Node(n); cur != nil; cur = cur.Parent() {
+	for cur := n; cur != nil; cur = cur.Parent() {
 		if _, ok := helium.AsNode[*helium.Document](cur); ok {
 			// Reached the document node: the accumulated indices form a valid
 			// path. Reverse to root-to-node order.
