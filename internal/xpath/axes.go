@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"context"
 	"reflect"
 	"slices"
 
@@ -74,20 +75,22 @@ func AxisFromName(name string) (AxisType, bool) {
 
 // TraverseAxis returns the nodes along the given axis from the context node,
 // in the order defined by the XPath spec. maxNodes limits the result size
-// for unbounded axes; use DefaultMaxNodeSetLength if unsure.
-func TraverseAxis(axis AxisType, node helium.Node, maxNodes int) ([]helium.Node, error) {
+// for unbounded axes; use DefaultMaxNodeSetLength if unsure. ctx is checked
+// inside the unbounded descendant/following/preceding walks so a cancelled
+// context aborts the traversal promptly rather than walking the whole subtree.
+func TraverseAxis(ctx context.Context, axis AxisType, node helium.Node, maxNodes int) ([]helium.Node, error) {
 	if IsNilNode(node) {
 		return nil, nil
 	}
 	switch axis {
 	case AxisDescendant:
-		return axisDescendant(node, maxNodes)
+		return axisDescendant(ctx, node, maxNodes)
 	case AxisDescendantOrSelf:
-		return axisDescendantOrSelf(node, maxNodes)
+		return axisDescendantOrSelf(ctx, node, maxNodes)
 	case AxisFollowing:
-		return axisFollowing(node, maxNodes)
+		return axisFollowing(ctx, node, maxNodes)
 	case AxisPreceding:
-		return axisPreceding(node, maxNodes)
+		return axisPreceding(ctx, node, maxNodes)
 	}
 	return TraverseAxisSimple(axis, node), nil
 }
@@ -149,9 +152,9 @@ func axisChild(node helium.Node) []helium.Node {
 	return result
 }
 
-func axisDescendant(node helium.Node, maxNodes int) ([]helium.Node, error) {
+func axisDescendant(ctx context.Context, node helium.Node, maxNodes int) ([]helium.Node, error) {
 	var result []helium.Node
-	if err := collectDescendants(node, &result, maxNodes); err != nil {
+	if err := collectDescendants(ctx, node, &result, maxNodes); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -165,7 +168,7 @@ func appendAxisNode(result *[]helium.Node, node helium.Node, maxNodes int) error
 	return nil
 }
 
-func collectDescendants(node helium.Node, result *[]helium.Node, maxNodes int) error {
+func collectDescendants(ctx context.Context, node helium.Node, result *[]helium.Node, maxNodes int) error {
 	// In XPath, attributes have no children
 	if _, ok := node.(*helium.Attribute); ok {
 		return nil
@@ -177,6 +180,9 @@ func collectDescendants(node helium.Node, result *[]helium.Node, maxNodes int) e
 		}
 	}
 	for len(stack) > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		last := len(stack) - 1
 		cur := stack[last]
 		stack = stack[:last]
@@ -193,12 +199,12 @@ func collectDescendants(node helium.Node, result *[]helium.Node, maxNodes int) e
 	return nil
 }
 
-func axisDescendantOrSelf(node helium.Node, maxNodes int) ([]helium.Node, error) {
+func axisDescendantOrSelf(ctx context.Context, node helium.Node, maxNodes int) ([]helium.Node, error) {
 	result := make([]helium.Node, 0, 1)
 	if err := appendAxisNode(&result, node, maxNodes); err != nil {
 		return nil, err
 	}
-	if err := collectDescendants(node, &result, maxNodes); err != nil {
+	if err := collectDescendants(ctx, node, &result, maxNodes); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -262,7 +268,7 @@ func axisPrecedingSibling(node helium.Node) []helium.Node {
 	return result
 }
 
-func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
+func axisFollowing(ctx context.Context, node helium.Node, maxNodes int) ([]helium.Node, error) {
 	// Per XPath data model: attribute and namespace nodes are ordered after
 	// their parent element and before the parent's children.  Therefore the
 	// following axis from an attribute/namespace node includes the parent's
@@ -276,20 +282,23 @@ func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
 		}
 		var result []helium.Node
 		// Parent's descendants come first (they follow attrs in document order).
-		if err := collectDescendants(parent, &result, maxNodes); err != nil {
+		if err := collectDescendants(ctx, parent, &result, maxNodes); err != nil {
 			return nil, err
 		}
 		// Then the parent's following siblings + their descendants, and up
 		// through ancestors — same as the normal following axis from the parent.
 		for p := parent; p != nil; p = p.Parent() {
 			for s := p.NextSibling(); s != nil; s = s.NextSibling() {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				if !IsXDMChild(s) {
 					continue
 				}
 				if err := appendAxisNode(&result, s, maxNodes); err != nil {
 					return nil, err
 				}
-				if err := collectDescendants(s, &result, maxNodes); err != nil {
+				if err := collectDescendants(ctx, s, &result, maxNodes); err != nil {
 					return nil, err
 				}
 			}
@@ -299,25 +308,31 @@ func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
 
 	var result []helium.Node
 	for s := node.NextSibling(); s != nil; s = s.NextSibling() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if !IsXDMChild(s) {
 			continue
 		}
 		if err := appendAxisNode(&result, s, maxNodes); err != nil {
 			return nil, err
 		}
-		if err := collectDescendants(s, &result, maxNodes); err != nil {
+		if err := collectDescendants(ctx, s, &result, maxNodes); err != nil {
 			return nil, err
 		}
 	}
 	for p := node.Parent(); p != nil; p = p.Parent() {
 		for s := p.NextSibling(); s != nil; s = s.NextSibling() {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			if !IsXDMChild(s) {
 				continue
 			}
 			if err := appendAxisNode(&result, s, maxNodes); err != nil {
 				return nil, err
 			}
-			if err := collectDescendants(s, &result, maxNodes); err != nil {
+			if err := collectDescendants(ctx, s, &result, maxNodes); err != nil {
 				return nil, err
 			}
 		}
@@ -325,7 +340,7 @@ func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
 	return result, nil
 }
 
-func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
+func axisPreceding(ctx context.Context, node helium.Node, maxNodes int) ([]helium.Node, error) {
 	// Per XPath data model: attribute and namespace nodes are ordered after
 	// their parent element and before the parent's children.  Therefore the
 	// preceding axis from an attribute/namespace node contains the same nodes
@@ -340,10 +355,13 @@ func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
 		}
 		var result []helium.Node
 		for s := parent.PrevSibling(); s != nil; s = s.PrevSibling() {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			if !IsXDMChild(s) {
 				continue
 			}
-			if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
+			if err := collectDescendantsReverse(ctx, s, &result, maxNodes); err != nil {
 				return nil, err
 			}
 			if err := appendAxisNode(&result, s, maxNodes); err != nil {
@@ -352,10 +370,13 @@ func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
 		}
 		for p := parent.Parent(); p != nil; p = p.Parent() {
 			for s := p.PrevSibling(); s != nil; s = s.PrevSibling() {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				if !IsXDMChild(s) {
 					continue
 				}
-				if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
+				if err := collectDescendantsReverse(ctx, s, &result, maxNodes); err != nil {
 					return nil, err
 				}
 				if err := appendAxisNode(&result, s, maxNodes); err != nil {
@@ -368,10 +389,13 @@ func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
 
 	var result []helium.Node
 	for s := node.PrevSibling(); s != nil; s = s.PrevSibling() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if !IsXDMChild(s) {
 			continue
 		}
-		if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
+		if err := collectDescendantsReverse(ctx, s, &result, maxNodes); err != nil {
 			return nil, err
 		}
 		if err := appendAxisNode(&result, s, maxNodes); err != nil {
@@ -380,10 +404,13 @@ func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
 	}
 	for p := node.Parent(); p != nil; p = p.Parent() {
 		for s := p.PrevSibling(); s != nil; s = s.PrevSibling() {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			if !IsXDMChild(s) {
 				continue
 			}
-			if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
+			if err := collectDescendantsReverse(ctx, s, &result, maxNodes); err != nil {
 				return nil, err
 			}
 			if err := appendAxisNode(&result, s, maxNodes); err != nil {
@@ -394,7 +421,7 @@ func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
 	return result, nil
 }
 
-func collectDescendantsReverse(node helium.Node, result *[]helium.Node, maxNodes int) error {
+func collectDescendantsReverse(ctx context.Context, node helium.Node, result *[]helium.Node, maxNodes int) error {
 	type frame struct {
 		node     helium.Node
 		expanded bool
@@ -407,6 +434,9 @@ func collectDescendantsReverse(node helium.Node, result *[]helium.Node, maxNodes
 		}
 	}
 	for len(stack) > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		last := len(stack) - 1
 		cur := stack[last]
 		stack = stack[:last]

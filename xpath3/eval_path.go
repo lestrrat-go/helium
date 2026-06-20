@@ -209,7 +209,7 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 func evalStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	allFiltered := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
-		matched, traversed, err := appendAxisNodeMatches(nil, ec, n, step.Axis, step.NodeTest)
+		matched, traversed, err := appendAxisNodeMatches(ctx, nil, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,7 @@ func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.N
 	for _, n := range nodes {
 		var traversed int
 		var err error
-		next, traversed, err = appendAxisNodeMatches(next, ec, n, step.Axis, step.NodeTest)
+		next, traversed, err = appendAxisNodeMatches(ctx, next, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
@@ -246,7 +246,7 @@ func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.N
 func evalVMStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
 	allFiltered := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
-		matched, traversed, err := appendAxisNodeMatches(nil, ec, n, step.Axis, step.NodeTest)
+		matched, traversed, err := appendAxisNodeMatches(ctx, nil, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +368,7 @@ func evalVMStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium
 	for _, n := range nodes {
 		var traversed int
 		var err error
-		next, traversed, err = appendAxisNodeMatches(next, ec, n, step.Axis, step.NodeTest)
+		next, traversed, err = appendAxisNodeMatches(ctx, next, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
@@ -379,7 +379,7 @@ func evalVMStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium
 	return ixpath.DeduplicateNodes(next, ec.docOrder, ec.maxNodes)
 }
 
-func appendAxisNodeMatches(dst []helium.Node, ec *evalContext, node helium.Node, axis AxisType, nodeTest NodeTest) ([]helium.Node, int, error) {
+func appendAxisNodeMatches(ctx context.Context, dst []helium.Node, ec *evalContext, node helium.Node, axis AxisType, nodeTest NodeTest) ([]helium.Node, int, error) {
 	switch axis {
 	case AxisChild:
 		if _, ok := node.(*helium.Attribute); ok {
@@ -425,7 +425,7 @@ func appendAxisNodeMatches(dst []helium.Node, ec *evalContext, node helium.Node,
 		}
 		return dst, 1, nil
 	default:
-		candidates, err := ixpath.TraverseAxis(axis, node, ec.maxNodes)
+		candidates, err := ixpath.TraverseAxis(ctx, axis, node, ec.maxNodes)
 		if err != nil {
 			return nil, 0, err
 		}

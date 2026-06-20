@@ -206,7 +206,7 @@ func evalStepWithPredicates(ctx context.Context, ec *evalContext, nodes []helium
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		candidates, err := traverseAxis(step.Axis, n)
+		candidates, err := traverseAxis(ctx, step.Axis, n)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,7 @@ func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.N
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		candidates, err := traverseAxis(step.Axis, n)
+		candidates, err := traverseAxis(ctx, step.Axis, n)
 		if err != nil {
 			return nil, err
 		}
