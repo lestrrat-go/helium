@@ -98,3 +98,76 @@ func TestEvalAttributeAxis_ContextCancelledWideAttrSet(t *testing.T) {
 	require.LessOrEqual(t, ctx.calls, cancelAfter+1,
 		"attribute enumeration must bail on the first cancelled Err() observation")
 }
+
+// buildWideAttrElement returns "<root a0="v" a1="v" ... />" with width
+// attributes, used to exercise the VM predicate fast-path attribute scans.
+func buildWideAttrElement(width int) string {
+	var b strings.Builder
+	b.WriteString("<root")
+	for i := range width {
+		b.WriteString(" a")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(`="v"`)
+	}
+	b.WriteString("/>")
+	return b.String()
+}
+
+// The VM predicate fast path for `[@missing]` (vmAttributeExistsPredicateExpr)
+// scans an element's attribute set looking for a matching attribute. Over a wide
+// attribute set with no match it would otherwise walk every attribute before any
+// later step consulted the context. With the in-loop ctx.Err() checks inside the
+// ForEachAttribute callback the scan bails on the first cancelled observation and
+// surfaces context.Canceled.
+func TestEvalVMAttributeExistsPredicate_ContextCancelledWideAttrSet(t *testing.T) {
+	const width = 5000
+	const cancelAfter = 50
+
+	xml := "<wrap>" + buildWideAttrElement(width) + "</wrap>"
+	doc := mustParseXML(t, xml)
+	root := doc.DocumentElement()
+
+	compiled, err := xpath3.NewCompiler().Compile(`child::*[@missing]`)
+	require.NoError(t, err)
+
+	ctx := &cancelAfterNContext{cancelAfter: cancelAfter}
+
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, compiled, root)
+	require.ErrorIs(t, err, context.Canceled)
+	require.LessOrEqual(t, ctx.calls, cancelAfter+1,
+		"attribute-exists predicate scan must bail on the first cancelled Err() observation")
+}
+
+// The VM predicate fast path for `[@a = "v"]`
+// (vmAttributeEqualsStringPredicateExpr) scans an element's attribute set looking
+// for a matching attribute whose value equals the literal. The matching
+// attribute is placed last so the scan must walk the whole set; with the in-loop
+// ctx.Err() checks inside the ForEachAttribute callback the scan bails on the
+// first cancelled observation and surfaces context.Canceled.
+func TestEvalVMAttributeEqualsStringPredicate_ContextCancelledWideAttrSet(t *testing.T) {
+	const width = 5000
+	const cancelAfter = 50
+
+	var b strings.Builder
+	b.WriteString("<wrap><root")
+	for i := range width {
+		b.WriteString(" a")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(`="x"`)
+	}
+	// The single matching attribute sits at the end of the set.
+	b.WriteString(` match="v"/></wrap>`)
+
+	doc := mustParseXML(t, b.String())
+	root := doc.DocumentElement()
+
+	compiled, err := xpath3.NewCompiler().Compile(`child::*[@match = "v"]`)
+	require.NoError(t, err)
+
+	ctx := &cancelAfterNContext{cancelAfter: cancelAfter}
+
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, compiled, root)
+	require.ErrorIs(t, err, context.Canceled)
+	require.LessOrEqual(t, ctx.calls, cancelAfter+1,
+		"attribute-equals predicate scan must bail on the first cancelled Err() observation")
+}
