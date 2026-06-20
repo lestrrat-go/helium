@@ -336,13 +336,25 @@ func PredicateIsNonMotionlessWithStep(pred xpath3.Expr, step *xpath3.Step) bool 
 	return predicateIsNonMotionlessWithStep(pred, step)
 }
 
-// isFnNamespacePrefix reports whether a FunctionCall prefix refers to the
-// XPath functions namespace (http://www.w3.org/2005/xpath-functions). For
-// function calls an empty prefix defaults to that namespace, and the
-// conventional "fn" prefix is bound to it, so both lexical forms name the
-// same function. Streamability analysis special-cases functions such as
-// position()/last() by (namespace, local-name), so it must treat the
-// unprefixed and "fn:"-prefixed spellings identically.
+// isFnNamespacePrefix reports whether a FunctionCall prefix names the XPath
+// functions namespace (http://www.w3.org/2005/xpath-functions) for the purpose
+// of streamability analysis. For function calls an empty prefix defaults to
+// that namespace, and "fn" is the conventional reserved prefix bound to it, so
+// both lexical forms name the same built-in. Streamability special-cases
+// functions such as position()/last() by (namespace, local-name) and must
+// therefore treat the unprefixed and "fn:"-prefixed spellings identically.
+//
+// This is a deliberately lexical check, not a namespace-resolved one: this
+// analysis runs over the static AST with no access to a prefix->URI map (the map
+// only exists at eval time, via the xpath3 evaluator's namespace bindings).
+// Resolving "fn" properly would mean threading that map through every xslt3
+// streamability caller. We make the same assumption the xpath3 evaluator's own
+// static-shape recognition already makes (eval_path.go positionCall:
+// Prefix == "" || Prefix == "fn"), keeping the two consistent. Edge case: a
+// caller that rebinds "fn" to a custom namespace and then calls fn:position()
+// would have it resolve to a user function at eval time while streamability still
+// treats it as the built-in. Rebinding the reserved "fn" prefix is pathological
+// and unsupported here; consistency with eval_path.go is preferred.
 func isFnNamespacePrefix(prefix string) bool {
 	return prefix == "" || prefix == "fn"
 }
