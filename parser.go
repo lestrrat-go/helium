@@ -20,14 +20,6 @@ import (
 // wrapping fragment content during entity/external-subset parsing.
 const pseudoRootName = "pseudoroot"
 
-// readerReturningErr always returns its stored error (and no bytes). It
-// re-delivers a non-EOF read error that arrived together with the EBCDIC-sniff
-// prefix bytes, so the error is surfaced once the buffered prefix drains
-// instead of being lost.
-type readerReturningErr struct{ err error }
-
-func (r readerReturningErr) Read([]byte) (int, error) { return 0, r.err }
-
 type stopFuncKey struct{}
 
 // StopParser tells the parser to stop at the next opportunity. Call this
@@ -669,23 +661,40 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 	}
 	head := scratch[:hn]
 
-	if perr == nil && hn >= len(patEBCDIC) && bytes.Equal(head[:len(patEBCDIC)], patEBCDIC) {
-		b, rerr := io.ReadAll(r)
-		if rerr != nil {
-			return nil, rerr
-		}
-		// Prepend the EBCDIC head bytes already consumed from r.
-		return p.Parse(ctx, append(append([]byte(nil), head...), b...))
+	// A non-EOF read error returned alongside the sniff bytes is a real read
+	// failure: surface it before doing anything else. (io.EOF is the normal
+	// terminator and means the whole document arrived in the head read.)
+	if perr != nil && perr != io.EOF {
+		return nil, perr
 	}
 
-	// Reconstruct the stream: head bytes + remainder (+ any non-EOF error from
-	// the head read, re-delivered once the buffered head drains so a reader that
-	// returned data alongside an error is not silently truncated). io.EOF is the
-	// normal terminator and is not re-delivered.
+	// Detect EBCDIC regardless of whether the head read ended with io.EOF: an
+	// io.Reader may legally return all of its bytes together with io.EOF in a
+	// single Read, and EBCDIC decoding requires the full raw input up front.
+	// When the prefix matches, route through the byte-slice path (Parse) so
+	// behavior matches Parse exactly.
+	if hn >= len(patEBCDIC) && bytes.Equal(head[:len(patEBCDIC)], patEBCDIC) {
+		buf := append([]byte(nil), head...)
+		if perr != io.EOF {
+			// The head read did not signal EOF, so a tail remains in r.
+			b, rerr := io.ReadAll(r)
+			if rerr != nil {
+				return nil, rerr
+			}
+			buf = append(buf, b...)
+		}
+		return p.Parse(ctx, buf)
+	}
+
+	// Reconstruct the stream: head bytes + remainder. A non-EOF read error was
+	// already surfaced above, and io.EOF is the normal terminator (the whole
+	// document is in head when perr == io.EOF), so only the buffered head plus
+	// any unread tail in r need to be replayed.
 	var stream io.Reader
 	switch {
-	case perr != nil && perr != io.EOF:
-		stream = io.MultiReader(bytes.NewReader(head), readerReturningErr{err: perr})
+	case perr == io.EOF:
+		// No tail remains in r; replay only the buffered head.
+		stream = bytes.NewReader(head)
 	case hn > 0:
 		stream = io.MultiReader(bytes.NewReader(head), r)
 	default:

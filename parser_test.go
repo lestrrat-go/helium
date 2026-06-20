@@ -2656,6 +2656,41 @@ func TestParseFileEBCDICMatchesParse(t *testing.T) {
 		"ParseFile output must match Parse([]byte) for EBCDIC")
 }
 
+// TestParseReaderEBCDICDataWithEOFInFirstRead guards the EBCDIC sniff against a
+// reader that returns its entire payload together with io.EOF in a single Read
+// (which io.Reader explicitly permits). EBCDIC decoding requires the full raw
+// input up front, so detection must happen even when the head read ends with
+// io.EOF; otherwise the streaming path resets the cursor from a nil rawInput and
+// loses the document.
+func TestParseReaderEBCDICDataWithEOFInFirstRead(t *testing.T) {
+	t.Parallel()
+
+	const xml = `<?xml version="1.0" encoding="IBM037"?><root><child>hi</child></root>`
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	bytesDoc, err := helium.NewParser().Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must handle EBCDIC")
+	want := serialize(bytesDoc)
+
+	// dataThenErrReader with err == io.EOF returns all bytes plus io.EOF in the
+	// FIRST Read, exactly the case that previously fell through to the streaming
+	// path and produced a parse error.
+	r := &dataThenErrReader{data: ebcdic, err: io.EOF}
+	doc, err := helium.NewParser().ParseReader(t.Context(), r)
+	require.NoError(t, err, "ParseReader must parse EBCDIC delivered with io.EOF in the first read")
+	require.Equal(t, want, serialize(doc),
+		"ParseReader output must match Parse([]byte) when EBCDIC arrives with io.EOF in one read")
+}
+
 func TestParseFileResolvesRelativeExternalEntity(t *testing.T) {
 	t.Parallel()
 
