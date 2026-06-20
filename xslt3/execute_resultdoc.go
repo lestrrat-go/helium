@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"net/url"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -11,6 +12,42 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
+
+// canonicalResultURIKey produces a canonical key for XTDE1490 duplicate
+// detection. Unlike helium.BuildURI (which strips the file: scheme for file:
+// bases, turning "file:///d/out.xml" into "/d/out.xml"), this resolves the
+// href as a URI and PRESERVES the scheme/host for both absolute and relative
+// hrefs. That ensures a relative href ("out.xml") and the equivalent absolute
+// href ("file:///d/out.xml") under the same base collapse to the same key, so
+// two result documents denoting the same file are detected as duplicates.
+func canonicalResultURIKey(href, base string) string {
+	ref, err := url.Parse(href)
+	if err != nil {
+		return href
+	}
+	if ref.IsAbs() {
+		// Collapse "." / ".." dot-segments so that
+		// "file:///base/dir/a/../out.xml" and "file:///base/dir/out.xml" produce
+		// the SAME key (XTDE1490 duplicate detection). Resolving an absolute
+		// hierarchical reference against itself runs RFC 3986 remove_dot_segments
+		// while preserving the scheme/authority.
+		return ref.ResolveReference(ref).String()
+	}
+	if base == "" {
+		return ref.ResolveReference(ref).String()
+	}
+	baseURL, err := url.Parse(base)
+	if err != nil || !baseURL.IsAbs() {
+		// Without a usable absolute base we cannot canonicalize URI-wise;
+		// fall back to helium.BuildURI's filesystem-style resolution so that
+		// distinct relative hrefs denoting the same path still collide.
+		if resolved := helium.BuildURI(href, base); resolved != "" {
+			return resolved
+		}
+		return href
+	}
+	return baseURL.ResolveReference(ref).String()
+}
 
 // getParamDocOutputDef returns the effective parameter-document OutputDef for
 // a result-document instruction, checking the per-invocation cache on
@@ -259,7 +296,10 @@ func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *resultD
 	if inst.FormatAVT != nil {
 		v, err := inst.FormatAVT.evaluate(ctx, ec.contextNode)
 		if err != nil {
-			return inst.Format, nil //nolint:nilerr // AVT eval failure falls back to static format
+			// A dynamic error raised while evaluating the format AVT must be
+			// surfaced, not swallowed: silently falling back to the static
+			// format would hide a transformation failure from the caller.
+			return "", err
 		}
 		v = strings.TrimSpace(v)
 		if v != "" && !strings.HasPrefix(v, "Q{") {
@@ -315,6 +355,54 @@ func isItemSerializationMethod(method string) bool {
 	return method == methodJSON || method == methodAdaptive
 }
 
+// commitPrimaryOutputState publishes the serialization overrides and
+// character-map state that a primary xsl:result-document contributes to the
+// final primary output. It is the single commit point shared by EVERY primary
+// sub-branch (default direct-write, build-tree="no", type="...",
+// validation="strict|lax"): each branch evaluates the preflight overrides up
+// front (before touching the primary tree) and calls this only after its body
+// and post-body checks succeed. Calling it uniformly guarantees that the
+// serialization AVTs and character maps declared on a primary result-document
+// take effect regardless of which validation/type/build-tree branch handled it.
+func (ec *execContext) commitPrimaryOutputState(inst *resultDocumentInst, effectiveFormat string, primaryOverrides *OutputDef) {
+	// Propagate character map names to the primary output frame.
+	// Include maps from the named format (xsl:output) first, then
+	// maps from xsl:result-document itself (higher priority).
+	var allMaps []string
+	if effectiveFormat != "" {
+		if fmtDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok {
+			allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
+			// Also propagate resolved character maps from parameter-document.
+			// Clone the compiled map so the later maps.Copy merge below never
+			// mutates the compiled format's ResolvedCharMap.
+			if len(fmtDef.ResolvedCharMap) > 0 {
+				ec.primaryResolvedCharMap = maps.Clone(fmtDef.ResolvedCharMap)
+			}
+		}
+	}
+	allMaps = append(allMaps, inst.UseCharacterMaps...)
+	if len(allMaps) > 0 {
+		ec.primaryCharacterMaps = allMaps
+		// Resolve character maps now while currentPackage is correct
+		// (package-scoped isolation). Merge into primaryResolvedCharMap.
+		resolved := resolveCharacterMaps(ec.effectiveStylesheet(), allMaps)
+		if len(resolved) > 0 {
+			if ec.primaryResolvedCharMap == nil {
+				ec.primaryResolvedCharMap = resolved
+			} else {
+				maps.Copy(ec.primaryResolvedCharMap, resolved)
+			}
+		}
+	}
+	// Capture serialization parameter overrides from xsl:result-document.
+	// These were already evaluated up front (before any primary output was
+	// emitted) so that an AVT error releases the URI reservation without
+	// leaving partial primary output behind.
+	if primaryOverrides != nil {
+		ec.primaryOutputOverrides = primaryOverrides
+	}
+}
+
 func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocumentInst) error {
 	// XTDE1480: xsl:result-document is not allowed in a temporary output state.
 	if ec.temporaryOutputDepth > 0 {
@@ -331,18 +419,40 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		}
 	}
 
-	// Check for duplicate URI (XTDE1490).
-	if _, used := ec.usedResultURIs[href]; used {
-		return dynamicError(errCodeXTDE1490, "two result documents written to same URI: %q", href)
-	}
-
 	isPrimary := href == ""
+
+	// XTDE1490 duplicate detection keys on the canonical (resolved) output URI,
+	// not the raw href: distinct hrefs that resolve to the same absolute URI
+	// (e.g. "a/../out.xml" and "out.xml" under the same base) target the same
+	// document and must collide. The primary output (empty href) always keys on
+	// "" so that the implicit-primary claim tracked elsewhere stays consistent.
+	dupKey := href
+	if !isPrimary {
+		dupKey = canonicalResultURIKey(href, ec.currentOutputURI)
+	}
+	if _, used := ec.usedResultURIs[dupKey]; used {
+		return dynamicError(errCodeXTDE1490, "two result documents written to same URI: %q", dupKey)
+	}
 
 	if isPrimary && ec.primaryClaimedImplicitly {
 		return dynamicError(errCodeXTRE1495, "primary output URI already has implicit content")
 	}
 
-	ec.usedResultURIs[href] = struct{}{}
+	// Reserve the canonical URI so a concurrent/nested result-document targeting
+	// the same URI collides, but treat the reservation as provisional until the
+	// result document is actually committed. Any error before commit (e.g. a
+	// format AVT that raises a dynamic error, a failed parameter-document load,
+	// or a body that throws) must release the reservation. Otherwise an
+	// xsl:result-document caught inside xsl:try would leave its URI permanently
+	// claimed, making an xsl:catch that writes the same href fail with a
+	// spurious XTDE1490 even though no result document was ever written there.
+	ec.usedResultURIs[dupKey] = struct{}{}
+	committed := false
+	defer func() {
+		if !committed {
+			delete(ec.usedResultURIs, dupKey)
+		}
+	}()
 
 	// Resolve the effective format name (static or avt).
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
@@ -410,22 +520,40 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	}
 
 	// Track the current output URI for current-output-uri().
-	// For secondary outputs, resolve relative href against the current output URI.
+	// For secondary outputs, resolve relative href against the current output URI
+	// using the SAME URI-preserving resolver as the XTDE1490 duplicate key
+	// (canonicalResultURIKey). helium.BuildURI strips the file: scheme for file:
+	// bases, so a nested result-document inside a secondary output would compute a
+	// scheme-stripped base ("/base/dir/inner.xml") that no longer matches the
+	// duplicate key's scheme-preserving form ("file:///base/dir/inner.xml"),
+	// causing a relative href and its absolute file: equivalent to miss inside the
+	// secondary output. Canonicalizing here keeps both forms consistent.
 	savedOutputURI := ec.currentOutputURI
-	if href != "" && savedOutputURI != "" {
-		resolved := helium.BuildURI(href, savedOutputURI)
-		if resolved != "" {
-			ec.currentOutputURI = resolved
-		} else {
-			ec.currentOutputURI = href
-		}
-	} else if href != "" {
-		ec.currentOutputURI = href
+	if href != "" {
+		ec.currentOutputURI = canonicalResultURIKey(href, savedOutputURI)
 	}
 	// For primary output (href==""), currentOutputURI stays unchanged.
 	defer func() { ec.currentOutputURI = savedOutputURI }()
 
 	if isPrimary {
+		// PREFLIGHT (uniform across EVERY primary sub-branch): evaluate the
+		// error-prone serialization parameter AVTs (method, standalone, indent,
+		// doctype, omit-xml-declaration, etc.) BEFORE any branch executes its body
+		// or mutates/emits primary output. This MUST run above the early type=/
+		// validation= returns: those branches previously returned before the
+		// preflight, so a serialization AVT that raises a dynamic error (e.g.
+		// standalone="{1 idiv 0}") was silently swallowed and primaryOutputOverrides/
+		// character-map state was never applied for them. Computing the overrides up
+		// front guarantees that any such error happens before the primary output is
+		// touched: the deferred cleanup releases the URI reservation so an xsl:catch
+		// may write the primary result document, and no partial primary output is
+		// left behind. The staged overrides are committed (via commitPrimaryOutputState)
+		// only after each branch's body and post-body checks succeed.
+		primaryOverrides, err := ec.evalResultDocOutputDef(ctx, inst)
+		if err != nil {
+			return err
+		}
+
 		v := inst.Validation
 		if inst.TypeName != "" && v == "" {
 			// type attribute without explicit validation: build into temp doc, validate type, copy.
@@ -450,6 +578,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if err := moveChildren(tmpDoc, primaryFrame.doc); err != nil {
 				return err
 			}
+			ec.commitPrimaryOutputState(inst, effectiveFormat, primaryOverrides)
+			committed = true
 			return nil
 		}
 		if v == validationStrict || v == validationLax {
@@ -493,6 +623,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if err := moveChildren(tmpDoc, primaryFrame.doc); err != nil {
 				return err
 			}
+			ec.commitPrimaryOutputState(inst, effectiveFormat, primaryOverrides)
+			committed = true
 			return nil
 		}
 		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
@@ -532,26 +664,58 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			out := ec.outputStack[0]
 			out.pendingItems = append(out.pendingItems, frame.pendingItems...)
 
-			if overrides, err := ec.evalResultDocOutputDef(ctx, inst); err != nil {
-				return err
-			} else if overrides != nil {
-				ec.primaryOutputOverrides = overrides
-			}
+			ec.commitPrimaryOutputState(inst, effectiveFormat, primaryOverrides)
+			committed = true
 			return nil
 		}
 
-		// Write directly to the primary output (base frame).
+		// Buffer the primary direct-write path: execute the body into a
+		// temporary frame and splice it into the real primary output ONLY after
+		// the body and all post-body checks succeed. A body that throws (e.g.
+		// inside xsl:try) must leave NO partial primary output behind, so that
+		// the deferred release of the "" reservation is sound and an xsl:catch
+		// that writes another primary result document does not produce a
+		// double-primary result.
+		//
+		// The buffer frame stands IN for the base frame: it temporarily replaces
+		// ec.outputStack[0] (rather than being pushed on top), so that the body
+		// observes the same outputStack depth (1) and the same insideResultDocPrimary
+		// state as a true direct write. This keeps every depth-sensitive branch
+		// (XTRE1495 suppression, rawResultSequence capture, etc.) behaving exactly
+		// as before; only the destination tree changes, and only until commit.
+		realBase := ec.outputStack[0]
+		bufDoc := helium.NewDefaultDocument()
+		// Clone the REAL base frame so every output flag (captureItems,
+		// sequenceMode, documentConstructor, mapConstructor, wherePopulated,
+		// separateTextNodes, …) and accumulator (prevWasAtomic, prevHadOutput,
+		// outputSerial, …) is preserved. If the real primary frame captures items
+		// (raw delivery via cfg.rawCapture, or a json/adaptive default output
+		// method), atomics from xsl:sequence MUST be preserved as XDM items, not
+		// stringified into the DOM. Override ONLY the per-buffer destination
+		// (doc/current), the per-buffer item-separator, and the per-buffer
+		// accumulators that must start fresh for this buffer (pendingItems,
+		// seqPlaceholders, conditionalScopes). Everything else carries over.
+		bufFrameVal := *realBase
+		bufFrame := &bufFrameVal
+		bufFrame.doc = bufDoc
+		bufFrame.current = bufDoc
+		bufFrame.itemSeparator = itemSep
+		bufFrame.pendingItems = nil
+		bufFrame.seqPlaceholders = nil
+		bufFrame.conditionalScopes = nil
 		savedStack := ec.outputStack
-		ec.outputStack = ec.outputStack[:1] // keep only the base frame
+		bufferedStack := make([]*outputFrame, len(ec.outputStack))
+		copy(bufferedStack, ec.outputStack)
+		bufferedStack[0] = bufFrame
+		ec.outputStack = bufferedStack[:1] // keep only the (buffered) base frame
 		ec.insideResultDocPrimary = true
-		savedSep := ec.outputStack[0].itemSeparator
-		ec.outputStack[0].itemSeparator = itemSep
 		savedMethod := ec.currentResultDocMethod
 		ec.currentResultDocMethod = effectiveMethod
+		savedRawResult := ec.rawResultSequence
 		if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
 			ec.insideResultDocPrimary = false
 			ec.currentResultDocMethod = savedMethod
-			ec.outputStack[0].itemSeparator = savedSep
+			ec.rawResultSequence = savedRawResult
 			ec.outputStack = savedStack
 			return err
 		}
@@ -568,11 +732,10 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 				}
 			}
 			if !allowDupes {
-				out := ec.outputStack[0]
-				if err := validateJSONItems(out.pendingItems); err != nil {
+				if err := validateJSONItems(bufFrame.pendingItems); err != nil {
 					ec.insideResultDocPrimary = false
 					ec.currentResultDocMethod = savedMethod
-					ec.outputStack[0].itemSeparator = savedSep
+					ec.rawResultSequence = savedRawResult
 					ec.outputStack = savedStack
 					return err
 				}
@@ -580,43 +743,24 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		}
 		ec.insideResultDocPrimary = false
 		ec.currentResultDocMethod = savedMethod
-		ec.outputStack[0].itemSeparator = savedSep
 		ec.outputStack = savedStack
-		// Propagate character map names to the primary output frame.
-		// Include maps from the named format (xsl:output) first, then
-		// maps from xsl:result-document itself (higher priority).
-		var allMaps []string
-		if effectiveFormat != "" {
-			if fmtDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok {
-				allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
-				// Also propagate resolved character maps from parameter-document.
-				// Clone the compiled map so the later maps.Copy merge below never
-				// mutates the compiled format's ResolvedCharMap.
-				if len(fmtDef.ResolvedCharMap) > 0 {
-					ec.primaryResolvedCharMap = maps.Clone(fmtDef.ResolvedCharMap)
-				}
-			}
-		}
-		allMaps = append(allMaps, inst.UseCharacterMaps...)
-		if len(allMaps) > 0 {
-			ec.primaryCharacterMaps = allMaps
-			// Resolve character maps now while currentPackage is correct
-			// (package-scoped isolation). Merge into primaryResolvedCharMap.
-			resolved := resolveCharacterMaps(ec.effectiveStylesheet(), allMaps)
-			if len(resolved) > 0 {
-				if ec.primaryResolvedCharMap == nil {
-					ec.primaryResolvedCharMap = resolved
-				} else {
-					maps.Copy(ec.primaryResolvedCharMap, resolved)
-				}
-			}
-		}
-		// Capture serialization parameter overrides from xsl:result-document.
-		if overrides, err := ec.evalResultDocOutputDef(ctx, inst); err != nil {
+		// Body and all post-body checks succeeded: splice the buffered content
+		// into the real primary output and propagate the accumulator state.
+		if err := moveChildren(bufDoc, realBase.doc); err != nil {
 			return err
-		} else if overrides != nil {
-			ec.primaryOutputOverrides = overrides
 		}
+		realBase.pendingItems = append(realBase.pendingItems, bufFrame.pendingItems...)
+		realBase.prevWasAtomic = bufFrame.prevWasAtomic
+		realBase.prevHadOutput = bufFrame.prevHadOutput
+		realBase.outputSerial = bufFrame.outputSerial
+		realBase.emptyAtomicGen = bufFrame.emptyAtomicGen
+		realBase.seqConstructorGen = bufFrame.seqConstructorGen
+		// Commit the serialization overrides + character-map state. The overrides
+		// were evaluated up front (before any primary output was emitted) so that
+		// an AVT error releases the URI reservation without leaving partial primary
+		// output behind.
+		ec.commitPrimaryOutputState(inst, effectiveFormat, primaryOverrides)
+		committed = true
 		return nil
 	}
 
@@ -634,7 +778,34 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	}
 	tmpDoc.SetURL(resolvedHref)
 
-	effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
+	// PREFLIGHT (symmetric with the primary path): evaluate the secondary
+	// effective output definition — which evaluates EVERY error-prone
+	// serialization parameter AVT (method, standalone, indent, doctype, etc.) via
+	// evalResultDocOutputDef — BEFORE running the body. A serialization AVT that
+	// raises a dynamic error (e.g. method="{1 idiv 0}") inside xsl:try must roll
+	// the transaction back with NO body executed and NO per-href side effect: were
+	// the AVTs evaluated AFTER the body (the prior order), a NESTED secondary
+	// result-document inside the body could commit before the outer instruction's
+	// AVT error surfaced, leaving the enclosing xsl:catch to observe a stale nested
+	// result document. Building the output def up front guarantees any such error
+	// happens before inst.Body executes.
+	stagedOutDef, err := ec.buildEffectiveOutputDef(ctx, inst, effectiveFormat, "")
+	if err != nil {
+		return err
+	}
+
+	// Derive the effective output method from the preflighted output definition so
+	// a MethodAVT error is NOT swallowed (resolveResultDocMethod silently ignores
+	// MethodAVT failures): buildEffectiveOutputDef already surfaced any AVT error
+	// above. Fall back to resolveResultDocMethod only for the non-AVT resolution
+	// chain (static method, parameter-document, named format, default).
+	effectiveMethod := stagedOutDef.Method
+	if effectiveMethod == "" {
+		effectiveMethod = ec.resolveResultDocMethod(ctx, inst)
+		stagedOutDef.Method = effectiveMethod
+		stagedOutDef.MethodExplicit = true
+	}
+
 	savedMethod := ec.currentResultDocMethod
 	ec.currentResultDocMethod = effectiveMethod
 	captureSecondary := isItemSerializationMethod(effectiveMethod)
@@ -648,17 +819,18 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	ec.currentResultDocMethod = savedMethod
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
-	// For json/adaptive serialization, store captured items.
+	// Stage ALL per-href state locally; publish into the shared evaluator maps
+	// only at the single commit point below, after the body AND every post-body
+	// validation step has succeeded. If a validation error is thrown here (and
+	// possibly caught by an enclosing xsl:try), NO per-href side effect may
+	// persist: a stale resultDocItems/resultDocOutputDefs entry would otherwise
+	// be materialized at end-of-transform or contaminate an xsl:catch that writes
+	// the same href (spurious XTDE1490 / wrong output). The three staged pieces
+	// are: the captured json/adaptive items, the effective output definition (built
+	// up front in the preflight above), and the result-document tree itself.
+	var stagedItems xpath3.Sequence
 	if isItemSerializationMethod(effectiveMethod) && len(frame.pendingItems) > 0 {
-		ec.resultDocItems[href] = frame.pendingItems
-	}
-
-	// Always store the effective output definition for secondary result documents
-	// so that serialization parameters (omit-xml-declaration, indent, etc.) from
-	// the named format are applied when serializing the result.
-	effOutDef, err := ec.buildEffectiveOutputDef(ctx, inst, effectiveFormat, effectiveMethod)
-	if err == nil && effOutDef != nil {
-		ec.resultDocOutputDefs[href] = effOutDef
+		stagedItems = frame.pendingItems
 	}
 
 	// Apply type validation for secondary result documents (type="...").
@@ -723,8 +895,17 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		}
 	}
 
-	// Store the secondary result document.
+	// COMMIT POINT: body and every post-body validation step succeeded. Publish
+	// all staged per-href state atomically, then mark the transaction committed
+	// so the deferred rollback leaves the usedResultURIs reservation in place.
+	if stagedItems != nil {
+		ec.resultDocItems[href] = stagedItems
+	}
+	if stagedOutDef != nil {
+		ec.resultDocOutputDefs[href] = stagedOutDef
+	}
 	ec.resultDocuments[href] = tmpDoc
+	committed = true
 	return nil
 }
 
