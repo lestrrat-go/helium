@@ -401,7 +401,10 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		// Validate the byte slice directly: a string() copy here would double the
 		// peak memory for a large (attacker-controlled) comment before the same
 		// bytes are written below.
-		content := n.Content()
+		// rawContent avoids the defensive copy Content() makes: this path is
+		// read-only and a copy here would double the peak memory for a large
+		// (attacker-controlled) comment before the same bytes are written below.
+		content := rawContent(n)
 		if bytes.Contains(content, []byte("--")) || (len(content) > 0 && content[len(content)-1] == '-') {
 			// check() keeps the first sticky error, so an earlier I/O failure is
 			// not clobbered by this validation error.
@@ -409,7 +412,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			return d.err
 		}
 		d.writeString(out, "<!--")
-		d.writeBytes(out, n.Content())
+		d.writeBytes(out, content)
 		d.writeString(out, "-->")
 		return d.err
 	case ProcessingInstructionNode:
@@ -446,7 +449,8 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		d.writeString(out, ";")
 		return d.err
 	case TextNode:
-		c := n.Content()
+		// Read-only serialization: use the internal slice without a copy.
+		c := rawContent(n)
 		if n.Name() == xmlTextNoEnc {
 			// xmlTextNoEnc is a libxml2 marker (set on the node's name, not
 			// its content) indicating the text should be emitted without
@@ -464,7 +468,8 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	case CDATASectionNode:
 		// Mirrors xmlsave.c XML_CDATA_SECTION_NODE handling.
 		// Splits content on "]]>" sequences so the output is well-formed.
-		c := n.Content()
+		// Read-only serialization: use the internal slice without a copy.
+		c := rawContent(n)
 		if len(c) == 0 {
 			d.writeString(out, "<![CDATA[]]>")
 		} else {

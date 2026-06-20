@@ -1,6 +1,10 @@
 package helium
 
-import "github.com/lestrrat-go/pdebug"
+import (
+	"bytes"
+
+	"github.com/lestrrat-go/pdebug"
+)
 
 // CDATASection represents a CDATA section node in the DOM tree
 // (libxml2: xmlNode with type XML_CDATA_SECTION_NODE).
@@ -30,7 +34,15 @@ func (n *CDATASection) AddSibling(cur Node) error {
 	return addSibling(n, cur)
 }
 
+// Content returns a defensive copy of the CDATA section's content. Mutating the
+// returned slice does NOT affect the node; re-reading returns the original bytes.
 func (n CDATASection) Content() []byte {
+	return bytes.Clone(n.content)
+}
+
+// rawContent returns the internal content slice without copying for read-only
+// internal hot paths. See the package-level rawContent for the contract.
+func (n CDATASection) rawContent() []byte {
 	return n.content
 }
 
@@ -84,7 +96,15 @@ func (n *Comment) AddSibling(cur Node) error {
 	return addSibling(n, cur)
 }
 
+// Content returns a defensive copy of the comment's content. Mutating the
+// returned slice does NOT affect the node; re-reading returns the original bytes.
 func (n Comment) Content() []byte {
+	return bytes.Clone(n.content)
+}
+
+// rawContent returns the internal content slice without copying for read-only
+// internal hot paths. See the package-level rawContent for the contract.
+func (n Comment) rawContent() []byte {
 	return n.content
 }
 
@@ -242,7 +262,15 @@ func (n *Text) AddSibling(cur Node) error {
 	return addSibling(n, cur)
 }
 
+// Content returns a defensive copy of the text node's content. Mutating the
+// returned slice does NOT affect the node; re-reading returns the original bytes.
 func (n Text) Content() []byte {
+	return bytes.Clone(n.content)
+}
+
+// rawContent returns the internal content slice without copying for read-only
+// internal hot paths. See the package-level rawContent for the contract.
+func (n Text) rawContent() []byte {
 	return n.content
 }
 
