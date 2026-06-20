@@ -253,6 +253,53 @@ func TestStripSpaceSameKindWildcardConflict(t *testing.T) {
 	require.Contains(t, err.Error(), "XTSE0270")
 }
 
+// TestStripSpaceWildcardOverlapConflict verifies that two wildcard NameTests of
+// DIFFERENT shapes but the SAME match priority whose match SETS genuinely
+// overlap raise XTSE0270 at the same import precedence — even though their
+// canonical keys differ. "*:item" (local-name wildcard) and "Q{urn:A}*"
+// (namespace wildcard) both match Q{urn:A}item at priority -0.25, so declaring
+// one strip and the other preserve is a genuine conflict. Both orderings are
+// checked because conflict detection must be symmetric.
+func TestStripSpaceWildcardOverlapConflict(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		strip    string
+		preserve string
+	}{
+		{
+			name:     "local-wildcard strip vs namespace-wildcard preserve",
+			strip:    "*:item",
+			preserve: "Q{urn:A}*",
+		},
+		{
+			name:     "namespace-wildcard strip vs local-wildcard preserve",
+			strip:    "Q{urn:A}*",
+			preserve: "*:item",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="` + tc.strip + `"/>
+  <xsl:preserve-space elements="` + tc.preserve + `"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+			require.NoError(t, err)
+
+			_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+			require.Error(t, err,
+				"overlapping same-priority strip=%q preserve=%q must raise XTSE0270", tc.strip, tc.preserve)
+			require.Contains(t, err.Error(), "XTSE0270")
+		})
+	}
+}
+
 // TestStripSpaceNamespaceWildcardPriority verifies that a namespace wildcard
 // (Q{uri}*) outranks the universal wildcard (*) at equal import precedence, so
 // strip-space="Q{urn:A}*" wins over preserve-space="*" for an element in urn:A.

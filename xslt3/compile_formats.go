@@ -1209,48 +1209,108 @@ func nameTestKey(nt nameTest) string {
 	}
 }
 
+// nameTestsOverlap reports whether two strip/preserve NameTest SETS can match
+// the same expanded name. It is not enough to compare canonical keys for
+// equality: two NameTests of different shapes (e.g. the local-name wildcard
+// "*:item" and the namespace wildcard "Q{urn:A}*") can both match a third name
+// ("Q{urn:A}item") even though their keys differ. When two such rules carry the
+// SAME priority and import precedence, that is a genuine XTSE0270 conflict that
+// equality-only checking misses.
+//
+// Overlap rules by NameTest shape:
+//   - universal "*" overlaps everything;
+//   - namespace wildcard "Q{uri}*" overlaps an exact "Q{uri}local",
+//     a local-name wildcard "*:local" (its uri is unconstrained), and another
+//     "Q{uri}*" with the SAME uri;
+//   - local-name wildcard "*:local" overlaps an exact "Q{uri}local" (any uri)
+//     and another "*:local" with the same local name;
+//   - exact overlaps exact iff their expanded names are equal.
+func nameTestsOverlap(a, b nameTest) bool {
+	uri := func(nt nameTest) string {
+		if nt.HasURI {
+			return nt.URI
+		}
+		return ""
+	}
+	isUniversal := func(nt nameTest) bool {
+		return nt.Local == "*" && nt.Prefix == "" && !nt.HasURI
+	}
+	isNSWildcard := func(nt nameTest) bool {
+		return nt.Local == "*" && !isUniversal(nt)
+	}
+	isLocalWildcard := func(nt nameTest) bool {
+		return nt.Prefix == "*"
+	}
+	if isUniversal(a) || isUniversal(b) {
+		return true
+	}
+	switch {
+	case isNSWildcard(a) && isNSWildcard(b):
+		return uri(a) == uri(b)
+	case isNSWildcard(a) && isLocalWildcard(b):
+		return true // ns wildcard's local is unconstrained; local wildcard's uri is unconstrained
+	case isLocalWildcard(a) && isNSWildcard(b):
+		return true
+	case isNSWildcard(a): // b is exact
+		return uri(a) == uri(b)
+	case isNSWildcard(b): // a is exact
+		return uri(a) == uri(b)
+	case isLocalWildcard(a) && isLocalWildcard(b):
+		return a.Local == b.Local
+	case isLocalWildcard(a): // b is exact
+		return a.Local == b.Local
+	case isLocalWildcard(b): // a is exact
+		return a.Local == b.Local
+	default: // both exact
+		return uri(a) == uri(b) && a.Local == b.Local
+	}
+}
+
 // checkSpaceConflicts detects NameTests that appear in both xsl:strip-space and
-// xsl:preserve-space. Conflicts are resolved by import precedence: a rule at a
-// higher import precedence overrides one at a lower precedence. XTSE0270 is
-// raised only when the same NameTest is declared as both strip and preserve at
-// the same (highest) import precedence.
+// xsl:preserve-space. Conflicts are resolved by import precedence and match
+// priority: a rule at a higher import precedence (or, at equal precedence, a
+// higher priority) overrides the other. XTSE0270 is raised only when a strip and
+// a preserve rule at the SAME highest import precedence AND SAME match priority
+// have OVERLAPPING NameTest sets — i.e. some expanded name they could both match.
 func (c *compiler) checkSpaceConflicts(_ context.Context) error {
 	if len(c.stylesheet.stripSpace) == 0 || len(c.stylesheet.preserveSpace) == 0 {
 		return nil
 	}
-	// Highest strip/preserve precedence per resolved NameTest key.
-	type prec struct {
-		strip, preserve int
-		hasStrip        bool
-		hasPreserve     bool
-	}
-	byKey := make(map[string]*prec)
-	get := func(key string) *prec {
-		p := byKey[key]
-		if p == nil {
-			p = &prec{}
-			byKey[key] = p
+	// Highest import precedence at which any strip / preserve rule appears.
+	highestStrip, highestPreserve := 0, 0
+	for i, nt := range c.stylesheet.stripSpace {
+		if i == 0 || nt.ImportPrec > highestStrip {
+			highestStrip = nt.ImportPrec
 		}
-		return p
 	}
-	for _, nt := range c.stylesheet.stripSpace {
-		p := get(nameTestKey(nt))
-		if !p.hasStrip || nt.ImportPrec > p.strip {
-			p.strip = nt.ImportPrec
+	for i, nt := range c.stylesheet.preserveSpace {
+		if i == 0 || nt.ImportPrec > highestPreserve {
+			highestPreserve = nt.ImportPrec
 		}
-		p.hasStrip = true
 	}
-	for _, nt := range c.stylesheet.preserveSpace {
-		p := get(nameTestKey(nt))
-		if !p.hasPreserve || nt.ImportPrec > p.preserve {
-			p.preserve = nt.ImportPrec
+	// A conflict can only be genuine at a precedence that is the highest for both
+	// kinds; otherwise the higher-precedence kind wins outright. Compare only the
+	// rules at each kind's own highest precedence, and require equal precedence.
+	for _, sNT := range c.stylesheet.stripSpace {
+		if sNT.ImportPrec != highestStrip {
+			continue
 		}
-		p.hasPreserve = true
-	}
-	for key, p := range byKey {
-		if p.hasStrip && p.hasPreserve && p.strip == p.preserve {
+		for _, pNT := range c.stylesheet.preserveSpace {
+			if pNT.ImportPrec != highestPreserve {
+				continue
+			}
+			if sNT.ImportPrec != pNT.ImportPrec {
+				continue
+			}
+			if nameTestPriority(sNT) != nameTestPriority(pNT) {
+				continue
+			}
+			if !nameTestsOverlap(sNT, pNT) {
+				continue
+			}
 			return staticError(errCodeXTSE0270,
-				"conflicting xsl:strip-space and xsl:preserve-space for %q", key)
+				"conflicting xsl:strip-space %q and xsl:preserve-space %q at the same import precedence and priority",
+				nameTestKey(sNT), nameTestKey(pNT))
 		}
 	}
 	return nil
