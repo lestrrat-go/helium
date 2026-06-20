@@ -38,6 +38,18 @@ var (
 	// after evaluating the attack surface (e.g. ensuring decryption
 	// errors are not exposed to remote attackers).
 	ErrCBCRequiresOptIn = errors.New("xmlenc1: AES-CBC decryption requires AllowUnauthenticatedCBC(true)")
+
+	// ErrCBCEncryptionRequiresOptIn is returned when an Encryptor is
+	// configured to emit a new AES-CBC ciphertext (via a CBC
+	// BlockAlgorithm) but the caller has not opted in to legacy CBC
+	// encryption via Encryptor.AllowLegacyCBC(true).
+	//
+	// The Encryptor defaults to AES-256-GCM (authenticated). AES-CBC
+	// under XML Encryption 1.0 is unauthenticated and vulnerable to
+	// padding-oracle attacks (Jager/Somorovsky 2011); XML Encryption
+	// 1.1 deprecated it in favor of AES-GCM. Emitting new CBC
+	// ciphertext therefore requires an explicit acknowledgement.
+	ErrCBCEncryptionRequiresOptIn = errors.New("xmlenc1: AES-CBC encryption requires AllowLegacyCBC(true)")
 )
 
 // UnsupportedAlgorithmError is returned for unrecognized algorithm URIs.

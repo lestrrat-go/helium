@@ -329,7 +329,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	}
 
 	// XTTE0590: validate global context item against declared type.
-	if err := ec.validateGlobalContextItem(effectiveSource); err != nil {
+	if err := ec.validateGlobalContextItem(ctx, effectiveSource); err != nil {
 		return nil, err
 	}
 

@@ -37,6 +37,7 @@ func TestEncryptDecryptElementRSAOAEP_AES128CBC(t *testing.T) {
 
 	encryptor := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES128CBC).
+		AllowLegacyCBC(true).
 		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
 		RecipientPublicKey(&key.PublicKey)
 
@@ -197,6 +198,7 @@ func TestEncryptDecryptWithAESKeyWrap(t *testing.T) {
 
 	encryptor := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES256CBC).
+		AllowLegacyCBC(true).
 		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
 		KeyEncryptionKey(kek)
 
@@ -223,6 +225,7 @@ func TestEncryptDecryptWithSessionKey(t *testing.T) {
 
 	encryptor := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES128CBC).
+		AllowLegacyCBC(true).
 		SessionKey(sessionKey)
 
 	edElem, err := encryptor.EncryptElement(t.Context(), elem)
@@ -239,7 +242,7 @@ func TestEncryptDecryptWithSessionKey(t *testing.T) {
 }
 
 func TestEncryptorImmutability(t *testing.T) {
-	e1 := xmlenc1.NewEncryptor().BlockAlgorithm(xmlenc1.AES128CBC)
+	e1 := xmlenc1.NewEncryptor().BlockAlgorithm(xmlenc1.AES128CBC).AllowLegacyCBC(true)
 	e2 := e1.BlockAlgorithm(xmlenc1.AES256GCM)
 
 	// e1 should still be AES128CBC (not modified by e2).
@@ -266,9 +269,10 @@ func TestEncryptNoConfig(t *testing.T) {
 
 func TestEncryptNoKey(t *testing.T) {
 	doc := mustParseXML(t, samlAssertion)
-	encryptor := xmlenc1.NewEncryptor().BlockAlgorithm(xmlenc1.AES128CBC)
+	encryptor := xmlenc1.NewEncryptor().BlockAlgorithm(xmlenc1.AES256GCM)
 	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
 	require.Error(t, err)
+	require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
 }
 
 func TestDecryptWrongKey(t *testing.T) {
@@ -278,6 +282,7 @@ func TestDecryptWrongKey(t *testing.T) {
 
 	encryptor := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES128CBC).
+		AllowLegacyCBC(true).
 		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
 		RecipientPublicKey(&key1.PublicKey)
 
@@ -305,6 +310,7 @@ func TestAESKeyWrapRFC3394(t *testing.T) {
 
 	encryptor := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES256CBC).
+		AllowLegacyCBC(true).
 		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
 		KeyEncryptionKey(kek).
 		SessionKey(keyData)
@@ -645,6 +651,7 @@ func TestEncryptElementPreservesSiblingOrder(t *testing.T) {
 
 			encryptor := xmlenc1.NewEncryptor().
 				BlockAlgorithm(xmlenc1.AES128CBC).
+				AllowLegacyCBC(true).
 				KeyTransportAlgorithm(xmlenc1.RSAOAEP).
 				RecipientPublicKey(&key.PublicKey)
 
@@ -664,6 +671,7 @@ func TestEncryptElementRootInPlace(t *testing.T) {
 
 	encryptor := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES128CBC).
+		AllowLegacyCBC(true).
 		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
 		RecipientPublicKey(&key.PublicKey)
 
