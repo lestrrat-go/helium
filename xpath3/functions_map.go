@@ -80,9 +80,7 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		if !ok {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:merge requires sequence of maps"}
 		}
-		mergeErr := m.ForEach(func(k AtomicValue, v Sequence) error {
-			return builder.Add(k, v)
-		})
+		mergeErr := m.forEach0(builder.Add)
 		if mergeErr != nil {
 			return nil, mergeErr
 		}
@@ -159,7 +157,7 @@ func fnMapContains(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleBoolean(m.Contains(ka)), nil
 }
 
-func fnMapGet(_ context.Context, args []Sequence) (Sequence, error) {
+func fnMapGet(ctx context.Context, args []Sequence) (Sequence, error) {
 	m, err := extractMap(args[0])
 	if err != nil {
 		return nil, err
@@ -174,11 +172,18 @@ func fnMapGet(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	val, ok := m.Get(ka)
+	// Borrow the stored value WITHOUT cloning (get0), then drain it through
+	// appendBoundedClonedSeq so maxNodes / OpLimit / cancellation fire BEFORE the
+	// value is materialized. Public Get deep-clones by materializing eagerly,
+	// which would defeat the bound for a borrowed lazy value (and panic if its
+	// Materialize panics). Cloning each appended item keeps value semantics, so
+	// mutating the result cannot reach the source map.
+	val, ok := m.get0(ka)
 	if !ok {
 		return validNilSequence, nil
 	}
-	return val, nil
+	ec := getFnContext(ctx)
+	return appendBoundedClonedSeq(ctx, ec, nil, val, fnMaxNodes(ec))
 }
 
 func fnMapPut(_ context.Context, args []Sequence) (Sequence, error) {
@@ -228,11 +233,20 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	ec := getFnContext(ctx)
 	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
-	mapErr := m.ForEach(func(k AtomicValue, v Sequence) error {
-		if err := fnCountOp(ctx, ec); err != nil {
+	// Iterate without cloning (forEach0) so a borrowed lazy value is never
+	// materialized by ForEach's clone before the bound/op guards run. For each
+	// entry: bound the value length against maxNodes and charge the value's
+	// length (min 1) of ops BEFORE cloning the key/value into the callback, so a
+	// pathological lazy value is rejected rather than eagerly materialized.
+	mapErr := m.forEach0(func(k AtomicValue, v Sequence) error {
+		vLen := seqLen(v)
+		if maxNodes > 0 && vLen > maxNodes {
+			return ErrNodeSetLimit
+		}
+		if err := fnCountOps(ctx, ec, max(vLen, 1)); err != nil {
 			return err
 		}
-		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{k}, v})
+		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{cloneMapKey(k)}, cloneSequence(v)})
 		if err != nil {
 			return err
 		}

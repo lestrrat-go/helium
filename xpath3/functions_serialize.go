@@ -385,7 +385,7 @@ func validateSerializeCharacterMaps(v Sequence) error {
 	if !ok {
 		return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize option 'use-character-maps' must be a map"}
 	}
-	return m.ForEach(func(key AtomicValue, value Sequence) error {
+	return m.forEach0(func(key AtomicValue, value Sequence) error {
 		if key.TypeName != TypeString && key.TypeName != TypeUntypedAtomic {
 			return &XPathError{Code: lexicon.ErrXPTY0004, Message: "serialize use-character-maps keys must be strings"}
 		}
@@ -453,7 +453,7 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 
 func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 	parts := make([]string, 0, m.Size())
-	err := m.ForEach(func(key AtomicValue, value Sequence) error {
+	err := m.forEach0(func(key AtomicValue, value Sequence) error {
 		keyText, err := serializeAdaptiveItem(key, opts)
 		if err != nil {
 			return err
@@ -516,7 +516,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 	case MapItem:
 		seen := make(map[string]struct{}, v.Size())
 		parts := make([]string, 0, v.Size())
-		err := v.ForEach(func(key AtomicValue, value Sequence) error {
+		err := v.forEach0(func(key AtomicValue, value Sequence) error {
 			keyText, err := atomicToString(key)
 			if err != nil {
 				return &XPathError{Code: errCodeFOER0000, Message: "json serialization map keys must be stringifiable"}

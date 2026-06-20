@@ -37,6 +37,15 @@ type compiler struct {
 	// through a referenced group — not just direct xs:attribute children — is
 	// reported (ag-props-correct.2).
 	attrGroupRefChildren map[QName][]QName
+	// per-edge source info for the nested xs:attributeGroup ref children recorded in
+	// attrGroupRefChildren, keyed by the containing group's QName and index-aligned
+	// with the corresponding attrGroupRefChildren slice. Each entry records the
+	// line/file of the back-edge <xs:attributeGroup ref="..."> element itself (not
+	// the owning group's declaration), so an indirect-cycle diagnostic
+	// (checkCircularAttrGroupRefs) cites the ref element that closed the cycle —
+	// matching the direct-self-reference path — even when the cycle spans
+	// included/redefined schemas that live in different files.
+	attrGroupRefSources map[QName][]attrGroupSource
 	// source info for named model group definitions (xs:group name="..."), keyed
 	// by group QName. Used to run cos-element-consistent over standalone named
 	// groups that no complex type references, reporting against the declaring file.
@@ -352,6 +361,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		attrGroupRefChildren:     make(map[QName][]QName),
+		attrGroupRefSources:      make(map[QName][]attrGroupSource),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
 		typeKinds:                make(map[QName]redefineKind),

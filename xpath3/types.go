@@ -46,7 +46,164 @@ var (
 // sequence with no error is the intentional result.
 var validNilSequence Sequence
 
-var cloneSequence = sequence.Clone[Item]
+// cloneSequence returns a deep copy of the Sequence. It materializes the source
+// (matching the timing of the former shallow sequence.Clone — bounded call
+// sites pre-charge the sequence length against OpLimit BEFORE invoking this, so
+// the materialize cost is already accounted for) and then deep-copies each item
+// so that pointer-backed atomic values (*big.Int, *big.Rat, *FloatValue,
+// []byte) and nested maps/arrays are not shared with the source. This preserves
+// XPath 3.1 value semantics: mutating a value after it was inserted into a
+// map/array must not change the stored map/array.
+func cloneSequence(seq Sequence) Sequence {
+	if seq == nil {
+		return nil
+	}
+	src := seq.Materialize()
+	if len(src) == 0 {
+		return ItemSlice(append([]Item(nil), src...))
+	}
+	cloned := make([]Item, len(src))
+	for i, item := range src {
+		cloned[i] = deepCloneItem(item)
+	}
+	return ItemSlice(cloned)
+}
+
+// deepCloneItem returns a value-semantics copy of an Item.
+//
+// Only AtomicValue with a pointer- or slice-backed payload is actually copied:
+// those payloads (*big.Int, *big.Rat, *FloatValue, []byte, Duration's *big.Rat
+// fields) are the sole way a caller can hold a reference and later mutate a value
+// after it was inserted into a map/array.
+//
+// MapItem and ArrayItem are returned AS-IS, NOT recursively cloned. They are
+// immutable (Put/Append/Remove/SubArray are all copy-on-write — the backing
+// entry/member slices are never mutated in place), and every value placed inside
+// one passed through cloneSequence at ingress, so any pointer atomics they hold
+// were already detached from caller storage. Recursively re-cloning a nested
+// map/array on every insert would turn incremental construction of a
+// depth-N structure into O(N^2)/unbounded work and defeat the OpLimit/maxNodes
+// bounds, which charge per inserted value once — not per nesting level on every
+// insert.
+//
+// NodeItem keeps its underlying DOM node identity shared (the node itself is
+// never cloned), but copies its mutable metadata slice (UnionMemberTypes) so a
+// caller cannot mutate it after insertion. FunctionItem keeps its closure and
+// any DOM identity shared, but copies its mutable type-metadata (ParamTypes /
+// ReturnType) for the same reason.
+func deepCloneItem(item Item) Item {
+	switch v := item.(type) {
+	case AtomicValue:
+		// Only re-box when the payload actually carries shared mutable state.
+		// Returning the original boxed Item for immutable payloads (int64,
+		// string, bool, float64, time.Time, QNameValue, by-value Duration
+		// without rationals, …) avoids an interface re-allocation per item on
+		// the hot clone path.
+		if cloned, copied := deepCloneAtomicValue(v); copied {
+			return cloned
+		}
+		return item
+	case NodeItem:
+		if v.UnionMemberTypes == nil {
+			return item
+		}
+		v.UnionMemberTypes = append([]string(nil), v.UnionMemberTypes...)
+		return v
+	case FunctionItem:
+		if v.ParamTypes == nil && v.ReturnType == nil {
+			return item
+		}
+		v.ParamTypes = cloneSequenceTypes(v.ParamTypes)
+		v.ReturnType = cloneSequenceTypePtr(v.ReturnType)
+		return v
+	default:
+		return item
+	}
+}
+
+// cloneSequenceTypePtr deep-copies a *SequenceType, preserving nil.
+func cloneSequenceTypePtr(st *SequenceType) *SequenceType {
+	if st == nil {
+		return nil
+	}
+	cloned := cloneSequenceType(*st)
+	return &cloned
+}
+
+// cloneSequenceTypes deep-copies a slice of SequenceType, preserving nil.
+func cloneSequenceTypes(sts []SequenceType) []SequenceType {
+	if sts == nil {
+		return nil
+	}
+	cloned := make([]SequenceType, len(sts))
+	for i := range sts {
+		cloned[i] = cloneSequenceType(sts[i])
+	}
+	return cloned
+}
+
+// cloneSequenceType deep-copies a SequenceType's mutable metadata. Three item
+// tests carry mutable backing reachable from a SequenceType: FunctionTest
+// (ParamTypes slice + ReturnType, each itself a SequenceType), MapTest
+// (ValType) and ArrayTest (MemberType). Those nested SequenceTypes can in turn
+// hold a FunctionTest, so cloning recurses through all three. Every other
+// NodeTest is an immutable value with no shared mutable backing, so it is kept
+// as-is.
+func cloneSequenceType(st SequenceType) SequenceType {
+	switch t := st.ItemTest.(type) {
+	case FunctionTest:
+		t.ParamTypes = cloneSequenceTypes(t.ParamTypes)
+		t.ReturnType = cloneSequenceType(t.ReturnType)
+		st.ItemTest = t
+	case MapTest:
+		t.ValType = cloneSequenceType(t.ValType)
+		st.ItemTest = t
+	case ArrayTest:
+		t.MemberType = cloneSequenceType(t.MemberType)
+		st.ItemTest = t
+	}
+	return st
+}
+
+// deepCloneAtomicValue copies an AtomicValue when its Go payload is pointer- or
+// slice-backed, duplicating that payload so a later mutation of the original
+// cannot reach the stored copy. It returns (copy, true) only when a duplication
+// was needed; for immutable value payloads it returns (zero, false) so the
+// caller can keep the original (already-boxed) Item and skip a re-allocation.
+func deepCloneAtomicValue(a AtomicValue) (AtomicValue, bool) {
+	switch v := a.Value.(type) {
+	case *big.Int:
+		a.Value = new(big.Int).Set(v)
+	case *big.Rat:
+		a.Value = new(big.Rat).Set(v)
+	case *FloatValue:
+		a.Value = v.clone()
+	case []byte:
+		a.Value = append([]byte(nil), v...)
+	case Duration:
+		a.Value = v.clone()
+	case *Duration:
+		d := v.clone()
+		a.Value = &d
+	default:
+		return AtomicValue{}, false
+	}
+	return a, true
+}
+
+// cloneMapKey returns a value-semantics copy of a map key. Map keys are single
+// AtomicValues, so this is O(1). A pointer-backed key (e.g. xs:integer backed by
+// *big.Int) could otherwise be mutated by the caller after insertion and, because
+// single-entry maps recompute the stored key in Get, the map's key would change
+// after construction. Cloning at every map ingress detaches the stored key from
+// caller-held storage. Immutable payloads keep their original (already-boxed)
+// AtomicValue and skip the re-allocation.
+func cloneMapKey(key AtomicValue) AtomicValue {
+	if cloned, copied := deepCloneAtomicValue(key); copied {
+		return cloned
+	}
+	return key
+}
 
 // CloneSequence returns a deep copy of the Sequence.
 func CloneSequence(seq Sequence) Sequence {
@@ -553,6 +710,19 @@ type Duration struct {
 	Negative bool
 }
 
+// clone returns a deep copy of the Duration, duplicating its *big.Rat fields so
+// a mutation of the original cannot reach the copy. Used by value-semantics deep
+// cloning of atomic values stored in maps/arrays.
+func (d Duration) clone() Duration {
+	if d.FracSec != nil {
+		d.FracSec = new(big.Rat).Set(d.FracSec)
+	}
+	if d.SecRat != nil {
+		d.SecRat = new(big.Rat).Set(d.SecRat)
+	}
+	return d
+}
+
 // --- FunctionItem ---
 
 // FunctionItem represents a callable function value (inline, named ref, partial application).
@@ -730,7 +900,7 @@ func normalizeMapKey(key AtomicValue) mapKey {
 // Used by map:entry where the value is already owned by the caller.
 func newSingleEntryMap(key AtomicValue, value Sequence) MapItem {
 	return MapItem{
-		entries: []mapEntry{{key: key, value: value}},
+		entries: []mapEntry{{key: cloneMapKey(key), value: value}},
 	}
 }
 
@@ -740,7 +910,7 @@ func NewMap(entries []MapEntry) MapItem {
 	// skip the index map allocation entirely.
 	if len(entries) == 1 {
 		return MapItem{
-			entries: []mapEntry{{key: entries[0].Key, value: cloneSequence(entries[0].Value)}},
+			entries: []mapEntry{{key: cloneMapKey(entries[0].Key), value: cloneSequence(entries[0].Value)}},
 		}
 	}
 	m := MapItem{
@@ -748,7 +918,7 @@ func NewMap(entries []MapEntry) MapItem {
 		index:   make(map[mapKey]int, len(entries)),
 	}
 	for i, e := range entries {
-		m.entries[i] = mapEntry{key: e.Key, value: cloneSequence(e.Value)}
+		m.entries[i] = mapEntry{key: cloneMapKey(e.Key), value: cloneSequence(e.Value)}
 		m.index[normalizeMapKey(e.Key)] = i
 	}
 	return m
@@ -801,9 +971,9 @@ func (m MapItem) Put(key AtomicValue, value Sequence) MapItem {
 	}
 
 	if idx, ok := newIndex[nk]; ok {
-		newEntries[idx] = mapEntry{key: key, value: cloneSequence(value)}
+		newEntries[idx] = mapEntry{key: cloneMapKey(key), value: cloneSequence(value)}
 	} else {
-		newEntries = append(newEntries, mapEntry{key: key, value: cloneSequence(value)})
+		newEntries = append(newEntries, mapEntry{key: cloneMapKey(key), value: cloneSequence(value)})
 		newIndex[nk] = len(newEntries) - 1
 	}
 	return MapItem{entries: newEntries, index: newIndex}
@@ -818,8 +988,20 @@ func (m MapItem) Contains(key AtomicValue) bool {
 	return ok
 }
 
-// Keys returns all keys in insertion order.
+// Keys returns all keys in insertion order. Keys are cloned so a caller cannot
+// mutate a pointer-backed key and change the stored map key.
 func (m MapItem) Keys() []AtomicValue {
+	keys := make([]AtomicValue, len(m.entries))
+	for i, e := range m.entries {
+		keys[i] = cloneMapKey(e.key)
+	}
+	return keys
+}
+
+// keys0 returns the map's keys in insertion order without cloning. The returned
+// AtomicValues are the map's own stored keys; callers must not mutate them.
+// Used by trusted internal paths that only read keys.
+func (m MapItem) keys0() []AtomicValue {
 	keys := make([]AtomicValue, len(m.entries))
 	for i, e := range m.entries {
 		keys[i] = e.key
@@ -833,7 +1015,24 @@ func (m MapItem) Size() int {
 }
 
 // ForEach calls fn for each entry in insertion order. Stops on first error.
+// The key and value passed to fn are clones of the map's stored entry, so a
+// caller that mutates a pointer-backed atomic through fn cannot change the
+// supposedly-immutable map. Trusted internal callers that need to avoid the
+// clone (e.g. bounded/lazy iteration) use forEach0 instead.
 func (m MapItem) ForEach(fn func(AtomicValue, Sequence) error) error {
+	for _, e := range m.entries {
+		if err := fn(cloneMapKey(e.key), cloneSequence(e.value)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// forEach0 calls fn for each entry in insertion order WITHOUT cloning the key or
+// value. The key and value passed to fn are the map's own backing storage;
+// callers must not mutate either and must clone before exposing them outward.
+// Used by trusted internal/lazy/bounded paths that preserve laziness and bounds.
+func (m MapItem) forEach0(fn func(AtomicValue, Sequence) error) error {
 	for _, e := range m.entries {
 		if err := fn(e.key, e.value); err != nil {
 			return err
@@ -899,7 +1098,7 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 				case MergeUseFirst:
 					continue
 				case MergeUseLast:
-					allEntries[idx] = mapEntry{key: e.key, value: cloneSequence(e.value)}
+					allEntries[idx] = mapEntry{key: cloneMapKey(e.key), value: cloneSequence(e.value)}
 					continue
 				case MergeReject:
 					return MapItem{}, &XPathError{
@@ -916,7 +1115,7 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 				}
 			}
 			seen[nk] = len(allEntries)
-			allEntries = append(allEntries, mapEntry{key: e.key, value: cloneSequence(e.value)})
+			allEntries = append(allEntries, mapEntry{key: cloneMapKey(e.key), value: cloneSequence(e.value)})
 		}
 	}
 
@@ -950,7 +1149,9 @@ func NewMapBuilder(policy MergePolicy, sizeHint int) *MapBuilder {
 // Add inserts a key-value pair into the builder, applying the merge policy
 // for duplicate keys. The value is NOT cloned — the caller must ensure the
 // value is not mutated after this call (which is the case for values produced
-// by the evaluator, since XPath values are immutable).
+// by the evaluator, since XPath values are immutable). The key IS cloned
+// (an O(1) single-atomic copy) so a pointer-backed key cannot be mutated
+// after insertion and silently change the stored map key.
 func (b *MapBuilder) Add(key AtomicValue, value Sequence) error {
 	nk := normalizeMapKey(key)
 	if idx, ok := b.index[nk]; ok {
@@ -958,7 +1159,7 @@ func (b *MapBuilder) Add(key AtomicValue, value Sequence) error {
 		case MergeUseFirst:
 			return nil
 		case MergeUseLast:
-			b.entries[idx] = mapEntry{key: key, value: value}
+			b.entries[idx] = mapEntry{key: cloneMapKey(key), value: value}
 			return nil
 		case MergeReject:
 			return &XPathError{
@@ -975,7 +1176,7 @@ func (b *MapBuilder) Add(key AtomicValue, value Sequence) error {
 		}
 	}
 	b.index[nk] = len(b.entries)
-	b.entries = append(b.entries, mapEntry{key: key, value: value})
+	b.entries = append(b.entries, mapEntry{key: cloneMapKey(key), value: value})
 	return nil
 }
 
@@ -1079,6 +1280,14 @@ func (a ArrayItem) SubArray(start, length int) (ArrayItem, error) {
 
 // Flatten returns all members concatenated into a single sequence.
 // Nested arrays are recursively flattened per XPath 3.1 spec.
+//
+// Leaf items are deep-cloned via deepCloneItem so that pointer-backed atomics
+// (*big.Int, *big.Rat, *FloatValue, []byte) held in the array's internal
+// storage are not exposed to the caller; mutating the returned sequence must
+// not mutate the original array. Nested arrays/maps are flattened recursively
+// (their own leaves are cloned at that level) and any non-flattened maps are
+// kept shared by value — they are immutable and were detached at ingress — to
+// avoid O(N^2) deep recursion and stay within the resource bounds.
 func (a ArrayItem) Flatten() Sequence {
 	var result ItemSlice
 	for _, m := range a.members {
@@ -1086,7 +1295,7 @@ func (a ArrayItem) Flatten() Sequence {
 			if nested, ok := item.(ArrayItem); ok {
 				result = append(result, nested.Flatten().Materialize()...)
 			} else {
-				result = append(result, item)
+				result = append(result, deepCloneItem(item))
 			}
 		}
 	}

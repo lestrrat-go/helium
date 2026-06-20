@@ -302,8 +302,14 @@ func fnArrayFlatten(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		arr, isArr := item.(ArrayItem)
 		if !isArr {
+			// Deep-clone leaf items so pointer-backed atomics (*big.Int,
+			// *big.Rat, *FloatValue, []byte) held in the array's internal
+			// storage are not exposed to the caller; mutating the returned
+			// sequence must not mutate the source array. Matches
+			// ArrayItem.Flatten(). Nested arrays/maps are kept shared by
+			// value (immutable, detached at ingress) to avoid O(N^2) work.
 			var err error
-			result, err = appendBounded(result, []Item{item}, maxNodes)
+			result, err = appendBounded(result, []Item{deepCloneItem(item)}, maxNodes)
 			if err != nil {
 				return nil, err
 			}

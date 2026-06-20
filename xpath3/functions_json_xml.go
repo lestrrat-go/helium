@@ -102,7 +102,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 	case nil:
 		return elem, nil
 	case MapItem:
-		if err := v.ForEach(func(key AtomicValue, value Sequence) error {
+		if err := v.forEach0(func(key AtomicValue, value Sequence) error {
 			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(value), opts, false)
 			if err != nil {
 				return err
