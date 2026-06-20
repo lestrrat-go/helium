@@ -59,6 +59,50 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 	return ec.cachedFns
 }
 
+// xsltFunctionArities is the static arity table for XSLT-defined functions that
+// live in the fn: namespace. It is the single source of truth consulted by
+// compile-time checks (e.g. validatePatternFunctions) that run without an
+// execContext. The runtime registries in xsltFunctions / xsltFunctionsNS must
+// stay consistent with this table; TestXSLTFunctionAritiesMatchRegistry guards
+// against drift.
+var xsltFunctionArities = map[string][2]int{
+	"nilled":                      {0, 1},
+	"current":                     {0, 0},
+	"document":                    {1, 2},
+	"doc":                         {1, 1},
+	"key":                         {2, 3},
+	"generate-id":                 {0, 1},
+	funcSystemProperty:            {1, 1},
+	"unparsed-entity-uri":         {1, 2},
+	"unparsed-entity-public-id":   {1, 2},
+	"element-available":           {1, 1},
+	"function-available":          {1, 2},
+	"type-available":              {1, 1},
+	"current-group":               {0, 0},
+	"current-grouping-key":        {0, 0},
+	"current-merge-group":         {0, 1},
+	"current-merge-key":           {0, 0},
+	"accumulator-before":          {1, 1},
+	"accumulator-after":           {1, 1},
+	"copy-of":                     {0, 1},
+	funcSnapshot:                  {0, 1},
+	"regex-group":                 {1, 1},
+	"transform":                   {1, 1},
+	funcAvailableSystemProperties: {0, 0},
+	"stream-available":            {1, 1},
+	"current-output-uri":          {0, 0},
+}
+
+// xsltFunctionAcceptsArity reports whether an XSLT-defined function (fn:
+// namespace) with the given local name exists and accepts the given arity.
+func xsltFunctionAcceptsArity(name string, arity int) bool {
+	bounds, ok := xsltFunctionArities[name]
+	if !ok {
+		return false
+	}
+	return arity >= bounds[0] && arity <= bounds[1]
+}
+
 type xsltFunc struct {
 	min         int
 	max         int

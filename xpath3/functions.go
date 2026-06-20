@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"math/big"
 	"os"
@@ -82,6 +83,14 @@ var defaultPrefixNS = map[string]string{
 func PredeclaredNamespace(prefix string) (string, bool) {
 	ns, ok := defaultPrefixNS[prefix]
 	return ns, ok
+}
+
+// PredeclaredNamespaces returns a copy of all XPath 3.0 predeclared
+// prefix→URI bindings (fn, math, map, array, err, xs) from the static context.
+// Callers that overlay these onto an evaluator must let explicit in-scope
+// namespace declarations take precedence over the returned fallback bindings.
+func PredeclaredNamespaces() map[string]string {
+	return maps.Clone(defaultPrefixNS)
 }
 
 // namespacePrefixFor returns the conventional prefix for a known namespace URI.

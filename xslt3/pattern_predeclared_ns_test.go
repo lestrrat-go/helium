@@ -80,3 +80,94 @@ func TestPatternPredeclaredFunctionNamespace(t *testing.T) {
 		})
 	}
 }
+
+// TestPatternPredeclaredFunctionMatchesAtRuntime verifies that a template whose
+// match pattern relies on a predeclared XPath namespace prefix (math:, fn:)
+// without an explicit xmlns declaration not only compiles but actually MATCHES
+// at runtime. Compile-time and runtime prefix resolution must be symmetric:
+// if the pattern compiles, it must also be evaluable.
+func TestPatternPredeclaredFunctionMatchesAtRuntime(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		match string
+	}{
+		{name: "math-predicate", match: "a[math:pi() > 3]"},
+		{name: "math-sqrt", match: "a[math:sqrt(4) = 2]"},
+		{name: "fn-predicate", match: "a[fn:true()]"},
+		{name: "map-predicate", match: "a[map:size(map{}) = 0]"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="root/a"/></out></xsl:template>
+  <xsl:template match="` + tc.match + `">[matched]</xsl:template>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+			require.NoError(t, err)
+
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a>x</a></root>`))
+			require.NoError(t, err)
+
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			// The specialized template must win over the built-in template, so
+			// the predeclared-prefix predicate must evaluate true at runtime.
+			require.Contains(t, out, "[matched]", "pattern %q must match at runtime", tc.match)
+		})
+	}
+}
+
+// TestPatternXSLTFunctionAllowed verifies that XSLT-defined functions in the fn
+// namespace (key, current, document, ...) are accepted in match patterns —
+// compile-time validation must consult the XSLT function registry, not only the
+// XPath built-in registry. These previously raised a spurious XPST0017.
+func TestPatternXSLTFunctionAllowed(t *testing.T) {
+	t.Parallel()
+
+	// fn:key in a pattern: the template matches nodes returned by the key.
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:key name="k" match="a" use="@id"/>
+  <xsl:template match="/"><out><xsl:apply-templates select="root/a"/></out></xsl:template>
+  <xsl:template match="fn:key('k', '1')">[keyed]</xsl:template>
+  <xsl:template match="a">[plain]</xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err)
+
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a id="1">x</a><a id="2">y</a></root>`))
+	require.NoError(t, err)
+
+	out, err := ss.Transform(src).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "[keyed]")
+	require.Contains(t, out, "[plain]")
+}
+
+// TestPatternFnCurrentCompiles verifies fn:current() is accepted (not rejected
+// as XPST0017) inside a pattern predicate.
+func TestPatternFnCurrentCompiles(t *testing.T) {
+	t.Parallel()
+
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="a[fn:current()]">[matched]</xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+}

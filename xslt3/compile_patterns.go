@@ -384,6 +384,15 @@ func (c *compiler) validatePatternFunctions(_ context.Context, p *pattern, sourc
 			if xpath3.BuiltinFunctionAcceptsArity(nsURI, local, len(fc.Args)) {
 				return true
 			}
+			// XSLT defines additional functions in the fn: namespace (key,
+			// current, document, generate-id, ...). These are not XPath
+			// built-ins, so consult the XSLT function registry before
+			// rejecting. Functions forbidden in patterns (current-group,
+			// current-merge-key, ...) are caught separately by
+			// checkPatternForbiddenFunctions.
+			if nsURI == lexicon.NamespaceFn && xsltFunctionAcceptsArity(local, len(fc.Args)) {
+				return true
+			}
 			// Check if declared as xsl:function in the stylesheet.
 			qn := xpath3.QualifiedName{Name: local, URI: nsURI}
 			for fk := range c.stylesheet.functions {

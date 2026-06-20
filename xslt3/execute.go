@@ -125,6 +125,7 @@ type execContext struct {
 	cachedBaseEvalHasXPathDefaultNS bool
 	cachedBaseEvalBaseURI           string
 	cachedBaseEvalPackage           *Stylesheet
+	cachedBaseEvalInPattern         bool
 }
 
 func (ec *execContext) setCurrentTemplate(tmpl *template) {
@@ -932,7 +933,8 @@ func (ec *execContext) baseXPathEvaluator() xpath3.Evaluator {
 		ec.cachedBaseEvalXPathDefaultNS == ec.xpathDefaultNS &&
 		ec.cachedBaseEvalHasXPathDefaultNS == ec.hasXPathDefaultNS &&
 		ec.cachedBaseEvalBaseURI == baseURI &&
-		ec.cachedBaseEvalPackage == ec.currentPackage {
+		ec.cachedBaseEvalPackage == ec.currentPackage &&
+		ec.cachedBaseEvalInPattern == ec.inPatternMatch {
 		return ec.cachedBaseEval
 	}
 
@@ -944,6 +946,7 @@ func (ec *execContext) baseXPathEvaluator() xpath3.Evaluator {
 	ec.cachedBaseEvalHasXPathDefaultNS = ec.hasXPathDefaultNS
 	ec.cachedBaseEvalBaseURI = baseURI
 	ec.cachedBaseEvalPackage = ec.currentPackage
+	ec.cachedBaseEvalInPattern = ec.inPatternMatch
 	return eval
 }
 
@@ -959,18 +962,7 @@ func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator 
 		AllowXML11Chars().
 		TraceWriter(ec.traceWriter)
 
-	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
-		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
-		collectPackageNamespaces(ec.stylesheet, ns)
-		for k, v := range ec.stylesheet.namespaces {
-			if k == "" && !ec.hasXPathDefaultNS {
-				continue
-			}
-			ns[k] = v
-		}
-		if ec.hasXPathDefaultNS {
-			ns[""] = ec.xpathDefaultNS
-		}
+	if ns := ec.effectiveXPathNamespaces(); ns != nil {
 		eval = eval.Namespaces(ns).StrictPrefixes()
 	}
 	if baseURI != "" {
@@ -1002,6 +994,37 @@ func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator 
 		eval = eval.MaxResourceBytes(resolveResourceLimit(ec.resourceLimit()))
 	}
 	return eval
+}
+
+// effectiveXPathNamespaces returns the prefix→URI bindings for the strict
+// XPath evaluator, or nil when there are no bindings to apply. The evaluator is
+// built with StrictPrefixes(), so it does NOT consult the XPath predeclared
+// fallback (fn/math/map/array/xs/err) on its own. Stylesheet-declared bindings
+// always take precedence; explicit declarations override the fallback.
+func (ec *execContext) effectiveXPathNamespaces() map[string]string {
+	if len(ec.stylesheet.namespaces) == 0 && !ec.hasXPathDefaultNS && !ec.inPatternMatch {
+		return nil
+	}
+	ns := make(map[string]string, len(ec.stylesheet.namespaces)+len(xpath3.PredeclaredNamespaces())+1)
+	// Pattern matching is symmetric with compile-time pattern validation, which
+	// allows the XPath predeclared prefixes without an explicit xmlns. Seed the
+	// predeclared bindings first so stylesheet declarations below override them.
+	if ec.inPatternMatch {
+		for prefix, uri := range xpath3.PredeclaredNamespaces() {
+			ns[prefix] = uri
+		}
+	}
+	collectPackageNamespaces(ec.stylesheet, ns)
+	for k, v := range ec.stylesheet.namespaces {
+		if k == "" && !ec.hasXPathDefaultNS {
+			continue
+		}
+		ns[k] = v
+	}
+	if ec.hasXPathDefaultNS {
+		ns[""] = ec.xpathDefaultNS
+	}
+	return ns
 }
 
 // effectiveDecimalFormats returns the decimal formats for the current
