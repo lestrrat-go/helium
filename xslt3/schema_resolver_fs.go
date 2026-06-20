@@ -3,6 +3,7 @@ package xslt3
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"path/filepath"
@@ -41,10 +42,33 @@ type schemaResolverFS struct {
 func (s schemaResolverFS) Open(name string) (fs.File, error) {
 	data, err := s.load(s.ctx, name)
 	if err != nil {
+		// The xsd compiler demotes an ordinary xs:import load failure to a
+		// non-fatal warning ("Failed to locate a schema ... Skipping the
+		// import."). A resource-limit breach must NOT be silently demoted, or
+		// the cap is defeated for a nested xs:import target. Mark it so the xsd
+		// import path (which checks xsd.FatalSchemaLoader) treats it as fatal,
+		// while keeping ErrResourceTooLarge in the chain so callers at the
+		// xslt3 boundary can still errors.Is it.
+		if errors.Is(err, ErrResourceTooLarge) {
+			err = fatalSchemaLoadError{err}
+		}
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
 	return &schemaResolverFile{name: name, r: bytes.NewReader(data), size: int64(len(data))}, nil
 }
+
+// fatalSchemaLoadError marks a schema-load failure that the xsd compiler must
+// treat as fatal rather than demoting to a warning. It satisfies
+// [xsd.FatalSchemaLoader] and unwraps to the underlying error so the original
+// cause (e.g. [ErrResourceTooLarge]) remains discoverable via errors.Is /
+// errors.As across the xsd→xslt3 boundary.
+type fatalSchemaLoadError struct{ err error }
+
+func (e fatalSchemaLoadError) Error() string { return e.err.Error() }
+
+func (e fatalSchemaLoadError) Unwrap() error { return e.err }
+
+func (e fatalSchemaLoadError) FatalSchemaLoad() bool { return true }
 
 // resolveSchemaURI resolves a schema-location reference against a base URI.
 //

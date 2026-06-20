@@ -22,6 +22,30 @@ var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
 // so the containment violation is visible to callers.
 var errSchemaPathEscape = errors.New("xsd: schema location escapes base directory")
 
+// FatalSchemaLoader is implemented by errors raised from a configured [fs.FS]
+// (see [Compiler.FS]) that must abort compilation rather than be demoted to a
+// warning when they occur while loading an xs:import target. The xsd compiler
+// normally treats a failure to load an xs:import target as a non-fatal warning
+// ("Failed to locate a schema ... Skipping the import."), matching libxml2.
+// A resource-limit guard, however, must not be silently defeated by that
+// demotion: an FS whose Open error wraps a value satisfying this interface (and
+// returning true) is propagated as a fatal compilation error. The wrapped error
+// chain is preserved, so callers can still errors.Is/errors.As the underlying
+// cause (e.g. a resource-too-large sentinel).
+type FatalSchemaLoader interface {
+	FatalSchemaLoad() bool
+}
+
+// isFatalSchemaLoad reports whether err (or anything in its chain, including the
+// *fs.PathError returned by fs.ReadFile) is a [FatalSchemaLoader] that demands
+// fatal handling. It is how the import warn-and-continue path distinguishes an
+// ordinary "schema not found" miss (warning) from a load failure that must abort
+// compilation, such as a resource-limit breach.
+func isFatalSchemaLoad(err error) bool {
+	var f FatalSchemaLoader
+	return errors.As(err, &f) && f.FatalSchemaLoad()
+}
+
 // validateSchemaPath resolves an xs:include/xs:import/xs:redefine
 // schemaLocation against baseDir and returns the name handed to the configured
 // fs.FS. It is a thin wrapper over [ResolveSchemaURI], the single canonical
@@ -97,8 +121,11 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 			if err := c.loadImport(ctx, loc, ns, elem); err != nil {
 				// Depth-exceeded and baseDir-escape are security limits,
 				// not I/O hiccups; surface them as fatal compilation
-				// errors rather than demoting to an I/O warning.
-				if errors.Is(err, errImportDepthExceeded) || errors.Is(err, errSchemaPathEscape) {
+				// errors rather than demoting to an I/O warning. A
+				// FatalSchemaLoader load failure (e.g. a resource-limit
+				// breach from the configured FS) is likewise fatal so the
+				// cap cannot be silently defeated for an xs:import target.
+				if errors.Is(err, errImportDepthExceeded) || errors.Is(err, errSchemaPathEscape) || isFatalSchemaLoad(err) {
 					return err
 				}
 				// Import failure — report warning if we have a filename.
@@ -676,7 +703,10 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	if err := impC.processIncludes(ctx, impRoot); err != nil {
 		// Depth-exceeded errors propagate so a hostile import cycle
 		// is reported to the caller rather than being silently truncated.
-		if errors.Is(err, errImportDepthExceeded) {
+		// A FatalSchemaLoader load failure (e.g. a resource-limit breach
+		// from the configured FS) propagates for the same reason: the cap
+		// must not be silently defeated for a nested xs:import target.
+		if errors.Is(err, errImportDepthExceeded) || isFatalSchemaLoad(err) {
 			return err
 		}
 		// Other errors in nested processing are non-fatal — the import

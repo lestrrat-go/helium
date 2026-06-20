@@ -268,6 +268,71 @@ func TestMergeOverCapPreservesSentinel(t *testing.T) {
 		"xsl:merge over-cap read must preserve ErrResourceTooLarge")
 }
 
+// A nested xs:import target loaded under xsl:import-schema that exceeds the
+// Compiler MaxResourceBytes cap must FAIL compilation with ErrResourceTooLarge.
+// The xsd import path normally demotes an xs:import load failure to a non-fatal
+// warning ("Skipping the import."), which would silently defeat the cap for the
+// imported schema. The resource-limit case must instead abort compilation, and
+// the sentinel must survive across the xsd->xslt3 boundary so callers can
+// errors.Is it.
+func TestImportSchemaNestedImportOverCapIsFatal(t *testing.T) {
+	t.Parallel()
+
+	const baseURI = "mem://stylesheets/main.xsl"
+	const mainSchemaURI = "mem:/stylesheets/main.xsd"
+	const importedSchemaURI = "mem:/stylesheets/imported.xsd"
+
+	// main.xsd imports a second-namespace schema via xs:import.
+	mainSchema := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/s"
+           xmlns:s="http://example.com/s"
+           xmlns:o="http://example.com/o"
+           elementFormDefault="qualified">
+  <xs:import namespace="http://example.com/o" schemaLocation="imported.xsd"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	// The imported schema is padded well past the configured cap.
+	importedSchema := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/o"
+           elementFormDefault="qualified">
+  <!-- ` + strings.Repeat("z", 8192) + ` -->
+  <xs:element name="other" type="xs:string"/>
+</xs:schema>`
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="http://example.com/s">
+  <xsl:import-schema namespace="http://example.com/s" schema-location="main.xsd"/>
+  <xsl:template match="/">
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	resolver := fileMapResolver{files: map[string]string{
+		mainSchemaURI:     mainSchema,
+		importedSchemaURI: importedSchema,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+
+	// Cap above the main schema but below the imported schema; only fatal
+	// handling of the over-cap nested import surfaces ErrResourceTooLarge.
+	_, err = xslt3.NewCompiler().
+		BaseURI(baseURI).
+		URIResolver(resolver).
+		MaxResourceBytes(1024).
+		Compile(ctx, doc)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+		"over-cap nested xs:import under xsl:import-schema must fail with ErrResourceTooLarge, not be silently skipped")
+}
+
 // A serialization parameter-document over-cap read wraps in a static error
 // (XTSE0090) at compile time; the ErrResourceTooLarge sentinel must survive
 // that wrapping so callers can match it via errors.Is.
