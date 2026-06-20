@@ -498,7 +498,16 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 //
 // This covers the most common case where compile-time static errors arise:
 // using schema-element() or schema-attribute() with an undeclared name.
-func (c *compiler) validateAsSequenceType(_ context.Context, as string, context string) error {
+func (c *compiler) validateAsSequenceType(ctx context.Context, as string, context string) error {
+	return c.validateAsSequenceTypeWithNS(ctx, as, context, c.nsBindings)
+}
+
+// validateAsSequenceTypeWithNS is like validateAsSequenceType but resolves
+// schema-element()/schema-attribute() QNames against the supplied namespace
+// bindings instead of the mutable compiler-wide c.nsBindings. This lets
+// declarations such as xsl:global-context-item validate their @as type against
+// the namespace context in scope at the declaration element itself.
+func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, context string, nsBindings map[string]string) error {
 	if as == "" {
 		return nil
 	}
@@ -537,8 +546,8 @@ func (c *compiler) validateAsSequenceType(_ context.Context, as string, context 
 			if qname == "" {
 				continue
 			}
-			// Resolve the QName to (local, ns) using current namespace bindings.
-			local, ns := resolveQNameToLocalNS(qname, c.nsBindings)
+			// Resolve the QName to (local, ns) using the supplied bindings.
+			local, ns := resolveQNameToLocalNS(qname, nsBindings)
 			if local == "" {
 				continue
 			}
