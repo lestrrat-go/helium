@@ -163,10 +163,21 @@ func (c Compiler) ImportSchemas(schemas ...*xsd.Schema) Compiler {
 // external resource loaded during compilation through the configured
 // URIResolver / PackageResolver — xsl:import / xsl:include, xsl:use-package
 // package loads, xsl:import-schema, and serialization parameter documents. It
-// also governs runtime resolver-backed reads (fn:doc, fn:unparsed-text,
-// fn:json-doc) unless overridden per-invocation by [Invocation.MaxResourceBytes].
+// also governs the runtime resource reads performed by XSLT's own loader —
+// fn:doc / document(), xsl:source-document, xsl:merge, and fn:transform
+// stylesheet / package sources — unless overridden per-invocation by
+// [Invocation.MaxResourceBytes].
+//
 // A value of 0 selects the [MaxResourceBytes] default; a negative value
-// disables the bound. Reads exceeding the cap fail with [ErrResourceTooLarge].
+// disables the bound. Reads exceeding the cap on these XSLT-owned paths fail
+// with [ErrResourceTooLarge].
+//
+// The XPath built-ins fn:unparsed-text, fn:unparsed-text-lines, and
+// fn:json-doc read through the xpath3 layer rather than the XSLT loader: they
+// honor the same byte cap but do NOT surface [ErrResourceTooLarge]. An over-cap
+// fn:unparsed-text / fn:unparsed-text-lines read surfaces FOUT1170
+// (fn:unparsed-text-available returns false), and an over-cap fn:json-doc read
+// surfaces FODC0002.
 func (c Compiler) MaxResourceBytes(n int64) Compiler {
 	c = c.clone()
 	c.cfg.maxResourceBytes = n

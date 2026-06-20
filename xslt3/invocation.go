@@ -345,11 +345,20 @@ func (inv Invocation) GlobalContextSelect(expr string) Invocation {
 
 // MaxResourceBytes sets the maximum number of bytes read from a single
 // external resource fetched at runtime through the configured URIResolver /
-// HTTPClient — fn:doc / document(), fn:unparsed-text, fn:json-doc,
-// fn:doc-available, and fn:transform stylesheet sources. A value of 0 inherits
-// the cap configured on the Compiler (or the [MaxResourceBytes] default); a
-// negative value disables the bound. Reads exceeding the cap fail with
-// [ErrResourceTooLarge].
+// HTTPClient. It governs the resource reads performed by XSLT's own loader —
+// fn:doc / document(), fn:doc-available, xsl:source-document, xsl:merge, and
+// fn:transform stylesheet / package sources — which fail with
+// [ErrResourceTooLarge] when the cap is exceeded.
+//
+// A value of 0 inherits the cap configured on the Compiler (or the
+// [MaxResourceBytes] default); a negative value disables the bound.
+//
+// The XPath built-ins fn:unparsed-text, fn:unparsed-text-lines, and
+// fn:json-doc read through the xpath3 layer rather than the XSLT loader: they
+// honor the same byte cap but do NOT surface [ErrResourceTooLarge]. An over-cap
+// fn:unparsed-text / fn:unparsed-text-lines read surfaces FOUT1170
+// (fn:unparsed-text-available returns false), and an over-cap fn:json-doc read
+// surfaces FODC0002.
 func (inv Invocation) MaxResourceBytes(n int64) Invocation {
 	inv = inv.clone()
 	inv.cfg.maxResourceBytes = n
