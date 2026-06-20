@@ -26,6 +26,7 @@ func TestDecryptCBC_DefaultDenied(t *testing.T) {
 
 	encryptor := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES128CBC).
+		AllowLegacyCBC(true).
 		SessionKey(sessionKey)
 	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
 	require.NoError(t, err)
@@ -46,6 +47,7 @@ func TestDecryptCBC_OptInAllowed(t *testing.T) {
 
 	encryptor := xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES128CBC).
+		AllowLegacyCBC(true).
 		SessionKey(sessionKey)
 	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
 	require.NoError(t, err)
@@ -239,6 +241,93 @@ func TestDecryptCBC_PaddingOracle_IndistinguishableErrors(t *testing.T) {
 		"error B leaks padding state: %v", errB)
 	require.False(t, errors.Is(errB, xmlenc1.ErrInvalidPadding),
 		"error B is distinguishable as ErrInvalidPadding: %v", errB)
+}
+
+// D-ENC-003: the Encryptor must default to authenticated AES-GCM. A
+// caller that sets no BlockAlgorithm gets AES-256-GCM, and the emitted
+// EncryptedData advertises a GCM URI (never an unauthenticated CBC URI).
+func TestEncrypt_DefaultsToGCM(t *testing.T) {
+	sessionKey := make([]byte, 32) // AES-256 session key
+	_, err := rand.Read(sessionKey)
+	require.NoError(t, err)
+
+	doc := mustParseXML(t, samlAssertion)
+
+	// No BlockAlgorithm set.
+	encryptor := xmlenc1.NewEncryptor().SessionKey(sessionKey)
+	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, xml, xmlenc1.AES256GCM, "default block algorithm must be AES-256-GCM")
+	require.NotContains(t, xml, "cbc", "default must never emit a CBC algorithm URI")
+
+	// A default Decryptor (no CBC opt-in) must round-trip GCM ciphertext.
+	decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)
+	nodes, err := decryptor.Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	s, err := helium.WriteString(nodes[0])
+	require.NoError(t, err)
+	require.Contains(t, s, "user@example.com")
+}
+
+// D-ENC-003: selecting a CBC BlockAlgorithm without AllowLegacyCBC must
+// be refused with ErrCBCEncryptionRequiresOptIn and emit no ciphertext.
+func TestEncryptCBC_DefaultDenied(t *testing.T) {
+	for _, alg := range []string{xmlenc1.AES128CBC, xmlenc1.AES256CBC} {
+		sessionKey := make([]byte, 16)
+		if alg == xmlenc1.AES256CBC {
+			sessionKey = make([]byte, 32)
+		}
+		_, err := rand.Read(sessionKey)
+		require.NoError(t, err)
+
+		doc := mustParseXML(t, samlAssertion)
+		encryptor := xmlenc1.NewEncryptor().
+			BlockAlgorithm(alg).
+			SessionKey(sessionKey)
+		_, err = encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+		require.Error(t, err)
+		require.ErrorIs(t, err, xmlenc1.ErrCBCEncryptionRequiresOptIn)
+
+		// Nothing should have been serialized into the tree.
+		xml, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.NotContains(t, xml, elemEncryptedData)
+		require.Contains(t, xml, "user@example.com")
+	}
+}
+
+// D-ENC-003: with AllowLegacyCBC(true), CBC encryption works (legacy
+// interop) and round-trips against a CBC-opted-in Decryptor.
+func TestEncryptCBC_OptInAllowed(t *testing.T) {
+	sessionKey := make([]byte, 16)
+	_, err := rand.Read(sessionKey)
+	require.NoError(t, err)
+
+	doc := mustParseXML(t, samlAssertion)
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES128CBC).
+		AllowLegacyCBC(true).
+		SessionKey(sessionKey)
+	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, xml, xmlenc1.AES128CBC)
+
+	decryptor := xmlenc1.NewDecryptor().
+		SessionKey(sessionKey).
+		AllowUnauthenticatedCBC(true)
+	nodes, err := decryptor.Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	s, err := helium.WriteString(nodes[0])
+	require.NoError(t, err)
+	require.Contains(t, s, "user@example.com")
 }
 
 // swapEncryptionMethodAlgorithm finds the EncryptionMethod child of
