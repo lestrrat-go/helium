@@ -529,9 +529,17 @@ func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, co
 	}
 
 	reg := &schemaRegistry{schemas: c.stylesheet.schemas}
+	resolve := nsResolverFromMap(nsBindings)
 
 	// Check schema-element(Q) and schema-attribute(Q) references.
 	for _, kind := range []string{"schema-element", "schema-attribute"} {
+		// schema-element name arguments take the default element namespace; a
+		// schema-attribute name argument never does (an unprefixed attribute name
+		// is in no namespace).
+		nameKind := qnameElementName
+		if kind == "schema-attribute" {
+			nameKind = qnameAttributeName
+		}
 		search := kind + "("
 		s := as
 		for {
@@ -550,9 +558,9 @@ func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, co
 			if qname == "" {
 				continue
 			}
-			// Resolve the QName to (local, ns) using the supplied bindings and
-			// the declaration-site xpath-default-namespace for unprefixed names.
-			local, ns := resolveQNameToLocalNS(qname, nsBindings, xpathDefaultNS, hasXPathDefaultNS)
+			// Resolve the QName to (local, ns) using the single unified resolver
+			// with the position-specific rule for this kind.
+			local, ns := resolveSequenceTypeQName(qname, nameKind, resolve, xpathDefaultNS, hasXPathDefaultNS)
 			if local == "" {
 				continue
 			}
@@ -571,34 +579,4 @@ func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, co
 		}
 	}
 	return nil
-}
-
-// resolveQNameToLocalNS resolves a QName (prefix:local or NCName) using the
-// given namespace bindings and returns (local, ns). A prefixed name resolves
-// its prefix against nsBindings. An unprefixed name resolves against
-// xpathDefaultNS when hasXPathDefaultNS is set (the declaration-site default
-// element namespace, matching runtime resolveSchemaQName), otherwise to the
-// empty namespace. This keeps compile-time schema-element()/schema-attribute()
-// resolution identical to the runtime resolution for the same declaration.
-func resolveQNameToLocalNS(qname string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) (local, ns string) {
-	qname = strings.TrimSpace(qname)
-	// EQName form: Q{uri}local
-	if strings.HasPrefix(qname, "Q{") {
-		closeIdx := strings.IndexByte(qname, '}')
-		if closeIdx > 0 {
-			return qname[closeIdx+1:], qname[2:closeIdx]
-		}
-		return "", ""
-	}
-	if prefix, loc, ok := strings.Cut(qname, ":"); ok {
-		uri, ok := nsBindings[prefix]
-		if !ok {
-			return loc, ""
-		}
-		return loc, uri
-	}
-	if hasXPathDefaultNS {
-		return qname, xpathDefaultNS
-	}
-	return qname, ""
 }

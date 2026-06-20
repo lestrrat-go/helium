@@ -327,7 +327,7 @@ func coerceItemWithContext(ctx context.Context, item xpath3.Item, itemType strin
 
 		if reqName != "*" {
 			// Resolve prefix:local to (local, ns) for namespace-aware comparison.
-			reqLocal, reqNS := resolveSchemaQName(reqName, ec)
+			reqLocal, reqNS := resolveSchemaQName(reqName, qnameElementName, ec)
 			elem, isElem := ni.Node.(*helium.Element)
 			if !isElem {
 				return nil, fmt.Errorf("expected %s, got non-element node", itemType)
@@ -372,7 +372,7 @@ func coerceItemWithContext(ctx context.Context, item xpath3.Item, itemType strin
 			return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
 		}
 		inner := strings.TrimSpace(itemType[len("schema-element(") : len(itemType)-1])
-		reqLocal, reqNS := resolveSchemaQName(inner, ec)
+		reqLocal, reqNS := resolveSchemaQName(inner, qnameElementName, ec)
 		elem, isElem := ni.Node.(*helium.Element)
 		if !isElem {
 			return nil, fmt.Errorf("expected %s, got non-element node", itemType)
@@ -414,7 +414,7 @@ func coerceItemWithContext(ctx context.Context, item xpath3.Item, itemType strin
 			return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
 		}
 		inner := strings.TrimSpace(itemType[len("schema-attribute(") : len(itemType)-1])
-		reqLocal, reqNS := resolveSchemaQName(inner, ec)
+		reqLocal, reqNS := resolveSchemaQName(inner, qnameAttributeName, ec)
 		// Retrieve attribute local name and namespace.
 		// Cast to *helium.Attribute to get LocalName() (Node.Name() includes prefix for attributes).
 		attr, isAttr := ni.Node.(*helium.Attribute)
@@ -764,24 +764,27 @@ func isAnyURIType(typeName string, ec ...*execContext) bool {
 	return base == xpath3.TypeAnyURI
 }
 
-// resolveSchemaQName resolves a QName string (e.g. "my:userNode" or "localName")
-// to (localName, namespace) using the stylesheet's namespace bindings, or the
-// exec context's namespace override when one is set (e.g. the declaration-site
-// context of an xsl:global-context-item).
-func resolveSchemaQName(qname string, ec *execContext) (local, ns string) {
-	prefix, l, ok := strings.Cut(qname, ":")
-	if !ok {
-		// Unprefixed: use xpath-default-namespace if set.
-		if ec != nil && ec.hasXPathDefaultNS {
-			return qname, ec.xpathDefaultNS
-		}
-		return qname, ""
-	}
-	local = l
+// resolveSchemaQName resolves the NAME argument of an element()/schema-element()
+// or attribute()/schema-attribute() sequence-type test to (localName, namespace),
+// using the exec context's namespace bindings (the declaration-site override when
+// one is set, e.g. for xsl:global-context-item, else the stylesheet map). It
+// delegates to the single unified resolveSequenceTypeQName so that the runtime
+// resolution matches @as validation and the XTSE3087 canonicalization exactly.
+//
+// kind selects the position-specific rule: qnameElementName applies the default
+// element namespace to an unprefixed name; qnameAttributeName never does (an
+// unprefixed attribute name is in no namespace). The xml prefix is predeclared
+// to the XML namespace in both positions.
+func resolveSchemaQName(qname string, kind qnameKind, ec *execContext) (local, ns string) {
+	var resolve nsResolver
+	hasDefaultNS := false
+	defaultNS := ""
 	if ec != nil {
-		ns = ec.lookupTypeNamespace(prefix)
+		resolve = ec.lookupTypeNamespaceOK
+		hasDefaultNS = ec.hasXPathDefaultNS
+		defaultNS = ec.xpathDefaultNS
 	}
-	return local, ns
+	return resolveSequenceTypeQName(qname, kind, resolve, defaultNS, hasDefaultNS)
 }
 
 // describeItem returns a human-readable description of an item for error messages.

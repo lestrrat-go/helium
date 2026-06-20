@@ -115,21 +115,28 @@ func canonicalGlobalContextAs(def *globalContextItemDef) string {
 // by scanning all kind tests in the string, every QName in the (possibly
 // nested) item type is canonicalized, making the comparison total.
 func expandSequenceTypeQNames(as string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) string {
+	resolve := nsResolverFromMap(nsBindings)
 	for _, kind := range []string{"schema-element", "schema-attribute", "element", "attribute"} {
 		// element()/attribute() carry an optional second TYPE argument;
 		// schema-element()/schema-attribute() take a single NAME argument.
 		expandType := kind == "element" || kind == "attribute"
-		as = expandKindTestQNames(as, kind, nsBindings, xpathDefaultNS, hasXPathDefaultNS, expandType)
+		// element()/schema-element() name arguments take the default element
+		// namespace; attribute()/schema-attribute() name arguments never do.
+		nameKind := qnameElementName
+		if kind == "attribute" || kind == "schema-attribute" {
+			nameKind = qnameAttributeName
+		}
+		as = expandKindTestQNames(as, kind, nameKind, resolve, xpathDefaultNS, hasXPathDefaultNS, expandType)
 	}
 	return as
 }
 
 // expandKindTestQNames rewrites the QName arguments of every kind(...) test in
-// as. The first argument (the element/attribute name) is always expanded with
-// the element default-namespace rule. When expandType is true (element/attribute
-// kind tests), the second argument (the type name) is also expanded, using the
-// type-name resolution rule (no default-namespace application).
-func expandKindTestQNames(as, kind string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS, expandType bool) string {
+// as. The first argument (the element/attribute name) is expanded with nameKind's
+// resolution rule. When expandType is true (element/attribute kind tests), the
+// second argument (the type name) is also expanded, using the type-name
+// resolution rule (no default-namespace application).
+func expandKindTestQNames(as, kind string, nameKind qnameKind, resolve nsResolver, xpathDefaultNS string, hasXPathDefaultNS, expandType bool) string {
 	search := kind + "("
 	var b strings.Builder
 	rest := as
@@ -148,7 +155,7 @@ func expandKindTestQNames(as, kind string, nsBindings map[string]string, xpathDe
 			break
 		}
 		name := strings.TrimSpace(rest[:nameEnd])
-		b.WriteString(expandTestName(name, nsBindings, xpathDefaultNS, hasXPathDefaultNS))
+		b.WriteString(expandTestName(name, nameKind, resolve, xpathDefaultNS, hasXPathDefaultNS))
 		// If this kind test carries a second TYPE argument, expand it too.
 		if expandType && rest[nameEnd] == ',' {
 			b.WriteByte(',')
@@ -159,7 +166,7 @@ func expandKindTestQNames(as, kind string, nsBindings map[string]string, xpathDe
 				break
 			}
 			typeName := strings.TrimSpace(rest[:typeEnd])
-			b.WriteString(expandTestTypeName(typeName, nsBindings))
+			b.WriteString(expandTestName(typeName, qnameTypeName, resolve, xpathDefaultNS, hasXPathDefaultNS))
 			rest = rest[typeEnd:]
 			continue
 		}
@@ -208,49 +215,17 @@ func isNCNameByte(b byte) bool {
 	return false
 }
 
-// expandTestName expands a single kind-test name argument to Q{uri}local form.
-func expandTestName(name string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) string {
+// expandTestName expands a single kind-test QName argument (element name,
+// attribute name, or type name, per kind) to its canonical Q{uri}local form
+// using the single unified sequence-type QName resolver.
+func expandTestName(name string, kind qnameKind, resolve nsResolver, xpathDefaultNS string, hasXPathDefaultNS bool) string {
 	if name == "" || name == "*" {
 		return name
 	}
 	if strings.HasPrefix(name, "Q{") {
 		return name
 	}
-	local, ns := resolveQNameToLocalNS(name, nsBindings, xpathDefaultNS, hasXPathDefaultNS)
-	return "Q{" + ns + "}" + local
-}
-
-// expandTestTypeName expands the TYPE argument of an element(name, type) or
-// attribute(name, type) kind test to its canonical Q{uri}local form. Unlike a
-// name argument, a type name does NOT take the element default namespace: an
-// unprefixed non-builtin type name is in no namespace, and the xs:/xsd: prefixes
-// (or any prefix bound to the XML Schema namespace) all collapse to the XSD
-// namespace. This mirrors the runtime normalizeTypeName resolution so the
-// XTSE3087 comparison matches how the same declaration is interpreted at run time.
-func expandTestTypeName(name string, nsBindings map[string]string) string {
-	if name == "" || name == "*" {
-		return name
-	}
-	if strings.HasPrefix(name, "Q{") {
-		return name
-	}
-	prefix, local, ok := strings.Cut(name, ":")
-	if !ok {
-		// Unprefixed type name: builtin xs: names are recognized by their local
-		// part; everything else is in no namespace. The default element
-		// namespace is intentionally NOT applied to a type name.
-		if isBuiltinXSDLocalName(name) {
-			return "Q{" + lexicon.NamespaceXSD + "}" + name
-		}
-		return "Q{}" + name
-	}
-	// Prefixed type name. xs:/xsd: are conventional aliases for the XSD
-	// namespace; otherwise resolve the prefix against the declaration-site
-	// bindings. An unresolved prefix yields the empty namespace.
-	if prefix == "xs" || prefix == "xsd" {
-		return "Q{" + lexicon.NamespaceXSD + "}" + local
-	}
-	ns := nsBindings[prefix]
+	local, ns := resolveSequenceTypeQName(name, kind, resolve, xpathDefaultNS, hasXPathDefaultNS)
 	return "Q{" + ns + "}" + local
 }
 
@@ -286,6 +261,12 @@ func inScopeNamespaces(elem *helium.Element) map[string]string {
 				bindings[ns.Prefix()] = ns.URI()
 			}
 		}
+	}
+	// The xml prefix is implicitly in scope on every element (XML Namespaces
+	// spec), so it must resolve even without an explicit xmlns:xml declaration.
+	// An explicit declaration recorded above takes precedence over this default.
+	if _, seen := bindings[lexicon.PrefixXML]; !seen {
+		bindings[lexicon.PrefixXML] = lexicon.NamespaceXML
 	}
 	return bindings
 }

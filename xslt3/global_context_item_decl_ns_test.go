@@ -323,3 +323,103 @@ func TestGlobalContextItemDupDeclDifferentTypeArgNS(t *testing.T) {
 	require.Error(t, err, "type argument in a different namespace makes the types distinct; XTSE3087 expected")
 	require.Contains(t, err.Error(), "XTSE3087")
 }
+
+// TestGlobalContextItemAttributeNameIgnoresDefaultElementNS verifies that an
+// UNPREFIXED attribute() name in an @as type is NOT resolved against the
+// declaration-site xpath-default-namespace: an unprefixed attribute name is in
+// no namespace. The two declarations expand to the same {}foo attribute test —
+// one under xpath-default-namespace="urn:x", one without — so no XTSE3087 is
+// raised. With the default element namespace wrongly applied to the attribute
+// name, the two would expand to {urn:x}foo vs {}foo and conflict (false reject).
+func TestGlobalContextItemAttributeNameIgnoresDefaultElementNS(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const includeURI = "mem:/stylesheets/inc.xsl"
+
+	included := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:global-context-item as="attribute(foo)"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:include href="inc.xsl"/>
+  <xsl:global-context-item xpath-default-namespace="urn:x" as="attribute(foo)"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "attribute(foo) must stay {}foo under xpath-default-namespace; the default element namespace never applies to an attribute name")
+	require.NotNil(t, ss)
+}
+
+// TestGlobalContextItemSchemaAttributeIgnoresDefaultElementNS verifies that an
+// UNPREFIXED schema-attribute() name validates as a no-namespace attribute even
+// under an xpath-default-namespace: the default element namespace must NOT be
+// applied to an attribute name. The schema declares a global {}foo attribute;
+// resolving the name to {urn:x}foo (the bug) would not find it (false reject).
+func TestGlobalContextItemSchemaAttributeIgnoresDefaultElementNS(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const schemaURI = "mem:/stylesheets/s.xsd"
+
+	schema := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="foo" type="xs:string"/>
+</xs:schema>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:import-schema schema-location="s.xsd"/>
+  <xsl:global-context-item xpath-default-namespace="urn:x"
+    as="schema-attribute(foo)"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{schemaURI: schema}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "schema-attribute(foo) must resolve to {}foo (no namespace) under xpath-default-namespace and find the imported global attribute")
+	require.NotNil(t, ss)
+}
+
+// TestGlobalContextItemXMLPrefixPredeclared verifies that the xml prefix is
+// implicitly in scope in an @as sequence type even without an explicit xmlns:xml
+// declaration: attribute(xml:lang) resolves to the XML namespace. The two
+// declarations — attribute(xml:lang) and attribute(Q{...XML...}lang) — expand to
+// the same {http://www.w3.org/XML/1998/namespace}lang test, so no XTSE3087 is
+// raised. Without seeding the xml prefix, xml:lang would resolve to {}lang and
+// the two would conflict (false reject).
+func TestGlobalContextItemXMLPrefixPredeclared(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const includeURI = "mem:/stylesheets/inc.xsl"
+
+	included := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:global-context-item as="attribute(Q{http://www.w3.org/XML/1998/namespace}lang)"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:include href="inc.xsl"/>
+  <xsl:global-context-item as="attribute(xml:lang)"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "xml:lang must resolve to the predeclared XML namespace, matching Q{...XML...}lang; no XTSE3087")
+	require.NotNil(t, ss)
+}
