@@ -19,6 +19,14 @@ import (
 // syntax errors from known schemes, matching libxml2 behavior.
 var errUnknownScheme = errors.New("xpointer: unknown scheme")
 
+// ErrNilExpression is returned by [Expression.Evaluate] when the receiver is a
+// nil or uncompiled *Expression.
+var ErrNilExpression = errors.New("xpointer: nil or uncompiled expression")
+
+// ErrNilDocument is returned by [Expression.Evaluate] and [Evaluate] when the
+// document to evaluate against is nil.
+var ErrNilDocument = errors.New("xpointer: nil document")
+
 // xptrPart represents a single parsed XPointer scheme(body) part.
 type xptrPart struct {
 	scheme string
@@ -62,9 +70,16 @@ func Compile(expr string) (*Expression, error) {
 			}
 			compiled[i] = c
 		case "xmlns":
-			if _, _, ok := parseXmlnsBody(p.body); !ok {
+			prefix, _, ok := parseXmlnsBody(p.body)
+			if !ok {
 				return nil, fmt.Errorf("xpointer: invalid xmlns() body %q", p.body)
 			}
+			if err := validateXmlnsPrefix(prefix); err != nil {
+				return nil, err
+			}
+			// Reserved-prefix / reserved-namespace bindings are accepted here:
+			// per the XPointer xmlns() scheme they are no-ops at evaluation
+			// time (they leave the binding context unchanged), not errors.
 		}
 	}
 	return &Expression{parts: parts, compiled: compiled}, nil
@@ -73,11 +88,27 @@ func Compile(expr string) (*Expression, error) {
 // Evaluate evaluates the compiled XPointer against a document, returning
 // the matching nodes. Cascading fallback semantics match [Evaluate].
 func (e *Expression) Evaluate(ctx context.Context, doc *helium.Document) ([]helium.Node, error) {
+	// A nil receiver or a zero-value Expression (e.g. var e Expression) has
+	// never been through Compile. A successfully compiled expression always
+	// holds at least one part because parseParts rejects the empty expression,
+	// so an empty parts slice reliably marks an uncompiled value.
+	if e == nil || len(e.parts) == 0 {
+		return nil, ErrNilExpression
+	}
+	if doc == nil {
+		return nil, ErrNilDocument
+	}
+
 	var nsMap map[string]string
 	var lastErr error
 	for i, p := range e.parts {
 		if p.scheme == "xmlns" {
 			prefix, uri, _ := parseXmlnsBody(p.body) // validated in Compile
+			// Reserved-prefix and reserved-namespace bindings are no-ops per
+			// the XPointer xmlns() scheme: leave the binding context unchanged.
+			if isXmlnsNoOp(prefix, uri) {
+				continue
+			}
 			if nsMap == nil {
 				nsMap = make(map[string]string)
 			}
@@ -165,6 +196,13 @@ func (e *Expression) evaluatePart(ctx context.Context, doc *helium.Document, p x
 // [Expression.Evaluate]. When the same XPointer is reused across documents,
 // call Compile once and reuse the resulting [*Expression].
 func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.Node, error) {
+	// Check the nil document before Compile so that a nil document is reported
+	// as ErrNilDocument (as documented) even when expr would also fail to
+	// compile. Expression.Evaluate keeps its own nil-doc check for the
+	// pre-compiled path.
+	if doc == nil {
+		return nil, ErrNilDocument
+	}
 	e, err := Compile(expr)
 	if err != nil {
 		return nil, err
@@ -172,13 +210,81 @@ func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.
 	return e.Evaluate(ctx, doc)
 }
 
-// parseXmlnsBody parses "prefix=uri" from an xmlns() body.
+// validateXmlnsPrefix rejects xmlns() scheme prefixes that are syntactically
+// malformed. The XPointer xmlns() scheme binds a NamespacePrefix (an XML
+// NCName) to a namespace URI; a prefix that is not a valid NCName is malformed
+// and is a compile-time error.
+//
+// The reserved prefixes "xml" and "xmlns" are NOT rejected here: per the
+// XPointer xmlns() scheme, attempting to (re)bind them is a no-op that leaves
+// the namespace binding context unchanged, not an error. The no-op is applied
+// during evaluation (see isXmlnsNoOp).
+func validateXmlnsPrefix(prefix string) error {
+	if !xmlchar.IsValidNCName(prefix) {
+		return fmt.Errorf("xpointer: invalid xmlns() prefix %q (not an NCName)", prefix)
+	}
+	return nil
+}
+
+// Reserved namespace URIs that an xmlns() scheme part may not bind a prefix to.
+// Per the XPointer xmlns() scheme, attempting to bind any prefix to one of
+// these is a no-op (the binding context is left unchanged), not an error.
+const (
+	xmlNamespaceURI   = "http://www.w3.org/XML/1998/namespace"
+	xmlnsNamespaceURI = "http://www.w3.org/2000/xmlns/"
+)
+
+// isXmlnsNoOp reports whether an xmlns(prefix=uri) binding must be ignored
+// (left as a no-op) per the XPointer xmlns() scheme. The reserved prefixes
+// "xml" and "xmlns" may not be (re)bound, and no prefix may be bound to the XML
+// or xmlns namespace URIs.
+func isXmlnsNoOp(prefix, uri string) bool {
+	if prefix == "xml" || prefix == "xmlns" {
+		return true
+	}
+	return uri == xmlNamespaceURI || uri == xmlnsNamespaceURI
+}
+
+// xmlSpaceCutset is the set of XML S (whitespace) characters per the XML 1.0
+// production S ::= (#x20 | #x9 | #xD | #xA)+. Note this is deliberately NOT the
+// Unicode whitespace set used by strings.TrimSpace.
+const xmlSpaceCutset = " \t\r\n"
+
+// parseXmlnsBody parses an xmlns() scheme body per the W3C XPointer xmlns()
+// grammar:
+//
+//	XmlnsSchemeData ::= NCName S? '=' S? EscapedNamespaceName
+//
+// where the escaped namespace name is EscapedData* and S ::= (#x20 | #x9 | #xD |
+// #xA)+. Optional XML whitespace is allowed after the NCName prefix and after the
+// '='; this function trims that surrounding whitespace from the prefix (right
+// side) and the URI (left side) before returning. The prefix is returned
+// unvalidated — callers validate it as an NCName via validateXmlnsPrefix. The URI
+// is the remaining namespace name with leading S removed but otherwise preserved
+// exactly (no internal or trailing trimming); circumflex-escaping in the body has
+// already been undone by parseScheme/unescapeXPointer before this function sees it.
+//
+// Leading whitespace before the NCName is intentionally NOT trimmed: the data
+// begins with the NCName, so a leading space leaves a non-NCName prefix that
+// validateXmlnsPrefix rejects as malformed.
+//
+// ok is false when there is no '=' or the prefix portion is empty after
+// trimming surrounding whitespace.
 func parseXmlnsBody(body string) (prefix, uri string, ok bool) {
-	i := strings.IndexByte(body, '=')
-	if i < 1 {
+	rawPrefix, rawURI, found := strings.Cut(body, "=")
+	if !found {
 		return "", "", false
 	}
-	return body[:i], body[i+1:], true
+	// XmlnsSchemeData ::= NCName S? '=' S? EscapedNamespaceName — the data
+	// starts with the NCName, so only whitespace AFTER the prefix (and after
+	// '=') is permitted. Trim the prefix on the right only; any leading
+	// whitespace stays attached so the NCName validation rejects it.
+	prefix = strings.TrimRight(rawPrefix, xmlSpaceCutset)
+	if prefix == "" {
+		return "", "", false
+	}
+	uri = strings.TrimLeft(rawURI, xmlSpaceCutset)
+	return prefix, uri, true
 }
 
 // ParseFragmentID splits a URI fragment into its XPointer scheme and body.
