@@ -374,3 +374,43 @@ func TestPrefixedNameOverridesNSAttr(t *testing.T) {
 		validateWith(t, schema, `<root><admin xmlns="urn:wrong"/></root>`),
 		"the ns attribute urn:wrong must be overridden by the prefix namespace")
 }
+
+// TestNSAttrXMLWhitespaceTrim covers the ns-attribute side of the XML
+// whitespace rule for unprefixed names: the value of an ns attribute is trimmed
+// of leading/trailing XML whitespace before it becomes the element namespace,
+// both when declared directly on the <element name> pattern and when inherited
+// from an ancestor. Otherwise ns=" urn:x " would compile with spaces in the
+// namespace and fail to match a properly-namespaced instance.
+func TestNSAttrXMLWhitespaceTrim(t *testing.T) {
+	t.Parallel()
+
+	t.Run("direct ns with surrounding spaces is trimmed", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="root" ns=" urn:x "
+    xmlns="http://relaxng.org/ns/structure/1.0">
+  <empty/>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"surrounding XML whitespace on a direct ns attribute must be trimmed")
+		require.NoError(t,
+			validateWith(t, schema, `<root xmlns="urn:x"/>`),
+			"the trimmed namespace urn:x must match a urn:x instance")
+	})
+
+	t.Run("inherited ns with surrounding spaces is trimmed", func(t *testing.T) {
+		t.Parallel()
+		// The ns attribute lives on the ancestor <grammar>/<element> and is
+		// inherited via getInheritedNS for the unprefixed inner <element name>.
+		schema := `<element name="outer" ns=" urn:x "
+    xmlns="http://relaxng.org/ns/structure/1.0">
+  <element name="inner">
+    <empty/>
+  </element>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"surrounding XML whitespace on an inherited ns attribute must be trimmed")
+		require.NoError(t,
+			validateWith(t, schema, `<outer xmlns="urn:x"><inner/></outer>`),
+			"the trimmed inherited namespace urn:x must match a urn:x instance")
+	})
+}

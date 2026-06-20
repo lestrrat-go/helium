@@ -1346,7 +1346,7 @@ func getInheritedNS(node *helium.Element) string {
 		if elem, ok := current.(*helium.Element); ok {
 			for _, attr := range elem.Attributes() {
 				if attr.LocalName() == "ns" && attr.Prefix() == "" {
-					return attr.Value()
+					return trimXMLSpace(attr.Value())
 				}
 			}
 			current = elem.Parent()
