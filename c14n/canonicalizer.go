@@ -983,6 +983,14 @@ func relativizeURI(base, target string) string {
 		return target
 	}
 
+	// Opaque / non-hierarchical URIs (e.g. "urn:target") carry their data in
+	// Opaque rather than Path, so there is no path to relativize. Path-based
+	// relativization would yield a meaningless (and possibly empty) result, so
+	// return the target absolutely instead.
+	if baseURL.Opaque != "" || targetURL.Opaque != "" {
+		return target
+	}
+
 	basePath := baseURL.Path
 	targetPath := targetURL.Path
 
@@ -1056,6 +1064,8 @@ func (c *canonicalizer) setXMLBaseEntry(entries *[]attrSortEntry, value string) 
 	for i, e := range *entries {
 		if e.nsURI == lexicon.NamespaceXML && e.localName == xmlBaseLocalName {
 			(*entries)[i].fixupValue = value
+			(*entries)[i].hasFixup = true
+			(*entries)[i].attr = nil
 			return
 		}
 	}
@@ -1064,6 +1074,7 @@ func (c *canonicalizer) setXMLBaseEntry(entries *[]attrSortEntry, value string) 
 		nsURI:      lexicon.NamespaceXML,
 		localName:  xmlBaseLocalName,
 		fixupValue: value,
+		hasFixup:   true,
 	})
 }
 
@@ -1097,8 +1108,11 @@ func (c *canonicalizer) writeAttribute(entry attrSortEntry) error {
 		return err
 	}
 
-	// Write value: check for fixup value first (C14N 1.1 xml:base)
-	if entry.fixupValue != "" {
+	// Write value: check for fixup value first (C14N 1.1 xml:base). A fixup may
+	// legitimately be the empty string (an empty relative reference resolving
+	// back to the base), so rely on hasFixup rather than fixupValue != "" to
+	// avoid falling through to writeAttrValue(nil) for synthetic entries.
+	if entry.hasFixup {
 		if err := escapeAttrValue(c.out, []byte(entry.fixupValue)); err != nil {
 			return err
 		}

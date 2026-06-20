@@ -578,3 +578,30 @@ func TestC14N11BaseURIFixupEmptyRelativeQueryFragment(t *testing.T) {
 	// also resolve there but introduce a spurious "." segment.
 	require.Contains(t, string(got), `xml:base="?q=1#frag"`, "empty relative reference must carry only the query+fragment, got: %s", string(got))
 }
+
+// TestC14N11BaseURIFixupOpaqueURI verifies that C14N 1.1 xml:base fixup handles
+// opaque (non-hierarchical) absolute URIs such as "urn:target". These carry
+// their data in the URL's Opaque field rather than Path, so path-based
+// relativization is meaningless and previously produced an empty synthetic
+// value that panicked in writeAttribute (nil attr → writeAttrValue(nil)). The
+// fixup must instead emit the target URI absolutely with no panic.
+func TestC14N11BaseURIFixupOpaqueURI(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="urn:target"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("urn:base").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// The base "urn:base" and target "urn:target" are opaque URIs; the target
+	// cannot be relativized against the base, so it must be emitted absolutely.
+	require.Contains(t, string(got), `xml:base="urn:target"`, "opaque xml:base must canonicalize absolutely without panic, got: %s", string(got))
+}
