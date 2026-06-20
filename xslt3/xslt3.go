@@ -54,14 +54,20 @@ func parseExternalXML(ctx context.Context, data []byte, baseURI string, allowExt
 			p = extraOpts(p)
 		}
 	} else {
-		p = helium.NewParser().BlockXXE(true).LoadExternalDTD(false).AllowNetwork(false)
+		// SubstituteEntities(true) keeps INTERNAL general entities (declared in
+		// the internal subset) expanding to their replacement text; BlockXXE /
+		// LoadExternalDTD(false) / AllowNetwork(false) still block external DTD,
+		// external entity, and network access. Without SubstituteEntities a
+		// resolver-loaded doc() with an internal entity ref would surface an
+		// EntityRefNode instead of substituted text.
+		p = helium.NewParser().SubstituteEntities(true).BlockXXE(true).LoadExternalDTD(false).AllowNetwork(false)
 		if extraOpts != nil {
 			p = extraOpts(p)
 		}
 		// Re-assert the XXE guards so extraOpts cannot weaken the secure posture;
 		// only internal-subset behaviors layered by extraOpts (e.g.
-		// DefaultDTDAttributes) are kept.
-		p = p.BlockXXE(true).AllowNetwork(false).LoadExternalDTD(false)
+		// DefaultDTDAttributes, internal-entity substitution) are kept.
+		p = p.SubstituteEntities(true).BlockXXE(true).AllowNetwork(false).LoadExternalDTD(false)
 	}
 	if baseURI != "" {
 		p = p.BaseURI(baseURI)

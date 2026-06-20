@@ -596,6 +596,11 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	// the same MaxResourceBytes override. Without this the inner reads would
 	// silently fall back to the default cap, ignoring Invocation.MaxResourceBytes.
 	fnTransformCfg.maxResourceBytes = ec.resourceLimit()
+	// Inherit the outer Invocation's external-entity opt-in so doc() /
+	// xsl:source-document inside the nested transform see the same posture as the
+	// caller. Without this the nested transform would force the secure (blocked)
+	// parse even when the outer invocation opted in.
+	fnTransformCfg.allowExternalEntities = ec.allowExternalEntities()
 
 	// Apply map-valued options from the fn:transform options map.
 	for _, mp := range []struct {

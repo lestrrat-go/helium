@@ -295,6 +295,122 @@ func TestXXE_RuntimeDocOptInUsesResolverNotRawFS(t *testing.T) {
 	}
 }
 
+// xxeDocEntityStylesheet loads an external document via doc() and emits the
+// string value of its root element, which contains an internal general entity
+// reference.
+const xxeDocEntityStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:param name="url"/>
+  <xsl:template match="/">
+    <out><xsl:value-of select="doc($url)/payload"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+// A-006 (regression): under the secure default (XXE blocked), fn:doc() must
+// still expand INTERNAL general entities defined in the document's internal
+// subset. The secure parser path previously dropped SubstituteEntities(true),
+// so &local; survived as an EntityRefNode and the XPath string-value of
+// /payload was empty, yielding <out/>. Internal-subset entity substitution must
+// keep working while EXTERNAL DTD/entity/network stay blocked.
+func TestXXE_RuntimeDocInternalEntityExpands(t *testing.T) {
+	t.Parallel()
+
+	docPath := "mem://doc.xml"
+	docBody := `<?xml version="1.0"?>
+<!DOCTYPE payload [ <!ENTITY local "ok"> ]>
+<payload>&local;</payload>`
+
+	resolver := &xxeResolver{files: map[string]string{docPath: docBody}}
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xxeDocEntityStylesheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+
+	out, err := ss.Transform(source).
+		URIResolver(resolver).
+		SetParameter("url", xpath3.SingleString(docPath)).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "ok",
+		"internal-subset general entity must expand under the secure default")
+}
+
+// A-007 (regression): when the OUTER fn:transform invocation opts into external
+// entities, a nested fn:transform() must inherit that opt-in so its own doc()
+// loads (with an external SYSTEM entity, served via the resolver) are permitted.
+// The nested transformConfig previously did not inherit allowExternalEntities,
+// forcing the inner doc() back to the blocked posture even when the outer caller
+// opted in.
+func TestXXE_NestedFnTransformInheritsOptIn(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// Inner stylesheet loaded by the outer fn:transform; it itself runs a doc()
+	// whose XML defines an external SYSTEM entity that the resolver serves.
+	innerLoc := filepath.Join(dir, "inner.xsl")
+	dataPath := filepath.Join(dir, "data.xml")
+	secretURI := filepath.Join(dir, "secret.txt")
+
+	innerXSL := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:param name="data-url"/>
+  <xsl:template match="/">
+    <inner><xsl:value-of select="doc($data-url)/payload"/></inner>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	dataXML := `<?xml version="1.0"?>
+<!DOCTYPE payload [ <!ENTITY leak SYSTEM "secret.txt"> ]>
+<payload>&leak;</payload>`
+
+	resolver := &xxeResolver{files: map[string]string{
+		innerLoc:  innerXSL,
+		dataPath:  dataXML,
+		secretURI: "NESTED-LEGACY",
+	}}
+
+	outerXSL := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner-loc"/>
+  <xsl:param name="data-url"/>
+  <xsl:template match="/">
+    <xsl:variable name="result" select="transform(map{
+      'stylesheet-location': $inner-loc,
+      'stylesheet-params': map{ QName('','data-url'): $data-url },
+      'delivery-format': 'serialized'
+    })"/>
+    <out><xsl:value-of select="$result('output')"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(outerXSL))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().
+		URIResolver(resolver).
+		AllowExternalEntities(true).
+		Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+
+	out, err := ss.Transform(source).
+		URIResolver(resolver).
+		AllowExternalEntities(true).
+		SetParameter("inner-loc", xpath3.SingleString(innerLoc)).
+		SetParameter("data-url", xpath3.SingleString(dataPath)).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "NESTED-LEGACY",
+		"nested fn:transform must inherit the outer external-entity opt-in")
+}
+
 // A-005: imported XSD schemas are ALWAYS parsed XXE-blocked. Even with
 // Compiler.AllowExternalEntities(true), an external SYSTEM entity in an imported
 // schema must not be expanded — the entity opt-in does not extend to schemas.
