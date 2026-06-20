@@ -23,7 +23,12 @@ type encryptConfig struct {
 	oaepParams       []byte
 	keyWrapAlgorithm string
 	keyEncryptionKey []byte
+	allowLegacyCBC   bool
 }
+
+// DefaultBlockAlgorithm is the block encryption algorithm an Encryptor
+// uses when no BlockAlgorithm is set. It is authenticated AES-256-GCM.
+const DefaultBlockAlgorithm = AES256GCM
 
 // Encryptor encrypts XML elements or content. It uses clone-on-write
 // semantics: each builder method returns a new Encryptor and the original
@@ -45,10 +50,33 @@ func (e Encryptor) clone() Encryptor {
 	return Encryptor{cfg: &cp}
 }
 
-// BlockAlgorithm sets the block encryption algorithm URI.
+// BlockAlgorithm sets the block encryption algorithm URI. If never set,
+// the Encryptor defaults to [DefaultBlockAlgorithm] (authenticated
+// AES-256-GCM).
+//
+// Selecting an AES-CBC algorithm (AES128CBC / AES256CBC) additionally
+// requires AllowLegacyCBC(true): CBC under XML Encryption 1.0 is
+// unauthenticated and padding-oracle-prone, so emitting new CBC
+// ciphertext is gated behind an explicit opt-in. Without it, encryption
+// returns [ErrCBCEncryptionRequiresOptIn].
 func (e Encryptor) BlockAlgorithm(uri string) Encryptor {
 	e = e.clone()
 	e.cfg.blockAlgorithm = uri
+	return e
+}
+
+// AllowLegacyCBC opts the Encryptor in to emitting unauthenticated
+// AES-CBC ciphertext when a CBC BlockAlgorithm is selected.
+//
+// The Encryptor defaults to authenticated AES-GCM. AES-CBC under XML
+// Encryption 1.0 is unauthenticated and vulnerable to padding-oracle
+// attacks (Jager/Somorovsky 2011); XML Encryption 1.1 deprecated it in
+// favor of AES-GCM. Set this to true only when you must produce
+// ciphertext for a legacy recipient that cannot accept AES-GCM. This
+// does not affect decryption (see Decryptor.AllowUnauthenticatedCBC).
+func (e Encryptor) AllowLegacyCBC(v bool) Encryptor {
+	e = e.clone()
+	e.cfg.allowLegacyCBC = v
 	return e
 }
 
@@ -122,8 +150,20 @@ func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*h
 }
 
 func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encType string) (*helium.Element, error) {
-	if cfg.blockAlgorithm == "" {
-		return nil, fmt.Errorf("%w: block algorithm not set", ErrMissingConfig)
+	// Secure by default: an unset block algorithm uses authenticated
+	// AES-256-GCM rather than refusing or falling back to CBC.
+	blockAlgorithm := cfg.blockAlgorithm
+	if blockAlgorithm == "" {
+		blockAlgorithm = DefaultBlockAlgorithm
+	}
+
+	// Emitting new unauthenticated CBC ciphertext requires an explicit
+	// opt-in. Decryption of existing CBC ciphertext is unaffected.
+	switch blockAlgorithm {
+	case AES128CBC, AES256CBC:
+		if !cfg.allowLegacyCBC {
+			return nil, ErrCBCEncryptionRequiresOptIn
+		}
 	}
 
 	hasKeyTransport := cfg.recipientPubKey != nil && cfg.keyTransport != ""
@@ -135,7 +175,7 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 	}
 
 	// Get or generate session key.
-	keySize, err := keySizeForAlgorithm(cfg.blockAlgorithm)
+	keySize, err := keySizeForAlgorithm(blockAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +191,7 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 	// Bind the declared block-algorithm URI to the session-key length so
 	// a user-supplied SessionKey cannot make us emit, e.g., an AES-256
 	// URI while actually encrypting with AES-128.
-	if err := validateKeySize(cfg.blockAlgorithm, sessionKey); err != nil {
+	if err := validateKeySize(blockAlgorithm, sessionKey); err != nil {
 		return nil, err
 	}
 
@@ -167,7 +207,7 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 	}
 
 	// Block encrypt.
-	cipherValue, err := blockEncrypt(cfg.blockAlgorithm, sessionKey, []byte(plaintext))
+	cipherValue, err := blockEncrypt(blockAlgorithm, sessionKey, []byte(plaintext))
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +248,7 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 	// Build EncryptedData.
 	ed := &EncryptedData{
 		Type:             encType,
-		EncryptionMethod: &EncryptionMethod{Algorithm: cfg.blockAlgorithm},
+		EncryptionMethod: &EncryptionMethod{Algorithm: blockAlgorithm},
 		EncryptedKey:     encKey,
 		CipherValue:      cipherValue,
 	}

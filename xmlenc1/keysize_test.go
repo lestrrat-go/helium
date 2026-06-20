@@ -25,17 +25,23 @@ func TestEncrypt_BlockKeySizeMismatch(t *testing.T) {
 		name string
 		alg  string
 		size int // wrong size
+		cbc  bool
 	}{
-		{"aes256-gcm with 16-byte key", xmlenc1.AES256GCM, 16},
-		{"aes128-gcm with 32-byte key", xmlenc1.AES128GCM, 32},
-		{"aes256-cbc with 16-byte key", xmlenc1.AES256CBC, 16},
-		{"aes128-cbc with 24-byte key", xmlenc1.AES128CBC, 24},
+		{"aes256-gcm with 16-byte key", xmlenc1.AES256GCM, 16, false},
+		{"aes128-gcm with 32-byte key", xmlenc1.AES128GCM, 32, false},
+		{"aes256-cbc with 16-byte key", xmlenc1.AES256CBC, 16, true},
+		{"aes128-cbc with 24-byte key", xmlenc1.AES128CBC, 24, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := mustParseXML(t, `<root><a>hi</a></root>`)
 			enc := xmlenc1.NewEncryptor().
 				BlockAlgorithm(tc.alg).
 				SessionKey(randKey(t, tc.size))
+			// Opt in to CBC so the failure exercises the key-size
+			// binding rather than the CBC encryption opt-in gate.
+			if tc.cbc {
+				enc = enc.AllowLegacyCBC(true)
+			}
 			_, err := enc.EncryptElement(t.Context(), doc.DocumentElement())
 			require.Error(t, err)
 			var kse *xmlenc1.KeySizeError
@@ -174,6 +180,9 @@ func TestSessionKey_CorrectSizeRoundTrip(t *testing.T) {
 			enc := xmlenc1.NewEncryptor().
 				BlockAlgorithm(tc.alg).
 				SessionKey(key)
+			if tc.cbc {
+				enc = enc.AllowLegacyCBC(true)
+			}
 			edElem, err := enc.EncryptElement(t.Context(), doc.DocumentElement())
 			require.NoError(t, err)
 
