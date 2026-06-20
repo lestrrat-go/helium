@@ -719,6 +719,20 @@ func TestParseElementMatchingRequiresNamespace(t *testing.T) {
 		require.Equal(t, []byte("hello"), ed.CipherValue)
 	})
 
+	t.Run("foreign root with valid xenc children is rejected", func(t *testing.T) {
+		// The entry element itself is foreign-namespaced even though all
+		// of its children are correctly xenc-qualified. The parser must
+		// reject the entry element rather than trusting the children.
+		xml := `<foo:EncryptedData xmlns:foo="` + foreignNS + `" xmlns:xenc="` + xencNS + `">` +
+			`<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>` +
+			`<xenc:CipherData><xenc:CipherValue>aGVsbG8=</xenc:CipherValue></xenc:CipherData>` +
+			`</foo:EncryptedData>`
+		doc := mustParseXML(t, xml)
+
+		_, err := xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+		require.Error(t, err, "foreign-namespaced EncryptedData root must not be accepted")
+	})
+
 	t.Run("foreign CipherValue inside correct CipherData is not matched", func(t *testing.T) {
 		// The CipherData is correctly namespaced but its CipherValue
 		// child is foreign. The foreign CipherValue must be ignored,

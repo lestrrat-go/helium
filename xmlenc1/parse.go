@@ -3,6 +3,7 @@ package xmlenc1
 import (
 	"encoding/base64"
 	"fmt"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -10,6 +11,10 @@ import (
 
 // parseEncryptedData parses an EncryptedData element.
 func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
+	if elem == nil || !isXMLEncElem(elem, "EncryptedData") {
+		return nil, fmt.Errorf("%w: expected xenc:EncryptedData", ErrMalformedEncrypted)
+	}
+
 	ed := &EncryptedData{}
 	ed.ID, _ = elem.GetAttribute("Id")
 	ed.Type, _ = elem.GetAttribute("Type")
@@ -66,6 +71,10 @@ func parseKeyInfoForEncryption(elem *helium.Element, ed *EncryptedData) error {
 
 // parseEncryptedKey parses an EncryptedKey element.
 func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
+	if elem == nil || !isXMLEncElem(elem, "EncryptedKey") {
+		return nil, fmt.Errorf("%w: expected xenc:EncryptedKey", ErrMalformedEncrypted)
+	}
+
 	ek := &EncryptedKey{}
 	ek.ID, _ = elem.GetAttribute("Id")
 	ek.Recipient, _ = elem.GetAttribute("Recipient")
@@ -164,13 +173,7 @@ func isElemNS(e *helium.Element, local string, nsURIs ...string) bool {
 	if localName(e) != local {
 		return false
 	}
-	uri := e.URI()
-	for _, want := range nsURIs {
-		if uri == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(nsURIs, e.URI())
 }
 
 // isXMLEncElem reports whether e is an XML Encryption element
