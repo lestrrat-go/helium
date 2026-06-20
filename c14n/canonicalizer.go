@@ -1043,6 +1043,21 @@ func relativizeURI(base, target string) string {
 	if targetURL.Fragment != "" {
 		result += "#" + targetURL.EscapedFragment()
 	}
+
+	// Convergence check: a relative reference is only correct if resolving it
+	// against the base yields exactly the target. Several edge cases (empty path
+	// with a base that carries a query/fragment, same-authority quirks, etc.)
+	// produce a candidate that resolves back to the BASE rather than the TARGET,
+	// silently changing the URI. Parse the candidate, resolve it against the
+	// base, and fall back to the absolute target whenever the round-trip does
+	// not reproduce the exact target.
+	candidate, err := url.Parse(result)
+	if err != nil {
+		return target
+	}
+	if baseURL.ResolveReference(candidate).String() != targetURL.String() {
+		return targetURL.String()
+	}
 	return result
 }
 

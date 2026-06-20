@@ -605,3 +605,36 @@ func TestC14N11BaseURIFixupOpaqueURI(t *testing.T) {
 	// cannot be relativized against the base, so it must be emitted absolutely.
 	require.Contains(t, string(got), `xml:base="urn:target"`, "opaque xml:base must canonicalize absolutely without panic, got: %s", string(got))
 }
+
+// TestC14N11BaseURIFixupBaseCarriesQuery is a convergence regression: when the
+// configured base URI carries a query (or fragment) that the target does NOT,
+// a naive relativizer can produce a relative reference that resolves back to the
+// BASE rather than the TARGET. Here the base is "http://example.com?old=1" and
+// the hidden ancestor's xml:base is the absolute "http://example.com" (no query).
+// The naive relative reference would be the empty string, which resolves against
+// the base to "http://example.com?old=1" — silently re-attaching "?old=1" and
+// changing the URI. The round-trip convergence check must detect this and fall
+// back to emitting the absolute target so the canonical xml:base resolves to the
+// exact target "http://example.com".
+func TestC14N11BaseURIFixupBaseCarriesQuery(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="http://example.com"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's absolute xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com?old=1").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// The emitted xml:base must resolve to the exact target "http://example.com",
+	// not the base "http://example.com?old=1". An empty relative reference would
+	// resolve back to the base, so the absolute target must be emitted instead.
+	require.Contains(t, string(got), `xml:base="http://example.com"`, "base-carries-query: xml:base must resolve to the target, not the base, got: %s", string(got))
+	require.NotContains(t, string(got), `old=1`, "the base's query must not leak into the canonical xml:base, got: %s", string(got))
+}
