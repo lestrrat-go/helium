@@ -465,27 +465,35 @@ func TestRawTextChunkSlicesAreIndependent(t *testing.T) {
 	}
 }
 
-// TestRCDATAUnknownEntityChunked is the regression for the RCDATA char-ref
-// bypass: with a tiny MaxContentSize, an unresolved NAMED entity reference such
-// as `<title>&aaaa...(huge)...</title>` must NOT be scanned into one string and
-// emitted as a single giant Characters event. The leading '&' plus the runaway
-// name must be flushed as literal text in capped chunks, the full content must
-// still be preserved, and no chunk may exceed the cap by more than a small
-// terminator slack. Covers both RCDATA elements (title, textarea).
+// TestRCDATAOverCapNamedEntityFails is the core-invariant regression for the
+// RCDATA char-ref bypass: with a tiny MaxContentSize, a NAMED entity reference
+// whose name runs far past the cap — e.g. `<title>&aaaa...(huge)...</title>` —
+// must NOT be buffered whole. A name longer than the longest known entity (31
+// chars) can never resolve to a full entity; deciding whether it resolves a
+// legacy prefix requires knowing whether a ';' eventually terminates the run,
+// and with a forward-only cursor finding that terminator while preserving SAX
+// source order would mean retaining the entire tail — exactly the unbounded
+// growth MaxContentSize exists to prevent. So the parser rejects the over-cap
+// named reference with ErrContentSizeExceeded instead, keeping peak retained
+// memory bounded by the cap. Covers both RCDATA elements (title, textarea),
+// with and without a trailing ';', and legacy-prefix runs (which only resolve
+// without ';' and so are equally unbounded to decide).
 //
-// Numeric references are handled separately by TestRCDATANumericEntityNormalized
-// because, unlike an unknown name, an overlong numeric reference still resolves
-// (to U+FFFD on overflow) rather than being echoed as literal text.
-func TestRCDATAUnknownEntityChunked(t *testing.T) {
+// Numeric references are unaffected (see TestRCDATANumericEntityNormalized):
+// they accumulate a saturating value without retaining the digit run, so an
+// overlong numeric reference still resolves rather than failing.
+func TestRCDATAOverCapNamedEntityFails(t *testing.T) {
 	const limit = 4
-	const runLen = 4096 // far larger than any valid entity name
+	const runLen = 4096 // far larger than any valid entity name or legacy prefix
 
 	cases := []struct {
 		name string
-		body string // RCDATA content (the literal text expected back out)
+		body string // RCDATA content
 	}{
-		{"named", "&" + strings.Repeat("a", runLen)},
-		{"named_semicolon", "&" + strings.Repeat("a", runLen) + ";"},
+		{"unknown", "&" + strings.Repeat("a", runLen)},
+		{"unknown_semicolon", "&" + strings.Repeat("a", runLen) + ";"},
+		{"legacy_prefix", "&amp" + strings.Repeat("x", runLen)},
+		{"legacy_prefix_semicolon", "&amp" + strings.Repeat("x", runLen) + ";"},
 	}
 
 	for _, elem := range []string{tagTitle, tagTextarea} {
@@ -493,9 +501,14 @@ func TestRCDATAUnknownEntityChunked(t *testing.T) {
 			t.Run(elem+"_"+tc.name, func(t *testing.T) {
 				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
 
-				var chunks [][]byte
+				// Track the largest single Characters chunk and total retained
+				// bytes: nothing of the over-cap run may be buffered before the
+				// parse aborts.
+				maxChunk := 0
 				record := html.CharactersFunc(func(data []byte) error {
-					chunks = append(chunks, append([]byte(nil), data...))
+					if len(data) > maxChunk {
+						maxChunk = len(data)
+					}
 					return nil
 				})
 				sax := &html.SAXCallbacks{}
@@ -504,57 +517,34 @@ func TestRCDATAUnknownEntityChunked(t *testing.T) {
 
 				err := html.NewParser().MaxContentSize(limit).
 					ParseWithSAX(t.Context(), []byte(input), sax)
-				require.NoError(t, err,
-					"over-cap unknown entity in RCDATA must parse, not error")
-
-				var got strings.Builder
-				maxChunk := 0
-				for _, c := range chunks {
-					got.Write(c)
-					if len(c) > maxChunk {
-						maxChunk = len(c)
-					}
-				}
-				require.Equal(t, tc.body, got.String(),
-					"unresolved RCDATA entity literal must be preserved intact")
+				require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+					"over-cap named %s reference in RCDATA must fail, not buffer the tail", tc.name)
 				require.LessOrEqual(t, maxChunk, limit+16,
-					"no single Characters chunk may exceed the cap")
-				require.Greater(t, len(chunks), 1,
-					"runaway RCDATA entity must be split into multiple chunks")
+					"no single Characters chunk may exceed the cap before the abort")
 			})
 		}
 	}
 }
 
-// TestRCDATALegacyPrefixOverCap pins the over-cap legacy-prefix behavior of the
-// bounded RCDATA char-ref scanner to match the normal-text (parseCharRef) path
-// exactly, for both over-cap cases:
-//
-//   - A long alphanumeric run with NO trailing ';' that begins with a legacy
-//     (HTML4) entity prefix (e.g. "&amp" + thousands of letters) must resolve
-//     the LONGEST legacy prefix without a semicolon ("amp" -> "&") and emit the
-//     remaining tail literally. HTML legacy entities resolve without ';'.
-//   - A ';'-terminated over-cap run is an unknown (too-long) name — legacy
-//     prefixes only match WITHOUT a ';' — so it is emitted verbatim.
-//
-// The earlier bounded implementation either blanket-resolved or blanket-emitted
-// the run; this guards both decisions.
-func TestRCDATALegacyPrefixOverCap(t *testing.T) {
-	const limit = 4
-	const runLen = 4096 // far larger than any valid entity name or legacy prefix
+// TestRCDATAWithinCapNamedEntity verifies that a within-cap named reference in
+// RCDATA still resolves exactly like the normal-text (parseCharRef) path under
+// a small MaxContentSize: a known entity with ';' resolves, a legacy (HTML4)
+// entity resolves WITHOUT ';' and emits its tail literally, and an unknown but
+// within-cap name is echoed verbatim. Only names longer than the cap (which can
+// never be a known entity) are rejected — this pins that the hard-fail is
+// scoped to the over-cap case and does not break ordinary references.
+func TestRCDATAWithinCapNamedEntity(t *testing.T) {
+	const limit = 8 // larger than every name below but far smaller than 16 MiB
 
 	cases := []struct {
 		name string
 		body string // RCDATA source
 		want string // expected concatenated Characters output
 	}{
-		// No ';': resolve the longest legacy prefix ("amp" -> "&"), tail literal.
-		{"amp_no_semicolon", "&amp" + strings.Repeat("x", runLen), "&" + strings.Repeat("x", runLen)},
-		// No ';': "lt" -> "<"; guard against any legacy prefix, not just amp.
-		{"lt_no_semicolon", "&lt" + strings.Repeat("y", runLen), "<" + strings.Repeat("y", runLen)},
-		// ';'-terminated over-cap unknown name — emitted literally.
-		{"amp_semicolon", "&amp" + strings.Repeat("x", runLen) + ";", "&amp" + strings.Repeat("x", runLen) + ";"},
-		{"lt_semicolon", "&lt" + strings.Repeat("y", runLen) + ";", "&lt" + strings.Repeat("y", runLen) + ";"},
+		{"amp_semicolon", "&amp;", "&"},
+		{"lt_semicolon", "&lt;", "<"},
+		{"amp_no_semicolon_tail", "&ampZ", "&Z"}, // legacy "amp" resolves; "Z" literal
+		{"unknown_semicolon", "&zzz;", "&zzz;"},  // unknown name echoed verbatim
 	}
 
 	for _, elem := range []string{tagTitle, tagTextarea} {
@@ -563,14 +553,8 @@ func TestRCDATALegacyPrefixOverCap(t *testing.T) {
 				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
 
 				var got strings.Builder
-				maxChunk := 0
-				var nchunks int
 				record := html.CharactersFunc(func(data []byte) error {
 					got.Write(data)
-					if len(data) > maxChunk {
-						maxChunk = len(data)
-					}
-					nchunks++
 					return nil
 				})
 				sax := &html.SAXCallbacks{}
@@ -580,13 +564,9 @@ func TestRCDATALegacyPrefixOverCap(t *testing.T) {
 				err := html.NewParser().MaxContentSize(limit).
 					ParseWithSAX(t.Context(), []byte(input), sax)
 				require.NoError(t, err,
-					"over-cap legacy-prefix entity in RCDATA must parse, not error")
+					"within-cap named reference in RCDATA must parse")
 				require.Equal(t, tc.want, got.String(),
-					"bounded over-cap resolution must match the normal-text path")
-				require.LessOrEqual(t, maxChunk, limit+16,
-					"no single Characters chunk may exceed the cap")
-				require.Greater(t, nchunks, 1,
-					"runaway RCDATA entity must be split into multiple chunks")
+					"within-cap named reference must resolve like the normal-text path")
 			})
 		}
 	}

@@ -1092,9 +1092,12 @@ const maxEntityNameLen = 32
 // runs) normalize to their HTML5 output (U+FFFD on overflow/invalid), and named
 // references resolve identically including legacy-prefix matching. The only
 // difference is memory: an unbounded digit run is consumed in fixed-size chunks
-// while tracking value/overflow rather than buffered whole, and an unresolved
-// reference is flushed as literal text in capped chunks rather than one giant
-// Characters event.
+// while tracking value/overflow rather than buffered whole; an unresolved
+// (within-cap) reference is flushed as literal text in capped chunks rather than
+// one giant Characters event; and a named reference whose name exceeds the
+// content cap — which can never be a known entity and whose resolution would
+// require retaining the whole tail to find its terminator — fails the parse with
+// ErrContentSizeExceeded so peak retained memory stays bounded by the cap.
 func (p *parser) parseCharRefBounded(limit int) {
 	// Entity content is non-whitespace — ensure implied elements.
 	p.htmlStartCharData()
@@ -1128,37 +1131,21 @@ func (p *parser) parseCharRefBounded(limit int) {
 	// match (and every legacy prefix), while still bounding the scan.
 	name := p.parseWhileMax(isAlphanumeric, maxEntityNameLen)
 
-	// When the alphanumeric run hit the cap, it is longer than every known
-	// entity name, so the over-long name itself matches nothing. But it may
-	// still START with a legacy (HTML4) entity that resolves WITHOUT a trailing
-	// ';' (e.g. "&amp" out of "&ampxxxx…"); the longest legacy entity is 6 chars,
-	// so any legacy prefix is wholly within the bounded `name`. We must mirror
-	// parseCharRef exactly: consume the remaining alphanumeric tail to learn
-	// whether a ';' terminates the run, then resolve via resolveNamedEntity. A
-	// ';'-terminated over-long name resolves nothing (legacy prefixes only match
-	// without ';') and is emitted literally; a ';'-less run resolves the longest
-	// legacy prefix and emits the rest as literal text. The tail is consumed in
-	// capped chunks so no single Characters event is ever oversized.
-	overCap := len(name) >= maxEntityNameLen
-	if overCap {
-		tailChunks, tailSemicolon := p.collectAlnumLiteral(isAlphanumeric, limit)
-		if val, remainder, ok := resolveNamedEntity(name, tailSemicolon); ok {
-			_ = p.emitCharacters([]byte(val))
-			if remainder != "" {
-				p.emitLiteralChunked(remainder, limit)
-			}
-			for _, chunk := range tailChunks {
-				_ = p.emitCharacters(chunk)
-			}
-			return
-		}
-		p.emitLiteralChunked("&"+name, limit)
-		for _, chunk := range tailChunks {
-			_ = p.emitCharacters(chunk)
-		}
-		if tailSemicolon {
-			_ = p.emitCharacters([]byte(";"))
-		}
+	// When the alphanumeric run reaches the cap it is longer than every known
+	// entity name, so the over-long name itself can never match a full entity.
+	// Whether it resolves at all then hinges on a single bit — whether a ';'
+	// eventually terminates the run (no ';' resolves the longest legacy prefix;
+	// a ';' resolves nothing and is echoed literally). That terminator can be an
+	// arbitrary distance away, and the resolved head ("&" vs the legacy value)
+	// must be emitted in source order BEFORE the tail. With a forward-only
+	// cursor the only way to learn the terminator while preserving order is to
+	// retain the whole tail until it is found, which is exactly the unbounded
+	// growth MaxContentSize exists to prevent. So instead of buffering the tail
+	// we fail the parse: a named character reference whose name exceeds the
+	// content cap (and therefore cannot be a known entity) is rejected with
+	// ErrContentSizeExceeded, keeping peak retained memory bounded by the cap.
+	if len(name) >= maxEntityNameLen {
+		p.fatalErr = fmt.Errorf("named character reference exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
 		return
 	}
 
@@ -1246,32 +1233,6 @@ func digitValue(b byte, base int) int {
 // (zero-padded) references still resolve while keeping per-chunk allocations
 // bounded.
 const maxNumericRefLen = 32
-
-// collectAlnumLiteral consumes the remainder of an over-cap character-reference
-// run — the bytes matching pred — in chunks no larger than limit, returning the
-// chunks (each a freshly-copied byte slice so it is safe to retain) and whether
-// a ';' terminates the run (which it also consumes). It does not emit, so the
-// caller can decide a resolved-value prefix first and emit the collected tail
-// afterward in source order.
-func (p *parser) collectAlnumLiteral(pred func(byte) bool, limit int) ([][]byte, bool) {
-	if limit <= 0 {
-		limit = defaultMaxContentSize
-	}
-	var chunks [][]byte
-	for {
-		chunk := p.parseWhileMax(pred, limit)
-		if chunk == "" {
-			break
-		}
-		chunks = append(chunks, []byte(chunk))
-	}
-	hasSemicolon := false
-	if p.cur.Peek() == ';' {
-		hasSemicolon = true
-		_ = p.cur.Advance(1)
-	}
-	return chunks, hasSemicolon
-}
 
 // emitLiteralChunked emits s as literal text in Characters events no larger
 // than limit bytes. s contains only ASCII (the '&', '#', 'x', and alphanumeric
@@ -1561,6 +1522,11 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 
 		if p.cur.Peek() == '&' {
 			p.parseCharRefBounded(limit)
+			// A char-ref over the content cap sets fatalErr; stop scanning
+			// immediately so the main loop surfaces it instead of running on.
+			if p.fatalErr != nil {
+				return
+			}
 		} else {
 			// Collect text up to next & or potential end tag, but cap the run
 			// at the content limit so one huge text span is emitted in bounded
