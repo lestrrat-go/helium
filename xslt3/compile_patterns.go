@@ -1420,7 +1420,14 @@ func matchElementTest(ctx context.Context, ec *execContext, et xpath3.ElementTes
 		}
 		nameMatch = elem.LocalName() == local && elem.URI() == uri
 	} else {
-		nameMatch = elem.LocalName() == name
+		// Unprefixed name: resolve the expected namespace the same way a
+		// NameTest does — xpath-default-namespace when set, otherwise
+		// no-namespace. Compare BOTH local name and namespace URI.
+		expectedURI := ""
+		if ec != nil && ec.hasXPathDefaultNS {
+			expectedURI = ec.xpathDefaultNS
+		}
+		nameMatch = elem.LocalName() == name && elem.URI() == expectedURI
 	}
 	if !nameMatch {
 		return false
