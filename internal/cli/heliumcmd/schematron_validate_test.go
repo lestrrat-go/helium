@@ -151,6 +151,48 @@ func TestSchematronValidateMultipleFiles(t *testing.T) {
 	require.Equal(t, heliumcmd.ExitValidation, code)
 }
 
+func TestSchematronValidateMaxInputBytes(t *testing.T) {
+	dir := t.TempDir()
+	schemaFile := writeFile(t, dir, "schema.sch", `<?xml version="1.0"?>
+<schema xmlns="http://www.ascc.net/xml/schematron">
+  <pattern>
+    <rule context="root">
+      <assert test="child">child element is required</assert>
+    </rule>
+  </pattern>
+</schema>`)
+	xml := `<?xml version="1.0"?><root><child/></root>`
+
+	t.Run("file over cap rejected", func(t *testing.T) {
+		xmlFile := writeFile(t, dir, "over.xml", xml)
+		var stderr bytes.Buffer
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, flagMaxInput, "5", schemaFile, xmlFile})
+		require.Equal(t, heliumcmd.ExitReadFile, code)
+		require.Contains(t, stderr.String(), "exceeds maximum size")
+	})
+
+	t.Run("stdin over cap rejected", func(t *testing.T) {
+		var stderr bytes.Buffer
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(xml), io.Discard, &stderr)
+
+		code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, flagMaxInput, "5", schemaFile})
+		require.Equal(t, heliumcmd.ExitReadFile, code)
+		require.Contains(t, stderr.String(), "exceeds maximum size")
+	})
+
+	t.Run("within cap ok", func(t *testing.T) {
+		xmlFile := writeFile(t, dir, "within.xml", xml)
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, flagMaxInput, "100000", schemaFile, xmlFile})
+		require.Equal(t, heliumcmd.ExitOK, code)
+	})
+}
+
 func TestSchematronValidateStdIn(t *testing.T) {
 	dir := t.TempDir()
 	schemaFile := writeFile(t, dir, "schema.sch", `<?xml version="1.0"?>

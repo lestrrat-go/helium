@@ -6,10 +6,9 @@ Arrows show "imports" direction. Indented items are transitive.
 cmd/helium     → internal/cli/heliumcmd
 internal/cli/heliumcmd → helium, c14n, relaxng, schematron, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil
 shim           → helium, stream, enum, internal/encoding, internal/xmlchar
-xinclude       → helium, xpointer
+xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/lexicon
                   → xpath1 (via xpointer)
                   → internal/xmlchar (via xpointer)
-                  → internal/encoding
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex
 xslt3          → helium, xpath3, xsd, html, internal/lexicon, internal/sequence, internal/xpathstream, xslt3/internal/elements
 xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, internal/xsdregex
@@ -21,7 +20,7 @@ xmldsig1       → helium, c14n, internal/lexicon
 xmlenc1        → helium
 html           → helium, sax, push
 catalog        → helium, internal/catalog, internal/lexicon
-stream         → internal/encoding
+stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
 helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack
 sink           → (none)
@@ -52,7 +51,7 @@ c14n, xpath1, xpath3, html, catalog, relaxng, stream, xmlenc1
 xmldsig1 (root + c14n + internal/lexicon)
 
 ## Composition layer (depends on processing)
-xsd (root + xpath1 + internal/lexicon), xpointer (root + xpath1 + internal/xmlchar), schematron (root + xpath1), xinclude (root + xpointer), xslt3 (root + xpath3 + xsd + html + internal/elements), shim (root + stream)
+xsd (root + xpath1 + internal/lexicon), xpointer (root + xpath1 + internal/xmlchar), schematron (root + xpath1), xinclude (root + xpointer + internal/encoding + internal/iofs + internal/lexicon), xslt3 (root + xpath3 + xsd + html + internal/elements), shim (root + stream)
 
 ## Application layer
 internal/cli/heliumcmd (CLI implementation)

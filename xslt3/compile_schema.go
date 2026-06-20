@@ -50,11 +50,19 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 		BaseDir(schemaCompileBaseDir(uri)).
 		FS(fsys).
 		Compile(ctx, doc)
+	// XTSE0220: the schema could not be constructed (e.g. an unresolved
+	// referenced type or a nested xs:import miss). The xsd compiler now
+	// reports this as ErrCompilationFailed (nil schema); the fatalErrorCounter
+	// carries the diagnostic count for the message.
+	if errors.Is(err, xsd.ErrCompilationFailed) {
+		return nil, staticError(errCodeXTSE0220,
+			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
+	}
 	if err != nil {
 		return nil, err
 	}
-	// XTSE0220: the schema could not be constructed (e.g. an unresolved
-	// referenced type or a nested xs:import miss left a recovery placeholder).
+	// Defensive: a fatal diagnostic without ErrCompilationFailed should not
+	// happen, but keep the XTSE0220 guard so an invalid schema never leaks.
 	if errCounter.count.Load() > 0 {
 		return nil, staticError(errCodeXTSE0220,
 			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
@@ -243,11 +251,18 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 				compiler = compiler.BaseDir(schemaCompileBaseDir(baseURI))
 			}
 			schema, err := compiler.Compile(ctx, inlineDoc)
+			// XTSE0220: the synthetic schema document does not satisfy XSD
+			// constraints (e.g., duplicate global declarations). The xsd
+			// compiler now signals this via ErrCompilationFailed (nil schema).
+			if errors.Is(err, xsd.ErrCompilationFailed) {
+				return staticError(errCodeXTSE0220,
+					"xsl:import-schema: inline schema has %d schema construction error(s)", errCounter.count.Load())
+			}
 			if err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot compile inline schema: %w", err)
 			}
-			// XTSE0220: the synthetic schema document does not satisfy XSD constraints
-			// (e.g., duplicate global declarations).
+			// Defensive guard: a fatal diagnostic without ErrCompilationFailed
+			// should not occur, but never let an invalid schema leak through.
 			if errCounter.count.Load() > 0 {
 				return staticError(errCodeXTSE0220,
 					"xsl:import-schema: inline schema has %d schema construction error(s)", errCounter.count.Load())

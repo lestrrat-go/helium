@@ -518,6 +518,77 @@ func TestSchemaValidation(t *testing.T) {
 	}
 }
 
+func TestSchemaCompileDiagnosticReachesStderr(t *testing.T) {
+	// A duplicate global element is a fatal schema compile error. lint must
+	// compile with an ErrorHandler + Label so the diagnostic detail reaches
+	// stderr instead of being discarded behind a bare summary.
+	dir := t.TempDir()
+	xsdContent := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+	xsdFile := writeFile(t, dir, "dup.xsd", xsdContent)
+	xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>x</root>`)
+
+	_, errOut, code := executeLintFile(t, xmlFile, "--schema", xsdFile, "--noout")
+	require.Equal(t, heliumcmd.ExitSchemaComp, code)
+	require.Contains(t, errOut, "dup.xsd", "diagnostic should name the schema file")
+	require.Contains(t, errOut, "does already exist", "diagnostic detail should reach stderr")
+}
+
+func TestSchemaCompileWarningReachesStderr(t *testing.T) {
+	// An <xs:import> with an unresolvable schemaLocation is a non-fatal
+	// warning: the schema still compiles. Without --quiet the warning detail
+	// must reach stderr.
+	dir := t.TempDir()
+	xsdContent := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="http://example.com/missing" schemaLocation="does-not-exist.xsd"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+	xsdFile := writeFile(t, dir, "warn.xsd", xsdContent)
+	xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>x</root>`)
+
+	_, errOut, code := executeLintFile(t, xmlFile, "--schema", xsdFile, "--noout")
+	require.Equal(t, heliumcmd.ExitOK, code, "missing import is non-fatal; schema compiles")
+	require.Contains(t, errOut, "does-not-exist.xsd", "warning detail should reach stderr without --quiet")
+}
+
+func TestSchemaCompileWarningSuppressedByQuiet(t *testing.T) {
+	// --quiet must suppress non-fatal schema compile warnings (e.g. an
+	// unresolvable import) but a fatal schema error must still be printed.
+	t.Run("warning suppressed", func(t *testing.T) {
+		dir := t.TempDir()
+		xsdContent := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="http://example.com/missing" schemaLocation="does-not-exist.xsd"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+		xsdFile := writeFile(t, dir, "warn.xsd", xsdContent)
+		xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>x</root>`)
+
+		_, errOut, code := executeLintFile(t, xmlFile, "--schema", xsdFile, "--noout", "--quiet")
+		require.Equal(t, heliumcmd.ExitOK, code)
+		require.Empty(t, errOut, "--quiet should suppress non-fatal schema compile warnings")
+	})
+
+	t.Run("fatal still printed", func(t *testing.T) {
+		dir := t.TempDir()
+		xsdContent := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+		xsdFile := writeFile(t, dir, "dup.xsd", xsdContent)
+		xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>x</root>`)
+
+		_, errOut, code := executeLintFile(t, xmlFile, "--schema", xsdFile, "--noout", "--quiet")
+		require.Equal(t, heliumcmd.ExitSchemaComp, code)
+		require.Contains(t, errOut, "does already exist", "fatal schema error must print even with --quiet")
+	})
+}
+
 func TestDropDTD(t *testing.T) {
 	dir := t.TempDir()
 	xml := `<?xml version="1.0"?>

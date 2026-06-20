@@ -34,7 +34,7 @@ func TestCompile_ImportNamespaceMismatch(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
-		require.NoError(t, err)
+		requireCompileResultErr(t, err)
 		var b strings.Builder
 		for _, e := range collector.Errors() {
 			b.WriteString(e.Error())
@@ -137,7 +137,7 @@ func TestCompile_ImportNoNamespaceListUnionRefs(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		schema, err := xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
-		require.NoError(t, err)
+		requireCompileResultErr(t, err)
 		var b strings.Builder
 		for _, e := range collector.Errors() {
 			b.WriteString(e.Error())
@@ -245,7 +245,7 @@ func TestCompile_PrefixedRefNoEmptyNamespaceFallback(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
-		require.NoError(t, err)
+		requireCompileResultErr(t, err)
 		var b strings.Builder
 		for _, e := range collector.Errors() {
 			b.WriteString(e.Error())
@@ -344,7 +344,7 @@ func TestCompile_DefaultNamespaceBoundRefNoEmptyNamespaceFallback(t *testing.T) 
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
-		require.NoError(t, err)
+		requireCompileResultErr(t, err)
 		var b strings.Builder
 		for _, e := range collector.Errors() {
 			b.WriteString(e.Error())
@@ -446,7 +446,7 @@ func TestCompile_QualifiedTargetNamespaceRefNoEmptyNamespaceFallback(t *testing.
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.NewCompiler().Label(importMainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
-		require.NoError(t, err)
+		requireCompileResultErr(t, err)
 		var b strings.Builder
 		for _, e := range collector.Errors() {
 			b.WriteString(e.Error())

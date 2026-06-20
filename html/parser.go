@@ -475,6 +475,14 @@ func (p *parser) parse(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		// A non-EOF read error from the underlying reader (e.g. the push
+		// parser's stream returning the context error when its blocking wait
+		// is cancelled) is recorded by the cursor and otherwise masked by
+		// Done(). Surface it so a cancelled or failed read aborts the parse
+		// rather than silently accepting truncated input.
+		if err := p.cur.Err(); err != nil {
+			return err
+		}
 		if p.cur.Peek() == '<' {
 			if p.cur.PeekAt(1) == '/' {
 				p.parseEndTag()
@@ -500,6 +508,13 @@ func (p *parser) parse(ctx context.Context) error {
 		} else {
 			p.parseCharacters()
 		}
+	}
+
+	// A clean Done() may mask a non-EOF read error that arrived together with
+	// the final bytes (e.g. a cancelled push-stream wait). Surface it before
+	// reporting success.
+	if err := p.cur.Err(); err != nil {
+		return err
 	}
 
 	p.htmlAutoCloseOnEnd()
