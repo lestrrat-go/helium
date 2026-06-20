@@ -776,6 +776,38 @@ func TestEvaluate_XmlnsNoOp(t *testing.T) {
 	})
 }
 
+// The W3C xmlns() grammar (XmlnsSchemeData ::= NCName S? '=' S?
+// EscapedNamespaceName) permits optional XML whitespace around the '='. These
+// spec-valid forms must compile, bind the prefix correctly, and cascade so the
+// bound prefix is usable in a following xpointer() part.
+func TestEvaluate_XmlnsWhitespaceAroundEquals(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xmlns:ns="urn:test"><ns:child>hi</ns:child></root>`))
+	require.NoError(t, err)
+
+	exprs := []struct {
+		name string
+		expr string
+	}{
+		{name: "space both sides", expr: `xmlns(p = urn:test) xpointer(/root/p:child)`},
+		{name: "space before equals", expr: `xmlns(p =urn:test) xpointer(/root/p:child)`},
+		{name: "space after equals", expr: `xmlns(p= urn:test) xpointer(/root/p:child)`},
+		{name: "tab around equals", expr: "xmlns(p\t=\turn:test) xpointer(/root/p:child)"},
+	}
+	for _, tt := range exprs {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
+			require.NoError(t, err)
+			require.Len(t, nodes, 1)
+			require.Equal(t, "child", nodes[0].(*helium.Element).LocalName())
+		})
+	}
+}
+
 // The one-shot Evaluate must report a nil document as ErrNilDocument before
 // attempting to compile the expression, even when the expression is itself
 // invalid (which would otherwise surface a compile error first).

@@ -245,13 +245,42 @@ func isXmlnsNoOp(prefix, uri string) bool {
 	return uri == xmlNamespaceURI || uri == xmlnsNamespaceURI
 }
 
-// parseXmlnsBody parses "prefix=uri" from an xmlns() body.
+// xmlSpaceCutset is the set of XML S (whitespace) characters per the XML 1.0
+// production S ::= (#x20 | #x9 | #xD | #xA)+. Note this is deliberately NOT the
+// Unicode whitespace set used by strings.TrimSpace.
+const xmlSpaceCutset = " \t\r\n"
+
+// parseXmlnsBody parses an xmlns() scheme body per the W3C XPointer xmlns()
+// grammar:
+//
+//	XmlnsSchemeData ::= NCName S? '=' S? EscapedNamespaceName
+//
+// where the escaped namespace name is EscapedData* and S ::= (#x20 | #x9 | #xD |
+// #xA)+. Optional XML whitespace is allowed after the NCName prefix and after the
+// '='; this function trims that surrounding whitespace from the prefix (right
+// side) and the URI (left side) before returning. The prefix is returned
+// unvalidated — callers validate it as an NCName via validateXmlnsPrefix. The URI
+// is the remaining namespace name with leading S removed but otherwise preserved
+// exactly (no internal or trailing trimming); circumflex-escaping in the body has
+// already been undone by parseScheme/unescapeXPointer before this function sees it.
+//
+// A leading-whitespace allowance before the NCName is also applied defensively;
+// the framework strips whitespace around scheme bodies before this point, but
+// trimming here keeps parsing robust to bodies fed in directly.
+//
+// ok is false when there is no '=' or the prefix portion is empty after
+// trimming surrounding whitespace.
 func parseXmlnsBody(body string) (prefix, uri string, ok bool) {
-	i := strings.IndexByte(body, '=')
-	if i < 1 {
+	rawPrefix, rawURI, found := strings.Cut(body, "=")
+	if !found {
 		return "", "", false
 	}
-	return body[:i], body[i+1:], true
+	prefix = strings.Trim(rawPrefix, xmlSpaceCutset)
+	if prefix == "" {
+		return "", "", false
+	}
+	uri = strings.TrimLeft(rawURI, xmlSpaceCutset)
+	return prefix, uri, true
 }
 
 // ParseFragmentID splits a URI fragment into its XPointer scheme and body.
