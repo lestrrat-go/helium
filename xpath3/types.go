@@ -86,21 +86,73 @@ func cloneSequence(seq Sequence) Sequence {
 // bounds, which charge per inserted value once — not per nesting level on every
 // insert.
 //
-// NodeItem (DOM identity must stay shared) and FunctionItem (immutable closure)
-// are likewise returned as-is.
+// NodeItem keeps its underlying DOM node identity shared (the node itself is
+// never cloned), but copies its mutable metadata slice (UnionMemberTypes) so a
+// caller cannot mutate it after insertion. FunctionItem keeps its closure and
+// any DOM identity shared, but copies its mutable type-metadata (ParamTypes /
+// ReturnType) for the same reason.
 func deepCloneItem(item Item) Item {
-	av, ok := item.(AtomicValue)
-	if !ok {
+	switch v := item.(type) {
+	case AtomicValue:
+		// Only re-box when the payload actually carries shared mutable state.
+		// Returning the original boxed Item for immutable payloads (int64,
+		// string, bool, float64, time.Time, QNameValue, by-value Duration
+		// without rationals, …) avoids an interface re-allocation per item on
+		// the hot clone path.
+		if cloned, copied := deepCloneAtomicValue(v); copied {
+			return cloned
+		}
+		return item
+	case NodeItem:
+		if v.UnionMemberTypes == nil {
+			return item
+		}
+		v.UnionMemberTypes = append([]string(nil), v.UnionMemberTypes...)
+		return v
+	case FunctionItem:
+		if v.ParamTypes == nil && v.ReturnType == nil {
+			return item
+		}
+		v.ParamTypes = cloneSequenceTypes(v.ParamTypes)
+		v.ReturnType = cloneSequenceTypePtr(v.ReturnType)
+		return v
+	default:
 		return item
 	}
-	// Only re-box when the payload actually carries shared mutable state.
-	// Returning the original boxed Item for immutable payloads (int64, string,
-	// bool, float64, time.Time, QNameValue, by-value Duration without rationals,
-	// …) avoids an interface re-allocation per item on the hot clone path.
-	if cloned, copied := deepCloneAtomicValue(av); copied {
-		return cloned
+}
+
+// cloneSequenceTypePtr deep-copies a *SequenceType, preserving nil.
+func cloneSequenceTypePtr(st *SequenceType) *SequenceType {
+	if st == nil {
+		return nil
 	}
-	return item
+	cloned := cloneSequenceType(*st)
+	return &cloned
+}
+
+// cloneSequenceTypes deep-copies a slice of SequenceType, preserving nil.
+func cloneSequenceTypes(sts []SequenceType) []SequenceType {
+	if sts == nil {
+		return nil
+	}
+	cloned := make([]SequenceType, len(sts))
+	for i := range sts {
+		cloned[i] = cloneSequenceType(sts[i])
+	}
+	return cloned
+}
+
+// cloneSequenceType deep-copies a SequenceType's mutable metadata. Only the
+// FunctionTest item test carries mutable slices (ParamTypes); every other
+// NodeTest is an immutable value with no shared mutable backing, so it is kept
+// as-is.
+func cloneSequenceType(st SequenceType) SequenceType {
+	if ft, ok := st.ItemTest.(FunctionTest); ok {
+		ft.ParamTypes = cloneSequenceTypes(ft.ParamTypes)
+		ft.ReturnType = cloneSequenceType(ft.ReturnType)
+		st.ItemTest = ft
+	}
+	return st
 }
 
 // deepCloneAtomicValue copies an AtomicValue when its Go payload is pointer- or

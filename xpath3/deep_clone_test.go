@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"context"
 	"math/big"
 	"testing"
 
@@ -357,5 +358,73 @@ func TestDeepCloneValueSemantics(t *testing.T) {
 		stored, ok := av.Value.([]byte)
 		require.True(t, ok, "expected []byte, got %T", av.Value)
 		require.Equal(t, []byte{0x01, 0x02, 0x03}, stored, "stored byte slice must be detached from the source slice")
+	})
+
+	// NodeItem.UnionMemberTypes is a mutable slice on a public item struct. A
+	// caller can mutate it after the item has been deep-cloned (e.g. via
+	// CloneSequence), so the clone must copy the slice while leaving the
+	// underlying DOM node identity shared.
+	t.Run("NodeItem.UnionMemberTypes is detached", func(t *testing.T) {
+		t.Parallel()
+
+		members := []string{"xs:integer", "xs:string"}
+		src := xpath3.NodeItem{UnionMemberTypes: members}
+		cloned := xpath3.CloneSequence(xpath3.ItemSlice{src}).Materialize()
+		require.Len(t, cloned, 1)
+		ci, ok := cloned[0].(xpath3.NodeItem)
+		require.True(t, ok, "expected NodeItem, got %T", cloned[0])
+
+		// Mutate the returned clone's slice; the source must be unchanged.
+		ci.UnionMemberTypes[0] = "MUTATED"
+		require.Equal(t, "xs:integer", src.UnionMemberTypes[0], "source NodeItem.UnionMemberTypes must be unaffected by mutation of the clone")
+	})
+
+	// FunctionItem.ParamTypes and ReturnType are mutable type-metadata on a
+	// public item struct. The deep clone must copy them (recursively, including
+	// nested FunctionTest param slices) while preserving the callable closure.
+	t.Run("FunctionItem type metadata is detached", func(t *testing.T) {
+		t.Parallel()
+
+		called := false
+		ret := xpath3.SequenceType{Occurrence: xpath3.OccurrenceExactlyOne}
+		src := xpath3.FunctionItem{
+			Arity: 1,
+			Invoke: func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+				called = true
+				return xpath3.ItemSlice{}, nil
+			},
+			ParamTypes: []xpath3.SequenceType{{Occurrence: xpath3.OccurrenceZeroOrMore}},
+			ReturnType: &ret,
+		}
+
+		cloned := xpath3.CloneSequence(xpath3.ItemSlice{src}).Materialize()
+		require.Len(t, cloned, 1)
+		ci, ok := cloned[0].(xpath3.FunctionItem)
+		require.True(t, ok, "expected FunctionItem, got %T", cloned[0])
+
+		// The closure must be preserved (shared), not dropped.
+		require.NotNil(t, ci.Invoke, "clone must preserve the callable closure")
+		_, err := ci.Invoke(t.Context(), nil)
+		require.NoError(t, err)
+		require.True(t, called, "clone's Invoke must be the original closure")
+
+		// Mutate the clone's ParamTypes/ReturnType; the source must be unchanged.
+		ci.ParamTypes[0].Occurrence = xpath3.OccurrenceOneOrMore
+		ci.ReturnType.Occurrence = xpath3.OccurrenceZeroOrOne
+		require.Equal(t, xpath3.OccurrenceZeroOrMore, src.ParamTypes[0].Occurrence, "source FunctionItem.ParamTypes must be unaffected by mutation of the clone")
+		require.Equal(t, xpath3.OccurrenceExactlyOne, src.ReturnType.Occurrence, "source FunctionItem.ReturnType must be unaffected by mutation of the clone")
+
+		// A nested FunctionTest inside ParamTypes must also be copied, so its
+		// nested ParamTypes slice is detached.
+		nestedFT := xpath3.FunctionTest{ParamTypes: []xpath3.SequenceType{{Occurrence: xpath3.OccurrenceExactlyOne}}}
+		src2 := xpath3.FunctionItem{
+			Invoke:     func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) { return xpath3.ItemSlice{}, nil },
+			ParamTypes: []xpath3.SequenceType{{ItemTest: nestedFT}},
+		}
+		cloned2 := xpath3.CloneSequence(xpath3.ItemSlice{src2}).Materialize()
+		ci2 := cloned2[0].(xpath3.FunctionItem)
+		clonedFT := ci2.ParamTypes[0].ItemTest.(xpath3.FunctionTest)
+		clonedFT.ParamTypes[0].Occurrence = xpath3.OccurrenceOneOrMore
+		require.Equal(t, xpath3.OccurrenceExactlyOne, nestedFT.ParamTypes[0].Occurrence, "nested FunctionTest.ParamTypes must be detached")
 	})
 }
