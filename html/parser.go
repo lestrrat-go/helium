@@ -496,7 +496,11 @@ func (p *parser) parse(ctx context.Context) error {
 	p.handleSAXErr(p.sax.SetDocumentLocator(p.locator))
 	p.handleSAXErr(p.sax.StartDocument())
 
-	for !p.cur.Done() {
+	// Check ctx/fatalErr/read-error BEFORE Done() so a condition set during the
+	// previous iteration aborts immediately. Done() refills the buffer with a
+	// blocking Read; checking afterward would let an over-cap fatalErr (or a
+	// cancellation) trigger one more blocking read before the parse returns.
+	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -510,6 +514,9 @@ func (p *parser) parse(ctx context.Context) error {
 		// rather than silently accepting truncated input.
 		if err := p.cur.Err(); err != nil {
 			return err
+		}
+		if p.cur.Done() {
+			break
 		}
 		if p.cur.Peek() == '<' {
 			if p.cur.PeekAt(1) == '/' {
@@ -1566,13 +1573,27 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 		content.WriteString(s)
 	}
 
-	for !p.cur.Done() {
+	// Check ctx/fatalErr BEFORE Done() so a condition set during the previous
+	// iteration aborts immediately. Done() refills via a blocking Read; checking
+	// afterward would let an over-cap fatalErr (or a cancellation) trigger one
+	// more blocking read before this loop returns.
+	for {
 		// Abort promptly on context cancellation rather than buffering the
 		// entire (possibly gigantic or unterminated) section first. The main
 		// parse loop re-checks ctx.Err() and surfaces it.
 		if ctx.Err() != nil {
 			flushChunk()
 			return
+		}
+		// An over-cap construct (e.g. via emitted SAX content in strict mode)
+		// may set fatalErr; stop scanning immediately so the main loop surfaces
+		// it instead of issuing another blocking read.
+		if p.fatalErr != nil {
+			flushChunk()
+			return
+		}
+		if p.cur.Done() {
+			break
 		}
 		// Check for <!-- to enter escaped state
 		if isScript && state == scriptNormal && p.cur.Peek() == '<' && p.cur.PeekAt(1) == '!' &&
@@ -1705,11 +1726,23 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 	endTag := "</" + tagName
 	limit := p.cfg.contentLimit()
 
-	for !p.cur.Done() {
+	// Check ctx/fatalErr BEFORE Done() so a condition set during the previous
+	// iteration aborts immediately. Done() refills via a blocking Read; checking
+	// afterward would let an over-cap fatalErr (set by parseCharRefBounded at a
+	// buffer boundary) or a cancellation trigger one more blocking read.
+	for {
 		// Abort promptly on context cancellation. The main parse loop
 		// re-checks ctx.Err() and surfaces it.
 		if ctx.Err() != nil {
 			return
+		}
+		// A char-ref over the content cap sets fatalErr; stop scanning so the
+		// main loop surfaces it instead of issuing another blocking read.
+		if p.fatalErr != nil {
+			return
+		}
+		if p.cur.Done() {
+			break
 		}
 		if p.cur.Peek() == '<' && p.cur.PeekAt(1) == '/' {
 			if p.hasPrefixFold(endTag) {
@@ -1738,8 +1771,9 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 
 		if p.cur.Peek() == '&' {
 			p.parseCharRefBounded(ctx, limit)
-			// A char-ref over the content cap sets fatalErr; stop scanning
-			// immediately so the main loop surfaces it instead of running on.
+			// A char-ref over the content cap sets fatalErr; return from the
+			// current iteration immediately rather than scanning further. The
+			// loop-top fatalErr guard already prevents another blocking read.
 			if p.fatalErr != nil {
 				return
 			}
@@ -1835,12 +1869,25 @@ func (p *parser) parsePlaintext(ctx context.Context) {
 		}
 		content.WriteString(s)
 	}
-	for !p.cur.Done() {
+	// Check ctx/fatalErr BEFORE Done() so a condition set during the previous
+	// iteration aborts immediately. Done() refills via a blocking Read; checking
+	// afterward would let a fatalErr or cancellation trigger one more blocking
+	// read before this loop returns.
+	for {
 		// Abort promptly on context cancellation rather than buffering the
 		// entire (possibly endless) plaintext section first.
 		if ctx.Err() != nil {
 			flushChunk()
 			return
+		}
+		// An over-cap construct may set fatalErr; stop scanning immediately so
+		// the main loop surfaces it instead of issuing another blocking read.
+		if p.fatalErr != nil {
+			flushChunk()
+			return
+		}
+		if p.cur.Done() {
+			break
 		}
 		// A real U+0000 (NUL) byte reads as 0, which the previous PeekAt-based
 		// scan treated as EOF, truncating plaintext early. Per HTML5 the

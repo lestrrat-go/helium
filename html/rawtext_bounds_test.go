@@ -1260,6 +1260,99 @@ func (r *countingReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// blockOnExtraReadReader streams a throttled body whose final bytes carry an
+// over-cap construct that makes the parser set fatalErr at a buffer boundary.
+// Once `data` is exhausted, the FIRST further Read records that an extra read
+// occurred and then blocks forever — so a parser that issues another blocking
+// Read after fatalErr is set (the check-after-Done bug) hangs, while a parser
+// that returns immediately never reaches the block. maxRead caps each Read so a
+// single read can't gulp the whole body (and the trailing blocking boundary)
+// before the construct is reached.
+type blockOnExtraReadReader struct {
+	data      []byte
+	pos       int
+	maxRead   int
+	extraRead bool          // set true if a Read is attempted past `data`
+	block     chan struct{} // never closed: a post-boundary Read blocks here
+}
+
+func (r *blockOnExtraReadReader) Read(p []byte) (int, error) {
+	if r.pos >= len(r.data) {
+		// The whole body (including the over-cap construct) has been delivered.
+		// Any Read here is the "extra" blocking read the fix must avoid.
+		r.extraRead = true
+		<-r.block // block forever; a correct parser never gets here
+		return 0, io.EOF
+	}
+	if r.maxRead > 0 && len(p) > r.maxRead {
+		p = p[:r.maxRead]
+	}
+	n := copy(p, r.data[r.pos:])
+	r.pos += n
+	return n, nil
+}
+
+// TestNoBlockingReadAfterFatalErr is the regression for codex 615-29: after an
+// over-cap construct sets fatalErr at a buffer boundary, the parser must NOT
+// perform another blocking Read (via Done()/refill) before returning
+// ErrContentSizeExceeded. The reader blocks forever on any read past the body,
+// so the buggy check-after-Done ordering hangs (caught by the timeout) while the
+// fixed check-before-Done ordering returns promptly.
+//
+// An unresolved over-cap named reference (`&zzzzzzzz;`, 10 literal bytes > cap 4)
+// sits PAST the 1024-byte charset prescan, preceded by valid RCDATA filler, so
+// the over-cap decision is made while streaming (the cursor buffer is exhausted
+// at the boundary) rather than during the prescan. A <meta charset="utf-8">
+// forces the streaming sanitize path and throttled reads keep the cursor
+// refilling incrementally. The closing ';' is the LAST byte of the body and is
+// consumed as part of the unresolved run, so when parseCharRefBounded sets
+// fatalErr the cursor buffer is exactly empty (bufpos == buflen). The buggy
+// `for !p.cur.Done()` ordering would then refill (blocking) before the fatalErr
+// check; the fix surfaces fatalErr first. (A non-consumed terminator such as a
+// trailing space leaves a byte buffered, so Done() short-circuits and never
+// exposes the bug — the ';' boundary is essential.)
+//
+// This exercises both the parseRCDATAContent scanner loop (sets fatalErr via
+// parseCharRefBounded, returns without a further read) and parse() (observes
+// fatalErr before its own Done()). No read past the construct may occur.
+func TestNoBlockingReadAfterFatalErr(t *testing.T) {
+	const limit = 4
+	// Valid RCDATA filler long enough to push the over-cap char-ref past the
+	// 1024-byte charset prescan, so the boundary is hit while streaming.
+	filler := strings.Repeat("a", 1200)
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			// body ends with the ';' that closes (and is consumed by) the over-cap
+			// unresolved run, leaving the cursor buffer empty; the next read is the
+			// blocking sentinel.
+			input := []byte(metaUTF8 + "<" + elem + ">" + filler + "&zzzzzzzz;")
+			r := &blockOnExtraReadReader{
+				data:    input,
+				maxRead: 64,
+				block:   make(chan struct{}),
+			}
+
+			done := make(chan error, 1)
+			go func() {
+				_, err := html.NewParser().MaxContentSize(limit).
+					ParseReader(t.Context(), r)
+				done <- err
+			}()
+
+			select {
+			case err := <-done:
+				require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+					"over-cap reference must fail with ErrContentSizeExceeded")
+				require.False(t, r.extraRead,
+					"no blocking Read may occur after fatalErr is set at the boundary")
+			case <-time.After(10 * time.Second):
+				t.Fatal("parse issued a blocking Read after fatalErr was set (check-after-Done bug)")
+			}
+		})
+	}
+}
+
 // TestRCDATAOverCapNonLegacyAbortsWithoutDrainingTail is the WORK-bound
 // regression for parseSaturatedCharRefLiteral: a very long UNRESOLVED named
 // reference whose run neither matches a known entity nor begins with a legacy
