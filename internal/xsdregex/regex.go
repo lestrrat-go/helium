@@ -6,19 +6,39 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/dlclark/regexp2"
 )
 
-// DefaultMatchTimeout bounds how long the regexp2 backtracking engine spends on
-// a single pattern-facet match before giving up. Patterns that use constructs
-// RE2 cannot handle (character-class subtraction, large quantifiers) compile to
-// regexp2, which is vulnerable to catastrophic backtracking on adversarial
-// inputs; this is a defense-in-depth ceiling for those matches. RE2-compiled
-// patterns are linear-time and unaffected. Set to 0 to disable; mutating it
-// affects only subsequently-compiled patterns.
-var DefaultMatchTimeout = 5 * time.Second
+// defaultMatchTimeoutNanos holds the current default match timeout, in
+// nanoseconds, as an atomic so concurrent compilation (which reads it) and
+// SetDefaultMatchTimeout (which writes it) cannot race. See DefaultMatchTimeout.
+var defaultMatchTimeoutNanos atomic.Int64
+
+func init() {
+	defaultMatchTimeoutNanos.Store(int64(5 * time.Second))
+}
+
+// DefaultMatchTimeout returns the bound on how long the regexp2 backtracking
+// engine spends on a single pattern-facet match before giving up. Patterns that
+// use constructs RE2 cannot handle (character-class subtraction, large
+// quantifiers) compile to regexp2, which is vulnerable to catastrophic
+// backtracking on adversarial inputs; this is a defense-in-depth ceiling for
+// those matches. RE2-compiled patterns are linear-time and unaffected. A value
+// of 0 disables the timeout.
+func DefaultMatchTimeout() time.Duration {
+	return time.Duration(defaultMatchTimeoutNanos.Load())
+}
+
+// SetDefaultMatchTimeout sets the default match timeout returned by
+// DefaultMatchTimeout. Setting it to 0 disables the timeout. The change affects
+// only subsequently-compiled patterns. It is safe to call concurrently with
+// regex compilation.
+func SetDefaultMatchTimeout(d time.Duration) {
+	defaultMatchTimeoutNanos.Store(int64(d))
+}
 
 // errCodeFORX0002 mirrors the XPath FORX0002 ("invalid regular expression")
 // error code. This package is layering-neutral (no xpath3 dependency); callers
@@ -45,7 +65,14 @@ func (e *regexError) Error() string { return e.Message }
 // through and relies on Go's (different) interpretation. It also does NOT reject
 // Perl-specific constructs or validate back-references — call RejectPerlSpecific
 // and Validate separately for those checks.
-func translateXPathRegex(pattern string, dotAll, ignoreCase bool) (string, error) {
+// xsdPattern selects between the two regex flavors that share this translator:
+//
+//   - true  → XSD xs:pattern facet. The pattern is implicitly anchored to the
+//     whole value and '^'/'$' are ordinary literal characters, not anchors.
+//   - false → XPath/XQuery fn:matches/tokenize/replace. The pattern is NOT
+//     implicitly anchored and '^'/'$' keep their RE2 anchor meaning (start/end,
+//     multiline with the 'm' flag).
+func translateXPathRegex(pattern string, dotAll, ignoreCase, xsdPattern bool) (string, error) {
 	isDotAll := dotAll
 	var b strings.Builder
 	runes := []rune(pattern)
@@ -151,6 +178,20 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase bool) (string, error
 			} else {
 				b.WriteString(`[^\n\r]`)
 			}
+			i++
+			continue
+		}
+
+		// In the XSD xs:pattern grammar '^' and '$' are ordinary literal
+		// characters, not anchors (the only XSD metacharacters are
+		// . \ ? * + { } ( ) [ ] |, and the whole pattern is already implicitly
+		// anchored when Compile wraps it in \A(?:...)\z). Escape them so RE2
+		// treats them as literals. In XPath/XQuery regex (fn:matches/tokenize/
+		// replace) '^' and '$' are anchors (start/end, multiline with 'm'); leave
+		// them untouched so the engine keeps that meaning.
+		if xsdPattern && (r == '^' || r == '$') {
+			b.WriteRune('\\')
+			b.WriteRune(r)
 			i++
 			continue
 		}
@@ -1151,9 +1192,12 @@ func rejectPerlSpecific(pattern string) error {
 	return nil
 }
 
-// Translate converts an XPath/XML Schema regex pattern into a Go RE2 pattern.
+// Translate converts an XPath/XQuery regex pattern (fn:matches/tokenize/replace)
+// into a Go RE2 pattern. In this flavor '^' and '$' are anchors and the pattern
+// is not implicitly anchored; use Compile for XSD xs:pattern facets, where
+// '^'/'$' are literals and the whole value must match.
 func Translate(pattern string, dotAll, ignoreCase bool) (string, error) {
-	return translateXPathRegex(pattern, dotAll, ignoreCase)
+	return translateXPathRegex(pattern, dotAll, ignoreCase, false)
 }
 
 // Regexp is a compiled XML Schema pattern-facet regular expression. It matches
@@ -1168,7 +1212,7 @@ type Regexp struct {
 func (r *Regexp) MatchString(s string) bool {
 	if r.backtrack != nil {
 		// regexp2 is a backtracking engine; the only error it returns is a
-		// match-timeout (see DefaultMatchTimeout). A timed-out match cannot be
+		// match-timeout (see DefaultMatchTimeout()). A timed-out match cannot be
 		// proven to satisfy the pattern, so report it as a non-match rather than
 		// letting a catastrophic-backtracking input hang the caller.
 		ok, _ := r.backtrack.MatchString(s)
@@ -1199,7 +1243,10 @@ func Compile(pattern string) (*Regexp, error) {
 		return nil, err
 	}
 
-	translated, err := translateXPathRegex(pattern, false, false)
+	// Compile handles XSD xs:pattern facets: '^'/'$' are literal characters and
+	// the pattern is implicitly anchored to the whole value (the \A(?:...)\z
+	// wrap below). Pass xsdPattern=true so the translator escapes '^'/'$'.
+	translated, err := translateXPathRegex(pattern, false, false, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1214,7 +1261,7 @@ func Compile(pattern string) (*Regexp, error) {
 		}
 		// Bound backtracking so an adversarial pattern/value cannot hang the
 		// process (catastrophic backtracking). 0 disables the timeout.
-		if t := DefaultMatchTimeout; t > 0 {
+		if t := DefaultMatchTimeout(); t > 0 {
 			re.MatchTimeout = t
 		}
 		return &Regexp{backtrack: re}, nil
