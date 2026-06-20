@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"net/url"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -11,6 +12,37 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
+
+// canonicalResultURIKey produces a canonical key for XTDE1490 duplicate
+// detection. Unlike helium.BuildURI (which strips the file: scheme for file:
+// bases, turning "file:///d/out.xml" into "/d/out.xml"), this resolves the
+// href as a URI and PRESERVES the scheme/host for both absolute and relative
+// hrefs. That ensures a relative href ("out.xml") and the equivalent absolute
+// href ("file:///d/out.xml") under the same base collapse to the same key, so
+// two result documents denoting the same file are detected as duplicates.
+func canonicalResultURIKey(href, base string) string {
+	ref, err := url.Parse(href)
+	if err != nil {
+		return href
+	}
+	if ref.IsAbs() {
+		return ref.String()
+	}
+	if base == "" {
+		return ref.String()
+	}
+	baseURL, err := url.Parse(base)
+	if err != nil || !baseURL.IsAbs() {
+		// Without a usable absolute base we cannot canonicalize URI-wise;
+		// fall back to helium.BuildURI's filesystem-style resolution so that
+		// distinct relative hrefs denoting the same path still collide.
+		if resolved := helium.BuildURI(href, base); resolved != "" {
+			return resolved
+		}
+		return href
+	}
+	return baseURL.ResolveReference(ref).String()
+}
 
 // getParamDocOutputDef returns the effective parameter-document OutputDef for
 // a result-document instruction, checking the per-invocation cache on
@@ -343,12 +375,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	// "" so that the implicit-primary claim tracked elsewhere stays consistent.
 	dupKey := href
 	if !isPrimary {
-		base := ec.currentOutputURI
-		if base != "" {
-			if resolved := helium.BuildURI(href, base); resolved != "" {
-				dupKey = resolved
-			}
-		}
+		dupKey = canonicalResultURIKey(href, ec.currentOutputURI)
 	}
 	if _, used := ec.usedResultURIs[dupKey]; used {
 		return dynamicError(errCodeXTDE1490, "two result documents written to same URI: %q", dupKey)
@@ -530,6 +557,21 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
 		buildTreeNo := inst.BuildTree != nil && !*inst.BuildTree
 
+		// Evaluate the error-prone serialization parameter AVTs (method,
+		// standalone, indent, doctype, etc.) BEFORE mutating or emitting any
+		// primary output. If one of these AVTs raises a dynamic error, the
+		// reservation is released by the deferred cleanup and an xsl:catch may
+		// write the primary result document. Were these AVTs evaluated AFTER the
+		// body had already emitted content to the primary output, a caught
+		// failure could leave partial primary output in place while also letting
+		// the catch write a SECOND primary result document. Computing the
+		// overrides up front guarantees that any such error happens before the
+		// primary output is touched.
+		primaryOverrides, err := ec.evalResultDocOutputDef(ctx, inst)
+		if err != nil {
+			return err
+		}
+
 		// When build-tree="no", execute into a temporary document,
 		// then extract children and pending items as a raw sequence
 		// for serialization with item-separator.
@@ -564,10 +606,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			out := ec.outputStack[0]
 			out.pendingItems = append(out.pendingItems, frame.pendingItems...)
 
-			if overrides, err := ec.evalResultDocOutputDef(ctx, inst); err != nil {
-				return err
-			} else if overrides != nil {
-				ec.primaryOutputOverrides = overrides
+			if primaryOverrides != nil {
+				ec.primaryOutputOverrides = primaryOverrides
 			}
 			committed = true
 			return nil
@@ -645,10 +685,11 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			}
 		}
 		// Capture serialization parameter overrides from xsl:result-document.
-		if overrides, err := ec.evalResultDocOutputDef(ctx, inst); err != nil {
-			return err
-		} else if overrides != nil {
-			ec.primaryOutputOverrides = overrides
+		// These were already evaluated up front (before any primary output was
+		// emitted) so that an AVT error releases the URI reservation without
+		// leaving partial primary output behind.
+		if primaryOverrides != nil {
+			ec.primaryOutputOverrides = primaryOverrides
 		}
 		committed = true
 		return nil

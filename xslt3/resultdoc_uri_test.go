@@ -65,3 +65,51 @@ func TestResultDocumentFormatAVTErrorReleasesURIInTryCatch(t *testing.T) {
 	_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
 	require.NoError(t, err, "the caught result-document must release its URI reservation so the catch can reuse the same href")
 }
+
+// A relative secondary href ("out.xml") and the equivalent absolute href
+// ("file:///base/dir/out.xml") under the same base output URI denote the SAME
+// file. The XTDE1490 duplicate-detection key must canonicalize URI-wise,
+// PRESERVING the file: scheme for BOTH forms, so the two collide. (Regression:
+// helium.BuildURI strips the file: scheme for file: bases, turning the relative
+// href into "/base/dir/out.xml" while the absolute href stayed
+// "file:///base/dir/out.xml", so the duplicate was missed.)
+func TestResultDocumentDuplicateRelativeVsAbsoluteFileURI(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="out.xml"><a/></xsl:result-document>
+    <xsl:result-document href="file:///base/dir/out.xml"><b/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).
+		BaseOutputURI("file:///base/dir/main.xml").
+		Do(t.Context())
+	require.Error(t, err, "relative and absolute file: hrefs denoting the same file must collide")
+	require.Contains(t, err.Error(), "XTDE1490")
+}
+
+// A primary xsl:result-document whose serialization parameter AVT raises a
+// dynamic error must fail BEFORE any primary output is emitted. When wrapped in
+// xsl:try, the released URI reservation lets an xsl:catch write the primary
+// result document — but the failed instruction must not have left partial
+// primary content behind, so the catch's document is the SOLE primary output
+// (no double-primary "<a/><b/>").
+func TestResultDocumentPrimarySerializationAVTErrorNoDoublePrimary(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:try>
+      <xsl:result-document standalone="{1 idiv 0}"><a/></xsl:result-document>
+      <xsl:catch>
+        <xsl:result-document><b/></xsl:result-document>
+      </xsl:catch>
+    </xsl:try>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err, "the caught primary result-document must succeed without a spurious conflict")
+	require.Contains(t, out, "<b/>", "the catch's primary result document must be emitted")
+	require.NotContains(t, out, "<a/>", "the failed primary result document must not leave partial output behind")
+}
