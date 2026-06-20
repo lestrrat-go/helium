@@ -337,7 +337,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// CONTAINING an 'all' group, which is forbidden. The base-as-sole-content
 		// and direct-group-ref paths are checked elsewhere; this catches the
 		// extension-merge path, which they miss. libxml2 rejects this.
-		if baseMG != nil && derivedMG != nil && derivedMG.Compositor == CompositorAll && modelGroupHasContent(baseMG) {
+		if baseMG != nil && derivedMG != nil && derivedMG.MaxOccurs != 0 && derivedMG.Compositor == CompositorAll && modelGroupHasContent(baseMG) {
 			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
 				component := componentLocalComplexType
 				if !src.isLocal {
@@ -562,8 +562,12 @@ func (c *compiler) checkAttrGroupDuplicates(ctx context.Context) {
 			}
 			reported[au.Name] = true
 			src := c.attrGroupSources[qn]
+			filename := src.source
+			if filename == "" {
+				filename = c.filename
+			}
 			msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, "attributeGroup", "attributeGroup", msg), helium.ErrorLevelFatal))
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(filename, src.line, "attributeGroup", "attributeGroup", msg), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 		c.schema.attrGroups[qn] = deduped
@@ -631,14 +635,20 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 }
 
 // modelGroupHasContent reports whether mg carries any actual content particle
-// (an element, wildcard, or nested non-empty group). A nil group, or a group
-// that wraps only empty sub-groups, has no content. Used to decide whether an
-// extension base content model is "effectively non-empty" before merging.
+// (an element, wildcard, or nested non-empty group). A nil group, a group whose
+// own occurrence is prohibited (maxOccurs=0), or a group that wraps only empty
+// or prohibited sub-particles, has no content. Used to decide whether an
+// extension base content model is "effectively non-empty" before merging. A
+// prohibited particle (minOccurs=0 maxOccurs=0) maps to no particle at all, so
+// it must not be counted as content.
 func modelGroupHasContent(mg *ModelGroup) bool {
-	if mg == nil {
+	if mg == nil || mg.MaxOccurs == 0 {
 		return false
 	}
 	for _, p := range mg.Particles {
+		if p.MaxOccurs == 0 {
+			continue
+		}
 		switch term := p.Term.(type) {
 		case *ModelGroup:
 			if modelGroupHasContent(term) {

@@ -634,4 +634,49 @@ func TestExtensionAllGroupPlacement(t *testing.T) {
 		_, errors := partitionCompileErrors(collector.Errors())
 		require.Empty(t, errors)
 	})
+
+	acceptsClean := func(t *testing.T, schemaXML string) {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		_, errors := partitionCompileErrors(collector.Errors())
+		require.Empty(t, errors)
+	}
+
+	// A prohibited (minOccurs=0 maxOccurs=0) DERIVED group reference that resolves
+	// to an 'all' group maps to no particle at all, so the merge never builds a
+	// sequence containing an 'all' group. It must not be rejected even over a
+	// non-empty base.
+	t.Run("accepts prohibited derived all-group ref over non-empty base", func(t *testing.T) {
+		t.Parallel()
+		acceptsClean(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="x" type="xs:string"/></xs:all></xs:group>
+  <xs:complexType name="Base"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="Base"><xs:group ref="g" minOccurs="0" maxOccurs="0"/></xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`)
+	})
+
+	// A BASE whose content model is a prohibited (maxOccurs=0) group carries no
+	// content, so an 'all' extension over it remains the whole content of the
+	// derived type and must be accepted.
+	t.Run("accepts all over prohibited-particle base", func(t *testing.T) {
+		t.Parallel()
+		acceptsClean(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="Base"><xs:all><xs:element name="x" type="xs:string"/></xs:all></xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`)
+	})
 }

@@ -725,6 +725,13 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// above): a group present in both keeps the parent's declaration and source.
 	for qn, src := range impC.attrGroupSources {
 		if _, exists := c.attrGroupSources[qn]; !exists {
+			// An attribute group parsed directly in the imported document (not via
+			// a nested include) has an empty source; attribute it to the imported
+			// file so its duplicate-attribute-use diagnostic cites the file whose
+			// line number it carries, not the importing schema.
+			if src.source == "" {
+				src.source = impC.filename
+			}
 			c.attrGroupSources[qn] = src
 		}
 	}

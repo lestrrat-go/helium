@@ -91,7 +91,15 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		}
 	}
 	c.schema.attrGroups[qn] = attrs
-	c.attrGroupSources[qn] = attrGroupSource{line: elem.Line(), source: c.includeFile}
+	// Record the declaring source so the duplicate-attribute-use diagnostic cites
+	// the file the group was actually declared in. The declaring file is the
+	// include file when inside an include/redefine, else this compiler's filename
+	// (mirroring parseNamedGroup / IDConstraint.Source).
+	source := c.filename
+	if c.includeFile != "" {
+		source = c.includeFile
+	}
+	c.attrGroupSources[qn] = attrGroupSource{line: elem.Line(), source: source}
 	return nil
 }
 
