@@ -1072,6 +1072,12 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		if au.Required {
 			continue
 		}
+		// A prohibited attribute use must never materialize a default/fixed
+		// value: the absent attribute is accepted as-is, and supplying one
+		// would itself be rejected.
+		if au.Prohibited {
+			continue
+		}
 		defVal := ""
 		if au.Default != nil {
 			defVal = *au.Default

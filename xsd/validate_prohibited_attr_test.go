@@ -3,6 +3,8 @@ package xsd_test
 import (
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,5 +87,84 @@ func TestProhibitedAttributeUse(t *testing.T) {
 </xs:schema>`
 
 		require.NoError(t, compileAndValidate(t, schemaXML, `<root a="x"/>`, nil))
+	})
+
+	t.Run("prohibited fixed attribute is not inserted when absent", func(t *testing.T) {
+		t.Parallel()
+		// A prohibited use carrying a fixed value must never materialize that
+		// value on an instance that omits the attribute: validating <root/>
+		// succeeds and must not mutate the document by inserting a="x".
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified"
+  attributeFormDefault="qualified">
+  <xs:attribute name="a" type="xs:string"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute ref="t:a" use="prohibited" fixed="x"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+		schema, errs := compileWithErrors(t, schemaXML)
+		require.Empty(t, errs, "unexpected compile errors")
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<t:root xmlns:t="urn:t"/>`))
+		require.NoError(t, err)
+
+		require.NoError(t, xsd.NewValidator(schema).Label("test.xml").Validate(t.Context(), doc))
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		for _, a := range root.Attributes() {
+			require.NotEqualf(t, "a", a.LocalName(),
+				"prohibited fixed/default attribute must not be inserted into the document")
+		}
+	})
+
+	t.Run("prohibited default attribute is not inserted when absent", func(t *testing.T) {
+		t.Parallel()
+		// Same as above but with a default value instead of fixed. (An
+		// unqualified ref keeps the compile-time default-requires-optional
+		// check from firing, isolating the insertion behavior.)
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="a" type="xs:string" default="x"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute ref="a" use="prohibited"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+		schema, errs := compileWithErrors(t, schemaXML)
+		require.Empty(t, errs, "unexpected compile errors")
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err)
+
+		require.NoError(t, xsd.NewValidator(schema).Label("test.xml").Validate(t.Context(), doc))
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		require.Empty(t, root.Attributes(),
+			"prohibited default attribute must not be inserted into the document")
+	})
+
+	t.Run("prohibited ref with default is rejected at compile time", func(t *testing.T) {
+		t.Parallel()
+		// default/fixed are incompatible with use="prohibited"; default
+		// requires use="optional". The check must also apply to ref attributes.
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:t="urn:t" targetNamespace="urn:t">
+  <xs:attribute name="a" type="xs:string"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute ref="t:a" use="prohibited" default="x"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs,
+			"must be 'optional' if the attribute 'default' is present")
 	})
 }

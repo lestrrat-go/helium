@@ -501,6 +501,18 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 			c.errorCount++
 		}
 
+		// If default is present, use must be optional (or absent, which
+		// defaults to optional). default/fixed are incompatible with
+		// use="prohibited"; a prohibited use can never carry a value.
+		if hasAttr(elem, attrDefault) {
+			use := getAttr(elem, attrUse)
+			if use != "" && use != attrValOptional {
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
+					"The value of the attribute 'use' must be 'optional' if the attribute 'default' is present."), helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+		}
+
 		// form not allowed with ref.
 		if getAttr(elem, attrForm) != "" {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
