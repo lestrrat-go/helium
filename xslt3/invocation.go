@@ -485,12 +485,15 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		traceWriter:        c.traceWriter,
 	}
 
-	// Resource cap: an explicit per-invocation setting wins; otherwise inherit
-	// the cap configured on the Compiler (stored on the stylesheet). 0 then
-	// falls through to the MaxResourceBytes default at the read sites.
-	if c.maxResourceBytesSet {
+	// Resource cap: a non-zero explicit per-invocation setting wins; an explicit
+	// 0 (or no setting at all) inherits the cap configured on the Compiler
+	// (stored on the stylesheet). A negative value disables the bound; a stylesheet
+	// value of 0 then falls through to the MaxResourceBytes default at the read
+	// sites. This keeps MaxResourceBytes(0) meaning "inherit" per its contract.
+	switch {
+	case c.maxResourceBytesSet && c.maxResourceBytes != 0:
 		tcfg.maxResourceBytes = c.maxResourceBytes
-	} else if c.ss != nil {
+	case c.ss != nil:
 		tcfg.maxResourceBytes = c.ss.maxResourceBytes
 	}
 

@@ -177,17 +177,71 @@ func TestFnDoc_OverLimitResourceRejected(t *testing.T) {
 		"client must stop reading near the cap, not drain the whole stream")
 }
 
+// A resource larger than the default cap is accepted when the per-invocation
+// cap is raised via Invocation.MaxResourceBytes. Exercises the full doc()
+// retrieval path, confirming the configured override actually threads through.
+func TestFnDoc_RaisedCapAcceptsLargeResource(t *testing.T) {
+	t.Parallel()
+
+	// A well-formed XML document comfortably larger than the default cap.
+	const padding = xslt3.MaxResourceBytes + (1 << 20) // > 10 MiB
+	var b strings.Builder
+	b.Grow(padding + 64)
+	b.WriteString("<root>")
+	for b.Len() < padding {
+		b.WriteString("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	}
+	b.WriteString("</root>")
+	body := b.String()
+	require.Greater(t, len(body), int(xslt3.MaxResourceBytes))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, body)
+	}))
+	defer srv.Close()
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+	ss := compileFnDocStylesheet(t)
+
+	// Default cap rejects it.
+	_, err = ss.Transform(source).
+		SetParameter("url", xpath3.SingleString(srv.URL+"/x")).
+		HTTPClient(srv.Client()).
+		Serialize(t.Context())
+	require.Error(t, err, "default cap must reject the over-limit resource")
+
+	// Raised cap accepts it.
+	out, err := ss.Transform(source).
+		SetParameter("url", xpath3.SingleString(srv.URL+"/x")).
+		HTTPClient(srv.Client()).
+		MaxResourceBytes(int64(len(body)) + 1).
+		Serialize(t.Context())
+	require.NoError(t, err, "raised cap must accept the resource")
+	require.Contains(t, out, "<root>")
+}
+
 // Sanity: the bounded helper itself rejects an over-limit reader and accepts a
 // reader exactly at the cap. Guards the bound logic independent of the HTTP path.
 func TestReadResourceBounded_Limit(t *testing.T) {
 	t.Parallel()
 
-	_, err := xslt3.ReadResourceBoundedForTest(io.LimitReader(neverEndingReader{}, xslt3.MaxResourceBytes+1))
+	_, err := xslt3.ReadResourceBoundedForTest(io.LimitReader(neverEndingReader{}, xslt3.MaxResourceBytes+1), 0)
 	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge)
 
-	data, err := xslt3.ReadResourceBoundedForTest(io.LimitReader(neverEndingReader{}, xslt3.MaxResourceBytes))
+	data, err := xslt3.ReadResourceBoundedForTest(io.LimitReader(neverEndingReader{}, xslt3.MaxResourceBytes), 0)
 	require.NoError(t, err)
 	require.Len(t, data, xslt3.MaxResourceBytes)
+
+	// A raised cap accepts a reader larger than the default.
+	data, err = xslt3.ReadResourceBoundedForTest(io.LimitReader(neverEndingReader{}, xslt3.MaxResourceBytes+1), xslt3.MaxResourceBytes+1)
+	require.NoError(t, err)
+	require.Len(t, data, xslt3.MaxResourceBytes+1)
+
+	// A negative cap disables the bound entirely.
+	data, err = xslt3.ReadResourceBoundedForTest(io.LimitReader(neverEndingReader{}, xslt3.MaxResourceBytes*2), -1)
+	require.NoError(t, err)
+	require.Len(t, data, xslt3.MaxResourceBytes*2)
 }
 
 // neverEndingReader yields an unbounded stream of 'a' bytes.
