@@ -31,6 +31,10 @@ type compiler struct {
 	groupRefSources map[*ModelGroup]groupRefSource
 	// unresolved attribute group references: maps from TypeDef to list of QNames
 	attrGroupRefs map[*TypeDef][]QName
+	// source info for named model group definitions (xs:group name="..."), keyed
+	// by group QName. Used to run cos-element-consistent over standalone named
+	// groups that no complex type references, reporting against the declaring file.
+	groupSources map[QName]groupSource
 	// source info for global elements, used in substitution group error messages
 	globalElemSources map[*ElementDecl]elemRefSource
 	// source info for type definitions, used in duplicate attribute errors
@@ -192,6 +196,14 @@ type groupRefSource struct {
 	maxOccursRaw string
 }
 
+// groupSource tracks where a named model group definition (xs:group name="...")
+// appeared so cos-element-consistent diagnostics over standalone named groups
+// cite the declaring file and line.
+type groupSource struct {
+	line   int
+	source string // declaring file (this compiler's filename, or an imported file)
+}
+
 // unionMemberRef tracks an unresolved union member type reference.
 type unionMemberRef struct {
 	owner *TypeDef
@@ -215,6 +227,12 @@ type attrConstraintSource struct {
 type typeDefSource struct {
 	line    int
 	isLocal bool // true for anonymous (local) complex types
+	// source is the declaring file: this compiler's filename, or the file
+	// pulled in by xs:include/xs:import/xs:redefine (c.includeFile) when the
+	// type was parsed from an included/imported document. It is empty for
+	// types declared directly in the top-level schema. Diagnostics cite this
+	// so a type's line number matches the file it is reported against.
+	source string
 	// ordinal is a stable parse-order sequence number, used as the final
 	// tie-breaker when ordering diagnostics for types that share a source line
 	// and have empty (anonymous) names. See recordTypeDefSource.
@@ -228,10 +246,10 @@ type typeDefSource struct {
 // reflects when the type was first seen.
 func (c *compiler) recordTypeDefSource(td *TypeDef, line int, isLocal bool) {
 	if existing, ok := c.typeDefSources[td]; ok {
-		c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, ordinal: existing.ordinal}
+		c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: existing.source, ordinal: existing.ordinal}
 		return
 	}
-	c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, ordinal: c.nextTypeDefOrdinal}
+	c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: c.includeFile, ordinal: c.nextTypeDefOrdinal}
 	c.nextTypeDefOrdinal++
 }
 
@@ -265,6 +283,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		elemRefSources:           make(map[*ElementDecl]elemRefSource),
 		groupRefs:                make(map[*ModelGroup]QName),
 		groupRefSources:          make(map[*ModelGroup]groupRefSource),
+		groupSources:             make(map[QName]groupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
@@ -372,6 +391,14 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		c.checkFinalOnTypes(ctx)
 		c.checkFinalOnSubstGroups(ctx)
 	}
+
+	// Enforce cos-element-consistent (Element Declarations Consistent): two
+	// element declarations with the same expanded name in one effective content
+	// model must have the same type definition. Run AFTER substitution groups are
+	// built (it consults schema.substGroups to fold in a head's implicitly-
+	// containable members) and gated on errorCount==0 like UPA, since the content
+	// models must be fully resolved and structurally sound.
+	c.checkElementConsistent(ctx)
 
 	// Resolve every xs:keyref/@refer against the schema-wide registry of
 	// key/unique constraints. An unresolved refer must be a fatal schema error:
@@ -731,7 +758,7 @@ func registerBuiltinTypes(s *Schema) {
 		"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",
 		"hexBinary", "base64Binary",
 		"anyURI", lexicon.TypeQName, lexicon.TypeNotation,
-		"anyType", "anySimpleType",
+		typeAnyType, "anySimpleType",
 	}
 	for _, name := range builtins {
 		qn := QName{Local: name, NS: lexicon.NamespaceXSD}
@@ -740,7 +767,7 @@ func registerBuiltinTypes(s *Schema) {
 			Name:        qn,
 			ContentType: ct,
 		}
-		if name == "anyType" {
+		if name == typeAnyType {
 			td.ContentType = ContentTypeMixed
 			td.AnyAttribute = &Wildcard{
 				Namespace:       WildcardNSAny,

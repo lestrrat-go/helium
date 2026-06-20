@@ -6,6 +6,11 @@ const (
 	attrValQualified = "qualified"
 )
 
+// typeAnyType is the local name of the built-in xs:anyType (the ur-type), used
+// as the default {type definition} for an element declaration with no resolvable
+// type.
+const typeAnyType = "anyType"
+
 const (
 	elemAll            = "all"
 	elemAnnotation     = "annotation"

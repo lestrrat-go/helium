@@ -25,6 +25,7 @@ Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check
    - `checkFinalOnTypes()` — final attribute enforcement
    - `checkFinalOnSubstGroups()` — substitution group final
    - `checkUPA()` — Unique Particle Attribution (content model determinism)
+   - `checkElementConsistent()` (`check_element_consistent.go`) — cos-element-consistent (Element Declarations Consistent): two element declarations with the same expanded name reachable in one effective content model (after group-ref expansion and across nested model groups) must have the same {type definition}. Runs in `compileSchema` AFTER substitution groups are built (NOT inside `resolveRefs`), gated on `errorCount==0` — it consults `schema.substGroups`, so it must run once that map exists. Coverage: (a) complex-type content models (iterated in source line/ordinal order); (b) for each element TERM, the term's substitution-group MEMBERS (`schema.substGroups[term.Name]`) are folded in as implicitly-containable declarations under each member's own name (a head's particle stands in for its members), so a `ref="head"` colliding by name with a different-typed same-named local element is rejected — members' declared types resolve through their head via `resolveDeclaredType`; (c) standalone named `xs:group` definitions (over `schema.groups`, in stable source order via `groupSources` recorded at parse time and merged from import sub-compilers), so a named group no complex type references is still checked. Type identity is by `*TypeDef` pointer (helium shares one pointer per named type and copies the global's type onto a `ref`), with a same-expanded-QName fallback for import-merged duplicates; distinct anonymous inline types are different components and therefore inconsistent. The check is only ever under-strict (a missed violation is safe; it never false-rejects a valid schema). libxml2 does NOT implement this constraint (it is an "URGENT TODO" in `xmlschemas.c`), so the diagnostic uses the existing component-error style rather than mirroring libxml2 wording, and no golden schema trips it.
    - Wildcard overlap detection
 
 7. **Compile result gate:** after linking/checks, `compileSchema` returns `(nil, ErrCompilationFailed)` if `c.errorCount > 0` (fatal diagnostics already delivered to the `ErrorHandler`), otherwise `(schema, nil)`. Sub-compiler `errorCount` is merged into the parent (`compile_imports.go`), so an import/include/redefine fatal also fails the top-level `Compile`. `xslt3` schema-awareness (`compile_schema.go`) maps `ErrCompilationFailed` to `XTSE0220`.
@@ -470,11 +471,22 @@ Three-phase parsing:
 
 Message content parsed into `[]messagePart`: text literals, `<name path="..."/>` (element name), `<value-of select="..."/>` (XPath value).
 
+**Namespace gating:** structural elements are only recognized when in the detected Schematron namespace (`isSchematronElement`/`elementInNamespace`). Foreign-namespaced elements are handled differently depending on position:
+- **Required structural position → fatal/rejected.** Where a specific Schematron element is expected (e.g. a `<rule>` under `<pattern>`, checked via `isSchematronElement(elem, schNS, "rule")` in `compilePattern`), a foreign element like `<x:rule>` does NOT satisfy the requirement and is rejected with a fatal `Expecting a rule element instead of ...` diagnostic. The same applies at the top level (`Expecting a pattern element instead of ...`).
+- **Free-content children → ignored.** Foreign-namespaced children inside rules, asserts, and reports are skipped as free content. `compileRuleChild` returns early when `!elementInNamespace(...)`, so e.g. `<x:assert>` inside a `<rule>` is not executed; likewise foreign `<name>`/`<value-of>` inside message content (`parseMessageElement`) are ignored, not interpolated.
+
+Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri`, `value`, `path`) are read unqualified-only via `getStructuralAttr` (`NSPredicate{..., NamespaceURI: ""}`); a prefixed `x:test` is not read as Schematron.
+
+**Fatal compile errors:** `compileSchema` wraps the configured handler in a `fatalTrackingHandler`. If any `ErrorLevelFatal` diagnostic is emitted (no pattern, pattern with no rule, rule with no test, etc.), `Compile`/`CompileFile` return `ErrCompileFailed` with a **nil** `*Schema` — even when no error handler is configured, so a broken schema can never validate as success.
+
 ### Validate: Document + Schema → Errors
+
+`Validate` returns `ErrNoSchema` (typed) when the Validator has no compiled schema (`NewValidator(nil)` or zero-value), guarding against a nil-deref panic.
 
 1. Create XPath context with schema's namespaces
 2. For each pattern/rule: evaluate `contextExpr` against document root → node set
    - If the context XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and mark the document invalid (the rule's assertions can't be checked, so it is not silently skipped)
+   - **First-match-only (ISO Schematron):** within a pattern, each node is processed by only the FIRST rule whose context matches it. A per-pattern `map[helium.Node]bool` (reset each pattern) skips nodes already claimed by an earlier rule. Scope is per pattern, so a later pattern still fires for the same node.
 3. For each context node:
    - Bind `<let>` variables in **document order** (accumulated, so a later let sees earlier ones, e.g. `<let name="b" value="$a"/>` after `a`). A let whose expression **errors at evaluation** surfaces an `XPath error : ...` diagnostic rather than being silently dropped.
    - Create rule-specific XPath context with variables
