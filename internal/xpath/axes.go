@@ -175,6 +175,9 @@ func collectDescendants(ctx context.Context, node helium.Node, result *[]helium.
 	}
 	var stack []helium.Node
 	for c := node.LastChild(); c != nil; c = c.PrevSibling() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if IsXDMChild(c) {
 			stack = append(stack, c)
 		}
@@ -191,6 +194,9 @@ func collectDescendants(ctx context.Context, node helium.Node, result *[]helium.
 			return err
 		}
 		for child := cur.LastChild(); child != nil; child = child.PrevSibling() {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if IsXDMChild(child) {
 				stack = append(stack, child)
 			}
@@ -429,6 +435,9 @@ func collectDescendantsReverse(ctx context.Context, node helium.Node, result *[]
 
 	var stack []frame
 	for c := range helium.Children(node) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if IsXDMChild(c) {
 			stack = append(stack, frame{node: c})
 		}
@@ -450,6 +459,9 @@ func collectDescendantsReverse(ctx context.Context, node helium.Node, result *[]
 
 		stack = append(stack, frame{node: cur.node, expanded: true})
 		for child := cur.node.FirstChild(); child != nil; child = child.NextSibling() {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if IsXDMChild(child) {
 				stack = append(stack, frame{node: child})
 			}
