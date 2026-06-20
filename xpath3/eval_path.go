@@ -209,7 +209,7 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 func evalStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	allFiltered := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
-		matched, traversed, err := appendAxisNodeMatches(nil, ec, n, step.Axis, step.NodeTest)
+		matched, traversed, err := appendAxisNodeMatches(ctx, nil, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,7 @@ func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.N
 	for _, n := range nodes {
 		var traversed int
 		var err error
-		next, traversed, err = appendAxisNodeMatches(next, ec, n, step.Axis, step.NodeTest)
+		next, traversed, err = appendAxisNodeMatches(ctx, next, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
@@ -246,7 +246,7 @@ func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.N
 func evalVMStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
 	allFiltered := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
-		matched, traversed, err := appendAxisNodeMatches(nil, ec, n, step.Axis, step.NodeTest)
+		matched, traversed, err := appendAxisNodeMatches(ctx, nil, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
@@ -269,7 +269,7 @@ func applyVMPredicate(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	case vmPositionPredicateExpr:
 		return applyVMPositionPredicate(nodes, p), nil
 	case vmAttributeExistsPredicateExpr:
-		return applyVMAttributeExistsPredicate(ec, nodes, p), nil
+		return applyVMAttributeExistsPredicate(ctx, ec, nodes, p)
 	case vmAttributeEqualsStringPredicateExpr:
 		return applyVMAttributeEqualsStringPredicate(evalFn, ctx, ec, nodes, p)
 	default:
@@ -284,21 +284,34 @@ func applyVMPositionPredicate(nodes []helium.Node, pred vmPositionPredicateExpr)
 	return nodes[pred.Position-1 : pred.Position]
 }
 
-func applyVMAttributeExistsPredicate(ec *evalContext, nodes []helium.Node, pred vmAttributeExistsPredicateExpr) []helium.Node {
+func applyVMAttributeExistsPredicate(ctx context.Context, ec *evalContext, nodes []helium.Node, pred vmAttributeExistsPredicateExpr) ([]helium.Node, error) {
 	result := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
-		if nodeHasMatchingAttribute(ec, n, pred.NodeTest) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		found, err := nodeHasMatchingAttribute(ctx, ec, n, pred.NodeTest)
+		if err != nil {
+			return nil, err
+		}
+		if found {
 			result = append(result, n)
 		}
 	}
-	return result
+	return result, nil
 }
 
 func applyVMAttributeEqualsStringPredicate(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, pred vmAttributeEqualsStringPredicateExpr) ([]helium.Node, error) {
 	size := len(nodes)
 	result := make([]helium.Node, 0, size)
 	for i, n := range nodes {
-		match, ok := vmAttributeEqualsStringPredicateMatches(ec, n, pred)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		match, ok, err := vmAttributeEqualsStringPredicateMatches(ctx, ec, n, pred)
+		if err != nil {
+			return nil, err
+		}
 		if !ok {
 			frame := ec.pushNodeContext(n, i+1, size)
 			r, err := evalFn(ctx, ec, pred.Fallback)
@@ -319,15 +332,20 @@ func applyVMAttributeEqualsStringPredicate(evalFn exprEvaluator, ctx context.Con
 	return result, nil
 }
 
-func vmAttributeEqualsStringPredicateMatches(ec *evalContext, node helium.Node, pred vmAttributeEqualsStringPredicateExpr) (bool, bool) {
+func vmAttributeEqualsStringPredicateMatches(ctx context.Context, ec *evalContext, node helium.Node, pred vmAttributeEqualsStringPredicateExpr) (bool, bool, error) {
 	elem, ok := node.(*helium.Element)
 	if !ok {
-		return false, true
+		return false, true, nil
 	}
 
 	mustFallback := false
 	matched := false
+	var cancelErr error
 	elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+		if err := ctx.Err(); err != nil {
+			cancelErr = err
+			return false
+		}
 		if !matchNodeTest(pred.NodeTest, attr, AxisAttribute, ec) {
 			return true
 		}
@@ -341,26 +359,37 @@ func vmAttributeEqualsStringPredicateMatches(ec *evalContext, node helium.Node, 
 		}
 		return true
 	})
-	if mustFallback {
-		return false, false
+	if cancelErr != nil {
+		return false, false, cancelErr
 	}
-	return matched, true
+	if mustFallback {
+		return false, false, nil
+	}
+	return matched, true, nil
 }
 
-func nodeHasMatchingAttribute(ec *evalContext, node helium.Node, test NodeTest) bool {
+func nodeHasMatchingAttribute(ctx context.Context, ec *evalContext, node helium.Node, test NodeTest) (bool, error) {
 	elem, ok := node.(*helium.Element)
 	if !ok {
-		return false
+		return false, nil
 	}
 	found := false
+	var cancelErr error
 	elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+		if err := ctx.Err(); err != nil {
+			cancelErr = err
+			return false
+		}
 		if !matchNodeTest(test, attr, AxisAttribute, ec) {
 			return true
 		}
 		found = true
 		return false
 	})
-	return found
+	if cancelErr != nil {
+		return false, cancelErr
+	}
+	return found, nil
 }
 
 func evalVMStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
@@ -368,7 +397,7 @@ func evalVMStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium
 	for _, n := range nodes {
 		var traversed int
 		var err error
-		next, traversed, err = appendAxisNodeMatches(next, ec, n, step.Axis, step.NodeTest)
+		next, traversed, err = appendAxisNodeMatches(ctx, next, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
@@ -379,7 +408,7 @@ func evalVMStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium
 	return ixpath.DeduplicateNodes(next, ec.docOrder, ec.maxNodes)
 }
 
-func appendAxisNodeMatches(dst []helium.Node, ec *evalContext, node helium.Node, axis AxisType, nodeTest NodeTest) ([]helium.Node, int, error) {
+func appendAxisNodeMatches(ctx context.Context, dst []helium.Node, ec *evalContext, node helium.Node, axis AxisType, nodeTest NodeTest) ([]helium.Node, int, error) {
 	switch axis {
 	case AxisChild:
 		if _, ok := node.(*helium.Attribute); ok {
@@ -387,6 +416,9 @@ func appendAxisNodeMatches(dst []helium.Node, ec *evalContext, node helium.Node,
 		}
 		traversed := 0
 		for child := range helium.Children(node) {
+			if err := ctx.Err(); err != nil {
+				return nil, 0, err
+			}
 			if !ixpath.IsXDMChild(child) {
 				continue
 			}
@@ -401,14 +433,25 @@ func appendAxisNodeMatches(dst []helium.Node, ec *evalContext, node helium.Node,
 		if !ok {
 			return dst, 0, nil
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
 		traversed := 0
+		var iterErr error
 		elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+			if err := ctx.Err(); err != nil {
+				iterErr = err
+				return false
+			}
 			traversed++
 			if matchNodeTest(nodeTest, attr, axis, ec) {
 				dst = append(dst, attr)
 			}
 			return true
 		})
+		if iterErr != nil {
+			return nil, 0, iterErr
+		}
 		return dst, traversed, nil
 	case AxisSelf:
 		if matchNodeTest(nodeTest, node, axis, ec) {
@@ -425,7 +468,7 @@ func appendAxisNodeMatches(dst []helium.Node, ec *evalContext, node helium.Node,
 		}
 		return dst, 1, nil
 	default:
-		candidates, err := ixpath.TraverseAxis(axis, node, ec.maxNodes)
+		candidates, err := ixpath.TraverseAxis(ctx, axis, node, ec.maxNodes)
 		if err != nil {
 			return nil, 0, err
 		}
