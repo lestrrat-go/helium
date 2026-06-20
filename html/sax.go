@@ -20,12 +20,12 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // the parse fails rather than emitting a truncated node and leaking the
 // remainder as stray text.
 //
-// It is also returned from the RCDATA path when an unresolved named
-// character-reference run (an "&"-prefixed alphanumeric sequence that fills the
-// fixed lookahead window without resolving to a known entity and continues with
-// no terminator in sight) accumulates more literal bytes than the cap before any
-// terminator. A resolvable reference is preserved verbatim and never charged
-// against the cap; only an unbounded unresolved literal run triggers this error.
+// It is also returned from the RCDATA path for ANY unresolved named
+// character-reference literal — an "&"-prefixed sequence that does not resolve
+// to a known entity or legacy prefix — whether short, semicolon-terminated, or
+// unbounded, once the literal bytes it would emit ("&" + name + optional ";")
+// exceed the cap. A RESOLVABLE reference (known entity or longest legacy prefix)
+// is exempt: it is resolved to its value and never charged against the cap.
 var ErrContentSizeExceeded = errors.New("content size limit exceeded")
 
 // DocumentLocator is an alias for [sax.DocumentLocator].

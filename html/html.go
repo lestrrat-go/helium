@@ -98,10 +98,12 @@ func (p Parser) Strict(v bool) Parser {
 // section, which still parses successfully. A chunk may slightly exceed the cap
 // because an indivisible token is never split: a whole multi-byte UTF-8 rune (or
 // a resolved character reference) is always emitted intact, so a single rune
-// larger than the cap is emitted whole. A single indivisible run that genuinely
-// exceeds the cap — an unterminated named-entity alphanumeric run whose ordered
-// resolution would require buffering the unbounded tail — hard-fails with
-// [ErrContentSizeExceeded].
+// larger than the cap is emitted whole. An unresolved RCDATA named-reference
+// literal hard-fails with [ErrContentSizeExceeded] when the bytes it would emit
+// ("&" + name + optional ";") exceed the cap — this applies to ANY unresolved
+// literal, whether short, semicolon-terminated, or unbounded. A RESOLVABLE
+// reference (a known entity or longest legacy prefix) is exempt: it is resolved
+// to its value regardless of the cap.
 //
 // This bounds only the streaming scanner / SAX chunk size. DOM construction via
 // [Parser.Parse] necessarily merges every chunk back into the document tree
