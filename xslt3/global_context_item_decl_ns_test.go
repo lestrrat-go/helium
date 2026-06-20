@@ -251,3 +251,75 @@ func TestGlobalContextItemDupDeclDifferentPrefixDifferentType(t *testing.T) {
 	require.Error(t, err, "element(p:root) with different xmlns:p expands to different types; XTSE3087 expected")
 	require.Contains(t, err.Error(), "XTSE3087")
 }
+
+// TestGlobalContextItemDupDeclSameTypeArgDifferentPrefix verifies that two
+// xsl:global-context-item declarations whose @as types name BOTH a different
+// element-name prefix and a different type-name prefix, all bound to the SAME
+// namespaces, do NOT raise XTSE3087. element(p:root, p:T) and element(q:root,
+// q:T) expand to the identical {urn:same}root / {urn:same}T type. The TYPE
+// argument must be canonicalized for this to be recognized as equivalent.
+func TestGlobalContextItemDupDeclSameTypeArgDifferentPrefix(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const includeURI = "mem:/stylesheets/inc.xsl"
+
+	included := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:q="urn:same">
+  <xsl:global-context-item as="element(q:root, q:T)"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:p="urn:same">
+  <xsl:include href="inc.xsl"/>
+  <xsl:global-context-item as="element(p:root, p:T)"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "element(p:root, p:T) and element(q:root, q:T) expand to the same type; no XTSE3087")
+	require.NotNil(t, ss)
+}
+
+// TestGlobalContextItemDupDeclDifferentTypeArgNS verifies that two
+// xsl:global-context-item declarations whose element-NAME argument expands to
+// the same type but whose TYPE argument is bound to a DIFFERENT namespace DO
+// raise XTSE3087. element(p:root, p:T) with p="urn:same" vs element(q:root, q:T)
+// with q's root in urn:same but T's prefix bound to urn:other are distinct
+// types. Without canonicalizing the type argument this conflict is missed
+// (false-accept).
+func TestGlobalContextItemDupDeclDifferentTypeArgNS(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const includeURI = "mem:/stylesheets/inc.xsl"
+
+	included := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:q="urn:same"
+  xmlns:t="urn:other">
+  <xsl:global-context-item as="element(q:root, t:T)"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:p="urn:same">
+  <xsl:include href="inc.xsl"/>
+  <xsl:global-context-item as="element(p:root, p:T)"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.Error(t, err, "type argument in a different namespace makes the types distinct; XTSE3087 expected")
+	require.Contains(t, err.Error(), "XTSE3087")
+}

@@ -97,24 +97,39 @@ func canonicalGlobalContextAs(def *globalContextItemDef) string {
 	return expandSequenceTypeQNames(collapsed, def.Namespaces, def.XPathDefaultNS, def.HasXPathDefaultNS)
 }
 
-// expandSequenceTypeQNames rewrites every QName argument of an
+// expandSequenceTypeQNames rewrites EVERY QName position of an
 // element()/attribute()/schema-element()/schema-attribute() kind test in a
-// (whitespace-collapsed) sequence-type string to its expanded Q{uri}local form,
-// resolving prefixes against nsBindings and an unprefixed name against
-// xpathDefaultNS (when present) — identical to the runtime resolveSchemaQName
-// decision used to interpret the same declaration. Wildcards ("*") and names
-// that are already in Q{...} form are left unchanged.
+// (whitespace-collapsed) sequence-type string to its expanded Q{uri}local form.
+//
+// For the element/attribute NAME argument, prefixes resolve against nsBindings
+// and an unprefixed name resolves against xpathDefaultNS (when present) —
+// identical to the runtime resolveSchemaQName decision used to interpret the
+// same declaration. For the TYPE argument of element(name, type) and
+// attribute(name, type), the type-name resolution semantics apply instead: the
+// default element namespace is NOT applied (an unprefixed non-builtin type name
+// is in no namespace), matching the runtime normalizeTypeName logic. The single
+// argument of schema-element()/schema-attribute() is a NAME argument.
+//
+// Wildcards ("*") and names already in Q{...} form are left unchanged. Because
+// document-node(element(...)) and other nested item-type structures are handled
+// by scanning all kind tests in the string, every QName in the (possibly
+// nested) item type is canonicalized, making the comparison total.
 func expandSequenceTypeQNames(as string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) string {
 	for _, kind := range []string{"schema-element", "schema-attribute", "element", "attribute"} {
-		as = expandKindTestQNames(as, kind, nsBindings, xpathDefaultNS, hasXPathDefaultNS)
+		// element()/attribute() carry an optional second TYPE argument;
+		// schema-element()/schema-attribute() take a single NAME argument.
+		expandType := kind == "element" || kind == "attribute"
+		as = expandKindTestQNames(as, kind, nsBindings, xpathDefaultNS, hasXPathDefaultNS, expandType)
 	}
 	return as
 }
 
-// expandKindTestQNames rewrites the leading QName of every kind(...) test in as.
-// It scans for the kind name followed by "(" and expands the first comma- or
-// paren-terminated argument (the element/attribute name).
-func expandKindTestQNames(as, kind string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) string {
+// expandKindTestQNames rewrites the QName arguments of every kind(...) test in
+// as. The first argument (the element/attribute name) is always expanded with
+// the element default-namespace rule. When expandType is true (element/attribute
+// kind tests), the second argument (the type name) is also expanded, using the
+// type-name resolution rule (no default-namespace application).
+func expandKindTestQNames(as, kind string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS, expandType bool) string {
 	search := kind + "("
 	var b strings.Builder
 	rest := as
@@ -134,6 +149,20 @@ func expandKindTestQNames(as, kind string, nsBindings map[string]string, xpathDe
 		}
 		name := strings.TrimSpace(rest[:nameEnd])
 		b.WriteString(expandTestName(name, nsBindings, xpathDefaultNS, hasXPathDefaultNS))
+		// If this kind test carries a second TYPE argument, expand it too.
+		if expandType && rest[nameEnd] == ',' {
+			b.WriteByte(',')
+			rest = rest[nameEnd+1:]
+			typeEnd := strings.IndexByte(rest, ')')
+			if typeEnd < 0 {
+				b.WriteString(rest)
+				break
+			}
+			typeName := strings.TrimSpace(rest[:typeEnd])
+			b.WriteString(expandTestTypeName(typeName, nsBindings))
+			rest = rest[typeEnd:]
+			continue
+		}
 		rest = rest[nameEnd:]
 	}
 	return b.String()
@@ -189,6 +218,53 @@ func expandTestName(name string, nsBindings map[string]string, xpathDefaultNS st
 	}
 	local, ns := resolveQNameToLocalNS(name, nsBindings, xpathDefaultNS, hasXPathDefaultNS)
 	return "Q{" + ns + "}" + local
+}
+
+// expandTestTypeName expands the TYPE argument of an element(name, type) or
+// attribute(name, type) kind test to its canonical Q{uri}local form. Unlike a
+// name argument, a type name does NOT take the element default namespace: an
+// unprefixed non-builtin type name is in no namespace, and the xs:/xsd: prefixes
+// (or any prefix bound to the XML Schema namespace) all collapse to the XSD
+// namespace. This mirrors the runtime normalizeTypeName resolution so the
+// XTSE3087 comparison matches how the same declaration is interpreted at run time.
+func expandTestTypeName(name string, nsBindings map[string]string) string {
+	if name == "" || name == "*" {
+		return name
+	}
+	if strings.HasPrefix(name, "Q{") {
+		return name
+	}
+	prefix, local, ok := strings.Cut(name, ":")
+	if !ok {
+		// Unprefixed type name: builtin xs: names are recognized by their local
+		// part; everything else is in no namespace. The default element
+		// namespace is intentionally NOT applied to a type name.
+		if isBuiltinXSDLocalName(name) {
+			return "Q{" + lexicon.NamespaceXSD + "}" + name
+		}
+		return "Q{}" + name
+	}
+	// Prefixed type name. xs:/xsd: are conventional aliases for the XSD
+	// namespace; otherwise resolve the prefix against the declaration-site
+	// bindings. An unresolved prefix yields the empty namespace.
+	if prefix == "xs" || prefix == "xsd" {
+		return "Q{" + lexicon.NamespaceXSD + "}" + local
+	}
+	ns := nsBindings[prefix]
+	return "Q{" + ns + "}" + local
+}
+
+// isBuiltinXSDLocalName reports whether an unprefixed type name denotes a
+// built-in XML Schema type (interpreted in the XSD namespace) per the runtime
+// normalizeTypeName mapping, rather than a user type in no namespace.
+func isBuiltinXSDLocalName(local string) bool {
+	switch local {
+	case lexicon.TypeString, "integer", "decimal", "double", "float",
+		lexicon.TypeBoolean, "date", "dateTime", "time", "duration",
+		"dayTimeDuration", "yearMonthDuration", "anyURI", "untypedAtomic":
+		return true
+	}
+	return false
 }
 
 // inScopeNamespaces returns the in-scope namespace bindings (prefix→URI) for
