@@ -13,7 +13,9 @@
 // making it usable as an async error collector during parsing and validation.
 //
 // The buffer size defaults to 256 and can be configured via [WithBufferSize].
-// Handle on a nil *Sink is a no-op.
+// Handle on a nil *Sink is a no-op, and a Sink built with a nil Handler
+// discards items rather than panicking. A Handler may safely call Close or
+// Handle on its own Sink; neither deadlocks.
 //
 // # Examples
 //

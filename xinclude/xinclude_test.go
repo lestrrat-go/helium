@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1576,4 +1577,161 @@ func TestZeroValueProcessorFluent(t *testing.T) {
 	count, err := proc.NoXIncludeMarkers().Process(t.Context(), doc)
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
+}
+
+// endlessResolver returns a reader that never reaches EOF, simulating a hostile
+// or pathological resolver whose response would exhaust memory if read fully.
+type endlessResolver struct{}
+
+func (endlessResolver) Resolve(string, string) (io.ReadCloser, error) {
+	return io.NopCloser(repeatingReader{b: 'x'}), nil
+}
+
+type repeatingReader struct{ b byte }
+
+func (r repeatingReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = r.b
+	}
+	return len(p), nil
+}
+
+func TestXIncludeMaxIncludeSize(t *testing.T) {
+	t.Parallel()
+
+	t.Run("text include over cap fails with ErrIncludeTooLarge", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="huge.txt" parse="text"/>
+		</root>`)
+
+		_, err := xinclude.NewProcessor().
+			Resolver(endlessResolver{}).
+			MaxIncludeSize(1024).
+			Process(t.Context(), doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, xinclude.ErrIncludeTooLarge)
+	})
+
+	t.Run("xml include over cap fails with ErrIncludeTooLarge", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="huge.xml"/>
+		</root>`)
+
+		_, err := xinclude.NewProcessor().
+			Resolver(endlessResolver{}).
+			MaxIncludeSize(1024).
+			Process(t.Context(), doc)
+		require.Error(t, err)
+		require.ErrorIs(t, err, xinclude.ErrIncludeTooLarge)
+	})
+
+	t.Run("include at or under cap succeeds", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="small.txt" parse="text"/>
+		</root>`)
+
+		res := &stringResolver{files: map[string]string{"small.txt": "hello"}}
+		count, err := xinclude.NewProcessor().
+			Resolver(res).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+}
+
+func TestXIncludeFileURIHref(t *testing.T) {
+	t.Parallel()
+
+	// Write a real include target and reference it via an absolute file:// URI.
+	// The default permissive resolver must convert the URI to an OS path rather
+	// than handing "file:/..." to os.Open verbatim.
+	dir := t.TempDir()
+	target := filepath.Join(dir, "inc.xml")
+	require.NoError(t, os.WriteFile(target, []byte(`<loaded>FromFileURI</loaded>`), 0o600))
+
+	fileURI := (&url.URL{Scheme: "file", Path: filepath.ToSlash(target)}).String()
+
+	doc := parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="%s"/>
+	</root>`, fileURI))
+
+	count, err := xinclude.NewProcessor().
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	root := docElement(doc)
+	require.NotNil(t, root)
+	var found bool
+	for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+		if c.Type() == helium.ElementNode && c.(*helium.Element).LocalName() == "loaded" {
+			found = true
+			require.Equal(t, "FromFileURI", string(c.Content()))
+		}
+	}
+	require.True(t, found, "loaded element from file URI not found")
+}
+
+func TestXIncludeFileURINestedExternalDTD(t *testing.T) {
+	t.Parallel()
+
+	// Regression: a file:// XInclude whose included document references an
+	// external DTD that defines a general entity. The included doc is parsed
+	// with BaseURI("file:///.../inc.xml"), so the DTD SYSTEM ref resolves to a
+	// "file:" URI handed to the inner parser's FS (normalizingFS). That FS must
+	// convert the file: URI to a local path too, or the nested external DTD is
+	// never found and its entity is silently missed. The entity-merge step then
+	// surfaces the entity into the target's internal subset, proving the nested
+	// DTD was actually located and parsed.
+	dir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "inc.dtd"),
+		[]byte(`<!ENTITY greet "hello from nested dtd">`), 0o600))
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "inc.xml"),
+		[]byte(`<?xml version="1.0"?>`+
+			`<!DOCTYPE chapter SYSTEM "inc.dtd">`+
+			`<chapter>text</chapter>`), 0o600))
+
+	fileURI := (&url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(dir, "inc.xml"))}).String()
+
+	doc := parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="%s"/>
+	</root>`, fileURI))
+
+	count, err := xinclude.NewProcessor().
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	// The entity defined in the included document's EXTERNAL DTD must have been
+	// merged into the target's internal subset. This only happens if the nested
+	// "file:" DTD reference was converted to a local path and successfully read.
+	intSub := doc.IntSubset()
+	require.NotNil(t, intSub, "target should have a merged internal subset")
+	greet, ok := intSub.LookupEntity("greet")
+	require.True(t, ok, "entity from nested external DTD must be merged, proving the file: DTD URI was resolved")
+	require.Equal(t, "hello from nested dtd", string(greet.Content()))
+}
+
+func TestXIncludeFileURINonLocalHost(t *testing.T) {
+	t.Parallel()
+
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="file://remotehost/tmp/inc.xml"/>
+	</root>`)
+
+	_, err := xinclude.NewProcessor().
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "non-local file URI host",
+		"expected explicit non-local host rejection, got: %v", err)
 }

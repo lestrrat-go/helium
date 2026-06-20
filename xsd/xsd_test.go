@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -28,6 +29,21 @@ func partitionCompileErrors(errs []error) (warnings, errors string) {
 		}
 	}
 	return w.String(), e.String()
+}
+
+// requireCompileResultErr asserts that a Compile/CompileFile error is either
+// nil (the schema was valid) or ErrCompilationFailed (the schema had fatal
+// diagnostics, which are delivered to the ErrorHandler and asserted
+// separately). Any other error is a genuine harness failure.
+func requireCompileResultErr(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		return
+	}
+	if errors.Is(err, xsd.ErrCompilationFailed) {
+		return
+	}
+	require.NoError(t, err)
 }
 
 // validateWithOutput validates a document and optionally collects error strings.
@@ -213,7 +229,13 @@ func TestGoldenFiles(t *testing.T) {
 			xsdFilename := "./test/schemas/" + tc.xsdBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 			schema, err := xsd.NewCompiler().Label(xsdFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.xsdPath)
-			require.NoError(t, err, "schema compilation failed for %s", tc.xsdPath)
+			// A schema with fatal diagnostics now returns ErrCompilationFailed
+			// (and a nil schema); the diagnostics themselves are delivered to
+			// the collector and compared below. Any other error is a genuine
+			// harness failure (e.g. the schema file could not be read).
+			if err != nil && !errors.Is(err, xsd.ErrCompilationFailed) {
+				require.NoError(t, err, "schema compilation failed for %s", tc.xsdPath)
+			}
 			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
 
@@ -803,7 +825,7 @@ func TestRedefine(t *testing.T) {
 		t.Helper()
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err := xsd.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
-		require.NoError(t, err)
+		requireCompileResultErr(t, err)
 		require.NoError(t, collector.Close())
 		_, errors := partitionCompileErrors(collector.Errors())
 		return errors
@@ -1358,7 +1380,7 @@ func TestFacetConsistency(t *testing.T) {
 		require.NoError(t, err, "XSD parse failed")
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), xsdDoc)
-		require.NoError(t, err, "schema compilation failed")
+		requireCompileResultErr(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
 		return compileErrors
@@ -1600,5 +1622,47 @@ func TestZeroValidatorFluent(t *testing.T) {
 	require.NotPanics(t, func() {
 		v2 := v.Label("test.xml")
 		_ = v2
+	})
+}
+
+// TestCompileFatalReturnsError documents the Compile contract: a schema with a
+// fatal diagnostic yields (nil schema, ErrCompilationFailed) so callers cannot
+// unknowingly validate against an invalid schema, while the diagnostic is still
+// delivered to the ErrorHandler. A well-formed schema still yields a non-nil
+// schema and a nil error.
+func TestCompileFatalReturnsError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("fatal diagnostic returns nil schema and ErrCompilationFailed", func(t *testing.T) {
+		t.Parallel()
+		// Two global elements share the name "dup": a fatal schema error.
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="dup" type="xs:string"/>
+  <xs:element name="dup" type="xs:string"/>
+</xs:schema>`))
+		require.NoError(t, err)
+
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		schema, err := xsd.NewCompiler().Label("dup.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		require.Nil(t, schema, "Compile must not hand back a schema built from an invalid document")
+
+		require.NoError(t, collector.Close())
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.NotEmpty(t, compileErrors, "the fatal diagnostic must still reach the ErrorHandler")
+	})
+
+	t.Run("valid schema returns schema and nil error", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`))
+		require.NoError(t, err)
+
+		schema, err := xsd.NewCompiler().Label("ok.xsd").Compile(t.Context(), doc)
+		require.NoError(t, err)
+		require.NotNil(t, schema)
 	})
 }
