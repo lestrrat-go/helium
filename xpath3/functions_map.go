@@ -288,7 +288,16 @@ func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequen
 	stack := []seqCursor{{members: []Sequence{root}}}
 	for len(stack) > 0 {
 		top := &stack[len(stack)-1]
-		item, ok := top.next()
+		item, ok, skippedEmpty := top.next()
+		// Charge one op per empty value the cursor stepped past, so scanning N
+		// empty map values costs ~N ops and trips OpLimit. Without this a map
+		// with thousands of empty values is searched for free even when no key
+		// matches.
+		if skippedEmpty > 0 {
+			if err := fnCountOps(ctx, ec, skippedEmpty); err != nil {
+				return nil, err
+			}
+		}
 		if !ok {
 			stack = stack[:len(stack)-1]
 			continue

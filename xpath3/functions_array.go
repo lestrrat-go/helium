@@ -284,7 +284,15 @@ func fnArrayFlatten(ctx context.Context, args []Sequence) (Sequence, error) {
 	stack := []seqCursor{{members: []Sequence{args[0]}}}
 	for len(stack) > 0 {
 		top := &stack[len(stack)-1]
-		item, ok := top.next()
+		item, ok, skippedEmpty := top.next()
+		// Charge one op per empty member the cursor stepped past, so scanning N
+		// empty array members costs ~N ops and trips OpLimit. Without this an
+		// array of thousands of empty members is flattened for free.
+		if skippedEmpty > 0 {
+			if err := fnCountOps(ctx, ec, skippedEmpty); err != nil {
+				return nil, err
+			}
+		}
 		if !ok {
 			stack = stack[:len(stack)-1]
 			continue
@@ -339,18 +347,33 @@ func (c *seqCursor) memberAt(i int) Sequence {
 	return c.members[i]
 }
 
-func (c *seqCursor) next() (Item, bool) {
+// next advances the cursor by one item. The returned skippedEmpty count is the
+// number of EMPTY member/value sequences the cursor stepped past to reach the
+// returned item (or to exhaust the cursor). An empty member is one the cursor
+// enters at item index 0 and finds has zero items, so it yields nothing. Callers
+// MUST charge one op per skipped-empty member: otherwise a flood of empty array
+// members or empty map values would advance the cursor for free and let
+// array:flatten / map:find scan far more than OpLimit members without tripping
+// the limit, since an empty member yields no item and so would never reach a
+// per-item op charge. (A non-empty member is not counted: its op cost is charged
+// once per item it yields by the caller's per-item op charge.)
+func (c *seqCursor) next() (item Item, ok bool, skippedEmpty int) {
 	for c.mi < c.memberCount() {
 		m := c.memberAt(c.mi)
 		if c.ii < seqLen(m) {
-			item := m.Get(c.ii)
+			it := m.Get(c.ii)
 			c.ii++
-			return item, true
+			return it, true, skippedEmpty
+		}
+		if c.ii == 0 {
+			// We entered this member at its start and it has no items: it is an
+			// empty member, scanned for free unless the caller charges an op.
+			skippedEmpty++
 		}
 		c.mi++
 		c.ii = 0
 	}
-	return nil, false
+	return nil, false, skippedEmpty
 }
 
 func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {

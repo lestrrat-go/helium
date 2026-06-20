@@ -15,6 +15,8 @@ const (
 	tcArrayForEachPair = "array-for-each-pair"
 	tcArrayJoin        = "array-join"
 	tcArrayFlatMap     = "array-flat-map"
+	tcArrayFlatten     = "array-flatten"
+	tcMapFind          = "map-find"
 )
 
 // panicOnMaterializeSeq is a Sequence of n items where realizing the WHOLE
@@ -123,7 +125,7 @@ func TestHOFMaterializationLimit(t *testing.T) {
 		// array:flatten over a wide (variable-bound) array whose flattened size
 		// exceeds the limit. The array is bound as a variable so its construction
 		// does not trip the `1 to N` range guard before array:flatten runs.
-		{name: "array-flatten", expr: `array:flatten($arr)`, vars: varsSet("arr", wideArray(1100))},
+		{name: tcArrayFlatten, expr: `array:flatten($arr)`, vars: varsSet("arr", wideArray(1100))},
 		// fn:filter accumulating every (true) item of a variable-bound wide
 		// sequence past the limit. Binding via a variable keeps the input out of
 		// the `1 to N` range guard so only filter's accumulation overflows.
@@ -131,7 +133,7 @@ func TestHOFMaterializationLimit(t *testing.T) {
 		// map:find collecting one matching value per map past the limit. The
 		// maps are bound as a variable so map:find's accumulation, not the input
 		// construction, is what overflows the limit.
-		{name: "map-find", expr: `map:find($maps, "k")`, vars: varsSet("maps", wideMaps(1100))},
+		{name: tcMapFind, expr: `map:find($maps, "k")`, vars: varsSet("maps", wideMaps(1100))},
 		// fold-left: accumulator grows by 2 items per step -> overflows the limit.
 		{name: "fold-left", expr: `fold-left(1 to 600, (), function($acc, $x) { ($acc, $x, $x) })`},
 		// fold-right: same, accumulator grows past the limit.
@@ -177,7 +179,7 @@ func TestHOFMaterializationLimit(t *testing.T) {
 		{"for-each", `for-each(1 to 10, function($x) { ($x, $x) })`, 20},
 		{"for-each-pair", `for-each-pair(1 to 10, 1 to 10, function($a, $b) { ($a, $b) })`, 20},
 		{"map-for-each", `count(map:for-each(map { 1: 1, 2: 2, 3: 3 }, function($k, $v) { ($k, $v) }))`, 1},
-		{"array-flatten", `array:flatten(array { 1, [2, [3, 4]], 5 })`, 5},
+		{tcArrayFlatten, `array:flatten(array { 1, [2, [3, 4]], 5 })`, 5},
 		{"filter", `filter(1 to 10, function($x) { $x mod 2 = 0 })`, 5},
 		{"fold-left", `fold-left(1 to 10, 0, function($acc, $x) { $acc + $x })`, 1},
 		{"fold-right", `fold-right(1 to 10, 0, function($x, $acc) { $x + $acc })`, 1},
@@ -186,7 +188,7 @@ func TestHOFMaterializationLimit(t *testing.T) {
 		{"array-filter", `array:flatten(array:filter(array { 1 to 10 }, function($x) { $x mod 2 = 0 }))`, 5},
 		{tcArrayForEach, `array:flatten(array:for-each(array { 1 to 10 }, function($x) { $x * 2 }))`, 10},
 		{tcArrayForEachPair, `array:flatten(array:for-each-pair(array { 1 to 5 }, array { 1 to 5 }, function($a, $b) { $a + $b }))`, 5},
-		{"map-find", `array:flatten(map:find(map { "k": 1, "m": map { "k": 2 } }, "k"))`, 2},
+		{tcMapFind, `array:flatten(map:find(map { "k": 1, "m": map { "k": 2 } }, "k"))`, 2},
 	}
 	for _, tc := range withinLimit {
 		t.Run("within/"+tc.name, func(t *testing.T) {
@@ -381,7 +383,7 @@ func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
 		// runs first. (A plain wide sequence cannot isolate this site because the
 		// surrounding result construction also charges per-item ops.)
 		{
-			name: "map-find",
+			name: tcMapFind,
 			expr: `map:find(map:entry("k", $panic), "k")`,
 			vars: varsSet("panic", panicOnMaterializeSeq{n: wide}),
 		},
@@ -450,7 +452,7 @@ func TestArrayMemberCountBound(t *testing.T) {
 		// 1100 pairs, each callback returns () -> 1100 members, 0 items.
 		{name: tcArrayForEachPair, expr: `array:for-each-pair($arr, $arr, function($a, $b) { () })`, vars: varsSet("arr", wideArray(1100))},
 		// 1100 maps each with an empty value for "k" -> 1100 empty members.
-		{name: "map-find", expr: `map:find($maps, "k")`, vars: varsSet("maps", wideMapsEmpty(1100))},
+		{name: tcMapFind, expr: `map:find($maps, "k")`, vars: varsSet("maps", wideMapsEmpty(1100))},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -694,6 +696,68 @@ func TestArrayJoinFlatMapEmptyMemberOpLimit(t *testing.T) {
 	}{
 		{name: tcArrayJoin, expr: `array:join($arr)`, vars: varsSet("arr", emptyMemberArray(wide))},
 		{name: tcArrayFlatMap, expr: `array:flat-map(array { 1 }, function($x) { $arr })`, vars: varsSet("arr", emptyMemberArray(wide))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(tc.vars).
+				OpLimit(opLimit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrOpLimit)
+		})
+	}
+}
+
+// TestSeqCursorEmptyMemberOpLimit proves the seqCursor — the shared one-item-
+// at-a-time walker behind array:flatten and map:find — charges an op for every
+// EMPTY member/value sequence it steps past. An empty member yields no item, so
+// it never reaches the consumers' per-item op charge; without a per-empty charge
+// at the cursor level, array:flatten over thousands of empty array members and a
+// non-matching map:find over thousands of empty map values would each scan for
+// free and never trip OpLimit. Each case has NO node-set limit (so only the
+// op-counter can fire) and a low op-limit, with all members/values empty so only
+// the per-empty cursor charge can stop the run.
+func TestSeqCursorEmptyMemberOpLimit(t *testing.T) {
+	t.Parallel()
+
+	const opLimit = 1000
+	const wide = 5000
+
+	// emptyMemberArray builds an array with n EMPTY members. array:flatten steps
+	// the cursor past every one, yielding nothing per member.
+	emptyMemberArray := func(n int) xpath3.Sequence {
+		members := make([]xpath3.Sequence, n)
+		for i := range members {
+			members[i] = xpath3.ItemSlice{}
+		}
+		return xpath3.ItemSlice{xpath3.NewArray(members)}
+	}
+	// emptyValueMaps builds a sequence of n single-entry maps {"k": ()}. map:find
+	// for a NON-matching key ("absent") collects nothing, so it only steps the
+	// cursor past every empty value — each must cost an op.
+	emptyValueMaps := func(n int) xpath3.Sequence {
+		key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "k"}
+		items := make([]xpath3.Item, n)
+		for i := range items {
+			items[i] = xpath3.NewMap([]xpath3.MapEntry{{Key: key, Value: xpath3.ItemSlice{}}})
+		}
+		return xpath3.ItemSlice(items)
+	}
+
+	cases := []struct {
+		name string
+		expr string
+		vars *xpath3.Variables
+	}{
+		// array:flatten over an array of `wide` empty members: each member adds zero
+		// items, so only the per-empty cursor op-charge can trip OpLimit.
+		{name: tcArrayFlatten, expr: `array:flatten($arr)`, vars: varsSet("arr", emptyMemberArray(wide))},
+		// map:find for a key that matches NO entry over `wide` maps with empty
+		// values: nothing is collected, so only the per-empty cursor op-charge fires.
+		{name: tcMapFind, expr: `map:find($maps, "absent")`, vars: varsSet("maps", emptyValueMaps(wide))},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
