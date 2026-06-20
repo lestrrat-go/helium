@@ -164,6 +164,62 @@ func (nopSource) ParseReader(_ context.Context, r io.Reader) (struct{}, error) {
 	return struct{}{}, nil
 }
 
+// finishSignalSource models a parser that completes successfully without ever
+// observing context cancellation through the stream. It performs a single Read,
+// signals on parsed, then blocks on resume so the test can cancel the context
+// and have that cancel be visible to the parse epilogue BEFORE it runs. A
+// correct epilogue must still report success because no Read returned the
+// context error.
+type finishSignalSource struct {
+	result string
+	parsed chan struct{}
+	resume chan struct{}
+}
+
+func (s finishSignalSource) ParseReader(_ context.Context, r io.Reader) (string, error) {
+	p := make([]byte, 4096)
+	_, _ = r.Read(p)
+	close(s.parsed)
+	<-s.resume
+	return s.result, nil
+}
+
+// TestNewLateCancelKeepsResult verifies that a parse which completes
+// successfully is still reported as success when the context is cancelled
+// immediately AFTER ParseReader returns. The late cancel must not be turned
+// into context.Canceled by the parse epilogue, since no Read ever observed it.
+func TestNewLateCancelKeepsResult(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	const want = "parsed-document"
+	src := finishSignalSource{
+		result: want,
+		parsed: make(chan struct{}),
+		resume: make(chan struct{}),
+	}
+
+	pp := New[string](ctx, src)
+	require.NoError(t, pp.Push([]byte("payload")))
+
+	// Wait until the parse has done its work, then cancel the context so the
+	// cancel is observable to the epilogue before it runs, then let the parse
+	// return. This deterministically reproduces a late external cancel.
+	select {
+	case <-src.parsed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ParseReader did not start")
+	}
+	cancel()
+	close(src.resume)
+
+	got, err := pp.Close()
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
 // TestStreamReadEOFAfterClose verifies that a Read on an empty, closed
 // stream returns io.EOF.
 func TestStreamReadEOFAfterClose(t *testing.T) {
