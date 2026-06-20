@@ -259,7 +259,10 @@ func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *resultD
 	if inst.FormatAVT != nil {
 		v, err := inst.FormatAVT.evaluate(ctx, ec.contextNode)
 		if err != nil {
-			return inst.Format, nil //nolint:nilerr // AVT eval failure falls back to static format
+			// A dynamic error raised while evaluating the format AVT must be
+			// surfaced, not swallowed: silently falling back to the static
+			// format would hide a transformation failure from the caller.
+			return "", err
 		}
 		v = strings.TrimSpace(v)
 		if v != "" && !strings.HasPrefix(v, "Q{") {
@@ -331,18 +334,31 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		}
 	}
 
-	// Check for duplicate URI (XTDE1490).
-	if _, used := ec.usedResultURIs[href]; used {
-		return dynamicError(errCodeXTDE1490, "two result documents written to same URI: %q", href)
-	}
-
 	isPrimary := href == ""
+
+	// XTDE1490 duplicate detection keys on the canonical (resolved) output URI,
+	// not the raw href: distinct hrefs that resolve to the same absolute URI
+	// (e.g. "a/../out.xml" and "out.xml" under the same base) target the same
+	// document and must collide. The primary output (empty href) always keys on
+	// "" so that the implicit-primary claim tracked elsewhere stays consistent.
+	dupKey := href
+	if !isPrimary {
+		base := ec.currentOutputURI
+		if base != "" {
+			if resolved := helium.BuildURI(href, base); resolved != "" {
+				dupKey = resolved
+			}
+		}
+	}
+	if _, used := ec.usedResultURIs[dupKey]; used {
+		return dynamicError(errCodeXTDE1490, "two result documents written to same URI: %q", dupKey)
+	}
 
 	if isPrimary && ec.primaryClaimedImplicitly {
 		return dynamicError(errCodeXTRE1495, "primary output URI already has implicit content")
 	}
 
-	ec.usedResultURIs[href] = struct{}{}
+	ec.usedResultURIs[dupKey] = struct{}{}
 
 	// Resolve the effective format name (static or avt).
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
