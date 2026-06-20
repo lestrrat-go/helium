@@ -2,9 +2,11 @@ package helium_test
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
@@ -215,6 +217,35 @@ func TestPushParser(t *testing.T) {
 		got, err := pp.Close()
 		require.NoError(t, err)
 		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
+	})
+
+	t.Run("context cancel while waiting for data", func(t *testing.T) {
+		t.Parallel()
+
+		// Push a partial document and never push the rest. The background
+		// parser will block in the stream's Read waiting for more data. The
+		// stream wait is context-aware, so cancelling must unblock it and let
+		// Close return promptly with the context error.
+		ctx, cancel := context.WithCancel(t.Context())
+
+		p := helium.NewParser()
+		pp := p.NewPushParser(ctx)
+		require.NoError(t, pp.Push([]byte(`<?xml version="1.0"?><root>`)))
+
+		cancel()
+
+		done := make(chan error, 1)
+		go func() {
+			_, err := pp.Close()
+			done <- err
+		}()
+
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, context.Canceled, "Close must return the context error")
+		case <-time.After(10 * time.Second):
+			t.Fatal("push parser did not abort promptly after context cancellation")
+		}
 	})
 
 	t.Run("real file", func(t *testing.T) {

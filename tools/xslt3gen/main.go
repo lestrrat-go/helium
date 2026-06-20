@@ -305,11 +305,16 @@ func main() {
 			continue
 		}
 
-		tsFile := filepath.Join(sourceDir, tsRef.File)
+		// The test-set href itself is catalog-derived; verify it stays inside
+		// sourceDir before opening it.
+		tsRel, ok := catalogRelPath(sourceDir, ".", tsRef.File)
+		if !ok {
+			continue
+		}
+		tsFile := filepath.Join(sourceDir, tsRel)
 		ts := parseTestSet(tsFile)
-		tsDir := filepath.Dir(tsRef.File)           // e.g. "tests/insn/apply-templates"
-		tsDirAbs := filepath.Join(sourceDir, tsDir) // absolute path for reading files
-		addCatalogReferencedFiles(assetFiles, tsDir, ts)
+		tsDir := filepath.Dir(tsRel) // e.g. "tests/insn/apply-templates"
+		addCatalogReferencedFiles(assetFiles, sourceDir, tsDir, ts)
 
 		// Some test sets reference non-XML files (JSON, text, etc.) at runtime
 		// via unparsed-text(). Copy the entire directory tree for these.
@@ -326,51 +331,37 @@ func main() {
 			localEnvs[ts.Environments[i].Name] = &ts.Environments[i]
 			// Track environment-level stylesheet and source assets
 			for _, ss := range ts.Environments[i].Stylesheets {
-				if ss.File != "" {
-					relPath := filepath.Join(tsDir, ss.File)
-					assetFiles[relPath] = struct{}{}
-					absPath := filepath.Join(sourceDir, relPath)
-					for _, dep := range collectTransitiveDeps(absPath) {
-						relDep, err := filepath.Rel(sourceDir, dep)
-						if err == nil {
-							assetFiles[relDep] = struct{}{}
-						}
-					}
+				relPath, ok := catalogRelPath(sourceDir, tsDir, ss.File)
+				if !ok {
+					continue
 				}
+				assetFiles[relPath] = struct{}{}
+				addTransitiveDeps(assetFiles, sourceDir, relPath)
 			}
 			// Track environment-level package assets
 			for _, pkg := range ts.Environments[i].Packages {
-				if pkg.File != "" {
-					relPath := filepath.Join(tsDir, pkg.File)
-					assetFiles[relPath] = struct{}{}
-					absPath := filepath.Join(sourceDir, relPath)
-					for _, dep := range collectTransitiveDeps(absPath) {
-						relDep, err := filepath.Rel(sourceDir, dep)
-						if err == nil {
-							assetFiles[relDep] = struct{}{}
-						}
-					}
+				relPath, ok := catalogRelPath(sourceDir, tsDir, pkg.File)
+				if !ok {
+					continue
 				}
+				assetFiles[relPath] = struct{}{}
+				addTransitiveDeps(assetFiles, sourceDir, relPath)
 			}
 			for _, src := range ts.Environments[i].Sources {
-				if src.File != "" {
-					relPath := filepath.Join(tsDir, src.File)
+				if relPath, ok := catalogRelPath(sourceDir, tsDir, src.File); ok {
 					assetFiles[relPath] = struct{}{}
 				}
 			}
 			for _, sch := range ts.Environments[i].Schemas {
-				if sch.File != "" {
-					relPath := filepath.Join(tsDir, sch.File)
+				if relPath, ok := catalogRelPath(sourceDir, tsDir, sch.File); ok {
 					assetFiles[relPath] = struct{}{}
 				}
 			}
 			for _, col := range ts.Environments[i].Collections {
 				for _, src := range col.Sources {
-					if src.File == "" {
-						continue
+					if relPath, ok := catalogRelPath(sourceDir, tsDir, src.File); ok {
+						assetFiles[relPath] = struct{}{}
 					}
-					relPath := filepath.Join(tsDir, src.File)
-					assetFiles[relPath] = struct{}{}
 				}
 			}
 		}
@@ -411,7 +402,10 @@ func main() {
 
 			// Find primary and secondary stylesheets
 			for _, ss := range tc.Test.Stylesheets {
-				relPath := filepath.Join(tsDir, ss.File)
+				relPath, ok := catalogRelPath(sourceDir, tsDir, ss.File)
+				if !ok {
+					continue
+				}
 				if ss.Role == "secondary" {
 					gt.SecondaryStylesheets = append(gt.SecondaryStylesheets, relPath)
 				} else {
@@ -422,7 +416,10 @@ func main() {
 			// Process packages before the single-stylesheet fallback so
 			// that a principal package takes priority.
 			for _, pkg := range tc.Test.Packages {
-				relPath := filepath.Join(tsDir, pkg.File)
+				relPath, ok := catalogRelPath(sourceDir, tsDir, pkg.File)
+				if !ok {
+					continue
+				}
 				if pkg.Role == "principal" {
 					if gt.StylesheetPath == "" {
 						gt.StylesheetPath = relPath
@@ -435,18 +432,14 @@ func main() {
 					})
 				}
 				assetFiles[relPath] = struct{}{}
-				absPath := filepath.Join(sourceDir, relPath)
-				for _, dep := range collectTransitiveDeps(absPath) {
-					relDep, err := filepath.Rel(sourceDir, dep)
-					if err == nil {
-						assetFiles[relDep] = struct{}{}
-					}
-				}
+				addTransitiveDeps(assetFiles, sourceDir, relPath)
 			}
 
 			// If only one stylesheet and no explicit role, it's the primary
 			if gt.StylesheetPath == "" && len(tc.Test.Stylesheets) == 1 {
-				gt.StylesheetPath = filepath.Join(tsDir, tc.Test.Stylesheets[0].File)
+				if relPath, ok := catalogRelPath(sourceDir, tsDir, tc.Test.Stylesheets[0].File); ok {
+					gt.StylesheetPath = relPath
+				}
 			}
 
 			// Fall back to environment-level stylesheet/packages if test has none
@@ -464,7 +457,10 @@ func main() {
 						}
 					}
 					for _, ss := range env.Stylesheets {
-						relPath := filepath.Join(tsDir, ss.File)
+						relPath, ok := catalogRelPath(sourceDir, tsDir, ss.File)
+						if !ok {
+							continue
+						}
 						if ss.Role == "secondary" {
 							gt.SecondaryStylesheets = append(gt.SecondaryStylesheets, relPath)
 						} else {
@@ -474,11 +470,16 @@ func main() {
 					// Only promote a lone environment stylesheet to primary
 					// when the source document does not define the stylesheet.
 					if gt.StylesheetPath == "" && len(env.Stylesheets) == 1 && !sourceDefinesStylesheet {
-						gt.StylesheetPath = filepath.Join(tsDir, env.Stylesheets[0].File)
+						if relPath, ok := catalogRelPath(sourceDir, tsDir, env.Stylesheets[0].File); ok {
+							gt.StylesheetPath = relPath
+						}
 					}
 					// Environment-level packages as principal fallback
 					for _, pkg := range env.Packages {
-						relPath := filepath.Join(tsDir, pkg.File)
+						relPath, ok := catalogRelPath(sourceDir, tsDir, pkg.File)
+						if !ok {
+							continue
+						}
 						if pkg.Role == "principal" && gt.StylesheetPath == "" {
 							gt.StylesheetPath = relPath
 						}
@@ -491,22 +492,20 @@ func main() {
 				env := resolveEnvironment(tc.Environment, localEnvs)
 				if env != nil {
 					for _, pkg := range env.Packages {
-						if pkg.Role == "secondary" || pkg.Role == "" {
-							relPath := filepath.Join(tsDir, pkg.File)
-							gt.PackageDeps = append(gt.PackageDeps, packageDep{
-								URI:            pkg.URI,
-								PackageVersion: pkg.PackageVersion,
-								FilePath:       relPath,
-							})
-							assetFiles[relPath] = struct{}{}
-							absPath := filepath.Join(sourceDir, relPath)
-							for _, dep := range collectTransitiveDeps(absPath) {
-								relDep, err := filepath.Rel(sourceDir, dep)
-								if err == nil {
-									assetFiles[relDep] = struct{}{}
-								}
-							}
+						if pkg.Role != "secondary" && pkg.Role != "" {
+							continue
 						}
+						relPath, ok := catalogRelPath(sourceDir, tsDir, pkg.File)
+						if !ok {
+							continue
+						}
+						gt.PackageDeps = append(gt.PackageDeps, packageDep{
+							URI:            pkg.URI,
+							PackageVersion: pkg.PackageVersion,
+							FilePath:       relPath,
+						})
+						assetFiles[relPath] = struct{}{}
+						addTransitiveDeps(assetFiles, sourceDir, relPath)
 					}
 				}
 			}
@@ -529,7 +528,7 @@ func main() {
 						if gt.InitialTemplateParams == nil {
 							gt.InitialTemplateParams = make(map[string]string)
 						}
-						gt.InitialTemplateParams[p.Name] = p.Select
+						gt.InitialTemplateParams[resolvedName] = p.Select
 					}
 				}
 			}
@@ -570,12 +569,13 @@ func main() {
 			if len(tc.Test.Params) > 0 {
 				gt.Params = make(map[string]string)
 				for _, p := range tc.Test.Params {
-					gt.Params[p.Name] = p.Select
+					name := resolveQNameWithAttrs(p.Name, p.Attrs)
+					gt.Params[name] = p.Select
 					if p.As != "" {
 						if gt.ParamTypes == nil {
 							gt.ParamTypes = make(map[string]string)
 						}
-						gt.ParamTypes[p.Name] = p.As
+						gt.ParamTypes[name] = p.As
 					}
 				}
 			}
@@ -584,16 +584,16 @@ func main() {
 			env := resolveEnvironment(tc.Environment, localEnvs)
 			if env != nil {
 				for _, src := range env.Sources {
-					if src.File != "" {
-						relPath := filepath.Join(tsDir, src.File)
+					srcRel, srcOK := catalogRelPath(sourceDir, tsDir, src.File)
+					if srcOK {
 						// Always copy source files as assets (for document()/fn:doc() etc.)
-						assetFiles[relPath] = struct{}{}
+						assetFiles[srcRel] = struct{}{}
 					}
 					if src.Role != "." {
 						continue
 					}
-					if src.File != "" {
-						gt.SourceDocPath = filepath.Join(tsDir, src.File)
+					if srcOK {
+						gt.SourceDocPath = srcRel
 					} else if src.Content != nil {
 						gt.SourceContent = decodeXMLText(string(src.Content.Inner))
 					} else if xmlContent := extractParseXMLContent(src.Select); xmlContent != "" {
@@ -614,12 +614,18 @@ func main() {
 				for _, col := range env.Collections {
 					def := collectionDef{URI: col.URI}
 					for _, src := range col.Sources {
-						if src.File == "" {
+						// Containment is checked on the file portion only; any
+						// "#fragment" suffix is preserved in the doc path since
+						// fn:collection consumers rely on it.
+						relPath, ok := catalogRelPath(sourceDir, tsDir, src.File)
+						if !ok {
 							continue
 						}
-						relPath := filepath.Join(tsDir, src.File)
+						assetFiles[relPath] = struct{}{}
+						if _, frag, hasFrag := strings.Cut(src.File, "#"); hasFrag {
+							relPath += "#" + frag
+						}
 						def.DocPaths = append(def.DocPaths, relPath)
-						assetFiles[normalizeAssetPath(relPath)] = struct{}{}
 					}
 					gt.Collections = append(gt.Collections, def)
 				}
@@ -627,10 +633,10 @@ func main() {
 				// Use the first schema with role="source-reference" or no role
 				// (not "stylesheet-import" which is for xsl:import-schema).
 				for _, sch := range env.Schemas {
-					if sch.File == "" {
+					relPath, ok := catalogRelPath(sourceDir, tsDir, sch.File)
+					if !ok {
 						continue
 					}
-					relPath := filepath.Join(tsDir, sch.File)
 					assetFiles[relPath] = struct{}{}
 					if sch.Role == "stylesheet-import" {
 						gt.ImportSchemaPaths = append(gt.ImportSchemaPaths, relPath)
@@ -645,7 +651,7 @@ func main() {
 			}
 
 			// Parse assertions
-			gt.Assertions = parseResultAssertions(tc, tsDirAbs)
+			gt.Assertions = parseResultAssertions(tc, sourceDir, tsDir)
 			classifyError(&gt)
 			classifyUnsupportedAssertions(&gt)
 			isSchemaAware := hasFeatureDep(ts.Dependencies, "schema_aware") ||
@@ -667,27 +673,16 @@ func main() {
 				}
 			}
 
-			// Track stylesheet assets
+			// Track stylesheet assets. gt.StylesheetPath and the secondary
+			// stylesheets are already contained (validated at assignment via
+			// catalogRelPath), so transitive scanning stays within sourceDir.
 			if gt.StylesheetPath != "" {
 				assetFiles[gt.StylesheetPath] = struct{}{}
-				// Scan transitive xsl:import/xsl:include deps
-				absPath := filepath.Join(sourceDir, gt.StylesheetPath)
-				for _, dep := range collectTransitiveDeps(absPath) {
-					relDep, err := filepath.Rel(sourceDir, dep)
-					if err == nil {
-						assetFiles[relDep] = struct{}{}
-					}
-				}
+				addTransitiveDeps(assetFiles, sourceDir, gt.StylesheetPath)
 			}
 			for _, ss := range gt.SecondaryStylesheets {
 				assetFiles[ss] = struct{}{}
-				absPath := filepath.Join(sourceDir, ss)
-				for _, dep := range collectTransitiveDeps(absPath) {
-					relDep, err := filepath.Rel(sourceDir, dep)
-					if err == nil {
-						assetFiles[relDep] = struct{}{}
-					}
-				}
+				addTransitiveDeps(assetFiles, sourceDir, ss)
 			}
 
 			if isExcludedTestCase(gt.CaseName) {
@@ -702,8 +697,19 @@ func main() {
 	copied := 0
 	for relPath := range assetFiles {
 		normalizedRelPath := normalizeAssetPath(relPath)
-		srcFull := filepath.Join(sourceDir, resolvedAssetSourcePath(normalizedRelPath))
-		dstFull := filepath.Join(assetsDir, normalizedRelPath)
+		// Reject paths that escape the destination asset tree (absolute or
+		// ".."-escaping). A catalog referencing "../../xslt3/pwn.go" or an
+		// absolute path must not let the generator write outside assetsDir.
+		dstFull, err := containedPath(assetsDir, normalizedRelPath)
+		if err != nil {
+			log.Printf("warning: skipping unsafe asset path %q: %v", relPath, err)
+			continue
+		}
+		srcFull, err := containedPath(sourceDir, resolvedAssetSourcePath(normalizedRelPath))
+		if err != nil {
+			log.Printf("warning: skipping unsafe asset path %q: %v", relPath, err)
+			continue
+		}
 		if err := copyFile(srcFull, dstFull); err != nil {
 			log.Printf("warning: copying %s: %v", relPath, err)
 			continue
@@ -787,32 +793,30 @@ func parseTestSet(path string) *xslTestSetFile {
 	return &ts
 }
 
-func addCatalogReferencedFiles(assetFiles map[string]struct{}, tsDir string, ts *xslTestSetFile) {
+func addCatalogReferencedFiles(assetFiles map[string]struct{}, sourceDir, tsDir string, ts *xslTestSetFile) {
 	for _, env := range ts.Environments {
-		addCatalogFileRefs(assetFiles, tsDir, env.Stylesheets, env.Packages)
+		addCatalogFileRefs(assetFiles, sourceDir, tsDir, env.Stylesheets, env.Packages)
 	}
 
 	for _, tc := range ts.TestCases {
 		if tc.Environment != nil {
-			addCatalogFileRefs(assetFiles, tsDir, tc.Environment.Stylesheets, tc.Environment.Packages)
+			addCatalogFileRefs(assetFiles, sourceDir, tsDir, tc.Environment.Stylesheets, tc.Environment.Packages)
 		}
-		addCatalogFileRefs(assetFiles, tsDir, tc.Test.Stylesheets, tc.Test.Packages)
+		addCatalogFileRefs(assetFiles, sourceDir, tsDir, tc.Test.Stylesheets, tc.Test.Packages)
 	}
 }
 
-func addCatalogFileRefs(assetFiles map[string]struct{}, tsDir string, stylesheets []xslStylesheet, packages []xslPackage) {
+func addCatalogFileRefs(assetFiles map[string]struct{}, sourceDir, tsDir string, stylesheets []xslStylesheet, packages []xslPackage) {
 	for _, ss := range stylesheets {
-		if ss.File == "" {
-			continue
+		if rel, ok := catalogRelPath(sourceDir, tsDir, ss.File); ok {
+			assetFiles[rel] = struct{}{}
 		}
-		assetFiles[normalizeAssetPath(filepath.Join(tsDir, ss.File))] = struct{}{}
 	}
 
 	for _, pkg := range packages {
-		if pkg.File == "" {
-			continue
+		if rel, ok := catalogRelPath(sourceDir, tsDir, pkg.File); ok {
+			assetFiles[rel] = struct{}{}
 		}
-		assetFiles[normalizeAssetPath(filepath.Join(tsDir, pkg.File))] = struct{}{}
 	}
 }
 
@@ -1042,14 +1046,51 @@ func resolveQNameWithAttrs(name string, attrs []xml.Attr) string {
 // Stylesheet dependency scanning
 // ──────────────────────────────────────────────────────────────────────
 
-func collectTransitiveDeps(xslPath string) []string {
+func collectTransitiveDeps(sourceDir, xslPath string) []string {
 	visited := make(map[string]struct{})
 	var result []string
-	collectDepsRecursive(xslPath, visited, &result)
+	collectDepsRecursive(sourceDir, xslPath, visited, &result)
 	return result
 }
 
-func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[]string) {
+// addTransitiveDeps scans the contained, sourceDir-relative stylesheet/package
+// at relPath for transitive xsl:import/xsl:include (and schema) dependencies and
+// records each discovered in-tree dependency in assetFiles. relPath MUST already
+// have passed catalogRelPath containment.
+func addTransitiveDeps(assetFiles map[string]struct{}, sourceDir, relPath string) {
+	absPath := filepath.Join(sourceDir, relPath)
+	for _, dep := range collectTransitiveDeps(sourceDir, absPath) {
+		relDep, err := filepath.Rel(sourceDir, dep)
+		if err == nil {
+			assetFiles[relDep] = struct{}{}
+		}
+	}
+}
+
+// resolveDep resolves a discovered dependency reference (relative to dir) and
+// verifies it stays within the containment root. It returns the cleaned
+// absolute path, or ok=false (with a logged warning) when the reference is
+// absolute or escapes the root.
+func resolveDep(root, dir, ref string) (string, bool) {
+	if filepath.IsAbs(ref) {
+		log.Printf("xslt3gen: skipping absolute dependency %q", ref)
+		return "", false
+	}
+	depAbs := filepath.Join(dir, ref)
+	rel, err := filepath.Rel(root, depAbs)
+	if err != nil {
+		log.Printf("xslt3gen: skipping dependency %q: %v", ref, err)
+		return "", false
+	}
+	contained, err := containedPath(root, rel)
+	if err != nil {
+		log.Printf("xslt3gen: skipping dependency %q: %v", ref, err)
+		return "", false
+	}
+	return contained, true
+}
+
+func collectDepsRecursive(sourceDir, xslPath string, visited map[string]struct{}, result *[]string) {
 	absPath, err := filepath.Abs(xslPath)
 	if err != nil {
 		return
@@ -1085,9 +1126,12 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		if isXSLT && (se.Name.Local == "import" || se.Name.Local == "include") {
 			for _, attr := range se.Attr {
 				if attr.Name.Local == "href" {
-					depPath := filepath.Join(dir, attr.Value)
+					depPath, ok := resolveDep(sourceDir, dir, attr.Value)
+					if !ok {
+						continue
+					}
 					*result = append(*result, depPath)
-					collectDepsRecursive(depPath, visited, result)
+					collectDepsRecursive(sourceDir, depPath, visited, result)
 				}
 			}
 			continue
@@ -1096,9 +1140,12 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		if isXSLT && se.Name.Local == "import-schema" {
 			for _, attr := range se.Attr {
 				if attr.Name.Local == "schema-location" && attr.Value != "" {
-					depPath := filepath.Join(dir, attr.Value)
+					depPath, ok := resolveDep(sourceDir, dir, attr.Value)
+					if !ok {
+						continue
+					}
 					*result = append(*result, depPath)
-					collectSchemaDeps(depPath, visited, result)
+					collectSchemaDeps(sourceDir, depPath, visited, result)
 				}
 			}
 			continue
@@ -1107,9 +1154,12 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		if isXSD && (se.Name.Local == "include" || se.Name.Local == "import") {
 			for _, attr := range se.Attr {
 				if attr.Name.Local == "schemaLocation" && attr.Value != "" {
-					depPath := filepath.Join(dir, attr.Value)
+					depPath, ok := resolveDep(sourceDir, dir, attr.Value)
+					if !ok {
+						continue
+					}
 					*result = append(*result, depPath)
-					collectSchemaDeps(depPath, visited, result)
+					collectSchemaDeps(sourceDir, depPath, visited, result)
 				}
 			}
 			continue
@@ -1118,7 +1168,10 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		if isXSLT && se.Name.Local == "source-document" {
 			for _, attr := range se.Attr {
 				if attr.Name.Local == "href" && attr.Value != "" && !strings.Contains(attr.Value, "{") {
-					depPath := filepath.Join(dir, normalizeAssetPath(attr.Value))
+					depPath, ok := resolveDep(sourceDir, dir, normalizeAssetPath(attr.Value))
+					if !ok {
+						continue
+					}
 					*result = append(*result, depPath)
 				}
 			}
@@ -1132,7 +1185,7 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 
 // collectSchemaDeps scans an XSD file for xs:include/xs:import with
 // schemaLocation attributes and collects them as transitive dependencies.
-func collectSchemaDeps(xsdPath string, visited map[string]struct{}, result *[]string) {
+func collectSchemaDeps(sourceDir, xsdPath string, visited map[string]struct{}, result *[]string) {
 	absPath, err := filepath.Abs(xsdPath)
 	if err != nil {
 		return
@@ -1166,9 +1219,12 @@ func collectSchemaDeps(xsdPath string, visited map[string]struct{}, result *[]st
 		}
 		for _, attr := range se.Attr {
 			if attr.Name.Local == "schemaLocation" && attr.Value != "" {
-				depPath := filepath.Join(dir, attr.Value)
+				depPath, ok := resolveDep(sourceDir, dir, attr.Value)
+				if !ok {
+					continue
+				}
 				*result = append(*result, depPath)
-				collectSchemaDeps(depPath, visited, result)
+				collectSchemaDeps(sourceDir, depPath, visited, result)
 			}
 		}
 	}
@@ -1183,24 +1239,36 @@ const (
 	w3cAssertSkipCall = "w3cAssertSkip()"
 )
 
-func parseResultAssertions(tc xslTestCase, tsDir string) []assertion {
+func parseResultAssertions(tc xslTestCase, sourceDir, tsDir string) []assertion {
 	resultXML := "<result xmlns=\"" + xslTestNS + "\">" + string(tc.Result.Inner) + "</result>"
-	return parseAssertionXML(resultXML, tsDir)
+	return parseAssertionXML(resultXML, sourceDir, tsDir)
 }
 
-func parseAssertionXML(s string, tsDir string) []assertion {
+func parseAssertionXML(s string, sourceDir, tsDir string) []assertion {
 	var result xmlResultWrapper
 	if err := xml.Unmarshal([]byte(s), &result); err != nil {
 		return nil
 	}
 	var out []assertion
 	for _, child := range result.Children {
-		out = append(out, convertAssertion(child, tsDir))
+		out = append(out, convertAssertion(child, sourceDir, tsDir))
 	}
 	return out
 }
 
-func convertAssertion(xa xmlAssertion, tsDir string) assertion {
+// readContainedAssertionFile reads an assert-xml / assert-serialization "file"
+// reference at gen time after verifying it stays inside sourceDir. An escaping
+// or absolute reference yields an error string rather than reading outside the
+// test tree.
+func readContainedAssertionFile(sourceDir, tsDir, file string) ([]byte, error) {
+	rel, ok := catalogRelPath(sourceDir, tsDir, file)
+	if !ok {
+		return nil, fmt.Errorf("unsafe assertion file path %q", file)
+	}
+	return os.ReadFile(filepath.Join(sourceDir, rel))
+}
+
+func convertAssertion(xa xmlAssertion, sourceDir, tsDir string) assertion {
 	a := assertion{
 		Type: xa.XMLName.Local,
 	}
@@ -1209,8 +1277,7 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 	case "assert-xml":
 		if xa.File != "" {
 			// Read the .out file content at gen time and embed it
-			outPath := filepath.Join(tsDir, xa.File)
-			data, err := os.ReadFile(outPath)
+			data, err := readContainedAssertionFile(sourceDir, tsDir, xa.File)
 			if err != nil {
 				a.Value = fmt.Sprintf("ERROR: cannot read %s: %v", xa.File, err)
 			} else {
@@ -1225,22 +1292,21 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 		a.Value = decodeXMLText(string(xa.Inner))
 	case "all-of", "any-of":
 		for _, child := range xa.Children {
-			a.Children = append(a.Children, convertAssertion(child, tsDir))
+			a.Children = append(a.Children, convertAssertion(child, sourceDir, tsDir))
 		}
 	case "assert-message":
 		for _, child := range xa.Children {
-			a.Children = append(a.Children, convertAssertion(child, tsDir))
+			a.Children = append(a.Children, convertAssertion(child, sourceDir, tsDir))
 		}
 	case "assert-result-document":
 		a.URI = xa.URI
 		for _, child := range xa.Children {
-			a.Children = append(a.Children, convertAssertion(child, tsDir))
+			a.Children = append(a.Children, convertAssertion(child, sourceDir, tsDir))
 		}
 	case "assert-serialization":
 		a.Method = xa.Method
 		if xa.File != "" {
-			outPath := filepath.Join(tsDir, xa.File)
-			data, err := os.ReadFile(outPath)
+			data, err := readContainedAssertionFile(sourceDir, tsDir, xa.File)
 			if err != nil {
 				a.Value = fmt.Sprintf("ERROR: cannot read %s: %v", xa.File, err)
 			} else if !utf8.Valid(data) {
@@ -1263,7 +1329,7 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 		a.Value = decodeXMLText(string(xa.Inner))
 	case "not":
 		for _, child := range xa.Children {
-			a.Children = append(a.Children, convertAssertion(child, tsDir))
+			a.Children = append(a.Children, convertAssertion(child, sourceDir, tsDir))
 		}
 	case "assert-posture-and-sweep":
 		a.Value = "skip: streaming not supported"
@@ -2093,6 +2159,58 @@ func addAssetTree(assetFiles map[string]struct{}, rootDir, relDir string) error 
 func normalizeAssetPath(path string) string {
 	base, _, _ := strings.Cut(path, "#")
 	return base
+}
+
+// catalogRelPath turns a catalog-derived file reference (a test-set-relative
+// "file" / "href" attribute under tsDir) into a sourceDir-relative path,
+// rejecting any reference that is absolute or escapes sourceDir via ".."
+// segments. It returns the cleaned, slash-normalized relative path and ok=true
+// on success; on rejection it logs a warning and returns ok=false.
+//
+// This is the single choke point every catalog-derived on-disk path must pass
+// through BEFORE it is scanned, stored on a generatedTest, or opened — so an
+// escaping reference can never reach os.Open/os.ReadFile or be written into a
+// generated test.
+func catalogRelPath(sourceDir, tsDir, file string) (string, bool) {
+	if file == "" {
+		return "", false
+	}
+	if filepath.IsAbs(file) || filepath.IsAbs(normalizeAssetPath(file)) {
+		log.Printf("xslt3gen: skipping absolute catalog path %q (under %q)", file, tsDir)
+		return "", false
+	}
+	rel := normalizeAssetPath(filepath.Join(tsDir, file))
+	full, err := containedPath(sourceDir, rel)
+	if err != nil {
+		log.Printf("xslt3gen: skipping unsafe catalog path %q (under %q): %v", file, tsDir, err)
+		return "", false
+	}
+	cleaned, err := filepath.Rel(sourceDir, full)
+	if err != nil {
+		log.Printf("xslt3gen: skipping unsafe catalog path %q (under %q): %v", file, tsDir, err)
+		return "", false
+	}
+	return cleaned, true
+}
+
+// containedPath joins root and relPath, rejecting any relPath that is absolute
+// or escapes root via ".." segments. It returns the cleaned absolute path on
+// success. This prevents a malicious or malformed catalog asset reference (e.g.
+// "../../xslt3/pwn.go" or "/etc/passwd") from causing the generator to read or
+// write outside the intended testdata tree.
+func containedPath(root, relPath string) (string, error) {
+	if filepath.IsAbs(relPath) {
+		return "", fmt.Errorf("absolute path not allowed: %q", relPath)
+	}
+	cleaned := filepath.Clean(filepath.Join(root, relPath))
+	rel, err := filepath.Rel(root, cleaned)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes root %q: %q", root, relPath)
+	}
+	return cleaned, nil
 }
 
 func boolAttrTrue(v string) bool {

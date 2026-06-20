@@ -18,6 +18,12 @@ import (
 // ErrorHandler configured on the Validator.
 var ErrValidationFailed = errors.New("xsd: validation failed")
 
+// ErrCompilationFailed is returned by Compile and CompileFile when the schema
+// contains one or more fatal errors. The returned schema is nil; the
+// individual diagnostics are delivered to the ErrorHandler configured on the
+// Compiler.
+var ErrCompilationFailed = errors.New("xsd: schema compilation failed")
+
 // ErrNilSchema is returned by Validate when the Validator has no compiled
 // schema (for example, after NewValidator(nil)).
 var ErrNilSchema = errors.New("xsd: nil schema")

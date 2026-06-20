@@ -2,10 +2,23 @@ package catalog
 
 import (
 	"context"
+	"errors"
 
 	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 )
+
+// MaxCatalogSize is the default maximum number of bytes read from a catalog
+// file. Catalog files are loaded from XML_CATALOG_FILES or the API, so an
+// unbounded read of a hostile or pathological source (e.g. /dev/zero) could
+// exhaust memory before parsing applies any limits. The file is read through a
+// strict byte cap and rejected with [ErrCatalogTooLarge] when it is exceeded.
+const MaxCatalogSize = 10 << 20 // 10 MiB
+
+// ErrCatalogTooLarge is returned when a catalog file exceeds the configured
+// byte cap (set via [Loader.MaxBytes]), or [MaxCatalogSize] when no cap is
+// configured. The cap is enforced against the actual number of bytes read.
+var ErrCatalogTooLarge = errors.New("catalog file exceeds maximum allowed size")
 
 // Catalog holds parsed catalog entries and provides resolution.
 // It wraps the internal catalog implementation and serves as the
@@ -37,6 +50,7 @@ func (c *Catalog) ResolveURI(ctx context.Context, uri string) string {
 // loaderConfig holds configuration for a Loader.
 type loaderConfig struct {
 	errorHandler helium.ErrorHandler
+	maxBytes     int
 }
 
 // Loader loads OASIS XML Catalog files. It is a value-style wrapper:
@@ -64,5 +78,16 @@ func (l Loader) clone() Loader {
 func (l Loader) ErrorHandler(h helium.ErrorHandler) Loader {
 	l = l.clone()
 	l.cfg.errorHandler = h
+	return l
+}
+
+// MaxBytes returns a copy of the Loader that caps the number of bytes read
+// from a catalog file at n. The cap guards against hostile or pathological
+// sources (e.g. /dev/zero) that could otherwise exhaust memory. When a catalog
+// file exceeds the cap, Load fails with [ErrCatalogTooLarge]. A value less than
+// or equal to zero (the default) means [MaxCatalogSize] (10 MiB) is used.
+func (l Loader) MaxBytes(n int) Loader {
+	l = l.clone()
+	l.cfg.maxBytes = n
 	return l
 }

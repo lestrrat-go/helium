@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
+	"strconv"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -13,9 +13,10 @@ import (
 )
 
 type xpathConfig struct {
-	engine  string
-	expr    string
-	version bool
+	engine        string
+	expr          string
+	version       bool
+	maxInputBytes int64
 }
 
 type xpathCommand struct {
@@ -77,12 +78,13 @@ func (c *xpathCommand) showUsage() {
 	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] EXPR [XMLfiles ...]
 	Evaluate an XPath expression against XML input
 	--engine N : XPath engine version (1 or 3, default 3)
+	--max-input-bytes N : cap bytes read per input (0 = unlimited)
 	--version : display the version of the XML library used
 `, c.prog)
 }
 
 func (c *xpathCommand) parseArgs(args []string) (*xpathConfig, []string) {
-	cfg := &xpathConfig{engine: "3"}
+	cfg := &xpathConfig{engine: "3", maxInputBytes: DefaultMaxInputBytes}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -97,6 +99,18 @@ func (c *xpathCommand) parseArgs(args []string) (*xpathConfig, []string) {
 				return nil, nil
 			}
 			cfg.engine = args[i] //nolint:gosec // bounds checked above
+		case flagMaxInputBytes:
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-input-bytes requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.ParseInt(args[i], 10, 64) //nolint:gosec // bounds checked above
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-input-bytes: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
+				return nil, nil
+			}
+			cfg.maxInputBytes = n
 		default:
 			if strings.HasPrefix(arg, "-") {
 				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)
@@ -132,9 +146,9 @@ func (c *xpathCommand) processInput(ctx context.Context, cfg *xpathConfig, input
 	var buf []byte
 	var err error
 	if input.stdin {
-		buf, err = io.ReadAll(c.stdin)
+		buf, err = readInput(c.stdin, "-", cfg.maxInputBytes)
 	} else {
-		buf, err = os.ReadFile(input.name)
+		buf, err = readInputFile(input.name, cfg.maxInputBytes)
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
