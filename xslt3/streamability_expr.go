@@ -325,7 +325,7 @@ func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
 			return false
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if fc.Prefix == "" && (fc.Name == "reverse" || fc.Name == "innermost") {
+			if isFnNamespacePrefix(fc.Prefix) && (fc.Name == "reverse" || fc.Name == "innermost") {
 				if slices.ContainsFunc(fc.Args, argHasStreamingCrawl) {
 					found = true
 					return false
@@ -514,7 +514,7 @@ func exprCallsFunction(expr xpath3.Expr, name string) bool {
 			return false
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if fc.Prefix == "" && fc.Name == name {
+			if isFnNamespacePrefix(fc.Prefix) && fc.Name == name {
 				found = true
 				return false
 			}
@@ -591,7 +591,7 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 	// Check if this is a grounding function call
 	newGrounding := insideGrounding
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
-		if fc.Prefix == "" && isGroundingFuncName(fc.Name) {
+		if isFnNamespacePrefix(fc.Prefix) && isGroundingFuncName(fc.Name) {
 			newGrounding = true
 		}
 	}
@@ -692,7 +692,7 @@ func isGroundingExprSS(ss *Stylesheet, expr xpath3.Expr) bool {
 		return true
 	}
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
-		if fc.Prefix == "" {
+		if isFnNamespacePrefix(fc.Prefix) {
 			return isGroundingFuncName(fc.Name)
 		}
 		// Check user-defined absorbing/unclassified functions
@@ -707,7 +707,7 @@ func isGroundingExprSS(ss *Stylesheet, expr xpath3.Expr) bool {
 	// treating arbitrary filtered expressions as grounded.
 	if fe, ok := expr.(xpath3.FilterExpr); ok {
 		if fc, ok2 := derefXPathExpr(fe.Expr).(xpath3.FunctionCall); ok2 {
-			if fc.Prefix == "" {
+			if isFnNamespacePrefix(fc.Prefix) {
 				return isGroundingFuncName(fc.Name)
 			}
 		}
@@ -740,7 +740,7 @@ func exprProducesAtomicResult(expr xpath3.Expr) bool {
 func isAtomicResultExpr(expr xpath3.Expr) bool {
 	expr = derefXPathExpr(expr)
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
-		if fc.Prefix == "" {
+		if isFnNamespacePrefix(fc.Prefix) {
 			switch fc.Name {
 			case "tokenize", "string", "data", "number", "boolean",
 				lexicon.FnName, "local-name", "namespace-uri", "string-length",
@@ -773,7 +773,7 @@ func exprUsesLastOutsideGrounding(expr *xpath3.Expression) bool {
 			return true
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if fc.Prefix == "" && fc.Name == "last" {
+			if isFnNamespacePrefix(fc.Prefix) && fc.Name == "last" {
 				found = true
 				return false
 			}
@@ -798,7 +798,7 @@ func exprUsesFunctionOutsideGrounding(expr *xpath3.Expression, name string) bool
 			return true
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if fc.Prefix == "" && fc.Name == name {
+			if isFnNamespacePrefix(fc.Prefix) && fc.Name == name {
 				found = true
 				return false
 			}
@@ -997,18 +997,18 @@ func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr, step *xpath3.S
 				walkPred(lp, underNonContext || filterIsNonContext)
 			}
 		case xpath3.FunctionCall:
-			if v.Prefix == "" && v.Name == "last" {
+			if isFnNamespacePrefix(v.Prefix) && v.Name == "last" {
 				nonMotionless = true
 				return
 			}
 			// current-group() and current-grouping-key() always return
 			// materialized (grounded) data.  Navigation into them (e.g.
 			// current-group()[1]/Date) is motionless w.r.t. the stream.
-			if v.Prefix == "" && (v.Name == "current-group" || v.Name == "current-grouping-key") {
+			if isFnNamespacePrefix(v.Prefix) && (v.Name == "current-group" || v.Name == "current-grouping-key") {
 				return // skip children — result is grounded
 			}
 			// Property-access functions are motionless.
-			if v.Prefix == "" {
+			if isFnNamespacePrefix(v.Prefix) {
 				switch v.Name {
 				case lexicon.FnName, "local-name", "namespace-uri", "node-name",
 					"self", "generate-id", "base-uri", "document-uri",
