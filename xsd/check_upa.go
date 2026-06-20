@@ -27,96 +27,223 @@ func (c *compiler) checkUPA(ctx context.Context, td *TypeDef, src typeDefSource)
 	}
 }
 
-// modelGroupIsDeterministic checks if a content model satisfies UPA.
+// modelGroupIsDeterministic checks if a content model satisfies UPA
+// (Unique Particle Attribution, a.k.a. cos-nonambig).
+//
+// It builds a position automaton (Glushkov construction) over the content-model
+// particle tree: every element/wildcard leaf particle becomes a numbered
+// position, and the structure yields nullable/firstpos/lastpos/followpos. A
+// model is ambiguous if, from any single state, two distinct positions are
+// reachable that can both match the same element name (or via overlapping
+// wildcards). The two competing states are firstpos(root) (the start state) and
+// followpos(p) for every position p.
+//
+// This subsumes the older adjacent first/last heuristic: it catches
+// non-adjacent ambiguity such as `a?, b?, a`, where skipping the optional first
+// `a` makes the final `a` reachable from the same state as the first.
 func modelGroupIsDeterministic(mg *ModelGroup, schema *Schema) bool {
+	a := newPositionAutomaton(schema)
+	a.add(&Particle{MinOccurs: 1, MaxOccurs: 1, Term: mg})
+	return a.isDeterministic()
+}
+
+// upaPosition is a single leaf particle (element or wildcard) in the position
+// automaton. The entry captures everything needed to test name/wildcard overlap
+// against another position.
+type upaPosition struct {
+	id    int
+	entry firstSetEntry
+}
+
+// positionAutomaton accumulates nullable/firstpos/lastpos/followpos for a
+// content-model particle tree using a bottom-up Glushkov construction.
+type positionAutomaton struct {
+	schema    *Schema
+	positions []upaPosition
+	followpos map[int][]int
+}
+
+func newPositionAutomaton(schema *Schema) *positionAutomaton {
+	return &positionAutomaton{schema: schema, followpos: make(map[int][]int)}
+}
+
+// posInfo is the per-node result of the Glushkov walk.
+type posInfo struct {
+	nullable bool
+	first    []int
+	last     []int
+}
+
+// newPos allocates a fresh position for a leaf entry and returns it.
+func (a *positionAutomaton) newPos(entry firstSetEntry) int {
+	id := len(a.positions)
+	a.positions = append(a.positions, upaPosition{id: id, entry: entry})
+	return id
+}
+
+// add registers a top-level particle (the synthetic root particle wrapping the
+// whole content model) and seeds the start-state choices (firstpos of the root)
+// under the synthetic predecessor key -1.
+func (a *positionAutomaton) add(p *Particle) posInfo {
+	info := a.walkParticle(p)
+	a.followpos[-1] = append(a.followpos[-1], info.first...)
+	return info
+}
+
+// walkParticle computes nullable/firstpos/lastpos for a particle, accounting for
+// its own minOccurs/maxOccurs repetition, and records the followpos edges that
+// repetition introduces.
+func (a *positionAutomaton) walkParticle(p *Particle) posInfo {
+	// A maxOccurs="0" particle contributes nothing to the content model.
+	if p.MaxOccurs == 0 {
+		return posInfo{nullable: true}
+	}
+
+	base := a.walkTerm(p.Term)
+
+	// Repetition (maxOccurs > 1 or unbounded) lets the particle's lastpos flow
+	// back into its firstpos.
+	if p.MaxOccurs == Unbounded || p.MaxOccurs > 1 {
+		for _, l := range base.last {
+			a.addFollow(l, base.first)
+		}
+	}
+
+	// An optional particle (minOccurs == 0) is nullable.
+	nullable := base.nullable || p.MinOccurs == 0
+	return posInfo{nullable: nullable, first: base.first, last: base.last}
+}
+
+// walkTerm computes nullable/firstpos/lastpos for a particle term.
+func (a *positionAutomaton) walkTerm(term ParticleTerm) posInfo {
+	switch t := term.(type) {
+	case *ElementDecl:
+		// An element leaf and each of its substitution-group members is its own
+		// position; any of them can match where the element is expected.
+		var info posInfo
+		ids := []int{a.newPos(firstSetEntry{qname: t.Name})}
+		for _, member := range a.schema.substGroups[t.Name] {
+			ids = append(ids, a.newPos(firstSetEntry{qname: member.Name}))
+		}
+		info.first = ids
+		info.last = slices.Clone(ids)
+		return info
+	case *Wildcard:
+		id := a.newPos(firstSetEntry{wildcard: t.Namespace, targetNS: t.TargetNS})
+		return posInfo{first: []int{id}, last: []int{id}}
+	case *ModelGroup:
+		return a.walkModelGroup(t)
+	}
+	return posInfo{nullable: true}
+}
+
+// walkModelGroup computes nullable/firstpos/lastpos for a model group and
+// records the followpos edges its compositor introduces.
+func (a *positionAutomaton) walkModelGroup(mg *ModelGroup) posInfo {
 	switch mg.Compositor {
 	case CompositorChoice:
-		return choiceIsDeterministic(mg, schema)
-	case CompositorSequence:
-		return sequenceIsDeterministic(mg, schema)
+		var info posInfo
+		for _, p := range mg.Particles {
+			ci := a.walkParticle(p)
+			info.first = append(info.first, ci.first...)
+			info.last = append(info.last, ci.last...)
+			if ci.nullable {
+				info.nullable = true
+			}
+		}
+		// An empty choice matches nothing; treat it as nullable for safety.
+		if len(mg.Particles) == 0 {
+			info.nullable = true
+		}
+		return a.applyGroupRepetition(mg, info)
+	case CompositorSequence, CompositorAll:
+		// xs:all is order-independent at validation time, but for UPA purposes a
+		// sequence-style concatenation is a sound over-approximation: any false
+		// edge it adds can only widen reachability, and xs:all members are
+		// already constrained to be distinct elements by other checks.
+		info := posInfo{nullable: true}
+		for _, p := range mg.Particles {
+			ci := a.walkParticle(p)
+			// followpos: lastpos of everything matchable so far flows into the
+			// firstpos of this particle.
+			if info.nullable {
+				info.first = append(info.first, ci.first...)
+			}
+			for _, l := range info.last {
+				a.addFollow(l, ci.first)
+			}
+			if info.nullable {
+				// prior segment could be empty: this particle may itself end the
+				// segment, so its lastpos joins the running lastpos.
+				info.last = append(info.last, ci.last...)
+			} else {
+				info.last = ci.last
+			}
+			info.nullable = info.nullable && ci.nullable
+		}
+		if len(mg.Particles) == 0 {
+			info.nullable = true
+		}
+		return a.applyGroupRepetition(mg, info)
+	}
+	return posInfo{nullable: true}
+}
+
+// applyGroupRepetition folds a model group's own minOccurs/maxOccurs into the
+// computed posInfo, mirroring walkParticle's repetition handling.
+func (a *positionAutomaton) applyGroupRepetition(mg *ModelGroup, info posInfo) posInfo {
+	if mg.MaxOccurs == Unbounded || mg.MaxOccurs > 1 {
+		for _, l := range info.last {
+			a.addFollow(l, info.first)
+		}
+	}
+	if mg.MinOccurs == 0 {
+		info.nullable = true
+	}
+	return info
+}
+
+// addFollow records that every position in `to` may follow `from`.
+func (a *positionAutomaton) addFollow(from int, to []int) {
+	if len(to) == 0 {
+		return
+	}
+	a.followpos[from] = append(a.followpos[from], to...)
+}
+
+// isDeterministic returns true if no automaton state offers two distinct
+// competing positions that overlap on the same element name (or wildcard).
+func (a *positionAutomaton) isDeterministic() bool {
+	// The start state's choices are firstpos(root). Re-derive it as followpos of
+	// a synthetic predecessor: every position reachable initially is in
+	// followpos[-1].
+	root := a.followpos[-1]
+	if !a.stateUnambiguous(root) {
+		return false
+	}
+	for from := range a.positions {
+		if !a.stateUnambiguous(a.followpos[from]) {
+			return false
+		}
 	}
 	return true
 }
 
-// choiceIsDeterministic checks that no two particles in a choice can match the same element.
-func choiceIsDeterministic(mg *ModelGroup, schema *Schema) bool {
-	// Check each pair of particles for first-set overlap.
-	for i := range len(mg.Particles) {
-		for j := i + 1; j < len(mg.Particles); j++ {
-			if particleFirstSetsOverlap(mg.Particles[i], mg.Particles[j], schema) {
-				return false
+// stateUnambiguous returns true if no two distinct positions reachable from one
+// state can match the same element.
+func (a *positionAutomaton) stateUnambiguous(reachable []int) bool {
+	for i := range reachable {
+		for j := i + 1; j < len(reachable); j++ {
+			pi, pj := reachable[i], reachable[j]
+			if pi == pj {
+				continue
 			}
-		}
-		// Recurse into nested model groups.
-		if nested, ok := mg.Particles[i].Term.(*ModelGroup); ok {
-			if !modelGroupIsDeterministic(nested, schema) {
+			if entriesOverlap(a.positions[pi].entry, a.positions[pj].entry) {
 				return false
 			}
 		}
 	}
 	return true
-}
-
-// sequenceIsDeterministic checks that adjacent particles in a sequence don't create ambiguity.
-func sequenceIsDeterministic(mg *ModelGroup, schema *Schema) bool {
-	for i := range len(mg.Particles) {
-		p := mg.Particles[i]
-		// Recurse into nested model groups.
-		if nested, ok := p.Term.(*ModelGroup); ok {
-			if !modelGroupIsDeterministic(nested, schema) {
-				return false
-			}
-		}
-		if i+1 < len(mg.Particles) {
-			next := mg.Particles[i+1]
-			if canRepeatOrEnd(p) {
-				// When current particle can repeat or end, check two overlaps:
-				// 1. Current's first-set vs next's first-set (can a new element
-				//    start either a new repetition of current OR the next particle?)
-				if particleFirstSetsOverlap(p, next, schema) {
-					return false
-				}
-				// 2. Current's last-set vs next's first-set.
-				if particleLastFirstOverlap(p, next, schema) {
-					return false
-				}
-			}
-		}
-	}
-	return true
-}
-
-// canRepeatOrEnd returns true if the particle could match more or stop matching,
-// creating ambiguity about whether the next element belongs to this particle or the next.
-func canRepeatOrEnd(p *Particle) bool {
-	if p.MaxOccurs == Unbounded {
-		return true
-	}
-	if p.MinOccurs < p.MaxOccurs {
-		return true
-	}
-	// Check nested model groups with variable repetition.
-	if mg, ok := p.Term.(*ModelGroup); ok {
-		if mg.MinOccurs < mg.MaxOccurs || mg.MaxOccurs == Unbounded {
-			return true
-		}
-	}
-	return false
-}
-
-// particleFirstSetsOverlap checks if two particles can both match the same starting element.
-func particleFirstSetsOverlap(p1, p2 *Particle, schema *Schema) bool {
-	first1 := particleFirstSet(p1, schema)
-	first2 := particleFirstSet(p2, schema)
-	return firstSetsOverlap(first1, first2)
-}
-
-// particleLastFirstOverlap checks if the last elements matchable by p1 overlap
-// with the first elements matchable by p2.
-func particleLastFirstOverlap(p1, p2 *Particle, schema *Schema) bool {
-	last1 := particleLastSet(p1, schema)
-	first2 := particleFirstSet(p2, schema)
-	return firstSetsOverlap(last1, first2)
 }
 
 // firstSetEntry represents an element or wildcard in a first/last set.
@@ -124,109 +251,6 @@ type firstSetEntry struct {
 	qname    QName  // for elements
 	wildcard string // for wildcards (namespace constraint)
 	targetNS string // for wildcards
-}
-
-// particleFirstSet returns the set of elements/wildcards that can appear first.
-func particleFirstSet(p *Particle, schema *Schema) []firstSetEntry {
-	switch term := p.Term.(type) {
-	case *ElementDecl:
-		entries := make([]firstSetEntry, 1, 1+len(schema.substGroups[term.Name]))
-		entries[0] = firstSetEntry{qname: term.Name}
-		for _, member := range schema.substGroups[term.Name] {
-			entries = append(entries, firstSetEntry{qname: member.Name})
-		}
-		return entries
-	case *Wildcard:
-		return []firstSetEntry{{wildcard: term.Namespace, targetNS: term.TargetNS}}
-	case *ModelGroup:
-		return modelGroupFirstSet(term, schema)
-	}
-	return nil
-}
-
-// particleLastSet returns the set of elements/wildcards that can appear last.
-func particleLastSet(p *Particle, schema *Schema) []firstSetEntry {
-	switch term := p.Term.(type) {
-	case *ElementDecl:
-		entries := make([]firstSetEntry, 1, 1+len(schema.substGroups[term.Name]))
-		entries[0] = firstSetEntry{qname: term.Name}
-		for _, member := range schema.substGroups[term.Name] {
-			entries = append(entries, firstSetEntry{qname: member.Name})
-		}
-		return entries
-	case *Wildcard:
-		return []firstSetEntry{{wildcard: term.Namespace, targetNS: term.TargetNS}}
-	case *ModelGroup:
-		return modelGroupLastSet(term, schema)
-	}
-	return nil
-}
-
-// modelGroupFirstSet returns the first set for a model group.
-func modelGroupFirstSet(mg *ModelGroup, schema *Schema) []firstSetEntry {
-	switch mg.Compositor {
-	case CompositorSequence:
-		// First set = first set of first non-optional particle
-		// (union with subsequent particles if earlier ones are optional).
-		var result []firstSetEntry
-		for _, p := range mg.Particles {
-			result = append(result, particleFirstSet(p, schema)...)
-			if p.MinOccurs > 0 {
-				break // this particle is required, stop here
-			}
-		}
-		return result
-	case CompositorChoice:
-		var result []firstSetEntry
-		for _, p := range mg.Particles {
-			result = append(result, particleFirstSet(p, schema)...)
-		}
-		return result
-	case CompositorAll:
-		var result []firstSetEntry
-		for _, p := range mg.Particles {
-			result = append(result, particleFirstSet(p, schema)...)
-		}
-		return result
-	}
-	return nil
-}
-
-// modelGroupLastSet returns the last set for a model group.
-func modelGroupLastSet(mg *ModelGroup, schema *Schema) []firstSetEntry {
-	switch mg.Compositor {
-	case CompositorSequence:
-		// Last set = last set of last non-optional particle
-		// (union with previous particles if later ones are optional).
-		var result []firstSetEntry
-		for _, v := range slices.Backward(mg.Particles) {
-			p := v
-			result = append(result, particleLastSet(p, schema)...)
-			if p.MinOccurs > 0 {
-				break
-			}
-		}
-		return result
-	case CompositorChoice:
-		var result []firstSetEntry
-		for _, p := range mg.Particles {
-			result = append(result, particleLastSet(p, schema)...)
-		}
-		return result
-	}
-	return nil
-}
-
-// firstSetsOverlap checks if two first-sets have any overlapping entries.
-func firstSetsOverlap(a, b []firstSetEntry) bool {
-	for _, ea := range a {
-		for _, eb := range b {
-			if entriesOverlap(ea, eb) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // entriesOverlap checks if two first-set entries can match the same element.
