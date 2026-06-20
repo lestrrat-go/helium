@@ -275,6 +275,42 @@ func TestDeepCloneValueSemantics(t *testing.T) {
 		})
 	}
 
+	// The array `?*` wildcard and keyed `?n` lookup paths must hand back a
+	// defensive clone of the borrowed stored member — not the array's own backing
+	// sequence. Under EvalBorrowing the variable array is the same Go ArrayItem we
+	// hold here, so a regression that returns the stored member lets a mutation of
+	// the lookup output reach the source array. Each case mutates the lookup
+	// result and asserts the source array still reads its original value.
+	for _, tc := range []struct {
+		name string
+		expr string
+	}{
+		{name: "array wildcard lookup output is detached", expr: `$a ! ?*`},
+		{name: "array keyed lookup output is detached", expr: `$a ! ?1`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			seq, _ := bigIntSeq(7)
+			arr := xpath3.NewArray([]xpath3.Sequence{seq})
+
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+
+			result, err := xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(varsSet("a", xpath3.ItemSlice{arr})).
+				Evaluate(t.Context(), compiled, nil)
+			require.NoError(t, err)
+
+			// Mutate the *big.Int returned by the lookup.
+			mutateBigInt(t, result.Sequence())
+
+			got, err := arr.Get(1)
+			require.NoError(t, err)
+			require.Equal(t, int64(7), readInt(t, got), "source array member must be unaffected by mutation of the lookup output")
+		})
+	}
+
 	t.Run("byte-slice atomic is detached", func(t *testing.T) {
 		t.Parallel()
 

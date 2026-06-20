@@ -118,9 +118,14 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 	case ArrayItem:
 		if all {
 			var result ItemSlice
+			// Borrow each stored member WITHOUT cloning (members0), then drain
+			// it through appendBoundedClonedSeq so maxNodes / OpLimit /
+			// cancellation fire BEFORE the member is materialized, and each
+			// appended item is a defensive clone — so mutating the `?*` output
+			// cannot reach the source array's pointer-backed atomics.
 			for _, m := range v.members0() {
 				var err error
-				result, err = appendBounded(result, seqMaterialize(m), ec.maxNodes)
+				result, err = appendBoundedClonedSeq(ctx, ec, result, m, ec.maxNodes)
 				if err != nil {
 					return nil, err
 				}
@@ -153,11 +158,16 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 			if err != nil {
 				return nil, err
 			}
+			// Borrow the stored member WITHOUT cloning (get0), then drain it
+			// through appendBoundedClonedSeq so maxNodes / OpLimit /
+			// cancellation fire BEFORE the member is materialized, and each
+			// appended item is a defensive clone — so mutating the keyed lookup
+			// output cannot reach the source array's pointer-backed atomics.
 			member, err := v.get0(idx)
 			if err != nil {
 				return nil, err
 			}
-			result, err = appendBounded(result, seqMaterialize(member), ec.maxNodes)
+			result, err = appendBoundedClonedSeq(ctx, ec, result, member, ec.maxNodes)
 			if err != nil {
 				return nil, err
 			}
