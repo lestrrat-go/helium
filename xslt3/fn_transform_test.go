@@ -458,9 +458,10 @@ func TestFnTransformInheritsRuntimeResourceCap(t *testing.T) {
 // TestFnTransformInitialMatchSelectionResultDocument is a regression test for a
 // panic ("assignment to entry in nil map") that occurred when fn:transform was
 // called with a non-empty initial-match-selection and the invoked stylesheet
-// wrote a secondary xsl:result-document. The selection path
-// (executeTransformWithSelection) failed to initialize resultDocItems and
-// resultDocOutputDefs, so execResultDocument panicked when assigning into them.
+// wrote a secondary xsl:result-document. The former forked selection path
+// failed to initialize resultDocItems and resultDocOutputDefs, so
+// execResultDocument panicked when assigning into them. The selection case now
+// routes through the normal executeTransform path, which initializes them.
 func TestFnTransformInitialMatchSelectionResultDocument(t *testing.T) {
 	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
@@ -495,4 +496,47 @@ func TestFnTransformInitialMatchSelectionResultDocument(t *testing.T) {
 	// The secondary xsl:result-document appears in the result map keyed by href.
 	require.Contains(t, out, `key="secondary.xml"`)
 	require.Contains(t, out, "&lt;secondary&gt;alpha&lt;/secondary&gt;")
+}
+
+// TestFnTransformInitialMatchSelectionInitialModeText verifies that a
+// fn:transform with a non-empty initial-match-selection, an initial-mode, and
+// an inner stylesheet declaring <xsl:output method="text"> selects templates by
+// the requested mode AND serializes through the resolved (text) output
+// definition — exactly as a normal transform would. This guards against the
+// forked selection execution path that skipped output-def resolution and
+// initial-mode resolution.
+func TestFnTransformInitialMatchSelectionInitialModeText(t *testing.T) {
+	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner-loc"/>
+  <xsl:template match="/">
+    <xsl:variable name="sel" as="element()*">
+      <item>alpha</item>
+    </xsl:variable>
+    <xsl:variable name="result" select="transform(map{
+      'stylesheet-location': $inner-loc,
+      'initial-match-selection': $sel,
+      'initial-mode': QName('','special'),
+      'delivery-format': 'serialized'
+    })"/>
+    <result><xsl:value-of select="$result('output')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
+	out, err := ss.Transform(src).
+		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-text-modes.xsl"))).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	// The "special" mode template must be selected (not the default-mode one).
+	// The whole inner result is wrapped verbatim inside the outer <result>.
+	require.Contains(t, out, "<result xmlns:map=\"http://www.w3.org/2005/xpath-functions/map\">special:alpha</result>")
+	require.NotContains(t, out, "default:alpha")
+	// method="text" serialization: no element wrapper, no XML escaping, and no
+	// XML declaration around the inner output. A forked path that left
+	// resolvedOutputDef nil would XML-serialize the inner result and emit an
+	// escaped declaration / angle brackets (e.g. "&lt;?xml ...").
+	require.NotContains(t, out, "&lt;")
 }

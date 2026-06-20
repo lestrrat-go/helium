@@ -147,6 +147,16 @@ type Stylesheet struct {
 type globalContextItemDef struct {
 	Use string // "required", "optional", "absent"
 	As  string // sequence type (e.g., "document-node(element(codd))")
+	// Namespaces captures the in-scope namespace bindings (prefix→URI) at the
+	// declaration element, so the @as sequence type resolves prefixes exactly
+	// as written at the declaration site rather than against the runtime
+	// stylesheet-wide namespace map.
+	Namespaces map[string]string
+	// XPathDefaultNS is the in-scope xpath-default-namespace (default element
+	// namespace) at the declaration element. Used to resolve unprefixed names
+	// in the @as sequence type.
+	XPathDefaultNS    string
+	HasXPathDefaultNS bool
 }
 
 // DefaultOutputDef returns the default output definition for the stylesheet

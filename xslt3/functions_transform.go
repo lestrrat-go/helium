@@ -5,7 +5,6 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -651,8 +650,9 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	var resultDoc *helium.Document
 	var capturedItems xpath3.Sequence
 	if initialMatchSel != nil && sequence.Len(initialMatchSel) > 0 {
-		// initial-match-selection: create a document wrapper for non-node items
-		// or apply templates to the selection
+		// initial-match-selection: when the selection is a single node, derive
+		// the owning document so the source tree (and its accumulators, schema
+		// annotations, etc.) is available during template execution.
 		if sequence.Len(initialMatchSel) == 1 {
 			if ni, ok := initialMatchSel.Get(0).(xpath3.NodeItem); ok {
 				n := ni.Node
@@ -665,40 +665,28 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 				}
 			}
 		}
-		// For atomic values, we need to create a temporary document and
-		// use a different execution path. For now, wrap in a document.
-		if sourceDoc == nil {
-			sourceDoc = helium.NewDefaultDocument()
-		}
-
-		// Set up the initial match selection on the exec context.
-		// Enable raw capture when delivery-format is "raw" so function
-		// items and other non-node XDM values are preserved.
-		rawCapture := deliveryFormat == lexicon.OutputRaw
-		var execErr error
-		resultDoc, capturedItems, execErr = executeTransformWithSelection(ctx, sourceDoc, ss, fnTransformCfg, initialMatchSel, rawCapture)
-		if execErr != nil {
-			return nil, execErr
-		}
-	} else {
-		if sourceDoc == nil {
-			sourceDoc = helium.NewDefaultDocument()
-		}
-		if deliveryFormat == "raw" {
-			fnTransformCfg.rawCapture = true
-			var execErr error
-			resultDoc, execErr = executeTransform(ctx, sourceDoc, ss, fnTransformCfg)
-			if execErr != nil {
-				return nil, execErr
-			}
-			capturedItems = fnTransformCfg.rawCapturedItems
-		} else {
-			var execErr error
-			resultDoc, execErr = executeTransform(ctx, sourceDoc, ss, fnTransformCfg)
-			if execErr != nil {
-				return nil, execErr
-			}
-		}
+		// Route the selection through the normal executeTransform path via the
+		// shared config so output-def resolution, initial-mode resolution,
+		// global-context-item handling, result-document/message handlers, and
+		// schema/static context all behave identically to a source-driven
+		// transform.
+		fnTransformCfg.initialMatchSelection = initialMatchSel
+	}
+	if sourceDoc == nil {
+		sourceDoc = helium.NewDefaultDocument()
+	}
+	// Enable raw capture when delivery-format is "raw" so function items and
+	// other non-node XDM values are preserved for raw delivery.
+	if deliveryFormat == lexicon.OutputRaw {
+		fnTransformCfg.rawCapture = true
+	}
+	var execErr error
+	resultDoc, execErr = executeTransform(ctx, sourceDoc, ss, fnTransformCfg)
+	if execErr != nil {
+		return nil, execErr
+	}
+	if fnTransformCfg.rawCapture {
+		capturedItems = fnTransformCfg.rawCapturedItems
 	}
 
 	// Build result map
@@ -774,144 +762,4 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	}
 
 	return xpath3.ItemSlice{result}, nil
-}
-
-// executeTransformWithSelection runs a transform where the initial match
-// selection is an explicit sequence (not derived from a source document root).
-// When rawCapture is true, the output frame captures non-node items (function
-// items, maps, arrays) so they can be returned in raw delivery format.
-func executeTransformWithSelection(ctx context.Context, source *helium.Document, ss *Stylesheet, cfg *transformConfig, selection xpath3.Sequence, rawCapture bool) (*helium.Document, xpath3.Sequence, error) {
-	resultDoc := helium.NewDefaultDocument()
-
-	outFrame := &outputFrame{doc: resultDoc, current: resultDoc, itemSeparator: ss.defaultItemSeparator(), captureItems: rawCapture}
-	ec := &execContext{
-		stylesheet:          ss,
-		sourceDoc:           source,
-		resultDoc:           resultDoc,
-		currentNode:         source,
-		contextNode:         source,
-		position:            1,
-		size:                1,
-		globalVars:          make(map[string]xpath3.Sequence),
-		currentMode:         "",
-		outputStack:         []*outputFrame{outFrame},
-		keyTables:           make(map[string]*keyTable),
-		docCache:            make(map[string]*helium.Document),
-		functionResultCache: make(map[string]xpath3.Sequence),
-		accumulatorState:    make(map[string]xpath3.Sequence),
-		currentTime:         time.Now().UTC(),
-		resultDocuments:     make(map[string]*helium.Document),
-		resultDocItems:      make(map[string]xpath3.Sequence),
-		resultDocOutputDefs: make(map[string]*OutputDef),
-		usedResultURIs:      make(map[string]struct{}),
-		defaultValidation:   ss.defaultValidation,
-		docOrderCache:       xpath3.NewDocOrderCache(),
-	}
-	ec.setCurrentTemplate(nil) // initialize currentTemplateBaseDir from stylesheet
-
-	if cfg != nil && cfg.msgHandler != nil {
-		ec.msgHandler = cfg.msgHandler
-	}
-
-	// Schema-aware: build schema registry and validate source document.
-	if ss.schemaAware {
-		ec.schemaRegistry = &schemaRegistry{schemas: ss.schemas}
-		if len(ss.schemas) > 0 && source != nil {
-			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, source)
-			if valErr != nil && ss.defaultValidation == validationStrict {
-				return nil, nil, valErr
-			}
-			for node, typeName := range vr.Annotations {
-				ec.annotateNode(node, typeName)
-			}
-			for elem := range vr.NilledElements {
-				ec.markNilled(elem)
-			}
-		}
-	}
-
-	if len(ss.stripSpace) > 0 && source != nil {
-		ec.stripWhitespaceFromDoc(source)
-	}
-
-	ctx = withExecContext(ctx, ec)
-
-	if err := ec.initGlobalVars(ctx, cfg); err != nil {
-		return nil, nil, err
-	}
-
-	// Check for initial template
-	initialTemplateName := ""
-	if cfg != nil && cfg.initialTemplate != "" {
-		initialTemplateName = cfg.initialTemplate
-	}
-
-	if initialTemplateName != "" {
-		tmpl := ss.namedTemplates[initialTemplateName]
-		if tmpl == nil {
-			return nil, nil, dynamicError(errCodeXTDE0820, "initial template %q not found", initialTemplateName)
-		}
-		if err := ec.executeTemplate(ctx, tmpl, source, ""); err != nil {
-			return nil, nil, err
-		}
-	} else {
-		// Apply templates to the initial match selection
-		selLen := sequence.Len(selection)
-		for i := range selLen {
-			item := selection.Get(i)
-			switch v := item.(type) {
-			case xpath3.NodeItem:
-				ec.contextNode = v.Node
-				ec.currentNode = v.Node
-				ec.position = i + 1
-				ec.size = selLen
-				if err := ec.applyTemplates(ctx, v.Node, ""); err != nil {
-					return nil, nil, err
-				}
-			case xpath3.AtomicValue:
-				// For atomic values, use atomic template matching
-				ec.contextItem = v
-				ec.position = i + 1
-				ec.size = selLen
-				tmpl, tErr := ec.findAtomicTemplate(ctx, v, "")
-				if tErr != nil {
-					return nil, nil, tErr
-				}
-				if tmpl != nil {
-					if err := ec.executeAtomicTemplate(ctx, tmpl, v, ""); err != nil {
-						return nil, nil, err
-					}
-				} else {
-					// Built-in: output string value of atomic item
-					av, aErr := xpath3.AtomizeItem(v)
-					if aErr == nil {
-						s, sErr := xpath3.AtomicToString(av)
-						if sErr == nil {
-							text := ec.resultDoc.CreateText([]byte(s))
-							if err := ec.addNode(text); err != nil {
-								return nil, nil, err
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if cfg != nil && cfg.resultDocHandler != nil {
-		for href, doc := range ec.resultDocuments {
-			outDef := ec.resultDocOutputDefs[href]
-			if err := cfg.resultDocHandler.HandleResultDocument(href, doc, outDef); err != nil {
-				return nil, nil, err
-			}
-		}
-	}
-
-	// Collect captured items from the output frame (raw delivery mode).
-	var capturedItems xpath3.Sequence
-	if rawCapture {
-		capturedItems = outFrame.pendingItems
-	}
-
-	return resultDoc, capturedItems, nil
 }
