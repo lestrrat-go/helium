@@ -2,7 +2,6 @@ package xmldsig1
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -134,16 +133,6 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		}
 	}
 
-	// Temporarily detach the Signature element for enveloped signatures,
-	// remembering its exact position so we can restore it after
-	// canonicalization. Naive reattach-via-AddChild would move the
-	// Signature to the end of its parent and silently restructure the doc.
-	var anchor sigAnchor
-	if hasEnveloped {
-		anchor = captureAnchor(sigElem)
-		helium.UnlinkNode(sigElem)
-	}
-
 	// Find the c14n method. Fail closed: any transform whose URI we cannot
 	// apply must be rejected before digesting, otherwise a Reference could
 	// declare an unsupported transform (XPath, Base64, custom URI) and still
@@ -156,38 +145,26 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 			c14nMethod = t.algorithm
 			prefixes = t.prefixes
 		case TransformEnvelopedSignature:
-			// Handled in the separate enveloped-signature pass above; no-op here.
+			// Handled by canonicalizeEnveloped below; no-op here.
 		default:
-			// Reattach the Signature element we detached above before
-			// bailing out, so a rejected reference does not leave the
-			// document structurally modified. The rejection is the primary
-			// error, but if restore itself fails the document is left mutated,
-			// so surface that failure too (joined) rather than dropping it
-			// silently. errors.Is(ErrUnsupportedTransform) still holds.
-			rejectErr := fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
-			if hasEnveloped {
-				if rerr := anchor.restore(sigElem); rerr != nil {
-					rejectErr = errors.Join(rejectErr, fmt.Errorf("failed to restore detached Signature element: %w", rerr))
-				}
-			}
-			return nil, rejectErr
+			return nil, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
 		}
 	}
 
+	// For enveloped signatures the Signature element and its descendants must
+	// be omitted from the canonical input. canonicalizeEnveloped does this on a
+	// deep copy of the document, never mutating the caller's live DOM (which
+	// would race with concurrent readers and risk leaving the tree corrupted if
+	// a restore failed).
 	var canonical []byte
-	if ref.uri == "" {
+	switch {
+	case hasEnveloped:
+		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, ref.uri == "", prefixes)
+	case ref.uri == "":
 		canonical, err = canonicalize(c14nMethod, doc, prefixes)
-	} else {
+	default:
 		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
 	}
-
-	// Reattach the Signature element at its original sibling position.
-	if hasEnveloped {
-		if rerr := anchor.restore(sigElem); rerr != nil && err == nil {
-			err = rerr
-		}
-	}
-
 	if err != nil {
 		return nil, err
 	}

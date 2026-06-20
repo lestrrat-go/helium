@@ -242,16 +242,6 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		}
 	}
 
-	// For enveloped signature, temporarily detach the Signature element,
-	// remembering its exact position so we can restore it after
-	// canonicalization.
-	var anchor sigAnchor
-	if hasEnveloped {
-		anchor = captureAnchor(sigElem)
-		helium.UnlinkNode(sigElem)
-	}
-
-	var canonical []byte
 	// Find the last c14n transform to determine the canonicalization method.
 	c14nMethod := ExcC14N10 // default
 	var prefixes []string
@@ -265,20 +255,20 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		}
 	}
 
-	if ref.URI == "" {
-		// Whole document.
+	// For enveloped signatures the Signature element and its descendants must
+	// be omitted from the canonical input. canonicalizeEnveloped does this on a
+	// deep copy of the document, never mutating the caller's live DOM (which
+	// would race with concurrent readers and risk leaving the tree corrupted if
+	// a restore failed).
+	var canonical []byte
+	switch {
+	case hasEnveloped:
+		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, ref.URI == "", prefixes)
+	case ref.URI == "":
 		canonical, err = canonicalize(c14nMethod, doc, prefixes)
-	} else {
+	default:
 		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
 	}
-
-	// Reattach the Signature element at its original sibling position.
-	if hasEnveloped {
-		if rerr := anchor.restore(sigElem); rerr != nil {
-			return rerr
-		}
-	}
-
 	if err != nil {
 		return err
 	}
