@@ -47,12 +47,14 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		{
 			typeName: lexicon.TypeFloat,
 			valid:    []string{lexicon.XSLTVersion10, "-1.5", "+3.14", "1", ".5", "1.", "1e10", "1.5E-3", lexicon.FloatINF, lexicon.FloatNegINF, "+INF", lexicon.FloatNaN},
-			invalid:  []string{"", testAbc, "1.2.3", "inf", "nan", "Inf"},
+			// The optional sign applies to INF and the numeric forms but NOT to NaN:
+			// "+NaN"/"-NaN" are not valid xs:float lexical forms.
+			invalid: []string{"", testAbc, "1.2.3", "inf", "nan", "Inf", "+NaN", "-NaN"},
 		},
 		{
 			typeName: lexicon.TypeDouble,
-			valid:    []string{lexicon.XSLTVersion10, "-1.5", "1e10", lexicon.FloatINF, lexicon.FloatNegINF, lexicon.FloatNaN},
-			invalid:  []string{"", testAbc, "inf", "nan"},
+			valid:    []string{lexicon.XSLTVersion10, "-1.5", "1e10", "+INF", lexicon.FloatINF, lexicon.FloatNegINF, lexicon.FloatNaN},
+			invalid:  []string{"", testAbc, "inf", "nan", "+NaN", "-NaN"},
 		},
 		{
 			typeName: lexicon.TypeDateTime,
@@ -308,6 +310,12 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeFloat, lexicon.FloatNaN, lexicon.XSLTVersion10, 0, false},
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, lexicon.FloatNaN, 0, false},
 		{lexicon.TypeFloat, lexicon.FloatNaN, lexicon.FloatNaN, 0, false},
+		// "+NaN"/"-NaN" are not valid xs:float lexical forms, so a comparison
+		// against them is indeterminate rather than treating them as NaN. This
+		// keeps the value space consistent with the lexical validator.
+		{lexicon.TypeFloat, "+NaN", lexicon.FloatNaN, 0, false},
+		{lexicon.TypeFloat, "-NaN", lexicon.FloatNaN, 0, false},
+		{lexicon.TypeFloat, lexicon.FloatNaN, "+NaN", 0, false},
 		{lexicon.TypeFloat, "1e2", "100", 0, true},
 		{lexicon.TypeFloat, "1.5E-3", "0.0015", 0, true},
 		// xs:float value space is IEEE-754 single precision: 16777216 and
@@ -535,6 +543,25 @@ func TestNormalize(t *testing.T) {
 			require.Equal(t, tt.want, value.Normalize(tt.in, tt.typ))
 		})
 	}
+}
+
+// TestIsFloatNaN verifies that only the bare "NaN" lexical form denotes NaN: the
+// sign-prefixed "+NaN"/"-NaN" are not valid XSD xs:float/xs:double lexical forms,
+// and INF and finite values are not NaN.
+func TestIsFloatNaN(t *testing.T) {
+	// Only the bare "NaN" denotes NaN. The sign-prefixed +NaN/-NaN are not valid
+	// XSD lexical forms and must be rejected, so a facet value="+NaN" cannot
+	// value-match an instance "NaN".
+	require.True(t, value.IsFloatNaN(lexicon.FloatNaN), "bare NaN is NaN")
+	require.False(t, value.IsFloatNaN("+NaN"), "+NaN is not a valid NaN form")
+	require.False(t, value.IsFloatNaN("-NaN"), "-NaN is not a valid NaN form")
+	// strconv.ParseFloat accepts these lenient spellings, but they are not valid
+	// XSD lexical forms for NaN, so IsFloatNaN must reject them.
+	require.False(t, value.IsFloatNaN("nan"), "lowercase nan is not a valid NaN form")
+	require.False(t, value.IsFloatNaN("NAN"), "uppercase NAN is not a valid NaN form")
+	require.False(t, value.IsFloatNaN("Infinity"), "Infinity is not a valid NaN form")
+	require.False(t, value.IsFloatNaN(lexicon.FloatINF), "INF is not NaN")
+	require.False(t, value.IsFloatNaN("1.5"), "finite value is not NaN")
 }
 
 // TestTimezoneUppercaseZOnly verifies that the timezone designator is the

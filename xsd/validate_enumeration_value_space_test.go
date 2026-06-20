@@ -21,6 +21,15 @@ func TestEnumerationValueSpace(t *testing.T) {
 		enum       []string
 		instance   string
 		wantReject bool
+		// wantCompileError marks a case whose enumeration facet value is itself not
+		// datatype-valid against the base type, so the SCHEMA is in error and must be
+		// rejected at compile time (before any instance validation runs).
+		wantCompileError bool
+		// wantRejectMsg is the substring expected in the validation error when
+		// wantReject is set. It defaults to the enumeration-facet message; cases
+		// that are rejected at the lexical-type level (e.g. an out-of-space
+		// lexical form) override it with the atomic-type message.
+		wantRejectMsg string
 	}
 
 	cases := []testCase{
@@ -42,12 +51,20 @@ func TestEnumerationValueSpace(t *testing.T) {
 		{name: "double exponent form", baseType: xsDoubleType, enum: []string{"1.5"}, instance: "1.5E0"},
 		{name: "double non-member", baseType: xsDoubleType, enum: []string{"1.5"}, instance: "2.5", wantReject: true},
 
-		// float NaN — per XSD, NaN equals NaN for enumeration purposes; signed
-		// lexical forms (accepted by the float validator) must match too.
+		// float NaN — per XSD, NaN equals NaN for enumeration purposes. The only
+		// valid lexical form is bare "NaN": signed forms "+NaN"/"-NaN" are not in
+		// the xs:float/xs:double lexical space, so they must be rejected outright.
 		{name: "float NaN matches NaN", baseType: xsFloatType, enum: []string{nanLexical}, instance: nanLexical},
 		{name: "double NaN matches NaN", baseType: xsDoubleType, enum: []string{nanLexical}, instance: nanLexical},
-		{name: "float signed NaN matches NaN", baseType: xsFloatType, enum: []string{nanLexical}, instance: "+NaN"},
-		{name: "double signed NaN matches NaN", baseType: xsDoubleType, enum: []string{nanLexical}, instance: "-NaN"},
+		{name: "float signed NaN rejected", baseType: xsFloatType, enum: []string{nanLexical}, instance: "+NaN", wantReject: true, wantRejectMsg: "is not a valid value of the atomic type 'xs:float'"},
+		{name: "double signed NaN rejected", baseType: xsDoubleType, enum: []string{nanLexical}, instance: "-NaN", wantReject: true, wantRejectMsg: "is not a valid value of the atomic type 'xs:double'"},
+		// A signed-NaN enumeration member is itself an invalid lexical form, so the
+		// enumeration facet is not datatype-valid against its xs:float/xs:double base.
+		// Per XSD §3.16 the SCHEMA is in error: it must be rejected at compile time
+		// rather than compiling into an unsatisfiable enumeration that fails only at
+		// instance validation.
+		{name: "float signed NaN member rejected at compile", baseType: xsFloatType, enum: []string{"+NaN"}, instance: nanLexical, wantCompileError: true},
+		{name: "double signed NaN member rejected at compile", baseType: xsDoubleType, enum: []string{"-NaN"}, instance: nanLexical, wantCompileError: true},
 
 		// hexBinary — value space is the decoded octets, so case differences are
 		// not significant ("0A" == "0a"); a different byte must be rejected.
@@ -111,6 +128,14 @@ func TestEnumerationValueSpace(t *testing.T) {
 			schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
 			require.NoError(t, err)
 
+			if tc.wantCompileError {
+				errs := compileSchemaErrors(t, schemaXML)
+				require.NotEmpty(t, errs, "expected a compile error for invalid enumeration value")
+				require.Contains(t, errs, "facet 'enumeration'", "expected enumeration-facet compile diagnostic")
+				require.Contains(t, errs, tc.enum[0], "expected the offending enumeration value in the diagnostic")
+				return
+			}
+
 			schema, err := xsd.NewCompiler().Compile(t.Context(), schemaDOC)
 			require.NoError(t, err)
 
@@ -122,7 +147,11 @@ func TestEnumerationValueSpace(t *testing.T) {
 
 			if tc.wantReject {
 				require.Error(t, err)
-				require.Contains(t, errs, "[facet 'enumeration']")
+				wantMsg := tc.wantRejectMsg
+				if wantMsg == "" {
+					wantMsg = "[facet 'enumeration']"
+				}
+				require.Contains(t, errs, wantMsg)
 				return
 			}
 			require.NoError(t, err, "validation errors: %s", errs)
