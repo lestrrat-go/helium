@@ -1061,10 +1061,8 @@ func buildNameClassChoice(classes []*nameClass) *nameClass {
 	// is a fatal compile error that must taint the whole choice. Otherwise a
 	// <choice> would silently validate via its remaining branches and mask the
 	// error. Propagate the taint so the choice never matches.
-	for _, nc := range classes {
-		if nameClassContainsNoMatch(nc) {
-			return &nameClass{kind: ncNoMatch}
-		}
+	if slices.ContainsFunc(classes, nameClassContainsNoMatch) {
+		return &nameClass{kind: ncNoMatch}
 	}
 	if len(classes) == 1 {
 		return classes[0]
