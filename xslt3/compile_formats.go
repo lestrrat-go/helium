@@ -494,14 +494,21 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 		defer func() { _ = rc.Close() }()
 		return readResourceBounded(rc, c.maxResourceBytes)
 	}
-	return loadParameterDocumentFromFile(ctx, outDef, baseURI, href, loadBytes)
+	return loadParameterDocumentFromFile(ctx, outDef, baseURI, href, loadBytes, false)
 }
 
 // loadParameterDocumentFromFile loads a serialization parameter document and
 // applies its settings to the given OutputDef. This standalone version can be
 // called at both compile-time and runtime; the loadBytes callback performs the
 // actual retrieval so each caller supplies its own (opt-in) loader.
-func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseURI, href string, loadBytes func(context.Context, string) ([]byte, error)) error {
+//
+// runtime selects the error taxonomy: at compile time (runtime=false) a load or
+// parse failure is a static error (XTSE0090); at runtime (runtime=true, e.g. an
+// xsl:result-document parameter-document AVT) it is a dynamic error (FODC0002).
+// A runtime failure must NOT also satisfy errors.Is(err, ErrStaticError), so the
+// runtime path never applies the static wrapper. A distinguishable cause such as
+// [ErrResourceTooLarge] survives either way via errors.Join.
+func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseURI, href string, loadBytes func(context.Context, string) ([]byte, error), runtime bool) error {
 	// Decide absoluteness with xsd.URIScheme (RFC 3986), not filepath.IsAbs or a
 	// "://" substring check: an absolute-URI href may carry a scheme with no
 	// "//" authority (e.g. "urn:params", "file:/p/p.xml") and must pass through
@@ -523,6 +530,13 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 
 	data, err := loadBytes(ctx, uri)
 	if err != nil {
+		// At runtime the failure is dynamic (FODC0002); it must not also match
+		// ErrStaticError, so re-wrap the raw cause via dynamicErrorCause rather
+		// than returning the static wrapper. The cause (e.g. ErrResourceTooLarge)
+		// survives the join either way.
+		if runtime {
+			return dynamicErrorCause(errCodeFODC0002, err, "cannot read parameter-document %q: %v", href, err)
+		}
 		// The compile-time loader already returns an *XSLTError (XTSE0090);
 		// return it as-is rather than wrapping it in a second XTSE0090.
 		var xe *XSLTError
@@ -533,10 +547,16 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 	}
 	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
+		if runtime {
+			return dynamicError(errCodeFODC0002, "cannot parse parameter-document %q: %v", href, err)
+		}
 		return staticError(errCodeXTSE0090, "cannot parse parameter-document %q: %v", href, err)
 	}
 	root := doc.DocumentElement()
 	if root == nil || root.LocalName() != "serialization-parameters" || root.URI() != lexicon.NamespaceSerialization {
+		if runtime {
+			return dynamicError(errCodeFODC0002, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
+		}
 		return staticError(errCodeXTSE0090, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
 	}
 

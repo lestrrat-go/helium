@@ -370,17 +370,14 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if pdHref != "" {
 				outDef := &OutputDef{}
 				baseURI := ec.effectiveStaticBaseURI()
-				if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref, ec.retrieveDocumentBytes); loadErr != nil {
-					// A load failure must not be silently dropped: the
-					// transformation has to fail so callers can observe it. In
-					// particular an over-cap resource read returns
-					// [ErrResourceTooLarge]; re-wrap with the dynamic-error
-					// convention so errors.Is(err, ErrResourceTooLarge) and
-					// errors.Is(err, ErrDynamicError) both continue to hold at
-					// this runtime site (loadParameterDocumentFromFile tags the
-					// cause with the static XTSE0090 code, which is wrong here).
-					return dynamicErrorCause(errCodeFODC0002, loadErr,
-						"xsl:result-document cannot load parameter-document %q: %v", pdHref, loadErr)
+				// runtime=true so the helper classifies a load/parse failure as
+				// a dynamic error (FODC0002), never a static one. A failure must
+				// not be silently dropped: the transformation has to fail so
+				// callers can observe it, and an over-cap read keeps
+				// [ErrResourceTooLarge] in the chain (matched via errors.Is)
+				// while errors.Is(err, ErrStaticError) stays false.
+				if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref, ec.retrieveDocumentBytes, true); loadErr != nil {
+					return loadErr
 				}
 				if ec.paramDocOutputDefs == nil {
 					ec.paramDocOutputDefs = make(map[*resultDocumentInst]*OutputDef)

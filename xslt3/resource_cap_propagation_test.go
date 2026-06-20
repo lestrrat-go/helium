@@ -417,6 +417,12 @@ func TestResultDocumentParameterDocumentOverCapIsFatal(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
 		"runtime xsl:result-document parameter-document over-cap read must fail with ErrResourceTooLarge")
+	// A runtime failure is a dynamic error and must NOT also classify as a
+	// static error: errors.Is must not match both taxonomies.
+	require.ErrorIs(t, err, xslt3.ErrDynamicError,
+		"runtime xsl:result-document parameter-document failure must be a dynamic error")
+	require.NotErrorIs(t, err, xslt3.ErrStaticError,
+		"runtime xsl:result-document parameter-document failure must NOT also be a static error")
 }
 
 // A source schema referenced via xsi:schemaLocation that exceeds the cap must
