@@ -360,6 +360,16 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 					if !ok {
 						continue
 					}
+					// InclusiveNamespaces is an Exclusive XML Canonicalization
+					// element and lives ONLY in the exc-c14n namespace
+					// (http://www.w3.org/2001/10/xml-exc-c14n#), not the core
+					// XML-Signature namespace. Matching on local name alone would
+					// let a foreign-namespace look-alike inject a PrefixList and
+					// alter which namespaces are canonicalized, so require the
+					// exact exc-c14n namespace.
+					if !isExcC14NNS(incElem) {
+						continue
+					}
 					if localName(incElem) == "InclusiveNamespaces" {
 						pl, _ := incElem.GetAttribute("PrefixList")
 						if pl != "" {
