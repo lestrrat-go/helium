@@ -377,15 +377,14 @@ func TestStripSpaceSameKindWildcardConflict(t *testing.T) {
 	require.Contains(t, err.Error(), "XTSE0270")
 }
 
-// TestStripSpaceWildcardOverlapNoConflict verifies that two wildcard NameTests
-// of DIFFERENT shapes (different resolved keys) whose match SETS merely intersect
-// do NOT raise a static XTSE0270 at the same import precedence. "*:item"
-// (local-name wildcard) and "Q{urn:A}*" (namespace wildcard) both match
-// Q{urn:A}item, but they are genuinely different NameTests; per the W3C XTSE0270
-// semantics a static conflict requires the SAME resolved NameTest (same
-// name-set), so this intersection is deliberately left to RUNTIME priority
-// resolution. Both orderings are checked because the rule is symmetric.
-func TestStripSpaceWildcardOverlapNoConflict(t *testing.T) {
+// TestStripSpaceWildcardOverlapConflict verifies that a namespace wildcard
+// "Q{urn:A}*" and a local-name wildcard "*:item" at the SAME import precedence
+// raise a static XTSE0270. Both NameTests have the same match priority (-0.25)
+// and both match Q{urn:A}item, so neither outranks the other for that name and
+// the strip/preserve outcome is undecidable. Per XSLT 3.0 this is a static error,
+// not a runtime tiebreak. Both orderings are checked because the rule is
+// symmetric.
+func TestStripSpaceWildcardOverlapConflict(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -417,12 +416,71 @@ func TestStripSpaceWildcardOverlapNoConflict(t *testing.T) {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
 			require.NoError(t, err)
 
-			ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
-			require.NoError(t, err,
-				"different-shape intersecting strip=%q preserve=%q must NOT raise a static XTSE0270", tc.strip, tc.preserve)
-			require.NotNil(t, ss)
+			_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+			require.Error(t, err,
+				"equal-priority overlapping wildcards strip=%q preserve=%q must raise a static XTSE0270", tc.strip, tc.preserve)
+			require.Contains(t, err.Error(), "XTSE0270")
 		})
 	}
+}
+
+// TestStripSpaceWildcardOverlapResolvedByPrecedence verifies that an
+// equal-priority wildcard overlap is NOT a conflict when a strictly
+// higher-precedence rule covers the overlap region. "*" (universal) at higher
+// import precedence covers Q{urn:A}item, so it decides the outcome and no
+// XTSE0270 fires for the lower-precedence "*:item" vs "Q{urn:A}*" pair.
+func TestStripSpaceWildcardOverlapResolvedByPrecedence(t *testing.T) {
+	t.Parallel()
+
+	imported := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*:item"/>
+  <xsl:preserve-space elements="Q{urn:A}*"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:import href="` + importedModuleURI + `"/>
+  <xsl:preserve-space elements="*"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	resolver := &memResolver{files: map[string]string{
+		importedModuleURI: imported,
+	}}
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+
+	ss, err := xslt3.NewCompiler().
+		BaseURI("mem:/main.xsl").
+		URIResolver(resolver).
+		Compile(t.Context(), doc)
+	require.NoError(t, err,
+		"a higher-precedence rule covering the overlap region must resolve the conflict, not raise XTSE0270")
+	require.NotNil(t, ss)
+}
+
+// TestStripSpaceDisjointNamespaceWildcards verifies that two namespace wildcards
+// of DIFFERENT namespaces do not overlap and never raise XTSE0270 even at equal
+// import precedence and priority.
+func TestStripSpaceDisjointNamespaceWildcards(t *testing.T) {
+	t.Parallel()
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="Q{urn:A}*"/>
+  <xsl:preserve-space elements="Q{urn:B}*"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err,
+		"disjoint namespace wildcards must NOT raise XTSE0270")
+	require.NotNil(t, ss)
 }
 
 // TestStripSpaceNamespaceWildcardPriority verifies that a namespace wildcard
