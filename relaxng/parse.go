@@ -678,8 +678,7 @@ func (c *compiler) parsePattern(ctx context.Context, node *helium.Element) *patt
 func (c *compiler) parseElement(ctx context.Context, node *helium.Element) *pattern {
 	p := &pattern{kind: patternElement, line: node.Line()}
 
-	name := getAttr(node, "name")
-	if name != "" {
+	if name, ok := getAttrOpt(node, "name"); ok {
 		if nc := c.resolveNameAttr(ctx, node, name, false); nc != nil {
 			p.nameClass = nc
 			p.name = nc.name
@@ -759,8 +758,7 @@ attrConflictDone:
 func (c *compiler) parseAttribute(ctx context.Context, node *helium.Element) *pattern {
 	p := &pattern{kind: patternAttribute, line: node.Line()}
 
-	name := getAttr(node, "name")
-	if name != "" {
+	if name, ok := getAttrOpt(node, "name"); ok {
 		if nc := c.resolveNameAttr(ctx, node, name, true); nc != nil {
 			p.nameClass = nc
 			p.name = nc.name

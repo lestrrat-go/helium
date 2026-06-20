@@ -277,6 +277,57 @@ func TestUnboundPrefixInChoiceNameClassPoisonsChoice(t *testing.T) {
 	})
 }
 
+// TestWhitespaceOnlyNameIsCompileError covers the presence-aware name lookup: a
+// name attribute whose value is XML whitespace only trims to "" but is still
+// PRESENT. It must be treated as an invalid (empty) QName — a fatal compile
+// error installing a never-matching name class — rather than as an ABSENT name,
+// which would leave no name class and make <attribute>/<element> match anything.
+func TestWhitespaceOnlyNameIsCompileError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("attribute name whitespace-only is a fatal compile error", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute name=" "/>
+</element>`
+		require.NotEmpty(t, compileErrorsFor(t, schema),
+			"a present-but-empty attribute name must be a fatal compile error")
+	})
+
+	t.Run("element name whitespace-only is a fatal compile error", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name=" " xmlns="http://relaxng.org/ns/structure/1.0">
+  <empty/>
+</element>`
+		require.NotEmpty(t, compileErrorsFor(t, schema),
+			"a present-but-empty element name must be a fatal compile error")
+	})
+
+	t.Run("default handler: whitespace-only attribute name does not match anything", func(t *testing.T) {
+		t.Parallel()
+		// On the DEFAULT compile path (no error collector) the fatal diagnostic
+		// is dropped, so the whitespace-only name must still install a
+		// never-matching name class. Otherwise <attribute name=" "> would have no
+		// name class and accept ANY attribute, spuriously validating <a x=""/>.
+		schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute name=" "/>
+</element>`
+
+		schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err, "schema should parse")
+
+		grammar, err := relaxng.NewCompiler().Compile(t.Context(), schemaDoc)
+		require.NoError(t, err, "default Compile returns a nil hard error")
+		require.NotNil(t, grammar, "default Compile still returns a grammar")
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<a x=""/>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"a whitespace-only attribute name must not accept an arbitrary attribute")
+	})
+}
+
 // TestNBSPNotXMLWhitespace covers D-RNG-003: XML whitespace is only #x20, #x9,
 // #xA, #xD. A U+00A0 NBSP must NOT be treated as ignorable whitespace, so an
 // NBSP between element children, or an NBSP value for an <empty/> pattern, is
