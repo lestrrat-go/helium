@@ -1472,6 +1472,101 @@ func TestRCDATASaturatedRefContextCancellation(t *testing.T) {
 	}
 }
 
+// TestRCDATASaturatedRefPushCancellationEmitsNothing pins the class fixed in
+// codex 615-33: a low-level char-ref scan helper (parseWhileMax) returns a SHORT
+// chunk both at true exhaustion AND when PeekAt/fillBuffer hit a read error /
+// context cancellation — the push stream's blocking wait returns context.Canceled
+// on cancel, which fillBuffer records as the cursor's sticky read error and
+// PeekAt then reports as 0 (indistinguishable from EOF on length alone). The old
+// parseSaturatedCharRefLiteral treated a short parseWhileMax result as "run
+// ended", broke out of the spool, settled the absent ';', and emitted the legacy
+// "amp" resolution + tail as Characters BEFORE the parse returned
+// context.Canceled — a partial SAX emission ahead of a cancel.
+//
+// Using the SAX PUSH parser, this cancels the context WHILE the saturated
+// legacy-prefix run is being spooled (the spool blocks on the push stream waiting
+// for more of the run) and asserts BOTH that Close returns context.Canceled AND
+// that NO Characters/CDATA callback is delivered. A generous MaxContentSize keeps
+// the run within cap so the spool keeps draining (an over-cap run would hard-fail
+// first); the title's only content is the saturated "&amp"+tail run, so any
+// chardata event would be a leaked partial resolution. Before the fix this
+// records >0 chardata bytes; after it records exactly zero.
+func TestRCDATASaturatedRefPushCancellationEmitsNothing(t *testing.T) {
+	const sizeCap = 1 << 30 // far above the pushed run so the within-cap spool keeps draining
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+
+			var mu sync.Mutex
+			var charBytes int
+			record := html.CharactersFunc(func(data []byte) error {
+				mu.Lock()
+				charBytes += len(data)
+				mu.Unlock()
+				return nil
+			})
+			started := make(chan struct{}, 1)
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+			// Signal once the RCDATA element start fires: the parser is then about
+			// to scan the saturated run.
+			sax.SetOnStartElement(html.StartElementFunc(func(name string, _ []html.Attribute) error {
+				if name == elem {
+					select {
+					case started <- struct{}{}:
+					default:
+					}
+				}
+				return nil
+			}))
+
+			pp := html.NewParser().MaxContentSize(sizeCap).NewSAXPushParser(ctx, sax)
+
+			// Clear the 1024-byte charset prescan (meta charset forces the
+			// streaming path), open the RCDATA element, and start a saturated
+			// "&amp"+tail run (no ';') that exceeds the 32-byte lookahead so
+			// parseSaturatedCharRefLiteral spools the tail. The run is NEVER
+			// terminated and the stream is left OPEN (Close is deferred until after
+			// cancel), so the spool drains the pushed tail and then PARKS in a
+			// blocking push-stream Read waiting for more of the run — exactly where
+			// the cancel must land so that blocked Read returns context.Canceled
+			// (the short-chunk-via-read-error case). Cancelling before the parser
+			// reaches the spool would just trip the main loop's ctx.Err() check and
+			// never exercise the scan helper; closing the stream first would feed
+			// the spool a clean EOF instead of a read error.
+			// Filler to clear the prescan is an HTML comment so it fires a Comment
+			// event, NOT Characters — keeping the chardata counter clean so any
+			// non-zero count is unambiguously a leaked partial char-ref resolution.
+			head := metaUTF8 + "<!--" + strings.Repeat("p", 1100) + "-->" +
+				"<" + elem + ">&amp" + strings.Repeat("x", 8192)
+			require.NoError(t, pp.Push([]byte(head)))
+
+			// Wait until the element opened, then let the parser drain the pushed
+			// tail and block in the spool's push-stream Read before cancelling.
+			select {
+			case <-started:
+			case <-time.After(10 * time.Second):
+				t.Fatal("parser never opened the RCDATA element")
+			}
+			time.Sleep(100 * time.Millisecond)
+			cancel()
+
+			_, err := pp.Close()
+			require.ErrorIs(t, err, context.Canceled,
+				"cancelled mid-saturated-run push parse should return context.Canceled")
+
+			mu.Lock()
+			got := charBytes
+			mu.Unlock()
+			require.Zero(t, got,
+				"no Characters/CDATA must be emitted when cancellation aborts a saturated char-ref spool")
+		})
+	}
+}
+
 // TestRCDATACharRefEmitPathsCapEnforced is the convergent, cross-path regression
 // for the legacy-prefix cap bypass (codex 615-27) and a sweep over every
 // char-ref emit path in parseCharRefBounded. The documented contract

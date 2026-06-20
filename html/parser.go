@@ -1181,7 +1181,13 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 		if cancelled {
 			return
 		}
-		if p.cur.Peek() == ';' {
+		semicolon := p.cur.Peek() == ';'
+		// Peek may refill the buffer when the digit run ended at a buffer
+		// boundary; abort without emitting if that hit a read error / cancel.
+		if ctx.Err() != nil || p.cur.Err() != nil {
+			return
+		}
+		if semicolon {
 			_ = p.cur.Advance(1)
 		}
 		p.emitNumericCharRef(codepoint, haveDigits)
@@ -1192,7 +1198,15 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	// constant, NOT MaxContentSize — because every known entity and legacy
 	// prefix is shorter than that window, so this is O(1) memory regardless of
 	// the user's cap.
-	name := p.parseWhileMax(isAlphanumeric, maxEntityNameLen)
+	name, scanErr := p.parseWhileMaxErr(isAlphanumeric, maxEntityNameLen)
+	// A short name scan is ambiguous: the name ended (next byte is not
+	// alphanumeric, e.g. ';' or EOF) OR PeekAt/fillBuffer hit a read error /
+	// cancellation. Disambiguate BEFORE resolving/emitting so a cancelled read
+	// is never mistaken for a finished entity name that would then emit a
+	// (partial) resolution or literal. The main loop re-checks ctx/p.cur.Err().
+	if scanErr != nil || ctx.Err() != nil {
+		return
+	}
 
 	// The lookahead SATURATES when the alphanumeric run reaches the fixed window
 	// AND keeps going. parseCharRef scans the WHOLE run before deciding, so its
@@ -1214,7 +1228,13 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	}
 
 	hasSemicolon := false
-	if p.cur.Peek() == ';' {
+	semicolon := p.cur.Peek() == ';'
+	// Peek may refill the buffer when the name ended at a buffer boundary; abort
+	// without emitting if that hit a read error / cancellation.
+	if ctx.Err() != nil || p.cur.Err() != nil {
+		return
+	}
+	if semicolon {
 		hasSemicolon = true
 		_ = p.cur.Advance(1)
 	}
@@ -1337,7 +1357,16 @@ func (p *parser) parseSaturatedCharRefLiteral(ctx context.Context, head string, 
 		if ctx.Err() != nil {
 			return
 		}
-		chunk := p.parseWhileMax(isAlphanumeric, chunkSize)
+		chunk, scanErr := p.parseWhileMaxErr(isAlphanumeric, chunkSize)
+		// A short chunk is ambiguous: it can mean the alphanumeric run ended OR
+		// that PeekAt/fillBuffer hit a read error / context cancellation (e.g. a
+		// cancelled push-stream wait). Disambiguate BEFORE concluding "run
+		// ended" or emitting: on a read error / cancel, unwind without emitting
+		// any Characters/partial resolution and let the main loop surface the
+		// error (it re-checks ctx.Err() and p.cur.Err()).
+		if scanErr != nil || ctx.Err() != nil {
+			return
+		}
 		literalLen += len(chunk)
 		// Fail BEFORE retaining an over-cap spool: once the literal exceeds the
 		// cap the outcome is ErrContentSizeExceeded regardless of any trailing
@@ -1354,8 +1383,14 @@ func (p *parser) parseSaturatedCharRefLiteral(ctx context.Context, head string, 
 	}
 
 	// Run end reached within cap. Settle the ';' (it can only follow the run's
-	// end, where the cursor now sits).
+	// end, where the cursor now sits). Peek may refill the buffer when the run
+	// ended exactly at a buffer boundary; if that refill hit a read error /
+	// cancellation, abort without emitting so a cancelled push parse never
+	// resolves a partial run.
 	hasSemicolon := p.cur.Peek() == ';'
+	if ctx.Err() != nil || p.cur.Err() != nil {
+		return
+	}
 	if hasSemicolon {
 		literalLen++
 		if literalLen > sizeCap {
@@ -1414,7 +1449,16 @@ func (p *parser) consumeNumericCharRefBounded(ctx context.Context, pred func(byt
 		if ctx.Err() != nil {
 			return 0, false, true
 		}
-		chunk := p.parseWhileMax(pred, chunkSize)
+		chunk, scanErr := p.parseWhileMaxErr(pred, chunkSize)
+		// An empty chunk is ambiguous: the digit run ended (next byte is not a
+		// digit, e.g. ';' or EOF) OR PeekAt/fillBuffer hit a read error /
+		// cancellation. Disambiguate so a cancelled read is NOT mistaken for a
+		// finished run that would then emit a (partial) numeric entity: report
+		// cancelled=true so the caller emits nothing and the main loop surfaces
+		// the error.
+		if scanErr != nil || ctx.Err() != nil {
+			return 0, false, true
+		}
 		if chunk == "" {
 			break
 		}
@@ -2176,25 +2220,52 @@ func (p *parser) parseWhile(pred func(byte) bool) string {
 	return s
 }
 
-// parseWhileMax is parseWhile with an upper bound: it consumes at most limit
+// parseWhileMaxErr is parseWhile with an upper bound: it consumes at most limit
 // matching bytes, leaving any further matching bytes for the next call. It lets
 // a caller bound an otherwise unbounded scan (e.g. a runaway entity name) and
 // drain it in fixed-size pieces. A limit <= 0 is treated as unbounded.
-func (p *parser) parseWhileMax(pred func(byte) bool, limit int) string {
+//
+// It ALSO reports whether the scan was cut short by a read error / context
+// cancellation rather than by genuine exhaustion. PeekAt returns 0 both at true
+// EOF and when fillBuffer hit a non-EOF read error (e.g. the push stream
+// returning context.Canceled when its blocking wait is cancelled). Both stop the
+// scan and produce a chunk shorter than limit, so length alone cannot tell "run
+// ended" from "read failed". This is the disambiguation the bounded char-ref
+// scanners need: a short chunk is EITHER true exhaustion (next byte does not
+// match pred, or clean EOF) OR a read error (p.cur.Err() != nil). When the scan
+// stops short, this consults p.cur.Err() so callers never conclude "run ended" —
+// and never emit — on a cancelled/failed read.
+//
+// err is non-nil ONLY when the scan stopped short because the cursor could not
+// supply the next byte AND that was due to a recorded read error. A scan that
+// stops on a genuine non-matching byte, on clean EOF, or that fills the whole
+// limit returns a nil err.
+func (p *parser) parseWhileMaxErr(pred func(byte) bool, limit int) (string, error) {
 	n := 0
+	stoppedShort := false
 	for limit <= 0 || n < limit {
+		if !p.cur.HasByteAt(n) {
+			// No byte available at n: either clean EOF or a read error. Mark it
+			// so we can disambiguate against p.cur.Err() below.
+			stoppedShort = true
+			break
+		}
 		b := p.cur.PeekAt(n)
 		if b == 0 || !pred(b) {
 			break
 		}
 		n++
 	}
+	var err error
+	if stoppedShort {
+		err = p.cur.Err()
+	}
 	if n == 0 {
-		return ""
+		return "", err
 	}
 	s := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
-	return s
+	return s, err
 }
 
 // skipWhitespace skips whitespace characters.
