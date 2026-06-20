@@ -867,4 +867,202 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
+
+	// Repeated nested group: a valid restriction whose content is a repeated
+	// nested group (the nested group's own occurrence range times its children's
+	// emission) must be accepted. The recursion must descend into the nested
+	// group rather than mis-folding its occurrence range.
+	t.Run("accepts repeated nested group equivalent restriction", func(t *testing.T) {
+		t.Parallel()
+		// Base outer sequence holds a nested sequence(a,b) repeated exactly twice;
+		// derived restriction repeats the same nested sequence twice (identical) —
+		// every emitted sequence is valid against the base, a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:sequence minOccurs="2" maxOccurs="2">
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:sequence minOccurs="2" maxOccurs="2">
+            <xs:element name="a" type="xs:string"/>
+            <xs:element name="b" type="xs:string"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("accepts repeated nested group narrowed restriction", func(t *testing.T) {
+		t.Parallel()
+		// Base nested sequence(a, b?) repeated 1..3; derived narrows the repetition
+		// to 1..2 and drops the optional b — every derived emission is valid against
+		// the base, a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:sequence minOccurs="1" maxOccurs="3">
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:sequence minOccurs="1" maxOccurs="2">
+            <xs:element name="a" type="xs:string"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	// Prohibited (maxOccurs="0") leaves emit nothing: they neither require a base
+	// counterpart nor block subsumption of the rest of the model.
+	t.Run("accepts derived omitting a prohibited base leaf", func(t *testing.T) {
+		t.Parallel()
+		// Base sequence(a, b{0,0}) — b is prohibited and emits nothing; derived
+		// drops it entirely. The prohibited leaf must contribute (0,0) and be
+		// skipped, so the derivation is valid.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string" minOccurs="0" maxOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("accepts derived prohibiting a leaf the base allows", func(t *testing.T) {
+		t.Parallel()
+		// Base sequence(a, b?); derived prohibits b (maxOccurs="0"). The derived
+		// prohibited leaf emits nothing — it demands nothing of the base and is a
+		// valid (narrowing) restriction of the optional base b.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="b" type="xs:string" minOccurs="0" maxOccurs="0"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("accepts derived prohibited leaf with no base counterpart", func(t *testing.T) {
+		t.Parallel()
+		// Base sequence(a); derived keeps a and adds a prohibited leaf z
+		// (maxOccurs="0") that has no counterpart in the base. The prohibited leaf
+		// emits nothing, so it must be skipped during subsumption rather than
+		// treated as an added particle.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="z" type="xs:string" minOccurs="0" maxOccurs="0"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	// Value-space-equivalent fixed values: a derived fixed value that is
+	// value-space-equal but lexically different from the base fixed value is a
+	// valid restriction; a value-space-different fixed value is not.
+	t.Run("accepts value-space-equal fixed restriction", func(t *testing.T) {
+		t.Parallel()
+		// Base element a fixed="1" (xs:integer); derived fixed="01" — value-space
+		// equal, a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:integer" fixed="1"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:integer" fixed="01"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects value-space-different fixed restriction", func(t *testing.T) {
+		t.Parallel()
+		// Base element a fixed="1" (xs:integer); derived fixed="2" — a different
+		// value, not a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:integer" fixed="1"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:integer" fixed="2"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
 }
