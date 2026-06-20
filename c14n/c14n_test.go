@@ -462,3 +462,30 @@ func TestC14N11SchemeOnlyBaseURIFixup(t *testing.T) {
 	// relative to the ancestor base mem:/a/b/doc.xml this is "../../c/".
 	require.Contains(t, string(got), `xml:base="../../c/"`, "expected URI-relative xml:base, got: %s", string(got))
 }
+
+// TestC14N11BaseURIFixupQueryFragment verifies that C14N 1.1 xml:base fixup
+// preserves the query and fragment components of the element's base URI when
+// relativizing. Only the path is relativized; the query+fragment must carry
+// through unchanged into the canonical output.
+func TestC14N11BaseURIFixupQueryFragment(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="/c/page?q=1&amp;r=2#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base (carrying a query and fragment) is folded into the child.
+	nodes := collectDescendantElements(t, doc, "child")
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com/a/b/doc.xml").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// root xml:base "/c/page?q=1&r=2#frag" resolved against
+	// http://example.com/a/b/doc.xml is http://example.com/c/page?q=1&r=2#frag;
+	// relative to the visible ancestor base http://example.com/a/b/doc.xml the
+	// path component is "../../c/page" and the query+fragment carry through.
+	require.Contains(t, string(got), `xml:base="../../c/page?q=1&amp;r=2#frag"`, "query and fragment must be preserved, got: %s", string(got))
+}

@@ -1015,7 +1015,16 @@ func relativizeURI(base, target string) string {
 	result := strings.Repeat("../", ups) + targetPath[len(common):]
 
 	if result == "" {
-		return "."
+		result = "."
+	}
+
+	// Preserve the target's query and fragment components: only the path is
+	// relativized, the query+fragment carry through unchanged.
+	if targetURL.RawQuery != "" || targetURL.ForceQuery {
+		result += "?" + targetURL.RawQuery
+	}
+	if targetURL.Fragment != "" {
+		result += "#" + targetURL.EscapedFragment()
 	}
 	return result
 }
