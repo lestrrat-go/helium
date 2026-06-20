@@ -484,12 +484,23 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 			d.savedErr = nil
 			return nil, err
 		}
-		nextTok, err := d.tokenReader.Token()
-		if nextTok == nil && err == nil {
-			// A TokenReader that returns (nil, nil) makes no progress.
-			// Looping would spin forever, so treat it as a fatal protocol
-			// violation instead.
-			return nil, errors.New("xml: TokenReader returned (nil, nil)")
+		// A TokenReader returning (nil, nil) makes no progress on that call.
+		// The encoding/xml.TokenReader contract permits a transient (nil, nil)
+		// ("no token available yet"), so retry it; but bound consecutive
+		// no-progress reads to avoid spinning forever on a broken reader.
+		const maxNoProgress = 100
+		var nextTok Token
+		var err error
+		noProgress := 0
+		for {
+			nextTok, err = d.tokenReader.Token()
+			if nextTok != nil || err != nil {
+				break
+			}
+			noProgress++
+			if noProgress >= maxNoProgress {
+				return nil, errors.New("xml: TokenReader returned (nil, nil)")
+			}
 		}
 		if err != nil && nextTok == nil {
 			return nil, err
