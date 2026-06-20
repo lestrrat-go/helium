@@ -389,10 +389,11 @@ func TestEmptyNamespaceURIAccepted(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// collectDescendantElements returns the element nodes named `name` and all of
+// collectDescendantElements returns the element nodes named "child" and all of
 // their descendant nodes within doc.
-func collectDescendantElements(t *testing.T, doc *helium.Document, name string) []helium.Node {
+func collectDescendantElements(t *testing.T, doc *helium.Document) []helium.Node {
 	t.Helper()
+	const name = "child"
 	var out []helium.Node
 	var walk func(n helium.Node, inside bool)
 	walk = func(n helium.Node, inside bool) {
@@ -423,7 +424,7 @@ func TestC14N11HTTPBaseURIFixup(t *testing.T) {
 	require.NoError(t, err)
 
 	// Visible node-set: the child element subtree only (root excluded).
-	nodes := collectDescendantElements(t, doc, "child")
+	nodes := collectDescendantElements(t, doc)
 
 	got, err := c14n.NewCanonicalizer(c14n.C14N11).
 		NodeSet(nodes).
@@ -449,7 +450,7 @@ func TestC14N11SchemeOnlyBaseURIFixup(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
-	nodes := collectDescendantElements(t, doc, "child")
+	nodes := collectDescendantElements(t, doc)
 
 	got, err := c14n.NewCanonicalizer(c14n.C14N11).
 		NodeSet(nodes).
@@ -461,4 +462,209 @@ func TestC14N11SchemeOnlyBaseURIFixup(t *testing.T) {
 	// root xml:base "/c/" resolved against mem:/a/b/doc.xml is mem:/c/;
 	// relative to the ancestor base mem:/a/b/doc.xml this is "../../c/".
 	require.Contains(t, string(got), `xml:base="../../c/"`, "expected URI-relative xml:base, got: %s", string(got))
+}
+
+// TestC14N11BaseURIFixupQueryFragment verifies that C14N 1.1 xml:base fixup
+// preserves the query and fragment components of the element's base URI when
+// relativizing. Only the path is relativized; the query+fragment must carry
+// through unchanged into the canonical output.
+func TestC14N11BaseURIFixupQueryFragment(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="/c/page?q=1&amp;r=2#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base (carrying a query and fragment) is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com/a/b/doc.xml").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// root xml:base "/c/page?q=1&r=2#frag" resolved against
+	// http://example.com/a/b/doc.xml is http://example.com/c/page?q=1&r=2#frag;
+	// relative to the visible ancestor base http://example.com/a/b/doc.xml the
+	// path component is "../../c/page" and the query+fragment carry through.
+	require.Contains(t, string(got), `xml:base="../../c/page?q=1&amp;r=2#frag"`, "query and fragment must be preserved, got: %s", string(got))
+}
+
+// TestC14N11BaseURIFixupEmptyPathQueryFragment verifies that when both the base
+// URI and the resolved target have no path component, xml:base fixup does not
+// inject a spurious "." segment. Injecting "." would relativize to "./?q=1#frag"
+// which resolves to "http://example.com/?q=1#frag" (with a slash) — a different
+// URI than "http://example.com?q=1#frag". The query+fragment must attach to the
+// bare authority instead.
+func TestC14N11BaseURIFixupEmptyPathQueryFragment(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="?q=1#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// root xml:base "?q=1#frag" resolved against http://example.com is
+	// http://example.com?q=1#frag; relative to the same base it must be the bare
+	// "?q=1#frag" with no leading "." or "/".
+	require.Contains(t, string(got), `xml:base="?q=1#frag"`, "query and fragment must attach to authority without a spurious path, got: %s", string(got))
+}
+
+// TestC14N11BaseURIFixupSamePathQueryFragment verifies that when the resolved
+// target shares the base document's exact path but differs only by a
+// query/fragment, the relativized xml:base resolves back to the exact target
+// document — not its containing directory. Here the target is the base's own
+// filename ("doc.xml") plus a query+fragment, so the relative reference is
+// "doc.xml?q=1#frag", which resolves to
+// "http://example.com/a/b/doc.xml?q=1#frag" (the target document).
+func TestC14N11BaseURIFixupSamePathQueryFragment(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="?q=1#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com/a/b/doc.xml").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// root xml:base "?q=1#frag" resolved against http://example.com/a/b/doc.xml
+	// is http://example.com/a/b/doc.xml?q=1#frag; relative to that base it is the
+	// filename "doc.xml" carrying the query+fragment, which resolves back to the
+	// exact target document.
+	require.Contains(t, string(got), `xml:base="doc.xml?q=1#frag"`, "same-path query and fragment must resolve to the target document, got: %s", string(got))
+}
+
+// TestC14N11BaseURIFixupEmptyRelativeQueryFragment exercises the empty
+// relative-reference branch directly: when the resolved target's path is
+// identical to the base document's directory path, the relativized path is the
+// empty string. Injecting "." there would yield ".?q=1#frag" which resolves to
+// the directory with a query rather than the exact target; keeping the relative
+// reference as the bare "?q=1#frag" resolves back to the exact target document.
+func TestC14N11BaseURIFixupEmptyRelativeQueryFragment(t *testing.T) {
+	t.Parallel()
+	// Base URI is the directory http://example.com/a/b/; the xml:base "?q=1#frag"
+	// resolves to http://example.com/a/b/?q=1#frag, whose path equals the base
+	// directory, so the relative path component is empty.
+	xml := `<?xml version="1.0"?><root xml:base="?q=1#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com/a/b/").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// The relative path is empty (target path == base directory), so the result
+	// must be the bare "?q=1#frag" — resolving it against the base yields the
+	// exact target http://example.com/a/b/?q=1#frag, whereas ".?q=1#frag" would
+	// also resolve there but introduce a spurious "." segment.
+	require.Contains(t, string(got), `xml:base="?q=1#frag"`, "empty relative reference must carry only the query+fragment, got: %s", string(got))
+}
+
+// TestC14N11BaseURIFixupOpaqueURI verifies that C14N 1.1 xml:base fixup handles
+// opaque (non-hierarchical) absolute URIs such as "urn:target". These carry
+// their data in the URL's Opaque field rather than Path, so path-based
+// relativization is meaningless and previously produced an empty synthetic
+// value that panicked in writeAttribute (nil attr → writeAttrValue(nil)). The
+// fixup must instead emit the target URI absolutely with no panic.
+func TestC14N11BaseURIFixupOpaqueURI(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="urn:target"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("urn:base").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// The base "urn:base" and target "urn:target" are opaque URIs; the target
+	// cannot be relativized against the base, so it must be emitted absolutely.
+	require.Contains(t, string(got), `xml:base="urn:target"`, "opaque xml:base must canonicalize absolutely without panic, got: %s", string(got))
+}
+
+// TestC14N11BaseURIFixupSameDirQueryFragment is a regression for the
+// over-correction where a valid same-directory relative target was emitted as an
+// ABSOLUTE URI. The base document is .../a/b/doc.xml and the hidden xml:base
+// "./?q=1#frag" resolves to .../a/b/?q=1#frag — the base's own directory carrying
+// a query+fragment. The bare suffix "?q=1#frag" resolves against the base
+// document (re-using "doc.xml") and so does NOT round-trip; the correct minimal
+// relative reference is ".?q=1#frag", which resolves to the directory plus the
+// suffix. The fixup must emit that relative reference, not the absolute target.
+func TestC14N11BaseURIFixupSameDirQueryFragment(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="./?q=1#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com/a/b/doc.xml").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// The emitted xml:base must be the relative ".?q=1#frag" (which resolves to
+	// http://example.com/a/b/?q=1#frag), not the absolute target URL.
+	require.Contains(t, string(got), `xml:base=".?q=1#frag"`, "same-directory query+fragment must canonicalize to a relative reference, got: %s", string(got))
+	require.NotContains(t, string(got), `xml:base="http://example.com/a/b/?q=1#frag"`, "must not emit the absolute target for a relativizable same-directory target, got: %s", string(got))
+}
+
+// TestC14N11BaseURIFixupBaseCarriesQuery is a convergence regression: when the
+// configured base URI carries a query (or fragment) that the target does NOT,
+// a naive relativizer can produce a relative reference that resolves back to the
+// BASE rather than the TARGET. Here the base is "http://example.com?old=1" and
+// the hidden ancestor's xml:base is the absolute "http://example.com" (no query).
+// The naive relative reference would be the empty string, which resolves against
+// the base to "http://example.com?old=1" — silently re-attaching "?old=1" and
+// changing the URI. The round-trip convergence check must detect this and fall
+// back to emitting the absolute target so the canonical xml:base resolves to the
+// exact target "http://example.com".
+func TestC14N11BaseURIFixupBaseCarriesQuery(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="http://example.com"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's absolute xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com?old=1").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// The emitted xml:base must resolve to the exact target "http://example.com",
+	// not the base "http://example.com?old=1". An empty relative reference would
+	// resolve back to the base, so the absolute target must be emitted instead.
+	require.Contains(t, string(got), `xml:base="http://example.com"`, "base-carries-query: xml:base must resolve to the target, not the base, got: %s", string(got))
+	require.NotContains(t, string(got), `old=1`, "the base's query must not leak into the canonical xml:base, got: %s", string(got))
 }
