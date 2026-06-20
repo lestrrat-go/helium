@@ -559,7 +559,12 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 	if importedRoot.URI() != lexicon.NamespaceXSLT {
 		if _, ok := importedRoot.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
 			// Simplified stylesheet — compile as a single template matching "/"
-			simplified, err := compileSimplified(ctx, doc, importedRoot, &compileConfig{baseURI: uri})
+			simplified, err := compileSimplified(ctx, doc, importedRoot, &compileConfig{
+				baseURI:          uri,
+				resolver:         c.resolver,
+				packageResolver:  c.packageResolver,
+				maxResourceBytes: c.maxResourceBytes,
+			})
 			if err != nil {
 				return err
 			}
@@ -701,7 +706,9 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 		c.baseURI = cfg.baseURI
 		c.resolver = cfg.resolver
 		c.packageResolver = cfg.packageResolver
+		c.maxResourceBytes = cfg.maxResourceBytes
 	}
+	c.stylesheet.maxResourceBytes = c.maxResourceBytes
 
 	c.collectNamespaces(ctx, root)
 

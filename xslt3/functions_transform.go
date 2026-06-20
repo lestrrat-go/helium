@@ -436,7 +436,11 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	functionParamsSeq := getSeq("function-params")
 
 	// Build a compiler that inherits the outer stylesheet's configuration.
-	nestedCompiler := ec.stylesheet.newNestedCompiler()
+	// Apply the outer Invocation's effective per-resource read cap so that
+	// resources loaded while COMPILING the nested stylesheet/package
+	// (its include/import/schema/param-doc reads) honor the same
+	// MaxResourceBytes override rather than falling back to the default.
+	nestedCompiler := ec.stylesheet.newNestedCompiler().MaxResourceBytes(ec.resourceLimit())
 
 	// Apply static-params from the options map to the nested compiler.
 	// Static params affect both compile time (use-when, shadow attributes)
@@ -487,7 +491,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		var compileErr error
 		ss, compileErr = nestedCompiler.BaseURI(baseURI).Compile(ctx, doc)
 		if compileErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
+			return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
 		}
 	} else if packageName != "" {
 		// Resolve via package-name / package-version using the PackageResolver
@@ -516,7 +520,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		var compileErr error
 		ss, compileErr = compiler.Compile(ctx, doc)
 		if compileErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile package %q: %v", packageName, compileErr)
+			return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile package %q: %v", packageName, compileErr)
 		}
 	} else {
 		// Check for stylesheet-node
@@ -539,7 +543,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 				var compileErr error
 				ss, compileErr = nestedCompiler.Compile(ctx, doc)
 				if compileErr != nil {
-					return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile stylesheet: %v", compileErr)
+					return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet: %v", compileErr)
 				}
 			}
 		}

@@ -46,10 +46,11 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 
 	// Compile the package with its own compiler
 	pkgCfg := &compileConfig{
-		baseURI:         pkgBaseURI,
-		resolver:        c.resolver,
-		packageResolver: c.packageResolver,
-		isSubPackage:    true,
+		baseURI:          pkgBaseURI,
+		resolver:         c.resolver,
+		packageResolver:  c.packageResolver,
+		isSubPackage:     true,
+		maxResourceBytes: c.maxResourceBytes,
 	}
 	pkgSS, err := compile(ctx, doc, pkgCfg)
 	if err != nil {
