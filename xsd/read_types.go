@@ -104,6 +104,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 	// than accepting the last-seen child.
 	var contentModelChild string   // local name of the first model-group particle seen
 	var contentWrapperChild string // "simpleContent" or "complexContent" if seen
+	var directAttrChild string     // local name of the first direct attribute/attributeGroup/anyAttribute seen
 
 	reportExtraContent := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -194,6 +195,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the content model particle '%s'.", ce.LocalName(), contentModelChild))
 				continue
 			}
+			if directAttrChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the attribute declaration '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), directAttrChild))
+				continue
+			}
 			if contentWrapperChild != "" {
 				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one of 'simpleContent' or 'complexContent' (found '%s' after '%s').", ce.LocalName(), contentWrapperChild))
 				continue
@@ -207,6 +212,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the content model particle '%s'.", ce.LocalName(), contentModelChild))
 				continue
 			}
+			if directAttrChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the attribute declaration '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), directAttrChild))
+				continue
+			}
 			if contentWrapperChild != "" {
 				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one of 'simpleContent' or 'complexContent' (found '%s' after '%s').", ce.LocalName(), contentWrapperChild))
 				continue
@@ -214,14 +223,35 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 			contentWrapperChild = ce.LocalName()
 			c.parseSimpleContent(ctx, ce, td)
 		case isXSDElement(ce, elemAttribute):
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' is not allowed together with '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if directAttrChild == "" {
+				directAttrChild = ce.LocalName()
+			}
 			au := c.parseAttributeUse(ctx, ce)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ce, elemAttributeGroup):
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' is not allowed together with '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if directAttrChild == "" {
+				directAttrChild = ce.LocalName()
+			}
 			if ref := getAttr(ce, attrRef); ref != "" {
 				qn := c.resolveQName(ctx, ce, ref)
 				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
 			}
 		case isXSDElement(ce, elemAnyAttribute):
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The attribute wildcard '%s' is not allowed together with '%s'; the wildcard must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if directAttrChild == "" {
+				directAttrChild = ce.LocalName()
+			}
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		}
 	}

@@ -234,6 +234,10 @@ type attrConstraintSource struct {
 	line  int
 	local string            // attribute display name (local name)
 	nsMap map[string]string // in-scope namespaces for value validation (QName/NOTATION)
+	// source is the declaring file when the attribute use was parsed from an
+	// xs:include/xs:import/xs:redefine document (c.includeFile), empty for a
+	// top-level declaration. Diagnostics cite this so the line matches the file.
+	source string
 }
 
 // typeDefSource tracks source location and context for type definitions.

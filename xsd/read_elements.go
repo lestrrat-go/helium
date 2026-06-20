@@ -438,8 +438,9 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 		}
 	}
 	c.attrUseSources[au] = attrConstraintSource{
-		line:  elem.Line(),
-		local: opts.name.Local,
+		line:   elem.Line(),
+		local:  opts.name.Local,
+		source: c.includeFile,
 	}
 	au.Default, au.Fixed = readDefaultOrFixed(elem)
 	if au.Fixed != nil {
@@ -621,6 +622,17 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 			au.Required = true
 		case attrValProhibited:
 			au.Prohibited = true
+		}
+		// Record the source for a prohibited ref'd use so the pointless-prohibition
+		// warning can cite its line and declaring file. Only prohibited uses need
+		// this here; a non-prohibited ref'd use carries no inline type to feed the
+		// other attrUseSources consumers (e.g. the NOTATION enumeration check).
+		if au.Prohibited {
+			c.attrUseSources[au] = attrConstraintSource{
+				line:   elem.Line(),
+				local:  qn.Local,
+				source: c.includeFile,
+			}
 		}
 		if hasAttr(elem, attrDefault) {
 			v := getAttr(elem, attrDefault)

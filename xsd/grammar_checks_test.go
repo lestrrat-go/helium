@@ -21,6 +21,18 @@ func compileFatalErrors(t *testing.T, schemaXML string) string {
 	return errors
 }
 
+// compileWarnings compiles a schema document and returns only the formatted
+// non-fatal compile warnings.
+func compileWarnings(t *testing.T, schemaXML string) string {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	_, _ = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+	warnings, _ := partitionCompileErrors(collector.Errors())
+	return warnings
+}
+
 // TestSchemaBooleanAttr (C-008) verifies that boolean schema attributes
 // (abstract, mixed) are parsed with the full xs:boolean lexical space
 // (true/false/1/0) and that invalid lexical forms are diagnosed instead of
@@ -335,6 +347,87 @@ func TestComplexTypeContentModelExclusivity(t *testing.T) {
         <xs:group ref="g"/>
       </xs:restriction>
     </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	// A direct attribute sibling that follows a simpleContent/complexContent
+	// wrapper is illegal: attributes must be declared inside the wrapper's
+	// restriction/extension, not as direct complexType children. xmllint rejects
+	// this; before the fix the stray sibling was silently accepted.
+	t.Run("rejects attribute after simpleContent wrapper", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:simpleContent>
+      <xs:extension base="xs:string"/>
+    </xs:simpleContent>
+    <xs:attribute name="x" type="xs:string"/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "not allowed together")
+	})
+
+	t.Run("rejects attribute after complexContent wrapper", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base"/>
+    </xs:complexContent>
+    <xs:attribute name="x" type="xs:string"/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "not allowed together")
+	})
+
+	// The reverse order is equally illegal: a direct attribute sibling that
+	// precedes the wrapper.
+	t.Run("rejects simpleContent wrapper after attribute", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:simpleContent>
+      <xs:extension base="xs:string"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "not allowed together")
+	})
+
+	// An attributeGroup or anyAttribute sibling alongside a wrapper is rejected
+	// the same way.
+	t.Run("rejects anyAttribute after complexContent wrapper", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base"/>
+    </xs:complexContent>
+    <xs:anyAttribute/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "not allowed together")
+	})
+
+	// A normal complex type with direct attributes and no wrapper stays valid.
+	t.Run("accepts direct attributes without a wrapper", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:attribute name="y" type="xs:string"/>
+    <xs:anyAttribute/>
   </xs:complexType>
   <xs:element name="root" type="T"/>
 </xs:schema>`
@@ -677,5 +770,65 @@ func TestWildcardConstraintValidation(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, absentNS))
 		require.NoError(t, validates(t, absentNS, `<root><child/></root>`),
 			"absent namespace defaults to ##any and must accept any child")
+	})
+}
+
+// TestPointlessAttributeProhibition verifies that a prohibited attribute use
+// whose QName already names a real (non-prohibited) use in the same complex type
+// is reported with the libxml2-compatible schema parser WARNING (the prohibition
+// is pointless because the type itself declares the use). A prohibited use that
+// does NOT duplicate a real use (the normal restriction case) stays silent.
+func TestPointlessAttributeProhibition(t *testing.T) {
+	t.Parallel()
+
+	const warn = "Skipping pointless attribute use prohibition 'x', since a corresponding attribute use exists already in the type definition."
+
+	t.Run("warns on prohibition duplicating a real use", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:attribute name="x" use="prohibited"/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema),
+			"a pointless prohibition is a warning, not a fatal duplicate")
+		require.Contains(t, compileWarnings(t, schema), warn)
+	})
+
+	t.Run("warns when prohibition comes from an attribute group", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g">
+    <xs:attribute name="x" use="prohibited"/>
+  </xs:attributeGroup>
+  <xs:complexType name="T">
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:attributeGroup ref="g"/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+		require.Contains(t, compileWarnings(t, schema), warn)
+	})
+
+	t.Run("stays silent for a non-duplicating prohibition", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:attribute name="x" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:attribute name="x" use="prohibited"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+		require.NotContains(t, compileWarnings(t, schema), "pointless attribute use prohibition")
 	})
 }

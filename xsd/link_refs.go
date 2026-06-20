@@ -474,8 +474,15 @@ func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef
 
 // checkDuplicateAttrUses reports duplicate attribute uses (by expanded QName)
 // within a single complex type's own attribute set. Prohibited uses do not
-// contribute an attribute use and are skipped. Types are processed in source
-// line order for deterministic diagnostics.
+// contribute an attribute use and are skipped for the duplicate-error check.
+//
+// A prohibited use that shares its QName with a non-prohibited use in the same
+// expanded set is, however, pointless: the prohibition cannot remove a use that
+// the type itself declares. libxml2 strips such a prohibition and emits a schema
+// parser WARNING attributed to the prohibited xs:attribute element, which the
+// golden tests compare. We mirror that warning here.
+//
+// Types are processed in source line order for deterministic diagnostics.
 func (c *compiler) checkDuplicateAttrUses(ctx context.Context) {
 	if c.filename == "" {
 		return
@@ -490,10 +497,29 @@ func (c *compiler) checkDuplicateAttrUses(ctx context.Context) {
 		return c.typeDefSources[tds[i]].line < c.typeDefSources[tds[j]].line
 	})
 	for _, td := range tds {
-		seen := make(map[QName]bool, len(td.Attributes))
-		reported := make(map[QName]bool)
+		// Collect the QNames of every non-prohibited use so a pointless
+		// prohibition (one whose QName already has a real use) can be detected.
+		realUse := make(map[QName]struct{}, len(td.Attributes))
 		for _, au := range td.Attributes {
 			if au.Prohibited {
+				continue
+			}
+			realUse[au.Name] = struct{}{}
+		}
+
+		seen := make(map[QName]bool, len(td.Attributes))
+		reported := make(map[QName]bool)
+		warnedProhib := make(map[QName]bool)
+		for _, au := range td.Attributes {
+			if au.Prohibited {
+				if _, ok := realUse[au.Name]; !ok {
+					continue
+				}
+				if warnedProhib[au.Name] {
+					continue
+				}
+				warnedProhib[au.Name] = true
+				c.warnPointlessProhibition(ctx, au)
 				continue
 			}
 			if seen[au.Name] {
@@ -514,6 +540,33 @@ func (c *compiler) checkDuplicateAttrUses(ctx context.Context) {
 			seen[au.Name] = true
 		}
 	}
+}
+
+// warnPointlessProhibition emits the libxml2-compatible schema parser WARNING for
+// a prohibited attribute use whose QName already names a real (non-prohibited)
+// use in the same type definition. The diagnostic is attributed to the
+// prohibited xs:attribute element at its recorded source line/file (covering
+// xs:include/xs:import cases). If no source was recorded, the warning falls back
+// to the compiler's own filename and line 0.
+func (c *compiler) warnPointlessProhibition(ctx context.Context, au *AttrUse) {
+	file := c.filename
+	line := 0
+	if src, ok := c.attrUseSources[au]; ok {
+		line = src.line
+		file = c.diagSourceOrRecorded(src.source)
+	}
+	msg := fmt.Sprintf("Skipping pointless attribute use prohibition '%s', since a corresponding attribute use exists already in the type definition.", formatAttrQName(au.Name))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(file, line, "attribute", "attribute", msg), helium.ErrorLevelWarning))
+}
+
+// formatAttrQName renders an attribute QName the way libxml2's
+// xmlSchemaFormatQName does: "{ns}local" when a namespace is present, otherwise
+// the bare local name (no braces).
+func formatAttrQName(qn QName) string {
+	if qn.NS == "" {
+		return qn.Local
+	}
+	return fmt.Sprintf("{%s}%s", qn.NS, qn.Local)
 }
 
 // checkAttrGroupDuplicates reports duplicate attribute uses (by expanded QName)
