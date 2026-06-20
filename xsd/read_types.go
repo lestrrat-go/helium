@@ -184,6 +184,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 					local:        ce.LocalName(),
 					nested:       false,
 					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+					source:       c.diagSource(),
 				}
 				td.ContentModel = placeholder
 				if td.ContentType != ContentTypeMixed {
@@ -360,6 +361,7 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 					local:        ce.LocalName(),
 					nested:       false,
 					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+					source:       c.diagSource(),
 				}
 				td.ContentModel = placeholder
 				if td.ContentType != ContentTypeMixed {
@@ -459,6 +461,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 					local:        ce.LocalName(),
 					nested:       false,
 					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+					source:       c.diagSource(),
 				}
 				td.ContentModel = placeholder
 				if td.ContentType != ContentTypeMixed {

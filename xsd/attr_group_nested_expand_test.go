@@ -81,8 +81,12 @@ func TestAttrGroupNestedRefExpansion(t *testing.T) {
 		require.True(t, found, "nested default attribute must be inserted into the document")
 	})
 
-	// A nested PROHIBITED attribute is rejected if present on the instance.
-	t.Run("nested prohibited attribute is rejected", func(t *testing.T) {
+	// A use="prohibited" attribute declared inside an <xs:attributeGroup> is
+	// pointless: xmllint warns and SKIPS it, so it is NOT propagated as a blocking
+	// use into the referencing type. Therefore an xs:anyAttribute wildcard in that
+	// type still admits the attribute and <root a="x"/> is VALID. Propagating the
+	// prohibition would wrongly block the wildcard (over-rejection).
+	t.Run("prohibited attribute in attr group is skipped, wildcard admits", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:attribute name="a" type="xs:string"/>
@@ -99,9 +103,33 @@ func TestAttrGroupNestedRefExpansion(t *testing.T) {
   <xs:element name="root" type="t"/>
 </xs:schema>`
 
-		var out string
-		err := compileAndValidate(t, schemaXML, `<root a="x"/>`, &out)
-		require.Error(t, err, "nested prohibited attribute present on instance must be rejected; got: %q", out)
-		require.Contains(t, out, "is not allowed")
+		// Compiles (the skip emits a warning, not a fatal error).
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Empty(t, errs, "unexpected compile errors")
+
+		// The wildcard still admits the prohibited-but-skipped attribute.
+		require.NoError(t, compileAndValidate(t, schemaXML, `<root a="x"/>`, nil),
+			"prohibited use inside an attribute group must be skipped so the wildcard admits the attribute")
+	})
+
+	// A use="prohibited" attribute declared with a NAME (not ref) inside an
+	// <xs:attributeGroup> is likewise skipped.
+	t.Run("named prohibited attribute in attr group is skipped", func(t *testing.T) {
+		t.Parallel()
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g1">
+    <xs:attribute name="a" type="xs:string" use="prohibited"/>
+  </xs:attributeGroup>
+  <xs:complexType name="t">
+    <xs:attributeGroup ref="g1"/>
+    <xs:anyAttribute processContents="lax"/>
+  </xs:complexType>
+  <xs:element name="root" type="t"/>
+</xs:schema>`
+
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Empty(t, errs, "unexpected compile errors")
+		require.NoError(t, compileAndValidate(t, schemaXML, `<root a="x"/>`, nil),
+			"named prohibited use inside an attribute group must be skipped so the wildcard admits the attribute")
 	})
 }

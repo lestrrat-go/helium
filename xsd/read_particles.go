@@ -86,21 +86,42 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 			continue
 		}
 		if isXSDElement(ce, elemAttribute) {
+			// A use="prohibited" attribute declared directly inside an
+			// <xs:attributeGroup> is pointless: it cannot remove a use the group
+			// itself declares, and propagating it as a blocking use would wrongly
+			// stop an xs:anyAttribute wildcard in a referencing type from admitting
+			// the attribute. libxml2 warns and SKIPS it, so the wildcard still
+			// admits the attribute. Mirror that here (parent type is attributeGroup).
+			if getAttr(ce, attrUse) == attrValProhibited {
+				if c.filename != "" {
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.diagSource(), ce.Line(), ce.LocalName(), "attribute",
+						"Skipping attribute use prohibition, since it is pointless inside an <attributeGroup>."), helium.ErrorLevelWarning))
+				}
+				continue
+			}
 			au := c.parseAttributeUse(ctx, ce)
 			attrs = append(attrs, au)
 			continue
 		}
 		// Record nested xs:attributeGroup ref children so checkAttrGroupDuplicates
 		// can flatten the transitively-referenced groups and detect a duplicate
-		// attribute use introduced through a reference (ag-props-correct.2). A
-		// self-reference is skipped: it is handled by the redefine override path and
-		// would otherwise spuriously collide with the group's own attributes.
+		// attribute use introduced through a reference (ag-props-correct.2).
+		//
+		// A direct SELF-reference (ref resolves to the group being defined) is a
+		// CIRCULAR reference, which is disallowed OUTSIDE <redefine> (XSD §3.6.2
+		// src-attribute_group.3 / Attribute Group Definition Representation OK 3).
+		// The legitimate self-reference inside <redefine> is parsed by the redefine
+		// override path (compile_imports.go), not here, so any self-reference that
+		// reaches this point is genuinely circular and is reported and dropped (the
+		// reference is cut to avoid further confusion, matching libxml2).
 		if isXSDElement(ce, elemAttributeGroup) {
 			if ref := getAttr(ce, attrRef); ref != "" {
 				refQN := c.resolveQName(ctx, ce, ref)
-				if refQN != qn {
-					c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], refQN)
+				if refQN == qn {
+					c.reportCircularAttrGroupRef(ctx, ce, qn)
+					continue
 				}
+				c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], refQN)
 			}
 		}
 	}
@@ -208,6 +229,7 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 					local:        ce.LocalName(),
 					nested:       true,
 					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+					source:       c.diagSource(),
 				}
 				mg.Particles = append(mg.Particles, &Particle{
 					MinOccurs: placeholder.MinOccurs,

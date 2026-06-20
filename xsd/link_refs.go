@@ -698,13 +698,19 @@ func (c *compiler) checkAttrGroupDuplicates(ctx context.Context) {
 // flattenAttrGroupRefDuplicates walks a nested attribute-group reference,
 // recording each (non-prohibited) attribute use it contributes into seen and
 // reporting — once, attributed to the owning group ownerQN — any name already
-// present. visited guards against reference cycles. The walk descends into the
-// referenced group's own nested refs as well.
+// present. visited is a RECURSION STACK (the groups currently on the path being
+// expanded), not a global "seen ever" set: a group is added on entry and removed
+// on exit, so a true reference CYCLE is still cut, but two SIBLING refs to the
+// same group are each expanded — so a name contributed by both siblings surfaces
+// as a duplicate (g -> h, h with h carrying attribute x is a duplicate use of x,
+// which xmllint rejects). The walk descends into the referenced group's own
+// nested refs as well.
 func (c *compiler) flattenAttrGroupRefDuplicates(ctx context.Context, ownerQN, refQN QName, seen, reported map[QName]bool, visited map[QName]bool) {
 	if visited[refQN] {
 		return
 	}
 	visited[refQN] = true
+	defer delete(visited, refQN)
 	// A name repeated WITHIN this referenced group is that group's own internal
 	// duplicate (reported when the group is processed as owner), not a collision to
 	// attribute to ownerQN. Track this group's local names so each distinct name is
@@ -731,6 +737,22 @@ func (c *compiler) flattenAttrGroupRefDuplicates(ctx context.Context, ownerQN, r
 	for _, nextQN := range c.attrGroupRefChildren[refQN] {
 		c.flattenAttrGroupRefDuplicates(ctx, ownerQN, nextQN, seen, reported, visited)
 	}
+}
+
+// reportCircularAttrGroupRef emits the src-attribute_group.3 circular-reference
+// diagnostic for a self-referential <xs:attributeGroup ref="..."> that resolves
+// to the group being defined (groupQN). A circular attribute-group reference is
+// disallowed outside <redefine>; libxml2 reports it against the referencing
+// <attributeGroup> element and cuts the reference. The diagnostic is attributed
+// to the ref element's source line (ce) via diagSource so an included schema is
+// cited correctly.
+func (c *compiler) reportCircularAttrGroupRef(ctx context.Context, ce *helium.Element, groupQN QName) {
+	if c.filename == "" {
+		return
+	}
+	msg := fmt.Sprintf("Circular reference to the attribute group '%s' defined.", formatAttrQName(groupQN))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup", msg), helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 // reportAttrGroupDuplicate emits the ag-props-correct.2 duplicate-attribute-use
@@ -768,8 +790,13 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 		return
 	}
 
+	// Attribute to the declaring file recorded at parse time (an included/imported
+	// schema when the ref was parsed inside an xs:include/xs:import/xs:redefine),
+	// not the top-level compiler filename. c.includeFile has been restored by the
+	// time this deferred check runs, so the recorded source is used.
+	file := c.diagSourceOrRecorded(src.source)
 	if src.nested {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, src.local, elemGroup,
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(file, src.line, src.local, elemGroup,
 			"A model group definition is referenced, but it contains an 'all' model group, which cannot be contained by model groups."), helium.ErrorLevelFatal))
 		c.errorCount++
 		return
@@ -797,7 +824,7 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 	if n != Unbounded && n < 1 && placeholder.MinOccurs >= 1 {
 		return
 	}
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, src.local, elemGroup,
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(file, src.line, src.local, elemGroup,
 		"The particle's {max occurs} must be 1, since the reference resolves to an 'all' model group."), helium.ErrorLevelFatal))
 	c.errorCount++
 }

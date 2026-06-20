@@ -797,7 +797,12 @@ func TestPointlessAttributeProhibition(t *testing.T) {
 		require.Contains(t, compileWarnings(t, schema), warn)
 	})
 
-	t.Run("warns when prohibition comes from an attribute group", func(t *testing.T) {
+	// A use="prohibited" attribute declared directly inside an <xs:attributeGroup>
+	// is pointless there: libxml2 warns and SKIPS it at the group, so it is never
+	// propagated into a referencing type. The warning therefore cites the
+	// <attributeGroup> context, and the type-level "corresponding use exists
+	// already" warning does NOT fire (the prohibition never reaches the type).
+	t.Run("skips prohibition declared inside an attribute group", func(t *testing.T) {
 		t.Parallel()
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:attributeGroup name="g">
@@ -810,7 +815,11 @@ func TestPointlessAttributeProhibition(t *testing.T) {
   <xs:element name="root" type="T"/>
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
-		require.Contains(t, compileWarnings(t, schema), warn)
+		warnings := compileWarnings(t, schema)
+		require.Contains(t, warnings,
+			"Skipping attribute use prohibition, since it is pointless inside an <attributeGroup>.")
+		require.NotContains(t, warnings, warn,
+			"the prohibition is skipped at the group, so the type-level pointless warning must not fire")
 	})
 
 	t.Run("stays silent for a non-duplicating prohibition", func(t *testing.T) {

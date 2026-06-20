@@ -500,6 +500,17 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				}
 				switch {
 				case isXSDElement(gce, elemAttribute):
+					// A use="prohibited" attribute is pointless inside an
+					// <xs:attributeGroup> (including a redefine override): libxml2
+					// warns and skips it so a referencing wildcard still admits the
+					// attribute. Mirror parseNamedAttributeGroup here.
+					if getAttr(gce, attrUse) == attrValProhibited {
+						if c.filename != "" {
+							c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.diagSource(), gce.Line(), gce.LocalName(), "attribute",
+								"Skipping attribute use prohibition, since it is pointless inside an <attributeGroup>."), helium.ErrorLevelWarning))
+						}
+						continue
+					}
 					au := c.parseAttributeUse(ctx, gce)
 					attrs = append(attrs, au)
 				case isXSDElement(gce, elemAttributeGroup):

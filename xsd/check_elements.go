@@ -206,6 +206,9 @@ func (c *compiler) validateAllOccurs(ctx context.Context, elem *helium.Element) 
 	}
 	line := elem.Line()
 	local := elem.LocalName()
+	// Attribute to the declaring file (an included/imported schema when inside an
+	// xs:include/xs:import/xs:redefine), not the top-level compiler filename.
+	src := c.diagSource()
 
 	// The all compositor's minOccurs lexical space allows leading zeros (e.g.
 	// "01" parses to 1 and is accepted). libxml2 reports the all-specific
@@ -216,7 +219,7 @@ func (c *compiler) validateAllOccurs(ctx context.Context, elem *helium.Element) 
 		v := getAttr(elem, attrMinOccurs)
 		n, ok := parseNonNegativeOccurs(v, false)
 		if !ok || (n != 0 && n != 1) {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, elemAll, attrMinOccurs,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, elemAll, attrMinOccurs,
 				"The value '"+v+"' is not valid. Expected is '(0 | 1)'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -230,7 +233,7 @@ func (c *compiler) validateAllOccurs(ctx context.Context, elem *helium.Element) 
 		v := getAttr(elem, attrMaxOccurs)
 		n, ok := parseNonNegativeOccurs(v, true)
 		if !ok || n != 1 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, elemAll, attrMaxOccurs,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, elemAll, attrMaxOccurs,
 				"The value '"+v+"' is not valid. Expected is '1'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -249,6 +252,9 @@ func (c *compiler) checkAllElementParticleOccurs(ctx context.Context, elem *heli
 	}
 	line := elem.Line()
 	local := elem.LocalName()
+	// Attribute to the declaring file (an included/imported schema when inside an
+	// xs:include/xs:import/xs:redefine), not the top-level compiler filename.
+	src := c.diagSource()
 
 	// Child occurs lexical space allows leading zeros ("01" parses to 1 and is
 	// accepted). The all-specific "(must be 0 or 1)" diagnostic only fires for a
@@ -260,7 +266,7 @@ func (c *compiler) checkAllElementParticleOccurs(ctx context.Context, elem *heli
 		v := getAttr(elem, attrMaxOccurs)
 		n, ok := parseNonNegativeOccurs(v, true)
 		if ok && n != 0 && n != 1 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(src, line, local, "element",
 				"Invalid value for maxOccurs (must be 0 or 1)."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -270,7 +276,7 @@ func (c *compiler) checkAllElementParticleOccurs(ctx context.Context, elem *heli
 		v := getAttr(elem, attrMinOccurs)
 		n, ok := parseNonNegativeOccurs(v, false)
 		if ok && n != 0 && n != 1 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(src, line, local, "element",
 				"Invalid value for minOccurs (must be 0 or 1)."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}

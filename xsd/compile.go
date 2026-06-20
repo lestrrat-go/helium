@@ -205,6 +205,12 @@ type groupRefSource struct {
 	// ("" if absent, which defaults to 1). A reference to an 'all' model group
 	// must have maxOccurs == 1.
 	maxOccursRaw string
+	// source is the declaring file recorded at parse time (c.diagSource()): the
+	// included/imported schema when the ref was parsed inside an
+	// xs:include/xs:import/xs:redefine, else the compiler filename. checkAllGroupRef
+	// runs after parsing (from resolveRefs / the redefine loop) when c.includeFile
+	// has been restored, so the source must be captured here rather than recomputed.
+	source string
 }
 
 // groupSource tracks where a named model group definition (xs:group name="...")

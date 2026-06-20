@@ -100,6 +100,9 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 	line := elem.Line()
 	local := elem.LocalName()
 	xsdElem := local
+	// Attribute to the declaring file (the included/imported schema when inside
+	// an xs:include/xs:import/xs:redefine), not the top-level compiler filename.
+	src := c.diagSource()
 
 	minPresent := hasAttr(elem, attrMinOccurs)
 	maxPresent := hasAttr(elem, attrMaxOccurs)
@@ -110,7 +113,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		n, ok := parseNonNegativeOccurs(v, false)
 		if !ok {
 			minOK = false
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMinOccurs,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
 				"The value '"+v+"' is not valid. Expected is 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
@@ -124,7 +127,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		n, ok := parseNonNegativeOccurs(v, true)
 		if !ok {
 			maxOK = false
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMaxOccurs,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMaxOccurs,
 				"The value '"+v+"' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
@@ -144,7 +147,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		}
 		if effMin >= 1 {
 			maxBelowOne = true
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMaxOccurs,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMaxOccurs,
 				"The value must be greater than or equal to 1."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -154,7 +157,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 	// can never be exceeded). Suppress this when the ">= 1" rule already fired on
 	// maxOccurs; libxml2 reports only the maxOccurs error there.
 	if minPresent && maxPresent && minOK && maxOK && maxVal != Unbounded && !maxBelowOne && minVal > maxVal {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMinOccurs,
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
 			"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
