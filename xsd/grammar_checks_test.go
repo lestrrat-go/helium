@@ -545,6 +545,155 @@ func TestComplexTypeContentModelExclusivity(t *testing.T) {
 	})
 }
 
+// TestAnyAttributeOrder verifies XSD 3.4.2: within a complex type (and its
+// derivations) the xs:anyAttribute wildcard must be the OPTIONAL FINAL child,
+// after all attribute/attributeGroup uses, and at most one may appear. An
+// attribute/attributeGroup after the wildcard, or a second wildcard, is
+// rejected as a fatal grammar-order error.
+func TestAnyAttributeOrder(t *testing.T) {
+	t.Parallel()
+
+	const afterWildcard = "must appear before the attribute wildcard 'anyAttribute'"
+	const dupWildcard = "more than one attribute wildcard"
+
+	t.Run("rejects attribute after anyAttribute in complexType", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:anyAttribute/>
+    <xs:attribute name="x" type="xs:string"/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), afterWildcard)
+	})
+
+	t.Run("rejects attributeGroup after anyAttribute in complexType", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g"><xs:attribute name="x" type="xs:string"/></xs:attributeGroup>
+  <xs:complexType name="T">
+    <xs:anyAttribute/>
+    <xs:attributeGroup ref="g"/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), afterWildcard)
+	})
+
+	t.Run("rejects two anyAttribute in complexType", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:anyAttribute/>
+    <xs:anyAttribute/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), dupWildcard)
+	})
+
+	t.Run("accepts correct order in complexType", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:anyAttribute/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects attribute after anyAttribute in extension", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base">
+        <xs:anyAttribute/>
+        <xs:attribute name="x" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), afterWildcard)
+	})
+
+	t.Run("rejects two anyAttribute in extension", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base">
+        <xs:anyAttribute/>
+        <xs:anyAttribute/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), dupWildcard)
+	})
+
+	t.Run("rejects attribute after anyAttribute in restriction", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+    <xs:attribute name="x" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+        <xs:anyAttribute/>
+        <xs:attribute name="x" type="xs:string"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), afterWildcard)
+	})
+
+	t.Run("rejects attribute after anyAttribute in simpleContent extension", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:anyAttribute/>
+        <xs:attribute name="x" type="xs:string"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), afterWildcard)
+	})
+
+	t.Run("accepts correct order in simpleContent extension", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="x" type="xs:string"/>
+        <xs:anyAttribute/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+}
+
 // TestDuplicateAttributeUse (C-010) verifies that two attribute uses with the
 // same expanded name within a single type are rejected, including the case
 // where the collision arises from attribute-group expansion. Before the fix the
