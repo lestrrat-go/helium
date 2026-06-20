@@ -14,6 +14,90 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
+// remapSelectionToCopy rewrites the node items of an initial match selection so
+// that any node belonging to the original source document points instead to the
+// corresponding node in copyDoc, a faithful deep copy of orig produced by
+// helium.CopyDoc. Items that are not nodes, or that belong to a different
+// document (e.g. fn:doc()-loaded), are passed through unchanged.
+//
+// The correspondence is established by a parallel pre-order walk of orig and
+// copyDoc: CopyDoc reproduces children in document order, so the two trees have
+// identical shape and the i-th node visited in orig matches the i-th node in
+// copyDoc.
+func remapSelectionToCopy(sel xpath3.Sequence, orig, copyDoc *helium.Document) xpath3.Sequence {
+	nodeMap := make(map[helium.Node]helium.Node)
+	var walk func(a, b helium.Node)
+	walk = func(a, b helium.Node) {
+		if a == nil || b == nil {
+			return
+		}
+		nodeMap[a] = b
+		ca := a.FirstChild()
+		cb := b.FirstChild()
+		for ca != nil && cb != nil {
+			walk(ca, cb)
+			ca = ca.NextSibling()
+			cb = cb.NextSibling()
+		}
+	}
+	walk(orig, copyDoc)
+
+	items := make(xpath3.ItemSlice, 0, sequence.Len(sel))
+	for i := range sequence.Len(sel) {
+		item := sel.Get(i)
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok {
+			items = append(items, item)
+			continue
+		}
+		if mapped, found := nodeMap[ni.Node]; found {
+			items = append(items, xpath3.NodeItem{Node: mapped})
+			continue
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+// pruneRedundantNamespaceDecls removes namespace declarations on copied elements
+// that merely repeat a declaration already in scope from an ancestor with the
+// same prefix and URI. helium.CopyDoc re-declares an element's active namespace
+// on every element, even when an ancestor already declares it; those redundant
+// declarations would otherwise change how a copied subtree serializes (the
+// original declared the namespace only once, at the top). Pruning them restores
+// byte-for-byte serialization parity with the original tree. Only exact
+// (prefix, URI) duplicates of an in-scope ancestor declaration are removed, so a
+// genuine re-binding of a prefix to a different URI is preserved.
+func pruneRedundantNamespaceDecls(doc *helium.Document) {
+	var walk func(elem *helium.Element, inScope map[string]string)
+	walk = func(elem *helium.Element, inScope map[string]string) {
+		// childScope = inScope plus this element's surviving (non-redundant)
+		// declarations. Build it as a private copy so sibling subtrees do not
+		// observe each other's declarations.
+		childScope := make(map[string]string, len(inScope)+len(elem.Namespaces()))
+		for k, v := range inScope {
+			childScope[k] = v
+		}
+		var redundant []string
+		for _, ns := range elem.Namespaces() {
+			if inScope[ns.Prefix()] == ns.URI() {
+				redundant = append(redundant, ns.Prefix())
+				continue
+			}
+			childScope[ns.Prefix()] = ns.URI()
+		}
+		for _, prefix := range redundant {
+			elem.RemoveNamespaceByPrefix(prefix)
+		}
+		for child := range helium.ChildElements(elem) {
+			walk(child, childScope)
+		}
+	}
+	for child := range helium.ChildElements(doc) {
+		walk(child, map[string]string{})
+	}
+}
+
 // cloneOutputDef returns a deep copy of an OutputDef. All pointer, slice, and
 // map fields are freshly allocated so that mutating the clone (or the original)
 // never affects the other. Returns nil if src is nil.
@@ -63,6 +147,47 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	effectiveSource := source
 	if ss.globalContextItem != nil && ss.globalContextItem.Use == ctxItemAbsent {
 		effectiveSource = nil
+	}
+
+	// xsl:strip-space removes whitespace-only text nodes from the source tree.
+	// The source document is owned by the caller, so it must never be mutated in
+	// place: doing so destroys node identity, corrupts a tree the caller may
+	// reuse (e.g. for a later XPath query or a second transform), and is unsafe
+	// under concurrent reuse. Deep-copy the source first and run the transform
+	// against the copy so strip-space (applied below) only ever touches our
+	// private copy. The copy becomes the exec context's source, so the initial
+	// context node and all node identity stay consistent throughout the
+	// transform. Only copy when strip-space rules exist (it is otherwise pure
+	// overhead).
+	var matchSelection xpath3.Sequence
+	if cfg != nil {
+		matchSelection = cfg.initialMatchSelection
+	}
+	if len(ss.stripSpace) > 0 && effectiveSource != nil {
+		srcCopy, copyErr := helium.CopyDoc(effectiveSource)
+		if copyErr != nil {
+			return nil, copyErr
+		}
+		// Preserve the document URI so base-URI resolution (fn:doc(""), relative
+		// fn:doc()/fn:document() loads, xsl:result-document hrefs) on the copy
+		// resolves exactly as it would against the original.
+		srcCopy.SetURL(effectiveSource.URL())
+		// helium.CopyDoc re-declares an element's active namespace on every
+		// element even when an ancestor already declares it, which would alter
+		// serialization of the copied tree (e.g. via fn:serialize on a source
+		// subtree). Drop those redundant declarations so the copy round-trips
+		// identically to the original.
+		pruneRedundantNamespaceDecls(srcCopy)
+		// The initial match selection (if any) was computed against the original
+		// source tree, so its node items still point into the original. Remap any
+		// selected node that lives in the original source into the corresponding
+		// node of the copy so template matching runs over the same (stripped)
+		// tree as the context node. Selected nodes from other documents (e.g.
+		// fn:doc()-loaded) are left untouched.
+		if matchSelection != nil && sequence.Len(matchSelection) > 0 {
+			matchSelection = remapSelectionToCopy(matchSelection, effectiveSource, srcCopy)
+		}
+		effectiveSource = srcCopy
 	}
 
 	captureItems := cfg != nil && cfg.rawCapture
@@ -337,7 +462,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			}
 		}
 		// XTDE0040: no source document supplied and no initial template identified
-		if effectiveSource == nil && (cfg == nil || cfg.initialMatchSelection == nil || sequence.Len(cfg.initialMatchSelection) == 0) {
+		if effectiveSource == nil && (matchSelection == nil || sequence.Len(matchSelection) == 0) {
 			return nil, dynamicError(errCodeXTDE0040, "no source document and no initial template")
 		}
 		var initialModeParams map[string]xpath3.Sequence
@@ -348,7 +473,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if cfg != nil && len(cfg.initialModeTunnel) > 0 {
 			ec.tunnelParams = cloneSequenceMap(cfg.initialModeTunnel)
 		}
-		if cfg != nil && cfg.initialMatchSelection != nil && sequence.Len(cfg.initialMatchSelection) > 0 {
+		if matchSelection != nil && sequence.Len(matchSelection) > 0 {
 			// Resolve mode name for atomic template matching
 			resolvedMode := initialMode
 			switch resolvedMode {
@@ -363,10 +488,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			if resolvedMode == modeUnnamed {
 				resolvedMode = ""
 			}
-			selLen := sequence.Len(cfg.initialMatchSelection)
+			selLen := sequence.Len(matchSelection)
 			// Apply templates to the initial match selection items
 			for i := range selLen {
-				item := cfg.initialMatchSelection.Get(i)
+				item := matchSelection.Get(i)
 				switch v := item.(type) {
 				case xpath3.NodeItem:
 					ec.contextNode = v.Node
