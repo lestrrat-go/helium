@@ -133,6 +133,43 @@ func TestUPADeterminism(t *testing.T) {
   </xs:element>
 </xs:schema>`,
 			},
+			{
+				// `(a?, b), b`: the trailing `b` is REQUIRED, so the optional `a`'s
+				// position must NOT remain in the inner group's lastpos. A
+				// previous-segment-nullability bug kept `a` in lastpos and falsely
+				// flagged this deterministic model.
+				name: "optional prefix before a required element keeps determinism",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:sequence>
+          <xs:element name="a" type="xs:int" minOccurs="0"/>
+          <xs:element name="b" type="xs:int"/>
+        </xs:sequence>
+        <xs:element name="b" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// `a{2}, a`: a finite counted repetition followed by another `a`.
+				// Each of the three `a` occurrences is a distinct position, so the
+				// model is deterministic. Treating maxOccurs="2" as an unbounded loop
+				// falsely flags it.
+				name: "finite counted repetition followed by the same element",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:int" minOccurs="2" maxOccurs="2"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
@@ -142,4 +179,33 @@ func TestUPADeterminism(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestUPAFiniteCountedRepetitionInstance verifies that a deterministic counted
+// model `a{2}, a` not only compiles cleanly but also validates an instance with
+// three `a` children (xmllint accepts this schema + instance).
+func TestUPAFiniteCountedRepetitionInstance(t *testing.T) {
+	t.Parallel()
+
+	const schemaSrc = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:int" minOccurs="2" maxOccurs="2"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaSrc))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	inst, err := helium.NewParser().Parse(t.Context(), []byte(
+		`<?xml version="1.0"?><root><a>1</a><a>2</a><a>3</a></root>`))
+	require.NoError(t, err)
+	require.NoError(t, xsd.NewValidator(schema).Validate(t.Context(), inst))
 }

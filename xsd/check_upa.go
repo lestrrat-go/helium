@@ -90,6 +90,13 @@ func (a *positionAutomaton) add(p *Particle) posInfo {
 	return info
 }
 
+// upaMaxRequiredExpansion caps how many required occurrence copies a single
+// range may expand into. XSD finite minOccurs is typically small; past this
+// bound we collapse the required copies into a single looping body, which only
+// widens reachability (a sound over-approximation that can never produce a false
+// accept).
+const upaMaxRequiredExpansion = 256
+
 // walkParticle computes nullable/firstpos/lastpos for a particle, accounting for
 // its own minOccurs/maxOccurs repetition, and records the followpos edges that
 // repetition introduces.
@@ -98,20 +105,141 @@ func (a *positionAutomaton) walkParticle(p *Particle) posInfo {
 	if p.MaxOccurs == 0 {
 		return posInfo{nullable: true}
 	}
+	// A particle wrapping a model group carries the same occurrence range as the
+	// group itself (the parser stores it on both). The group's own occurrence is
+	// folded in by walkModelGroup, so applying it here too would double-count it
+	// (e.g. expanding `(a|b){1,3}` into four copies instead of two).
+	if _, ok := p.Term.(*ModelGroup); ok {
+		return a.walkTerm(p.Term)
+	}
+	return a.applyOccurs(p.MinOccurs, p.MaxOccurs, func() posInfo {
+		return a.walkTerm(p.Term)
+	})
+}
 
-	base := a.walkTerm(p.Term)
+// applyOccurs folds a minOccurs/maxOccurs occurrence range over a body. The body
+// closure walks the underlying term/group fresh on each call, allocating new
+// automaton positions every time, so distinct occurrences become distinct
+// automaton positions.
+//
+// When the body is NON-nullable, the required copies (minOccurs) are EXPANDED
+// into a strict chain of distinct positions, and the optional remainder
+// (maxOccurs-minOccurs, or unbounded) is modeled as a SINGLE additional body
+// copy that self-loops only if it may repeat. Expanding the required chain keeps
+// counted models such as `a{2}, a` deterministic — the loop-only model used
+// previously collapsed the required count and falsely flagged them. The optional
+// remainder stays a single copy, never expanded, because its iterations share
+// the same term and are interchangeable under XSD's per-particle UPA; expanding
+// them would falsely flag e.g. `<any maxOccurs="5"/>`.
+//
+// When the body is NULLABLE, expanding it is unsound: a skipped occurrence lets
+// later copies' positions become reachable alongside earlier ones, manufacturing
+// ambiguity that XSD's per-particle UPA does not see (e.g. `(a?, b?){1,3}`). In
+// that case the whole range collapses to a single loop copy, matching the
+// original construction.
+func (a *positionAutomaton) applyOccurs(minOccurs, maxOccurs int, body func() posInfo) posInfo {
+	// Build the first copy and inspect it. Probing nullability with a throwaway
+	// walk would double-allocate positions, so this copy is always reused below.
+	first := body()
 
-	// Repetition (maxOccurs > 1 or unbounded) lets the particle's lastpos flow
-	// back into its firstpos.
-	if p.MaxOccurs == Unbounded || p.MaxOccurs > 1 {
-		for _, l := range base.last {
-			a.addFollow(l, base.first)
+	// Nullable body, or a single occurrence: fall back to the loop model
+	// (self-loop iff the body may repeat). Expanding a nullable body is unsound —
+	// a skipped occurrence makes later copies' positions reachable alongside
+	// earlier ones, manufacturing ambiguity XSD's per-particle UPA never sees.
+	if first.nullable || (minOccurs <= 1 && maxOccurs == 1) {
+		if a.mayRepeat(minOccurs, maxOccurs) {
+			for _, l := range first.last {
+				a.addFollow(l, first.first)
+			}
 		}
+		if minOccurs == 0 {
+			first.nullable = true
+		}
+		return first
 	}
 
-	// An optional particle (minOccurs == 0) is nullable.
-	nullable := base.nullable || p.MinOccurs == 0
-	return posInfo{nullable: nullable, first: base.first, last: base.last}
+	// Non-nullable body. Expand the required copies (minOccurs) into a strict
+	// chain of distinct positions, then attach at most ONE optional remainder
+	// copy. The chain keeps counted models such as `a{2}, a` deterministic; the
+	// single optional copy avoids falsely flagging interchangeable repeated copies
+	// (e.g. `<any maxOccurs="5"/>`).
+	required := minOccurs
+	collapseRequired := required > upaMaxRequiredExpansion
+	if collapseRequired {
+		required = 1
+	}
+
+	optionalUnbounded := maxOccurs == Unbounded || collapseRequired
+	optionalCount := 0
+	if !optionalUnbounded {
+		optionalCount = maxOccurs - minOccurs
+	}
+	hasTail := optionalUnbounded || optionalCount >= 1
+	// The optional remainder self-loops when it can occur more than once.
+	tailLoops := optionalUnbounded || optionalCount >= 2
+
+	// `first` is the first required copy when one is required; otherwise it serves
+	// as the (single) optional remainder copy.
+	if required == 0 {
+		if !hasTail {
+			// minOccurs==0 and maxOccurs==0 is handled by the caller; this is
+			// defensive.
+			first.nullable = true
+			return first
+		}
+		if tailLoops {
+			for _, l := range first.last {
+				a.addFollow(l, first.first)
+			}
+		}
+		first.nullable = true
+		return first
+	}
+
+	acc := first
+	for i := 1; i < required; i++ {
+		acc = a.concat(acc, body())
+	}
+
+	if hasTail {
+		tail := body()
+		if tailLoops {
+			for _, l := range tail.last {
+				a.addFollow(l, tail.first)
+			}
+		}
+		tail.nullable = true
+		acc = a.concat(acc, tail)
+	}
+
+	return acc
+}
+
+// mayRepeat reports whether an occurrence range allows the body to appear more
+// than once (and therefore needs a back-edge in the loop model).
+func (a *positionAutomaton) mayRepeat(minOccurs, maxOccurs int) bool {
+	return maxOccurs == Unbounded || maxOccurs > 1 || minOccurs > 1
+}
+
+// concat sequentially composes two segments (Glushkov concatenation), recording
+// the followpos edges from the left segment's lastpos into the right segment's
+// firstpos.
+func (a *positionAutomaton) concat(left, right posInfo) posInfo {
+	var out posInfo
+	out.first = slices.Clone(left.first)
+	if left.nullable {
+		out.first = append(out.first, right.first...)
+	}
+	for _, l := range left.last {
+		a.addFollow(l, right.first)
+	}
+	if right.nullable {
+		out.last = append(slices.Clone(left.last), right.last...)
+	} else {
+		out.last = slices.Clone(right.last)
+	}
+	out.nullable = left.nullable && right.nullable
+	return out
 }
 
 // walkTerm computes nullable/firstpos/lastpos for a particle term.
@@ -137,11 +265,23 @@ func (a *positionAutomaton) walkTerm(term ParticleTerm) posInfo {
 	return posInfo{nullable: true}
 }
 
-// walkModelGroup computes nullable/firstpos/lastpos for a model group and
-// records the followpos edges its compositor introduces.
+// walkModelGroup computes nullable/firstpos/lastpos for a model group,
+// recording the followpos edges its compositor introduces and folding in the
+// group's own minOccurs/maxOccurs occurrence range.
 func (a *positionAutomaton) walkModelGroup(mg *ModelGroup) posInfo {
 	switch mg.Compositor {
-	case CompositorChoice:
+	case CompositorChoice, CompositorSequence, CompositorAll:
+		return a.applyOccurs(mg.MinOccurs, mg.MaxOccurs, func() posInfo {
+			return a.walkCompositorBody(mg)
+		})
+	}
+	return posInfo{nullable: true}
+}
+
+// walkCompositorBody computes nullable/firstpos/lastpos for one occurrence of a
+// model group's compositor body, ignoring the group's own occurrence range.
+func (a *positionAutomaton) walkCompositorBody(mg *ModelGroup) posInfo {
+	if mg.Compositor == CompositorChoice {
 		var info posInfo
 		for _, p := range mg.Particles {
 			ci := a.walkParticle(p)
@@ -155,49 +295,19 @@ func (a *positionAutomaton) walkModelGroup(mg *ModelGroup) posInfo {
 		if len(mg.Particles) == 0 {
 			info.nullable = true
 		}
-		return a.applyGroupRepetition(mg, info)
-	case CompositorSequence, CompositorAll:
-		// xs:all is order-independent at validation time, but for UPA purposes a
-		// sequence-style concatenation is a sound over-approximation: any false
-		// edge it adds can only widen reachability, and xs:all members are
-		// already constrained to be distinct elements by other checks.
-		info := posInfo{nullable: true}
-		for _, p := range mg.Particles {
-			ci := a.walkParticle(p)
-			// followpos: lastpos of everything matchable so far flows into the
-			// firstpos of this particle.
-			if info.nullable {
-				info.first = append(info.first, ci.first...)
-			}
-			for _, l := range info.last {
-				a.addFollow(l, ci.first)
-			}
-			if info.nullable {
-				// prior segment could be empty: this particle may itself end the
-				// segment, so its lastpos joins the running lastpos.
-				info.last = append(info.last, ci.last...)
-			} else {
-				info.last = ci.last
-			}
-			info.nullable = info.nullable && ci.nullable
-		}
-		if len(mg.Particles) == 0 {
-			info.nullable = true
-		}
-		return a.applyGroupRepetition(mg, info)
+		return info
 	}
-	return posInfo{nullable: true}
-}
 
-// applyGroupRepetition folds a model group's own minOccurs/maxOccurs into the
-// computed posInfo, mirroring walkParticle's repetition handling.
-func (a *positionAutomaton) applyGroupRepetition(mg *ModelGroup, info posInfo) posInfo {
-	if mg.MaxOccurs == Unbounded || mg.MaxOccurs > 1 {
-		for _, l := range info.last {
-			a.addFollow(l, info.first)
-		}
+	// CompositorSequence / CompositorAll. xs:all is order-independent at
+	// validation time, but for UPA purposes a sequence-style concatenation is a
+	// sound over-approximation: any false edge it adds can only widen
+	// reachability, and xs:all members are already constrained to be distinct
+	// elements by other checks.
+	info := posInfo{nullable: true}
+	for _, p := range mg.Particles {
+		info = a.concat(info, a.walkParticle(p))
 	}
-	if mg.MinOccurs == 0 {
+	if len(mg.Particles) == 0 {
 		info.nullable = true
 	}
 	return info
