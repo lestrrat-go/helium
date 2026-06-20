@@ -619,13 +619,16 @@ func TestRCDATASmallCapKnownEntityResolves(t *testing.T) {
 	}
 }
 
-// TestRCDATALegacyPrefixLongTailResolves pins that a legacy-prefix reference
-// with a long no-semicolon tail RESOLVES within the fixed maxEntityNameLen
-// lookahead and emits the tail as ordinary chunked text — it is never rejected,
-// matching the normal-text (parseCharRef) path. `&amp` + many literal chars
-// resolves the legacy "amp" entity to "&" and echoes the remaining run, even
-// under a tiny MaxContentSize.
-func TestRCDATALegacyPrefixLongTailResolves(t *testing.T) {
+// TestRCDATAOverCapLegacyPrefixLongTailFails pins the convergent BOUNDED-SPOOL
+// contract: a legacy-prefix reference with a long no-semicolon tail
+// (`&amp` + many chars) is AMBIGUOUS until the run ends — a trailing ';' would
+// make it an over-long unknown literal, its absence legacy-resolves "amp". The
+// decision can only be made at the run's end, so settling it without an over-cap
+// spool is impossible once the run exceeds MaxContentSize. The parser therefore
+// HARD-FAILS with ErrContentSizeExceeded and emits NOTHING, rather than streaming
+// or buffering the unbounded tail. (A within-cap run still resolves — see
+// TestRCDATAWithinCapSaturatedLegacyResolves.)
+func TestRCDATAOverCapLegacyPrefixLongTailFails(t *testing.T) {
 	const limit = 4
 	const runLen = 4096
 
@@ -634,10 +637,12 @@ func TestRCDATALegacyPrefixLongTailResolves(t *testing.T) {
 			tail := strings.Repeat("x", runLen)
 			input := "<" + elem + ">&amp" + tail + "</" + elem + ">"
 
-			var got strings.Builder
+			var events [][]byte
 			maxChunk := 0
 			record := html.CharactersFunc(func(data []byte) error {
-				got.Write(data)
+				cp := make([]byte, len(data))
+				copy(cp, data)
+				events = append(events, cp)
 				if len(data) > maxChunk {
 					maxChunk = len(data)
 				}
@@ -649,12 +654,46 @@ func TestRCDATALegacyPrefixLongTailResolves(t *testing.T) {
 
 			err := html.NewParser().MaxContentSize(limit).
 				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"an over-cap ambiguous legacy-prefix run must hard-fail, not stream the tail")
+			require.Empty(t, events,
+				"no Characters callback may be delivered before the ErrContentSizeExceeded; got %q", events)
+			require.LessOrEqual(t, maxChunk, limit+16,
+				"no over-cap chunk may be emitted before the abort")
+		})
+	}
+}
+
+// TestRCDATAWithinCapSaturatedLegacyResolves pins that a SATURATED legacy-prefix
+// run (its alphanumeric run overflows the fixed maxEntityNameLen lookahead) whose
+// whole would-be literal still fits MaxContentSize is resolved through the
+// bounded spool exactly like the unbounded parseCharRef path: `&amp` + a tail
+// that overflows the 32-byte lookahead but fits a generous cap legacy-resolves
+// "amp" to "&" and echoes the tail. This proves the hard-fail is scoped to the
+// over-cap case and the spool still resolves a within-cap saturated run.
+func TestRCDATAWithinCapSaturatedLegacyResolves(t *testing.T) {
+	const tailLen = 40 // overflows maxEntityNameLen (32) so the scan saturates
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			tail := strings.Repeat("x", tailLen)
+			input := "<" + elem + ">&amp" + tail + "</" + elem + ">"
+
+			var got strings.Builder
+			record := html.CharactersFunc(func(data []byte) error {
+				got.Write(data)
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			err := html.NewParser().MaxContentSize(1<<10).
+				ParseWithSAX(t.Context(), []byte(input), sax)
 			require.NoError(t, err,
-				"a long no-semicolon legacy-prefix reference must resolve, not fail")
+				"a within-cap saturated legacy-prefix run must resolve, not fail")
 			require.Equal(t, "&"+tail, got.String(),
 				"legacy 'amp' prefix resolves to '&' and the tail is echoed literally")
-			require.LessOrEqual(t, maxChunk, limit+16,
-				"the long tail must be delivered in capped chunks")
 		})
 	}
 }
@@ -672,8 +711,11 @@ func TestRCDATALegacyPrefixLongTailResolves(t *testing.T) {
 // (before seeing the eventual ';'), dropping "amp" and emitting "&xxxx...;".
 //
 // The no-semicolon counterpart (`&amp` + long tail, no ';') is the OPPOSITE
-// decision and DOES legacy-resolve — see TestRCDATALegacyPrefixLongTailResolves;
-// this test re-pins it under the same cap to lock both halves together.
+// decision and DOES legacy-resolve when its run fits the cap — see
+// TestRCDATAWithinCapSaturatedLegacyResolves; this test re-pins that resolve half
+// (under a within-cap limit) alongside the literal halves to lock them together.
+// (When such a no-';' run is OVER the cap it hard-fails as an ambiguous run —
+// TestRCDATAOverCapLegacyPrefixLongTailFails.)
 func TestRCDATALongSemicolonNameNotLegacyResolved(t *testing.T) {
 	const tailLen = 40 // run far exceeds maxEntityNameLen (32) → lookahead saturates
 
@@ -727,9 +769,10 @@ func TestRCDATALongSemicolonNameNotLegacyResolved(t *testing.T) {
 				"the whole run (incl. 'amp' and ';') must be echoed literally — no legacy resolution")
 		})
 
-		// The no-semicolon sibling under the SAME tiny cap still legacy-resolves
-		// the "amp" prefix and echoes the tail — the opposite decision, locked in
-		// alongside the literal case above.
+		// The no-semicolon sibling under a WITHIN-cap limit legacy-resolves the
+		// "amp" prefix and echoes the tail — the opposite decision, locked in
+		// alongside the literal cases above. (Over the cap it would hard-fail as an
+		// ambiguous run — see TestRCDATAOverCapLegacyPrefixLongTailFails.)
 		t.Run(elem+"_no_semicolon_legacy_resolves", func(t *testing.T) {
 			tail := strings.Repeat("x", tailLen)
 			input := "<" + elem + ">&amp" + tail + "</" + elem + ">"
@@ -743,10 +786,10 @@ func TestRCDATALongSemicolonNameNotLegacyResolved(t *testing.T) {
 			sax.SetOnCharacters(record)
 			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
 
-			err := html.NewParser().MaxContentSize(4).
+			err := html.NewParser().MaxContentSize(1<<10).
 				ParseWithSAX(t.Context(), []byte(input), sax)
 			require.NoError(t, err,
-				"a long no-semicolon legacy-prefix reference must resolve, not fail")
+				"a within-cap no-semicolon legacy-prefix reference must resolve, not fail")
 			require.Equal(t, "&"+tail, got.String(),
 				"legacy 'amp' prefix resolves to '&' and the tail is echoed literally")
 		})
@@ -763,9 +806,11 @@ func TestRCDATALongSemicolonNameNotLegacyResolved(t *testing.T) {
 // ErrContentSizeExceeded. That left a partial emission ('&' plus a truncated,
 // 'amp'-dropped tail) sitting ahead of the error, corrupting downstream output.
 //
-// The fix settles the ';' decision via a non-consuming lookahead BEFORE any
-// emit, so the error path delivers nothing. The no-';' sibling is re-pinned
-// alongside to prove the genuine legacy-resolve case still emits correctly.
+// The fix settles the ';' decision only AFTER consuming the run into a
+// cap-bounded spool, so the error path delivers nothing. Under the convergent
+// BOUNDED-SPOOL contract the over-cap NO-';' sibling ALSO hard-fails (ambiguous
+// until the run ends, which can't be reached within cap) and likewise emits
+// nothing; a within-cap no-';' run still legacy-resolves and emits correctly.
 func TestRCDATASaturatedLegacyPrefixNoPartialEmit(t *testing.T) {
 	const limit = 4
 	const tailLen = 40 // run far exceeds maxEntityNameLen (32) so the scan saturates
@@ -796,10 +841,36 @@ func TestRCDATASaturatedLegacyPrefixNoPartialEmit(t *testing.T) {
 				"no Characters callback may be delivered before the ErrContentSizeExceeded; got %q", events)
 		})
 
-		// The genuine no-';' legacy-resolve sibling under the same tiny cap still
-		// emits the resolved '&' and the echoed tail — proving the fix did not
-		// regress the resolve path.
-		t.Run(elem+"_no_semicolon_still_resolves", func(t *testing.T) {
+		// The over-cap NO-';' sibling under the same tiny cap is ambiguous until
+		// the run ends (which lies past the cap), so it ALSO hard-fails — and like
+		// the ';' case must emit NOTHING before the error.
+		t.Run(elem+"_no_semicolon_over_cap_emits_nothing_before_error", func(t *testing.T) {
+			tail := strings.Repeat("x", tailLen)
+			input := "<" + elem + ">&amp" + tail + "</" + elem + ">"
+
+			var events [][]byte
+			record := html.CharactersFunc(func(data []byte) error {
+				cp := make([]byte, len(data))
+				copy(cp, data)
+				events = append(events, cp)
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			err := html.NewParser().MaxContentSize(limit).
+				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"an over-cap no-';' ambiguous legacy-prefix run must hard-fail")
+			require.Empty(t, events,
+				"no Characters callback may be delivered before the ErrContentSizeExceeded; got %q", events)
+		})
+
+		// The genuine WITHIN-cap no-';' legacy-resolve sibling still emits the
+		// resolved '&' and the echoed tail — proving the spool did not regress the
+		// resolve path.
+		t.Run(elem+"_no_semicolon_within_cap_still_resolves", func(t *testing.T) {
 			tail := strings.Repeat("x", tailLen)
 			input := "<" + elem + ">&amp" + tail + "</" + elem + ">"
 
@@ -812,10 +883,10 @@ func TestRCDATASaturatedLegacyPrefixNoPartialEmit(t *testing.T) {
 			sax.SetOnCharacters(record)
 			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
 
-			err := html.NewParser().MaxContentSize(limit).
+			err := html.NewParser().MaxContentSize(1<<10).
 				ParseWithSAX(t.Context(), []byte(input), sax)
 			require.NoError(t, err,
-				"a no-';' legacy-prefix run must still resolve, not fail")
+				"a within-cap no-';' legacy-prefix run must still resolve, not fail")
 			require.Equal(t, "&"+tail, got.String(),
 				"legacy 'amp' resolves to '&' and the tail is echoed literally")
 		})
@@ -1204,21 +1275,56 @@ func TestRCDATAOverCapNonLegacyAbortsWithoutDrainingTail(t *testing.T) {
 	}
 }
 
+// TestRCDATAOverCapLegacyPrefixAbortsWithoutDrainingTail is the convergent
+// memory+work-bound regression named by the round-19/21 finding: an AMBIGUOUS
+// legacy-prefix reference (`&amp` + a multi-megabyte alphanumeric tail) over a
+// streaming reader must NOT buffer or drain the whole tail to decide. Resolving
+// it would require reaching the run's end (to rule out a trailing ';'), which an
+// unbounded non-consuming lookahead would buffer whole — re-violating the
+// MaxContentSize streaming bound. The bounded spool instead hard-fails with
+// ErrContentSizeExceeded as soon as the run exceeds the cap, reading only a small
+// bounded prefix — proved by the counting reader. (No-partial-emit for the same
+// legacy case is pinned in-memory by TestRCDATAOverCapLegacyPrefixLongTailFails.)
+func TestRCDATAOverCapLegacyPrefixAbortsWithoutDrainingTail(t *testing.T) {
+	const limit = 8
+	const runLen = 4 << 20 // 4 MiB tail after the "amp" legacy prefix
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			// <meta charset="utf-8"> selects the STREAMING sanitize reader so reads
+			// stay bounded (the default deferred-Latin-1 path would buffer the whole
+			// stream to settle the encoding, masking the parser-side work bound).
+			input := []byte(`<meta charset="utf-8"><` + elem + ">&amp" +
+				strings.Repeat("x", runLen) + "</" + elem + ">")
+			r := &countingReader{data: input}
+
+			_, err := html.NewParser().MaxContentSize(limit).ParseReader(t.Context(), r)
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"over-cap ambiguous legacy-prefix run must hard-fail, not stream/drain the tail")
+			require.Less(t, r.pos, runLen/2,
+				"abort must not drain the whole tail (read %d of %d run bytes)", r.pos, runLen)
+		})
+	}
+}
+
 // TestRCDATASaturatedRefContextCancellation verifies that a context cancelled
-// WHILE parseSaturatedCharRefLiteral drains a long alphanumeric run (the
-// legacy-prefix streaming path, which must drain to find a possible ';') aborts
-// promptly with context.Canceled instead of consuming the entire run. The reader
-// cancels a few bytes into the run; the drain loop observes ctx.Err() between
+// WHILE parseSaturatedCharRefLiteral spools a long alphanumeric run (the
+// legacy-prefix path, which must reach the run's end to settle a possible ';')
+// aborts promptly with context.Canceled instead of consuming the entire run. A
+// generous MaxContentSize keeps the run WITHIN cap so the spool loop keeps
+// draining (an over-cap run would hard-fail before cancellation could fire); the
+// reader cancels a few bytes into the run and the loop observes ctx.Err() between
 // bounded chunks and unwinds.
 func TestRCDATASaturatedRefContextCancellation(t *testing.T) {
-	const reps = 1 << 16 // long run so the drain is still in progress
+	const reps = 1 << 16    // long run so the drain is still in progress
+	const sizeCap = 1 << 30 // far above reps so the within-cap spool keeps draining
 
 	for _, elem := range []string{tagTitle, tagTextarea} {
 		t.Run(elem, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			t.Cleanup(cancel)
 
-			// "&amp" + a long no-';' tail: the saturated path streams the tail
+			// "&amp" + a long no-';' tail: the saturated path spools the tail
 			// (legacy "amp" resolves) and must keep draining to learn whether a ';'
 			// terminates it — exactly the loop that must honor cancellation.
 			input := []byte("<" + elem + ">&amp" + strings.Repeat("x", reps))
@@ -1226,7 +1332,7 @@ func TestRCDATASaturatedRefContextCancellation(t *testing.T) {
 
 			done := make(chan error, 1)
 			go func() {
-				_, err := html.NewParser().MaxContentSize(8).ParseReader(ctx, r)
+				_, err := html.NewParser().MaxContentSize(sizeCap).ParseReader(ctx, r)
 				done <- err
 			}()
 
