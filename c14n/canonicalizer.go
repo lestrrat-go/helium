@@ -983,6 +983,14 @@ func relativizeURI(base, target string) string {
 		return target
 	}
 
+	// Opaque / non-hierarchical URIs (e.g. "urn:target") carry their data in
+	// Opaque rather than Path, so there is no path to relativize. Path-based
+	// relativization would yield a meaningless (and possibly empty) result, so
+	// return the target absolutely instead.
+	if baseURL.Opaque != "" || targetURL.Opaque != "" {
+		return target
+	}
+
 	basePath := baseURL.Path
 	targetPath := targetURL.Path
 
@@ -1011,13 +1019,54 @@ func relativizeURI(base, target string) string {
 		}
 	}
 
-	// Build relative path
-	result := strings.Repeat("../", ups) + targetPath[len(common):]
+	// Build the path-relative part and the query/fragment suffix separately so
+	// the relative-reference candidates below can be assembled and tested
+	// independently.
+	pathRelative := strings.Repeat("../", ups) + targetPath[len(common):]
 
-	if result == "" {
-		return "."
+	suffix := ""
+	if targetURL.RawQuery != "" || targetURL.ForceQuery {
+		suffix += "?" + targetURL.RawQuery
 	}
-	return result
+	if targetURL.Fragment != "" {
+		suffix += "#" + targetURL.EscapedFragment()
+	}
+
+	// roundTrips reports whether resolving the candidate reference against the
+	// base reproduces the exact target. A relative reference is only correct if
+	// it round-trips; otherwise it would silently change the URI.
+	roundTrips := func(ref string) bool {
+		candidate, err := url.Parse(ref)
+		if err != nil {
+			return false
+		}
+		return baseURL.ResolveReference(candidate).String() == targetURL.String()
+	}
+
+	// Primary candidate: the relativized path plus the carried query/fragment.
+	candidate := pathRelative + suffix
+	if roundTrips(candidate) {
+		return candidate
+	}
+
+	// When the path part is empty the target lives in the base document's own
+	// directory. The bare suffix (e.g. "?q=1#frag") resolves against the base
+	// *document* (re-using its filename), so it points at the base document with
+	// the suffix attached rather than the directory. If that does not round-trip
+	// to the target, a leading "." selects the directory itself: "./?q=1#frag"
+	// (or ".?q=1#frag" when no path remains) resolves to the directory plus the
+	// suffix, which is the correct minimal relative reference for a same-directory
+	// target carrying only a query/fragment.
+	if pathRelative == "" {
+		dotCandidate := "." + suffix
+		if roundTrips(dotCandidate) {
+			return dotCandidate
+		}
+	}
+
+	// No relative candidate round-trips; emit the absolute target so the
+	// canonical xml:base resolves to the exact target.
+	return targetURL.String()
 }
 
 // removeXMLBaseEntry removes any xml:base entry from the attr list.
@@ -1038,6 +1087,8 @@ func (c *canonicalizer) setXMLBaseEntry(entries *[]attrSortEntry, value string) 
 	for i, e := range *entries {
 		if e.nsURI == lexicon.NamespaceXML && e.localName == xmlBaseLocalName {
 			(*entries)[i].fixupValue = value
+			(*entries)[i].hasFixup = true
+			(*entries)[i].attr = nil
 			return
 		}
 	}
@@ -1046,6 +1097,7 @@ func (c *canonicalizer) setXMLBaseEntry(entries *[]attrSortEntry, value string) 
 		nsURI:      lexicon.NamespaceXML,
 		localName:  xmlBaseLocalName,
 		fixupValue: value,
+		hasFixup:   true,
 	})
 }
 
@@ -1079,8 +1131,11 @@ func (c *canonicalizer) writeAttribute(entry attrSortEntry) error {
 		return err
 	}
 
-	// Write value: check for fixup value first (C14N 1.1 xml:base)
-	if entry.fixupValue != "" {
+	// Write value: check for fixup value first (C14N 1.1 xml:base). A fixup may
+	// legitimately be the empty string (an empty relative reference resolving
+	// back to the base), so rely on hasFixup rather than fixupValue != "" to
+	// avoid falling through to writeAttrValue(nil) for synthetic entries.
+	if entry.hasFixup {
 		if err := escapeAttrValue(c.out, []byte(entry.fixupValue)); err != nil {
 			return err
 		}
