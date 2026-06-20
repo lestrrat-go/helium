@@ -94,6 +94,25 @@ func (n *Element) SetBooleanAttribute(name string) error {
 	return nil
 }
 
+// attrMatches reports whether existing and the attribute identified by
+// (qname, nsURI, localName) are the same attribute for the purposes of
+// duplicate detection. Two attributes collide when EITHER their expanded
+// name (namespace URI + local name) matches OR their serialized QName
+// matches. The expanded-name test catches duplicates declared through
+// different namespace prefixes that resolve to the same URI (e.g. p:a and
+// q:a both bound to {urn:x}a); the QName test catches duplicates among
+// no-namespace attributes and any other identical serialization.
+//
+// This is the single attribute-identity check shared by every
+// attribute-creation entry point (addProperty, which backs SetAttribute
+// and SetLiteralAttribute(NS), and SetAttributeNS).
+func attrMatches(existing *Attribute, qname, nsURI, localName string) bool {
+	if existing.URI() == nsURI && existing.LocalName() == localName {
+		return true
+	}
+	return existing.Name() == qname
+}
+
 // addProperty inserts or replaces an attribute in the element's property list.
 func (n *Element) addProperty(attr *Attribute) {
 	p := n.properties
@@ -103,9 +122,13 @@ func (n *Element) addProperty(attr *Attribute) {
 		return
 	}
 
+	qname := attr.Name()
+	nsURI := attr.URI()
+	localName := attr.LocalName()
+
 	var last *Attribute
 	for ; p != nil; p = p.NextAttribute() {
-		if p.Name() == attr.Name() {
+		if attrMatches(p, qname, nsURI, localName) {
 			// Replace existing attribute in-place: splice new attr
 			// into the same position in the linked list.
 			pdn := p.baseDocNode()
@@ -169,9 +192,17 @@ func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) (*Eleme
 		return n, nil
 	}
 
+	// Use the same attribute-identity check as addProperty: an attribute is
+	// a duplicate when EITHER its expanded name (namespace URI + local name)
+	// OR its serialized QName matches an existing one. Comparing by URI
+	// value rather than *Namespace pointer identity means distinct namespace
+	// declarations carrying the same URI still collide.
+	qname := attr.Name()
+	nsURI := attr.URI()
+
 	var last *Attribute
 	for ; p != nil; p = p.NextAttribute() {
-		if p.LocalName() == localname && p.ns == ns {
+		if attrMatches(p, qname, nsURI, localname) {
 			return nil, ErrDuplicateAttribute
 		}
 		last = p
