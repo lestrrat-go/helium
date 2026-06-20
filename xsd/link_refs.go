@@ -322,7 +322,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				if !src.isLocal {
 					component = "complex type '" + td.Name.Local + "'"
 				}
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+				source := src.source
+				if source == "" {
+					source = c.filename
+				}
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(source, src.line, "complexType", component,
 					"The content type of both, the type and its base type, must either 'mixed' or 'element-only'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -343,7 +347,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				if !src.isLocal {
 					component = "complex type '" + td.Name.Local + "'"
 				}
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+				source := src.source
+				if source == "" {
+					source = c.filename
+				}
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(source, src.line, "complexType", component,
 					"The 'all' model group needs to be the only child of the model group."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -466,8 +474,12 @@ func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef
 		if !src.isLocal {
 			component = td.Name.Local
 		}
+		source := src.source
+		if source == "" {
+			source = c.filename
+		}
 		msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(source, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 }
@@ -506,8 +518,12 @@ func (c *compiler) checkDuplicateAttrUses(ctx context.Context) {
 				if !src.isLocal {
 					component = td.Name.Local
 				}
+				source := src.source
+				if source == "" {
+					source = c.filename
+				}
 				msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(source, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
 				c.errorCount++
 				continue
 			}
