@@ -190,8 +190,10 @@ func validateBoolean(value string) error {
 	return fmt.Errorf("invalid boolean")
 }
 
-// floatRegex matches xs:float and xs:double.
-var floatRegex = regexp.MustCompile(`^[+-]?((\d+\.?\d*|\.\d+)([eE][+-]?\d+)?|INF|NaN)$`)
+// floatRegex matches xs:float and xs:double. The optional sign applies to the
+// numeric forms and INF, but NaN must be bare: per XSD the valid special
+// lexical forms are INF, +INF, -INF and NaN — +NaN and -NaN are not valid.
+var floatRegex = regexp.MustCompile(`^([+-]?((\d+\.?\d*|\.\d+)([eE][+-]?\d+)?|INF)|NaN)$`)
 
 func validateFloat(value string) error {
 	if !floatRegex.MatchString(value) {

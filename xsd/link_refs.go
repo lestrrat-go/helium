@@ -383,11 +383,30 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Check UPA (Unique Particle Attribution) for all complex types with content models.
 	// Only run UPA if there are no prior schema errors (libxml2 skips UPA when
 	// the schema has structural parse errors).
+	//
+	// Iterate in a deterministic source order (line, then ordinal) rather than via
+	// Go map ranging: checkUPA increments errorCount, and a stable order keeps both
+	// which violation is reported first and the downstream errorCount-gated checks
+	// (e.g. checkElementConsistent) independent of map iteration order.
 	if c.filename != "" && c.errorCount == 0 {
+		type upaTarget struct {
+			td  *TypeDef
+			src typeDefSource
+		}
+		targets := make([]upaTarget, 0, len(c.typeDefSources))
 		for td, src := range c.typeDefSources {
 			if td.ContentModel != nil {
-				c.checkUPA(ctx, td, src)
+				targets = append(targets, upaTarget{td: td, src: src})
 			}
+		}
+		sort.Slice(targets, func(i, j int) bool {
+			if targets[i].src.line != targets[j].src.line {
+				return targets[i].src.line < targets[j].src.line
+			}
+			return targets[i].src.ordinal < targets[j].src.ordinal
+		})
+		for _, t := range targets {
+			c.checkUPA(ctx, t.td, t.src)
 		}
 	}
 }
