@@ -358,7 +358,21 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		return dynamicError(errCodeXTRE1495, "primary output URI already has implicit content")
 	}
 
+	// Reserve the canonical URI so a concurrent/nested result-document targeting
+	// the same URI collides, but treat the reservation as provisional until the
+	// result document is actually committed. Any error before commit (e.g. a
+	// format AVT that raises a dynamic error, a failed parameter-document load,
+	// or a body that throws) must release the reservation. Otherwise an
+	// xsl:result-document caught inside xsl:try would leave its URI permanently
+	// claimed, making an xsl:catch that writes the same href fail with a
+	// spurious XTDE1490 even though no result document was ever written there.
 	ec.usedResultURIs[dupKey] = struct{}{}
+	committed := false
+	defer func() {
+		if !committed {
+			delete(ec.usedResultURIs, dupKey)
+		}
+	}()
 
 	// Resolve the effective format name (static or avt).
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
@@ -466,6 +480,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if err := moveChildren(tmpDoc, primaryFrame.doc); err != nil {
 				return err
 			}
+			committed = true
 			return nil
 		}
 		if v == validationStrict || v == validationLax {
@@ -509,6 +524,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if err := moveChildren(tmpDoc, primaryFrame.doc); err != nil {
 				return err
 			}
+			committed = true
 			return nil
 		}
 		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
@@ -553,6 +569,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			} else if overrides != nil {
 				ec.primaryOutputOverrides = overrides
 			}
+			committed = true
 			return nil
 		}
 
@@ -633,6 +650,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		} else if overrides != nil {
 			ec.primaryOutputOverrides = overrides
 		}
+		committed = true
 		return nil
 	}
 
@@ -741,6 +759,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 
 	// Store the secondary result document.
 	ec.resultDocuments[href] = tmpDoc
+	committed = true
 	return nil
 }
 

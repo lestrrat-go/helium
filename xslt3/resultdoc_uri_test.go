@@ -44,3 +44,24 @@ func TestResultDocumentFormatAVTErrorPropagates(t *testing.T) {
 		strings.Contains(err.Error(), "division") || strings.Contains(err.Error(), "zero"),
 		"error should reflect the division-by-zero dynamic error, got: %v", err)
 }
+
+// A result-document whose format AVT raises a dynamic error inside xsl:try must
+// be caught, and the URI it targeted must NOT remain reserved: a subsequent
+// xsl:catch that writes the SAME href must succeed (no spurious XTDE1490),
+// because no result document was ever committed to that URI.
+func TestResultDocumentFormatAVTErrorReleasesURIInTryCatch(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:try>
+      <xsl:result-document href="out.xml" format="{1 idiv 0}"><a/></xsl:result-document>
+      <xsl:catch>
+        <xsl:result-document href="out.xml"><b/></xsl:result-document>
+      </xsl:catch>
+    </xsl:try>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.NoError(t, err, "the caught result-document must release its URI reservation so the catch can reuse the same href")
+}
