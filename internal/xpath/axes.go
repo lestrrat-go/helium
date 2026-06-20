@@ -532,43 +532,62 @@ func axisNamespace(ctx context.Context, node helium.Node) ([]helium.Node, error)
 		ancestors = append(ancestors, cur)
 	}
 
-	inScope := NamespacePrefixesInScope(ancestors)
-	return CollectNamespaceNodes(ancestors, inScope, elem), nil
+	inScope, err := NamespacePrefixesInScope(ctx, ancestors)
+	if err != nil {
+		return nil, err
+	}
+	return CollectNamespaceNodes(ctx, ancestors, inScope, elem)
 }
 
 // NamespacePrefixesInScope returns a map of prefix → active (non-empty URI)
 // by walking ancestors from outermost to innermost so inner declarations win.
-func NamespacePrefixesInScope(ancestors []helium.Node) map[string]bool {
+// It checks ctx for cancellation in both its outer and inner loops so a long
+// namespace::* traversal can be aborted promptly.
+func NamespacePrefixesInScope(ctx context.Context, ancestors []helium.Node) (map[string]bool, error) {
 	type nser interface{ Namespaces() []*helium.Namespace }
 	inScope := map[string]bool{}
 	for _, v := range slices.Backward(ancestors) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		ns, ok := v.(nser)
 		if !ok {
 			continue
 		}
 		for _, n := range ns.Namespaces() {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			inScope[n.Prefix()] = n.URI() != ""
 		}
 	}
-	return inScope
+	return inScope, nil
 }
 
 // CollectNamespaceNodes builds the namespace node list for an element, adding
 // the xml prefix first and then ancestor-declared prefixes in document order.
 // For each prefix, the innermost (closest ancestor) declaration provides the
 // URI, but the output order follows document order (outermost first).
-func CollectNamespaceNodes(ancestors []helium.Node, inScope map[string]bool, elem *helium.Element) []helium.Node {
+// It checks ctx for cancellation in both passes (outer and inner loops) so a
+// long namespace::* traversal can be aborted promptly.
+func CollectNamespaceNodes(ctx context.Context, ancestors []helium.Node, inScope map[string]bool, elem *helium.Element) ([]helium.Node, error) {
 	type nser interface{ Namespaces() []*helium.Namespace }
 
 	// First pass: find the correct namespace for each prefix (innermost wins).
 	// ancestors[0] is the element itself (innermost), ancestors[len-1] outermost.
 	winner := map[string]*helium.Namespace{}
 	for _, anc := range ancestors {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		ns, ok := anc.(nser)
 		if !ok {
 			continue
 		}
 		for _, n := range ns.Namespaces() {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			prefix := n.Prefix()
 			if _, found := winner[prefix]; found {
 				continue // innermost already recorded
@@ -589,11 +608,17 @@ func CollectNamespaceNodes(ancestors []helium.Node, inScope map[string]bool, ele
 	// use the innermost URI for each prefix.
 	emitted := map[string]struct{}{"xml": {}}
 	for _, v := range slices.Backward(ancestors) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		ns, ok := v.(nser)
 		if !ok {
 			continue
 		}
 		for _, n := range ns.Namespaces() {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			prefix := n.Prefix()
 			if _, done := emitted[prefix]; done {
 				continue
@@ -607,5 +632,5 @@ func CollectNamespaceNodes(ancestors []helium.Node, inScope map[string]bool, ele
 		}
 	}
 
-	return result
+	return result, nil
 }

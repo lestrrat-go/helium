@@ -294,3 +294,63 @@ func TestTraverseAxisPreceding_WideChildEnumerationChecksContext(t *testing.T) {
 	require.GreaterOrEqual(t, ctx.calls, 3*width,
 		"wide reverse child enumeration must check ctx.Err() in the enqueue loop too, not only on pop")
 }
+
+// TestTraverseAxisNamespace_WideContextCancelledMidWalk verifies that the
+// namespace axis aborts promptly when the context is cancelled partway through
+// scanning an element's many namespace declarations. axisNamespace delegates the
+// namespace work to NamespacePrefixesInScope and CollectNamespaceNodes; without
+// in-loop ctx.Err() checks inside those helpers the full namespace::* node-set
+// would be computed (and could even be returned with a nil error) after
+// cancellation had already occurred. cancelAfterNContext lets the ancestor walk
+// proceed and only reports cancellation once the helper loops are underway.
+func TestTraverseAxisNamespace_WideContextCancelledMidWalk(t *testing.T) {
+	const width = 5000
+	const cancelAfter = 10
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+	elem := doc.CreateElement("e")
+	require.NoError(t, root.AddChild(elem))
+	for i := range width {
+		require.NoError(t, elem.DeclareNamespace("p"+strconv.Itoa(i), "urn:ns:"+strconv.Itoa(i)))
+	}
+
+	ctx := &cancelAfterNContext{cancelAfter: cancelAfter}
+
+	nodes, err := ixpath.TraverseAxis(ctx, ixpath.AxisNamespace, elem, ixpath.DefaultMaxNodeSetLength)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, nodes)
+	require.LessOrEqual(t, ctx.calls, cancelAfter+1,
+		"namespace enumeration should stop on the first cancelled Err() observation")
+}
+
+// TestTraverseAxisNamespace_WideEnumerationChecksContext verifies that the
+// namespace-axis helpers (NamespacePrefixesInScope and CollectNamespaceNodes)
+// consult ctx.Err() per declared namespace in their inner loops, not merely
+// once per ancestor. The element declares width namespaces, so a correct
+// implementation reaches at least ~2*width consultations (NamespacePrefixesInScope
+// scans them once; CollectNamespaceNodes scans them again across its two passes).
+// Requiring >= 2*width fails if the inner-loop ctx checks are dropped, which is
+// the condition that would let a cancelled context compute the whole node-set.
+func TestTraverseAxisNamespace_WideEnumerationChecksContext(t *testing.T) {
+	const width = 20000
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+	elem := doc.CreateElement("e")
+	require.NoError(t, root.AddChild(elem))
+	for i := range width {
+		require.NoError(t, elem.DeclareNamespace("p"+strconv.Itoa(i), "urn:ns:"+strconv.Itoa(i)))
+	}
+
+	ctx := &countingContext{}
+
+	nodes, err := ixpath.TraverseAxis(ctx, ixpath.AxisNamespace, elem, ixpath.DefaultMaxNodeSetLength)
+	require.NoError(t, err)
+	// width declared prefixes plus the implicit xml namespace node.
+	require.Len(t, nodes, width+1)
+	require.GreaterOrEqual(t, ctx.calls, 2*width,
+		"namespace helpers must check ctx.Err() per declared namespace in their inner loops")
+}

@@ -5,18 +5,46 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
 
+// cancelAfterNContext reports a cancelled error from Err() only after Err has
+// been consulted cancelAfter times, simulating a context cancelled AFTER
+// evaluation (and thus axis enumeration) has begun. It implements
+// context.Context directly (no embedding) to satisfy the containedctx linter.
+type cancelAfterNContext struct {
+	cancelAfter int
+	calls       int
+}
+
+func (c *cancelAfterNContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+func (c *cancelAfterNContext) Done() <-chan struct{}       { return nil }
+func (c *cancelAfterNContext) Value(any) any               { return nil }
+
+func (c *cancelAfterNContext) Err() error {
+	c.calls++
+	if c.calls > c.cancelAfter {
+		return context.Canceled
+	}
+	return nil
+}
+
 // A context cancelled after evaluation starts must abort a wide child-axis
 // enumeration promptly with context.Canceled, rather than scanning the entire
-// child set before the per-step countOps observes the cancellation.
+// child set before the per-step countOps observes the cancellation. The
+// cancel-after context lets evaluation start and only reports cancellation once
+// the hot child loop is already iterating, so without the in-loop ctx.Err()
+// check the loop would scan all children before the next countOps boundary.
 func TestEvalChildAxis_ContextCancelledWideChildSet(t *testing.T) {
+	const width = 50000
+	const cancelAfter = 50
+
 	var b strings.Builder
 	b.WriteString("<root>")
-	for range 50000 {
+	for range width {
 		b.WriteString("<c/>")
 	}
 	b.WriteString("</root>")
@@ -27,20 +55,30 @@ func TestEvalChildAxis_ContextCancelledWideChildSet(t *testing.T) {
 	compiled, err := xpath3.NewCompiler().Compile("child::*")
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	ctx := &cancelAfterNContext{cancelAfter: cancelAfter}
 
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, compiled, root)
 	require.ErrorIs(t, err, context.Canceled)
+	// The hot child loop checks ctx.Err() once per child, so the cancel-after
+	// context reaches its trip count mid-enumeration and the loop bails on the
+	// first cancelled observation. Without the in-loop check the per-child
+	// consultations would not happen, the trip count would never be reached, and
+	// Evaluate would scan all width children and return success.
+	require.LessOrEqual(t, ctx.calls, cancelAfter+1,
+		"child enumeration must bail on the first cancelled Err() observation")
 }
 
 // A context cancelled after evaluation starts must abort a wide attribute-axis
 // enumeration promptly with context.Canceled. The ForEachAttribute callback
-// path must stop iterating and surface the cancellation error.
+// path must stop iterating and surface the cancellation error rather than
+// scanning the full attribute list before the next countOps boundary.
 func TestEvalAttributeAxis_ContextCancelledWideAttrSet(t *testing.T) {
+	const width = 5000
+	const cancelAfter = 50
+
 	var b strings.Builder
 	b.WriteString("<root")
-	for i := range 5000 {
+	for i := range width {
 		b.WriteString(" a")
 		b.WriteString(strconv.Itoa(i))
 		b.WriteString(`="v"`)
@@ -53,9 +91,10 @@ func TestEvalAttributeAxis_ContextCancelledWideAttrSet(t *testing.T) {
 	compiled, err := xpath3.NewCompiler().Compile("attribute::*")
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	ctx := &cancelAfterNContext{cancelAfter: cancelAfter}
 
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, compiled, root)
 	require.ErrorIs(t, err, context.Canceled)
+	require.LessOrEqual(t, ctx.calls, cancelAfter+1,
+		"attribute enumeration must bail on the first cancelled Err() observation")
 }
