@@ -2535,6 +2535,65 @@ func TestParseReaderSurfacesErrorReturnedWithData(t *testing.T) {
 	require.ErrorIs(t, err, wantErr, "a reader error returned alongside the final bytes must not be swallowed")
 }
 
+// startElementRecorder builds a SAX handler that records start-element local
+// names, so a test can prove the buffered bytes were parsed before any read
+// error was surfaced.
+func startElementRecorder(seen *[]string) sax.SAX2Handler {
+	h := sax.New()
+	h.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, local, _, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+		*seen = append(*seen, local)
+		return nil
+	}))
+	return h
+}
+
+// TestParseReaderParsesBytesThenSurfacesError is the convergence regression: a
+// reader that returns (n>0, non-EOF err) in a single Read must have its bytes
+// PARSED first and the error surfaced only AFTER they drain — on BOTH the
+// non-EBCDIC streaming path and the EBCDIC byte-slice path. Bytes returned
+// alongside a non-EOF error are never discarded.
+func TestParseReaderParsesBytesThenSurfacesError(t *testing.T) {
+	wantErr := errors.New("checksum mismatch")
+
+	ebcdic := func(s string) []byte {
+		b, err := charmap.CodePage037.NewEncoder().Bytes([]byte(s))
+		require.NoError(t, err)
+		require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, b[:4],
+			"encoded bytes must start with the EBCDIC invariant prefix")
+		return b
+	}
+
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "non-EBCDIC",
+			data: []byte(`<root><child/></root>`),
+		},
+		{
+			name: "EBCDIC",
+			data: ebcdic(`<?xml version="1.0" encoding="IBM037"?><root><child/></root>`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var seen []string
+			p := helium.NewParser().SAXHandler(startElementRecorder(&seen))
+
+			_, err := p.ParseReader(t.Context(), &dataThenErrReader{
+				data: tt.data,
+				err:  wantErr,
+			})
+			require.ErrorIs(t, err, wantErr,
+				"a non-EOF read error returned alongside the bytes must be surfaced")
+			require.Equal(t, []string{"root", "child"}, seen,
+				"the bytes returned alongside the error must be parsed before the error surfaces")
+		})
+	}
+}
+
 // blockingReader blocks forever inside Read until its done channel is closed,
 // then returns io.EOF. It models a non-context-aware reader (e.g. a slow
 // network stream) whose Read cannot be interrupted generically.
