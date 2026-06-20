@@ -131,16 +131,23 @@ func (p Parser) parseConfig() parseConfig {
 	return p.cfg.parseConfig
 }
 
-// ParseReader parses HTML from an io.Reader. The input is streamed through
-// encoding detection and normalization wrappers without reading it all into
-// memory first.
+// ParseReader parses HTML from an io.Reader, feeding the input through
+// encoding detection and normalization wrappers.
+//
+// Whether the input is processed incrementally depends on its encoding. Once a
+// streamable encoding is determined - either declared (BOM or meta charset) or
+// detected as a genuine non-UTF-8 byte sequence - bytes are converted and
+// consumed incrementally. However, an input with no declared encoding that
+// turns out to be valid UTF-8 cannot be distinguished from a Latin-1/Windows
+// -1252 stream until end of input, so it is buffered to EOF before being
+// flushed. This matches the materialization behavior of Parse with a []byte.
 func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*helium.Document, error) {
 	tb := newTreeBuilder()
 	hp := newParserFromReader(ctx, r, tb, p.parseConfig())
 	if err := hp.parse(ctx); err != nil {
 		return nil, err
 	}
-	if enc := hp.detectedEncoding; enc != "" {
+	if enc := hp.finalEncoding(); enc != "" {
 		tb.doc.SetEncoding(enc)
 	}
 	return tb.doc, nil
@@ -163,15 +170,17 @@ func (p Parser) Parse(ctx context.Context, data []byte) (*helium.Document, error
 // ParseFile reads and parses an HTML file.
 // (libxml2: htmlParseFile)
 func (p Parser) ParseFile(ctx context.Context, filename string) (*helium.Document, error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	doc, err := p.Parse(ctx, data)
-	if err != nil {
-		return nil, err
-	}
 	abs, err := filepath.Abs(filename)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(filename) //nolint:gosec // filename is caller-supplied
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	doc, err := p.ParseReader(ctx, f)
 	if err != nil {
 		return nil, err
 	}

@@ -235,37 +235,145 @@ func fnArrayReverse(_ context.Context, args []Sequence) (Sequence, error) {
 	return ItemSlice{NewArray(reversed)}, nil
 }
 
-func fnArrayJoin(_ context.Context, args []Sequence) (Sequence, error) {
+func fnArrayJoin(ctx context.Context, args []Sequence) (Sequence, error) {
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var allMembers []Sequence
+	// totalItems counts items already accumulated across all member sequences so
+	// NewArray's per-member clone cannot materialize more than maxNodes items.
+	totalItems := 0
 	for item := range seqItems(args[0]) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		a, ok := item.(ArrayItem)
 		if !ok {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array:join requires sequence of arrays"}
 		}
-		allMembers = append(allMembers, a.members0()...)
+		members := a.members0()
+		for _, member := range members {
+			// Both result-array bounds (member count and item count) plus the
+			// per-member op charge are enforced by appendArrayMember.
+			var err error
+			allMembers, totalItems, err = appendArrayMember(ctx, ec, maxNodes, allMembers, totalItems, member)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	return ItemSlice{NewArray(allMembers)}, nil
 }
 
-func fnArrayFlatten(_ context.Context, args []Sequence) (Sequence, error) {
+func fnArrayFlatten(ctx context.Context, args []Sequence) (Sequence, error) {
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
-	for item := range seqItems(args[0]) {
-		flattenArrayItem(&result, item)
+
+	// Walk the (possibly deeply nested) array structure iteratively with an
+	// explicit work stack rather than recursively, so a pathologically nested
+	// input cannot exhaust the goroutine stack. The op-counter and node-set
+	// limit bound the total work and output respectively.
+	//
+	// Each frame is a cursor over a list of member sequences (the array's
+	// members, or the single top-level input) tracking the current member and
+	// the current item within it. Items are consumed one at a time via
+	// Sequence.Get so a lazy member sequence (e.g. a large integer range) is
+	// never materialized into a temporary slice. The stack is LIFO, so on
+	// descending into a nested array the parent frame is left in place beneath
+	// the child frame, yielding document order.
+	stack := []seqCursor{{members: []Sequence{args[0]}}}
+	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		item, ok, skippedEmpty := top.next()
+		// Charge one op per empty member the cursor stepped past, so scanning N
+		// empty array members costs ~N ops and trips OpLimit. Without this an
+		// array of thousands of empty members is flattened for free.
+		if skippedEmpty > 0 {
+			if err := fnCountOps(ctx, ec, skippedEmpty); err != nil {
+				return nil, err
+			}
+		}
+		if !ok {
+			stack = stack[:len(stack)-1]
+			continue
+		}
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		arr, isArr := item.(ArrayItem)
+		if !isArr {
+			var err error
+			result, err = appendBounded(result, []Item{item}, maxNodes)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		// Descend into the nested array. The parent cursor was already advanced
+		// past this item, so pushing the child frame on top processes the
+		// array's contents before the parent's following items (document order).
+		stack = append(stack, seqCursor{members: arr.members0()})
 	}
 	return result, nil
 }
 
-func flattenArrayItem(dst *ItemSlice, item Item) {
-	arr, ok := item.(ArrayItem)
-	if !ok {
-		*dst = append(*dst, item)
-		return
+// seqCursor is a one-item-at-a-time cursor over a list of member sequences. It
+// lets the iterative array/map walkers descend into nested structures without
+// expanding any child sequence into a temporary slice: next() advances through
+// the members in order, returning a single Item per call.
+//
+// The backing list of sequences is either an explicit []Sequence (array
+// members or the single top-level input) or a map's entries, accessed in place
+// via mapEntries so a wide map is never duplicated into a temporary []Sequence
+// before traversal. memberAt/memberCount hide which backing is in use.
+type seqCursor struct {
+	members    []Sequence
+	mapEntries []mapEntry
+	mi         int // current member index
+	ii         int // current item index within member mi
+}
+
+func (c *seqCursor) memberCount() int {
+	if c.mapEntries != nil {
+		return len(c.mapEntries)
 	}
-	for _, member := range arr.members0() {
-		for child := range seqItems(member) {
-			flattenArrayItem(dst, child)
+	return len(c.members)
+}
+
+func (c *seqCursor) memberAt(i int) Sequence {
+	if c.mapEntries != nil {
+		return c.mapEntries[i].value
+	}
+	return c.members[i]
+}
+
+// next advances the cursor by one item. The returned skippedEmpty count is the
+// number of EMPTY member/value sequences the cursor stepped past to reach the
+// returned item (or to exhaust the cursor). An empty member is one the cursor
+// enters at item index 0 and finds has zero items, so it yields nothing. Callers
+// MUST charge one op per skipped-empty member: otherwise a flood of empty array
+// members or empty map values would advance the cursor for free and let
+// array:flatten / map:find scan far more than OpLimit members without tripping
+// the limit, since an empty member yields no item and so would never reach a
+// per-item op charge. (A non-empty member is not counted: its op cost is charged
+// once per item it yields by the caller's per-item op charge.)
+func (c *seqCursor) next() (item Item, ok bool, skippedEmpty int) {
+	for c.mi < c.memberCount() {
+		m := c.memberAt(c.mi)
+		if c.ii < seqLen(m) {
+			it := m.Get(c.ii)
+			c.ii++
+			return it, true, skippedEmpty
 		}
+		if c.ii == 0 {
+			// We entered this member at its start and it has no items: it is an
+			// empty member, scanned for free unless the caller charges an op.
+			skippedEmpty++
+		}
+		c.mi++
+		c.ii = 0
 	}
+	return nil, false, skippedEmpty
 }
 
 func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -277,18 +385,47 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var allMembers []Sequence
+	// totalItems counts items already accumulated across all member sequences so
+	// NewArray's per-member clone cannot materialize more than maxNodes items.
+	totalItems := 0
 	for _, m := range a.members0() {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
 		}
-		// Each result should be an array; collect members
+		// Each result should be an array; collect members one at a time, checking
+		// the limit before each append so neither a lazy callback result nor a
+		// wide array member list can overshoot the limit before the check. Charge
+		// one op per result item up front (even when the item is an empty array, so
+		// many empty arrays cannot bypass OpLimit).
 		for item := range seqItems(r) {
+			if err := fnCountOp(ctx, ec); err != nil {
+				return nil, err
+			}
 			if ra, ok := item.(ArrayItem); ok {
-				allMembers = append(allMembers, ra.members0()...)
-			} else {
-				allMembers = append(allMembers, ItemSlice{item})
+				for _, member := range ra.members0() {
+					// Both result-array bounds (member count and item count) plus the
+					// per-member op charge are enforced by appendArrayMember.
+					allMembers, totalItems, err = appendArrayMember(ctx, ec, maxNodes, allMembers, totalItems, member)
+					if err != nil {
+						return nil, err
+					}
+				}
+				continue
+			}
+			// A NON-array callback result becomes one scalar member. It must go
+			// through the SAME bounds as array members: after maxNodes empty array
+			// members the member count is already at the limit, so one scalar (item
+			// count 1) would otherwise push the member count to maxNodes+1.
+			allMembers, totalItems, err = appendArrayMember(ctx, ec, maxNodes, allMembers, totalItems, ItemSlice{item})
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -304,8 +441,18 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result []Sequence
+	// totalItems counts items already accumulated across all selected member
+	// sequences so NewArray's per-member clone cannot materialize more than
+	// maxNodes items: a single selected member with a huge lazy sequence must be
+	// rejected before it is cloned, not just the member COUNT bounded.
+	totalItems := 0
 	for _, m := range a.members0() {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
@@ -318,8 +465,17 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 		if !ok || av.TypeName != TypeBoolean {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array:filter callback must return xs:boolean"}
 		}
-		if av.BooleanVal() {
-			result = append(result, m)
+		if !av.BooleanVal() {
+			continue
+		}
+		// A selected member must honor BOTH result-array bounds: the item count
+		// (a selected member with a huge lazy sequence must be rejected before
+		// NewArray clones it) AND the member count (selecting many EMPTY members,
+		// each seqLen 0, must not build an array with more than maxNodes members).
+		// appendArrayMember enforces both plus the per-member op charge.
+		result, totalItems, err = appendArrayMember(ctx, ec, maxNodes, result, totalItems, m)
+		if err != nil {
+			return nil, err
 		}
 	}
 	return ItemSlice{NewArray(result)}, nil
@@ -335,10 +491,20 @@ func fnArrayFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	for _, m := range a.members0() {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		acc, err = fi.Invoke(ctx, []Sequence{acc, m})
 		if err != nil {
 			return nil, err
+		}
+		// The accumulator can grow without bound across iterations; reject once
+		// it would exceed the configured sequence/node-set limit.
+		if maxNodes > 0 && seqLen(acc) > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 	}
 	return acc, nil
@@ -354,11 +520,21 @@ func fnArrayFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	members := a.members0()
 	for _, v := range slices.Backward(members) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		acc, err = fi.Invoke(ctx, []Sequence{v, acc})
 		if err != nil {
 			return nil, err
+		}
+		// The accumulator can grow without bound across iterations; reject once
+		// it would exceed the configured sequence/node-set limit.
+		if maxNodes > 0 && seqLen(acc) > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 	}
 	return acc, nil
@@ -373,13 +549,28 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var results []Sequence
+	// total counts items across all callback results: NewArray clones each result,
+	// so a callback returning one oversized lazy/borrowed sequence is still
+	// materialized unless its length is bounded. Use an overflow-safe compare
+	// (rLen > maxNodes-total) so total+rLen never overflows.
+	total := 0
 	for _, m := range a.members0() {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, r)
+		// Each callback result becomes one array MEMBER. appendArrayMember bounds
+		// both the member count and the item count and charges the per-member op.
+		results, total, err = appendArrayMember(ctx, ec, maxNodes, results, total, r)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return ItemSlice{NewArray(results)}, nil
 }
@@ -400,16 +591,30 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 	if fi.Arity >= 0 && fi.Arity != 2 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("array:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	size := min(a1.Size(), a2.Size())
 	var results []Sequence
+	// total counts items across all callback results (NewArray clones each), so a
+	// callback returning one oversized lazy/borrowed sequence is bounded too. The
+	// compare is overflow-safe (rLen > maxNodes-total).
+	total := 0
 	for i := 1; i <= size; i++ {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		m1, _ := a1.get0(i)
 		m2, _ := a2.get0(i)
 		r, err := fi.Invoke(ctx, []Sequence{m1, m2})
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, r)
+		// Each callback result becomes one array MEMBER. appendArrayMember bounds
+		// both the member count and the item count and charges the per-member op.
+		results, total, err = appendArrayMember(ctx, ec, maxNodes, results, total, r)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return ItemSlice{NewArray(results)}, nil
 }
