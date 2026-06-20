@@ -56,3 +56,40 @@ func TestContentDefensiveCopy(t *testing.T) {
 		})
 	}
 }
+
+// TestContentInputCopyOnStore verifies that the leaf constructors copy the
+// caller's input slice on store. Mutating the original input slice AFTER the
+// Create* call must NOT change the node's content (the DOM must not alias the
+// caller's buffer).
+func TestContentInputCopyOnStore(t *testing.T) {
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitNo)
+
+	const original = "hello world"
+
+	makers := map[string]func(buf []byte) helium.Node{
+		"Text": func(buf []byte) helium.Node {
+			return doc.CreateText(buf)
+		},
+		"Comment": func(buf []byte) helium.Node {
+			return doc.CreateComment(buf)
+		},
+		"CDATASection": func(buf []byte) helium.Node {
+			return doc.CreateCDATASection(buf)
+		},
+	}
+
+	for name, make := range makers {
+		t.Run(name, func(t *testing.T) {
+			buf := []byte(original)
+			n := make(buf)
+			require.Equal(t, original, string(n.Content()), "initial content")
+
+			// Mutate the caller's input slice AFTER constructing the node.
+			for i := range buf {
+				buf[i] = 'X'
+			}
+
+			require.Equal(t, original, string(n.Content()), "content after input-slice mutation")
+		})
+	}
+}

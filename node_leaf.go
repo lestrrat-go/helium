@@ -15,8 +15,7 @@ type CDATASection struct {
 func newCDATASection(b []byte) *CDATASection {
 	c := CDATASection{}
 	c.etype = CDATASectionNode
-	c.content = make([]byte, len(b))
-	copy(c.content, b)
+	c.content = bytes.Clone(b)
 	c.name = "(CDATA)"
 	return &c
 }
@@ -62,7 +61,7 @@ type Comment struct {
 func newComment(b []byte) *Comment {
 	t := Comment{}
 	t.etype = CommentNode
-	t.content = b
+	t.content = bytes.Clone(b)
 	return &t
 }
 

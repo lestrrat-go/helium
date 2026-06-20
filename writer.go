@@ -575,7 +575,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			for achld := range Children(attr) {
 				count++
 				if achld.Type() == TextNode {
-					if err := escapeAttrValue(out, achld.Content(), d.escapeNonASCII); err != nil {
+					if err := escapeAttrValue(out, rawContent(achld), d.escapeNonASCII); err != nil {
 						return err
 					}
 				} else {
