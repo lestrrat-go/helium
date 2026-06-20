@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -44,6 +45,85 @@ func TestByteCursorSurfacesErrorReturnedWithData(t *testing.T) {
 	// rather than silently treating the stream as cleanly terminated.
 	require.True(t, cur.Done(), "Done should be true after buffer drains")
 	require.ErrorIs(t, cur.Err(), wantErr, "the non-EOF read error must be surfaced after the buffered bytes are consumed")
+}
+
+// zeroProgressReader always returns (0, nil) for a non-empty request, never
+// advancing and never erroring. A naive fill loop spins on it forever; the
+// bounded-retry fill loop must give up after maxZeroProgressReads.
+type zeroProgressReader struct{}
+
+func (zeroProgressReader) Read(p []byte) (int, error) {
+	return 0, nil
+}
+
+func TestByteCursorZeroProgressReaderDoesNotHang(t *testing.T) {
+	cur := NewByteCursor(zeroProgressReader{})
+
+	type result struct {
+		done bool
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		d := cur.Done()
+		done <- result{done: d, err: cur.Err()}
+	}()
+
+	select {
+	case res := <-done:
+		require.True(t, res.done, "a zero-progress reader must terminate fill, not spin")
+		require.ErrorIs(t, res.err, io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress after the bounded retry count")
+	case <-time.After(5 * time.Second):
+		t.Fatal("ByteCursor fillBuffer hung on a zero-progress reader")
+	}
+}
+
+// slowSplitReader emits its payload one byte per Read, returning a single
+// (0, nil) "waiting" read before each real byte. A fill loop that treats the
+// first (0, nil) as fatal would reject this legitimate slow producer.
+type slowSplitReader struct {
+	data    []byte
+	pos     int
+	pending bool // true after a (0, nil) stall, so the next Read yields a byte
+}
+
+func (r *slowSplitReader) Read(p []byte) (int, error) {
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if !r.pending {
+		r.pending = true
+		return 0, nil // stall once before delivering the next byte
+	}
+	r.pending = false
+	p[0] = r.data[r.pos]
+	r.pos++
+	return 1, nil
+}
+
+func TestByteCursorSlowSplitReaderMakesProgress(t *testing.T) {
+	cur := NewByteCursor(&slowSplitReader{data: []byte("<root/>")})
+
+	type result struct {
+		hasPrefix bool
+		err       error
+	}
+	done := make(chan result, 1)
+	go func() {
+		hp := cur.HasPrefix([]byte("<root/>"))
+		done <- result{hasPrefix: hp, err: cur.Err()}
+	}()
+
+	select {
+	case res := <-done:
+		require.True(t, res.hasPrefix, "a slow reader that emits (0, nil) between bytes must still be consumed")
+		require.NoError(t, res.err, "a progressing reader must not surface io.ErrNoProgress")
+	case <-time.After(5 * time.Second):
+		t.Fatal("ByteCursor fillBuffer hung on a slow split reader")
+	}
 }
 
 func TestByteCursorTreatsEOFWithDataAsCleanEnd(t *testing.T) {
