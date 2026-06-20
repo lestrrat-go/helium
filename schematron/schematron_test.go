@@ -498,14 +498,18 @@ func (c validationErrorCollector) Handle(_ context.Context, err error) {
 }
 
 // compileTestSchema compiles a schema and returns the compiled schema and
-// any compile error strings concatenated.
+// any compile error strings concatenated. A fatal compilation failure
+// (ErrCompileFailed) is tolerated so callers can assert on the collected
+// diagnostic strings; on such a failure the returned schema is nil.
 func compileTestSchema(t *testing.T, xml string) (*schematron.Schema, string) {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	schema, err := schematron.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
-	require.NoError(t, err)
+	if err != nil {
+		require.ErrorIs(t, err, schematron.ErrCompileFailed)
+	}
 	_ = collector.Close()
 	var b strings.Builder
 	for _, e := range collector.Errors() {
@@ -983,5 +987,221 @@ func TestZeroValidatorFluent(t *testing.T) {
 	require.NotPanics(t, func() {
 		v2 := v.Label("test.xml")
 		_ = v2
+	})
+}
+
+// TestFirstMatchOnlyRule verifies ISO Schematron semantics: within a pattern,
+// each node is processed by only the FIRST rule whose context matches it.
+// A second rule in the same pattern that also matches the node must not fire.
+func TestFirstMatchOnlyRule(t *testing.T) {
+	t.Parallel()
+
+	t.Run("later rule skipped within pattern", func(t *testing.T) {
+		t.Parallel()
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern>
+				<rule context="item"><report test="true()">first rule</report></rule>
+				<rule context="item"><report test="true()">second rule</report></rule>
+			</pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Len(t, collected, 1)
+		require.Equal(t, "first rule", collected[0].Message)
+	})
+
+	t.Run("broader later rule still skips matched node", func(t *testing.T) {
+		t.Parallel()
+		// First rule claims <item>; the second rule (context="*") matches
+		// every element but must skip the already-claimed <item>.
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern>
+				<rule context="item"><report test="true()">specific</report></rule>
+				<rule context="*"><report test="true()">wildcard <name/></report></rule>
+			</pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+
+		got := collectedString(collected)
+		require.Contains(t, got, "specific")
+		require.Contains(t, got, "wildcard root")
+		// The wildcard rule must NOT fire for <item>: it was claimed first.
+		require.NotContains(t, got, "wildcard item")
+	})
+
+	t.Run("separate patterns are independent", func(t *testing.T) {
+		t.Parallel()
+		// First-match-only is scoped per pattern: a matching rule in a second
+		// pattern still fires for the same node.
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="item"><report test="true()">p1</report></rule></pattern>
+			<pattern><rule context="item"><report test="true()">p2</report></rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Len(t, collected, 2)
+		got := collectedString(collected)
+		require.Contains(t, got, "p1")
+		require.Contains(t, got, "p2")
+	})
+}
+
+// TestForeignNamespaceRejected verifies that foreign-namespaced markup under a
+// Schematron <schema> is not executed as Schematron: neither foreign elements
+// (e.g. <x:rule>) nor foreign-namespaced structural attributes (e.g. x:test).
+func TestForeignNamespaceRejected(t *testing.T) {
+	t.Parallel()
+
+	t.Run("foreign rule element rejected", func(t *testing.T) {
+		t.Parallel()
+		// The only "rule" is foreign (x:rule); the pattern therefore has no
+		// Schematron rule and compilation fails.
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron" xmlns:x="urn:foreign">
+			<pattern>
+				<x:rule context="item"><x:assert test="false()">foreign fired</x:assert></x:rule>
+			</pattern>
+		</schema>`)
+		require.Nil(t, schema)
+		require.Contains(t, errs, "Pattern has no rule element")
+	})
+
+	t.Run("foreign assert/report ignored inside rule", func(t *testing.T) {
+		t.Parallel()
+		// The Schematron rule has only a foreign assert, so it has no
+		// Schematron test and compilation fails.
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron" xmlns:x="urn:foreign">
+			<pattern>
+				<rule context="item"><x:assert test="false()">foreign</x:assert></rule>
+			</pattern>
+		</schema>`)
+		require.Nil(t, schema)
+		require.Contains(t, errs, "rule has no assert nor report element")
+	})
+
+	t.Run("foreign-namespaced structural attribute not read", func(t *testing.T) {
+		t.Parallel()
+		// The assert carries only x:test (foreign); the unqualified test
+		// attribute is absent, so the assert is dropped, leaving the rule
+		// with no test.
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron" xmlns:x="urn:foreign">
+			<pattern>
+				<rule context="item"><assert x:test="false()">foreign attr</assert></rule>
+			</pattern>
+		</schema>`)
+		require.Nil(t, schema)
+		require.Contains(t, errs, "rule has no assert nor report element")
+	})
+
+	t.Run("unqualified test still honored alongside foreign attr", func(t *testing.T) {
+		t.Parallel()
+		// A valid unqualified test plus a stray foreign attribute must compile
+		// and use only the unqualified test.
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron" xmlns:x="urn:foreign">
+			<pattern>
+				<rule context="item"><assert test="false()" x:test="true()">real</assert></rule>
+			</pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+		require.NotNil(t, schema)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Len(t, collected, 1)
+		require.Equal(t, "real", collected[0].Message)
+	})
+}
+
+// TestCompileFailsOnBrokenSchema verifies that a fatal compile error makes
+// Compile return ErrCompileFailed and a nil schema, even when no error handler
+// is configured (so the error cannot be silently lost).
+func TestCompileFailsOnBrokenSchema(t *testing.T) {
+	t.Parallel()
+
+	broken := []struct {
+		name string
+		sct  string
+	}{
+		{"no pattern", `<schema xmlns="http://purl.oclc.org/dsdl/schematron"></schema>`},
+		{"pattern without rule", `<schema xmlns="http://purl.oclc.org/dsdl/schematron"><pattern/></schema>`},
+		{"rule without test", `<schema xmlns="http://purl.oclc.org/dsdl/schematron"><pattern><rule context="*"/></pattern></schema>`},
+	}
+
+	for _, tc := range broken {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.sct))
+			require.NoError(t, err)
+
+			// No error handler configured: the failure must surface via the
+			// returned error rather than being discarded.
+			schema, err := schematron.NewCompiler().Compile(t.Context(), doc)
+			require.ErrorIs(t, err, schematron.ErrCompileFailed)
+			require.Nil(t, schema)
+		})
+	}
+
+	t.Run("valid schema still compiles", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<schema xmlns="http://purl.oclc.org/dsdl/schematron"><pattern><rule context="*"><assert test="true()">ok</assert></rule></pattern></schema>`))
+		require.NoError(t, err)
+		schema, err := schematron.NewCompiler().Compile(t.Context(), doc)
+		require.NoError(t, err)
+		require.NotNil(t, schema)
+	})
+}
+
+// TestValidateNilSchema verifies that validating with a nil/zero-value schema
+// returns a typed error instead of panicking.
+func TestValidateNilSchema(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	t.Run("NewValidator(nil)", func(t *testing.T) {
+		t.Parallel()
+		var verr error
+		require.NotPanics(t, func() {
+			verr = schematron.NewValidator(nil).Validate(t.Context(), doc)
+		})
+		require.ErrorIs(t, verr, schematron.ErrNoSchema)
+	})
+
+	t.Run("zero-value Validator", func(t *testing.T) {
+		t.Parallel()
+		var v schematron.Validator
+		var verr error
+		require.NotPanics(t, func() {
+			verr = v.Validate(t.Context(), doc)
+		})
+		require.ErrorIs(t, verr, schematron.ErrNoSchema)
+	})
+
+	t.Run("empty Schema with no patterns", func(t *testing.T) {
+		t.Parallel()
+		var verr error
+		require.NotPanics(t, func() {
+			verr = schematron.NewValidator(&schematron.Schema{}).Validate(t.Context(), doc)
+		})
+		require.ErrorIs(t, verr, schematron.ErrNoSchema)
 	})
 }

@@ -49,6 +49,15 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 			return err
 		}
 		c.schema.groups[qn] = mg
+		// Record the declaring source so cos-element-consistent can be run over
+		// standalone named groups (those no complex type references). The
+		// declaring file is the include file when inside an include/redefine,
+		// else this compiler's filename (mirroring IDConstraint.Source).
+		source := c.filename
+		if c.includeFile != "" {
+			source = c.includeFile
+		}
+		c.groupSources[qn] = groupSource{line: elem.Line(), source: source}
 		return nil
 	}
 	return nil

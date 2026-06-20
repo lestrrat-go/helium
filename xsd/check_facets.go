@@ -88,6 +88,7 @@ func (c *compiler) checkFacetConsistency(ctx context.Context) {
 		if c.checkFacetApplicability(ctx, td, fs, line) {
 			c.checkFacetValueAgainstBase(ctx, td, fs, line, component)
 		}
+		c.checkEnumValueAgainstBase(ctx, td, fs, line, component)
 		c.checkFacetMutualExclusion(ctx, fs, line, component)
 		c.checkFacetSameTypeConsistency(ctx, td, fs, line, component)
 		c.checkFacetBaseRestriction(ctx, td, fs, line, component)
@@ -374,6 +375,68 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 		}
 		msg := fmt.Sprintf("The value '%s' of the facet '%s' is not a valid value of the base type '%s'.",
 			*rf.value, rf.name, typeDisplayName(base))
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+}
+
+// checkEnumValueAgainstBase validates that each enumeration facet value is itself
+// a valid instance of the base type's value space. Per XSD §3.16, an enumeration
+// {value} must be datatype-valid against the {base type definition}; an invalid
+// member (e.g. <xs:enumeration value="+NaN"/> on an xs:float base — signed NaN is
+// not in the float/double lexical space) makes the schema in error and must be
+// rejected at COMPILE time rather than silently compiling into an unsatisfiable
+// enumeration that fails at instance-validation time.
+//
+// This applies to ALL varieties — atomic, list, and union. validateValue is
+// variety-aware: an atomic literal is validated against the builtin base's value
+// space, a list literal item-by-item against the item type (so a list
+// itemType="xs:float" rejects a "+NaN" enumeration member), and a union literal
+// against whichever member type accepts it (so a union with an xs:float member
+// rejects "+NaN" when no member admits it).
+//
+// Suppression is PER LITERAL, not per type: only a literal that
+// enumLiteralHasUnboundQName flags — a QName/NOTATION carrier, at any nesting
+// depth within the variety structure, whose prefix is unbound — is skipped here,
+// because checkEnumQNameAndNotation already reports that exact case with
+// libxml2-matching phrasing; validating it here too would produce a duplicate /
+// differently-phrased diagnostic. Every OTHER enumeration literal of a
+// QName/NOTATION-carrying type is still validated against the base value space,
+// so a QName base restricted with (e.g.) xs:length value="2" still rejects an
+// out-of-space "abc" enumeration member.
+func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
+	base := td.BaseType
+	if base == nil || len(fs.Enumeration) == 0 {
+		return
+	}
+	variety := resolveVariety(td)
+
+	for i, ev := range fs.Enumeration {
+		var enumNS map[string]string
+		if i < len(fs.EnumerationNS) {
+			enumNS = fs.EnumerationNS[i]
+		}
+		// A QName/NOTATION literal whose prefix is unbound (at any nesting depth
+		// within the variety structure) is already reported by
+		// checkEnumQNameAndNotation; suppress the report HERE for just that literal
+		// to avoid a duplicate / differently-phrased diagnostic. This is per-literal,
+		// not a blanket skip of the whole type: a QName/NOTATION base still has its
+		// other enumeration literals validated against the base value space, so e.g.
+		// a QName base restricted with xs:length value="2" rejects an out-of-space
+		// "abc" enumeration member rather than silently compiling it.
+		if c.enumLiteralHasUnboundQName(ctx, ev, enumNS, td, variety) {
+			continue
+		}
+		// Validate the member against the base type's value space with errors
+		// suppressed; only the pass/fail verdict matters. A non-nil result means the
+		// member is not a valid instance of the base type, so the enumeration facet
+		// is in error.
+		sub := &validationContext{errorHandler: helium.NilErrorHandler{}, suppressDepth: 1}
+		if validateValue(ctx, ev, enumNS, base, "", "", 0, sub) == nil {
+			continue
+		}
+		msg := fmt.Sprintf("The value '%s' of the facet 'enumeration' is not a valid value of the base type '%s'.",
+			ev, typeDisplayName(base))
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
