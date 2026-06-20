@@ -200,25 +200,47 @@ func (c *compiler) recordRef(ctx context.Context, pat *pattern) {
 
 // resolveScopedRefs fixes each recorded ref/parentRef to the define it names in
 // its lexical grammar scope: <ref> resolves in the scope it appears in,
-// <parentRef> in that scope's parent. A name not found in the target scope (or
-// a parentRef with no parent scope) leaves resolved nil, which validation and
-// the cycle/forbidden-nesting checks treat as an unresolved ref.
-func (c *compiler) resolveScopedRefs(_ context.Context) {
+// <parentRef> in that scope's parent. RELAX NG §4.18 requires every
+// ref/parentRef to refer to a define, so any node that cannot be resolved — a
+// name absent from its target scope, or a <parentRef> with no parent grammar
+// scope — is reported as a fatal compile error so compilation fails cleanly
+// instead of deferring to validation.
+func (c *compiler) resolveScopedRefs(ctx context.Context) {
 	for _, pr := range c.pendingRefs {
 		scope := pr.scope
+		// A ref parsed outside any <grammar> has no scope; such bare top-level
+		// patterns carry no defines to resolve against, so leave them alone.
 		if scope == nil {
 			continue
 		}
 		if pr.pat.kind == patternParentRef {
 			scope = scope.parent
+			if scope == nil {
+				c.reportUnresolvedRef(ctx, pr.pat, "parentRef",
+					fmt.Sprintf("Reference %s has no parent grammar scope", pr.pat.name))
+				continue
+			}
 		}
-		if scope == nil {
+		entry, ok := scope.defines[pr.pat.name]
+		if !ok {
+			elemName := "ref"
+			if pr.pat.kind == patternParentRef {
+				elemName = "parentRef"
+			}
+			c.reportUnresolvedRef(ctx, pr.pat, elemName,
+				fmt.Sprintf("Reference %s has no matching definition", pr.pat.name))
 			continue
 		}
-		if entry, ok := scope.defines[pr.pat.name]; ok {
-			pr.pat.resolved = entry.pattern
-		}
+		pr.pat.resolved = entry.pattern
 	}
+}
+
+// reportUnresolvedRef emits a fatal parser error for a ref/parentRef that names
+// no in-scope define and bumps errorCount so compilation fails closed.
+func (c *compiler) reportUnresolvedRef(ctx context.Context, pat *pattern, elemName, msg string) {
+	formatted := rngParserErrorAt(c.filename, pat.line, elemName, msg)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(formatted, helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 // checkRefCycles detects cycles in inline references (refs that lead back to
