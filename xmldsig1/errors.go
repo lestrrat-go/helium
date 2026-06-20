@@ -18,6 +18,12 @@ var (
 	// ErrUnsupportedAlgorithm is returned for unrecognized algorithm URIs.
 	ErrUnsupportedAlgorithm = errors.New("xmldsig1: unsupported algorithm")
 
+	// ErrWeakAlgorithm is returned when a SHA-1-based signature or digest
+	// algorithm is encountered while SHA-1 is not allowed. SHA-1 is rejected
+	// by default; opt in with Verifier.AllowSHA1(true) (for verification) or
+	// Signer.AllowSHA1(true) (for signing) to accept it for legacy interop.
+	ErrWeakAlgorithm = errors.New("xmldsig1: weak algorithm SHA-1 not allowed")
+
 	// ErrUnsupportedTransform is returned for unrecognized transform URIs.
 	ErrUnsupportedTransform = errors.New("xmldsig1: unsupported transform")
 
