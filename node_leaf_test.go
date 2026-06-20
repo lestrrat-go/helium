@@ -30,14 +30,15 @@ type leafCase struct {
 	// new builds a fresh, unlinked instance of the leaf type.
 	new leafCtor
 	// canContainChildren is true when the type's AddChild can legally accept a
-	// foreign child (PI, EntityRef). For those the ancestor-insertion guard is
-	// exercised. Types whose AddChild only ever rejects (CDATASection) or only
-	// content-merges its own kind (Text, Comment) set this false.
+	// foreign child (EntityRef). For those the ancestor-insertion guard is
+	// exercised. Types whose AddChild only ever rejects (CDATASection, PI) or
+	// only content-merges its own kind (Text, Comment) set this false.
 	canContainChildren bool
 	// addChildSelfErr is the exact error AddChild(self) must return. For Text,
-	// Comment, PI and EntityRef the shared cycle guard fires; CDATASection has
-	// no merge/insert path and rejects every AddChild with ErrInvalidOperation
-	// before the guard, so self-insertion surfaces that error instead.
+	// Comment and EntityRef the shared cycle guard fires; CDATASection and PI
+	// reject AddChild before reaching the shared cycle guard (CDATASection with
+	// ErrInvalidOperation, PI with errPIAddChild for a non-text node), so
+	// self-insertion surfaces that rejection instead.
 	addChildSelfErr string
 }
 
