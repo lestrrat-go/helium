@@ -404,6 +404,9 @@ func (inv Invocation) Serialize(ctx context.Context) (string, error) {
 // WriteTo executes the transformation and writes the serialized result to w.
 // Secondary result documents are delivered through the handler only.
 func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
+	if w == nil {
+		return errNilWriter
+	}
 	if err := inv.validate(); err != nil {
 		return err
 	}

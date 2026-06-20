@@ -267,6 +267,7 @@ var (
 
 	errNilStylesheet  = errors.New("xslt3: nil stylesheet")
 	errNilDocument    = errors.New("xslt3: nil document")
+	errNilWriter      = errors.New("xslt3: nil writer")
 	errZeroInvocation = errors.New("xslt3: unconfigured invocation")
 )
 
