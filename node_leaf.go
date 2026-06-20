@@ -2,6 +2,7 @@ package helium
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/lestrrat-go/pdebug"
 )
@@ -135,12 +136,42 @@ func (p *ProcessingInstruction) Type() ElementType {
 	return ProcessingInstructionNode
 }
 
+// AddChild on a PI does not attach child nodes. A processing instruction
+// carries its content as a string (the "data" portion), not as element/text
+// children. This mirrors libxml2, where an xmlNode of type XML_PI_NODE stores
+// its content in the node's content string and has no element/text children.
+//
+// A Text/CDATA child has its content appended to the PI data (mirroring
+// xmlNodeAddContent on a PI). Any other node type is rejected, since attaching
+// it would corrupt the tree and break serialization.
 func (p *ProcessingInstruction) AddChild(cur Node) error {
-	return addChild(p, cur)
+	// Reject a nil or typed-nil operand BEFORE any method call on cur (a typed
+	// nil is a non-nil interface wrapping a nil pointer, so cur.Type() would
+	// panic) so the call returns ErrNilNode and leaves the tree untouched.
+	if isNilNode(cur) {
+		return ErrNilNode
+	}
+	switch cur.Type() {
+	case TextNode, CDATASectionNode:
+		// Run the shared self/cycle guard and auto-unlink BEFORE merging the
+		// source content into the PI data. Otherwise merging an already-linked
+		// text/CDATA node would copy its content while leaving it linked under
+		// its old parent, violating the AddChild auto-unlink contract.
+		if err := addChildPreflight(p, cur); err != nil {
+			return err
+		}
+		p.data += string(cur.Content())
+		return nil
+	default:
+		return fmt.Errorf("helium: cannot add %s as a child of a processing instruction", cur.Type())
+	}
 }
 
+// AppendText appends text to the PI's data string rather than creating a child
+// text node. See AddChild for rationale.
 func (p *ProcessingInstruction) AppendText(b []byte) error {
-	return appendText(p, b)
+	p.data += string(b)
+	return nil
 }
 
 func (p *ProcessingInstruction) AddSibling(cur Node) error {

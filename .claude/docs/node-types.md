@@ -71,7 +71,7 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 | Text | `Text` | node | ✗ (merges) | ✓ content | ✓ | Adjacent text nodes auto-merge |
 | CDATASection | `CDATASection` | node | ✗ | ✓ content | ✓ | — |
 | Comment | `Comment` | node | ✗ | ✓ content | ✓ | — |
-| PI | `ProcessingInstruction` | docnode | ✓ | data field | ✓ | target, data (Name() returns target) |
+| PI | `ProcessingInstruction` | docnode | ✗ | data field | ✓ | target, data (Name() returns target). AddChild/AppendText route text into `data`; non-text children rejected |
 | EntityRef | `EntityRef` | node | ✓ (if expanded) | ✓ (if resolved) | ✓ | References Entity by name |
 | Entity | `Entity` | node | ✓ (parsed) | ✓ content | ✓ | entityType, externalID, systemID, uri, checked, expanding, expandedSize |
 | DTD | `DTD` | docnode | ✓ (decls) | — | ✓ | attributes/elements/entities/pentities/notations maps, externalID, systemID |
@@ -85,6 +85,9 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 
 ### Text Node Consolidation
 `Text.AddSibling(Text)` → content merged instead of creating sibling. Prevents whitespace node bloat. Mirrors libxml2 TEXT consolidation.
+
+### PI Content Is A String, Not Children
+A `ProcessingInstruction` stores its content in the `data` string field (mirrors libxml2's XML_PI_NODE, whose content is the node's content string). It has NO element/text children. `AppendText` and an `AddChild` of a Text/CDATA node append the text to `data`; `AddChild` of any other node type is rejected (so the tree cannot be corrupted and serialization stays `<?target data?>`). The serializer reads `pi.data` directly.
 
 ### DTD Map Keys
 - Elements: `name:prefix`
@@ -112,7 +115,7 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
 - `UnlinkNode(n)` — detach a `MutableNode` from parent and siblings (delegates to the internal `unlinkNode(Node)`)
 - `unlinkNode(n)` — internal detach that works for ANY sealed node via `baseDocNode()`, including non-`MutableNode` nodes like `NamespaceNodeWrapper`. Attribute-aware: an `Attribute` under an `*Element` is detached via `spliceOutAttribute`, repairing `Element.properties`
 
-All three insertion paths share `wouldCreateCycle(parent, cur)`: they reject inserting a node into itself or into one of its own descendants (which would put an ancestor below itself). addChild/addSibling auto-unlink an already-linked incoming node before relinking so it never lives in two places; rejection leaves the tree untouched. The shared guard + auto-unlink is factored into `addChildPreflight`/`addSiblingPreflight`. Leaf `AddChild`/`AddSibling` overrides that take a content-merge fast path (Text, Comment) run the matching preflight BEFORE merging, so `txt.AddChild(txt)`/`comment.AddChild(comment)` are rejected instead of doubling content, and an already-linked incoming leaf is unlinked from its old parent before its content is merged.
+All three insertion paths share `wouldCreateCycle(parent, cur)`: they reject inserting a node into itself or into one of its own descendants (which would put an ancestor below itself). addChild/addSibling auto-unlink an already-linked incoming node before relinking so it never lives in two places; rejection leaves the tree untouched. The shared guard + auto-unlink is factored into `addChildPreflight`/`addSiblingPreflight`. Leaf `AddChild`/`AddSibling` overrides that take a content-merge fast path (Text, Comment, and ProcessingInstruction — whose `AddChild` merges a Text/CDATA operand's content into the PI data string) run the matching preflight BEFORE merging, so `txt.AddChild(txt)`/`comment.AddChild(comment)` are rejected instead of doubling content, and an already-linked incoming leaf (including a Text/CDATA node merged into a PI) is unlinked from its old parent before its content is merged. These overrides also reject a nil or typed-nil operand with `ErrNilNode` before any method call on the operand, since a typed nil reaching the type switch / merge path would panic.
 
 The auto-unlink and `replaceNode`'s splice operate through `unlinkNode`/`baseDocNode()` links rather than `MutableNode` setters. A non-`MutableNode` operand (e.g. a public `NamespaceNodeWrapper`, which embeds `docnode` directly) is therefore detached and spliced safely: the preflights no longer silently skip the unlink (which left stale old-parent links) and `replaceNode` no longer force-casts to `MutableNode` (which could panic). `setListDoc(Node, doc)` (the `SetTreeDoc` sibling walker) likewise accepts any `Node`: a non-`MutableNode` sibling has its `doc` set directly via `baseDocNode()` instead of a `MutableNode` force-cast, so `SetTreeDoc` over a tree containing a `NamespaceNodeWrapper` does not panic.
 
