@@ -185,6 +185,74 @@ func TestStripSpaceUndeclaredPrefix(t *testing.T) {
 	require.Contains(t, err.Error(), "XTSE0280")
 }
 
+// TestStripSpaceWildcardKindsNoConflict verifies that strip/preserve NameTests
+// of DIFFERENT kinds at the same import precedence do not raise a false
+// XTSE0270: their match priorities differ, so the conflict is resolved at
+// runtime by priority rather than being a genuine same-priority conflict.
+func TestStripSpaceWildcardKindsNoConflict(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		strip    string
+		preserve string
+	}{
+		{
+			// "*:item" (local-name wildcard, priority -0.25) vs "item"
+			// (exact, priority 0): distinct kinds, no conflict.
+			name:     "local-wildcard vs exact",
+			strip:    "*:item",
+			preserve: "item",
+		},
+		{
+			// "Q{}*" (namespace wildcard, empty ns, priority -0.25) vs "*"
+			// (universal, priority -0.5): distinct kinds, no conflict.
+			name:     "namespace-wildcard vs universal",
+			strip:    "Q{}*",
+			preserve: "*",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="` + tc.strip + `"/>
+  <xsl:preserve-space elements="` + tc.preserve + `"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+			require.NoError(t, err)
+
+			ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+			require.NoError(t, err,
+				"strip=%q preserve=%q are different NameTest kinds and must not raise XTSE0270", tc.strip, tc.preserve)
+			require.NotNil(t, ss)
+		})
+	}
+}
+
+// TestStripSpaceSameKindWildcardConflict verifies that a genuine same-kind,
+// same-name wildcard conflict at the same precedence still raises XTSE0270.
+func TestStripSpaceSameKindWildcardConflict(t *testing.T) {
+	t.Parallel()
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*:item"/>
+  <xsl:preserve-space elements="*:item"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+
+	_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.Error(t, err, "same-kind same-name wildcard conflict must raise XTSE0270")
+	require.Contains(t, err.Error(), "XTSE0270")
+}
+
 // TestStripSpaceNamespaceWildcardPriority verifies that a namespace wildcard
 // (Q{uri}*) outranks the universal wildcard (*) at equal import precedence, so
 // strip-space="Q{urn:A}*" wins over preserve-space="*" for an element in urn:A.

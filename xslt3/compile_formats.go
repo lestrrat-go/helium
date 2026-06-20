@@ -1171,15 +1171,42 @@ func (c *compiler) spaceDeclNamespaces(elem *helium.Element) map[string]string {
 	return bindings
 }
 
-// nameTestKey returns a canonical key for a nameTest. The namespace URI is
-// resolved at compile time and stored on the nameTest, so the key is built
-// directly from that resolved value.
+// nameTestKey returns a canonical conflict key for a nameTest. The key encodes
+// the NameTest KIND in addition to its resolved name so that NameTests of
+// different shapes never collide. A collision would raise a false XTSE0270 for a
+// strip/preserve pair whose match priorities differ and is therefore resolved at
+// runtime rather than being a genuine conflict. XTSE0270 must fire only for two
+// rules of the SAME kind and SAME name at the same import precedence.
+//
+// The four distinguished kinds (with their effective match priorities) are:
+//
+//   - universal wildcard "*"        (priority -0.5)
+//   - namespace wildcard "prefix:*" / "Q{uri}*" (priority -0.25)
+//   - local-name wildcard "*:local" (priority -0.25)
+//   - exact expanded name           (priority  0)
+//
+// The two -0.25 kinds share a priority but never match the same node by the same
+// criterion (one fixes the namespace, the other fixes the local name), so they
+// are kept as separate kinds.
 func nameTestKey(nt nameTest) string {
 	uri := ""
 	if nt.HasURI {
 		uri = nt.URI
 	}
-	return helium.ClarkName(uri, nt.Local)
+	switch {
+	case nt.Prefix == "*":
+		// "*:local" — local-name wildcard (namespace unconstrained).
+		return "L:" + nt.Local
+	case nt.Local == "*" && nt.HasURI:
+		// "prefix:*" / "Q{uri}*" — namespace wildcard.
+		return "N:" + uri
+	case nt.Local == "*":
+		// "*" — universal wildcard.
+		return "U:"
+	default:
+		// Exact expanded name.
+		return "E:" + helium.ClarkName(uri, nt.Local)
+	}
 }
 
 // checkSpaceConflicts detects NameTests that appear in both xsl:strip-space and
