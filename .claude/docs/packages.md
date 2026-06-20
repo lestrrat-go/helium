@@ -58,6 +58,7 @@ XPath 1.0 expression parsing and evaluation.
 - `FunctionContext` — read-only custom-function evaluation state; retrieve via `GetFunctionContext(ctx)`
 - Merge helpers: `WithAdditionalNamespaces(ctx, ns)`, `WithAdditionalVariables(ctx, vars)`
 - Limits: recursion 5000, node-set 10M, configurable op limit
+- Robustness: `eval` and axis-iteration loops honor `ctx.Err()` so a cancelled context aborts promptly; `Evaluate` on a nil/zero-value `Expression` returns `ErrNilExpression` instead of panicking
 - Files: `xpath.go` (API), `parser.go`, `lexer.go`, `eval.go`, `expr.go`, `axes.go`, `functions.go`, `token.go`
 - Imports: helium
 

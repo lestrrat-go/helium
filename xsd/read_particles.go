@@ -122,6 +122,10 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 					continue
 				}
 				c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], refQN)
+				// Record the back-edge ref element's own source so an indirect-cycle
+				// diagnostic cites this <xs:attributeGroup ref="..."> line/file, not
+				// the owning group's declaration line.
+				c.attrGroupRefSources[qn] = append(c.attrGroupRefSources[qn], attrGroupSource{line: ce.Line(), source: c.diagSource()})
 			}
 		}
 	}

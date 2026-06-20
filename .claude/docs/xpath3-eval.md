@@ -62,6 +62,8 @@ Evaluate each item, concatenate sequences.
 3. Hot axes (`child`, `attribute`, `self`, `parent`) fuse traversal and node-test filtering directly in `xpath3`, avoiding the generic `TraverseAxis` + extra filtered-slice path
 4. Return merged node-set
 
+**Cancellation:** the fused hot child/attribute loops check `ctx.Err()` once per enumerated node (the attribute path also inside its `ForEachAttribute` callback) so a cancelled context aborts mid-enumeration instead of scanning the whole child/attribute set before the next `countOps` boundary. Generic (non-hot) axes delegate to `ixpath.TraverseAxis(ctx, ...)`, which performs its own in-loop `ctx.Err()` checks; on the namespace axis those checks run inside the `NamespacePrefixesInScope` / `CollectNamespaceNodes` helper loops (outer and inner) so `namespace::*` cancels promptly too.
+
 ### Predicates
 - Numeric atomic → compare to position (1-based)
 - Otherwise → compute EBV

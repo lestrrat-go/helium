@@ -879,7 +879,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			}
 			allMatch := true
 			m := v
-			_ = m.ForEach(func(k AtomicValue, val Sequence) error {
+			_ = m.forEach0(func(k AtomicValue, val Sequence) error {
 				if matchesItemType(k, t.ParamTypes[0].ItemTest, ec) {
 					if !matchesSequenceType(val, rt, ec) {
 						allMatch = false
@@ -912,7 +912,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		}
 		// Typed map test: check all keys match key type and all values match value type
 		allMatch := true
-		_ = m.ForEach(func(k AtomicValue, v Sequence) error {
+		_ = m.forEach0(func(k AtomicValue, v Sequence) error {
 			if !matchesItemType(k, t.KeyType, ec) {
 				allMatch = false
 			}

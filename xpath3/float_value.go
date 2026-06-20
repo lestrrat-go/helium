@@ -148,6 +148,21 @@ func (fv *FloatValue) Neg() *FloatValue {
 	panic("unreachable")
 }
 
+// clone returns a deep copy of the FloatValue, duplicating the underlying
+// big.Float so a mutation of the original (e.g. via big.Float methods on the
+// shared pointer) cannot reach the copy. Used by value-semantics deep cloning
+// of atomic values stored in maps/arrays.
+func (fv *FloatValue) clone() *FloatValue {
+	if fv == nil {
+		return nil
+	}
+	out := &FloatValue{special: fv.special}
+	if fv.bf != nil {
+		out.bf = new(big.Float).SetPrec(fv.bf.Prec()).Set(fv.bf)
+	}
+	return out
+}
+
 // WithPrecision returns a new FloatValue with the given precision.
 // For normal values, this re-rounds the underlying big.Float.
 func (fv *FloatValue) WithPrecision(prec uint) *FloatValue {

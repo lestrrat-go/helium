@@ -81,6 +81,10 @@ var ErrUnknownAxis = errors.New("xpath: unknown axis")
 // ErrExpectedToken is returned when the parser expected a specific token but found another.
 var ErrExpectedToken = errors.New("xpath: expected token")
 
+// ErrNilExpression is returned when Evaluate is called on a nil or
+// zero-value (uncompiled) Expression, instead of panicking.
+var ErrNilExpression = errors.New("xpath: nil or uncompiled expression")
+
 // ResultType identifies the type of an XPath evaluation result.
 type ResultType int
 
@@ -253,6 +257,9 @@ func (e Evaluator) FunctionNS(uri, name string, fn Function) Evaluator {
 
 // Evaluate evaluates a compiled expression against the given context node.
 func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error) {
+	if expr == nil || expr.ast == nil {
+		return nil, ErrNilExpression
+	}
 	ectx := newEvalContextWithConfig(node, e.cfg)
 	return eval(ctx, ectx, expr.ast)
 }
@@ -319,6 +326,9 @@ func MustCompile(expr string) *Expression {
 // Evaluate evaluates the compiled expression against the given context node.
 // (libxml2: xmlXPathCompiledEval)
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
+	if e == nil || e.ast == nil {
+		return nil, ErrNilExpression
+	}
 	ectx := newEvalContextWithConfig(node, nil)
 	return eval(ctx, ectx, e.ast)
 }

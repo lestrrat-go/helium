@@ -118,6 +118,11 @@ func (ec *evalContext) Variable(name string) (any, bool) {
 
 // eval dispatches to the appropriate evaluator for each AST node type.
 func eval(ctx context.Context, ec *evalContext, expr Expr) (*Result, error) {
+	// Honor cancellation/deadline at every recursion point so a long or
+	// looping evaluation aborts promptly with the context error.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	ec.depth++
 	if ec.depth > maxRecursionDepth {
 		return nil, ErrRecursionLimit
@@ -183,7 +188,7 @@ func evalLocationPath(ctx context.Context, ec *evalContext, lp *LocationPath) (*
 		if len(step.Predicates) > 0 {
 			nodes, err = evalStepWithPredicates(ctx, ec, nodes, step)
 		} else {
-			nodes, err = evalStepNoPredicates(ec, nodes, step)
+			nodes, err = evalStepNoPredicates(ctx, ec, nodes, step)
 		}
 		if err != nil {
 			return nil, err
@@ -198,7 +203,10 @@ func evalLocationPath(ctx context.Context, ec *evalContext, lp *LocationPath) (*
 func evalStepWithPredicates(ctx context.Context, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	var allFiltered []helium.Node
 	for _, n := range nodes {
-		candidates, err := traverseAxis(step.Axis, n)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		candidates, err := traverseAxis(ctx, step.Axis, n)
 		if err != nil {
 			return nil, err
 		}
@@ -218,10 +226,13 @@ func evalStepWithPredicates(ctx context.Context, ec *evalContext, nodes []helium
 }
 
 // evalStepNoPredicates evaluates one location step that has no predicates.
-func evalStepNoPredicates(ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
+func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	var next []helium.Node
 	for _, n := range nodes {
-		candidates, err := traverseAxis(step.Axis, n)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		candidates, err := traverseAxis(ctx, step.Axis, n)
 		if err != nil {
 			return nil, err
 		}
