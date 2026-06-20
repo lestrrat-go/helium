@@ -240,6 +240,105 @@ func TestComplexTypeContentModelExclusivity(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	// An <xs:group ref> is a model-group particle too, so a group ref beside a
+	// sequence inside an extension is two content-model particles and must be
+	// rejected — not silently dropped.
+	t.Run("rejects group and sequence in extension", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base">
+        <xs:group ref="g"/>
+        <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "more than one content model particle")
+	})
+
+	// Same for a complexContent restriction.
+	t.Run("rejects group and sequence in restriction", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>
+  <xs:complexType name="Base">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:group ref="g"/>
+        <xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "more than one content model particle")
+	})
+
+	// A single <xs:group ref> as the sole content model of an extension must
+	// compile cleanly AND its content must be honored at validation time (not
+	// silently dropped).
+	t.Run("accepts and honors single group ref in extension", func(t *testing.T) {
+		t.Parallel()
+		validates := func(t *testing.T, schema, instanceXML string) error {
+			t.Helper()
+			sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+			require.NoError(t, err)
+			s, err := xsd.NewCompiler().Compile(t.Context(), sdoc)
+			require.NoError(t, err)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+			require.NoError(t, err)
+			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+			return xsd.NewValidator(s).ErrorHandler(collector).Validate(t.Context(), doc)
+		}
+
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base">
+        <xs:group ref="g"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+		require.NoError(t, validates(t, schema, `<root><a>hello</a></root>`),
+			"a single group ref content model must accept its content")
+		require.Error(t, validates(t, schema, `<root/>`),
+			"the group ref content model must be honored (required element a missing)")
+	})
+
+	// A single <xs:group ref> content model on a restriction compiles cleanly
+	// and is honored.
+	t.Run("accepts single group ref in restriction", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>
+  <xs:complexType name="Base">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:group ref="g"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
 }
 
 // TestDuplicateAttributeUse (C-010) verifies that two attribute uses with the

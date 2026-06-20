@@ -260,8 +260,9 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		c.markChameleonEligible(td, elem, baseRef)
 	}
 
-	// At most one model-group particle (sequence|choice|all) is permitted; a
-	// second one would silently overwrite td.ContentModel. Track the first seen.
+	// At most one model-group particle (sequence|choice|all|group ref) is
+	// permitted; a second one would silently overwrite td.ContentModel. Track
+	// the first seen.
 	var contentModelChild string
 
 	// Parse child model groups and attributes.
@@ -273,7 +274,7 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		if !ok {
 			continue
 		}
-		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) {
+		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup) {
 			if contentModelChild != "" {
 				if c.filename != "" {
 					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, ce.Line(),
@@ -312,6 +313,28 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 			td.ContentModel = mg
 			if td.ContentType != ContentTypeMixed {
 				td.ContentType = ContentTypeElementOnly
+			}
+		case isXSDElement(ce, elemGroup):
+			ref := getAttr(ce, attrRef)
+			if ref != "" {
+				c.validateOccursAttrs(ctx, ce)
+				placeholderMin, placeholderMax := parseParticleOccurs(ce)
+				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
+				qn := c.resolveQName(ctx, ce, ref)
+				c.groupRefs[placeholder] = qn
+				// Direct reference: this group ref is the sole top-level particle
+				// of the derived type's content, so a resolved 'all' model group
+				// is permitted here (subject to maxOccurs == 1).
+				c.groupRefSources[placeholder] = groupRefSource{
+					line:         ce.Line(),
+					local:        ce.LocalName(),
+					nested:       false,
+					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+				}
+				td.ContentModel = placeholder
+				if td.ContentType != ContentTypeMixed {
+					td.ContentType = ContentTypeElementOnly
+				}
 			}
 		case isXSDElement(ce, elemAttribute):
 			au := c.parseAttributeUse(ctx, ce)
@@ -336,8 +359,9 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		c.typeRefs[td] = qn
 		c.markChameleonEligible(td, elem, baseRef)
 	}
-	// At most one model-group particle (sequence|choice|all) is permitted; a
-	// second one would silently overwrite td.ContentModel. Track the first seen.
+	// At most one model-group particle (sequence|choice|all|group ref) is
+	// permitted; a second one would silently overwrite td.ContentModel. Track
+	// the first seen.
 	var contentModelChild string
 
 	// Parse child content model (if any).
@@ -349,7 +373,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		if !ok {
 			continue
 		}
-		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) {
+		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup) {
 			if contentModelChild != "" {
 				if c.filename != "" {
 					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, ce.Line(),
@@ -388,6 +412,28 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 			td.ContentModel = mg
 			if td.ContentType != ContentTypeMixed {
 				td.ContentType = ContentTypeElementOnly
+			}
+		case isXSDElement(ce, elemGroup):
+			ref := getAttr(ce, attrRef)
+			if ref != "" {
+				c.validateOccursAttrs(ctx, ce)
+				placeholderMin, placeholderMax := parseParticleOccurs(ce)
+				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
+				qn := c.resolveQName(ctx, ce, ref)
+				c.groupRefs[placeholder] = qn
+				// Direct reference: this group ref is the sole top-level particle
+				// of the derived type's content, so a resolved 'all' model group
+				// is permitted here (subject to maxOccurs == 1).
+				c.groupRefSources[placeholder] = groupRefSource{
+					line:         ce.Line(),
+					local:        ce.LocalName(),
+					nested:       false,
+					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+				}
+				td.ContentModel = placeholder
+				if td.ContentType != ContentTypeMixed {
+					td.ContentType = ContentTypeElementOnly
+				}
 			}
 		case isXSDElement(ce, elemAttribute):
 			if getAttr(ce, attrUse) == attrValProhibited {
