@@ -2055,7 +2055,7 @@ func (v *validator) patternElementName(pat *pattern) string {
 	switch pat.kind {
 	case patternElement:
 		return pat.name
-	case patternRef:
+	case patternRef, patternParentRef:
 		def := pat.resolved
 		if def == nil {
 			return ""
@@ -2111,7 +2111,7 @@ func (v *validator) isNullable(pat *pattern) bool {
 			}
 		}
 		return true
-	case patternRef:
+	case patternRef, patternParentRef:
 		def := pat.resolved
 		if def == nil {
 			return false
