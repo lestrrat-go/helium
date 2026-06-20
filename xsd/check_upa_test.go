@@ -75,6 +75,21 @@ func TestUPADeterminism(t *testing.T) {
 			{
 				// A wildcard followed by an element it can also match: after a
 				// nullable run, an `a` could start the wildcard or the element.
+				name: "all compositor with duplicate same-name member",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:all>
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:all>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A wildcard followed by an element it can also match: after a
+				// nullable run, an `a` could start the wildcard or the element.
 				name: "wildcard overlaps a following element of the same namespace",
 				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
@@ -164,6 +179,24 @@ func TestUPADeterminism(t *testing.T) {
     <xs:complexType>
       <xs:sequence>
         <xs:element name="a" type="xs:int" minOccurs="2" maxOccurs="2"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// `a{257}, a`: a large finite EXACT count followed by another `a`.
+				// A required exact run is a deterministic chain regardless of length;
+				// collapsing it into a looping optional tail past an expansion cap
+				// manufactures a back-edge that falsely flags this model. xmllint
+				// accepts it.
+				name: "large finite exact repetition followed by the same element",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:int" minOccurs="257" maxOccurs="257"/>
         <xs:element name="a" type="xs:int"/>
       </xs:sequence>
     </xs:complexType>

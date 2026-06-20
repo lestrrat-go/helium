@@ -91,10 +91,15 @@ func (a *positionAutomaton) add(p *Particle) posInfo {
 }
 
 // upaMaxRequiredExpansion caps how many required occurrence copies a single
-// range may expand into. XSD finite minOccurs is typically small; past this
-// bound we collapse the required copies into a single looping body, which only
-// widens reachability (a sound over-approximation that can never produce a false
-// accept).
+// range may expand into, to bound automaton size. XSD finite minOccurs is
+// typically small; past this bound the required copies are summarized as a
+// single non-nullable body copy. A required exact run is a deterministic chain
+// regardless of length, so the summary copy is NEVER given a self-loop back-edge
+// just because it was collapsed — a back-edge would manufacture ambiguity that
+// the full chain does not have (e.g. `a{257}, a` is deterministic). The summary
+// loops only when the original range genuinely repeats past the required count
+// (unbounded maxOccurs, or a repeating optional remainder), handled separately
+// below.
 const upaMaxRequiredExpansion = 256
 
 // walkParticle computes nullable/firstpos/lastpos for a particle, accounting for
@@ -163,13 +168,20 @@ func (a *positionAutomaton) applyOccurs(minOccurs, maxOccurs int, body func() po
 	// copy. The chain keeps counted models such as `a{2}, a` deterministic; the
 	// single optional copy avoids falsely flagging interchangeable repeated copies
 	// (e.g. `<any maxOccurs="5"/>`).
+	//
+	// Past upaMaxRequiredExpansion the required chain is SUMMARIZED into a single
+	// non-nullable copy rather than fully expanded, to bound automaton size. A
+	// required exact run is a deterministic chain regardless of length, so the
+	// summary copy is NOT looped just because it was collapsed — the optional-tail
+	// shape below is derived from the ORIGINAL range, never widened by the
+	// collapse, so a finite exact count such as `a{257}` stays a non-looping
+	// required run.
 	required := minOccurs
-	collapseRequired := required > upaMaxRequiredExpansion
-	if collapseRequired {
+	if required > upaMaxRequiredExpansion {
 		required = 1
 	}
 
-	optionalUnbounded := maxOccurs == Unbounded || collapseRequired
+	optionalUnbounded := maxOccurs == Unbounded
 	optionalCount := 0
 	if !optionalUnbounded {
 		optionalCount = maxOccurs - minOccurs
@@ -298,11 +310,12 @@ func (a *positionAutomaton) walkCompositorBody(mg *ModelGroup) posInfo {
 		return info
 	}
 
-	// CompositorSequence / CompositorAll. xs:all is order-independent at
-	// validation time, but for UPA purposes a sequence-style concatenation is a
-	// sound over-approximation: any false edge it adds can only widen
-	// reachability, and xs:all members are already constrained to be distinct
-	// elements by other checks.
+	if mg.Compositor == CompositorAll {
+		return a.walkAllBody(mg)
+	}
+
+	// CompositorSequence. Sequentially concatenate each member, recording the
+	// followpos edges that ordering introduces.
 	info := posInfo{nullable: true}
 	for _, p := range mg.Particles {
 		info = a.concat(info, a.walkParticle(p))
@@ -311,6 +324,50 @@ func (a *positionAutomaton) walkCompositorBody(mg *ModelGroup) posInfo {
 		info.nullable = true
 	}
 	return info
+}
+
+// walkAllBody computes nullable/firstpos/lastpos for one occurrence of an
+// xs:all compositor body. Unlike a sequence, xs:all is order-independent: every
+// member is reachable regardless of which members have already been seen. So all
+// member firstpos are competing from the start state, and after any member is
+// consumed every OTHER member is still reachable. Modeling this faithfully
+// (rather than as an ordered sequence) is what catches a duplicate same-name
+// member — two members with the same element name overlap in the union of
+// firstpos and fire the cos-nonambig (UPA) check.
+func (a *positionAutomaton) walkAllBody(mg *ModelGroup) posInfo {
+	if len(mg.Particles) == 0 {
+		return posInfo{nullable: true}
+	}
+
+	members := make([]posInfo, 0, len(mg.Particles))
+	for _, p := range mg.Particles {
+		members = append(members, a.walkParticle(p))
+	}
+
+	var out posInfo
+	out.nullable = true
+	for _, m := range members {
+		out.first = append(out.first, m.first...)
+		out.last = append(out.last, m.last...)
+		if !m.nullable {
+			out.nullable = false
+		}
+	}
+
+	// Mutual reachability: each member's lastpos may be followed by every other
+	// member's firstpos (the other members can still appear in any order).
+	for i, mi := range members {
+		for j, mj := range members {
+			if i == j {
+				continue
+			}
+			for _, l := range mi.last {
+				a.addFollow(l, mj.first)
+			}
+		}
+	}
+
+	return out
 }
 
 // addFollow records that every position in `to` may follow `from`.
