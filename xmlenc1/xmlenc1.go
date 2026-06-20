@@ -378,7 +378,12 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	var nodes []helium.Node
 	if isContent {
 		// Content may be multiple children; wrap in a temporary root.
-		wrapped := "<_wrap>" + string(plaintext) + "</_wrap>"
+		// The decrypted fragment may reference namespace prefixes that
+		// were declared on an ancestor of the EncryptedData element (the
+		// content's original location), not inside the ciphertext itself.
+		// Re-declare those in-scope namespaces on the wrapper so the
+		// prefixes resolve; otherwise valid content fails to parse.
+		wrapped := "<_wrap" + inScopeNamespaceAttrs(elem) + ">" + string(plaintext) + "</_wrap>"
 		tmpDoc, err := parser.Parse(ctx, []byte(wrapped))
 		if err != nil {
 			return nil, ErrDecryptionFailed
@@ -396,6 +401,53 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	}
 
 	return nodes, nil
+}
+
+// inScopeNamespaceAttrs returns the serialized xmlns attributes for all
+// namespace declarations in scope at elem, collected by walking elem and its
+// ancestors (a nearer declaration shadows a farther one for the same prefix).
+// The result is a leading-space-prefixed string suitable for splicing into an
+// element start tag, e.g. ` xmlns:saml="urn:..."`. URIs are XML-attribute
+// escaped because the recovered plaintext (and thus its declared namespaces)
+// is attacker-controlled.
+func inScopeNamespaceAttrs(elem *helium.Element) string {
+	seen := map[string]bool{}
+	var b strings.Builder
+	var cur helium.Node = elem
+	for cur != nil {
+		if e, ok := cur.(*helium.Element); ok {
+			for _, ns := range e.Namespaces() {
+				prefix := ns.Prefix()
+				if seen[prefix] {
+					continue
+				}
+				seen[prefix] = true
+				if prefix == "" {
+					b.WriteString(` xmlns="`)
+				} else {
+					b.WriteString(` xmlns:`)
+					b.WriteString(prefix)
+					b.WriteString(`="`)
+				}
+				b.WriteString(escapeNamespaceURI(ns.URI()))
+				b.WriteString(`"`)
+			}
+		}
+		cur = cur.Parent()
+	}
+	return b.String()
+}
+
+// escapeNamespaceURI escapes a namespace URI for inclusion in a double-quoted
+// XML attribute value.
+func escapeNamespaceURI(uri string) string {
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+	)
+	return replacer.Replace(uri)
 }
 
 // newHardenedInnerParser returns the helium parser used to parse the
