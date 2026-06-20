@@ -388,25 +388,25 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 // rejected at COMPILE time rather than silently compiling into an unsatisfiable
 // enumeration that fails at instance-validation time.
 //
-// This is deliberately scoped to ATOMIC restrictions whose base is NOT
-// xs:QName/xs:NOTATION: the QName/NOTATION prefix-binding validity of an
-// enumeration literal is already checked (with libxml2-matching phrasing) by
-// checkEnumQNameAndNotation, and list/union enumeration literals carry
-// member/item-relative value semantics that the existing fixed-value machinery
-// owns — validating those whole literals against the base here would mis-judge
-// them. Keeping the new check narrow avoids regressing valid schemas while still
-// rejecting the invalid atomic enumeration members it targets.
+// This applies to ALL varieties — atomic, list, and union. validateValue is
+// variety-aware: an atomic literal is validated against the builtin base's value
+// space, a list literal item-by-item against the item type (so a list
+// itemType="xs:float" rejects a "+NaN" enumeration member), and a union literal
+// against whichever member type accepts it (so a union with an xs:float member
+// rejects "+NaN" when no member admits it). The ONLY literals skipped are
+// QName/NOTATION carriers — at any nesting depth within the variety structure —
+// whose prefix-binding validity is already checked (with libxml2-matching
+// phrasing) by checkEnumQNameAndNotation; validating those here would produce
+// duplicate / differently-phrased diagnostics.
 func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
 	base := td.BaseType
 	if base == nil || len(fs.Enumeration) == 0 {
 		return
 	}
-	if resolveVariety(td) != TypeVarietyAtomic {
-		return
-	}
-	// QName/NOTATION enumeration literals are validated by checkEnumQNameAndNotation;
+	// QName/NOTATION enumeration literals (including ones carried inside a list
+	// item type or a union member) are validated by checkEnumQNameAndNotation;
 	// skip them here to avoid duplicate / differently-phrased diagnostics.
-	if prim := builtinBaseLocal(base); prim == lexicon.TypeQName || prim == lexicon.TypeNotation {
+	if typeHasQNameNotationCarrier(base) {
 		return
 	}
 
