@@ -31,17 +31,28 @@ const (
 // cancel func once a threshold number of bytes has been read. It lets a test
 // cancel the context AFTER the parser has entered (and is actively scanning) a
 // raw-text / comment section, rather than before parsing starts.
+//
+// maxRead caps the bytes returned per Read so a single large read can't gulp
+// the whole input (and the entire target construct) before `after` is reached.
+// ParseReader first drains a 1024-byte charset prescan; throttling per-read and
+// placing `after` past that prescan AND inside the target construct ensures the
+// cancellation lands while the parser is actively scanning the construct rather
+// than during the prescan or before parsing starts.
 type cancelAfterReader struct {
-	data   []byte
-	pos    int
-	after  int
-	cancel context.CancelFunc
-	fired  bool
+	data    []byte
+	pos     int
+	after   int
+	maxRead int
+	cancel  context.CancelFunc
+	fired   bool
 }
 
 func (r *cancelAfterReader) Read(p []byte) (int, error) {
 	if r.pos >= len(r.data) {
 		return 0, io.EOF
+	}
+	if r.maxRead > 0 && len(p) > r.maxRead {
+		p = p[:r.maxRead]
 	}
 	n := copy(p, r.data[r.pos:])
 	r.pos += n
@@ -51,6 +62,12 @@ func (r *cancelAfterReader) Read(p []byte) (int, error) {
 	}
 	return n, nil
 }
+
+// metaUTF8 forces ParseReader onto the streaming sanitize path. Without a
+// charset declaration ParseReader can buffer an all-valid-UTF-8 stream to EOF,
+// which would consume the entire input (and target construct) before any
+// cancellation threshold inside it is reached, masking the scanner path.
+const metaUTF8 = `<meta charset="utf-8">`
 
 // TestRawTextContextCancellationAborts verifies that cancelling the context
 // WHILE the parser is inside a raw-text / RCDATA / plaintext / comment section
@@ -107,14 +124,16 @@ func TestRawTextContextCancellationAborts(t *testing.T) {
 		})
 	}
 
-	// Comment: no mid-scan SAX event, so cancel via the reader after a few
-	// bytes of the comment body have streamed in.
+	// Comment: no mid-scan SAX event, so cancel via the reader once the comment
+	// body has streamed PAST the 1024-byte charset prescan (so the parser is
+	// actively scanning the comment, not prescanning). A meta charset forces the
+	// streaming path and throttled reads keep the cancel mid-comment.
 	t.Run(nameComment, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
-		input := []byte("<!--" + body)
-		r := &cancelAfterReader{data: input, after: 16, cancel: cancel}
+		input := []byte(metaUTF8 + "<!--" + body)
+		r := &cancelAfterReader{data: input, after: 1100, maxRead: 64, cancel: cancel}
 
 		done := make(chan error, 1)
 		go func() {
@@ -896,9 +915,11 @@ func TestRCDATASaturatedLegacyPrefixNoPartialEmit(t *testing.T) {
 // TestRCDATANumericRefContextCancellation verifies Finding 2: a context
 // cancelled WHILE the parser drains a long numeric character reference inside
 // RCDATA (e.g. <title>&#9999...) aborts promptly with context.Canceled instead
-// of consuming the entire digit run first. The reader cancels a few bytes into
-// the digit run; the bounded numeric scanner observes ctx.Err() between chunks
-// and unwinds without emitting a partial entity.
+// of consuming the entire digit run first. The digit run runs far past the
+// 1024-byte charset prescan; a meta charset forces the streaming path and the
+// reader cancels once the run has streamed past the prescan and is being
+// drained. The bounded numeric scanner observes ctx.Err() between chunks and
+// unwinds without emitting a partial entity.
 func TestRCDATANumericRefContextCancellation(t *testing.T) {
 	const reps = 1 << 16 // long digit run so the scan is still in progress
 
@@ -908,8 +929,8 @@ func TestRCDATANumericRefContextCancellation(t *testing.T) {
 			t.Cleanup(cancel)
 
 			// Unterminated numeric reference: '&#' followed by a huge digit run.
-			input := []byte("<" + elem + ">&#" + strings.Repeat("9", reps))
-			r := &cancelAfterReader{data: input, after: len(elem) + 8, cancel: cancel}
+			input := []byte(metaUTF8 + "<" + elem + ">&#" + strings.Repeat("9", reps))
+			r := &cancelAfterReader{data: input, after: 1100, maxRead: 64, cancel: cancel}
 
 			done := make(chan error, 1)
 			go func() {
@@ -1173,9 +1194,9 @@ func TestIndivisibleNodeCancellationNoPartialEmit(t *testing.T) {
 		name  string
 		input string
 	}{
-		{nameComment, "<!--" + body},                // parseComment
-		{nameBogusComment, "<!" + body},             // parseBogusComment
-		{"processing_instruction", "<?php " + body}, // parsePI
+		{nameComment, metaUTF8 + "<!--" + body},                // parseComment
+		{nameBogusComment, metaUTF8 + "<!" + body},             // parseBogusComment
+		{"processing_instruction", metaUTF8 + "<?php " + body}, // parsePI
 	}
 
 	for _, tc := range cases {
@@ -1183,9 +1204,12 @@ func TestIndivisibleNodeCancellationNoPartialEmit(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			t.Cleanup(cancel)
 
-			// Cancel a few bytes into the (still-unterminated) indivisible node so
-			// the scan loop observes ctx.Err() mid-construct.
-			r := &cancelAfterReader{data: []byte(tc.input), after: 32, cancel: cancel}
+			// Cancel once the (still-unterminated) indivisible node has streamed
+			// PAST the 1024-byte charset prescan, so the scan loop observes
+			// ctx.Err() mid-construct rather than during the prescan. A meta
+			// charset forces the streaming path; throttled reads keep the cancel
+			// landing inside the construct.
+			r := &cancelAfterReader{data: []byte(tc.input), after: 1100, maxRead: 64, cancel: cancel}
 
 			done := make(chan struct {
 				doc *helium.Document
@@ -1258,7 +1282,7 @@ func TestRCDATAOverCapNonLegacyAbortsWithoutDrainingTail(t *testing.T) {
 			// selects the STREAMING sanitize reader so reads stay bounded — the
 			// default deferred-Latin-1 path must buffer the whole stream to settle
 			// the encoding, which would mask the parser-side WORK bound under test.
-			input := []byte(`<meta charset="utf-8"><` + elem + ">&" +
+			input := []byte(metaUTF8 + "<" + elem + ">&" +
 				strings.Repeat("z", runLen) + "</" + elem + ">")
 			r := &countingReader{data: input}
 
@@ -1294,7 +1318,7 @@ func TestRCDATAOverCapLegacyPrefixAbortsWithoutDrainingTail(t *testing.T) {
 			// <meta charset="utf-8"> selects the STREAMING sanitize reader so reads
 			// stay bounded (the default deferred-Latin-1 path would buffer the whole
 			// stream to settle the encoding, masking the parser-side work bound).
-			input := []byte(`<meta charset="utf-8"><` + elem + ">&amp" +
+			input := []byte(metaUTF8 + "<" + elem + ">&amp" +
 				strings.Repeat("x", runLen) + "</" + elem + ">")
 			r := &countingReader{data: input}
 
@@ -1326,9 +1350,12 @@ func TestRCDATASaturatedRefContextCancellation(t *testing.T) {
 
 			// "&amp" + a long no-';' tail: the saturated path spools the tail
 			// (legacy "amp" resolves) and must keep draining to learn whether a ';'
-			// terminates it — exactly the loop that must honor cancellation.
-			input := []byte("<" + elem + ">&amp" + strings.Repeat("x", reps))
-			r := &cancelAfterReader{data: input, after: len(elem) + 16, cancel: cancel}
+			// terminates it — exactly the loop that must honor cancellation. A meta
+			// charset forces the streaming path; the cancel fires once the tail has
+			// streamed past the 1024-byte charset prescan and the spool is draining,
+			// and throttled reads keep it landing mid-run.
+			input := []byte(metaUTF8 + "<" + elem + ">&amp" + strings.Repeat("x", reps))
+			r := &cancelAfterReader{data: input, after: 1100, maxRead: 64, cancel: cancel}
 
 			done := make(chan error, 1)
 			go func() {

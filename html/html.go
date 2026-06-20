@@ -101,9 +101,13 @@ func (p Parser) Strict(v bool) Parser {
 // larger than the cap is emitted whole. An unresolved RCDATA named-reference
 // literal hard-fails with [ErrContentSizeExceeded] when the bytes it would emit
 // ("&" + name + optional ";") exceed the cap — this applies to ANY unresolved
-// literal, whether short, semicolon-terminated, or unbounded. A RESOLVABLE
-// reference (a known entity or longest legacy prefix) is exempt: it is resolved
-// to its value regardless of the cap.
+// literal, whether short, semicolon-terminated, or unbounded. A known-entity
+// reference is exempt: it is resolved within a fixed lookahead window and never
+// charged against the cap. A legacy-prefix reference (e.g. "&amp" with no ';')
+// is exempt only when its whole run fits within the cap; a SATURATED ambiguous
+// legacy-prefix run that exceeds the cap before its terminator is reached (e.g.
+// "&amp" followed by a long alphanumeric tail) hard-fails with
+// [ErrContentSizeExceeded] rather than resolving.
 //
 // This bounds only the streaming scanner / SAX chunk size. DOM construction via
 // [Parser.Parse] necessarily merges every chunk back into the document tree

@@ -20,9 +20,11 @@ type parseConfig struct {
 	// hard cap for an unresolved named character-reference literal in RCDATA: ANY
 	// "&"-prefixed run that does not resolve (whether short, semicolon-terminated,
 	// or unbounded) fails the parse with ErrContentSizeExceeded once the literal
-	// bytes it would emit ("&" + name + optional ";") exceed the cap. A resolvable
-	// reference (known entity or longest legacy prefix) is exempt and resolved to
-	// its value regardless of the cap. Zero selects defaultMaxContentSize. It
+	// bytes it would emit ("&" + name + optional ";") exceed the cap. A known
+	// entity is exempt (resolved within a fixed lookahead window); a legacy-prefix
+	// reference is exempt only when its whole run fits the cap — a saturated
+	// ambiguous legacy-prefix run that exceeds the cap hard-fails with
+	// ErrContentSizeExceeded. Zero selects defaultMaxContentSize. It
 	// guards against unbounded memory growth on a gigantic or unterminated section.
 	maxContentSize int
 }
