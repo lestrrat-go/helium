@@ -166,5 +166,5 @@ These are architectural choices, not bugs:
 - Go interfaces for node types vs xmlNode.type enum switch
 - No global state: explicit context passing
 - Functional options (WithX()) vs bitmask flags
-- Push parser buffers then parses (vs true incremental)
+- XML push parser parses incrementally as chunks arrive; HTML push parser buffers only through the initial ~1024-byte charset prescan, then streams
 - Namespace stack: frame-based visibleNSStack vs flat arrays
