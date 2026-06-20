@@ -434,7 +434,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		// would otherwise wrongly shadow the decrypted content. Use a NEUTRAL
 		// context (the owning document, or a fresh empty document) so no
 		// spurious default-ns or prefix bindings leak into the fragment.
-		var contextNode helium.Node = elem.Parent()
+		contextNode := elem.Parent()
 		if contextNode == nil {
 			if doc := elem.OwnerDocument(); doc != nil {
 				contextNode = doc
