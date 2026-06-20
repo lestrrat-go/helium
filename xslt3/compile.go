@@ -36,6 +36,7 @@ type compiler struct {
 	moduleKey                 string
 	resolver                  URIResolver
 	packageResolver           PackageResolver
+	maxResourceBytes          int64                      // per-resource read cap; 0 = MaxResourceBytes default, <0 = unbounded
 	localExcludes             map[string]struct{}        // accumulated LRE-level exclude-result-prefixes (stores URIs, not prefixes)
 	extensionURIs             map[string]struct{}        // namespace URIs declared as extension-element-prefixes
 	defaultMode               string                     // current default-mode (inherited through instruction nesting)
@@ -84,11 +85,12 @@ type Compiler struct {
 }
 
 type xsltCompilerCfg struct {
-	baseURI         string
-	uriResolver     URIResolver
-	packageResolver PackageResolver
-	staticParams    *Parameters
-	importSchemas   []*xsd.Schema
+	baseURI          string
+	uriResolver      URIResolver
+	packageResolver  PackageResolver
+	staticParams     *Parameters
+	importSchemas    []*xsd.Schema
+	maxResourceBytes int64
 }
 
 // NewCompiler creates a new Compiler with default settings.
@@ -157,6 +159,20 @@ func (c Compiler) ImportSchemas(schemas ...*xsd.Schema) Compiler {
 	return c
 }
 
+// MaxResourceBytes sets the maximum number of bytes read from a single
+// external resource loaded during compilation through the configured
+// URIResolver / PackageResolver — xsl:import / xsl:include, xsl:use-package
+// package loads, xsl:import-schema, and serialization parameter documents. It
+// also governs runtime resolver-backed reads (fn:doc, fn:unparsed-text,
+// fn:json-doc) unless overridden per-invocation by [Invocation.MaxResourceBytes].
+// A value of 0 selects the [MaxResourceBytes] default; a negative value
+// disables the bound. Reads exceeding the cap fail with [ErrResourceTooLarge].
+func (c Compiler) MaxResourceBytes(n int64) Compiler {
+	c = c.clone()
+	c.cfg.maxResourceBytes = n
+	return c
+}
+
 // ClearStaticParameters removes all static parameter bindings.
 func (c Compiler) ClearStaticParameters() Compiler {
 	c = c.clone()
@@ -190,10 +206,11 @@ func (c Compiler) toCompileConfig() *compileConfig {
 		return &compileConfig{}
 	}
 	cfg := &compileConfig{
-		baseURI:         c.cfg.baseURI,
-		resolver:        c.cfg.uriResolver,
-		packageResolver: c.cfg.packageResolver,
-		importSchemas:   c.cfg.importSchemas,
+		baseURI:          c.cfg.baseURI,
+		resolver:         c.cfg.uriResolver,
+		packageResolver:  c.cfg.packageResolver,
+		importSchemas:    c.cfg.importSchemas,
+		maxResourceBytes: c.cfg.maxResourceBytes,
 	}
 	if c.cfg.staticParams != nil {
 		cfg.staticParams = maps.Clone(c.cfg.staticParams.toMap())
@@ -1074,6 +1091,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.packageResolver = cfg.packageResolver
 		c.externalStaticParams = cfg.staticParams
 		c.importSchemas = cfg.importSchemas
+		c.maxResourceBytes = cfg.maxResourceBytes
 	}
 	if c.moduleKey == "" {
 		c.moduleKey = "<main>"
@@ -1392,6 +1410,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	if len(c.importSchemas) > 0 {
 		c.stylesheet.compilerImportSchemas = c.importSchemas
 	}
+	c.stylesheet.maxResourceBytes = c.maxResourceBytes
 
 	// Topologically sort accumulators so dependencies are evaluated first.
 	sortAccumulatorOrder(c.stylesheet)

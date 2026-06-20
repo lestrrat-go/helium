@@ -24,12 +24,13 @@ type PackageResolver interface {
 // --- Compile configuration (internal) ---
 
 type compileConfig struct {
-	baseURI         string
-	resolver        URIResolver
-	packageResolver PackageResolver
-	staticParams    map[string]xpath3.Sequence // externally supplied static param values
-	importSchemas   []*xsd.Schema              // pre-compiled schemas for xsl:import-schema resolution
-	isSubPackage    bool                       // true when compiling a sub-package (via xsl:use-package)
+	baseURI          string
+	resolver         URIResolver
+	packageResolver  PackageResolver
+	staticParams     map[string]xpath3.Sequence // externally supplied static param values
+	importSchemas    []*xsd.Schema              // pre-compiled schemas for xsl:import-schema resolution
+	isSubPackage     bool                       // true when compiling a sub-package (via xsl:use-package)
+	maxResourceBytes int64                      // per-resource read cap; 0 = MaxResourceBytes default, <0 = unbounded
 }
 
 // --- Transform configuration (internal) ---
@@ -62,6 +63,7 @@ type transformConfig struct {
 	traceWriter           io.Writer     // destination for fn:trace output (nil = os.Stderr)
 	resolvedOutputDef     *OutputDef    // resolved primary output def (set by executeTransform)
 	globalContextSelect   string        // XPath for global context item (evaluated after strip-space)
+	maxResourceBytes      int64         // per-resource read cap; 0 = MaxResourceBytes default, <0 = unbounded
 }
 
 // MessageHandler handles xsl:message output during transformation.

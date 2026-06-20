@@ -492,7 +492,7 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 			return nil, staticError(errCodeXTSE0090, "cannot read parameter-document %q: %v", href, resolveErr)
 		}
 		defer func() { _ = rc.Close() }()
-		return readResourceBounded(rc)
+		return readResourceBounded(rc, c.maxResourceBytes)
 	}
 	return loadParameterDocumentFromFile(ctx, outDef, baseURI, href, loadBytes)
 }

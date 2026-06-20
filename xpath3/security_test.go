@@ -13,6 +13,60 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// MaxResourceBytes bounds resolver-backed reads from fn:unparsed-text and
+// fn:json-doc so a hostile resource cannot exhaust memory.
+func TestMaxResourceBytesUnparsedText(t *testing.T) {
+	t.Parallel()
+	compiled, err := xpath3.NewCompiler().Compile(`unparsed-text("data.txt")`)
+	require.NoError(t, err)
+
+	res := testURIResolver{"http://example.com/base/data.txt": strings.Repeat("a", 100)}
+
+	t.Run("over limit fails", func(t *testing.T) {
+		_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			BaseURI("http://example.com/base/").
+			URIResolver(res).
+			MaxResourceBytes(10).
+			Evaluate(t.Context(), compiled, nil)
+		require.Error(t, err)
+		var xpErr *xpath3.XPathError
+		require.ErrorAs(t, err, &xpErr)
+		require.Equal(t, "FOUT1170", xpErr.Code)
+	})
+
+	t.Run("under limit succeeds", func(t *testing.T) {
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			BaseURI("http://example.com/base/").
+			URIResolver(res).
+			MaxResourceBytes(1000).
+			Evaluate(t.Context(), compiled, nil)
+		require.NoError(t, err)
+		s, ok := result.IsString()
+		require.True(t, ok)
+		require.Len(t, s, 100)
+	})
+}
+
+func TestMaxResourceBytesJSONDoc(t *testing.T) {
+	t.Parallel()
+	compiled, err := xpath3.NewCompiler().Compile(`json-doc("data.json")?name`)
+	require.NoError(t, err)
+
+	// A small valid JSON object padded past the cap with whitespace.
+	body := `{"name":"helium"}` + strings.Repeat(" ", 100)
+	res := testURIResolver{"http://example.com/base/data.json": body}
+
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		BaseURI("http://example.com/base/").
+		URIResolver(res).
+		MaxResourceBytes(10).
+		Evaluate(t.Context(), compiled, nil)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "FODC0002", xpErr.Code)
+}
+
 // H1: fn:doc / fn:unparsed-text must be secure-by-default — no implicit
 // HTTP fetches, no implicit os.ReadFile reads, no XXE in fetched docs.
 

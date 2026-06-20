@@ -334,6 +334,79 @@ func TestReadURI(t *testing.T) {
 	})
 }
 
+func TestMaxBytes(t *testing.T) {
+	t.Run("resolver over limit fails (LoadText)", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "big.txt")
+		require.NoError(t, os.WriteFile(path, []byte(strings.Repeat("a", 100)), 0644))
+
+		cfg := &unparsedtext.Config{
+			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
+			MaxBytes:    10,
+		}
+		_, err := unparsedtext.LoadText(t.Context(), cfg, "file://"+path, "")
+		require.Error(t, err)
+		var ue *unparsedtext.Error
+		require.ErrorAs(t, err, &ue)
+		require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
+	})
+
+	t.Run("resolver at limit succeeds", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "exact.txt")
+		require.NoError(t, os.WriteFile(path, []byte(strings.Repeat("a", 10)), 0644))
+
+		cfg := &unparsedtext.Config{
+			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
+			MaxBytes:    10,
+		}
+		text, err := unparsedtext.LoadText(t.Context(), cfg, "file://"+path, "")
+		require.NoError(t, err)
+		require.Equal(t, strings.Repeat("a", 10), text)
+	})
+
+	t.Run("resolver over limit fails (ReadURI / json-doc path)", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "big.json")
+		require.NoError(t, os.WriteFile(path, []byte(strings.Repeat("a", 100)), 0644))
+
+		cfg := &unparsedtext.Config{
+			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
+			MaxBytes:    10,
+		}
+		_, err := unparsedtext.ReadURI(t.Context(), cfg, "file://"+path)
+		require.Error(t, err)
+		var ue *unparsedtext.Error
+		require.ErrorAs(t, err, &ue)
+		require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
+	})
+
+	t.Run("http over limit fails", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(strings.Repeat("a", 100)))
+		}))
+		defer srv.Close()
+
+		cfg := &unparsedtext.Config{HTTPClient: srv.Client(), MaxBytes: 10}
+		_, err := unparsedtext.ReadURI(t.Context(), cfg, srv.URL+"/big.txt")
+		require.Error(t, err)
+	})
+
+	t.Run("negative limit disables bound", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "big.txt")
+		require.NoError(t, os.WriteFile(path, []byte(strings.Repeat("a", 100)), 0644))
+
+		cfg := &unparsedtext.Config{
+			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
+			MaxBytes:    -1,
+		}
+		text, err := unparsedtext.LoadText(t.Context(), cfg, "file://"+path, "")
+		require.NoError(t, err)
+		require.Len(t, text, 100)
+	})
+}
+
 func TestLoadText(t *testing.T) {
 	t.Run("basic file load via resolver", func(t *testing.T) {
 		dir := t.TempDir()

@@ -336,6 +336,9 @@ func (ss *Stylesheet) newNestedCompiler() Compiler {
 	if len(ss.compilerImportSchemas) > 0 {
 		c = c.ImportSchemas(ss.compilerImportSchemas...)
 	}
+	if ss.maxResourceBytes != 0 {
+		c = c.MaxResourceBytes(ss.maxResourceBytes)
+	}
 	return c
 }
 
@@ -469,7 +472,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve stylesheet %q: %v", stylesheetLoc, resolveErr)
 		}
 		var readErr error
-		data, readErr = readResourceBounded(rc)
+		data, readErr = readResourceBounded(rc, ec.resourceLimit())
 		// Close right after reading rather than deferring: the rest of this
 		// function parses, compiles and runs the stylesheet, and we must not
 		// hold the source handle open across that work.
@@ -497,7 +500,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if resolveErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve package %q (version %q): %v", packageName, packageVersion, resolveErr)
 		}
-		data, readErr := readResourceBounded(rc)
+		data, readErr := readResourceBounded(rc, ec.resourceLimit())
 		_ = rc.Close()
 		if readErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read package %q: %v", packageName, readErr)

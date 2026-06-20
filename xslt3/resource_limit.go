@@ -22,13 +22,31 @@ const MaxResourceBytes = 10 << 20 // 10 MiB
 // cannot bypass it.
 var ErrResourceTooLarge = errors.New("xslt3: external resource exceeds maximum allowed size")
 
-// readResourceBounded reads from r through an [io.LimitReader] capped at
-// [MaxResourceBytes], returning [ErrResourceTooLarge] when the source is larger.
+// resolveResourceLimit maps a configured cap to the value actually enforced:
+// 0 selects the default [MaxResourceBytes] and a negative value disables the
+// bound. Call sites pass the value configured on the Compiler / Invocation.
+func resolveResourceLimit(configured int64) int64 {
+	if configured == 0 {
+		return MaxResourceBytes
+	}
+	return configured
+}
+
+// readResourceBounded reads from r through an [io.LimitReader] capped at limit,
+// returning [ErrResourceTooLarge] when the source is larger. A limit of 0
+// selects the default [MaxResourceBytes]; a negative limit disables the bound.
 // It replaces unbounded io.ReadAll calls on resolver / HTTP bodies so a single
 // external resource cannot exhaust process memory. The default-permitted set of
 // resources is unchanged; only the read size is bounded.
-func readResourceBounded(r io.Reader) ([]byte, error) {
-	const limit int64 = MaxResourceBytes
+func readResourceBounded(r io.Reader, limit int64) ([]byte, error) {
+	limit = resolveResourceLimit(limit)
+	if limit < 0 {
+		data, err := io.ReadAll(r)
+		if err != nil {
+			return nil, err //nolint:wrapcheck // callers wrap with the URI for context
+		}
+		return data, nil
+	}
 
 	// Read one byte past the cap so a resource exactly at the limit succeeds
 	// while anything larger is detected. Guard against overflow even though the

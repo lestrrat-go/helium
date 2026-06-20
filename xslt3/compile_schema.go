@@ -83,7 +83,7 @@ func (c *compiler) loadSchemaBytes(_ context.Context, uri string) ([]byte, error
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, err)
 	}
-	data, err := readCloserToBytes(rc)
+	data, err := readCloserToBytes(rc, c.maxResourceBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read schema %q: %w", uri, err)
 	}

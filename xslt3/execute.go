@@ -995,6 +995,11 @@ func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator 
 		if c := ec.transformConfig.httpClient; c != nil {
 			eval = eval.HTTPClient(c)
 		}
+		// Map the xslt3 resource cap onto the xpath3 evaluator so
+		// fn:unparsed-text / fn:json-doc reads honor the same bound. The
+		// xpath3 setter takes 0 = unparsedtext default, so translate the
+		// xslt3 0-means-default convention into the concrete default here.
+		eval = eval.MaxResourceBytes(resolveResourceLimit(ec.resourceLimit()))
 	}
 	return eval
 }

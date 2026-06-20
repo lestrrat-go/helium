@@ -124,8 +124,9 @@ func (i schemaResolverFileInfo) ModTime() time.Time { return time.Time{} }
 func (i schemaResolverFileInfo) IsDir() bool        { return false }
 func (i schemaResolverFileInfo) Sys() any           { return nil }
 
-// readCloserToBytes drains and closes a resolver-provided reader.
-func readCloserToBytes(rc io.ReadCloser) ([]byte, error) {
+// readCloserToBytes drains and closes a resolver-provided reader, bounding the
+// read at limit (0 = MaxResourceBytes default, <0 = unbounded).
+func readCloserToBytes(rc io.ReadCloser, limit int64) ([]byte, error) {
 	defer func() { _ = rc.Close() }()
-	return readResourceBounded(rc)
+	return readResourceBounded(rc, limit)
 }

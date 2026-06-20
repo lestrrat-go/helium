@@ -34,7 +34,7 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 	}
 	defer func() { _ = rc.Close() }()
 
-	data, err := readResourceBounded(rc)
+	data, err := readResourceBounded(rc, c.maxResourceBytes)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot read package %q: %w", pkgName, err)
 	}

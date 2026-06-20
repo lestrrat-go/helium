@@ -93,6 +93,8 @@ type invocationConfig struct {
 	onMultipleMatch     OnMultipleMatchMode
 	traceWriter         io.Writer
 	globalContextSelect string // XPath for global context item (evaluated post-strip-space)
+	maxResourceBytes    int64  // per-resource read cap; 0 = inherit compiler/default, <0 = unbounded
+	maxResourceBytesSet bool   // true once MaxResourceBytes is explicitly configured
 
 	// resolved holds the effective output definition for the primary result
 	// after a terminal method (Do/Serialize/WriteTo) completes. It is stored
@@ -341,6 +343,20 @@ func (inv Invocation) GlobalContextSelect(expr string) Invocation {
 	return inv
 }
 
+// MaxResourceBytes sets the maximum number of bytes read from a single
+// external resource fetched at runtime through the configured URIResolver /
+// HTTPClient — fn:doc / document(), fn:unparsed-text, fn:json-doc,
+// fn:doc-available, and fn:transform stylesheet sources. A value of 0 inherits
+// the cap configured on the Compiler (or the [MaxResourceBytes] default); a
+// negative value disables the bound. Reads exceeding the cap fail with
+// [ErrResourceTooLarge].
+func (inv Invocation) MaxResourceBytes(n int64) Invocation {
+	inv = inv.clone()
+	inv.cfg.maxResourceBytes = n
+	inv.cfg.maxResourceBytesSet = true
+	return inv
+}
+
 // Do executes the transformation and returns the principal result document.
 func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 	if err := inv.validate(); err != nil {
@@ -467,6 +483,15 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		sourceSchemas:      c.sourceSchemas,
 		onMultipleMatch:    c.onMultipleMatch.String(),
 		traceWriter:        c.traceWriter,
+	}
+
+	// Resource cap: an explicit per-invocation setting wins; otherwise inherit
+	// the cap configured on the Compiler (stored on the stylesheet). 0 then
+	// falls through to the MaxResourceBytes default at the read sites.
+	if c.maxResourceBytesSet {
+		tcfg.maxResourceBytes = c.maxResourceBytes
+	} else if c.ss != nil {
+		tcfg.maxResourceBytes = c.ss.maxResourceBytes
 	}
 
 	// Entry mode
