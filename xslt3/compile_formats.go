@@ -1096,12 +1096,19 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 	}
 	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
 
+	// Resolve prefixes using the namespace context in scope at this
+	// declaration. Imported modules may bind the same prefix to a different
+	// URI than the importing module, so resolution must use the element's own
+	// in-scope bindings rather than a single flat stylesheet-wide map.
+	declNS := c.spaceDeclNamespaces(elem)
+
 	for name := range strings.FieldsSeq(elements) {
-		nt := nameTest{}
+		nt := nameTest{ImportPrec: c.importPrec}
 		// Handle EQName syntax: Q{uri}local
 		if strings.HasPrefix(name, "Q{") {
 			if closeIdx := strings.IndexByte(name, '}'); closeIdx > 0 {
-				nt.Prefix = "Q{" + name[2:closeIdx] + "}"
+				nt.URI = name[2:closeIdx]
+				nt.HasURI = true
 				nt.Local = name[closeIdx+1:]
 			} else {
 				nt.Local = name
@@ -1109,11 +1116,15 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 		} else if prefix, local, ok := strings.Cut(name, ":"); ok {
 			nt.Prefix = prefix
 			nt.Local = local
-			// XTSE0280: check that the prefix is declared (skip EQName and wildcards)
-			if !strings.HasPrefix(nt.Prefix, "Q{") && nt.Prefix != "*" {
-				if _, ok := c.nsBindings[nt.Prefix]; !ok {
-					return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in xsl:%s elements attribute", nt.Prefix, kind)
+			// "*:NCName" matches the local name in any namespace; no URI binding.
+			if prefix != "*" {
+				// XTSE0280: the prefix must be declared in scope here.
+				uri, ok := declNS[prefix]
+				if !ok {
+					return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in xsl:%s elements attribute", prefix, kind)
 				}
+				nt.URI = uri
+				nt.HasURI = true
 			}
 		} else {
 			nt.Local = name
@@ -1132,36 +1143,278 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 	return nil
 }
 
-// nameTestKey returns a canonical key for a nameTest by resolving the prefix
-// to a URI. EQName prefixes of the form "Q{uri}" are used as-is.
-func (c *compiler) nameTestKey(_ context.Context, nt nameTest) string {
-	uri := ""
-	if strings.HasPrefix(nt.Prefix, "Q{") {
-		uri = nt.Prefix[2 : len(nt.Prefix)-1]
-	} else if nt.Prefix != "" {
-		uri = c.nsBindings[nt.Prefix]
-	} else if nt.HasURI {
-		uri = nt.URI
+// spaceDeclNamespaces returns the namespace bindings in scope at an
+// xsl:strip-space / xsl:preserve-space declaration. Only the element's own
+// ancestor chain in the source tree (plus the implicit "xml" prefix) is
+// authoritative for declaration-time resolution. Compiler-wide bindings are NOT
+// consulted: they may carry prefixes from imported modules that are not in
+// scope here, which would wrongly accept an undeclared prefix instead of
+// raising XTSE0280.
+func (c *compiler) spaceDeclNamespaces(elem *helium.Element) map[string]string {
+	bindings := map[string]string{
+		// The "xml" prefix is implicitly bound in every XML document.
+		lexicon.PrefixXML: lexicon.NamespaceXML,
 	}
-	return helium.ClarkName(uri, nt.Local)
+	// Walk descendant-to-ancestor; nearest declaration wins.
+	for n := helium.Node(elem); n != nil; n = n.Parent() {
+		e, ok := n.(*helium.Element)
+		if !ok {
+			continue
+		}
+		for _, ns := range e.Namespaces() {
+			if _, exists := bindings[ns.Prefix()]; !exists {
+				bindings[ns.Prefix()] = ns.URI()
+			}
+		}
+	}
+	return bindings
 }
 
-// checkSpaceConflicts detects NameTests that appear in both xsl:strip-space
-// and xsl:preserve-space at the same import precedence (XTSE0270).
-func (c *compiler) checkSpaceConflicts(ctx context.Context) error {
+// nameTestKey returns a canonical conflict key for a nameTest. The key encodes
+// the NameTest KIND in addition to its resolved name so that NameTests of
+// different shapes never collide. A collision would raise a false XTSE0270 for a
+// strip/preserve pair whose match priorities differ and is therefore resolved at
+// runtime rather than being a genuine conflict. XTSE0270 must fire only for two
+// rules of the SAME kind and SAME name at the same import precedence.
+//
+// The four distinguished kinds (with their effective match priorities) are:
+//
+//   - universal wildcard "*"        (priority -0.5)
+//   - namespace wildcard "prefix:*" / "Q{uri}*" (priority -0.25)
+//   - local-name wildcard "*:local" (priority -0.25)
+//   - exact expanded name           (priority  0)
+//
+// The two -0.25 kinds share a priority but never match the same node by the same
+// criterion (one fixes the namespace, the other fixes the local name), so they
+// are kept as separate kinds.
+func nameTestKey(nt nameTest) string {
+	uri := ""
+	if nt.HasURI {
+		uri = nt.URI
+	}
+	switch {
+	case nt.Prefix == "*":
+		// "*:local" — local-name wildcard (namespace unconstrained).
+		return "L:" + nt.Local
+	case nt.Local == "*" && nt.HasURI:
+		// "prefix:*" / "Q{uri}*" — namespace wildcard.
+		return "N:" + uri
+	case nt.Local == "*":
+		// "*" — universal wildcard.
+		return "U:"
+	default:
+		// Exact expanded name.
+		return "E:" + helium.ClarkName(uri, nt.Local)
+	}
+}
+
+// nameTestURI returns the effective namespace URI of a NameTest ("" when unset).
+func nameTestURI(nt nameTest) string {
+	if nt.HasURI {
+		return nt.URI
+	}
+	return ""
+}
+
+// isUniversalNameTest reports whether nt is the universal wildcard "*", which
+// matches every expanded name in any namespace.
+func isUniversalNameTest(nt nameTest) bool {
+	return nt.Local == "*" && nt.Prefix == "" && !nt.HasURI
+}
+
+// isNSWildcardNameTest reports whether nt is a namespace wildcard "Q{uri}*" /
+// "prefix:*", which matches every local name in a fixed namespace.
+func isNSWildcardNameTest(nt nameTest) bool {
+	return nt.Local == "*" && !isUniversalNameTest(nt)
+}
+
+// isLocalWildcardNameTest reports whether nt is a local-name wildcard "*:local",
+// which matches a fixed local name in any namespace.
+func isLocalWildcardNameTest(nt nameTest) bool {
+	return nt.Prefix == "*"
+}
+
+// ruleCoversRegion reports whether NameTest h matches EVERY expanded name in
+// region's match-set (h's set ⊇ region's set). A region is one of the four
+// NameTest kinds. Because a wildcard region has infinitely many names, only a
+// rule at least as general as the region can cover it; finitely many narrower
+// rules never can. This makes single-rule coverage both sound and complete for
+// deciding whether a higher-precedence layer resolves a strip/preserve overlap.
+func ruleCoversRegion(h, region nameTest) bool {
+	switch {
+	case isUniversalNameTest(h):
+		return true // "*" matches every name
+	case isNSWildcardNameTest(h):
+		// Covers a region only if every name in the region lies in uri(h):
+		// the same namespace wildcard, or an exact name in that namespace.
+		switch {
+		case isNSWildcardNameTest(region):
+			return nameTestURI(h) == nameTestURI(region)
+		case !isUniversalNameTest(region) && !isLocalWildcardNameTest(region) && region.Local != "*":
+			// region is exact
+			return nameTestURI(h) == nameTestURI(region)
+		default:
+			return false // universal / local-name-wildcard region spans other namespaces
+		}
+	case isLocalWildcardNameTest(h):
+		// Covers a region only if every name in the region has local name h.Local:
+		// the same local-name wildcard, or an exact name with that local.
+		switch {
+		case isLocalWildcardNameTest(region):
+			return h.Local == region.Local
+		case !isUniversalNameTest(region) && !isNSWildcardNameTest(region):
+			// region is exact
+			return h.Local == region.Local
+		default:
+			return false // universal / namespace-wildcard region spans other local names
+		}
+	default: // h is exact; can only cover a single exact name equal to it
+		if isUniversalNameTest(region) || isNSWildcardNameTest(region) || isLocalWildcardNameTest(region) {
+			return false
+		}
+		return nameTestURI(h) == nameTestURI(region) && h.Local == region.Local
+	}
+}
+
+// checkSpaceConflicts detects NameTests that appear in both xsl:strip-space and
+// xsl:preserve-space. Conflicts are resolved per-name by import precedence and
+// match priority: for a given element name, the rule of highest import precedence
+// (then highest match priority) decides whether it is stripped or preserved.
+//
+// Per the W3C XTSE0270 semantics, a STATIC conflict arises for a strip rule and a
+// preserve rule that match an OVERLAPPING set of names at the SAME import
+// precedence AND the SAME match priority, where neither rule outranks the other
+// for the names they both match. Two cases produce such an unresolvable overlap:
+//
+//   - SAME resolved NameTest (same kind, same name-set): e.g. "item" vs "item",
+//     or "*:item" vs "*:item". Detected via nameTestKey.
+//   - DIFFERENT-shape wildcards of EQUAL priority whose match-sets intersect:
+//     "*:item" (local-name wildcard) vs "Q{urn:A}*" (namespace wildcard) both
+//     match Q{urn:A}item at priority -0.25, and neither is more specific than the
+//     other on that name, so the strip/preserve outcome is undecidable. Detected
+//     via nameTestsOverlapEqualPriority + the derived overlap region.
+//
+// A NameTest of HIGHER priority that intersects the other (e.g. an exact name vs
+// a wildcard) is NOT a static conflict: the more specific rule wins per-name at
+// RUNTIME, so those pairs are deliberately left to runtime resolution.
+//
+// A candidate same-precedence/priority overlap is still NOT a genuine conflict
+// when a rule of STRICTLY HIGHER import precedence (of either kind) covers the
+// entire overlap region: per XSLT's per-name precedence resolution, XTSE0270
+// fires only at the HIGHEST precedence that matches a given name, so a
+// higher-precedence rule resolves the names it matches (see spaceRegionCovered).
+//
+// The check must NOT be filtered by each kind's globally-highest precedence: an
+// unrelated higher-precedence rule (e.g. a higher-precedence strip-space for "b")
+// does not cover the name-set of an "a" vs "a" conflict, so it must not cancel
+// that genuine same-precedence conflict.
+func (c *compiler) checkSpaceConflicts(_ context.Context) error {
 	if len(c.stylesheet.stripSpace) == 0 || len(c.stylesheet.preserveSpace) == 0 {
 		return nil
 	}
-	stripKeys := make(map[string]struct{}, len(c.stylesheet.stripSpace))
-	for _, nt := range c.stylesheet.stripSpace {
-		stripKeys[c.nameTestKey(ctx, nt)] = struct{}{}
-	}
-	for _, nt := range c.stylesheet.preserveSpace {
-		key := c.nameTestKey(ctx, nt)
-		if _, ok := stripKeys[key]; ok {
+	// Scan every strip/preserve pair. A pair is a candidate conflict when its
+	// rules carry equal import precedence and an unresolvable overlap (same
+	// name-set, or different-shape wildcards of equal priority that intersect). It
+	// is a genuine conflict only if no rule of higher import precedence covers the
+	// overlap region.
+	for _, sNT := range c.stylesheet.stripSpace {
+		sKey := nameTestKey(sNT)
+		for _, pNT := range c.stylesheet.preserveSpace {
+			if sNT.ImportPrec != pNT.ImportPrec {
+				continue
+			}
+			region, ok := spaceConflictRegion(sNT, pNT, sKey)
+			if !ok {
+				continue
+			}
+			if c.spaceRegionCovered(region, sNT.ImportPrec) {
+				continue
+			}
 			return staticError(errCodeXTSE0270,
-				"conflicting xsl:strip-space and xsl:preserve-space for %q", key)
+				"conflicting xsl:strip-space and xsl:preserve-space for %q at the same import precedence",
+				nameTestKey(region))
 		}
 	}
 	return nil
+}
+
+// spaceConflictRegion reports whether a strip NameTest s and a preserve NameTest
+// p form an unresolvable static overlap (equal match priority, intersecting
+// match-sets, neither outranking the other) and, if so, returns the NameTest
+// describing the overlap region — the set of names BOTH match. sKey is
+// nameTestKey(s), passed in to avoid recomputation.
+//
+// Only EQUAL-priority pairs can be statically unresolvable: when priorities
+// differ, the higher-priority rule wins per-name at runtime. Among equal-priority
+// pairs the cases are:
+//
+//   - same kind, same name-set (equal nameTestKey): the region is that shared
+//     NameTest itself.
+//   - namespace wildcard "Q{ns}*" vs local-name wildcard "*:local" (both priority
+//     -0.25): they always intersect on the single exact name Q{ns}local, which is
+//     the overlap region.
+//
+// Two namespace wildcards (or two local-name wildcards) of DIFFERENT name never
+// intersect, and equal-name same-kind pairs are caught by the equal-key case, so
+// no other equal-priority cross pairs reach the wildcard branch.
+func spaceConflictRegion(s, p nameTest, sKey string) (nameTest, bool) {
+	if sKey == nameTestKey(p) {
+		// Same resolved NameTest: the overlap region is the shared name-set.
+		return s, true
+	}
+	if nameTestPriority(s) != nameTestPriority(p) {
+		// Differing priority: the more specific rule decides per-name at runtime.
+		return nameTest{}, false
+	}
+	// Equal priority, different keys. The only such intersecting pair is a
+	// namespace wildcard vs a local-name wildcard; their overlap is the single
+	// exact name Q{ns}local.
+	ns, ok := nsAndLocalWildcardOverlap(s, p)
+	if !ok {
+		return nameTest{}, false
+	}
+	return ns, true
+}
+
+// nsAndLocalWildcardOverlap returns the exact-name overlap region of a namespace
+// wildcard "Q{ns}*" and a local-name wildcard "*:local" — the single name
+// Q{ns}local that both match — in either argument order. ok is false when the
+// pair is not one namespace wildcard and one local-name wildcard.
+func nsAndLocalWildcardOverlap(a, b nameTest) (nameTest, bool) {
+	nsw, lw := a, b
+	if isLocalWildcardNameTest(a) && isNSWildcardNameTest(b) {
+		nsw, lw = b, a
+	}
+	if !isNSWildcardNameTest(nsw) || !isLocalWildcardNameTest(lw) {
+		return nameTest{}, false
+	}
+	// Exact name in the namespace of the namespace wildcard with the local name of
+	// the local-name wildcard.
+	return nameTest{
+		Local:  lw.Local,
+		URI:    nameTestURI(nsw),
+		HasURI: nsw.HasURI,
+	}, true
+}
+
+// spaceRegionCovered reports whether the entire overlap region of a conflicting
+// strip/preserve pair (declared at import precedence prec) is matched by some
+// rule of STRICTLY HIGHER import precedence — strip OR preserve, either kind.
+// Such a rule resolves every name in the region per XSLT's per-name precedence
+// rule, so no XTSE0270 conflict survives. Coverage of a (possibly wildcard)
+// region is decided one rule at a time: a wildcard region is only ever covered by
+// a single rule at least as general as it, so a union of narrower higher rules
+// can never spuriously "cover" it (see ruleCoversRegion).
+func (c *compiler) spaceRegionCovered(region nameTest, prec int) bool {
+	for _, h := range c.stylesheet.stripSpace {
+		if h.ImportPrec > prec && ruleCoversRegion(h, region) {
+			return true
+		}
+	}
+	for _, h := range c.stylesheet.preserveSpace {
+		if h.ImportPrec > prec && ruleCoversRegion(h, region) {
+			return true
+		}
+	}
+	return false
 }
