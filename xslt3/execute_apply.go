@@ -832,7 +832,7 @@ func instanceOfItemType(item xpath3.Item, itemType string, ec *execContext) bool
 		parts := splitTopLevelTypeArgs(inner)
 		reqName := strings.TrimSpace(parts[0])
 		if reqName != "*" {
-			reqLocal, reqNS := resolveSchemaQName(reqName, ec)
+			reqLocal, reqNS := resolveSchemaQName(reqName, qnameElementName, ec)
 			elem, isElem := ni.Node.(*helium.Element)
 			if !isElem || elem.LocalName() != reqLocal || elem.URI() != reqNS {
 				return false

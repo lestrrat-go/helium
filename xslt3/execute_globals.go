@@ -78,7 +78,7 @@ func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig)
 // xsl:global-context-item declaration. Returns XTDE3086 when the declaration
 // requires a context item but none is supplied, and XTTE0590 if the supplied
 // source doesn't match the declared type.
-func (ec *execContext) validateGlobalContextItem(source *helium.Document) error {
+func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *helium.Document) error {
 	if err := validateUsedPackageGlobalContextItem(ec.stylesheet, map[*Stylesheet]struct{}{}); err != nil {
 		return err
 	}
@@ -95,25 +95,31 @@ func (ec *execContext) validateGlobalContextItem(source *helium.Document) error 
 	if gci.As == "" {
 		return nil
 	}
-	// Parse "document-node(element(name))" pattern
-	as := gci.As
-	if strings.HasPrefix(as, "document-node(element(") && strings.HasSuffix(as, "))") {
-		inner := as[len("document-node(element(") : len(as)-2]
-		// Strip namespace prefix if present
-		if idx := strings.IndexByte(inner, ':'); idx >= 0 {
-			inner = inner[idx+1:]
-		}
-		// Check document element name
-		root := source.DocumentElement()
-		if root == nil {
-			return dynamicError(errCodeXTTE0590,
-				"global-context-item requires document-node(element(%s)) but document has no element", inner)
-		}
-		if root.LocalName() != inner {
-			return dynamicError(errCodeXTTE0590,
-				"global-context-item requires document-node(element(%s)) but found element %q",
-				inner, root.LocalName())
-		}
+	// Validate the supplied global context item (the source document node)
+	// against the declared sequence type using the namespace-aware type
+	// machinery, so that prefixed element tests like
+	// document-node(element(p:root)) compare both local name and namespace
+	// rather than local name alone. Prefixes and the default element namespace
+	// in the @as type must resolve against the namespace context of the
+	// xsl:global-context-item declaration itself, not the runtime
+	// stylesheet-wide context, so install the saved declaration-site context
+	// for the duration of the check.
+	savedNSOverride := ec.nsOverride
+	savedXPathDefaultNS := ec.xpathDefaultNS
+	savedHasXPathDefaultNS := ec.hasXPathDefaultNS
+	ec.nsOverride = gci.Namespaces
+	ec.xpathDefaultNS = gci.XPathDefaultNS
+	ec.hasXPathDefaultNS = gci.HasXPathDefaultNS
+	defer func() {
+		ec.nsOverride = savedNSOverride
+		ec.xpathDefaultNS = savedXPathDefaultNS
+		ec.hasXPathDefaultNS = savedHasXPathDefaultNS
+	}()
+
+	st := parseSequenceType(gci.As)
+	seq := xpath3.ItemSlice{xpath3.NodeItem{Node: source}}
+	if _, err := checkSequenceType(ctx, seq, st, errCodeXTTE0590, "global-context-item", ec); err != nil {
+		return err
 	}
 	return nil
 }
