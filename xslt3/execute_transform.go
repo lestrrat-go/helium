@@ -16,48 +16,22 @@ import (
 
 // remapSelectionToCopy rewrites the node items of an initial match selection so
 // that any node belonging to the original source document points instead to the
-// corresponding node in copyDoc, a faithful deep copy of orig produced by
-// helium.CopyDoc. Items that are not nodes, or that belong to a different
-// document (e.g. fn:doc()-loaded), are passed through unchanged.
+// corresponding node in the stripped copy. Items that are not nodes, or that
+// belong to a different document (e.g. fn:doc()-loaded), are passed through
+// unchanged.
 //
-// The correspondence is established by a parallel pre-order walk of orig and
-// copyDoc: CopyDoc reproduces children in document order, so the two trees have
-// identical shape and the i-th node visited in orig matches the i-th node in
-// copyDoc. Attributes are not part of the FirstChild/NextSibling spine, so for
-// each matching element pair their attributes are mapped separately by expanded
-// (URI, local) name. Namespace nodes are wrappers that are likewise off the
-// child spine; a selected *helium.NamespaceNodeWrapper is remapped by locating
-// the mapped owner element and rebuilding an equivalent wrapper bound to a
-// matching namespace declaration in scope on the copy. This ensures every
-// selected node (element, text, comment, PI, attribute, namespace) points into
-// the stripped copy, so XPath navigation from a matched template observes the
-// same tree as the context node.
-func remapSelectionToCopy(sel xpath3.Sequence, orig, copyDoc *helium.Document) xpath3.Sequence {
-	nodeMap := make(map[helium.Node]helium.Node)
-	var walk func(a, b helium.Node)
-	walk = func(a, b helium.Node) {
-		if a == nil || b == nil {
-			return
-		}
-		nodeMap[a] = b
-		// Attributes hang off the element's property list, not the child spine,
-		// so map them here. CopyDoc preserves attribute identity by expanded
-		// name, which is unique per element, so match on (URI, local).
-		if ea, ok := a.(*helium.Element); ok {
-			if eb, ok := b.(*helium.Element); ok {
-				mapElementAttributes(nodeMap, ea, eb)
-			}
-		}
-		ca := a.FirstChild()
-		cb := b.FirstChild()
-		for ca != nil && cb != nil {
-			walk(ca, cb)
-			ca = ca.NextSibling()
-			cb = cb.NextSibling()
-		}
-	}
-	walk(orig, copyDoc)
-
+// nodeMap is the original->copy correspondence built by copyAndStrip during the
+// single-pass copy. Because whitespace-only nodes are omitted from the copy, the
+// two trees no longer share a child shape, so the map (not a parallel walk) is
+// the only correct source of correspondence. It already covers elements,
+// text/comment/PI leaves, the document node, and each element's attributes (keyed
+// by expanded name). Namespace nodes are wrappers off the child spine; a selected
+// *helium.NamespaceNodeWrapper is remapped by locating the mapped owner element
+// and rebuilding an equivalent wrapper bound to a matching namespace declaration
+// in scope on the copy. This ensures every selected node (element, text, comment,
+// PI, attribute, namespace) points into the stripped copy, so XPath navigation
+// from a matched template observes the same tree as the context node.
+func remapSelectionToCopy(sel xpath3.Sequence, nodeMap map[helium.Node]helium.Node) xpath3.Sequence {
 	items := make(xpath3.ItemSlice, 0, sequence.Len(sel))
 	for i := range sequence.Len(sel) {
 		item := sel.Get(i)
@@ -133,43 +107,6 @@ func remapNamespaceWrapper(nodeMap map[helium.Node]helium.Node, nsw *helium.Name
 	return nil
 }
 
-// pruneRedundantNamespaceDecls removes namespace declarations on copied elements
-// that merely repeat a declaration already in scope from an ancestor with the
-// same prefix and URI. helium.CopyDoc re-declares an element's active namespace
-// on every element, even when an ancestor already declares it; those redundant
-// declarations would otherwise change how a copied subtree serializes (the
-// original declared the namespace only once, at the top). Pruning them restores
-// byte-for-byte serialization parity with the original tree. Only exact
-// (prefix, URI) duplicates of an in-scope ancestor declaration are removed, so a
-// genuine re-binding of a prefix to a different URI is preserved.
-func pruneRedundantNamespaceDecls(doc *helium.Document) {
-	var walk func(elem *helium.Element, inScope map[string]string)
-	walk = func(elem *helium.Element, inScope map[string]string) {
-		// childScope = inScope plus this element's surviving (non-redundant)
-		// declarations. Build it as a private copy so sibling subtrees do not
-		// observe each other's declarations.
-		childScope := make(map[string]string, len(inScope)+len(elem.Namespaces()))
-		maps.Copy(childScope, inScope)
-		var redundant []string
-		for _, ns := range elem.Namespaces() {
-			if inScope[ns.Prefix()] == ns.URI() {
-				redundant = append(redundant, ns.Prefix())
-				continue
-			}
-			childScope[ns.Prefix()] = ns.URI()
-		}
-		for _, prefix := range redundant {
-			elem.RemoveNamespaceByPrefix(prefix)
-		}
-		for child := range helium.ChildElements(elem) {
-			walk(child, childScope)
-		}
-	}
-	for child := range helium.ChildElements(doc) {
-		walk(child, map[string]string{})
-	}
-}
-
 // cloneOutputDef returns a deep copy of an OutputDef. All pointer, slice, and
 // map fields are freshly allocated so that mutating the clone (or the original)
 // never affects the other. Returns nil if src is nil.
@@ -236,28 +173,28 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		matchSelection = cfg.initialMatchSelection
 	}
 	if len(ss.stripSpace) > 0 && effectiveSource != nil {
-		srcCopy, copyErr := helium.CopyDoc(effectiveSource)
+		// copyAndStrip deep-copies the source, omits the whitespace-only text
+		// nodes strip-space would remove, declares namespaces without
+		// over-declaration, and preserves the URI/DTD — all in a single
+		// traversal. This replaces the former three-pass approach
+		// (CopyDoc + pruneRedundantNamespaceDecls + stripWhitespaceFromDoc) and
+		// is byte-for-byte equivalent. At this point the effective strip/preserve
+		// rules are the stylesheet's own (no package scope is active yet).
+		// Only build the original->copy node map when there is a selection to
+		// remap; the common case (no selection) skips that bookkeeping entirely.
+		needMap := matchSelection != nil && sequence.Len(matchSelection) > 0
+		srcCopy, nodeMap, copyErr := copyAndStrip(effectiveSource, ss.stripSpace, ss.preserveSpace, needMap)
 		if copyErr != nil {
 			return nil, copyErr
 		}
-		// Preserve the document URI so base-URI resolution (fn:doc(""), relative
-		// fn:doc()/fn:document() loads, xsl:result-document hrefs) on the copy
-		// resolves exactly as it would against the original.
-		srcCopy.SetURL(effectiveSource.URL())
-		// helium.CopyDoc re-declares an element's active namespace on every
-		// element even when an ancestor already declares it, which would alter
-		// serialization of the copied tree (e.g. via fn:serialize on a source
-		// subtree). Drop those redundant declarations so the copy round-trips
-		// identically to the original.
-		pruneRedundantNamespaceDecls(srcCopy)
 		// The initial match selection (if any) was computed against the original
 		// source tree, so its node items still point into the original. Remap any
 		// selected node that lives in the original source into the corresponding
 		// node of the copy so template matching runs over the same (stripped)
 		// tree as the context node. Selected nodes from other documents (e.g.
 		// fn:doc()-loaded) are left untouched.
-		if matchSelection != nil && sequence.Len(matchSelection) > 0 {
-			matchSelection = remapSelectionToCopy(matchSelection, effectiveSource, srcCopy)
+		if needMap {
+			matchSelection = remapSelectionToCopy(matchSelection, nodeMap)
 		}
 		effectiveSource = srcCopy
 	}
@@ -372,11 +309,8 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		}
 	}
 
-	// Apply xsl:strip-space to the source document so that whitespace-only
-	// text nodes are removed before template matching and XPath evaluation.
-	if len(ss.stripSpace) > 0 && effectiveSource != nil {
-		ec.stripWhitespaceFromDoc(effectiveSource)
-	}
+	// xsl:strip-space whitespace removal already happened during copyAndStrip
+	// above, so the source document seen here is the stripped copy.
 
 	// When a globalContextSelect expression is provided, evaluate it against
 	// the (possibly stripped) source document.  If the result is empty, the

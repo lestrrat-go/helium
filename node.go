@@ -784,6 +784,16 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 	return nil
 }
 
+// AddNamespaceDecl appends an existing Namespace to this node's declarations
+// (nsDefs) without allocating a new one. Unlike DeclareNamespace it does not
+// create a fresh Namespace, so a caller building a tree can reuse one Namespace
+// object as both the declaration and an element's active namespace. The caller
+// owns ns; it must not be shared as a declaration across nodes that could be
+// mutated independently.
+func (n *node) AddNamespaceDecl(ns *Namespace) {
+	n.nsDefs = append(n.nsDefs, ns)
+}
+
 // SetActiveNamespace declares a namespace and sets it as this node's active
 // namespace (libxml2: xmlSetNs).
 func (n *node) SetActiveNamespace(prefix, uri string) error {
