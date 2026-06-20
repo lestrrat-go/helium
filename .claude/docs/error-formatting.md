@@ -91,6 +91,13 @@ Note: line number appears twice (prefix and message suffix).
 
 Context extraction matches libxml2's `xmlParserInputGetWindow`: skip-eol, walk back 80, forward 80, cap caret.
 
+#### HTML sentinel errors (`html/sax.go`)
+
+- **`ErrContentSizeExceeded`** (exported) — returned from `parse()` (via `parser.fatalErr`) when a single content section blows the `Parser.MaxContentSize` hard cap. Wrapped with a descriptive prefix via `fmt.Errorf("... : %w", ErrContentSizeExceeded)`; callers match with `errors.Is`. Returned in two cases:
+  - A comment, bogus comment, or PI (`parseComment`/`parseBogusComment`/`parsePI`) that exceeds `MaxContentSize` before reaching its terminator. These map to a single indivisible SAX event / DOM node, so they cannot be chunked — a hard cap, not a soft chunk size.
+  - An over-cap UNRESOLVED RCDATA named-reference literal (`parseCharRefBounded`/`parseSaturatedCharRefLiteral`): ANY `"&"`-prefixed run that does not resolve to a known entity or longest legacy prefix, once the literal bytes it would emit (`"&"` + name + optional `";"`) exceed the cap — whether short, semicolon-terminated, or unbounded. A RESOLVABLE reference is exempt: it is resolved to its value regardless of the cap and never charged.
+- **`ErrHandlerUnspecified`** (exported) — returned by a `SAXCallbacks` method whose handler is unset (see SAX-callback error routing below; filtered by `handleSAXErr`, never fatal).
+
 #### HTML SAX-callback error routing (`html/parser.go`)
 
 When a SAX callback (e.g. `InternalSubset`, `StartElement`, `Characters`) returns a non-nil error other than `ErrHandlerUnspecified`, `handleSAXErr` forwards it through one of two paths:
