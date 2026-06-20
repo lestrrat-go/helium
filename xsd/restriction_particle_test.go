@@ -551,6 +551,234 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
 
+	// MapAndSum (derived SEQUENCE restricts a base CHOICE). Every derived sequence
+	// member must validly restrict SOME base choice branch AND the derived
+	// sequence's total element-emission range must be within the base choice
+	// particle's occurrence range — a single-item-max choice cannot be restricted
+	// by a multi-item sequence.
+	t.Run("rejects sequence restricting single-item choice with extra element", func(t *testing.T) {
+		t.Parallel()
+		// Base choice (a) matches at most one element; derived sequence(a,b) admits
+		// two elements the base choice rejects — not a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:choice>
+      <xs:element name="a" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="b" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects sequence restricting choice with unmatched member", func(t *testing.T) {
+		t.Parallel()
+		// Base choice (a|b) allows two items; derived sequence(a,c) is within the
+		// cardinality but member c matches no base branch — not a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:choice minOccurs="0" maxOccurs="2">
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="c" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts sequence restricting multi-item choice", func(t *testing.T) {
+		t.Parallel()
+		// Base choice (a|b) with maxOccurs 2 matches up to two items; derived
+		// sequence(a) emits one item that restricts the a branch — within cardinality
+		// and every member maps onto a base branch, a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:choice minOccurs="0" maxOccurs="2">
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	// A derived model GROUP restricting a base single ELEMENT (reached through the
+	// order-preserving recurse over an outer sequence). A base element accepts one
+	// element; the group must be a pointless wrapper emitting exactly that element.
+	t.Run("rejects group restricting element with extra member", func(t *testing.T) {
+		t.Parallel()
+		// Base outer sequence holds element a; derived maps a nested sequence(a,b)
+		// onto it. The nested group emits two elements where the base element accepts
+		// one — admits content the base does not.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:sequence>
+            <xs:element name="a" type="xs:string"/>
+            <xs:element name="b" type="xs:string"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts group pointless-wrapping a single element restriction", func(t *testing.T) {
+		t.Parallel()
+		// Base outer sequence holds element a; derived maps a nested sequence(a) onto
+		// it. The nested group emits exactly the matching element — a pointless
+		// wrapper, a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:sequence>
+            <xs:element name="a" type="xs:string"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	// NSRecurseCheckCardinality total-emission bound: a base <xs:any maxOccurs="1">
+	// matches at most ONE element, so a derived group that can emit two-or-more
+	// elements must be rejected even though each leaf individually fits the
+	// wildcard's namespace and per-leaf cardinality.
+	t.Run("rejects group restricting single-occurrence wildcard with two elements", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:any namespace="##any" processContents="lax" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="g1" type="xs:string"/>
+  <xs:element name="g2" type="xs:string"/>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence>
+          <xs:sequence>
+            <xs:element ref="t:g1"/>
+            <xs:element ref="t:g2"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts group restricting two-occurrence wildcard with two elements", func(t *testing.T) {
+		t.Parallel()
+		// Base <xs:any maxOccurs="2"> matches up to two elements; the derived group
+		// emits two in-namespace elements — within the wildcard's cardinality, a
+		// valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:any namespace="##any" processContents="lax" minOccurs="0" maxOccurs="2"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="g1" type="xs:string"/>
+  <xs:element name="g2" type="xs:string"/>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence>
+          <xs:sequence>
+            <xs:element ref="t:g1"/>
+            <xs:element ref="t:g2"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	// Element-restricts-wildcard (NSCompat): a base wildcard restricted by a
+	// derived element whose namespace the wildcard admits, within occurrence range,
+	// stays a valid restriction (kept ACCEPTED — the cardinality fix above must not
+	// reintroduce a false-accept nor a false-reject here).
+	t.Run("accepts element restricting wildcard within namespace", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:any namespace="##any" processContents="lax" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="g" type="xs:string"/>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence>
+          <xs:element ref="t:g"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
 	t.Run("rejects group restricting wildcard widening cardinality", func(t *testing.T) {
 		t.Parallel()
 		// Base wildcard admits ##any at most once; the derived group (replacing the
