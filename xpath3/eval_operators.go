@@ -126,6 +126,29 @@ func appendBounded(dst ItemSlice, src []Item, maxNodes int) (ItemSlice, error) {
 	return append(dst, src...), nil
 }
 
+// appendBoundedSeq appends the items of src to dst one at a time, enforcing the
+// configured sequence/node-set size limit before each append. Unlike
+// appendBounded (which takes an already-materialized []Item), it iterates src
+// lazily via seqItems so a callback returning an unbounded lazy Sequence is
+// rejected with ErrNodeSetLimit as soon as the accumulated length would exceed
+// maxNodes — without ever materializing the whole source sequence.
+//
+// It also charges one op (and honors cancellation) per appended item via
+// fnCountOp, so draining a large lazy source respects OpLimit / context
+// cancellation rather than running to completion unbounded.
+func appendBoundedSeq(ctx context.Context, ec *evalContext, dst ItemSlice, src Sequence, maxNodes int) (ItemSlice, error) {
+	for item := range seqItems(src) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		if maxNodes > 0 && len(dst)+1 > maxNodes {
+			return nil, ErrNodeSetLimit
+		}
+		dst = append(dst, item)
+	}
+	return dst, nil
+}
+
 func evalSimpleMapExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e SimpleMapExpr) (Sequence, error) {
 	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {

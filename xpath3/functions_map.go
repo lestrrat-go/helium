@@ -225,13 +225,21 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
 	mapErr := m.ForEach(func(k AtomicValue, v Sequence) error {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return err
+		}
 		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{k}, v})
 		if err != nil {
 			return err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBoundedSeq(ctx, ec, result, r, maxNodes)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	if mapErr != nil {
@@ -240,39 +248,91 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	return result, nil
 }
 
-func fnMapFind(_ context.Context, args []Sequence) (Sequence, error) {
+func fnMapFind(ctx context.Context, args []Sequence) (Sequence, error) {
 	ka, err := extractSingleAtomicArg(args[1], "map:find key")
 	if err != nil {
 		return nil, err
 	}
-	var results []Sequence
-	mapFindRecurse(args[0], ka, &results)
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	results, err := mapFindIter(ctx, ec, maxNodes, args[0], ka)
+	if err != nil {
+		return nil, err
+	}
 	return ItemSlice{NewArray(results)}, nil
 }
 
-// mapFindRecurse recursively searches for a key in maps within items.
-// Per XPath 3.1, map:find searches recursively through maps and arrays.
-func mapFindRecurse(items Sequence, key AtomicValue, results *[]Sequence) {
-	for item := range seqItems(items) {
-		switch v := item.(type) {
-		case MapItem:
-			if val, found := v.Get(key); found {
-				*results = append(*results, val)
-			}
-			// Also recurse into map values
-			_ = v.ForEach(func(_ AtomicValue, val Sequence) error {
-				mapFindRecurse(val, key, results)
-				return nil
-			})
-		case ArrayItem:
-			// Recurse into array members
-			for i := 1; i <= v.Size(); i++ {
-				member, err := v.Get(i)
-				if err != nil {
-					continue
-				}
-				mapFindRecurse(member, key, results)
+// mapFindIter searches for a key in maps within items. Per XPath 3.1, map:find
+// searches recursively through maps and arrays, in document order. The walk is
+// performed iteratively with an explicit work stack rather than recursively, so
+// a pathologically nested input cannot exhaust the goroutine stack when no op
+// limit is set. The traversal charges an op per item and bounds the accumulated
+// result item count so a deeply or widely nested input cannot exhaust resources.
+//
+// Each frame is a one-item-at-a-time cursor over a list of sequences: the root
+// input, an array's members, or — for maps — the map's own entries accessed in
+// place (so a wide map is never copied into a temporary []Sequence). Items are
+// consumed via Sequence.Get so a lazy value/member sequence is never expanded
+// into a temporary slice. A matched value is looked up without cloning (get0)
+// and its length bound-checked before it is cloned, so a borrowed lazy value is
+// rejected rather than materialized. The stack is LIFO, so on descending into a
+// nested map/array the parent frame is left in place beneath the child frame,
+// yielding document order.
+func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequence, key AtomicValue) ([]Sequence, error) {
+	var results []Sequence
+	// total counts items already accumulated across all matched value sequences,
+	// so a single huge (possibly lazy) matched value is bounded the same as many
+	// small matches.
+	total := 0
+
+	stack := []seqCursor{{members: []Sequence{root}}}
+	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		item, ok, skippedEmpty := top.next()
+		// Charge one op per empty value the cursor stepped past, so scanning N
+		// empty map values costs ~N ops and trips OpLimit. Without this a map
+		// with thousands of empty values is searched for free even when no key
+		// matches.
+		if skippedEmpty > 0 {
+			if err := fnCountOps(ctx, ec, skippedEmpty); err != nil {
+				return nil, err
 			}
 		}
+		if !ok {
+			stack = stack[:len(stack)-1]
+			continue
+		}
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		switch v := item.(type) {
+		case MapItem:
+			// The map's own match comes before its descendants in document order.
+			// Look the value up WITHOUT cloning (get0) and bound-check its length
+			// before materializing: a borrowed lazy value (e.g. a huge integer
+			// range stored via map:entry, which does not clone) must be rejected
+			// with ErrNodeSetLimit rather than materialized by the clone in Get.
+			if val, found := v.get0(key); found {
+				// Each matched value becomes one member of the result array.
+				// appendArrayMember bounds both the member count (many empty
+				// matches must not exceed maxNodes members) and the item count (a
+				// borrowed lazy value must be rejected before NewArray clones it),
+				// and charges max(valLen, 1) ops so empty matches still cost an op.
+				// The borrowed (uncloned) value is appended; the single defensive
+				// clone happens once in NewArray(results) at the call site.
+				var aerr error
+				results, total, aerr = appendArrayMember(ctx, ec, maxNodes, results, total, val)
+				if aerr != nil {
+					return nil, aerr
+				}
+			}
+			// Then descend into the map's values, in insertion order, iterating
+			// the entries in place so a wide map is not duplicated into a
+			// temporary []Sequence before traversal.
+			stack = append(stack, seqCursor{mapEntries: v.entries0()})
+		case ArrayItem:
+			stack = append(stack, seqCursor{members: v.members0()})
+		}
 	}
+	return results, nil
 }

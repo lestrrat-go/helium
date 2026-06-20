@@ -56,6 +56,12 @@ type parser struct {
 	// position when the first U+FFFD is encountered in emitCharacters.
 	encodingSanitizer *utf8SanitizeReader
 
+	// deferredEncoding is non-nil when streaming an undeclared-charset
+	// document whose encoding (UTF-8 vs Windows-1252) can only be decided
+	// once a non-UTF-8 byte is seen. It is queried after parsing for the
+	// final detected encoding name.
+	deferredEncoding *deferredLatin1Reader
+
 	// fatalSAXErr is set by handleSAXErr when cfg.strict is true and a SAX
 	// callback returns a non-ErrHandlerUnspecified error. parse() surfaces
 	// this value as the parse error. Outside strict mode it stays nil.
@@ -168,7 +174,7 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 // entire []byte), this chains io.Reader wrappers for newline normalization
 // and encoding conversion, feeding the result directly into the cursor.
 func newParserFromReader(_ context.Context, r io.Reader, sax SAXHandler, cfg parseConfig) *parser {
-	wrapped, detectedEnc, sanitizer := wrapReaderForHTML(r)
+	wrapped, detectedEnc, sanitizer, deferred := wrapReaderForHTML(r)
 
 	p := &parser{
 		cur:               strcursor.NewUTF8Cursor(wrapped),
@@ -176,10 +182,23 @@ func newParserFromReader(_ context.Context, r io.Reader, sax SAXHandler, cfg par
 		mode:              insertInitial,
 		detectedEncoding:  detectedEnc,
 		encodingSanitizer: sanitizer,
+		deferredEncoding:  deferred,
 		cfg:               cfg,
 	}
 	p.locator = &parserLocator{p: p}
 	return p
+}
+
+// finalEncoding returns the encoding detected for the input, accounting for
+// the streaming deferred-Latin-1 path where the encoding name is only known
+// after the full stream has been consumed during parsing.
+func (p *parser) finalEncoding() string {
+	if p.deferredEncoding != nil {
+		if enc := p.deferredEncoding.detectedEncoding(); enc != "" {
+			return enc
+		}
+	}
+	return p.detectedEncoding
 }
 
 // normalizeNewlines replaces \r\n with \n and standalone \r with \n.
@@ -510,9 +529,11 @@ func (p *parser) parse(ctx context.Context) error {
 		}
 	}
 
-	// A clean Done() may mask a non-EOF read error that arrived together with
-	// the final bytes (e.g. a cancelled push-stream wait). Surface it before
-	// reporting success.
+	// A clean Done() may mask an underlying read error (e.g. a truncated or
+	// checksummed stream that returned data together with a non-EOF error, or a
+	// cancelled push-stream wait). Surface it as a fatal parse error rather than
+	// accepting the input as a cleanly terminated document. Mirrors the XML
+	// parser's cursorDecodeErr.
 	if err := p.cur.Err(); err != nil {
 		return err
 	}

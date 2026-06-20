@@ -22,6 +22,7 @@ import (
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/encoding/charmap"
 )
 
 func TestDetectBOM(t *testing.T) {
@@ -2557,4 +2558,338 @@ func TestParseReaderZeroProgressReaderDoesNotHang(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("ParseReader hung on a zero-progress reader instead of failing fast")
 	}
+}
+
+// startElementRecorder builds a SAX handler that records start-element local
+// names, so a test can prove the buffered bytes were parsed before any read
+// error was surfaced.
+func startElementRecorder(seen *[]string) sax.SAX2Handler {
+	h := sax.New()
+	h.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, local, _, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+		*seen = append(*seen, local)
+		return nil
+	}))
+	return h
+}
+
+// TestParseReaderParsesBytesThenSurfacesError is the convergence regression: a
+// reader that returns (n>0, non-EOF err) in a single Read must have its bytes
+// PARSED first and the error surfaced only AFTER they drain — on BOTH the
+// non-EBCDIC streaming path and the EBCDIC byte-slice path. Bytes returned
+// alongside a non-EOF error are never discarded.
+func TestParseReaderParsesBytesThenSurfacesError(t *testing.T) {
+	wantErr := errors.New("checksum mismatch")
+
+	ebcdic := func(s string) []byte {
+		b, err := charmap.CodePage037.NewEncoder().Bytes([]byte(s))
+		require.NoError(t, err)
+		require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, b[:4],
+			"encoded bytes must start with the EBCDIC invariant prefix")
+		return b
+	}
+
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "non-EBCDIC",
+			data: []byte(`<root><child/></root>`),
+		},
+		{
+			name: "EBCDIC",
+			data: ebcdic(`<?xml version="1.0" encoding="IBM037"?><root><child/></root>`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var seen []string
+			p := helium.NewParser().SAXHandler(startElementRecorder(&seen))
+
+			_, err := p.ParseReader(t.Context(), &dataThenErrReader{
+				data: tt.data,
+				err:  wantErr,
+			})
+			require.ErrorIs(t, err, wantErr,
+				"a non-EOF read error returned alongside the bytes must be surfaced")
+			require.Equal(t, []string{"root", "child"}, seen,
+				"the bytes returned alongside the error must be parsed before the error surfaces")
+		})
+	}
+}
+
+// blockingReader blocks forever inside Read until its done channel is closed,
+// then returns io.EOF. It models a non-context-aware reader (e.g. a slow
+// network stream) whose Read cannot be interrupted generically.
+type blockingReader struct {
+	done    chan struct{}
+	entered chan struct{} // closed the first time Read is entered
+	once    sync.Once
+}
+
+func (r *blockingReader) Read([]byte) (int, error) {
+	r.once.Do(func() { close(r.entered) })
+	<-r.done
+	return 0, io.EOF
+}
+
+// TestParseReaderCancelledUpFrontDoesNotBlock guards the "cancelled before any
+// blocking read" contract: when the context is already cancelled, ParseReader
+// must return the context error promptly WITHOUT ever entering the underlying
+// reader's Read (the EBCDIC sniff must check ctx first).
+func TestParseReaderCancelledUpFrontDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	r := &blockingReader{done: make(chan struct{}), entered: make(chan struct{})}
+	// Never unblock the reader: if ParseReader touches it, the test deadlocks
+	// and is caught by the timeout below.
+	defer close(r.done)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled before the call
+
+	type result struct {
+		doc *helium.Document
+		err error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		doc, err := helium.NewParser().ParseReader(ctx, r)
+		resCh <- result{doc, err}
+	}()
+
+	select {
+	case res := <-resCh:
+		require.ErrorIs(t, res.err, context.Canceled,
+			"a context cancelled before any read must surface as context.Canceled")
+		require.Nil(t, res.doc, "a cancelled parse must not return a document")
+	case <-time.After(2 * time.Second):
+		t.Fatal("ParseReader blocked on a non-context-aware reader despite an already-cancelled context")
+	}
+
+	select {
+	case <-r.entered:
+		t.Fatal("ParseReader read from the underlying reader despite an already-cancelled context")
+	default:
+	}
+}
+
+func TestParseFileParsesNormalFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.xml")
+	require.NoError(t, os.WriteFile(path, []byte(`<root><child>hi</child></root>`), 0o600))
+
+	doc, err := helium.NewParser().ParseFile(t.Context(), path)
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	abs, err := filepath.Abs(path)
+	require.NoError(t, err)
+	require.Equal(t, abs, doc.URL(), "document URL should be the absolute path")
+}
+
+func TestParseFileMissingFileErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "does-not-exist.xml")
+
+	_, err := helium.NewParser().ParseFile(t.Context(), path)
+	require.Error(t, err, "parsing a missing file must error")
+}
+
+// TestParseFileEBCDICMatchesParse guards EBCDIC encoding parity across entry
+// points: an EBCDIC-encoded document must parse identically whether read via
+// ParseFile, ParseReader, or Parse([]byte). EBCDIC detection/decode relies on
+// the original raw bytes, so the reader-based paths must buffer the input.
+func TestParseFileEBCDICMatchesParse(t *testing.T) {
+	t.Parallel()
+
+	const xml = `<?xml version="1.0" encoding="IBM037"?><root><child>hi</child></root>`
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	// Sanity: the encoded bytes must carry the EBCDIC invariant prefix that
+	// triggers detection (otherwise the test would not exercise the path).
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	bytesDoc, err := helium.NewParser().Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must handle EBCDIC")
+	want := serialize(bytesDoc)
+
+	readerDoc, err := helium.NewParser().ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err, "ParseReader must handle EBCDIC")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for EBCDIC")
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.xml")
+	require.NoError(t, os.WriteFile(path, ebcdic, 0o600))
+	fileDoc, err := helium.NewParser().ParseFile(t.Context(), path)
+	require.NoError(t, err, "ParseFile must handle EBCDIC")
+	require.Equal(t, want, serialize(fileDoc),
+		"ParseFile output must match Parse([]byte) for EBCDIC")
+}
+
+// TestParseReaderEBCDICDataWithEOFInFirstRead guards the EBCDIC sniff against a
+// reader that returns its entire payload together with io.EOF in a single Read
+// (which io.Reader explicitly permits). EBCDIC decoding requires the full raw
+// input up front, so detection must happen even when the head read ends with
+// io.EOF; otherwise the streaming path resets the cursor from a nil rawInput and
+// loses the document.
+func TestParseReaderEBCDICDataWithEOFInFirstRead(t *testing.T) {
+	t.Parallel()
+
+	const xml = `<?xml version="1.0" encoding="IBM037"?><root><child>hi</child></root>`
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	bytesDoc, err := helium.NewParser().Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must handle EBCDIC")
+	want := serialize(bytesDoc)
+
+	// dataThenErrReader with err == io.EOF returns all bytes plus io.EOF in the
+	// FIRST Read, exactly the case that previously fell through to the streaming
+	// path and produced a parse error.
+	r := &dataThenErrReader{data: ebcdic, err: io.EOF}
+	doc, err := helium.NewParser().ParseReader(t.Context(), r)
+	require.NoError(t, err, "ParseReader must parse EBCDIC delivered with io.EOF in the first read")
+	require.Equal(t, want, serialize(doc),
+		"ParseReader output must match Parse([]byte) when EBCDIC arrives with io.EOF in one read")
+}
+
+// ebcdicSlowTailReader returns the EBCDIC invariant prefix on its first Read (so
+// detection succeeds), signals when its tail is first read, then drips the tail
+// one byte at a time. The first tail byte is served immediately so the parser
+// regains control (and re-checks ctx); every later tail Read blocks until the
+// reader is cancelled, modeling a stalled tail whose remaining bytes never
+// arrive. If ParseReader honored ctx between reads it returns before consuming
+// the whole tail; if it drained eagerly it would block forever.
+type ebcdicSlowTailReader struct {
+	prefix    []byte
+	gate      chan struct{} // closed to unblock later tail reads (test cleanup only)
+	entered   chan struct{} // closed the first time a tail byte is served
+	cancelled chan struct{} // closed by the test once ctx has been cancelled
+	once      sync.Once
+	served    int // number of tail bytes already delivered
+}
+
+func (r *ebcdicSlowTailReader) Read(p []byte) (int, error) {
+	if r.served == 0 && len(r.prefix) > 0 {
+		// First Read: hand back the EBCDIC prefix so detection succeeds.
+		n := copy(p, r.prefix)
+		r.prefix = nil
+		return n, nil
+	}
+	if r.served == 0 {
+		// First tail Read: signal the test, then wait until it has cancelled the
+		// context before returning one byte. This makes the test deterministic:
+		// when the drain loop iterates and re-checks ctx on the next pass, the
+		// cancellation is guaranteed to be observable, so a ctx-honoring loop
+		// returns instead of entering the blocking Read below.
+		r.served++
+		r.once.Do(func() { close(r.entered) })
+		<-r.cancelled
+		if len(p) > 0 {
+			p[0] = ' '
+			return 1, nil
+		}
+		return 0, nil
+	}
+	// Later tail Reads block until the test tears the reader down. A
+	// ctx-honoring drain loop never reaches here after cancellation.
+	<-r.gate
+	return 0, io.EOF
+}
+
+// TestParseReaderEBCDICTailCancelledDoesNotDrain guards the ctx-cancellation
+// contract on the EBCDIC tail-drain path: once the EBCDIC prefix is detected,
+// the remainder of the stream must be read through a loop that re-checks ctx
+// BEFORE each Read. When the context is cancelled after the prefix read and the
+// tail stalls, ParseReader must return context.Canceled promptly WITHOUT
+// blocking on the unread tail.
+func TestParseReaderEBCDICTailCancelledDoesNotDrain(t *testing.T) {
+	t.Parallel()
+
+	r := &ebcdicSlowTailReader{
+		prefix:    []byte{0x4C, 0x6F, 0xA7, 0x94},
+		gate:      make(chan struct{}),
+		entered:   make(chan struct{}),
+		cancelled: make(chan struct{}),
+	}
+	// Never unblock the stalled tail: if ParseReader drains past the ctx check,
+	// the test deadlocks and is caught by the timeout below.
+	defer close(r.gate)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	type result struct {
+		doc *helium.Document
+		err error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		doc, err := helium.NewParser().ParseReader(ctx, r)
+		resCh <- result{doc, err}
+	}()
+
+	// Wait until the parser has entered the tail-drain loop (prefix consumed),
+	// then cancel: this exercises a cancellation observed after the prefix read.
+	select {
+	case <-r.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ParseReader did not begin draining the EBCDIC tail")
+	}
+	cancel()
+	close(r.cancelled)
+
+	select {
+	case res := <-resCh:
+		require.ErrorIs(t, res.err, context.Canceled,
+			"a context cancelled while draining the EBCDIC tail must surface as context.Canceled")
+		require.Nil(t, res.doc, "a cancelled parse must not return a document")
+	case <-time.After(2 * time.Second):
+		t.Fatal("ParseReader blocked on the EBCDIC tail despite a cancelled context")
+	}
+}
+
+func TestParseFileResolvesRelativeExternalEntity(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "child.xml"), []byte("WORLD"), 0o600))
+
+	main := `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY child SYSTEM "child.xml">
+]>
+<doc>&child;</doc>`
+	mainPath := filepath.Join(dir, "main.xml")
+	require.NoError(t, os.WriteFile(mainPath, []byte(main), 0o600))
+
+	doc, err := helium.NewParser().SubstituteEntities(true).ParseFile(t.Context(), mainPath)
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	var buf bytes.Buffer
+	require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+	require.Contains(t, buf.String(), "WORLD",
+		"relative external entity must resolve against the file's base URI")
 }
