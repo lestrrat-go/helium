@@ -20,6 +20,11 @@ const (
 	tagPlaintext = "plaintext"
 	tagTextarea  = "textarea"
 	tagTitle     = "title"
+
+	// Subtest names for the comment-like constructs, shared across the
+	// comment/bogus-comment/PI table tests.
+	nameComment      = "comment"
+	nameBogusComment = "bogus_comment"
 )
 
 // cancelAfterReader is an io.Reader that streams a fixed body and invokes a
@@ -104,7 +109,7 @@ func TestRawTextContextCancellationAborts(t *testing.T) {
 
 	// Comment: no mid-scan SAX event, so cancel via the reader after a few
 	// bytes of the comment body have streamed in.
-	t.Run("comment", func(t *testing.T) {
+	t.Run(nameComment, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
@@ -250,8 +255,8 @@ func TestCommentLikeOverCapHardErrors(t *testing.T) {
 		name  string
 		input string
 	}{
-		{"comment", "<!--" + body + "--><p>x</p>"},
-		{"bogus_comment", "<!" + body + "><p>x</p>"},
+		{nameComment, "<!--" + body + "--><p>x</p>"},
+		{nameBogusComment, "<!" + body + "><p>x</p>"},
 		{"pi", "<?" + body + "><p>x</p>"},
 	}
 
@@ -261,6 +266,35 @@ func TestCommentLikeOverCapHardErrors(t *testing.T) {
 			_, err := p.Parse(t.Context(), []byte(tc.input))
 			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
 				"over-cap %s must fail with ErrContentSizeExceeded", tc.name)
+		})
+	}
+}
+
+// TestCommentLikeNULBypassHardErrors guards against a NUL-byte cap bypass: the
+// comment / bogus-comment / PI scanners must distinguish a real U+0000 byte from
+// end-of-input (PeekAt returns 0 for both) via HasByteAt, count the NUL as
+// content, and still hard-fail when the run exceeds MaxContentSize before its
+// terminator. A NUL placed before the terminator must not be mistaken for EOF
+// and silently emit a (truncated) comment instead of erroring.
+func TestCommentLikeNULBypassHardErrors(t *testing.T) {
+	const limit = 4
+	body := "\x00" + strings.Repeat("a", 10*limit)
+
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{nameComment, "<!--" + body + "--><p>x</p>"},
+		{nameBogusComment, "<!" + body + "><p>x</p>"},
+		{"pi", "<?" + body + "><p>x</p>"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := html.NewParser().MaxContentSize(limit)
+			_, err := p.Parse(t.Context(), []byte(tc.input))
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"NUL-before-terminator %s must fail with ErrContentSizeExceeded", tc.name)
 		})
 	}
 }
@@ -276,8 +310,8 @@ func TestCommentLikeUnderCapParses(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"comment", "<!--hello world-->", "hello world"},
-		{"bogus_comment", "<!bogus content>", "bogus content"},
+		{nameComment, "<!--hello world-->", "hello world"},
+		{nameBogusComment, "<!bogus content>", "bogus content"},
 		{"pi", "<?php echo 1 ?>", "?php echo 1 ?"},
 	}
 
@@ -316,8 +350,8 @@ func TestCommentLikeExactCapParses(t *testing.T) {
 		want    string
 		over    string // content length == limit+1
 	}{
-		{"comment", "<!--abcd-->", "abcd", "<!--abcde-->"},
-		{"bogus_comment", "<!abcd>", "abcd", "<!abcde>"},
+		{nameComment, "<!--abcd-->", "abcd", "<!--abcde-->"},
+		{nameBogusComment, "<!abcd>", "abcd", "<!abcde>"},
 		{"pi", "<?abc>", "?abc", "<?abcd>"},
 	}
 
@@ -492,31 +526,35 @@ func TestRCDATAUnknownEntityChunked(t *testing.T) {
 	}
 }
 
-// TestRCDATALegacyPrefixOverCapLiteral is the regression for the over-cap
-// legacy-prefix bug: a long alphanumeric named-reference run that begins with a
-// legacy entity prefix (e.g. "&amp" + thousands of letters + ";") must be
-// emitted LITERALLY in the bounded RCDATA path, exactly as the normal-text path
-// does, NOT resolved to "&" plus the tail. The bug truncated the name scan at
-// the entity-name cap and then ran legacy-prefix matching on the truncated
-// name, wrongly turning "&ampxxx…;" into "&xxx…;". An over-cap run, whose true
-// delimiter (and possibly a ';') is still in the stream, can never match an
-// entity and must pass through verbatim.
-func TestRCDATALegacyPrefixOverCapLiteral(t *testing.T) {
+// TestRCDATALegacyPrefixOverCap pins the over-cap legacy-prefix behavior of the
+// bounded RCDATA char-ref scanner to match the normal-text (parseCharRef) path
+// exactly, for both over-cap cases:
+//
+//   - A long alphanumeric run with NO trailing ';' that begins with a legacy
+//     (HTML4) entity prefix (e.g. "&amp" + thousands of letters) must resolve
+//     the LONGEST legacy prefix without a semicolon ("amp" -> "&") and emit the
+//     remaining tail literally. HTML legacy entities resolve without ';'.
+//   - A ';'-terminated over-cap run is an unknown (too-long) name — legacy
+//     prefixes only match WITHOUT a ';' — so it is emitted verbatim.
+//
+// The earlier bounded implementation either blanket-resolved or blanket-emitted
+// the run; this guards both decisions.
+func TestRCDATALegacyPrefixOverCap(t *testing.T) {
 	const limit = 4
 	const runLen = 4096 // far larger than any valid entity name or legacy prefix
 
 	cases := []struct {
 		name string
-		body string // RCDATA content (the literal text expected back out)
+		body string // RCDATA source
+		want string // expected concatenated Characters output
 	}{
-		// "amp" is a legacy entity prefix; the runaway tail makes the whole run
-		// unknown. With a trailing ';' the normal-text path emits it literally,
-		// so the bounded path must too.
-		{"amp_semicolon", "&amp" + strings.Repeat("x", runLen) + ";"},
-		// Same run without the trailing ';' — still over-cap, still literal.
-		{"amp_no_semicolon", "&amp" + strings.Repeat("x", runLen)},
-		// "lt" is another legacy prefix; guard against any prefix, not just amp.
-		{"lt_semicolon", "&lt" + strings.Repeat("y", runLen) + ";"},
+		// No ';': resolve the longest legacy prefix ("amp" -> "&"), tail literal.
+		{"amp_no_semicolon", "&amp" + strings.Repeat("x", runLen), "&" + strings.Repeat("x", runLen)},
+		// No ';': "lt" -> "<"; guard against any legacy prefix, not just amp.
+		{"lt_no_semicolon", "&lt" + strings.Repeat("y", runLen), "<" + strings.Repeat("y", runLen)},
+		// ';'-terminated over-cap unknown name — emitted literally.
+		{"amp_semicolon", "&amp" + strings.Repeat("x", runLen) + ";", "&amp" + strings.Repeat("x", runLen) + ";"},
+		{"lt_semicolon", "&lt" + strings.Repeat("y", runLen) + ";", "&lt" + strings.Repeat("y", runLen) + ";"},
 	}
 
 	for _, elem := range []string{tagTitle, tagTextarea} {
@@ -543,8 +581,8 @@ func TestRCDATALegacyPrefixOverCapLiteral(t *testing.T) {
 					ParseWithSAX(t.Context(), []byte(input), sax)
 				require.NoError(t, err,
 					"over-cap legacy-prefix entity in RCDATA must parse, not error")
-				require.Equal(t, tc.body, got.String(),
-					"over-cap legacy-prefix run must be emitted literally, not legacy-prefix-resolved")
+				require.Equal(t, tc.want, got.String(),
+					"bounded over-cap resolution must match the normal-text path")
 				require.LessOrEqual(t, maxChunk, limit+16,
 					"no single Characters chunk may exceed the cap")
 				require.Greater(t, nchunks, 1,
@@ -620,8 +658,8 @@ func TestIndivisibleNodeCancellationNoPartialEmit(t *testing.T) {
 		name  string
 		input string
 	}{
-		{"comment", "<!--" + body},                  // parseComment
-		{"bogus_comment", "<!" + body},              // parseBogusComment
+		{nameComment, "<!--" + body},                // parseComment
+		{nameBogusComment, "<!" + body},             // parseBogusComment
 		{"processing_instruction", "<?php " + body}, // parsePI
 	}
 

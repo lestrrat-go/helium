@@ -684,10 +684,13 @@ func (p *parser) parseComment(ctx context.Context) {
 	// it before its terminator. Also abort promptly on cancellation rather than
 	// scanning the whole (possibly unterminated) comment.
 	for ctx.Err() == nil {
-		b := p.cur.PeekAt(n)
-		if b == 0 {
+		// Use HasByteAt to distinguish EOF from a real NUL byte: PeekAt returns 0
+		// for both, so a NUL inside the comment would otherwise be mistaken for
+		// end-of-input and bypass the hard cap. A NUL counts as content.
+		if !p.cur.HasByteAt(n) {
 			break
 		}
+		b := p.cur.PeekAt(n)
 		// Check for end of comment: -->
 		if b == '-' && p.cur.PeekAt(n+1) == '-' && p.cur.PeekAt(n+2) == '>' {
 			data := p.cur.PeekString(n)
@@ -737,8 +740,14 @@ func (p *parser) parseBogusComment(ctx context.Context) {
 	// parse if it exceeds the limit before its '>' terminator rather than
 	// emitting a truncated comment. Abort promptly on cancellation too.
 	for ctx.Err() == nil {
+		// HasByteAt distinguishes EOF from a real NUL (PeekAt returns 0 for both),
+		// so a NUL inside the bogus comment is counted as content rather than
+		// mistaken for end-of-input and bypassing the hard cap.
+		if !p.cur.HasByteAt(n) {
+			break
+		}
 		b := p.cur.PeekAt(n)
-		if b == 0 || b == '>' {
+		if b == '>' {
 			break
 		}
 		// No terminator at offset n: this byte is content. Accepting it would
@@ -775,10 +784,13 @@ func (p *parser) parsePI(ctx context.Context) {
 	// parse if it exceeds the limit before its '>' terminator rather than
 	// emitting a truncated comment. Abort promptly on cancellation too.
 	for ctx.Err() == nil {
-		b := p.cur.PeekAt(n)
-		if b == 0 {
+		// HasByteAt distinguishes EOF from a real NUL (PeekAt returns 0 for both),
+		// so a NUL inside the PI is counted as content rather than mistaken for
+		// end-of-input and bypassing the hard cap.
+		if !p.cur.HasByteAt(n) {
 			break
 		}
+		b := p.cur.PeekAt(n)
 		if b == '>' {
 			data := p.cur.PeekString(n)
 			_ = p.cur.Advance(n + 1) // skip data + '>'
@@ -1117,20 +1129,36 @@ func (p *parser) parseCharRefBounded(limit int) {
 	name := p.parseWhileMax(isAlphanumeric, maxEntityNameLen)
 
 	// When the alphanumeric run hit the cap, it is longer than every known
-	// entity name (and longer than every legacy prefix that could plausibly
-	// stand alone), so it cannot match any entity. Crucially, we have NOT yet
-	// consumed the run's delimiter, and the bytes still in the stream — more
-	// alphanumerics and possibly a trailing ';' — are part of this same
-	// unresolved run. Resolving a legacy prefix here (e.g. "amp" out of
-	// "&ampxxxx…;") would diverge from the normal-text path, which reads the
-	// whole run and, on seeing the ';', treats the over-long name as unknown
-	// and emits it literally. So for an over-cap run, skip resolveNamedEntity
-	// entirely and emit the whole run (the bounded name plus its remaining
-	// alphanumeric bytes and ';') as literal text in capped chunks.
+	// entity name, so the over-long name itself matches nothing. But it may
+	// still START with a legacy (HTML4) entity that resolves WITHOUT a trailing
+	// ';' (e.g. "&amp" out of "&ampxxxx…"); the longest legacy entity is 6 chars,
+	// so any legacy prefix is wholly within the bounded `name`. We must mirror
+	// parseCharRef exactly: consume the remaining alphanumeric tail to learn
+	// whether a ';' terminates the run, then resolve via resolveNamedEntity. A
+	// ';'-terminated over-long name resolves nothing (legacy prefixes only match
+	// without ';') and is emitted literally; a ';'-less run resolves the longest
+	// legacy prefix and emits the rest as literal text. The tail is consumed in
+	// capped chunks so no single Characters event is ever oversized.
 	overCap := len(name) >= maxEntityNameLen
 	if overCap {
+		tailChunks, tailSemicolon := p.collectAlnumLiteral(isAlphanumeric, limit)
+		if val, remainder, ok := resolveNamedEntity(name, tailSemicolon); ok {
+			_ = p.emitCharacters([]byte(val))
+			if remainder != "" {
+				p.emitLiteralChunked(remainder, limit)
+			}
+			for _, chunk := range tailChunks {
+				_ = p.emitCharacters(chunk)
+			}
+			return
+		}
 		p.emitLiteralChunked("&"+name, limit)
-		p.flushAlnumLiteral(isAlphanumeric, limit)
+		for _, chunk := range tailChunks {
+			_ = p.emitCharacters(chunk)
+		}
+		if tailSemicolon {
+			_ = p.emitCharacters([]byte(";"))
+		}
 		return
 	}
 
@@ -1219,22 +1247,30 @@ func digitValue(b byte, base int) int {
 // bounded.
 const maxNumericRefLen = 32
 
-// flushAlnumLiteral consumes the remainder of an over-cap character-reference
-// run — the bytes matching pred plus a trailing ';' if present — and emits them
-// as literal text in chunks no larger than limit, so an unresolved reference is
-// never materialized as one giant Characters event.
-func (p *parser) flushAlnumLiteral(pred func(byte) bool, limit int) {
+// collectAlnumLiteral consumes the remainder of an over-cap character-reference
+// run — the bytes matching pred — in chunks no larger than limit, returning the
+// chunks (each a freshly-copied byte slice so it is safe to retain) and whether
+// a ';' terminates the run (which it also consumes). It does not emit, so the
+// caller can decide a resolved-value prefix first and emit the collected tail
+// afterward in source order.
+func (p *parser) collectAlnumLiteral(pred func(byte) bool, limit int) ([][]byte, bool) {
+	if limit <= 0 {
+		limit = defaultMaxContentSize
+	}
+	var chunks [][]byte
 	for {
 		chunk := p.parseWhileMax(pred, limit)
 		if chunk == "" {
 			break
 		}
-		_ = p.emitCharacters([]byte(chunk))
+		chunks = append(chunks, []byte(chunk))
 	}
+	hasSemicolon := false
 	if p.cur.Peek() == ';' {
+		hasSemicolon = true
 		_ = p.cur.Advance(1)
-		_ = p.emitCharacters([]byte(";"))
 	}
+	return chunks, hasSemicolon
 }
 
 // emitLiteralChunked emits s as literal text in Characters events no larger
