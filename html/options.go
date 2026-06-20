@@ -16,9 +16,12 @@ type parseConfig struct {
 	// a resolved character reference) is never split — a single rune larger than
 	// the cap is emitted whole. For comment/bogus-comment/PI it is a hard cap:
 	// exceeding it fails the parse with ErrContentSizeExceeded, since those
-	// constructs cannot be chunked without corrupting the document. Zero selects
-	// defaultMaxContentSize. It guards against unbounded memory growth on a
-	// gigantic or unterminated section.
+	// constructs cannot be chunked without corrupting the document. It is also a
+	// hard cap for an unresolved named character-reference run in RCDATA: an
+	// "&"-prefixed alphanumeric run that never resolves and never terminates
+	// fails the parse with ErrContentSizeExceeded once its literal bytes exceed
+	// the cap. Zero selects defaultMaxContentSize. It guards against unbounded
+	// memory growth on a gigantic or unterminated section.
 	maxContentSize int
 }
 
