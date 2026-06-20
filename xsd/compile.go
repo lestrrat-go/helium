@@ -227,6 +227,12 @@ type attrConstraintSource struct {
 type typeDefSource struct {
 	line    int
 	isLocal bool // true for anonymous (local) complex types
+	// source is the declaring file: this compiler's filename, or the file
+	// pulled in by xs:include/xs:import/xs:redefine (c.includeFile) when the
+	// type was parsed from an included/imported document. It is empty for
+	// types declared directly in the top-level schema. Diagnostics cite this
+	// so a type's line number matches the file it is reported against.
+	source string
 	// ordinal is a stable parse-order sequence number, used as the final
 	// tie-breaker when ordering diagnostics for types that share a source line
 	// and have empty (anonymous) names. See recordTypeDefSource.
@@ -240,10 +246,10 @@ type typeDefSource struct {
 // reflects when the type was first seen.
 func (c *compiler) recordTypeDefSource(td *TypeDef, line int, isLocal bool) {
 	if existing, ok := c.typeDefSources[td]; ok {
-		c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, ordinal: existing.ordinal}
+		c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: existing.source, ordinal: existing.ordinal}
 		return
 	}
-	c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, ordinal: c.nextTypeDefOrdinal}
+	c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: c.includeFile, ordinal: c.nextTypeDefOrdinal}
 	c.nextTypeDefOrdinal++
 }
 

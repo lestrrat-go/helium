@@ -149,6 +149,30 @@ func TestElementConsistent(t *testing.T) {
 </xs:schema>`,
 			},
 			{
+				// A transitive substitution-group chain head -> mid -> leaf. The
+				// content model references the HEAD. 'head' admits 'mid', and 'mid'
+				// admits 'leaf', so the head's particle implicitly contains 'leaf'
+				// too. A same-named local element 'leaf' of a genuinely different
+				// type (xs:string vs the chain's xs:int) therefore collides with the
+				// transitively-folded member and is inconsistent. Folding only the
+				// head's DIRECT members ('mid') would miss 'leaf' and accept this
+				// schema silently.
+				name: "transitive substitution-group member vs same-named local of a different type",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="mid" type="xs:int" substitutionGroup="head"/>
+  <xs:element name="leaf" type="xs:int" substitutionGroup="mid"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+        <xs:element name="leaf" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
 				// A standalone named group that no complex type references must
 				// still be checked: its two same-named elements have different
 				// types and are inconsistent.
@@ -326,6 +350,27 @@ func TestElementConsistent(t *testing.T) {
       <xs:sequence>
         <xs:element ref="head"/>
         <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// The transitive chain head -> mid -> leaf, all xs:int. A head
+				// reference transitively folds in 'leaf' (typed xs:int). A
+				// same-named local 'leaf' of that SAME type (xs:int) is consistent
+				// and must NOT be flagged, even though it collides with the
+				// transitively-folded member.
+				name: "transitive substitution-group member with a consistent same-named local",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int"/>
+  <xs:element name="mid" type="xs:int" substitutionGroup="head"/>
+  <xs:element name="leaf" type="xs:int" substitutionGroup="mid"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+        <xs:element name="leaf" type="xs:int"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>

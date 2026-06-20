@@ -28,9 +28,10 @@ import (
 // Coverage: a content model's same-name element declarations are compared via
 // their substitution-group-aware {type definition}s (see resolveDeclaredType).
 // In addition, for each element term the constraint folds in the term's
-// substitution-group MEMBERS as implicitly-containable declarations (a head's
-// particle stands in for any of its members), so a head reference colliding by
-// name with a different-typed local element is rejected. The check also runs
+// transitive substitution-group MEMBERS as implicitly-containable declarations
+// (a head's particle stands in for any of its members, and substitution chains
+// transitively), so a head reference colliding by name with a different-typed
+// local element is rejected. The check also runs
 // over standalone named xs:group definitions, so a named group never referenced
 // by a complex type is still checked.
 //
@@ -63,7 +64,15 @@ func (c *compiler) checkElementConsistent(ctx context.Context) {
 	})
 
 	for _, ct := range checked {
-		c.checkContentModelConsistent(ctx, ct.td.ContentModel, ct.src.line, c.complexTypeComponent(ct.td, ct.src))
+		// Attribute the diagnostic to the file the type was declared in (an
+		// include/import file when set) so the cited line number matches that
+		// file, not the top-level schema label. Types declared directly in the
+		// top-level schema have an empty source and fall back to c.filename.
+		source := ct.src.source
+		if source == "" {
+			source = c.filename
+		}
+		c.checkContentModelConsistent(ctx, ct.td.ContentModel, source, ct.src.line, c.complexTypeComponent(ct.td, ct.src))
 	}
 
 	// Run the same consistency check over standalone named model group
@@ -118,7 +127,7 @@ func (c *compiler) complexTypeComponent(td *TypeDef, src typeDefSource) string {
 // (including substitution-group members implied by each element term), grouped
 // by expanded name, and reports the first inconsistent pair found per name. The
 // diagnostic is attributed to a complexType component.
-func (c *compiler) checkContentModelConsistent(ctx context.Context, mg *ModelGroup, line int, component string) {
+func (c *compiler) checkContentModelConsistent(ctx context.Context, mg *ModelGroup, source string, line int, component string) {
 	byName := c.collectModelGroupElements(mg)
 	for _, qn := range sortedNames(byName) {
 		decls := byName[qn]
@@ -127,7 +136,7 @@ func (c *compiler) checkContentModelConsistent(ctx context.Context, mg *ModelGro
 		}
 		if !c.declsConsistent(decls) {
 			msg := fmt.Sprintf("Two elements with the same name '%s' and namespace '%s', but different type definitions, appear in the content model.", qn.Local, qn.NS)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "complexType", component, msg), helium.ErrorLevelFatal))
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(source, line, "complexType", component, msg), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
@@ -191,15 +200,12 @@ func sortedNames(byName map[QName][]*ElementDecl) []QName {
 
 // collectContentModelElements walks a model group recursively, appending every
 // element declaration term to byName keyed by its expanded name. For each
-// element term it also folds in the term's substitution-group MEMBERS that can
-// actually substitute for the head (the declarations the term's particle
-// implicitly stands in for), keyed by each member's own name, so a head reference
-// colliding by name with a different-typed same-named element elsewhere in the
-// model is detected. Members the head blocks from substituting (block="substitution"
-// on the head, or a derivation-blocked member) are NOT implicitly contained and so
-// are not folded in, mirroring elemMatchesDeclOrSubst's eligibility. The visited
-// set bounds shared/recursive model-group structures (e.g. a group referenced from
-// multiple places resolves to a shared *ModelGroup).
+// element term it also folds in the term's transitive substitution-group
+// MEMBERS that can actually substitute for the head (see foldSubstitutionMembers),
+// keyed by each member's own name, so a head reference colliding by name with a
+// different-typed same-named element elsewhere in the model is detected. The
+// visited set bounds shared/recursive model-group structures (e.g. a group
+// referenced from multiple places resolves to a shared *ModelGroup).
 func (c *compiler) collectContentModelElements(mg *ModelGroup, byName map[QName][]*ElementDecl, visited map[*ModelGroup]struct{}) {
 	if mg == nil {
 		return
@@ -224,30 +230,54 @@ func (c *compiler) collectContentModelElements(mg *ModelGroup, byName map[QName]
 		switch term := p.Term.(type) {
 		case *ElementDecl:
 			byName[term.Name] = append(byName[term.Name], term)
-			// Fold in the term's substitution-group members: a head's particle
-			// implicitly contains its members, so a member declaration is
-			// effectively present in this content model under its own name. An
-			// abstract head is itself never present, but its members still are.
-			//
-			// Only fold in members that can ACTUALLY substitute for the head,
-			// mirroring the substitution eligibility enforced at validation time
-			// (elemMatchesDeclOrSubst): a head with block="substitution" admits no
-			// members, and an individual member whose derivation chain to the head's
-			// type uses a blocked method cannot substitute. A member that genuinely
-			// cannot substitute is not implicitly contained, so folding it in would
-			// false-reject otherwise-valid schemas.
-			if term.Block&BlockSubstitution != 0 {
-				continue
-			}
-			headType := c.resolveDeclaredType(term)
-			for _, member := range c.schema.substGroups[term.Name] {
-				if isDerivationBlocked(c.resolveDeclaredType(member), headType, term.Block) {
-					continue
-				}
-				byName[member.Name] = append(byName[member.Name], member)
-			}
+			// Fold in the term's transitive substitution-group members: a head's
+			// particle implicitly contains its members (and their members), so each
+			// is effectively present in this content model under its own name.
+			c.foldSubstitutionMembers(term, byName)
 		case *ModelGroup:
 			c.collectContentModelElements(term, byName, visited)
+		}
+	}
+}
+
+// foldSubstitutionMembers folds the transitive substitution-group closure of
+// the head element term into byName. A head's particle implicitly stands in for
+// any member that can actually substitute for it, and substitution chains
+// transitively: if head admits mid and mid admits leaf, then leaf can also
+// appear where head's particle is, so leaf must be folded in too. Walking only
+// the DIRECT members of the head would miss such transitive members, letting a
+// nested chain (head -> mid -> leaf) collide undetected with a different-typed
+// same-named local element.
+//
+// At each reachable member the same eligibility check as the direct case is
+// applied against THAT member's own head: a head with block="substitution"
+// admits none of its members, and a member whose derivation chain to its head's
+// type uses a blocked method cannot substitute and is not folded in. The
+// visited set is keyed by member name and guards against substitution-group
+// cycles (rejected elsewhere, but defended against here so the walk terminates).
+func (c *compiler) foldSubstitutionMembers(head *ElementDecl, byName map[QName][]*ElementDecl) {
+	visited := map[QName]struct{}{head.Name: {}}
+	// queue holds heads whose direct members are not yet expanded.
+	queue := []*ElementDecl{head}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		// A head with block="substitution" admits no members, so its subtree
+		// contributes nothing further.
+		if cur.Block&BlockSubstitution != 0 {
+			continue
+		}
+		curType := c.resolveDeclaredType(cur)
+		for _, member := range c.schema.substGroups[cur.Name] {
+			if isDerivationBlocked(c.resolveDeclaredType(member), curType, cur.Block) {
+				continue
+			}
+			if _, seen := visited[member.Name]; seen {
+				continue
+			}
+			visited[member.Name] = struct{}{}
+			byName[member.Name] = append(byName[member.Name], member)
+			queue = append(queue, member)
 		}
 	}
 }

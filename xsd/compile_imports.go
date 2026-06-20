@@ -700,6 +700,13 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	base := c.nextTypeDefOrdinal
 	for td, src := range impC.typeDefSources {
 		src.ordinal += base
+		// Preserve the originating file for imported types. A type parsed
+		// directly in the imported document (not via a nested include) has an
+		// empty source; attribute it to the imported file so diagnostics cite
+		// the file whose line number they carry, not the importing schema.
+		if src.source == "" {
+			src.source = impC.filename
+		}
 		c.typeDefSources[td] = src
 	}
 	c.nextTypeDefOrdinal = base + impC.nextTypeDefOrdinal
