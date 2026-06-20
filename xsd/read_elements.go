@@ -193,7 +193,7 @@ func (c *compiler) readProcessContents(ctx context.Context, elem *helium.Element
 	default:
 		if c.filename != "" {
 			msg := fmt.Sprintf("'%s' is not a valid value of the union type '#processContents'.", v)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, elem.Line(),
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSource(), elem.Line(),
 				elem.LocalName(), elem.LocalName(), attrProcessContents, msg), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -211,7 +211,7 @@ func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.E
 		return
 	}
 	reject := func(msg string) {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, elem.Line(),
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSource(), elem.Line(),
 			elem.LocalName(), elem.LocalName(), attrNamespace, msg), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -329,7 +329,7 @@ func (c *compiler) readBooleanAttr(ctx context.Context, elem *helium.Element, at
 		return v
 	}
 	msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", normalizeWhiteSpace(getAttr(elem, attr), "collapse"))
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, elem.Line(),
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSource(), elem.Line(),
 		elem.LocalName(), elem.LocalName(), attr, msg), helium.ErrorLevelFatal))
 	c.errorCount++
 	return false

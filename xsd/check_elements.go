@@ -507,7 +507,7 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 		if hasAttr(elem, attrDefault) {
 			use := getAttr(elem, attrUse)
 			if use != "" && use != attrValOptional {
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSource(), line, local, "attribute",
 					"The value of the attribute 'use' must be 'optional' if the attribute 'default' is present."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}

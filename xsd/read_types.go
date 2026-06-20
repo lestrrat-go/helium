@@ -109,7 +109,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		if c.filename == "" {
 			return
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, ce.Line(),
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
 			elem.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -277,7 +277,7 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup) {
 			if contentModelChild != "" {
 				if c.filename != "" {
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, ce.Line(),
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
 						elem.LocalName(), componentLocalComplexType,
 						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)), helium.ErrorLevelFatal))
 					c.errorCount++
@@ -376,7 +376,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup) {
 			if contentModelChild != "" {
 				if c.filename != "" {
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, ce.Line(),
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
 						elem.LocalName(), componentLocalComplexType,
 						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)), helium.ErrorLevelFatal))
 					c.errorCount++

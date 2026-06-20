@@ -503,6 +503,12 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				}
 			}
 			c.schema.attrGroups[qn] = attrs
+			// The override REPLACES the Phase-A attribute group, so re-record its
+			// source to the redefining file/line (c.includeFile is the redefining
+			// label here). Without this the duplicate-attribute-use diagnostic over
+			// this group would keep the stale Phase-A source from parseNamedAttribute
+			// Group and cite the redefined (base) file instead of the redefine.
+			c.attrGroupSources[qn] = attrGroupSource{line: elem.Line(), source: c.diagSource()}
 		}
 	}
 

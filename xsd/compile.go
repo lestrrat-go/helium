@@ -266,6 +266,31 @@ func (c *compiler) recordTypeDefSource(td *TypeDef, line int, isLocal bool) {
 	c.nextTypeDefOrdinal++
 }
 
+// diagSource returns the file label a diagnostic should be attributed to during
+// parsing. A component parsed while inside an xs:include/xs:redefine (or the
+// Phase-A pass of a redefining schema) carries that file in c.includeFile; a
+// top-level component has no includeFile, so it falls back to the compiler's own
+// filename. Using c.filename directly would mis-attribute an included-file line
+// number to the including schema. This is the parse-time counterpart to using a
+// per-component recorded source (typeDefSource.source / attrGroupSource.source).
+func (c *compiler) diagSource() string {
+	if c.includeFile != "" {
+		return c.includeFile
+	}
+	return c.filename
+}
+
+// diagSourceOrRecorded prefers a per-component recorded source (e.g.
+// typeDefSource.source / attrGroupSource.source captured at parse time) and
+// falls back to the live parse-time source (c.includeFile, then c.filename) when
+// the recorded source is empty.
+func (c *compiler) diagSourceOrRecorded(recorded string) string {
+	if recorded != "" {
+		return recorded
+	}
+	return c.diagSource()
+}
+
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {
 	root := findDocumentElement(doc)
 	if root == nil {

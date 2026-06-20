@@ -86,3 +86,54 @@ func TestAttrGroupDuplicateSource(t *testing.T) {
 		assert(t, fsys, impXSD)
 	})
 }
+
+// TestRedefineAttrGroupDuplicateSource verifies that when an xs:redefine
+// OVERRIDE replaces an attribute group and the override body itself introduces a
+// duplicate attribute use, the ag-props-correct.2 diagnostic is attributed to
+// the REDEFINING file (where the override element and its line number live), not
+// the redefined (base) file the original group was loaded from. The override
+// replaces the stored group, so its recorded source must be re-pointed to the
+// redefining file; otherwise the diagnostic keeps the base file's source but the
+// override's line number, producing a mismatched file:line.
+func TestRedefineAttrGroupDuplicateSource(t *testing.T) {
+	t.Parallel()
+
+	const (
+		mainXSD = "redef_main.xsd"
+		baseXSD = "redef_base.xsd"
+	)
+
+	fsys := fstest.MapFS{
+		mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="redef_base.xsd">
+    <xs:attributeGroup name="g">
+      <xs:attribute name="dup" type="xs:string"/>
+      <xs:attribute name="dup" type="xs:int"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`)},
+		baseXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`)},
+	}
+
+	data, err := fsys.ReadFile(mainXSD)
+	require.NoError(t, err)
+	doc, err := helium.NewParser().Parse(t.Context(), data)
+	require.NoError(t, err)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	_, err = xsd.NewCompiler().Label(mainXSD).ErrorHandler(collector).FS(fsys).Compile(t.Context(), doc)
+	requireCompileResultErr(t, err)
+	require.NoError(t, collector.Close())
+	_, errStr := partitionCompileErrors(collector.Errors())
+
+	require.Contains(t, errStr, "Duplicate attribute use",
+		"expected the duplicate-attribute-use diagnostic")
+	require.Contains(t, errStr, mainXSD+":",
+		"override duplicate must be attributed to the redefining file; got: %q", errStr)
+	require.False(t, strings.Contains(errStr, baseXSD+":"),
+		"override duplicate must not cite the redefined base file; got: %q", errStr)
+}
