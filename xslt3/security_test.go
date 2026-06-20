@@ -1,6 +1,7 @@
 package xslt3_test
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -124,4 +125,77 @@ func TestFnDoc_HTTPClientHandlesUppercaseScheme(t *testing.T) {
 		Serialize(t.Context())
 	require.NoError(t, err)
 	require.Contains(t, out, "fetched")
+}
+
+// A hostile or pathological resource must not be read in full: doc()/fn:doc
+// reads through a bounded reader capped at [xslt3.MaxResourceBytes]. The server
+// streams more than the cap; the transform must fail with an error rather than
+// buffering the whole body into memory. The handler tracks how many bytes it
+// actually wrote so we can confirm the client stopped reading near the cap
+// instead of draining the entire (effectively unbounded) stream.
+func TestFnDoc_OverLimitResourceRejected(t *testing.T) {
+	t.Parallel()
+
+	// Far larger than MaxResourceBytes so a successful full read would be obvious.
+	const total = xslt3.MaxResourceBytes * 4
+
+	var written atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Begin with a well-formed document opener so that, absent the bound,
+		// the read would otherwise plausibly proceed; the padding never closes
+		// it. The size — not the well-formedness — is what must trip the guard.
+		buf := make([]byte, 64*1024)
+		for i := range buf {
+			buf[i] = 'a'
+		}
+		var sent int
+		for sent < total {
+			n := len(buf)
+			if remaining := total - sent; remaining < n {
+				n = remaining
+			}
+			m, err := w.Write(buf[:n])
+			written.Add(int64(m))
+			sent += m
+			if err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+	ss := compileFnDocStylesheet(t)
+
+	_, err = ss.Transform(source).
+		SetParameter("url", xpath3.SingleString(srv.URL+"/x")).
+		HTTPClient(srv.Client()).
+		Serialize(t.Context())
+	require.Error(t, err, "an over-limit resource must be rejected, not fully read")
+	require.Less(t, written.Load(), int64(total),
+		"client must stop reading near the cap, not drain the whole stream")
+}
+
+// Sanity: the bounded helper itself rejects an over-limit reader and accepts a
+// reader exactly at the cap. Guards the bound logic independent of the HTTP path.
+func TestReadResourceBounded_Limit(t *testing.T) {
+	t.Parallel()
+
+	_, err := xslt3.ReadResourceBoundedForTest(io.LimitReader(neverEndingReader{}, xslt3.MaxResourceBytes+1))
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge)
+
+	data, err := xslt3.ReadResourceBoundedForTest(io.LimitReader(neverEndingReader{}, xslt3.MaxResourceBytes))
+	require.NoError(t, err)
+	require.Len(t, data, xslt3.MaxResourceBytes)
+}
+
+// neverEndingReader yields an unbounded stream of 'a' bytes.
+type neverEndingReader struct{}
+
+func (neverEndingReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'a'
+	}
+	return len(p), nil
 }

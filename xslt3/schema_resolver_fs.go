@@ -127,5 +127,5 @@ func (i schemaResolverFileInfo) Sys() any           { return nil }
 // readCloserToBytes drains and closes a resolver-provided reader.
 func readCloserToBytes(rc io.ReadCloser) ([]byte, error) {
 	defer func() { _ = rc.Close() }()
-	return io.ReadAll(rc) //nolint:wrapcheck // caller wraps with context
+	return readResourceBounded(rc)
 }

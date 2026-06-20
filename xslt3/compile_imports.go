@@ -3,7 +3,6 @@ package xslt3
 import (
 	"context"
 	"fmt"
-	"io"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -203,7 +202,7 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 		return nil, fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
 	}
 	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
+	data, err := readResourceBounded(rc)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %q: %w", uri, err)
 	}
@@ -514,7 +513,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		return fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
 	}
 	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
+	data, err := readResourceBounded(rc)
 	if err != nil {
 		return fmt.Errorf("cannot read %q: %w", uri, err)
 	}

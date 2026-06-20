@@ -3,7 +3,6 @@ package xslt3
 import (
 	"context"
 	"errors"
-	"io"
 	"maps"
 	"path/filepath"
 	"strconv"
@@ -493,7 +492,7 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 			return nil, staticError(errCodeXTSE0090, "cannot read parameter-document %q: %v", href, resolveErr)
 		}
 		defer func() { _ = rc.Close() }()
-		return io.ReadAll(rc)
+		return readResourceBounded(rc)
 	}
 	return loadParameterDocumentFromFile(ctx, outDef, baseURI, href, loadBytes)
 }

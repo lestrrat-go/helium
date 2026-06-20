@@ -456,7 +456,7 @@ func fetchViaResolver(r xpath3.URIResolver, uri string) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = rc.Close() }()
-	return io.ReadAll(rc)
+	return readResourceBounded(rc)
 }
 
 // retrieveDocumentPrefix opens the resource through the configured
@@ -542,7 +542,7 @@ func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string) ([]byt
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("HTTP %d for %q", resp.StatusCode, uri)
 	}
-	return io.ReadAll(resp.Body)
+	return readResourceBounded(resp.Body)
 }
 
 // resolveAgainstBaseURI resolves a relative URI against an effective base URI.
