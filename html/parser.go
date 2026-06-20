@@ -1691,13 +1691,29 @@ func (p *parser) peekRuneToken() (string, int) {
 	if b < 0x80 {
 		return string([]byte{b}), 1
 	}
-	// Peek up to utf8.UTFMax bytes and decode. DecodeRuneInString reports a
-	// size of 1 for an invalid sequence and the true size for a valid rune
+	// Determine the expected UTF-8 sequence width from the lead byte alone and
+	// peek only that many bytes. Requesting utf8.UTFMax unconditionally would,
+	// under PUSH parsing, block until four bytes are buffered (or EOF) even
+	// though a complete 2- or 3-byte rune is already present — stalling
+	// progressive emission of raw-text/RCDATA/plaintext content. The lead byte
+	// tells us exactly how many bytes a valid sequence needs:
+	//   0xC0-0xDF -> 2, 0xE0-0xEF -> 3, 0xF0-0xF7 -> 4; anything else is an
+	// invalid lead (a stray continuation byte or 0xF8+) handled as one byte.
+	width := utf8ExpectedWidth(b)
+	if width == 1 {
+		// Invalid lead byte: consume a single byte so the scan makes progress
+		// and the caller never emits a partial rune.
+		return string([]byte{b}), 1
+	}
+	// Peek exactly the bytes a valid sequence needs. DecodeRuneInString reports
+	// a size of 1 for an invalid sequence and the true size for a valid rune
 	// (including a genuine U+FFFD), so the size distinguishes the two cases.
-	s := p.cur.PeekString(utf8.UTFMax)
+	s := p.cur.PeekString(width)
 	if s == "" {
-		// Fewer than UTFMax bytes remain near EOF; peek whatever is left.
-		for n := utf8.UTFMax - 1; n >= 1; n-- {
+		// Fewer than width bytes remain. Near true EOF, peek whatever is left
+		// and decode/replace it; this is not a block-on-more-input case because
+		// a complete rune of this width cannot fit in the remaining bytes.
+		for n := width - 1; n >= 1; n-- {
 			if s = p.cur.PeekString(n); s != "" {
 				break
 			}
@@ -1711,6 +1727,25 @@ func (p *parser) peekRuneToken() (string, int) {
 		size = 1
 	}
 	return s[:size], size
+}
+
+// utf8ExpectedWidth returns the number of bytes a valid UTF-8 sequence starting
+// with lead byte b occupies: 1 for ASCII, 2/3/4 for multi-byte leads. Any byte
+// that cannot begin a valid sequence (a continuation byte 0x80-0xBF or 0xF8+)
+// returns 1 so callers treat it as a single invalid byte.
+func utf8ExpectedWidth(b byte) int {
+	switch {
+	case b < 0x80:
+		return 1
+	case b >= 0xF0 && b <= 0xF7:
+		return 4
+	case b >= 0xE0 && b <= 0xEF:
+		return 3
+	case b >= 0xC0 && b <= 0xDF:
+		return 2
+	default:
+		return 1
+	}
 }
 
 // isUTF8Continuation reports whether b is a UTF-8 continuation byte

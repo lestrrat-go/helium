@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -20,6 +21,7 @@ const (
 	tagPlaintext = "plaintext"
 	tagTextarea  = "textarea"
 	tagTitle     = "title"
+	tagStyle     = "style"
 
 	// Subtest names for the comment-like constructs, shared across the
 	// comment/bogus-comment/PI table tests.
@@ -90,7 +92,7 @@ func TestRawTextContextCancellationAborts(t *testing.T) {
 		input string
 	}{
 		{"script", "<script>" + body},
-		{"style", "<style>" + body},
+		{tagStyle, "<style>" + body},
 		{tagTextarea, "<textarea>" + body},
 		{tagTitle, "<title>" + body},
 		{tagPlaintext, "<plaintext>" + body},
@@ -166,7 +168,7 @@ func TestRawTextChunksAreValidUTF8(t *testing.T) {
 		close string
 	}{
 		{"script", "<script>", "</script>"},
-		{"style", "<style>", "</style>"},
+		{tagStyle, "<style>", "</style>"},
 		{tagTextarea, "<textarea>", "</textarea>"}, // RCDATA
 		{tagTitle, "<title>", "</title>"},          // RCDATA
 		{tagPlaintext, "<plaintext>", ""},
@@ -217,7 +219,7 @@ func TestRawTextContentChunkedUnderCap(t *testing.T) {
 		close string
 	}{
 		{"script", "<script>", "</script>"},
-		{"style", "<style>", "</style>"},
+		{tagStyle, "<style>", "</style>"},
 		{tagTextarea, "<textarea>", "</textarea>"},
 		{tagPlaintext, "<plaintext>", ""},
 	}
@@ -443,7 +445,7 @@ func TestRawTextChunkSlicesAreIndependent(t *testing.T) {
 		close string
 	}{
 		{"script", "<script>", "</script>"},
-		{"style", "<style>", "</style>"},
+		{tagStyle, "<style>", "</style>"},
 		{tagPlaintext, "<plaintext>", ""},
 	}
 
@@ -1577,5 +1579,83 @@ func TestRCDATANumericRefExemptFromCap(t *testing.T) {
 					"%s: the resolved rune must be emitted whole", tc.name)
 			})
 		}
+	}
+}
+
+// TestRawTextProgressiveRuneEmittedWithoutBlocking is the regression for codex
+// 615-31: peekRuneToken called PeekString(utf8.UTFMax) for every non-ASCII byte,
+// which (under PUSH/streaming input) blocks the cursor refill until FOUR bytes
+// are buffered OR the stream closes. A COMPLETE 2-byte rune sitting at the end of
+// the pushed-but-not-yet-closed bytes therefore stalled the scanner inside the
+// refill Read until the caller pushed extra bytes or closed the stream — a
+// progressive-parsing regression in raw-text / RCDATA / plaintext content. The
+// fix peeks only the bytes the lead byte says the rune needs, so a complete rune
+// is consumed without that blocking refill.
+//
+// The stall is observable as a missed flush: with a tiny MaxContentSize the
+// scanner flushes the accumulated filler the instant it consumes the trailing
+// rune — appendToken("é") finds the buffer at the cap and flushes the filler
+// before writing é. With the bug the scanner blocks BEFORE that appendToken (in
+// PeekString(utf8.UTFMax), waiting for two bytes that will never be pushed), so
+// the filler chunk never arrives until Close() finally lets the near-EOF
+// fallback decode the rune. The test pushes head + filler + a complete 'é'
+// WITHOUT closing and asserts the filler chunk is delivered promptly; before the
+// fix the goroutine is parked in the refill and the chunk never comes (caught by
+// the timeout).
+func TestRawTextProgressiveRuneEmittedWithoutBlocking(t *testing.T) {
+	// Content (per element below) is exactly `sizeCap` bytes of filler followed
+	// by a complete 2-byte 'é'. appendToken accumulates the filler to the cap
+	// without flushing (a flush needs content.Len()+len(tok) > cap, and each
+	// 1-byte filler token keeps it at == cap), then appendToken("é") sees
+	// cap+2 > cap and flushes the whole filler chunk — the flush we watch for.
+	// The filler is also large enough to clear the 1024-byte charset prescan so
+	// the stall, if any, happens while streaming.
+	const sizeCap = 1200
+	filler := strings.Repeat("a", sizeCap)
+
+	cases := []struct {
+		name string
+		open string // raw-text / RCDATA / plaintext opener
+	}{
+		{tagPlaintext, "<plaintext>"}, // PLAINTEXT
+		{tagStyle, "<style>"},         // RAWTEXT
+		{tagTextarea, "<textarea>"},   // RCDATA
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			flushed := make(chan struct{})
+			var once sync.Once
+			record := html.CharactersFunc(func(data []byte) error {
+				// The flush we care about is the full filler chunk emitted when
+				// the trailing rune is consumed.
+				if strings.Count(string(data), "a") >= sizeCap {
+					once.Do(func() { close(flushed) })
+				}
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			pp := html.NewParser().MaxContentSize(sizeCap).
+				NewSAXPushParser(t.Context(), sax)
+			// Close at the end so the parse goroutine always terminates. The
+			// assertion happens BEFORE this Close: a passing parser must flush
+			// the filler chunk from the pushed bytes alone, without needing the
+			// stream to be closed or further bytes pushed.
+			defer func() { _, _ = pp.Close() }()
+
+			// Push head + filler + a COMPLETE 'é', then push nothing more.
+			require.NoError(t, pp.Push([]byte(metaUTF8+tc.open+filler+"é")))
+
+			select {
+			case <-flushed:
+				// Filler chunk flushed from the pushed bytes alone — the trailing
+				// complete rune was consumed without a blocking refill.
+			case <-time.After(10 * time.Second):
+				t.Fatal("filler chunk was not flushed after pushing a complete trailing rune (peekRuneToken over-requested bytes and stalled in a blocking refill)")
+			}
+		})
 	}
 }
