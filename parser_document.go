@@ -72,14 +72,18 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	// For UTF-16 detected encodings, we must switch encoding FIRST
 	// because the XML declaration is encoded in UTF-16, not ASCII.
 	switch pctx.detectedEncoding {
-	case encUTF16LE, encUTF16BE:
-		// For UTF-16 detected encodings, we must switch encoding FIRST
-		// because the XML declaration is encoded in UTF-16, not ASCII.
+	case encUTF16LE, encUTF16BE, encUCS4BE, encUCS4LE, encUCS42143, encUCS43412:
+		// For UTF-16 and UCS-4 detected encodings, we must switch encoding
+		// FIRST because the XML declaration is encoded in that fixed-width
+		// encoding, not ASCII. These encodings are not ASCII-compatible, so
+		// the byte-level XML declaration parser cannot read them. The UCS-4
+		// detection patterns are the encoded first '<' character (peeked, not
+		// consumed), so the decoded cursor still begins at the document start.
 		if err := pctx.switchEncoding(); err != nil {
 			return pctx.error(ctx, err)
 		}
 		cur := pctx.getCursor()
-		if cur != nil && cur.HasPrefixString("<?xml") {
+		if cur != nil && looksLikeXMLDeclString(cur) {
 			if err := pctx.parseXMLDeclFromCursor(ctx); err != nil {
 				return pctx.error(ctx, err)
 			}

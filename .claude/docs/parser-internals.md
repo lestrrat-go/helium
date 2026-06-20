@@ -91,7 +91,7 @@ State affects parsing rules: e.g., external entity refs forbidden in `psAttribut
 ## Encoding Detection
 
 Order in `detectEncoding()`:
-1. UCS-4 BE/LE/2143/3412 (4-byte BOM patterns)
+1. UCS-4 BE/LE/2143/3412 — matches the encoded leading `<` byte patterns of a BOM-less document and PEEKS them (does not consume), unlike a real BOM which is consumed
 2. EBCDIC (`0x4C 0x6F 0xA7 0x94` invariant prefix)
 3. UTF-8 BOM (`0xEF 0xBB 0xBF`)
 4. UTF-16 BOM (`0xFF 0xFE` LE, `0xFE 0xFF` BE)

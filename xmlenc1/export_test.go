@@ -28,6 +28,13 @@ func HardenedParserForTest() helium.Parser {
 	return newHardenedInnerParser()
 }
 
+// ParseEncryptedDataForTest is a test-only re-export of the package
+// internal EncryptedData parser so tests can assert namespace-aware
+// element matching directly against a parsed DOM.
+func ParseEncryptedDataForTest(elem *helium.Element) (*EncryptedData, error) {
+	return parseEncryptedData(elem)
+}
+
 // AESKeyWrapForTest wraps key material under a KEK using RFC 3394 AES Key
 // Wrap. It exists so security tests can assemble an EncryptedKey whose
 // wrapped session-key length does not match the declared block algorithm,

@@ -370,11 +370,21 @@ type accumulatorRule struct {
 }
 
 // nameTest is used for xsl:strip-space and xsl:preserve-space element names.
+//
+// The namespace URI for a prefixed or default-namespace name is resolved at
+// compile time using the namespace context in scope at the declaration (the
+// xsl:strip-space / xsl:preserve-space element). This is required because a
+// stylesheet and the modules it imports may bind the same prefix to different
+// URIs; relying on a single flat runtime binding map would mis-resolve such
+// names. ImportPrec records the import precedence of the declaring module so
+// that conflicting strip/preserve rules are resolved by precedence (XTSE0270
+// is only raised for genuine same-precedence conflicts).
 type nameTest struct {
-	Prefix string
-	Local  string // "*" = wildcard
-	URI    string // resolved namespace URI (set at compile time for unprefixed names via xpath-default-namespace)
-	HasURI bool   // true when URI was explicitly resolved (distinguishes "" from unset)
+	Prefix     string
+	Local      string // "*" = wildcard
+	URI        string // resolved namespace URI (set at compile time)
+	HasURI     bool   // true when URI was explicitly resolved (distinguishes "" from unset)
+	ImportPrec int    // import precedence of the declaring module
 }
 
 // Transform creates an Invocation that applies templates to the source
