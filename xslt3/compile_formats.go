@@ -1145,11 +1145,17 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 }
 
 // spaceDeclNamespaces returns the namespace bindings in scope at an
-// xsl:strip-space / xsl:preserve-space declaration. The element's own ancestor
-// chain in the source tree is authoritative for declaration-time resolution;
-// XSLT-implied bindings collected on the compiler are used only as a fallback.
+// xsl:strip-space / xsl:preserve-space declaration. Only the element's own
+// ancestor chain in the source tree (plus the implicit "xml" prefix) is
+// authoritative for declaration-time resolution. Compiler-wide bindings are NOT
+// consulted: they may carry prefixes from imported modules that are not in
+// scope here, which would wrongly accept an undeclared prefix instead of
+// raising XTSE0280.
 func (c *compiler) spaceDeclNamespaces(elem *helium.Element) map[string]string {
-	bindings := make(map[string]string)
+	bindings := map[string]string{
+		// The "xml" prefix is implicitly bound in every XML document.
+		lexicon.PrefixXML: lexicon.NamespaceXML,
+	}
 	// Walk descendant-to-ancestor; nearest declaration wins.
 	for n := helium.Node(elem); n != nil; n = n.Parent() {
 		e, ok := n.(*helium.Element)
@@ -1160,11 +1166,6 @@ func (c *compiler) spaceDeclNamespaces(elem *helium.Element) map[string]string {
 			if _, exists := bindings[ns.Prefix()]; !exists {
 				bindings[ns.Prefix()] = ns.URI()
 			}
-		}
-	}
-	for prefix, uri := range c.nsBindings {
-		if _, exists := bindings[prefix]; !exists {
-			bindings[prefix] = uri
 		}
 	}
 	return bindings

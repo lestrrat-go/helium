@@ -145,3 +145,79 @@ func TestStripSpacePrefixNamespaceContext(t *testing.T) {
 	require.Contains(t, out, "   </b:item>",
 		"urn:B item must not be stripped (prefix p resolves to urn:A at the import declaration); got %q", out)
 }
+
+// TestStripSpaceUndeclaredPrefix verifies that a prefix used in a strip-space
+// elements NameTest that is NOT in scope at the declaration raises XTSE0280,
+// rather than being silently accepted via a compiler-wide binding leaked from an
+// imported module.
+func TestStripSpaceUndeclaredPrefix(t *testing.T) {
+	t.Parallel()
+
+	// Imported module binds prefix "p" -> urn:A.
+	imported := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:p="urn:A" version="3.0">
+  <xsl:strip-space elements="p:item"/>
+</xsl:stylesheet>`
+
+	// Importing module does NOT bind "p" anywhere in scope at its own
+	// strip-space declaration. Using "p:item" here must raise XTSE0280, not be
+	// accepted because the imported module happened to bind "p".
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:import href="mem:/imported.xsl"/>
+  <xsl:strip-space elements="p:item"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	resolver := &memResolver{files: map[string]string{
+		"mem:/imported.xsl": imported,
+	}}
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+
+	_, err = xslt3.NewCompiler().
+		BaseURI("mem:/main.xsl").
+		URIResolver(resolver).
+		Compile(t.Context(), doc)
+	require.Error(t, err, "undeclared prefix in strip-space elements must raise XTSE0280")
+	require.Contains(t, err.Error(), "XTSE0280")
+}
+
+// TestStripSpaceNamespaceWildcardPriority verifies that a namespace wildcard
+// (Q{uri}*) outranks the universal wildcard (*) at equal import precedence, so
+// strip-space="Q{urn:A}*" wins over preserve-space="*" for an element in urn:A.
+func TestStripSpaceNamespaceWildcardPriority(t *testing.T) {
+	t.Parallel()
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="Q{urn:A}*"/>
+  <xsl:preserve-space elements="*"/>
+  <xsl:output method="xml" omit-xml-declaration="yes"/>
+  <xsl:template match="/">
+    <xsl:copy-of select="."/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+	require.NotNil(t, ss)
+
+	// <a:item> in urn:A has whitespace-only content. The namespace wildcard
+	// strip-space rule must outrank the universal preserve-space wildcard, so the
+	// whitespace is stripped.
+	source, err := helium.NewParser().Parse(t.Context(), []byte(
+		`<doc xmlns:a="urn:A"><a:item>   </a:item></doc>`))
+	require.NoError(t, err)
+
+	out, err := xslt3.TransformString(t.Context(), source, ss)
+	require.NoError(t, err)
+
+	require.NotContains(t, out, "   </a:item>",
+		"Q{urn:A}* strip-space must outrank * preserve-space; got %q", out)
+}

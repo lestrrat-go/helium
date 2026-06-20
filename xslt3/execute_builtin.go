@@ -432,11 +432,12 @@ func matchSpaceNameTest(nt nameTest, elem *helium.Element) bool {
 // nameTestPriority returns the priority of a nameTest for conflict resolution.
 // Specific names > prefix:* or *:NCName > *
 func nameTestPriority(nt nameTest) int {
-	if nt.Local == "*" && nt.Prefix == "" {
-		return 0 // "*"
+	if nt.Local == "*" && nt.Prefix == "" && !nt.HasURI {
+		return 0 // "*" (matches any element in any namespace)
 	}
 	if nt.Local == "*" || nt.Prefix == "*" {
-		return 1 // "prefix:*" or "*:NCName"
+		// "prefix:*" / "Q{uri}*" (namespace wildcard) or "*:NCName"
+		return 1
 	}
 	return 2 // specific name
 }
