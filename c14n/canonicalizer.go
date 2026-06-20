@@ -1019,46 +1019,54 @@ func relativizeURI(base, target string) string {
 		}
 	}
 
-	// Build relative path
-	result := strings.Repeat("../", ups) + targetPath[len(common):]
+	// Build the path-relative part and the query/fragment suffix separately so
+	// the relative-reference candidates below can be assembled and tested
+	// independently.
+	pathRelative := strings.Repeat("../", ups) + targetPath[len(common):]
 
-	// An empty relative reference resolves back to the base document, which is
-	// exactly what we want when target and base share the same path. Only inject
-	// "." when there is genuinely a path to represent AND no query/fragment is
-	// carried: a bare "." resolves to the directory ("host/dir/"), so combining
-	// it with a query/fragment ("./?q=1#frag" → "host/dir/?q=1#frag") would point
-	// at the directory rather than the target document. When result is empty,
-	// leave it empty so the query/fragment (or nothing) attach to the bare
-	// relative reference, resolving back to the exact target.
-	hasQueryOrFragment := targetURL.RawQuery != "" || targetURL.ForceQuery || targetURL.Fragment != ""
-	if result == "" && targetURL.Path != "" && !hasQueryOrFragment {
-		result = "."
-	}
-
-	// Preserve the target's query and fragment components: only the path is
-	// relativized, the query+fragment carry through unchanged.
+	suffix := ""
 	if targetURL.RawQuery != "" || targetURL.ForceQuery {
-		result += "?" + targetURL.RawQuery
+		suffix += "?" + targetURL.RawQuery
 	}
 	if targetURL.Fragment != "" {
-		result += "#" + targetURL.EscapedFragment()
+		suffix += "#" + targetURL.EscapedFragment()
 	}
 
-	// Convergence check: a relative reference is only correct if resolving it
-	// against the base yields exactly the target. Several edge cases (empty path
-	// with a base that carries a query/fragment, same-authority quirks, etc.)
-	// produce a candidate that resolves back to the BASE rather than the TARGET,
-	// silently changing the URI. Parse the candidate, resolve it against the
-	// base, and fall back to the absolute target whenever the round-trip does
-	// not reproduce the exact target.
-	candidate, err := url.Parse(result)
-	if err != nil {
-		return target
+	// roundTrips reports whether resolving the candidate reference against the
+	// base reproduces the exact target. A relative reference is only correct if
+	// it round-trips; otherwise it would silently change the URI.
+	roundTrips := func(ref string) bool {
+		candidate, err := url.Parse(ref)
+		if err != nil {
+			return false
+		}
+		return baseURL.ResolveReference(candidate).String() == targetURL.String()
 	}
-	if baseURL.ResolveReference(candidate).String() != targetURL.String() {
-		return targetURL.String()
+
+	// Primary candidate: the relativized path plus the carried query/fragment.
+	candidate := pathRelative + suffix
+	if roundTrips(candidate) {
+		return candidate
 	}
-	return result
+
+	// When the path part is empty the target lives in the base document's own
+	// directory. The bare suffix (e.g. "?q=1#frag") resolves against the base
+	// *document* (re-using its filename), so it points at the base document with
+	// the suffix attached rather than the directory. If that does not round-trip
+	// to the target, a leading "." selects the directory itself: "./?q=1#frag"
+	// (or ".?q=1#frag" when no path remains) resolves to the directory plus the
+	// suffix, which is the correct minimal relative reference for a same-directory
+	// target carrying only a query/fragment.
+	if pathRelative == "" {
+		dotCandidate := "." + suffix
+		if roundTrips(dotCandidate) {
+			return dotCandidate
+		}
+	}
+
+	// No relative candidate round-trips; emit the absolute target so the
+	// canonical xml:base resolves to the exact target.
+	return targetURL.String()
 }
 
 // removeXMLBaseEntry removes any xml:base entry from the attr list.

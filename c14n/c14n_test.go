@@ -606,6 +606,36 @@ func TestC14N11BaseURIFixupOpaqueURI(t *testing.T) {
 	require.Contains(t, string(got), `xml:base="urn:target"`, "opaque xml:base must canonicalize absolutely without panic, got: %s", string(got))
 }
 
+// TestC14N11BaseURIFixupSameDirQueryFragment is a regression for the
+// over-correction where a valid same-directory relative target was emitted as an
+// ABSOLUTE URI. The base document is .../a/b/doc.xml and the hidden xml:base
+// "./?q=1#frag" resolves to .../a/b/?q=1#frag — the base's own directory carrying
+// a query+fragment. The bare suffix "?q=1#frag" resolves against the base
+// document (re-using "doc.xml") and so does NOT round-trip; the correct minimal
+// relative reference is ".?q=1#frag", which resolves to the directory plus the
+// suffix. The fixup must emit that relative reference, not the absolute target.
+func TestC14N11BaseURIFixupSameDirQueryFragment(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="./?q=1#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com/a/b/doc.xml").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// The emitted xml:base must be the relative ".?q=1#frag" (which resolves to
+	// http://example.com/a/b/?q=1#frag), not the absolute target URL.
+	require.Contains(t, string(got), `xml:base=".?q=1#frag"`, "same-directory query+fragment must canonicalize to a relative reference, got: %s", string(got))
+	require.NotContains(t, string(got), `xml:base="http://example.com/a/b/?q=1#frag"`, "must not emit the absolute target for a relativizable same-directory target, got: %s", string(got))
+}
+
 // TestC14N11BaseURIFixupBaseCarriesQuery is a convergence regression: when the
 // configured base URI carries a query (or fragment) that the target does NOT,
 // a naive relativizer can produce a relative reference that resolves back to the
