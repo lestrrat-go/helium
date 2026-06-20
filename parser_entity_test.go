@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -678,6 +680,41 @@ func TestEntityAmplification(t *testing.T) {
 		require.Regexp(t, `\(\d+ > \d+\)`, err.Error(),
 			"error must include observed and configured sizes for diagnosis, got: %v", err)
 	})
+}
+
+// TestParseFileLargeEntityNotFalselyAmplified guards against a regression where
+// ParseFile delegated to the streaming reader path, leaving inputSize == 0. A
+// large internal entity referenced exactly once is legitimate (no
+// amplification) and must parse, but a zero inputSize made the
+// amplification-ratio guard fall back to a divisor of 1 and falsely reject it.
+// ParseFile knows the file size, so it must seed inputSize like Parse([]byte)
+// does and produce the same result.
+func TestParseFileLargeEntityNotFalselyAmplified(t *testing.T) {
+	t.Parallel()
+
+	// Entity content just over the 1 MiB ratio-check baseline
+	// (entityAllowedExpansion), referenced exactly once. The expansion is far
+	// below the file size, so the amplification ratio is well under the limit.
+	bigContent := strings.Repeat("A", 1_500_000)
+	xml := fmt.Sprintf(`<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ENTITY big "%s">
+]>
+<root>&big;</root>`, bigContent)
+
+	// Baseline: Parse([]byte) must accept this (inputSize == len(xml)).
+	doc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(xml))
+	require.NoError(t, err, "Parse([]byte) must accept a large entity referenced once")
+	require.NotNil(t, doc)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "big-entity.xml")
+	require.NoError(t, os.WriteFile(path, []byte(xml), 0o600))
+
+	// ParseFile must match Parse([]byte): the guard must not falsely trip.
+	fileDoc, err := helium.NewParser().SubstituteEntities(true).ParseFile(t.Context(), path)
+	require.NoError(t, err, "ParseFile must accept the same large-entity document as Parse([]byte)")
+	require.NotNil(t, fileDoc)
 }
 
 func TestPredefinedEntities(t *testing.T) {

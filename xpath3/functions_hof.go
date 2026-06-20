@@ -3,7 +3,6 @@ package xpath3
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
@@ -20,21 +19,100 @@ func init() {
 	registerFn("function-name", 1, 1, fnFunctionName)
 }
 
+// fnMaxNodes returns the node-set/sequence length limit that accumulating
+// built-ins (for-each, for-each-pair, map:for-each, array:flatten, ...) must
+// honor via appendBounded. When the function is called outside an evaluation
+// (ec == nil) or the evaluation did not set an explicit limit, the package
+// default applies so unbounded materialization is still rejected.
+func fnMaxNodes(ec *evalContext) int {
+	if ec == nil || ec.maxNodes <= 0 {
+		return maxNodeSetLength
+	}
+	return ec.maxNodes
+}
+
+// fnCountOp charges one operation against the evaluation's op-counter and
+// honors context cancellation. It is a no-op (other than the cancellation
+// check) when called outside an evaluation. Accumulating built-ins call it once
+// per iteration so a long-running higher-order call respects op/time limits.
+func fnCountOp(ctx context.Context, ec *evalContext) error {
+	if ec != nil {
+		return ec.countOps(ctx, 1)
+	}
+	return ctx.Err()
+}
+
+// fnCountOps charges n operations against the evaluation's op-counter and
+// honors context cancellation. It is a no-op (other than the cancellation
+// check) when called outside an evaluation. Built-ins that clone or materialize
+// a whole sub-sequence in one shot (array:for-each, array:for-each-pair,
+// array:join, array:flat-map, map:find) call it with the sub-sequence length
+// BEFORE the bulk clone/append so the work is charged against OpLimit — a length
+// below maxNodes but above OpLimit is still rejected with ErrOpLimit.
+func fnCountOps(ctx context.Context, ec *evalContext, n int) error {
+	if ec != nil {
+		return ec.countOps(ctx, n)
+	}
+	return ctx.Err()
+}
+
+// appendArrayMember enforces BOTH result-array bounds before adding one member
+// to an array builder (array:for-each, array:filter, array:join, array:flat-map,
+// map:find, ...) and charges the per-member op cost. It returns the grown member
+// slice and the running item total.
+//
+// Two independent limits must hold at every append site, because a member can
+// add zero items yet still add a member:
+//
+//   - member count: many EMPTY members (each seqLen 0) could otherwise build an
+//     array with more than maxNodes members while the item total stays at zero,
+//     so len(dst)+1 is bounded against maxNodes.
+//   - item count: a single member with a huge (possibly lazy) sequence could
+//     otherwise be cloned by NewArray past maxNodes items, so member length is
+//     bounded against the remaining headroom (maxNodes-total). The subtraction is
+//     overflow-safe because it only runs when maxNodes > 0.
+//
+// The op charge is max(seqLen(member), 1): NewArray clones each member, so a
+// member with many items below maxNodes but above OpLimit must be rejected, AND
+// empty members must still each cost an op so a flood of them cannot bypass
+// OpLimit.
+func appendArrayMember(ctx context.Context, ec *evalContext, maxNodes int, dst []Sequence, total int, member Sequence) ([]Sequence, int, error) {
+	if maxNodes > 0 && len(dst)+1 > maxNodes {
+		return dst, total, ErrNodeSetLimit
+	}
+	mLen := seqLen(member)
+	if maxNodes > 0 && mLen > maxNodes-total {
+		return dst, total, ErrNodeSetLimit
+	}
+	if err := fnCountOps(ctx, ec, max(mLen, 1)); err != nil {
+		return dst, total, err
+	}
+	return append(dst, member), total + mLen, nil
+}
+
 func fnForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
 	fi, err := extractFunctionItem(args[1])
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
 	callArgs := make([]Sequence, 1)
 	for item := range seqItems(seq) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		callArgs[0] = ItemSlice{item}
 		r, err := fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBoundedSeq(ctx, ec, result, r, maxNodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -49,9 +127,14 @@ func fnFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 	if fi.Arity >= 0 && fi.Arity != 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:filter callback must have arity 1, got %d", fi.Arity)}
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
 	callArgs := make([]Sequence, 1)
 	for item := range seqItems(seq) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		callArgs[0] = ItemSlice{item}
 		r, err := fi.Invoke(ctx, callArgs)
 		if err != nil {
@@ -66,7 +149,10 @@ func fnFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "fn:filter callback must return a single xs:boolean value"}
 		}
 		if av.BooleanVal() {
-			result = append(result, item)
+			result, err = appendBounded(result, []Item{item}, maxNodes)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return result, nil
@@ -79,13 +165,23 @@ func fnFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	callArgs := make([]Sequence, 2)
 	for item := range seqItems(seq) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		callArgs[0] = acc
 		callArgs[1] = ItemSlice{item}
 		acc, err = fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
+		}
+		// The accumulator can grow without bound across iterations; reject once
+		// it would exceed the configured sequence/node-set limit.
+		if maxNodes > 0 && seqLen(acc) > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 	}
 	return acc, nil
@@ -98,14 +194,26 @@ func fnFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	items := seqMaterialize(seq)
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	// Iterate from last to first WITHOUT materializing the input sequence, so a
+	// lazy/borrowed input is never fully realized before the per-item op-count
+	// and accumulator size-bound checks run (mirrors fnFoldLeft's streaming).
 	callArgs := make([]Sequence, 2)
-	for _, v := range slices.Backward(items) {
-		callArgs[0] = ItemSlice{v}
+	for i := seqLen(seq); i > 0; i-- {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		callArgs[0] = ItemSlice{seq.Get(i - 1)}
 		callArgs[1] = acc
 		acc, err = fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
+		}
+		// The accumulator can grow without bound across iterations; reject once
+		// it would exceed the configured sequence/node-set limit.
+		if maxNodes > 0 && seqLen(acc) > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 	}
 	return acc, nil
@@ -122,17 +230,25 @@ func fnForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
 	if fi.Arity >= 0 && fi.Arity != 2 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	size := min(seqLen(seq1), seqLen(seq2))
 	var result ItemSlice
 	callArgs := make([]Sequence, 2)
 	for i := range size {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		callArgs[0] = ItemSlice{seq1.Get(i)}
 		callArgs[1] = ItemSlice{seq2.Get(i)}
 		r, err := fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seqMaterialize(r)...)
+		result, err = appendBoundedSeq(ctx, ec, result, r, maxNodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
