@@ -400,6 +400,75 @@ func TestImportSchemaOverCapNotMaskedByPrecompiledFallback(t *testing.T) {
 		"over-cap import-schema must surface ErrResourceTooLarge, not silently fall back to ImportSchemas")
 }
 
+// An xsl:import-schema whose schema-location loads fine but whose NESTED
+// xs:include escapes its base directory via "../" must FAIL compilation, even
+// when a pre-compiled schema for the SAME target namespace is registered via
+// Compiler.ImportSchemas. The path-escape sentinel is a plain unexported xsd
+// error (not a FatalSchemaLoader interface value), so an interface-only fallback
+// guard would miss it and silently substitute the pre-compiled schema — defeating
+// the path-traversal guard. The single xsd.IsFatalSchemaLoad classifier must
+// short-circuit the fallback. (This test FAILS before the centralized fix and
+// PASSES after.)
+func TestImportSchemaNestedPathEscapeNotMaskedByPrecompiledFallback(t *testing.T) {
+	t.Parallel()
+
+	// Local (non-URI) base so the xsd compiler's "../"-escape guard fires on the
+	// nested include (the URI-base branch resolves per RFC 3986 instead).
+	const baseURI = "/local/styles/main.xsl"
+	const ns = "http://example.com/s"
+
+	// Main schema loads cleanly but pulls in a nested include that climbs above
+	// its own directory — a path-traversal escape the xsd compiler rejects with
+	// the errSchemaPathEscape sentinel.
+	mainSchema := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="` + ns + `"
+           elementFormDefault="qualified">
+  <xs:include schemaLocation="../../../etc/escape.xsd"/>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	// A small, valid pre-compiled schema for the same namespace. Before the fix
+	// the escape error fell through to this fallback and compilation reported OK.
+	preSchema := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="` + ns + `"
+           elementFormDefault="qualified">
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="` + ns + `">
+  <xsl:import-schema namespace="` + ns + `" schema-location="main.xsd"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	preDoc, err := helium.NewParser().Parse(ctx, []byte(preSchema))
+	require.NoError(t, err)
+	precompiled, err := xsd.NewCompiler().Compile(ctx, preDoc)
+	require.NoError(t, err)
+
+	// Resolver serves the main schema; the escaping nested include is never
+	// reachable because the escape is rejected during resolution.
+	resolver := fileMapResolver{files: map[string]string{
+		"/local/styles/main.xsd": mainSchema,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+
+	_, err = xslt3.NewCompiler().
+		BaseURI(baseURI).
+		URIResolver(resolver).
+		ImportSchemas(precompiled).
+		Compile(ctx, doc)
+	require.Error(t, err,
+		"nested xs:include path-escape must fail compilation even with a pre-compiled fallback registered")
+}
+
 // A serialization parameter-document over-cap read wraps in a static error
 // (XTSE0090) at compile time; the ErrResourceTooLarge sentinel must survive
 // that wrapping so callers can match it via errors.Is.

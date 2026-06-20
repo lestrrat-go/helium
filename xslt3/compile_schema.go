@@ -183,12 +183,16 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 		if err != nil {
 			// A genuine "schema not found / not applicable" error may fall back
 			// to a pre-compiled import schema registered for the namespace. But a
-			// resource-limit breach (ErrResourceTooLarge) or a fatal schema-load
-			// (path escape / import-depth, surfaced via FatalSchemaLoader) must
-			// NOT be papered over by the fallback — doing so would let an over-cap
-			// or path-traversal schema-location silently succeed, defeating the
-			// cap. Propagate those, preserving the sentinel for errors.Is.
-			if errors.Is(err, ErrResourceTooLarge) || isFatalSchemaLoadError(err) {
+			// fatal schema-load (resource-limit breach, path escape, or
+			// import-depth overflow) must NOT be papered over by the fallback —
+			// doing so would let an over-cap or path-traversal schema-location
+			// silently succeed, defeating the guard. The single classifier
+			// recognizes every fatal-load condition (including a nested path
+			// escape, which surfaces as a plain xsd sentinel that an interface-only
+			// check would miss); propagate those, preserving the sentinel for
+			// errors.Is. Decided BEFORE findImportSchema so no fatal load can fall
+			// through to the precompiled-schema path.
+			if isFatalSchemaLoadError(err) {
 				return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
 			}
 			// File not found — try pre-compiled import schemas by namespace.

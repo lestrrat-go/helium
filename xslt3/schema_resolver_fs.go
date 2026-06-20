@@ -71,14 +71,16 @@ func (e fatalSchemaLoadError) Unwrap() error { return e.err }
 func (e fatalSchemaLoadError) FatalSchemaLoad() bool { return true }
 
 // isFatalSchemaLoadError reports whether err (or anything in its chain) is a
-// [xsd.FatalSchemaLoader] — a schema-load failure (resource-limit breach, path
-// escape, or import-depth overflow) that must never be demoted to a warning or
-// papered over by a fallback to a pre-compiled schema. It mirrors the xsd
-// compiler's own fatal-load detection so the xslt3 boundary keeps the same
-// classification.
+// fatal schema-load condition that must never be demoted to a warning or papered
+// over by a fallback to a pre-compiled schema. It is the SINGLE classifier on
+// the xslt3 side: it delegates the cross-package conditions (path escape,
+// import-depth overflow, and any [xsd.FatalSchemaLoader]) to [xsd.IsFatalSchemaLoad]
+// — the one source of truth shared with the xsd compiler — and additionally
+// recognizes [ErrResourceTooLarge], the xslt3-package cap sentinel that the
+// top-level schema-location load returns directly (unwrapped, so it is not yet a
+// FatalSchemaLoader at that point).
 func isFatalSchemaLoadError(err error) bool {
-	var f xsd.FatalSchemaLoader
-	return errors.As(err, &f) && f.FatalSchemaLoad()
+	return errors.Is(err, ErrResourceTooLarge) || xsd.IsFatalSchemaLoad(err)
 }
 
 // resolveSchemaURI resolves a schema-location reference against a base URI.
