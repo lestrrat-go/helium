@@ -1097,12 +1097,19 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 	}
 	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
 
+	// Resolve prefixes using the namespace context in scope at this
+	// declaration. Imported modules may bind the same prefix to a different
+	// URI than the importing module, so resolution must use the element's own
+	// in-scope bindings rather than a single flat stylesheet-wide map.
+	declNS := c.spaceDeclNamespaces(elem)
+
 	for name := range strings.FieldsSeq(elements) {
-		nt := nameTest{}
+		nt := nameTest{ImportPrec: c.importPrec}
 		// Handle EQName syntax: Q{uri}local
 		if strings.HasPrefix(name, "Q{") {
 			if closeIdx := strings.IndexByte(name, '}'); closeIdx > 0 {
-				nt.Prefix = "Q{" + name[2:closeIdx] + "}"
+				nt.URI = name[2:closeIdx]
+				nt.HasURI = true
 				nt.Local = name[closeIdx+1:]
 			} else {
 				nt.Local = name
@@ -1110,11 +1117,15 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 		} else if prefix, local, ok := strings.Cut(name, ":"); ok {
 			nt.Prefix = prefix
 			nt.Local = local
-			// XTSE0280: check that the prefix is declared (skip EQName and wildcards)
-			if !strings.HasPrefix(nt.Prefix, "Q{") && nt.Prefix != "*" {
-				if _, ok := c.nsBindings[nt.Prefix]; !ok {
-					return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in xsl:%s elements attribute", nt.Prefix, kind)
+			// "*:NCName" matches the local name in any namespace; no URI binding.
+			if prefix != "*" {
+				// XTSE0280: the prefix must be declared in scope here.
+				uri, ok := declNS[prefix]
+				if !ok {
+					return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in xsl:%s elements attribute", prefix, kind)
 				}
+				nt.URI = uri
+				nt.HasURI = true
 			}
 		} else {
 			nt.Local = name
@@ -1133,33 +1144,83 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 	return nil
 }
 
-// nameTestKey returns a canonical key for a nameTest by resolving the prefix
-// to a URI. EQName prefixes of the form "Q{uri}" are used as-is.
-func (c *compiler) nameTestKey(_ context.Context, nt nameTest) string {
+// spaceDeclNamespaces returns the namespace bindings in scope at an
+// xsl:strip-space / xsl:preserve-space declaration. The element's own ancestor
+// chain in the source tree is authoritative for declaration-time resolution;
+// XSLT-implied bindings collected on the compiler are used only as a fallback.
+func (c *compiler) spaceDeclNamespaces(elem *helium.Element) map[string]string {
+	bindings := make(map[string]string)
+	// Walk descendant-to-ancestor; nearest declaration wins.
+	for n := helium.Node(elem); n != nil; n = n.Parent() {
+		e, ok := n.(*helium.Element)
+		if !ok {
+			continue
+		}
+		for _, ns := range e.Namespaces() {
+			if _, exists := bindings[ns.Prefix()]; !exists {
+				bindings[ns.Prefix()] = ns.URI()
+			}
+		}
+	}
+	for prefix, uri := range c.nsBindings {
+		if _, exists := bindings[prefix]; !exists {
+			bindings[prefix] = uri
+		}
+	}
+	return bindings
+}
+
+// nameTestKey returns a canonical key for a nameTest. The namespace URI is
+// resolved at compile time and stored on the nameTest, so the key is built
+// directly from that resolved value.
+func nameTestKey(nt nameTest) string {
 	uri := ""
-	if strings.HasPrefix(nt.Prefix, "Q{") {
-		uri = nt.Prefix[2 : len(nt.Prefix)-1]
-	} else if nt.Prefix != "" {
-		uri = c.nsBindings[nt.Prefix]
-	} else if nt.HasURI {
+	if nt.HasURI {
 		uri = nt.URI
 	}
 	return helium.ClarkName(uri, nt.Local)
 }
 
-// checkSpaceConflicts detects NameTests that appear in both xsl:strip-space
-// and xsl:preserve-space at the same import precedence (XTSE0270).
-func (c *compiler) checkSpaceConflicts(ctx context.Context) error {
+// checkSpaceConflicts detects NameTests that appear in both xsl:strip-space and
+// xsl:preserve-space. Conflicts are resolved by import precedence: a rule at a
+// higher import precedence overrides one at a lower precedence. XTSE0270 is
+// raised only when the same NameTest is declared as both strip and preserve at
+// the same (highest) import precedence.
+func (c *compiler) checkSpaceConflicts(_ context.Context) error {
 	if len(c.stylesheet.stripSpace) == 0 || len(c.stylesheet.preserveSpace) == 0 {
 		return nil
 	}
-	stripKeys := make(map[string]struct{}, len(c.stylesheet.stripSpace))
+	// Highest strip/preserve precedence per resolved NameTest key.
+	type prec struct {
+		strip, preserve int
+		hasStrip        bool
+		hasPreserve     bool
+	}
+	byKey := make(map[string]*prec)
+	get := func(key string) *prec {
+		p := byKey[key]
+		if p == nil {
+			p = &prec{}
+			byKey[key] = p
+		}
+		return p
+	}
 	for _, nt := range c.stylesheet.stripSpace {
-		stripKeys[c.nameTestKey(ctx, nt)] = struct{}{}
+		p := get(nameTestKey(nt))
+		if !p.hasStrip || nt.ImportPrec > p.strip {
+			p.strip = nt.ImportPrec
+		}
+		p.hasStrip = true
 	}
 	for _, nt := range c.stylesheet.preserveSpace {
-		key := c.nameTestKey(ctx, nt)
-		if _, ok := stripKeys[key]; ok {
+		p := get(nameTestKey(nt))
+		if !p.hasPreserve || nt.ImportPrec > p.preserve {
+			p.preserve = nt.ImportPrec
+		}
+		p.hasPreserve = true
+	}
+	for key, p := range byKey {
+		if p.hasStrip && p.hasPreserve && p.strip == p.preserve {
 			return staticError(errCodeXTSE0270,
 				"conflicting xsl:strip-space and xsl:preserve-space for %q", key)
 		}

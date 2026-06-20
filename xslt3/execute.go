@@ -1611,15 +1611,6 @@ func (ec *execContext) effectivePreserveSpace() []nameTest {
 	return ec.stylesheet.preserveSpace
 }
 
-// effectiveStripNamespaces returns the namespace bindings for strip/preserve
-// resolution in the current execution scope.
-func (ec *execContext) effectiveStripNamespaces() map[string]string {
-	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
-		return ec.currentPackage.namespaces
-	}
-	return ec.stylesheet.namespaces
-}
-
 // docCacheKey returns a package-scoped key for document caching. When
 // executing in a used package with different strip-space rules, the key
 // includes the package pointer so each package gets its own stripped copy.

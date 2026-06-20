@@ -344,17 +344,17 @@ func (ec *execContext) isElementStripped(elem *helium.Element) bool {
 		return false
 	}
 
-	nsBindings := ec.effectiveStripNamespaces()
-
-	stripped := false
-	stripPriority := -1
+	// Find the most authoritative matching strip rule, ordered first by import
+	// precedence (higher wins) and then by NameTest specificity priority.
+	stripPrec, stripPriority, stripped := -1, -1, false
 	for _, nt := range stripRules {
-		if matchSpaceNameTest(nt, elem, nsBindings) {
-			p := nameTestPriority(nt)
-			if p > stripPriority {
-				stripPriority = p
-				stripped = true
-			}
+		if !matchSpaceNameTest(nt, elem) {
+			continue
+		}
+		if !stripped || rankSpaceRule(nt) > packSpaceRank(stripPrec, stripPriority) {
+			stripPrec = nt.ImportPrec
+			stripPriority = nameTestPriority(nt)
+			stripped = true
 		}
 	}
 
@@ -362,16 +362,25 @@ func (ec *execContext) isElementStripped(elem *helium.Element) bool {
 		return false
 	}
 
-	// Check if preserve-space overrides
+	// A matching preserve rule overrides strip when it is at least as
+	// authoritative (import precedence, then specificity).
+	stripRank := packSpaceRank(stripPrec, stripPriority)
 	for _, nt := range ec.effectivePreserveSpace() {
-		if matchSpaceNameTest(nt, elem, nsBindings) {
-			p := nameTestPriority(nt)
-			if p >= stripPriority {
-				return false
-			}
+		if matchSpaceNameTest(nt, elem) && rankSpaceRule(nt) >= stripRank {
+			return false
 		}
 	}
 	return true
+}
+
+// rankSpaceRule combines a rule's import precedence and NameTest specificity
+// into a single comparable rank (import precedence dominates).
+func rankSpaceRule(nt nameTest) int {
+	return packSpaceRank(nt.ImportPrec, nameTestPriority(nt))
+}
+
+func packSpaceRank(importPrec, priority int) int {
+	return importPrec<<2 | priority
 }
 
 // hasElementOnlyContent returns true if the element has element-only content
@@ -396,30 +405,27 @@ func hasElementOnlyContent(elem *helium.Element) bool {
 	return false
 }
 
-// matchSpaceNameTest checks if an element matches a strip/preserve-space nameTest pattern.
-func matchSpaceNameTest(nt nameTest, elem *helium.Element, nsBindings map[string]string) bool {
-	if nt.Local == "*" && nt.Prefix == "" {
+// matchSpaceNameTest checks if an element matches a strip/preserve-space
+// nameTest pattern. The namespace URI of a prefixed or default-namespace name
+// is resolved at compile time (nt.URI / nt.HasURI), using the namespace context
+// in scope at the declaration, so no runtime binding map is consulted here.
+func matchSpaceNameTest(nt nameTest, elem *helium.Element) bool {
+	if nt.Local == "*" && nt.Prefix == "" && !nt.HasURI {
 		return true // "*" matches all
 	}
 	if nt.Prefix == "*" {
 		// "*:NCName" matches elements with given local name in any namespace
 		return elem.LocalName() == nt.Local
 	}
-	if nt.Local == "*" && nt.Prefix != "" {
-		// "prefix:*" matches elements in that namespace
-		nsURI := nsBindings[nt.Prefix]
-		return elem.URI() == nsURI
+	if nt.Local == "*" {
+		// "prefix:*" matches elements in the resolved namespace
+		return nt.HasURI && elem.URI() == nt.URI
 	}
-	if nt.Prefix != "" {
-		// "prefix:local" matches specific element in namespace
-		nsURI := nsBindings[nt.Prefix]
-		return elem.LocalName() == nt.Local && elem.URI() == nsURI
-	}
-	// Unprefixed name: use resolved URI if xpath-default-namespace was applied
+	// Named test: namespace URI was resolved at compile time.
 	if nt.HasURI {
 		return elem.LocalName() == nt.Local && elem.URI() == nt.URI
 	}
-	// "local" matches elements with that local name (no namespace)
+	// "local" with no namespace binding matches the local name in no namespace.
 	return elem.LocalName() == nt.Local && elem.URI() == ""
 }
 
