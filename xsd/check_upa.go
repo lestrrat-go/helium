@@ -92,14 +92,18 @@ func (a *positionAutomaton) add(p *Particle) posInfo {
 
 // upaMaxRequiredExpansion caps how many required occurrence copies a single
 // range may expand into, to bound automaton size. XSD finite minOccurs is
-// typically small; past this bound the required copies are summarized as a
-// single non-nullable body copy. A required exact run is a deterministic chain
-// regardless of length, so the summary copy is NEVER given a self-loop back-edge
-// just because it was collapsed — a back-edge would manufacture ambiguity that
-// the full chain does not have (e.g. `a{257}, a` is deterministic). The summary
-// loops only when the original range genuinely repeats past the required count
-// (unbounded maxOccurs, or a repeating optional remainder), handled separately
-// below.
+// typically small; past this bound the required copies are summarized as TWO
+// non-nullable body copies rather than the full chain. Two copies (not one) are
+// kept because for determinism analysis `U{n}` with a non-nullable unit U and
+// n>=2 is invariant in n: `U{2}` already realizes every inter-copy
+// boundary-followpos overlap, so it correctly rejects `(a, a?){257}` while a
+// single copy would drop the boundary and false-accept it. A required exact run
+// is a deterministic chain regardless of length, so the summary copies are NEVER
+// given a self-loop back-edge just because they were collapsed — a back-edge
+// would manufacture ambiguity that the full chain does not have (e.g.
+// `a{257}, a` is deterministic). The summary loops only when the original range
+// genuinely repeats past the required count (unbounded maxOccurs, or a repeating
+// optional remainder), handled separately below.
 const upaMaxRequiredExpansion = 256
 
 // walkParticle computes nullable/firstpos/lastpos for a particle, accounting for
@@ -169,16 +173,26 @@ func (a *positionAutomaton) applyOccurs(minOccurs, maxOccurs int, body func() po
 	// single optional copy avoids falsely flagging interchangeable repeated copies
 	// (e.g. `<any maxOccurs="5"/>`).
 	//
-	// Past upaMaxRequiredExpansion the required chain is SUMMARIZED into a single
-	// non-nullable copy rather than fully expanded, to bound automaton size. A
-	// required exact run is a deterministic chain regardless of length, so the
-	// summary copy is NOT looped just because it was collapsed — the optional-tail
-	// shape below is derived from the ORIGINAL range, never widened by the
-	// collapse, so a finite exact count such as `a{257}` stays a non-looping
-	// required run.
+	// Past upaMaxRequiredExpansion the required chain is SUMMARIZED rather than
+	// fully expanded, to bound automaton size. The summary must keep TWO copies,
+	// not one: for determinism analysis `U{n}` with a non-nullable unit U and
+	// n>=2 is invariant in n — every inter-copy boundary-followpos overlap that
+	// can ever occur is already realized within `U{2}`; additional middle copies
+	// only repeat the same boundary pattern. Collapsing to a single copy would
+	// DROP that inter-copy boundary and false-accept models such as `(a, a?){257}`
+	// (whose `(a, a?){2}` form is correctly rejected). Two copies preserve the
+	// boundary while still bounding size.
+	//
+	// The summary copies carry NO back-edge: a required exact run is a
+	// deterministic chain regardless of length, and the optional-tail shape below
+	// is derived from the ORIGINAL range, never widened by the collapse, so a
+	// finite exact count such as `a{257}` stays a non-looping required run
+	// (`a{257}, a` keeps the deterministic `a{3}` shape). The body is guaranteed
+	// non-nullable here (the nullable case returned via the loop model above), so
+	// the n>=2 invariant holds.
 	required := minOccurs
 	if required > upaMaxRequiredExpansion {
-		required = 1
+		required = 2
 	}
 
 	optionalUnbounded := maxOccurs == Unbounded

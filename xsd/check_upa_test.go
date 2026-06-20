@@ -88,6 +88,44 @@ func TestUPADeterminism(t *testing.T) {
 </xs:schema>`,
 			},
 			{
+				// `(a, a?){2}`: the repeated unit `(a, a?)` is non-nullable, but
+				// each iteration's optional trailing `a?` overlaps the next
+				// iteration's required leading `a` — after an `a` you cannot tell
+				// if it is the current iteration's optional `a?` or the next
+				// iteration's required `a`. Non-deterministic.
+				name: "repeated unit with optional tail overlapping next iteration",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence minOccurs="2" maxOccurs="2">
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="a" type="xs:int" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// `(a, a?){257}`: same boundary nondeterminism as the count=2 case.
+				// A large count must NOT collapse the repeated unit to a single
+				// copy (which would drop the inter-iteration boundary followpos and
+				// wrongly accept the model). For determinism analysis, U{n} with a
+				// non-nullable unit and n>=2 is invariant in n: U{2} already
+				// exposes every boundary overlap, so the >cap collapse keeps 2
+				// copies.
+				name: "large repeated unit with optional tail overlapping next iteration",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence minOccurs="257" maxOccurs="257">
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="a" type="xs:int" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
 				// A wildcard followed by an element it can also match: after a
 				// nullable run, an `a` could start the wildcard or the element.
 				name: "wildcard overlaps a following element of the same namespace",
@@ -189,8 +227,9 @@ func TestUPADeterminism(t *testing.T) {
 				// `a{257}, a`: a large finite EXACT count followed by another `a`.
 				// A required exact run is a deterministic chain regardless of length;
 				// collapsing it into a looping optional tail past an expansion cap
-				// manufactures a back-edge that falsely flags this model. xmllint
-				// accepts it.
+				// manufactures a back-edge that falsely flags this model. The >cap
+				// collapse keeps 2 required copies (no back-edge), preserving the
+				// deterministic `a{3}` shape. xmllint accepts it.
 				name: "large finite exact repetition followed by the same element",
 				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
@@ -198,6 +237,22 @@ func TestUPADeterminism(t *testing.T) {
       <xs:sequence>
         <xs:element name="a" type="xs:int" minOccurs="257" maxOccurs="257"/>
         <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// `(a, a?)` once: a single occurrence of the repeated unit is
+				// deterministic — there is no next iteration to create a boundary
+				// overlap. Regression guard distinguishing count==1 from count>=2.
+				name: "single occurrence of unit with optional tail",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="a" type="xs:int" minOccurs="0"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
