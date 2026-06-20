@@ -222,8 +222,11 @@ func (e Evaluator) HTTPClient(client *http.Client) Evaluator {
 // external resource fetched through the URIResolver or HTTPClient by
 // fn:unparsed-text, fn:unparsed-text-lines, fn:unparsed-text-available,
 // fn:doc, fn:doc-available, and fn:json-doc. A value of 0 selects the default cap; a
-// negative value disables the bound. Reads exceeding the cap fail with a
-// retrieval error (FOUT1170) rather than buffering an unbounded body.
+// negative value disables the bound. Reads exceeding the cap fail rather than
+// buffering an unbounded body. fn:unparsed-text and fn:unparsed-text-lines
+// surface the over-cap error as FOUT1170 (fn:unparsed-text-available returns
+// false); fn:doc and fn:json-doc surface it as a retrieval error (FODC0002),
+// and fn:doc-available returns false.
 func (e Evaluator) MaxResourceBytes(n int64) Evaluator {
 	e = e.clone()
 	e.cfg.maxResourceBytes = n
