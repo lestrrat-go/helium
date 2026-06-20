@@ -88,6 +88,20 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		if isXSDElement(ce, elemAttribute) {
 			au := c.parseAttributeUse(ctx, ce)
 			attrs = append(attrs, au)
+			continue
+		}
+		// Record nested xs:attributeGroup ref children so checkAttrGroupDuplicates
+		// can flatten the transitively-referenced groups and detect a duplicate
+		// attribute use introduced through a reference (ag-props-correct.2). A
+		// self-reference is skipped: it is handled by the redefine override path and
+		// would otherwise spuriously collide with the group's own attributes.
+		if isXSDElement(ce, elemAttributeGroup) {
+			if ref := getAttr(ce, attrRef); ref != "" {
+				refQN := c.resolveQName(ctx, ce, ref)
+				if refQN != qn {
+					c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], refQN)
+				}
+			}
 		}
 	}
 	c.schema.attrGroups[qn] = attrs

@@ -604,6 +604,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		groupSources:             make(map[QName]groupSource),
 		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
+		attrGroupRefChildren:     make(map[QName][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
 		typeKinds:                make(map[QName]redefineKind),
@@ -742,6 +743,11 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		}
 	}
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
+	for qn, refs := range impC.attrGroupRefChildren {
+		if _, exists := c.attrGroupRefChildren[qn]; !exists {
+			c.attrGroupRefChildren[qn] = refs
+		}
+	}
 	maps.Copy(c.globalElemSources, impC.globalElemSources)
 	maps.Copy(c.itemTypeRefs, impC.itemTypeRefs)
 	maps.Copy(c.chameleonEligible, impC.chameleonEligible)

@@ -588,7 +588,10 @@ func (c *compiler) checkAttrGroupDuplicates(ctx context.Context) {
 	}
 	qns := make([]QName, 0, len(c.attrGroupSources))
 	for qn := range c.attrGroupSources {
-		if len(c.schema.attrGroups[qn]) > 1 {
+		// A group needs inspection when it has more than one own attribute use OR
+		// when it pulls in attribute uses through nested xs:attributeGroup ref
+		// children, either of which can produce a duplicate (ag-props-correct.2).
+		if len(c.schema.attrGroups[qn]) > 1 || len(c.attrGroupRefChildren[qn]) > 0 {
 			qns = append(qns, qn)
 		}
 	}
@@ -614,13 +617,66 @@ func (c *compiler) checkAttrGroupDuplicates(ctx context.Context) {
 				continue
 			}
 			reported[au.Name] = true
-			src := c.attrGroupSources[qn]
-			msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSourceOrRecorded(src.source), src.line, "attributeGroup", "attributeGroup", msg), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.reportAttrGroupDuplicate(ctx, qn, au.Name)
 		}
 		c.schema.attrGroups[qn] = deduped
+
+		// After deduping the group's OWN attribute uses, flatten the attribute uses
+		// brought in through nested xs:attributeGroup ref children (recursively,
+		// cycle-guarded) and report any name that collides with a use already
+		// present in the group or another referenced group.
+		visited := map[QName]bool{qn: true}
+		for _, refQN := range c.attrGroupRefChildren[qn] {
+			c.flattenAttrGroupRefDuplicates(ctx, qn, refQN, seen, reported, visited)
+		}
 	}
+}
+
+// flattenAttrGroupRefDuplicates walks a nested attribute-group reference,
+// recording each (non-prohibited) attribute use it contributes into seen and
+// reporting — once, attributed to the owning group ownerQN — any name already
+// present. visited guards against reference cycles. The walk descends into the
+// referenced group's own nested refs as well.
+func (c *compiler) flattenAttrGroupRefDuplicates(ctx context.Context, ownerQN, refQN QName, seen, reported map[QName]bool, visited map[QName]bool) {
+	if visited[refQN] {
+		return
+	}
+	visited[refQN] = true
+	// A name repeated WITHIN this referenced group is that group's own internal
+	// duplicate (reported when the group is processed as owner), not a collision to
+	// attribute to ownerQN. Track this group's local names so each distinct name is
+	// merged into seen once and only a cross-group collision is reported here.
+	local := make(map[QName]bool)
+	for _, au := range c.schema.attrGroups[refQN] {
+		if au.Prohibited {
+			continue
+		}
+		if local[au.Name] {
+			continue
+		}
+		local[au.Name] = true
+		if !seen[au.Name] {
+			seen[au.Name] = true
+			continue
+		}
+		if reported[au.Name] {
+			continue
+		}
+		reported[au.Name] = true
+		c.reportAttrGroupDuplicate(ctx, ownerQN, au.Name)
+	}
+	for _, nextQN := range c.attrGroupRefChildren[refQN] {
+		c.flattenAttrGroupRefDuplicates(ctx, ownerQN, nextQN, seen, reported, visited)
+	}
+}
+
+// reportAttrGroupDuplicate emits the ag-props-correct.2 duplicate-attribute-use
+// diagnostic for name, attributed to the attribute group ownerQN's source.
+func (c *compiler) reportAttrGroupDuplicate(ctx context.Context, ownerQN, name QName) {
+	src := c.attrGroupSources[ownerQN]
+	msg := fmt.Sprintf("Duplicate attribute use '%s'.", name.Local)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSourceOrRecorded(src.source), src.line, "attributeGroup", "attributeGroup", msg), helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 // checkAllGroupRef enforces the constraints on an xs:group reference that

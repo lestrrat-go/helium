@@ -31,6 +31,12 @@ type compiler struct {
 	groupRefSources map[*ModelGroup]groupRefSource
 	// unresolved attribute group references: maps from TypeDef to list of QNames
 	attrGroupRefs map[*TypeDef][]QName
+	// nested xs:attributeGroup ref children of a GLOBAL attribute group, keyed by
+	// the containing group's QName. These are flattened (recursively, cycle-guarded)
+	// before checkAttrGroupDuplicates so a duplicate attribute use introduced
+	// through a referenced group — not just direct xs:attribute children — is
+	// reported (ag-props-correct.2).
+	attrGroupRefChildren map[QName][]QName
 	// source info for named model group definitions (xs:group name="..."), keyed
 	// by group QName. Used to run cos-element-consistent over standalone named
 	// groups that no complex type references, reporting against the declaring file.
@@ -328,6 +334,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		groupSources:             make(map[QName]groupSource),
 		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
+		attrGroupRefChildren:     make(map[QName][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
 		typeKinds:                make(map[QName]redefineKind),
