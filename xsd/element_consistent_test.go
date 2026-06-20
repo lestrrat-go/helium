@@ -440,6 +440,64 @@ func TestElementConsistent(t *testing.T) {
 </xs:schema>`,
 			},
 			{
+				// Two references to a named group whose inline element 'a' carries
+				// an ANONYMOUS complex type. Group references share the same
+				// *ElementDecl/*TypeDef (link_refs copies grp.Particles by
+				// reference), so the two occurrences are literally the SAME element
+				// declaration with the SAME type component and are consistent. They
+				// must compile cleanly; a same-component anonymous type must not be
+				// treated as two distinct components.
+				name: "two refs to a group with an anonymous-typed element",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g">
+    <xs:sequence>
+      <xs:element name="a">
+        <xs:complexType/>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:group ref="g"/>
+        <xs:group ref="g"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A transitive chain head(block="restriction") <- mid <- leaf,
+				// where 'leaf's type derives from the head's type by restriction.
+				// 'leaf' is reachable through the unblocked intermediate 'mid', but
+				// the ORIGINAL head disallows substitution-by-restriction, so 'leaf'
+				// cannot actually substitute for the head and must NOT be folded in.
+				// A same-named local 'leaf' of a genuinely different type (xs:string)
+				// therefore does NOT collide with a folded member. Before the fix the
+				// transitive member was folded against only the intermediate head and
+				// this false-rejected.
+				name: "blocked transitive member is not folded",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base"/>
+  <xs:complexType name="restr">
+    <xs:complexContent>
+      <xs:restriction base="base"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="head" type="base" block="restriction"/>
+  <xs:element name="mid" type="base" substitutionGroup="head"/>
+  <xs:element name="leaf" type="restr" substitutionGroup="mid"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+        <xs:element name="leaf" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
 				// A prohibited group reference (maxOccurs="0") maps to NO
 				// particle, so the element declarations it would otherwise
 				// expand to do not enter the effective content model.

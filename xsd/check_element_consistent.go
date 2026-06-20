@@ -249,13 +249,24 @@ func (c *compiler) collectContentModelElements(mg *ModelGroup, byName map[QName]
 // nested chain (head -> mid -> leaf) collide undetected with a different-typed
 // same-named local element.
 //
-// At each reachable member the same eligibility check as the direct case is
-// applied against THAT member's own head: a head with block="substitution"
-// admits none of its members, and a member whose derivation chain to its head's
-// type uses a blocked method cannot substitute and is not folded in. The
-// visited set is keyed by member name and guards against substitution-group
+// Per §3.3.6.3 (Substitution Group OK, Transitive) a member can substitute for
+// the ORIGINAL head only if it is substitutable at every step AND its derivation
+// chain back to the original head's type does not use a method the original head
+// disallows. So eligibility is checked against BOTH the immediate intermediate
+// head 'cur' (block="substitution" and derivation-blocking for that step) AND the
+// original head: a member blocked by the original head's disallowed substitutions
+// cannot substitute for it and must not be folded in, even though it is reachable
+// through an unblocked intermediate. Folding it would wrongly treat it as
+// implicitly contained and could trigger a false same-name collision.
+//
+// The visited set is keyed by member name and guards against substitution-group
 // cycles (rejected elsewhere, but defended against here so the walk terminates).
 func (c *compiler) foldSubstitutionMembers(head *ElementDecl, byName map[QName][]*ElementDecl) {
+	headType := c.resolveDeclaredType(head)
+	// The original head's block="substitution" blocks every member outright.
+	if head.Block&BlockSubstitution != 0 {
+		return
+	}
 	visited := map[QName]struct{}{head.Name: {}}
 	// queue holds heads whose direct members are not yet expanded.
 	queue := []*ElementDecl{head}
@@ -269,7 +280,14 @@ func (c *compiler) foldSubstitutionMembers(head *ElementDecl, byName map[QName][
 		}
 		curType := c.resolveDeclaredType(cur)
 		for _, member := range c.schema.substGroups[cur.Name] {
-			if isDerivationBlocked(c.resolveDeclaredType(member), curType, cur.Block) {
+			memberType := c.resolveDeclaredType(member)
+			// The member must be substitutable for the IMMEDIATE head 'cur' ...
+			if isDerivationBlocked(memberType, curType, cur.Block) {
+				continue
+			}
+			// ... and also for the ORIGINAL head, whose disallowed substitutions
+			// apply transitively to every member of the group.
+			if isDerivationBlocked(memberType, headType, head.Block) {
 				continue
 			}
 			if _, seen := visited[member.Name]; seen {
@@ -321,9 +339,15 @@ func (c *compiler) resolveDeclaredType(decl *ElementDecl) *TypeDef {
 // The constraint requires the type definitions to be the same component;
 // helium shares a single *TypeDef pointer per named type and copies the global
 // element's type pointer onto a ref, so identical components compare equal by
-// pointer. Two distinct named types with the same expanded QName (which can
-// arise across import merges) are also treated as the same component. Distinct
-// anonymous inline types are different components and therefore inconsistent.
+// pointer. This pointer identity also covers a shared ANONYMOUS type that is
+// genuinely the same component: a global element with an inline type referenced
+// twice, or a named group whose inline-typed element is expanded into two group
+// references, both reuse the SAME *ElementDecl/*TypeDef, so the repeated
+// occurrences are the same declaration and are consistent. Two distinct named
+// types with the same expanded QName (which can arise across import merges) are
+// also treated as the same component. Two genuinely distinct anonymous inline
+// types have distinct pointers and an absent QName, so they compare unequal and
+// are correctly inconsistent.
 func elementTypesConsistent(a, b *TypeDef) bool {
 	if a == b {
 		return true
