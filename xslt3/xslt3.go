@@ -20,24 +20,51 @@ func secureXMLParser(baseURI string) helium.Parser {
 	return p
 }
 
+// externalEntityLoader loads the bytes for an external DTD / general entity
+// referenced by an opted-in permissive parse. It is backed by the XSLT engine's
+// configured URIResolver / HTTPClient (and its default-deny + resource-limit
+// policy), so opted-in external entities are fetched through the SAME
+// resolver-mediated, bounded channel as the parent document — never via the
+// parser's default os.Open / network.
+type externalEntityLoader func(ctx context.Context, uri string) ([]byte, error)
+
 // parseExternalXML parses externally-sourced XML loaded through a resolver or
 // HTTP client. By default XXE is blocked. When allowExternalEntities is true
-// the legacy permissive behavior is restored (resolver-mediated external entity
-// loading via LoadExternalDTD + SubstituteEntities), subject to the configured
-// resource limits. extraOpts lets callers layer additional parser options (e.g.
-// DefaultDTDAttributes) onto the permissive path.
-func parseExternalXML(ctx context.Context, data []byte, baseURI string, allowExternalEntities bool, extraOpts func(helium.Parser) helium.Parser) (*helium.Document, error) {
+// the legacy permissive behavior is restored (external DTD / general entity
+// loading via LoadExternalDTD + SubstituteEntities), but the loads are routed
+// through entityLoader (the configured URIResolver / HTTPClient, subject to the
+// configured resource limits) rather than the parser's raw filesystem/network.
+// When entityLoader is nil the permissive parse falls back to the parser's
+// default resource access. extraOpts lets callers layer additional parser
+// options (e.g. DefaultDTDAttributes); they are applied in BOTH branches. In
+// the secure branch the XXE guards (BlockXXE / AllowNetwork / LoadExternalDTD)
+// are re-asserted AFTER extraOpts so an extraOpts hook cannot accidentally
+// re-enable external loading — only internal-subset behaviors (e.g.
+// DefaultDTDAttributes) survive.
+func parseExternalXML(ctx context.Context, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader, extraOpts func(helium.Parser) helium.Parser) (*helium.Document, error) {
 	var p helium.Parser
 	if allowExternalEntities {
 		p = helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)
+		if entityLoader != nil {
+			// Route opted-in external DTD/entity resolution through the
+			// configured resolver-backed loader instead of the parser default.
+			p = p.FS(schemaResolverFS{ctx: ctx, load: entityLoader})
+		}
 		if extraOpts != nil {
 			p = extraOpts(p)
 		}
-		if baseURI != "" {
-			p = p.BaseURI(baseURI)
-		}
 	} else {
-		p = secureXMLParser(baseURI)
+		p = helium.NewParser().BlockXXE(true).LoadExternalDTD(false).AllowNetwork(false)
+		if extraOpts != nil {
+			p = extraOpts(p)
+		}
+		// Re-assert the XXE guards so extraOpts cannot weaken the secure posture;
+		// only internal-subset behaviors layered by extraOpts (e.g.
+		// DefaultDTDAttributes) are kept.
+		p = p.BlockXXE(true).AllowNetwork(false).LoadExternalDTD(false)
+	}
+	if baseURI != "" {
+		p = p.BaseURI(baseURI)
 	}
 	return p.Parse(ctx, data)
 }
@@ -45,8 +72,8 @@ func parseExternalXML(ctx context.Context, data []byte, baseURI string, allowExt
 // parseStylesheetDocument parses an externally-sourced stylesheet module
 // (xsl:import / xsl:include / xsl:use-package / fn:transform stylesheets).
 // XXE is blocked unless allowExternalEntities opts into the legacy behavior.
-func parseStylesheetDocument(ctx context.Context, data []byte, baseURI string, allowExternalEntities bool) (*helium.Document, error) {
-	return parseExternalXML(ctx, data, baseURI, allowExternalEntities, nil)
+func parseStylesheetDocument(ctx context.Context, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader) (*helium.Document, error) {
+	return parseExternalXML(ctx, data, baseURI, allowExternalEntities, entityLoader, nil)
 }
 
 // CompileStylesheet compiles a parsed XSLT stylesheet document.

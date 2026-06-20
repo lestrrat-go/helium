@@ -207,7 +207,7 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 		return nil, fmt.Errorf("cannot read %q: %w", uri, err)
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities)
+	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities, c.loadResourceBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
@@ -518,7 +518,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		return fmt.Errorf("cannot read %q: %w", uri, err)
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities)
+	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities, c.loadResourceBytes)
 	if err != nil {
 		return fmt.Errorf("cannot parse %q: %w", uri, err)
 	}

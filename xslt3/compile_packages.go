@@ -39,7 +39,7 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 		return fmt.Errorf("xsl:use-package: cannot read package %q: %w", pkgName, err)
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, pkgBaseURI, c.allowExternalEntities)
+	doc, err := parseStylesheetDocument(ctx, data, pkgBaseURI, c.allowExternalEntities, c.loadResourceBytes)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot parse package %q: %w", pkgName, err)
 	}

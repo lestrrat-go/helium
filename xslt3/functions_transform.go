@@ -488,7 +488,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI, ec.allowExternalEntities())
+		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
 		}
@@ -513,7 +513,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, location, ec.allowExternalEntities())
+		doc, parseErr := parseStylesheetDocument(ctx, data, location, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse package %q: %v", packageName, parseErr)
 		}

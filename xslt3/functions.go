@@ -361,6 +361,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// that resolve external SYSTEM entities) must opt in via
 	// Invocation.AllowExternalEntities(true).
 	doc, err := parseExternalXML(ctx, data, resolvedURI, ec.allowExternalEntities(),
+		ec.retrieveDocumentBytes,
 		func(p helium.Parser) helium.Parser {
 			return p.DefaultDTDAttributes(true).FixBaseURIs(false)
 		})
