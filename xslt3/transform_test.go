@@ -372,3 +372,87 @@ func TestIterateAtomicClearsNodeContext(t *testing.T) {
 	require.Contains(t, result, "<out>x</out>")
 	require.NotContains(t, result, "<doc/>")
 }
+
+// TestGlobalContextItemNamespaceAwareType verifies that an xsl:global-context-item
+// declared as="document-node(element(p:root))" is validated namespace-aware: a
+// document whose root is in the wrong namespace is rejected (XTTE0590) and one
+// with the correctly-namespaced root is accepted.
+func TestGlobalContextItemNamespaceAwareType(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:p="urn:right">
+  <xsl:global-context-item as="document-node(element(p:root))"/>
+  <xsl:template match="/">
+    <out><xsl:value-of select="name(/*)"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	wrong, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns="urn:wrong"/>`))
+	require.NoError(t, err)
+	_, err = xslt3.TransformString(t.Context(), wrong, ss)
+	require.Error(t, err, "wrong-namespace root must be rejected")
+
+	right, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns="urn:right"/>`))
+	require.NoError(t, err)
+	result, err := xslt3.TransformString(t.Context(), right, ss)
+	require.NoError(t, err, "correctly-namespaced root must be accepted")
+	require.Contains(t, result, "root")
+}
+
+// TestGlobalContextItemDeclarationLocalNamespace verifies that the @as type on
+// xsl:global-context-item resolves prefixes against the declaration element's
+// own namespace context, not the runtime stylesheet-wide context. Here the p:
+// prefix is declared on the xsl:global-context-item element itself.
+func TestGlobalContextItemDeclarationLocalNamespace(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:global-context-item xmlns:p="urn:right" as="document-node(element(p:root))"/>
+  <xsl:template match="/">
+    <out><xsl:value-of select="name(/*)"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	right, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns="urn:right"/>`))
+	require.NoError(t, err)
+	result, err := xslt3.TransformString(t.Context(), right, ss)
+	require.NoError(t, err, "default-namespaced root must match declaration-local prefix")
+	require.Contains(t, result, "root")
+
+	right2, err := helium.NewParser().Parse(t.Context(), []byte(`<p:root xmlns:p="urn:right"/>`))
+	require.NoError(t, err)
+	_, err = xslt3.TransformString(t.Context(), right2, ss)
+	require.NoError(t, err, "explicitly-prefixed {urn:right}root must also match")
+
+	wrong, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns="urn:wrong"/>`))
+	require.NoError(t, err)
+	_, err = xslt3.TransformString(t.Context(), wrong, ss)
+	require.Error(t, err, "wrong-namespace root must be rejected")
+}
+
+// TestGlobalContextItemXPathDefaultNamespace verifies that the
+// xpath-default-namespace in scope at the xsl:global-context-item declaration
+// is used to resolve the unprefixed element name in its @as type.
+func TestGlobalContextItemXPathDefaultNamespace(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:global-context-item xpath-default-namespace="urn:right"
+    as="document-node(element(root))"/>
+  <xsl:template match="/">
+    <out><xsl:value-of select="local-name(/*)"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	right, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns="urn:right"/>`))
+	require.NoError(t, err)
+	result, err := xslt3.TransformString(t.Context(), right, ss)
+	require.NoError(t, err, "root in xpath-default-namespace must be accepted")
+	require.Contains(t, result, "root")
+
+	wrong, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns="urn:wrong"/>`))
+	require.NoError(t, err)
+	_, err = xslt3.TransformString(t.Context(), wrong, ss)
+	require.Error(t, err, "root in wrong namespace must be rejected")
+}
