@@ -206,11 +206,27 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	c.checkAttrGroupDuplicates(ctx)
 
 	// Resolve attribute group references.
+	//
+	// An attribute group's effective attribute uses are NOT only the uses it
+	// declares directly: an xs:attributeGroup may itself contain nested
+	// xs:attributeGroup ref children, whose attribute uses are pulled in
+	// transitively (XSD §3.6.2 / §3.4.2 — {attribute uses} is the union over
+	// the group and all groups it references). c.schema.attrGroups[qn] holds
+	// only the group's OWN direct uses; the nested refs live in
+	// c.attrGroupRefChildren. Expand each referenced group recursively
+	// (cycle-guarded) so the type's effective attributes include the
+	// transitively-referenced uses — otherwise a required/defaulted/prohibited
+	// attribute declared in a nested group is silently dropped.
+	//
+	// The expansion dedups WITHIN a single referenced group's transitive closure
+	// (override semantics), but the result is appended to td.Attributes WITHOUT
+	// further dedup, so a name that a type declares directly AND pulls in via a
+	// group — or via two distinct groups — still surfaces as a duplicate use for
+	// checkDuplicateAttrUses below (ct-props-correct.4), preserving the prior
+	// behavior of appending raw group attributes.
 	for td, qns := range c.attrGroupRefs {
 		for _, qn := range qns {
-			if attrs, ok := c.schema.attrGroups[qn]; ok {
-				td.Attributes = append(td.Attributes, attrs...)
-			}
+			td.Attributes = append(td.Attributes, c.expandAttrGroupUses(qn, map[QName]struct{}{})...)
 		}
 	}
 
@@ -429,6 +445,53 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			c.checkUPA(ctx, t.td, t.src)
 		}
 	}
+}
+
+// expandAttrGroupUses returns the effective attribute uses contributed by the
+// attribute group qn: its OWN direct uses (c.schema.attrGroups[qn]) plus, for
+// each nested xs:attributeGroup ref child, that group's effective uses computed
+// recursively. visited guards against reference cycles.
+//
+// Deduplication follows XSD attribute-group semantics: a use declared closer to
+// the referencing group (the group's own use, or an earlier-referenced group)
+// overrides one inherited from a more deeply / later referenced group, keyed by
+// expanded attribute QName. A prohibited use removes the corresponding use from
+// the effective set. The group's own uses take precedence over its nested refs.
+func (c *compiler) expandAttrGroupUses(qn QName, visited map[QName]struct{}) []*AttrUse {
+	if _, seen := visited[qn]; seen {
+		return nil
+	}
+	visited[qn] = struct{}{}
+
+	// The group's own direct uses come first (closest), then each nested ref's
+	// expanded uses in declaration order.
+	var uses []*AttrUse
+	uses = append(uses, c.schema.attrGroups[qn]...)
+	for _, refQN := range c.attrGroupRefChildren[qn] {
+		uses = appendAttrUses(uses, c.expandAttrGroupUses(refQN, visited))
+	}
+	return uses
+}
+
+// appendAttrUses merges the attribute uses in extra into dst applying
+// attribute-group override semantics: a use already present in dst (by expanded
+// QName) is kept and the incoming inherited use is discarded (closer wins). A
+// prohibited incoming use whose name is not yet present is still appended so a
+// later merge can observe the prohibition. The merge is order-preserving so the
+// closest-declared use stays first.
+func appendAttrUses(dst, extra []*AttrUse) []*AttrUse {
+	seen := make(map[QName]struct{}, len(dst))
+	for _, au := range dst {
+		seen[au.Name] = struct{}{}
+	}
+	for _, au := range extra {
+		if _, ok := seen[au.Name]; ok {
+			continue
+		}
+		seen[au.Name] = struct{}{}
+		dst = append(dst, au)
+	}
+	return dst
 }
 
 // checkExtensionAttrDuplicates reports an attribute use redeclared by a
