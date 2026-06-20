@@ -15,8 +15,11 @@ import (
 )
 
 // stream is a thread-safe concurrent buffer. Write appends data and
-// signals waiting readers; Read blocks until enough bytes are available,
-// the stream is closed, or the supplied context is cancelled.
+// signals waiting readers; Read blocks only while the buffer is empty
+// and the stream is neither closed nor its context cancelled, then
+// returns whatever bytes are currently available (up to len(p)). This
+// enables incremental push parsing: a reader is woken as soon as any
+// data arrives instead of stalling until a full len(p) chunk or EOF.
 //
 // A blocked Read is a parser-owned wait (sync.Cond), not an arbitrary
 // io.Reader.Read, so it can be unblocked on context cancellation: a watcher
@@ -28,6 +31,13 @@ type stream struct {
 	buf    bytes.Buffer
 	closed bool
 	wrErr  error
+	// ctxErr records the context error if and only if a Read actually
+	// returned it. It is consulted after the parse to surface a
+	// cancellation that the underlying parser swallowed (some readers
+	// treat any non-nil read error as EOF). A late external cancel that
+	// no Read ever observed leaves this nil, so a successfully completed
+	// parse is still reported as success.
+	ctxErr error
 	// ctx is stored intentionally: the stream's blocking Read is a
 	// parser-owned wait (sync.Cond), and storing the context lets that wait
 	// observe cancellation and return the context error. This is the
@@ -71,16 +81,27 @@ func (s *stream) stopWatcher() {
 }
 
 func (s *stream) Read(p []byte) (int, error) {
+	// Per the io.Reader contract a zero-length Read must return (0, nil)
+	// immediately rather than block on the wait loop below.
+	if len(p) == 0 {
+		return 0, nil
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for s.buf.Len() < len(p) && !s.closed && s.ctx.Err() == nil {
+	for s.buf.Len() == 0 && !s.closed && s.ctx.Err() == nil {
 		s.cond.Wait()
 	}
 
 	// Honor context cancellation before delivering buffered bytes so a
 	// cancelled parse aborts promptly rather than draining the buffer.
+	// Record the error so the parse epilogue can surface a cancellation
+	// the underlying parser may have swallowed. Only a Read that actually
+	// returns the context error sets this; a parse that completes without
+	// any Read observing cancellation is reported as success.
 	if err := s.ctx.Err(); err != nil {
+		s.ctxErr = err
 		return 0, err
 	}
 
@@ -89,6 +110,16 @@ func (s *stream) Read(p []byte) (int, error) {
 	}
 
 	return s.buf.Read(p)
+}
+
+// readContextErr returns the context error recorded by Read, or nil if no
+// Read ever returned a context error. Used by the parse epilogue to surface
+// a cancellation the underlying parser swallowed, without consulting a fresh
+// ctx.Err() that could reflect a late external cancel the parse never saw.
+func (s *stream) readContextErr() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ctxErr
 }
 
 func (s *stream) Write(p []byte) (int, error) {
@@ -156,6 +187,14 @@ type result[T any] struct {
 // returns the context error, so the background parse aborts promptly even while
 // it is waiting for more pushed data.
 func New[T any](ctx context.Context, p Source[T]) *Parser[T] {
+	// Normalize a nil context so callers such as NewPushParser(nil) do not
+	// panic when newStream dereferences ctx.Err/ctx.Done. There is no parent
+	// to inherit from here (the parent context is nil), so context.Background
+	// is the correct root; contextcheck's "non-inherited new context" warning
+	// does not apply.
+	if ctx == nil {
+		ctx = context.Background() //nolint:contextcheck
+	}
 	s := newStream(ctx)
 	pp := &Parser[T]{
 		s:    s,
@@ -168,6 +207,18 @@ func New[T any](ctx context.Context, p Source[T]) *Parser[T] {
 				if res.err == nil {
 					res.err = fmt.Errorf("parser panic: %v", r)
 				}
+			}
+			// A cancelled context must surface through Close even if the
+			// underlying parser swallowed the stream's ctx error (some
+			// readers treat any non-nil read error as EOF and return a
+			// partial, error-free result). Consult the error recorded by
+			// Read, NOT a fresh ctx.Err(): a parse that completed without any
+			// Read returning the context error is a genuine success and must
+			// not be turned into context.Canceled by a late external cancel
+			// that raced with this epilogue.
+			if streamErr := s.readContextErr(); res.err == nil && streamErr != nil {
+				var zero T
+				res = result[T]{val: zero, err: streamErr}
 			}
 			s.closeWithWriteError(res.err)
 			pp.done <- res
