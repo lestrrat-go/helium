@@ -11,6 +11,30 @@ import (
 // and can be ignored if the caller only listens to specific events.
 var ErrHandlerUnspecified = errors.New("handler unspecified")
 
+// ErrContentSizeExceeded is returned from parsing when a single comment,
+// bogus comment, or processing instruction exceeds the configured
+// [Parser.MaxContentSize] before reaching its terminator. Unlike raw-text
+// content (script/style/textarea/plaintext), these constructs map to a single
+// indivisible SAX event and DOM node, so they cannot be chunked without
+// corrupting the document. The cap is therefore enforced as a hard limit and
+// the parse fails rather than emitting a truncated node and leaking the
+// remainder as stray text.
+//
+// It is also returned from the RCDATA path for ANY unresolved named
+// character-reference literal — an "&"-prefixed sequence that does not resolve
+// to a known entity or legacy prefix — whether short, semicolon-terminated, or
+// unbounded, once the literal bytes it would emit ("&" + name + optional ";")
+// exceed the cap. A known-entity (';'-terminated) reference is exempt: it is
+// resolved within a fixed lookahead window and never charged against the cap. A
+// no-';' LEGACY resolution — a full legacy entity (e.g. "&amp") OR a
+// legacy-PREFIX match (e.g. "&ampZ", where "amp" resolves and "Z" is echoed) —
+// is exempt only when its whole consumed run ("&" + name) fits within the cap;
+// over the cap it hard-fails with this error and emits NOTHING. This holds
+// uniformly for both a SHORT within-lookahead run (e.g. "&ampZ" under a cap of 2)
+// and a saturated ambiguous run (e.g. "&amp" followed by a long alphanumeric
+// tail).
+var ErrContentSizeExceeded = errors.New("content size limit exceeded")
+
 // DocumentLocator is an alias for [sax.DocumentLocator].
 // (libxml2: xmlSAXLocator)
 type DocumentLocator = sax.DocumentLocator

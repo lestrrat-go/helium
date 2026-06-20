@@ -312,6 +312,49 @@ cannot generically) interrupt a read already in progress:
 document so far and a nil error (partial document, as opposed to context
 cancellation which returns a nil document and the context error).
 
+## HTML Raw-Text / RCDATA Bounding (`html/parser.go`, `html/options.go`)
+
+The HTML parser bounds the streaming scanner's working set with `Parser.MaxContentSize` (config field `parseConfig.maxContentSize`; effective value via `contentLimit()`, which substitutes `defaultMaxContentSize` = 16 MiB when ≤ 0). The cap has two distinct meanings depending on whether the construct is chunkable.
+
+### Soft cap (chunkable content): raw-text / RCDATA / plaintext
+
+Raw-text (`script`/`style`/`iframe`/`xmp`, `parseRawContent`), RCDATA (`title`/`textarea`, `parseRCDATAContent`), and plaintext (`parsePlaintext`) are delivered to SAX in chunks **targeting** `contentLimit()` bytes — the scanner never buffers a whole gigantic or unterminated section. The cap is a SOFT target, not a hard limit: a section larger than the cap still parses successfully, just in multiple chunks.
+
+- **UTF-8-aware chunk boundaries**: a chunk boundary never splits a multi-byte rune.
+  - `parseRawContent`/`parsePlaintext` accumulate whole tokens into a `bytes.Buffer` and flush (clone-then-Reset) before a token would push the buffer past the cap; a whole rune is read via `peekRuneToken` and appended as one indivisible token, so a rune (or complete `U+FFFD`) is never split. A single token larger than the cap is emitted whole as its own chunk.
+  - `parseRCDATAContent` caps the plain-text run at the limit, then backs the byte index off `isUTF8Continuation` bytes to the last whole-rune boundary; a lone rune larger than the cap is extended (not split) so a partial rune is never emitted.
+
+### Hard cap (indivisible content): comments / bogus comments / PIs
+
+`parseComment`, `parseBogusComment`, and `parsePI` map to a single indivisible SAX event / DOM node — chunking would corrupt the document (the remainder leaks as stray text). They enforce `contentLimit()` as a HARD cap: exceeding it before the terminator sets `parser.fatalErr` to a wrapped `ErrContentSizeExceeded` and aborts. The check is strict-greater (`n >= limit` only after the terminator check at offset `n`), so exactly `limit` content bytes followed by a terminator is accepted. `HasByteAt` distinguishes EOF from a real `NUL` (both `PeekAt` 0) so a NUL counts as content and cannot bypass the cap.
+
+### fatalErr / ErrContentSizeExceeded surfacing
+
+`parser.fatalErr` is set by a sub-parser on an unrecoverable condition (over-cap indivisible construct, or an over-cap unresolved RCDATA char-ref literal). The main `parse()` loop checks `p.fatalErr` at the top of each iteration AND after the loop, returning it (wrapping `ErrContentSizeExceeded`, matchable with `errors.Is`). `parseRCDATAContent` returns immediately after `parseCharRefBounded` sets `fatalErr` so the main loop surfaces it rather than running on.
+
+### Context cancellation in the bounded scanners
+
+Every bounded scanner checks `ctx.Err()` between steps so a cancelled parse aborts promptly without first draining a (possibly unbounded/unterminated) run:
+
+- `parseComment`/`parseBogusComment`/`parsePI` loop on `ctx.Err() == nil`; on mid-scan cancellation they abort WITHOUT emitting — publishing the bytes scanned so far would leak a truncated indivisible node as stray text.
+- `parseRawContent`/`parseRCDATAContent`/`parsePlaintext` check `ctx.Err()` per loop iteration (raw-text/plaintext flush the buffered chunk first; RCDATA returns).
+- The char-ref helpers (`consumeNumericCharRefBounded`, `parseSaturatedCharRefLiteral`) check `ctx.Err()` between bounded chunks and unwind without emitting a partial entity.
+- **Exhaustion vs. read-error disambiguation in the low-level scan helper (push-cancel safety).** `parseWhileMax` was removed and folded into `parseWhileMaxErr`, which returns `(chunk, err)`. A short chunk is ambiguous: `PeekAt` returns 0 BOTH at true EOF and when `fillBuffer` recorded a non-EOF read error (the push stream's blocking wait returns `context.Canceled` on cancel, which the cursor stores as a sticky `Err()`), so length alone cannot tell "run ended" from "read failed". `parseWhileMaxErr` uses `HasByteAt` to detect a short scan and then consults `p.cur.Err()`, returning a non-nil err ONLY when the scan stopped short because of a recorded read error (a genuine non-matching byte / clean EOF / full-limit fill returns nil). Every bounded char-ref caller — `parseSaturatedCharRefLiteral` (the saturated spool), `consumeNumericCharRefBounded` (digit run), and the named-entity scan in `parseCharRefBounded` — checks this err (and re-checks `ctx.Err()` / `p.cur.Err()` before the `Peek()` that settles a trailing `;`, since that peek may refill at a buffer boundary) BEFORE concluding "run ended" or emitting. On a cancel/read error they return WITHOUT any `Characters`/`CDataBlock`/partial resolution, letting the main loop surface the error. This closes the class where a cancelled push parse could emit a partial saturated-run resolution before returning `context.Canceled`.
+- The main loop also surfaces `ctx.Err()` and a sticky `p.cur.Err()` (e.g. a cancelled push-stream wait) per iteration.
+
+### Unresolved RCDATA named references charged against the cap
+
+In RCDATA, `&` is handled by `parseCharRefBounded`, which mirrors `parseCharRef`'s exact resolution decisions while keeping memory bounded by two independent budgets:
+
+- **Entity-name resolution** uses a FIXED `maxEntityNameLen`-byte (32) lookahead, a constant independent of `MaxContentSize` — every known entity (≤ 31 chars) and legacy prefix (≤ 6 chars) fits, so a SHORT resolvable reference whose run fits the cap is always decided in that window and never rejected for being a small name (`&amp;` resolves under `MaxContentSize(2)`).
+- **The cap governs the LITERAL text emitted for an UNRESOLVED run AND the work spent settling an AMBIGUOUS legacy-prefix run.** Numeric digit runs are consumed in fixed-size chunks with overflow saturation (`consumeNumericCharRefBounded`), never buffered whole. A run that genuinely exceeds the cap before its outcome is decided sets `fatalErr` (`ErrContentSizeExceeded`) and emits NOTHING. The charged length is `"&"` + name (+ `";"` when consumed) — the exact bytes that would be emitted.
+
+The legacy-prefix-resolves-vs-literal decision mirrors `parseCharRef`, but the bounded scanner adds a memory/work bound that changes the over-cap saturated case:
+
+- A `;`-terminated name is NOT legacy-prefix-resolved (the prefix loop in `resolveNamedEntity` is gated on `!hasSemicolon`); an over-long `;`-terminated unknown name is emitted literally and charged against the cap.
+- A no-`;` run that fits the cap resolves only its longest legacy prefix (which lies within the 32-byte head) and emits the resolution + the head's leftover followed by the tail as ordinary text.
+- **`parseSaturatedCharRefLiteral` handles the saturated case (the alphanumeric run overflowed the 32-byte lookahead) with a BOUNDED SPOOL.** A saturated `&amp` + alphanumeric tail is AMBIGUOUS until the run ends: a trailing `;` makes it an over-long unknown LITERAL (no legacy resolution), its absence legacy-resolves "amp" and emits the tail. Settling that requires reaching the run's end, so nothing may be emitted before the decision. The function CONSUMES the tail in chunks bounded by both the cap and a small constant (`saturatedCharRefChunk`, 4096) into a spool, tracking the would-be literal length. If the run exceeds the cap BEFORE its end is reached it hard-fails with `ErrContentSizeExceeded` and emits nothing — it never reintroduces an unbounded non-consuming `PeekAt` lookahead (the round-19/21 memory bound). Consequently an over-cap saturated no-`;` legacy-prefix run HARD-FAILS rather than streaming an unbounded tail; only a within-cap saturated run legacy-resolves. This keeps all three invariants: peak retained memory ≤ `MaxContentSize`, NO SAX emission before the resolve-vs-literal-vs-error decision, and bytes-read work bounded (no draining of an unbounded tail). `ctx` is checked between bounded chunks.
+
 ## Key Parser Fluent Method Effects
 
 | Method | Effect |

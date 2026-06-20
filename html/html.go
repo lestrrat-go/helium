@@ -89,6 +89,50 @@ func (p Parser) Strict(v bool) Parser {
 	return p
 }
 
+// MaxContentSize bounds, in bytes, the size of a single content section.
+//
+// For raw-text (script/style), RCDATA (title/textarea), and plaintext content
+// it bounds the streaming scanner's per-chunk working set: the parser flushes
+// accumulated content to SAX in temporary chunks that target this size, so the
+// scanner's own peak memory stays bounded even for a gigantic or unterminated
+// section, which still parses successfully. A chunk may slightly exceed the cap
+// because an indivisible token is never split: a whole multi-byte UTF-8 rune (or
+// a resolved character reference) is always emitted intact, so a single rune
+// larger than the cap is emitted whole. An unresolved RCDATA named-reference
+// literal hard-fails with [ErrContentSizeExceeded] when the bytes it would emit
+// ("&" + name + optional ";") exceed the cap — this applies to ANY unresolved
+// literal, whether short, semicolon-terminated, or unbounded. A known-entity
+// (';'-terminated) reference is exempt: it is resolved within a fixed lookahead
+// window and never charged against the cap. A no-';' LEGACY resolution — a full
+// legacy entity (e.g. "&amp") OR a legacy-PREFIX match (e.g. "&ampZ", where the
+// "amp" prefix resolves and "Z" is echoed) — is exempt ONLY when its whole
+// consumed run ("&" + name) fits within the cap; over the cap it hard-fails with
+// [ErrContentSizeExceeded] and emits NOTHING. This is enforced uniformly: a SHORT
+// within-lookahead run (e.g. "&ampZ" under a cap of 2) and a SATURATED ambiguous
+// run (e.g. "&amp" followed by a long alphanumeric tail) both hard-fail rather
+// than emit a partial resolution.
+//
+// This bounds only the streaming scanner / SAX chunk size. DOM construction via
+// [Parser.Parse] necessarily merges every chunk back into the document tree
+// (treeBuilder.AppendText), so the resulting [helium.Document] still retains the
+// full content; MaxContentSize does not make DOM parsing memory-bounded for
+// large documents. Use a SAX-only consumer to benefit from the streaming bound.
+//
+// For comments, bogus comments, and processing instructions it is a HARD cap:
+// these constructs map to a single indivisible SAX event and DOM node and
+// cannot be chunked without corrupting the document, so a comment/PI exceeding
+// this size before its terminator fails the parse with [ErrContentSizeExceeded]
+// rather than emitting a truncated node.
+//
+// A value <= 0 selects the default (16 MiB).
+//
+// Default: 16 MiB.
+func (p Parser) MaxContentSize(v int) Parser {
+	p = p.clone()
+	p.cfg.maxContentSize = v
+	return p
+}
+
 func (p Parser) parseConfig() parseConfig {
 	if p.cfg == nil {
 		return parseConfig{}
