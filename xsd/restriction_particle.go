@@ -154,8 +154,9 @@ func particleValidRestriction(r, b *Particle) bool {
 			// NSRecurseCheckCardinality (XSD §3.9.6): the derived group's effective
 			// occurrence range must be within the base wildcard's range, and every
 			// element/wildcard LEAF inside the derived group must be admitted by the
-			// base wildcard (namespace) and within its cardinality.
-			return groupRestrictsWildcard(r, rt, b, bt)
+			// base wildcard (namespace) and within its cardinality. The base
+			// wildcard is reached through the base particle b (b.Term).
+			return groupRestrictsWildcard(r, rt, b)
 		case *ElementDecl:
 			// A group against a single base element — conservatively accept.
 			return true
@@ -348,8 +349,9 @@ func elementRestrictsGroup(r *Particle, b *Particle, bg *ModelGroup) bool {
 // and every element/wildcard LEAF reachable inside the derived group must be
 // admitted by the base wildcard's namespace constraint. When a sub-case cannot
 // be decided with confidence (e.g. a nested group whose effective range is
-// genuinely undecidable) it stays conservative (accepts).
-func groupRestrictsWildcard(r *Particle, rg *ModelGroup, b *Particle, bw *Wildcard) bool {
+// genuinely undecidable) it stays conservative (accepts). The base wildcard
+// itself is reached through the base particle b (b.Term).
+func groupRestrictsWildcard(r *Particle, rg *ModelGroup, b *Particle) bool {
 	// The whole derived group particle's occurrence range must be within the base
 	// wildcard particle's range.
 	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
