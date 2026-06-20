@@ -46,7 +46,7 @@ func TestEvaluateContextCancelled(t *testing.T) {
 	// Build a reasonably large tree so descendant traversal does real work.
 	var sb strings.Builder
 	sb.WriteString("<root>")
-	for i := 0; i < 5000; i++ {
+	for range 5000 {
 		sb.WriteString("<a><b><c/></b></a>")
 	}
 	sb.WriteString("</root>")
