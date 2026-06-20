@@ -46,7 +46,88 @@ var (
 // sequence with no error is the intentional result.
 var validNilSequence Sequence
 
-var cloneSequence = sequence.Clone[Item]
+// cloneSequence returns a deep copy of the Sequence. It materializes the source
+// (matching the timing of the former shallow sequence.Clone — bounded call
+// sites pre-charge the sequence length against OpLimit BEFORE invoking this, so
+// the materialize cost is already accounted for) and then deep-copies each item
+// so that pointer-backed atomic values (*big.Int, *big.Rat, *FloatValue,
+// []byte) and nested maps/arrays are not shared with the source. This preserves
+// XPath 3.1 value semantics: mutating a value after it was inserted into a
+// map/array must not change the stored map/array.
+func cloneSequence(seq Sequence) Sequence {
+	if seq == nil {
+		return nil
+	}
+	src := seq.Materialize()
+	if len(src) == 0 {
+		return ItemSlice(append([]Item(nil), src...))
+	}
+	cloned := make([]Item, len(src))
+	for i, item := range src {
+		cloned[i] = deepCloneItem(item)
+	}
+	return ItemSlice(cloned)
+}
+
+// deepCloneItem returns a value-semantics copy of an Item.
+//
+// Only AtomicValue with a pointer- or slice-backed payload is actually copied:
+// those payloads (*big.Int, *big.Rat, *FloatValue, []byte, Duration's *big.Rat
+// fields) are the sole way a caller can hold a reference and later mutate a value
+// after it was inserted into a map/array.
+//
+// MapItem and ArrayItem are returned AS-IS, NOT recursively cloned. They are
+// immutable (Put/Append/Remove/SubArray are all copy-on-write — the backing
+// entry/member slices are never mutated in place), and every value placed inside
+// one passed through cloneSequence at ingress, so any pointer atomics they hold
+// were already detached from caller storage. Recursively re-cloning a nested
+// map/array on every insert would turn incremental construction of a
+// depth-N structure into O(N^2)/unbounded work and defeat the OpLimit/maxNodes
+// bounds, which charge per inserted value once — not per nesting level on every
+// insert.
+//
+// NodeItem (DOM identity must stay shared) and FunctionItem (immutable closure)
+// are likewise returned as-is.
+func deepCloneItem(item Item) Item {
+	av, ok := item.(AtomicValue)
+	if !ok {
+		return item
+	}
+	// Only re-box when the payload actually carries shared mutable state.
+	// Returning the original boxed Item for immutable payloads (int64, string,
+	// bool, float64, time.Time, QNameValue, by-value Duration without rationals,
+	// …) avoids an interface re-allocation per item on the hot clone path.
+	if cloned, copied := deepCloneAtomicValue(av); copied {
+		return cloned
+	}
+	return item
+}
+
+// deepCloneAtomicValue copies an AtomicValue when its Go payload is pointer- or
+// slice-backed, duplicating that payload so a later mutation of the original
+// cannot reach the stored copy. It returns (copy, true) only when a duplication
+// was needed; for immutable value payloads it returns (zero, false) so the
+// caller can keep the original (already-boxed) Item and skip a re-allocation.
+func deepCloneAtomicValue(a AtomicValue) (AtomicValue, bool) {
+	switch v := a.Value.(type) {
+	case *big.Int:
+		a.Value = new(big.Int).Set(v)
+	case *big.Rat:
+		a.Value = new(big.Rat).Set(v)
+	case *FloatValue:
+		a.Value = v.clone()
+	case []byte:
+		a.Value = append([]byte(nil), v...)
+	case Duration:
+		a.Value = v.clone()
+	case *Duration:
+		d := v.clone()
+		a.Value = &d
+	default:
+		return AtomicValue{}, false
+	}
+	return a, true
+}
 
 // CloneSequence returns a deep copy of the Sequence.
 func CloneSequence(seq Sequence) Sequence {
@@ -551,6 +632,19 @@ type Duration struct {
 	FracSec  *big.Rat // exact fractional seconds component (the part after decimal in 'S'), nil if integer
 	SecRat   *big.Rat // exact total dayTime seconds magnitude (>=0); authoritative when non-nil, sign carried by Negative
 	Negative bool
+}
+
+// clone returns a deep copy of the Duration, duplicating its *big.Rat fields so
+// a mutation of the original cannot reach the copy. Used by value-semantics deep
+// cloning of atomic values stored in maps/arrays.
+func (d Duration) clone() Duration {
+	if d.FracSec != nil {
+		d.FracSec = new(big.Rat).Set(d.FracSec)
+	}
+	if d.SecRat != nil {
+		d.SecRat = new(big.Rat).Set(d.SecRat)
+	}
+	return d
 }
 
 // --- FunctionItem ---

@@ -85,7 +85,9 @@ Produced by: inline functions, named refs (`fn#2`), partial application.
 ## MapItem
 
 Immutable. `Put` returns new map (copy-on-write).
-Construction + outward-facing accessors clone `Sequence` values. Caller mutation MUST NOT change stored contents.
+Construction + outward-facing accessors clone `Sequence` values via `cloneSequence`. Caller mutation MUST NOT change stored contents.
+
+`cloneSequence` (`types.go`) is a **deep** clone of each item, not a shallow slice copy: pointer/slice-backed `AtomicValue` payloads (`*big.Int`, `*big.Rat`, `*FloatValue`, `[]byte`, and a `Duration`'s `*big.Rat` fields) are duplicated so mutating the caller's original payload cannot reach the stored value. It does NOT recurse into nested `MapItem`/`ArrayItem` items: those are immutable (all mutators are copy-on-write) and every value they hold was already deep-cloned at its own ingress, so they are shared by value — this keeps incremental construction of a depth-N nested structure O(N) rather than O(N²) and preserves the OpLimit/maxNodes resource bounds (charged once per inserted value, not per nesting level). Immutable atomic payloads (int64, string, bool, float64, time.Time, QNameValue, by-value Duration without rationals) are returned as the original boxed item to avoid an interface re-allocation per item.
 
 ```go
 type MapItem struct {
