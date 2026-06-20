@@ -518,3 +518,63 @@ func TestC14N11BaseURIFixupEmptyPathQueryFragment(t *testing.T) {
 	// "?q=1#frag" with no leading "." or "/".
 	require.Contains(t, string(got), `xml:base="?q=1#frag"`, "query and fragment must attach to authority without a spurious path, got: %s", string(got))
 }
+
+// TestC14N11BaseURIFixupSamePathQueryFragment verifies that when the resolved
+// target shares the base document's exact path but differs only by a
+// query/fragment, the relativized xml:base resolves back to the exact target
+// document — not its containing directory. Here the target is the base's own
+// filename ("doc.xml") plus a query+fragment, so the relative reference is
+// "doc.xml?q=1#frag", which resolves to
+// "http://example.com/a/b/doc.xml?q=1#frag" (the target document).
+func TestC14N11BaseURIFixupSamePathQueryFragment(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="?q=1#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com/a/b/doc.xml").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// root xml:base "?q=1#frag" resolved against http://example.com/a/b/doc.xml
+	// is http://example.com/a/b/doc.xml?q=1#frag; relative to that base it is the
+	// filename "doc.xml" carrying the query+fragment, which resolves back to the
+	// exact target document.
+	require.Contains(t, string(got), `xml:base="doc.xml?q=1#frag"`, "same-path query and fragment must resolve to the target document, got: %s", string(got))
+}
+
+// TestC14N11BaseURIFixupEmptyRelativeQueryFragment exercises the empty
+// relative-reference branch directly: when the resolved target's path is
+// identical to the base document's directory path, the relativized path is the
+// empty string. Injecting "." there would yield ".?q=1#frag" which resolves to
+// the directory with a query rather than the exact target; keeping the relative
+// reference as the bare "?q=1#frag" resolves back to the exact target document.
+func TestC14N11BaseURIFixupEmptyRelativeQueryFragment(t *testing.T) {
+	t.Parallel()
+	// Base URI is the directory http://example.com/a/b/; the xml:base "?q=1#frag"
+	// resolves to http://example.com/a/b/?q=1#frag, whose path equals the base
+	// directory, so the relative path component is empty.
+	xml := `<?xml version="1.0"?><root xml:base="?q=1#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com/a/b/").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// The relative path is empty (target path == base directory), so the result
+	// must be the bare "?q=1#frag" — resolving it against the base yields the
+	// exact target http://example.com/a/b/?q=1#frag, whereas ".?q=1#frag" would
+	// also resolve there but introduce a spurious "." segment.
+	require.Contains(t, string(got), `xml:base="?q=1#frag"`, "empty relative reference must carry only the query+fragment, got: %s", string(got))
+}

@@ -1014,12 +1014,16 @@ func relativizeURI(base, target string) string {
 	// Build relative path
 	result := strings.Repeat("../", ups) + targetPath[len(common):]
 
-	// An empty relative path normally collapses to "." so it resolves back to
-	// the base. But when the target itself has no path component, injecting "."
-	// would resolve to "host/" (with a trailing slash) — a different URI than
-	// the bare "host". In that case keep the path empty so the query/fragment
-	// attach directly to the authority.
-	if result == "" && targetURL.Path != "" {
+	// An empty relative reference resolves back to the base document, which is
+	// exactly what we want when target and base share the same path. Only inject
+	// "." when there is genuinely a path to represent AND no query/fragment is
+	// carried: a bare "." resolves to the directory ("host/dir/"), so combining
+	// it with a query/fragment ("./?q=1#frag" → "host/dir/?q=1#frag") would point
+	// at the directory rather than the target document. When result is empty,
+	// leave it empty so the query/fragment (or nothing) attach to the bare
+	// relative reference, resolving back to the exact target.
+	hasQueryOrFragment := targetURL.RawQuery != "" || targetURL.ForceQuery || targetURL.Fragment != ""
+	if result == "" && targetURL.Path != "" && !hasQueryOrFragment {
 		result = "."
 	}
 
