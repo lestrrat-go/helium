@@ -20,6 +20,15 @@ import (
 // wrapping fragment content during entity/external-subset parsing.
 const pseudoRootName = "pseudoroot"
 
+// readerReturningErr always returns its stored error (and no bytes). It
+// re-delivers a non-EOF read error that arrived together with the EBCDIC-sniff
+// prefix bytes, so the error is surfaced only AFTER the buffered prefix drains
+// (honoring the io.Reader contract that data returned alongside a non-EOF error
+// must be processed before the error), instead of being lost.
+type readerReturningErr struct{ err error }
+
+func (r readerReturningErr) Read([]byte) (int, error) { return 0, r.err }
+
 type stopFuncKey struct{}
 
 // StopParser tells the parser to stop at the next opportunity. Call this
@@ -578,8 +587,12 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 // ParseReader parses XML from an io.Reader and returns the resulting Document
 // (libxml2: xmlReadIO).
 // This is identical to [Parse] but reads from a stream instead of a byte slice.
-// EBCDIC encoding detection is not supported when parsing from a reader.
 // See [Parse] for DTD validation error handling.
+//
+// EBCDIC encoding detection requires the full input up front: when the leading
+// bytes carry the EBCDIC invariant prefix the reader is buffered into memory and
+// parsed through the same path as [Parse], so an EBCDIC document parses
+// identically via ParseReader/ParseFile as via Parse. All other inputs stream.
 //
 // Cancellation: context cancellation and deadlines are observed BETWEEN read
 // operations and parse steps. The parser checks ctx before each cursor refill
@@ -595,7 +608,18 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 // Read with an error on cancellation. If r can block indefinitely (e.g. a slow
 // or never-returning network reader), wrap it so its Read observes ctx, or pass
 // the already-read bytes to [Parse] instead.
-func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) { //nolint:contextcheck
+func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
+	// A generic reader has unknown size: pass -1 so the streaming path keeps
+	// inputSize == 0 and the entity-amplification guard behaves as before.
+	return p.parseReader(ctx, r, -1)
+}
+
+// parseReader parses XML from an io.Reader. srcSize is the known size of the
+// underlying source in bytes, or a negative value when the size is unknown.
+// When a non-negative size is supplied (e.g. by ParseFile, which can stat the
+// file) it seeds parserCtx.inputSize so the entity-amplification guard matches
+// the byte-slice path in Parse, where inputSize is set from the slice length.
+func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -604,9 +628,128 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 		defer g.IRelease("=== END Parser.ParseReader ===")
 	}
 
-	pctx := &parserCtx{baseURI: p.cfg.baseURI}
-	if err := pctx.init(p.cfg, r); err != nil {
+	// Honor an already-cancelled context BEFORE touching r: the EBCDIC sniff
+	// below reads from r, and r may be a non-context-aware reader that blocks
+	// indefinitely. Checking ctx first preserves the "cancelled before any
+	// blocking read" contract — a cancellation observed up front never depends
+	// on the reader making progress.
+	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+
+	// Read the leading bytes to detect EBCDIC, which is not ASCII-compatible
+	// and whose detection/decode requires the original raw bytes (the
+	// streaming path cannot replay them). When detected, read the whole input
+	// and route through the byte-slice path so behavior matches Parse exactly.
+	//
+	// Read the head with a small loop (not bufio.Peek) so ctx is re-checked
+	// between reads: a slow reader that delivers the prefix one byte at a time
+	// is interrupted as soon as the parser regains control, instead of blocking
+	// inside Peek until the whole prefix arrives. The scratch buffer is larger
+	// than the EBCDIC prefix so a reader that returns more bytes than requested
+	// in one Read is captured in full rather than truncated; all captured bytes
+	// are prepended to the remaining stream so the non-EBCDIC path is
+	// unaffected, and any non-EOF error returned alongside the bytes is
+	// preserved and surfaced once the buffered head drains.
+	var scratch [512]byte
+	var hn int
+	var perr error
+	for hn < len(patEBCDIC) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		m, err := r.Read(scratch[hn:])
+		hn += m
+		if err != nil {
+			perr = err
+			break
+		}
+		if m == 0 {
+			break
+		}
+	}
+	head := scratch[:hn]
+
+	// Unifying invariant for both sniff paths: bytes returned alongside a
+	// non-EOF read error MUST be parsed before the error is surfaced (the
+	// io.Reader contract). io.EOF is the normal terminator and is never
+	// re-surfaced. A non-EOF perr is therefore carried forward, not returned
+	// early, so the head bytes are processed first.
+
+	// Detect EBCDIC regardless of whether the head read ended with io.EOF: an
+	// io.Reader may legally return all of its bytes together with io.EOF in a
+	// single Read, and EBCDIC decoding requires the full raw input up front.
+	// When the prefix matches, route through the byte-slice path (Parse) so
+	// behavior matches Parse exactly.
+	if hn >= len(patEBCDIC) && bytes.Equal(head[:len(patEBCDIC)], patEBCDIC) {
+		buf := append([]byte(nil), head...)
+		if perr == nil {
+			// The head read neither hit EOF nor errored, so a tail remains in r.
+			// Drain it with a manual loop (not io.ReadAll) that re-checks ctx
+			// BEFORE each Read: a cancellation observed after the prefix arrived
+			// must abort promptly without consuming a large or slow tail,
+			// mirroring the ctx-checking prefix-read loop above and honoring the
+			// cancellation contract this entry point establishes.
+			var chunk [4096]byte
+			for {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+				n, rerr := r.Read(chunk[:])
+				buf = append(buf, chunk[:n]...)
+				if rerr != nil {
+					// io.EOF is the normal terminator; any other non-EOF error
+					// arrives with the bytes that precede it, so the buffered
+					// bytes are parsed first and the error surfaced afterward.
+					if rerr == io.EOF {
+						break
+					}
+					perr = rerr
+					break
+				}
+			}
+		}
+		// Parse the buffered/converted bytes FIRST, then surface any sticky
+		// non-EOF read error after they drain. A successful parse over bytes
+		// that arrived alongside a read error must still report that error.
+		doc, parseErr := p.Parse(ctx, buf)
+		if parseErr != nil {
+			return doc, parseErr
+		}
+		if perr != nil && perr != io.EOF {
+			return doc, perr
+		}
+		return doc, nil
+	}
+
+	// Reconstruct the stream: head bytes + remainder. io.EOF means the whole
+	// document is in head; a non-EOF perr arrived alongside the head bytes, so
+	// replay the head then a sticky error-reader that surfaces the error only
+	// after those bytes drain (errReader-replay) — never discarding valid bytes.
+	var stream io.Reader
+	switch {
+	case perr != nil && perr != io.EOF:
+		// Replay the head bytes, then re-deliver the sticky read error. For
+		// hn == 0 the head reader yields nothing, so only the error surfaces.
+		stream = io.MultiReader(bytes.NewReader(head), readerReturningErr{err: perr})
+	case perr == io.EOF:
+		// No tail remains in r; replay only the buffered head.
+		stream = bytes.NewReader(head)
+	case hn > 0:
+		stream = io.MultiReader(bytes.NewReader(head), r)
+	default:
+		stream = r
+	}
+
+	pctx := &parserCtx{baseURI: p.cfg.baseURI}
+	if err := pctx.init(p.cfg, stream); err != nil {
+		return nil, err
+	}
+	// init seeds inputSize from rawInput (nil here, so 0). When the caller
+	// knows the source size, set it so the amplification guard isn't tripped
+	// for a large internal entity referenced only once.
+	if srcSize >= 0 {
+		pctx.inputSize = srcSize
 	}
 	defer func() {
 		if err := pctx.release(); err != nil {
@@ -650,15 +793,24 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 // absolute path of the file, and the file path is used as the base URI for
 // relative URI resolution during parsing.
 func (p Parser) ParseFile(ctx context.Context, path string) (*Document, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // path is caller-supplied
-	if err != nil {
-		return nil, fmt.Errorf("helium: failed to read %q: %w", path, err)
-	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("helium: failed to resolve path %q: %w", path, err)
 	}
-	doc, err := p.BaseURI(abs).Parse(ctx, data)
+	f, err := os.Open(path) //nolint:gosec // path is caller-supplied
+	if err != nil {
+		return nil, fmt.Errorf("helium: failed to read %q: %w", path, err)
+	}
+	defer f.Close()
+
+	// Pass the file size so the entity-amplification guard uses the real input
+	// size, matching Parse([]byte). Stat failure falls back to unknown (-1).
+	srcSize := int64(-1)
+	if fi, statErr := f.Stat(); statErr == nil {
+		srcSize = fi.Size()
+	}
+
+	doc, err := p.BaseURI(abs).parseReader(ctx, f, srcSize)
 	if err != nil {
 		return nil, err
 	}
