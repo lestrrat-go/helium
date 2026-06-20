@@ -1373,3 +1373,113 @@ func TestRCDATASaturatedRefContextCancellation(t *testing.T) {
 		})
 	}
 }
+
+// TestRCDATACharRefEmitPathsCapEnforced is the convergent, cross-path regression
+// for the legacy-prefix cap bypass (codex 615-27) and a sweep over every
+// char-ref emit path in parseCharRefBounded. The documented contract
+// (html.go / sax.go) is that a NO-';' legacy or legacy-PREFIX reference is
+// exempt from MaxContentSize ONLY when its whole consumed run ("&" + name) fits
+// the cap; over a tiny cap it must hard-fail with ErrContentSizeExceeded and
+// emit NOTHING — never a partial resolution. Each subtest pins a different emit
+// path under a tiny cap and asserts the SAME behavior, so a future tiny-cap
+// case in any of them is already covered:
+//
+//   - legacy_prefix_short: the cited `&ampZ` under MaxContentSize(2) — the
+//     SHORT (within-lookahead) successful resolveNamedEntity legacy-PREFIX path.
+//     5-byte run > 2 → fail, no "&Z" emitted.
+//   - legacy_full_short: `&amp` (no ';') under MaxContentSize(2) — the SHORT
+//     successful full-legacy-entity resolve path. 4-byte run > 2 → fail.
+//   - unresolved_short: `&zzz` under MaxContentSize(2) — the unresolved literal
+//     path. 4-byte run > 2 → fail.
+//   - legacy_prefix_saturated: `&amp` + long tail (no ';') under a tiny cap —
+//     the saturated/over-cap ambiguous legacy-prefix path. Hard-fail.
+//
+// The within-cap sibling for each resolving path (legacy resolves and emits when
+// the run fits) is already pinned by TestRCDATAWithinCapNamedEntity and
+// TestRCDATAWithinCapSaturatedLegacyResolves; this test locks the over-cap halves
+// together so the cap is enforced uniformly BEFORE any emit.
+func TestRCDATACharRefEmitPathsCapEnforced(t *testing.T) {
+	const limit = 2
+
+	cases := []struct {
+		name string
+		body string // RCDATA content under the tiny cap
+	}{
+		{"legacy_prefix_short", "&ampZ"},                              // resolveNamedEntity legacy-prefix success path
+		{"legacy_full_short", "&amp"},                                 // resolveNamedEntity full-legacy success path
+		{"unresolved_short", "&zzz"},                                  // unresolved literal path
+		{"legacy_prefix_saturated", "&amp" + strings.Repeat("x", 40)}, // saturated ambiguous legacy-prefix path
+	}
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		for _, tc := range cases {
+			t.Run(elem+"_"+tc.name, func(t *testing.T) {
+				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
+
+				var events [][]byte
+				record := html.CharactersFunc(func(data []byte) error {
+					cp := make([]byte, len(data))
+					copy(cp, data)
+					events = append(events, cp)
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+					"%s: over-cap char-ref run must hard-fail with ErrContentSizeExceeded", tc.name)
+				require.Empty(t, events,
+					"%s: no Characters callback may be delivered before the error (no partial emit); got %q", tc.name, events)
+			})
+		}
+	}
+}
+
+// TestRCDATANumericRefExemptFromCap pins that a numeric character reference is a
+// resolved character reference (one rune, always emitted intact) and therefore
+// EXEMPT from MaxContentSize even when the resolved rune is larger than the cap —
+// matching the documented "a single rune larger than the cap is emitted whole"
+// rule. `&#128512;` resolves to a 4-byte UTF-8 emoji under MaxContentSize(2); it
+// must succeed and emit the whole rune, NOT hard-fail. This locks the numeric
+// emit path on the exempt side of the unified cap behavior so it is not
+// over-eagerly charged when the legacy/literal paths are tightened.
+func TestRCDATANumericRefExemptFromCap(t *testing.T) {
+	const limit = 2
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"decimal_emoji", "&#128512;", "\U0001F600"}, // 4-byte rune > cap, exempt
+		{"hex_emoji", "&#x1F600;", "\U0001F600"},
+		{"ascii_A", "&#65;", "A"},
+	}
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		for _, tc := range cases {
+			t.Run(elem+"_"+tc.name, func(t *testing.T) {
+				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
+
+				var got strings.Builder
+				record := html.CharactersFunc(func(data []byte) error {
+					got.Write(data)
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				require.NoError(t, err,
+					"%s: a resolved numeric reference must be exempt from the cap", tc.name)
+				require.Equal(t, tc.want, got.String(),
+					"%s: the resolved rune must be emitted whole", tc.name)
+			})
+		}
+	}
+}

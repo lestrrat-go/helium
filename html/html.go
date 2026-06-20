@@ -102,12 +102,15 @@ func (p Parser) Strict(v bool) Parser {
 // literal hard-fails with [ErrContentSizeExceeded] when the bytes it would emit
 // ("&" + name + optional ";") exceed the cap — this applies to ANY unresolved
 // literal, whether short, semicolon-terminated, or unbounded. A known-entity
-// reference is exempt: it is resolved within a fixed lookahead window and never
-// charged against the cap. A legacy-prefix reference (e.g. "&amp" with no ';')
-// is exempt only when its whole run fits within the cap; a SATURATED ambiguous
-// legacy-prefix run that exceeds the cap before its terminator is reached (e.g.
-// "&amp" followed by a long alphanumeric tail) hard-fails with
-// [ErrContentSizeExceeded] rather than resolving.
+// (';'-terminated) reference is exempt: it is resolved within a fixed lookahead
+// window and never charged against the cap. A no-';' LEGACY resolution — a full
+// legacy entity (e.g. "&amp") OR a legacy-PREFIX match (e.g. "&ampZ", where the
+// "amp" prefix resolves and "Z" is echoed) — is exempt ONLY when its whole
+// consumed run ("&" + name) fits within the cap; over the cap it hard-fails with
+// [ErrContentSizeExceeded] and emits NOTHING. This is enforced uniformly: a SHORT
+// within-lookahead run (e.g. "&ampZ" under a cap of 2) and a SATURATED ambiguous
+// run (e.g. "&amp" followed by a long alphanumeric tail) both hard-fail rather
+// than emit a partial resolution.
 //
 // This bounds only the streaming scanner / SAX chunk size. DOM construction via
 // [Parser.Parse] necessarily merges every chunk back into the document tree

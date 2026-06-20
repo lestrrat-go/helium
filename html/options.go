@@ -21,10 +21,14 @@ type parseConfig struct {
 	// "&"-prefixed run that does not resolve (whether short, semicolon-terminated,
 	// or unbounded) fails the parse with ErrContentSizeExceeded once the literal
 	// bytes it would emit ("&" + name + optional ";") exceed the cap. A known
-	// entity is exempt (resolved within a fixed lookahead window); a legacy-prefix
-	// reference is exempt only when its whole run fits the cap — a saturated
-	// ambiguous legacy-prefix run that exceeds the cap hard-fails with
-	// ErrContentSizeExceeded. Zero selects defaultMaxContentSize. It
+	// (';'-terminated) entity reference is exempt (a resolved character reference,
+	// emitted intact within a fixed lookahead window, never charged). A no-';'
+	// LEGACY resolution — a full legacy entity (e.g. "&amp") OR a legacy-PREFIX
+	// match (e.g. "&ampZ", the "amp" prefix resolving with "Z" echoed) — is exempt
+	// only when its whole consumed run ("&" + name) fits the cap; over the cap it
+	// hard-fails with ErrContentSizeExceeded and emits NOTHING, uniformly across
+	// the short within-lookahead path and the saturated ambiguous path. Zero
+	// selects defaultMaxContentSize. It
 	// guards against unbounded memory growth on a gigantic or unterminated section.
 	maxContentSize int
 }

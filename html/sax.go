@@ -24,12 +24,15 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // character-reference literal — an "&"-prefixed sequence that does not resolve
 // to a known entity or legacy prefix — whether short, semicolon-terminated, or
 // unbounded, once the literal bytes it would emit ("&" + name + optional ";")
-// exceed the cap. A known-entity reference is exempt: it is resolved within a
-// fixed lookahead window and never charged against the cap. A legacy-prefix
-// reference is exempt only when its whole run fits within the cap; a saturated
-// ambiguous legacy-prefix run (e.g. "&amp" followed by a long alphanumeric tail)
-// that exceeds the cap before its terminator hard-fails with this error rather
-// than resolving.
+// exceed the cap. A known-entity (';'-terminated) reference is exempt: it is
+// resolved within a fixed lookahead window and never charged against the cap. A
+// no-';' LEGACY resolution — a full legacy entity (e.g. "&amp") OR a
+// legacy-PREFIX match (e.g. "&ampZ", where "amp" resolves and "Z" is echoed) —
+// is exempt only when its whole consumed run ("&" + name) fits within the cap;
+// over the cap it hard-fails with this error and emits NOTHING. This holds
+// uniformly for both a SHORT within-lookahead run (e.g. "&ampZ" under a cap of 2)
+// and a saturated ambiguous run (e.g. "&amp" followed by a long alphanumeric
+// tail).
 var ErrContentSizeExceeded = errors.New("content size limit exceeded")
 
 // DocumentLocator is an alias for [sax.DocumentLocator].

@@ -1213,6 +1213,27 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	}
 
 	if val, remainder, ok := resolveNamedEntity(name, hasSemicolon); ok {
+		// A ';'-terminated match is a KNOWN entity — a resolved character
+		// reference that is always emitted intact and exempt from the cap (the
+		// resolved value is one entity's worth of bytes within the fixed
+		// lookahead). A NO-';' match is a LEGACY resolution (a full legacy
+		// entity OR a legacy-prefix whose unmatched tail is echoed as literal
+		// text); per the documented contract it is exempt ONLY when its whole
+		// consumed run ("&" + name) fits the cap. Charge that run BEFORE emitting
+		// so a legacy/legacy-prefix run over a tiny cap hard-fails with NOTHING
+		// emitted, identical to the saturated path. (Example: `&ampZ` under
+		// MaxContentSize(2) — the 5-byte run "&ampZ" exceeds 2, so it must fail
+		// rather than emit "&" + "Z".)
+		if !hasSemicolon {
+			sizeCap := limit
+			if sizeCap <= 0 {
+				sizeCap = defaultMaxContentSize
+			}
+			if 1+len(name) > sizeCap {
+				p.fatalErr = fmt.Errorf("legacy character reference run exceeds %d bytes: %w", sizeCap, ErrContentSizeExceeded)
+				return
+			}
+		}
 		_ = p.emitCharacters([]byte(val))
 		if remainder != "" {
 			// remainder is ASCII (alphanumeric tail of the run); chunk it so it
