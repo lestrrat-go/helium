@@ -484,27 +484,23 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 			d.savedErr = nil
 			return nil, err
 		}
-		// A TokenReader returning (nil, nil) makes no progress on that call.
-		// The encoding/xml.TokenReader contract permits a transient (nil, nil)
-		// ("no token available yet"), so retry it; but bound consecutive
-		// no-progress reads to avoid spinning forever on a broken reader.
-		const maxNoProgress = 100
-		var nextTok Token
-		var err error
-		noProgress := 0
-		for {
-			nextTok, err = d.tokenReader.Token()
-			if nextTok != nil || err != nil {
-				break
-			}
-			noProgress++
-			if noProgress >= maxNoProgress {
-				return nil, errors.New("xml: TokenReader returned (nil, nil)")
-			}
+		nextTok, err := d.tokenReader.Token()
+		// Pass (nil, nil) straight through to match encoding/xml exactly.
+		// Per the TokenReader contract, (nil, nil) means "nothing happened"
+		// (e.g. a polling/non-blocking reader with no token available yet) and
+		// is NOT EOF; stdlib's Decoder.Token() returns it verbatim to the
+		// caller rather than retrying or erroring. Diverging here would break
+		// drop-in stdlib compatibility. The shim's own internal driving loops
+		// (Decode/populateElement, Skip) carry a bounded no-progress guard so
+		// the shim itself can never hang on a pathological reader.
+		if nextTok == nil && err == nil {
+			return nil, nil //nolint:nilnil // stdlib parity: (nil, nil) means "nothing happened"
 		}
 		if err != nil && nextTok == nil {
 			return nil, err
 		}
+		// Token came back with a trailing error: return the token now and
+		// surface the error on the next read (the general TokenReader case).
 		if err != nil {
 			d.savedErr = err
 		}
@@ -665,6 +661,30 @@ func (d *Decoder) mergeCharData(first tokenEvent, _ bool) tokenEvent {
 	return merged
 }
 
+// maxNoProgress bounds how many consecutive (nil, nil) "nothing happened"
+// reads the shim's own internal driving loops tolerate before giving up.
+// Token() passes (nil, nil) straight through to the caller for stdlib parity,
+// but loops that drive the decoder internally (Decode/populateElement, Skip)
+// expect forward progress; without this bound a pathological TokenReader that
+// always returns (nil, nil) would hang the shim itself.
+const maxNoProgress = 10_000
+
+// driveToken reads the next token for an internal driving loop. A (nil, nil)
+// "nothing happened" result is retried up to maxNoProgress times before the
+// loop is failed with io.ErrNoProgress, so the shim can never hang internally.
+func (d *Decoder) driveToken() (Token, error) {
+	for range maxNoProgress {
+		tok, err := d.Token()
+		if err != nil {
+			return nil, err
+		}
+		if tok != nil {
+			return tok, nil
+		}
+	}
+	return nil, io.ErrNoProgress
+}
+
 func (d *Decoder) Skip() error {
 	if d.lastToken == nil {
 		return errors.New("shim: Skip called before reading start element")
@@ -675,7 +695,7 @@ func (d *Decoder) Skip() error {
 
 	depth := 1
 	for depth > 0 {
-		tok, err := d.Token()
+		tok, err := d.driveToken()
 		if err != nil {
 			return err
 		}
@@ -705,7 +725,7 @@ func (d *Decoder) Decode(v any) error {
 		return err
 	}
 	for {
-		tok, err := d.Token()
+		tok, err := d.driveToken()
 		if err != nil {
 			return err
 		}
@@ -776,7 +796,7 @@ func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, 
 	}
 	defer func() { d.nestDepth-- }()
 	for {
-		tok, err := d.Token()
+		tok, err := d.driveToken()
 		if err != nil {
 			if err == io.EOF {
 				return io.ErrUnexpectedEOF
