@@ -450,9 +450,10 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 	// against the attribute's declared simple type once type refs are resolved.
 	if au.Default != nil || au.Fixed != nil {
 		c.attrUseConstraintSources[au] = attrConstraintSource{
-			line:  elem.Line(),
-			local: opts.name.Local,
-			nsMap: collectNSContext(elem),
+			line:   elem.Line(),
+			local:  opts.name.Local,
+			nsMap:  collectNSContext(elem),
+			source: c.includeFile,
 		}
 	}
 	return au

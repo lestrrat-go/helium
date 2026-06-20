@@ -887,7 +887,7 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 		}
 		if err := td.Validate(ctx, *val, it.src.nsMap); err != nil {
 			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(td))
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, it.src.line, it.src.local, "attribute", it.src.local, msg), helium.ErrorLevelFatal))
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}

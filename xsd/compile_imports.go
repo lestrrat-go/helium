@@ -477,6 +477,15 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				continue
 			}
 			origAttrs := c.schema.attrGroups[qn]
+			// The override REPLACES the Phase-A attribute group, so the nested
+			// attribute-group ref set must be rebuilt from the redefining group's
+			// children. Snapshot the Phase-A refs first (for self-reference
+			// expansion), then clear the slot so stale Phase-A refs cannot leak and
+			// the override's own non-self refs are recorded below. Without this,
+			// checkAttrGroupDuplicates would flatten the wrong reference set (old
+			// refs leak, new refs are ignored).
+			origRefChildren := c.attrGroupRefChildren[qn]
+			delete(c.attrGroupRefChildren, qn)
 			// Build the new attribute list manually, expanding self-references
 			// inline. parseNamedAttributeGroup only collects xs:attribute children
 			// and doesn't handle xs:attributeGroup ref children within a definition.
@@ -496,8 +505,19 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				case isXSDElement(gce, elemAttributeGroup):
 					if ref := getAttr(gce, attrRef); ref != "" {
 						refQN := c.resolveQName(ctx, gce, ref)
-						if refQN == qn && origAttrs != nil {
-							attrs = append(attrs, origAttrs...)
+						switch {
+						case refQN == qn:
+							// A self-reference resolves to the Phase-A group content.
+							if origAttrs != nil {
+								attrs = append(attrs, origAttrs...)
+							}
+							if len(origRefChildren) > 0 {
+								c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], origRefChildren...)
+							}
+						default:
+							// A non-self nested ref in the override is recorded so
+							// checkAttrGroupDuplicates flattens the redefining ref set.
+							c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], refQN)
 						}
 					}
 				}
@@ -753,7 +773,17 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	maps.Copy(c.chameleonEligible, impC.chameleonEligible)
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
 	maps.Copy(c.attrRefs, impC.attrRefs)
-	maps.Copy(c.attrUseConstraintSources, impC.attrUseConstraintSources)
+	// Merge attribute-use default/fixed constraint sources, preserving the
+	// originating file. An attribute use parsed directly in the imported document
+	// (not via a nested include) has an empty source; attribute it to the
+	// imported file so the invalid-default/fixed diagnostic cites the file whose
+	// line number it carries, not the importing schema.
+	for au, src := range impC.attrUseConstraintSources {
+		if src.source == "" {
+			src.source = impC.filename
+		}
+		c.attrUseConstraintSources[au] = src
+	}
 	maps.Copy(c.attrUseSources, impC.attrUseSources)
 
 	return nil
