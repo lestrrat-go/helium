@@ -659,6 +659,100 @@ func TestRCDATALegacyPrefixLongTailResolves(t *testing.T) {
 	}
 }
 
+// TestRCDATALongSemicolonNameNotLegacyResolved is the convergence regression for
+// the bounded-vs-unbounded char-ref decision: a long ';'-terminated name that
+// merely BEGINS with a legacy prefix (`&amp` + a long alphanumeric tail + `;`)
+// must NOT be legacy-resolved — it is an over-long unknown name. parseCharRef
+// scans the whole run before deciding and never legacy-resolves a
+// ';'-terminated name (its prefix loop is gated on the no-semicolon case), so it
+// emits the WHOLE run literally. The bounded scanner must make the identical
+// decision: the run is literal text, charged against MaxContentSize, and it
+// hard-fails once the literal exceeds the cap before the terminator. The earlier
+// bug resolved the legacy "amp" prefix from the truncated 32-byte lookahead
+// (before seeing the eventual ';'), dropping "amp" and emitting "&xxxx...;".
+//
+// The no-semicolon counterpart (`&amp` + long tail, no ';') is the OPPOSITE
+// decision and DOES legacy-resolve — see TestRCDATALegacyPrefixLongTailResolves;
+// this test re-pins it under the same cap to lock both halves together.
+func TestRCDATALongSemicolonNameNotLegacyResolved(t *testing.T) {
+	const tailLen = 40 // run far exceeds maxEntityNameLen (32) → lookahead saturates
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		// Over-cap, ';'-terminated, begins with the legacy "amp" prefix: must be
+		// treated as an unresolved literal and hard-fail (never legacy-resolved).
+		t.Run(elem+"_over_cap_semicolon_literal", func(t *testing.T) {
+			body := "&amp" + strings.Repeat("x", tailLen) + ";"
+			input := "<" + elem + ">" + body + "</" + elem + ">"
+
+			maxChunk := 0
+			record := html.CharactersFunc(func(data []byte) error {
+				if len(data) > maxChunk {
+					maxChunk = len(data)
+				}
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			err := html.NewParser().MaxContentSize(4).
+				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"a long ';'-terminated name beginning with a legacy prefix must be literal and hard-fail, not legacy-resolved")
+			require.LessOrEqual(t, maxChunk, 4+16,
+				"no over-cap literal may be emitted before the abort")
+		})
+
+		// Within-cap, ';'-terminated: same run but a cap large enough to hold the
+		// literal. It must be echoed VERBATIM (still no legacy resolution),
+		// exactly as the unbounded parseCharRef would emit it.
+		t.Run(elem+"_within_cap_semicolon_literal", func(t *testing.T) {
+			body := "&amp" + strings.Repeat("x", tailLen) + ";"
+			input := "<" + elem + ">" + body + "</" + elem + ">"
+
+			var got strings.Builder
+			record := html.CharactersFunc(func(data []byte) error {
+				got.Write(data)
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			err := html.NewParser().MaxContentSize(1<<10).
+				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.NoError(t, err,
+				"a within-cap long ';'-terminated unknown name must be echoed, not rejected")
+			require.Equal(t, body, got.String(),
+				"the whole run (incl. 'amp' and ';') must be echoed literally — no legacy resolution")
+		})
+
+		// The no-semicolon sibling under the SAME tiny cap still legacy-resolves
+		// the "amp" prefix and echoes the tail — the opposite decision, locked in
+		// alongside the literal case above.
+		t.Run(elem+"_no_semicolon_legacy_resolves", func(t *testing.T) {
+			tail := strings.Repeat("x", tailLen)
+			input := "<" + elem + ">&amp" + tail + "</" + elem + ">"
+
+			var got strings.Builder
+			record := html.CharactersFunc(func(data []byte) error {
+				got.Write(data)
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			err := html.NewParser().MaxContentSize(4).
+				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.NoError(t, err,
+				"a long no-semicolon legacy-prefix reference must resolve, not fail")
+			require.Equal(t, "&"+tail, got.String(),
+				"legacy 'amp' prefix resolves to '&' and the tail is echoed literally")
+		})
+	}
+}
+
 // TestRCDATANumericRefContextCancellation verifies Finding 2: a context
 // cancelled WHILE the parser drains a long numeric character reference inside
 // RCDATA (e.g. <title>&#9999...) aborts promptly with context.Canceled instead
