@@ -1,6 +1,7 @@
 package xslt3_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -42,10 +43,25 @@ func TestWriteToNilWriterRejectsBeforeTransform(t *testing.T) {
 	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
 	require.NoError(t, err)
 
-	h := &recordingMessageHandler{}
-	require.NotPanics(t, func() {
-		err = ss.Transform(src).MessageHandler(h).WriteTo(ctx, nil)
+	t.Run("nil interface", func(t *testing.T) {
+		h := &recordingMessageHandler{}
+		require.NotPanics(t, func() {
+			err = ss.Transform(src).MessageHandler(h).WriteTo(ctx, nil)
+		})
+		require.Error(t, err, "WriteTo with nil writer must return an error")
+		require.False(t, h.called, "transform side effects must not run when writer is nil")
 	})
-	require.Error(t, err, "WriteTo with nil writer must return an error")
-	require.False(t, h.called, "transform side effects must not run when writer is nil")
+
+	t.Run("typed nil", func(t *testing.T) {
+		// A typed-nil writer is a non-nil io.Writer interface wrapping a nil
+		// pointer. It must be rejected before the transform runs, not panic
+		// during serialization.
+		var b *bytes.Buffer
+		h := &recordingMessageHandler{}
+		require.NotPanics(t, func() {
+			err = ss.Transform(src).MessageHandler(h).WriteTo(ctx, b)
+		})
+		require.Error(t, err, "WriteTo with typed-nil writer must return an error")
+		require.False(t, h.called, "transform side effects must not run when writer is a typed nil")
+	})
 }

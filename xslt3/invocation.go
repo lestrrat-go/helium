@@ -6,6 +6,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -401,10 +402,26 @@ func (inv Invocation) Serialize(ctx context.Context) (string, error) {
 	return buf.String(), nil
 }
 
+// isNilWriter reports whether w is unusable: either a nil interface or a
+// typed nil (a non-nil interface wrapping a nil pointer, map, channel,
+// func, slice, or interface). Reflection is only used when w is non-nil.
+func isNilWriter(w io.Writer) bool {
+	if w == nil {
+		return true
+	}
+	v := reflect.ValueOf(w)
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.Func, reflect.Slice, reflect.Interface:
+		return v.IsNil()
+	default:
+		return false
+	}
+}
+
 // WriteTo executes the transformation and writes the serialized result to w.
 // Secondary result documents are delivered through the handler only.
 func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
-	if w == nil {
+	if isNilWriter(w) {
 		return errNilWriter
 	}
 	if err := inv.validate(); err != nil {
