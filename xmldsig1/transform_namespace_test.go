@@ -83,7 +83,7 @@ func TestForeignNamespaceTransformRejected(t *testing.T) {
 	// namespace check on the Transform element.
 	canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, nil)
 	require.NoError(t, err)
-	sigBytes, err := signBytes(AlgRSASHA256, key, canonical)
+	sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
 	require.NoError(t, err)
 
 	sigValueElem := findChild(t, sigElem, "SignatureValue")

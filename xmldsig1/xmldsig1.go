@@ -33,6 +33,7 @@ type signerConfig struct {
 	references         []ReferenceConfig
 	keyInfoBuilder     KeyInfoBuilder
 	signatureID        string
+	allowSHA1          bool
 }
 
 // Signer creates XML Digital Signatures. It uses clone-on-write semantics:
@@ -93,6 +94,16 @@ func (s Signer) SignatureID(id string) Signer {
 	return s
 }
 
+// AllowSHA1 controls whether SHA-1-based signature and digest algorithms
+// (rsa-sha1, hmac-sha1, sha1) may be used when signing. SHA-1 is rejected by
+// default; pass true to opt in for legacy interoperability. SHA-1 is
+// cryptographically weak and should not be used for new signatures.
+func (s Signer) AllowSHA1(allow bool) Signer {
+	s = s.clone()
+	s.cfg.allowSHA1 = allow
+	return s
+}
+
 // SignEnveloped creates an enveloped signature inside the given parent
 // element of the document. The key is a crypto.Signer (rsa.PrivateKey,
 // ecdsa.PrivateKey, ed25519.PrivateKey) or []byte for HMAC.
@@ -115,9 +126,11 @@ func (s Signer) SignDetached(ctx context.Context, doc *helium.Document, key any)
 // verifierConfig holds the configuration for a Verifier.
 type verifierConfig struct {
 	keySource KeySource
+	allowSHA1 bool
 }
 
-// Verifier verifies XML Digital Signatures. It uses clone-on-write semantics.
+// Verifier verifies XML Digital Signatures. It uses clone-on-write semantics:
+// each builder method returns a new Verifier and the original is never mutated.
 type Verifier struct {
 	cfg *verifierConfig
 }
@@ -125,6 +138,26 @@ type Verifier struct {
 // NewVerifier creates a new Verifier with the given key source.
 func NewVerifier(ks KeySource) Verifier {
 	return Verifier{cfg: &verifierConfig{keySource: ks}}
+}
+
+func (v Verifier) clone() Verifier {
+	if v.cfg == nil {
+		return Verifier{cfg: &verifierConfig{}}
+	}
+	cp := *v.cfg
+	return Verifier{cfg: &cp}
+}
+
+// AllowSHA1 controls whether SHA-1-based signature and digest algorithms
+// (rsa-sha1, hmac-sha1, sha1) are accepted during verification. SHA-1 is
+// rejected by default; pass true to opt in for verifying legacy signatures.
+// SHA-1 is cryptographically weak and accepting it exposes callers to
+// downgrade and collision risks, so only enable it when interoperating with
+// systems that cannot be upgraded.
+func (v Verifier) AllowSHA1(allow bool) Verifier {
+	v = v.clone()
+	v.cfg.allowSHA1 = allow
+	return v
 }
 
 // Verify verifies the Signature element in the document. The document must

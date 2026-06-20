@@ -17,6 +17,12 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 		return fmt.Errorf("%w: signature algorithm not set", ErrInvalidSignature)
 	}
 
+	// Reject weak (SHA-1) algorithms before building or mutating any nodes, so a
+	// rejected default-SHA-1 request leaves the input tree untouched.
+	if err := preflightSignerWeakAlgorithms(cfg); err != nil {
+		return err
+	}
+
 	sigElem, signedInfo, sigValueElem, err := buildSignatureSkeleton(doc, cfg)
 	if err != nil {
 		return err
@@ -29,7 +35,7 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 
 	// Process references: compute digests and add Reference elements.
 	for _, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref); err != nil {
+		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
 			// Detach the signature on failure.
 			helium.UnlinkNode(sigElem)
 			return err
@@ -66,6 +72,13 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, fmt.Errorf("%w: signature algorithm not set", ErrInvalidSignature)
 	}
 
+	// Reject weak (SHA-1) algorithms before building nodes or moving caller
+	// content into the <Object>, so a rejected default-SHA-1 request leaves the
+	// input nodes unmoved and the input tree untouched.
+	if err := preflightSignerWeakAlgorithms(cfg); err != nil {
+		return nil, err
+	}
+
 	sigElem, signedInfo, sigValueElem, err := buildSignatureSkeleton(doc, cfg)
 	if err != nil {
 		return nil, err
@@ -90,7 +103,7 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 	}
 
 	for _, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref); err != nil {
+		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
 			return nil, err
 		}
 	}
@@ -121,13 +134,18 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 		return nil, fmt.Errorf("%w: signature algorithm not set", ErrInvalidSignature)
 	}
 
+	// Reject weak (SHA-1) algorithms before building or mutating any nodes.
+	if err := preflightSignerWeakAlgorithms(cfg); err != nil {
+		return nil, err
+	}
+
 	sigElem, signedInfo, sigValueElem, err := buildSignatureSkeleton(doc, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref); err != nil {
+		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
 			return nil, err
 		}
 	}
@@ -208,7 +226,7 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 
 // processReference computes the digest for a single Reference and adds the
 // Reference element to SignedInfo.
-func processReference(_ context.Context, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig) error {
+func processReference(_ context.Context, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig, allowSHA1 bool) error {
 	// Resolve the reference target.
 	target, err := resolveReference(doc, ref.URI)
 	if err != nil {
@@ -265,8 +283,9 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		return err
 	}
 
-	// Compute digest.
-	digest, err := computeDigest(ref.DigestAlgorithm, canonical)
+	// Compute digest. A SHA-1 digest is rejected unless the caller opted in
+	// via Signer.AllowSHA1(true).
+	digest, err := computeDigest(ref.DigestAlgorithm, canonical, allowSHA1)
 	if err != nil {
 		return err
 	}
@@ -386,7 +405,7 @@ func computeAndSetSignatureValue(cfg *signerConfig, sigElem *helium.Element, sig
 		return err
 	}
 
-	sigBytes, err := signBytes(cfg.signatureAlgorithm, key, canonical)
+	sigBytes, err := signBytes(cfg.signatureAlgorithm, key, canonical, cfg.allowSHA1)
 	if err != nil {
 		return err
 	}
