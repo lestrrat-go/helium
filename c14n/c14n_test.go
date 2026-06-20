@@ -389,10 +389,11 @@ func TestEmptyNamespaceURIAccepted(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// collectDescendantElements returns the element nodes named `name` and all of
+// collectDescendantElements returns the element nodes named "child" and all of
 // their descendant nodes within doc.
-func collectDescendantElements(t *testing.T, doc *helium.Document, name string) []helium.Node {
+func collectDescendantElements(t *testing.T, doc *helium.Document) []helium.Node {
 	t.Helper()
+	const name = "child"
 	var out []helium.Node
 	var walk func(n helium.Node, inside bool)
 	walk = func(n helium.Node, inside bool) {
@@ -423,7 +424,7 @@ func TestC14N11HTTPBaseURIFixup(t *testing.T) {
 	require.NoError(t, err)
 
 	// Visible node-set: the child element subtree only (root excluded).
-	nodes := collectDescendantElements(t, doc, "child")
+	nodes := collectDescendantElements(t, doc)
 
 	got, err := c14n.NewCanonicalizer(c14n.C14N11).
 		NodeSet(nodes).
@@ -449,7 +450,7 @@ func TestC14N11SchemeOnlyBaseURIFixup(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
-	nodes := collectDescendantElements(t, doc, "child")
+	nodes := collectDescendantElements(t, doc)
 
 	got, err := c14n.NewCanonicalizer(c14n.C14N11).
 		NodeSet(nodes).
@@ -475,7 +476,7 @@ func TestC14N11BaseURIFixupQueryFragment(t *testing.T) {
 
 	// Visible node-set: the child element subtree only (root excluded), so the
 	// root's xml:base (carrying a query and fragment) is folded into the child.
-	nodes := collectDescendantElements(t, doc, "child")
+	nodes := collectDescendantElements(t, doc)
 
 	got, err := c14n.NewCanonicalizer(c14n.C14N11).
 		NodeSet(nodes).
@@ -488,4 +489,32 @@ func TestC14N11BaseURIFixupQueryFragment(t *testing.T) {
 	// relative to the visible ancestor base http://example.com/a/b/doc.xml the
 	// path component is "../../c/page" and the query+fragment carry through.
 	require.Contains(t, string(got), `xml:base="../../c/page?q=1&amp;r=2#frag"`, "query and fragment must be preserved, got: %s", string(got))
+}
+
+// TestC14N11BaseURIFixupEmptyPathQueryFragment verifies that when both the base
+// URI and the resolved target have no path component, xml:base fixup does not
+// inject a spurious "." segment. Injecting "." would relativize to "./?q=1#frag"
+// which resolves to "http://example.com/?q=1#frag" (with a slash) — a different
+// URI than "http://example.com?q=1#frag". The query+fragment must attach to the
+// bare authority instead.
+func TestC14N11BaseURIFixupEmptyPathQueryFragment(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="?q=1#frag"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// Visible node-set: the child element subtree only (root excluded), so the
+	// root's xml:base is folded into the child.
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).
+		NodeSet(nodes).
+		BaseURI("http://example.com").
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+
+	// root xml:base "?q=1#frag" resolved against http://example.com is
+	// http://example.com?q=1#frag; relative to the same base it must be the bare
+	// "?q=1#frag" with no leading "." or "/".
+	require.Contains(t, string(got), `xml:base="?q=1#frag"`, "query and fragment must attach to authority without a spurious path, got: %s", string(got))
 }

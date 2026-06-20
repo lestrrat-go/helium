@@ -1014,7 +1014,12 @@ func relativizeURI(base, target string) string {
 	// Build relative path
 	result := strings.Repeat("../", ups) + targetPath[len(common):]
 
-	if result == "" {
+	// An empty relative path normally collapses to "." so it resolves back to
+	// the base. But when the target itself has no path component, injecting "."
+	// would resolve to "host/" (with a trailing slash) — a different URI than
+	// the bare "host". In that case keep the path empty so the query/fragment
+	// attach directly to the authority.
+	if result == "" && targetURL.Path != "" {
 		result = "."
 	}
 
