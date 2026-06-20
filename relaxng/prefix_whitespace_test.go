@@ -277,6 +277,111 @@ func TestUnboundPrefixInChoiceNameClassPoisonsChoice(t *testing.T) {
 	})
 }
 
+// TestFatalCompileErrorFailsClosed covers the fail-closed guarantee: when
+// compilation reports any fatal error (here, an unbound namespace prefix), the
+// resulting grammar must be unmatchable. A poisoned branch can otherwise be
+// masked at the PATTERN level by a valid <choice> sibling or skipped through a
+// nullable wrapper (optional/zeroOrMore), so the start pattern is replaced with
+// notAllowed and the whole grammar refuses to validate any instance.
+func TestFatalCompileErrorFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("pattern-level choice with unbound-prefix branch fails closed", func(t *testing.T) {
+		t.Parallel()
+		// <choice> of two <element> patterns; the second names p:b with an
+		// unbound prefix p. The valid <a/> sibling branch must NOT mask the
+		// fatal compile error: validating <root><a/></root> must fail.
+		schema := `<element name="root" xmlns="http://relaxng.org/ns/structure/1.0">
+  <choice>
+    <element name="a"><empty/></element>
+    <element name="p:b"><empty/></element>
+  </choice>
+</element>`
+
+		grammar := compileWithDefaultHandler(t, schema)
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/></root>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"an unbound-prefix choice branch must fail the whole grammar closed, not be masked by the valid <a/> sibling")
+	})
+
+	t.Run("optional-wrapped unbound-prefix name fails closed", func(t *testing.T) {
+		t.Parallel()
+		// The poisoned <element name="p:b"/> is wrapped in <optional>; a nullable
+		// wrapper must not let the grammar skip past the fatal error. An instance
+		// that omits the optional child must still be rejected.
+		schema := `<element name="root" xmlns="http://relaxng.org/ns/structure/1.0">
+  <optional>
+    <element name="p:b"><empty/></element>
+  </optional>
+</element>`
+
+		grammar := compileWithDefaultHandler(t, schema)
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"an optional-wrapped unbound-prefix name must fail the grammar closed, not be skipped as nullable")
+	})
+
+	t.Run("zeroOrMore-wrapped unbound-prefix name fails closed", func(t *testing.T) {
+		t.Parallel()
+		// Same as above but with <zeroOrMore>, which is also nullable. An empty
+		// <root/> must still be rejected because the grammar failed to compile.
+		schema := `<element name="root" xmlns="http://relaxng.org/ns/structure/1.0">
+  <zeroOrMore>
+    <element name="p:b"><empty/></element>
+  </zeroOrMore>
+</element>`
+
+		grammar := compileWithDefaultHandler(t, schema)
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"a zeroOrMore-wrapped unbound-prefix name must fail the grammar closed, not be skipped as nullable")
+	})
+
+	t.Run("clean compile still validates a matching instance", func(t *testing.T) {
+		t.Parallel()
+		// A grammar with no compile errors must be unaffected by the fail-closed
+		// guard and continue to validate matching instances normally.
+		schema := `<element name="root"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    xmlns:p="urn:example:p">
+  <choice>
+    <element name="a"><empty/></element>
+    <element name="p:b"><empty/></element>
+  </choice>
+</element>`
+
+		require.Empty(t, compileErrorsFor(t, schema),
+			"a bound-prefix grammar must compile cleanly")
+		require.NoError(t, validateWith(t, schema, `<root><a/></root>`),
+			"a clean grammar must still validate a matching instance")
+	})
+}
+
+// compileWithDefaultHandler compiles a schema via the DEFAULT compile path (no
+// error collector) and returns the resulting grammar. The default path drops
+// the fatal diagnostic and returns a non-nil grammar with a nil error, which is
+// exactly the path that must fail closed at validation time.
+func compileWithDefaultHandler(t *testing.T, schema string) *relaxng.Grammar {
+	t.Helper()
+
+	schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+	require.NoError(t, err, "schema should parse")
+
+	grammar, err := relaxng.NewCompiler().Compile(t.Context(), schemaDoc)
+	require.NoError(t, err, "default Compile returns a nil hard error")
+	require.NotNil(t, grammar, "default Compile still returns a grammar")
+	return grammar
+}
+
 // TestWhitespaceOnlyNameIsCompileError covers the presence-aware name lookup: a
 // name attribute whose value is XML whitespace only trims to "" but is still
 // PRESENT. It must be treated as an invalid (empty) QName — a fatal compile

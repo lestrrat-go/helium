@@ -101,6 +101,15 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.grammar.start = startPat
 	c.checkRules(ctx)
 
+	// Fail closed: if compilation produced any fatal errors (e.g. an unbound
+	// namespace prefix), the grammar must not validate any instance. A poisoned
+	// branch buried inside a <choice> or a nullable wrapper could otherwise be
+	// masked by a valid sibling, so replace the start pattern with notAllowed
+	// to make the whole grammar unmatchable.
+	if c.errorCount > 0 {
+		c.grammar.start = &pattern{kind: patternNotAllowed}
+	}
+
 	return c.grammar, nil
 }
 
