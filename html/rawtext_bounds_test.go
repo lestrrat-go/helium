@@ -740,6 +740,90 @@ func TestRCDATALongWithinCapNamedEntityPreserved(t *testing.T) {
 	}
 }
 
+// TestRCDATAShortNameOverCapFails pins that an UNRESOLVED named reference whose
+// alphanumeric name fits inside the fixed maxEntityNameLen lookahead — so it
+// takes the within-cap fallback path rather than the long-run branch — is STILL
+// charged against MaxContentSize. The literal run it produces is "&" plus the
+// name; if that alone exceeds the cap the parse must hard-fail with
+// ErrContentSizeExceeded, exactly like the long-run path. This guards the bug
+// where a short unknown name (e.g. `&zzzzz;`, 7 literal bytes) under
+// MaxContentSize(4) was silently emitted instead of erroring, because only runs
+// continuing past the fixed lookahead reached the size check.
+func TestRCDATAShortNameOverCapFails(t *testing.T) {
+	const limit = 4
+
+	// name length 5 → "&zzzzz" is 6 literal bytes > limit (4); both the
+	// semicolon-terminated and no-semicolon forms must fail.
+	overCap := []struct {
+		name string
+		body string
+	}{
+		{"no_semicolon", "&zzzzz"},
+		{"semicolon", "&zzzzz;"},
+	}
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		for _, tc := range overCap {
+			t.Run(elem+"_overcap_"+tc.name, func(t *testing.T) {
+				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
+
+				maxChunk := 0
+				record := html.CharactersFunc(func(data []byte) error {
+					if len(data) > maxChunk {
+						maxChunk = len(data)
+					}
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+					"a short unknown name whose literal exceeds the cap must hard-fail")
+				require.LessOrEqual(t, maxChunk, limit+16,
+					"no over-cap literal may be emitted before the abort")
+			})
+		}
+	}
+
+	// Within-cap counterparts: "&zz" is 3 literal bytes <= limit (4), so it is
+	// echoed verbatim (with any trailing ';') and never errors.
+	withinCap := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"no_semicolon", "&zz", "&zz"},
+		{"semicolon", "&zz;", "&zz;"},
+	}
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		for _, tc := range withinCap {
+			t.Run(elem+"_withincap_"+tc.name, func(t *testing.T) {
+				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
+
+				var got strings.Builder
+				record := html.CharactersFunc(func(data []byte) error {
+					got.Write(data)
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				require.NoError(t, err,
+					"a short unknown name within the cap must be echoed, not rejected")
+				require.Equal(t, tc.want, got.String(),
+					"within-cap unknown name must be echoed verbatim")
+			})
+		}
+	}
+}
+
 // TestRCDATANumericEntityNormalized verifies that the bounded RCDATA char-ref
 // scanner makes the SAME entity-resolution decision as the normal-text scanner
 // for numeric references, even with a tiny MaxContentSize: an overlong numeric

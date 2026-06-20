@@ -1230,7 +1230,19 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	}
 
 	// Unknown entity within the lookahead — emit "&" + name (and any ';') as
-	// literal text in capped chunks.
+	// literal text in capped chunks. Even though the name fits the fixed
+	// lookahead window, the LITERAL run it produces is still charged against
+	// MaxContentSize exactly like the long-run branch above: "&" plus the name
+	// length. If that alone exceeds the cap, fail with ErrContentSizeExceeded
+	// rather than emitting an over-cap literal.
+	sizeCap := limit
+	if sizeCap <= 0 {
+		sizeCap = defaultMaxContentSize
+	}
+	if 1+len(name) > sizeCap {
+		p.fatalErr = fmt.Errorf("unresolved character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
+		return
+	}
 	text := "&" + name
 	if hasSemicolon {
 		text += ";"
