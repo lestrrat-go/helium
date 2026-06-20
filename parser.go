@@ -676,12 +676,28 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 	if hn >= len(patEBCDIC) && bytes.Equal(head[:len(patEBCDIC)], patEBCDIC) {
 		buf := append([]byte(nil), head...)
 		if perr != io.EOF {
-			// The head read did not signal EOF, so a tail remains in r.
-			b, rerr := io.ReadAll(r)
-			if rerr != nil {
-				return nil, rerr
+			// The head read did not signal EOF, so a tail remains in r. Drain it
+			// with a manual loop (not io.ReadAll) that re-checks ctx BEFORE each
+			// Read: a cancellation observed after the prefix arrived must abort
+			// promptly without consuming a large or slow tail, mirroring the
+			// ctx-checking prefix-read loop above and honoring the cancellation
+			// contract this entry point establishes.
+			var chunk [4096]byte
+			for {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+				n, rerr := r.Read(chunk[:])
+				buf = append(buf, chunk[:n]...)
+				if rerr != nil {
+					// io.EOF is the normal terminator; any other error is a real
+					// read failure and is surfaced.
+					if rerr == io.EOF {
+						break
+					}
+					return nil, rerr
+				}
 			}
-			buf = append(buf, b...)
 		}
 		return p.Parse(ctx, buf)
 	}

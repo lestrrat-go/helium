@@ -2691,6 +2691,101 @@ func TestParseReaderEBCDICDataWithEOFInFirstRead(t *testing.T) {
 		"ParseReader output must match Parse([]byte) when EBCDIC arrives with io.EOF in one read")
 }
 
+// ebcdicSlowTailReader returns the EBCDIC invariant prefix on its first Read (so
+// detection succeeds), signals when its tail is first read, then drips the tail
+// one byte at a time. The first tail byte is served immediately so the parser
+// regains control (and re-checks ctx); every later tail Read blocks until the
+// reader is cancelled, modeling a stalled tail whose remaining bytes never
+// arrive. If ParseReader honored ctx between reads it returns before consuming
+// the whole tail; if it drained eagerly it would block forever.
+type ebcdicSlowTailReader struct {
+	prefix    []byte
+	gate      chan struct{} // closed to unblock later tail reads (test cleanup only)
+	entered   chan struct{} // closed the first time a tail byte is served
+	cancelled chan struct{} // closed by the test once ctx has been cancelled
+	once      sync.Once
+	served    int // number of tail bytes already delivered
+}
+
+func (r *ebcdicSlowTailReader) Read(p []byte) (int, error) {
+	if r.served == 0 && len(r.prefix) > 0 {
+		// First Read: hand back the EBCDIC prefix so detection succeeds.
+		n := copy(p, r.prefix)
+		r.prefix = nil
+		return n, nil
+	}
+	if r.served == 0 {
+		// First tail Read: signal the test, then wait until it has cancelled the
+		// context before returning one byte. This makes the test deterministic:
+		// when the drain loop iterates and re-checks ctx on the next pass, the
+		// cancellation is guaranteed to be observable, so a ctx-honoring loop
+		// returns instead of entering the blocking Read below.
+		r.served++
+		r.once.Do(func() { close(r.entered) })
+		<-r.cancelled
+		if len(p) > 0 {
+			p[0] = ' '
+			return 1, nil
+		}
+		return 0, nil
+	}
+	// Later tail Reads block until the test tears the reader down. A
+	// ctx-honoring drain loop never reaches here after cancellation.
+	<-r.gate
+	return 0, io.EOF
+}
+
+// TestParseReaderEBCDICTailCancelledDoesNotDrain guards the ctx-cancellation
+// contract on the EBCDIC tail-drain path: once the EBCDIC prefix is detected,
+// the remainder of the stream must be read through a loop that re-checks ctx
+// BEFORE each Read. When the context is cancelled after the prefix read and the
+// tail stalls, ParseReader must return context.Canceled promptly WITHOUT
+// blocking on the unread tail.
+func TestParseReaderEBCDICTailCancelledDoesNotDrain(t *testing.T) {
+	t.Parallel()
+
+	r := &ebcdicSlowTailReader{
+		prefix:    []byte{0x4C, 0x6F, 0xA7, 0x94},
+		gate:      make(chan struct{}),
+		entered:   make(chan struct{}),
+		cancelled: make(chan struct{}),
+	}
+	// Never unblock the stalled tail: if ParseReader drains past the ctx check,
+	// the test deadlocks and is caught by the timeout below.
+	defer close(r.gate)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	type result struct {
+		doc *helium.Document
+		err error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		doc, err := helium.NewParser().ParseReader(ctx, r)
+		resCh <- result{doc, err}
+	}()
+
+	// Wait until the parser has entered the tail-drain loop (prefix consumed),
+	// then cancel: this exercises a cancellation observed after the prefix read.
+	select {
+	case <-r.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ParseReader did not begin draining the EBCDIC tail")
+	}
+	cancel()
+	close(r.cancelled)
+
+	select {
+	case res := <-resCh:
+		require.ErrorIs(t, res.err, context.Canceled,
+			"a context cancelled while draining the EBCDIC tail must surface as context.Canceled")
+		require.Nil(t, res.doc, "a cancelled parse must not return a document")
+	case <-time.After(2 * time.Second):
+		t.Fatal("ParseReader blocked on the EBCDIC tail despite a cancelled context")
+	}
+}
+
 func TestParseFileResolvesRelativeExternalEntity(t *testing.T) {
 	t.Parallel()
 
