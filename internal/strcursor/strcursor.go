@@ -6,7 +6,6 @@ package strcursor
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"unicode/utf8"
 	"unsafe"
@@ -638,6 +637,7 @@ func (c *ByteCursor) fillBuffer(n int) error {
 		copy(c.buf, c.buf[c.bufpos:c.buflen])
 	}
 	c.bufpos = 0
+	c.buflen = remaining
 
 	// Grow buffer if needed.
 	if n > len(c.buf) {
@@ -651,30 +651,33 @@ func (c *ByteCursor) fillBuffer(n int) error {
 		c.buf[i] = 0
 	}
 
-	nread, err := c.in.Read(c.buf[remaining:])
-	c.buflen = nread + remaining
-	if err != nil {
-		// Remember a genuine read error (anything other than a clean EOF) so
-		// it survives even when this Read also returned data (n > 0), which
-		// io.Reader explicitly permits. A truncated/corrupt stream may deliver
-		// its final bytes and the error together in a single Read; discarding
-		// the error here would let the parser accept the buffered bytes as if
-		// the stream ended cleanly.
-		if err != io.EOF && c.readErr == nil {
-			c.readErr = err
-		}
-		if nread == 0 {
-			if remaining >= n {
+	// Read until we have enough. A single underlying Read may return fewer
+	// bytes than requested without an error (io.Reader explicitly permits a
+	// short read), as happens with the incremental push-parser stream that
+	// delivers each pushed chunk as soon as it arrives. Looping here keeps a
+	// slow producer that splits a token (e.g. the XML declaration) across
+	// pushes from being mistaken for end-of-input, matching UTF8Cursor.
+	for c.buflen < n {
+		nread, err := c.in.Read(c.buf[c.buflen:])
+		c.buflen += nread
+		if err != nil {
+			// Remember a genuine read error (anything other than a clean EOF)
+			// so it survives even when this Read also returned data (n > 0),
+			// which io.Reader explicitly permits. A truncated/corrupt stream
+			// may deliver its final bytes and the error together in a single
+			// Read; discarding the error here would let the parser accept the
+			// buffered bytes as if the stream ended cleanly.
+			if err != io.EOF && c.readErr == nil {
+				c.readErr = err
+			}
+			if c.buflen >= n {
 				return nil
+			}
+			if c.readErr != nil {
+				return c.readErr
 			}
 			return err
 		}
-	}
-	if c.buflen < n {
-		if c.readErr != nil {
-			return c.readErr
-		}
-		return errors.New("fillBuffer request exceeds available data")
 	}
 	return nil
 }
