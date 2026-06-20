@@ -184,6 +184,75 @@ func TestResultDocumentSecondarySerializationAVTErrorNoNestedCommit(t *testing.T
 	require.True(t, gotCaught, "the catch's result document must be delivered")
 }
 
+// A-007 (PR #649 round 7): the PRIMARY xsl:result-document branches for
+// validation="strict|lax" previously RETURNED before the serialization-AVT
+// preflight, so a failing serialization AVT (standalone="{1 idiv 0}") was
+// silently swallowed and the instruction returned <a/> with err=nil. The
+// preflight now runs above the validation= return, so the dynamic error is
+// surfaced and (here) catchable in xsl:try, leaving the catch's <b/> as the
+// sole primary output with no partial <a/>.
+func TestResultDocumentPrimaryValidationStrictSerializationAVTError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:try>
+      <xsl:result-document validation="strict" standalone="{1 idiv 0}"><a/></xsl:result-document>
+      <xsl:catch>
+        <xsl:result-document><b/></xsl:result-document>
+      </xsl:catch>
+    </xsl:try>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err, "the caught validation=strict primary result-document must succeed")
+	require.Contains(t, out, "<b/>", "the catch's primary result document must be emitted")
+	require.NotContains(t, out, "<a/>", "the failed validation=strict primary must not leave partial output behind")
+}
+
+// A-007 (PR #649 round 7): the same swallow existed in the primary
+// type="..." branch — it returned before the serialization-AVT preflight. The
+// hoisted preflight surfaces the failing AVT, catchable in xsl:try.
+func TestResultDocumentPrimaryTypeSerializationAVTError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:try>
+      <xsl:result-document type="xs:untyped" standalone="{1 idiv 0}"><a/></xsl:result-document>
+      <xsl:catch>
+        <xsl:result-document><b/></xsl:result-document>
+      </xsl:catch>
+    </xsl:try>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err, "the caught type=... primary result-document must succeed")
+	require.Contains(t, out, "<b/>", "the catch's primary result document must be emitted")
+	require.NotContains(t, out, "<a/>", "the failed type=... primary must not leave partial output behind")
+}
+
+// A-007 (PR #649 round 7): a primary xsl:result-document with validation="strict"
+// and VALID serialization AVTs must still apply its overrides. Pre-fix the
+// validation= branch returned before committing primaryOutputOverrides, so the
+// standalone="yes" override was dropped from the effective primary output def.
+func TestResultDocumentPrimaryValidationStrictAppliesOverrides(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document validation="strict" standalone="yes"><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	_, err := inv.Do(t.Context())
+	require.NoError(t, err)
+	od := inv.ResolvedOutputDef()
+	require.NotNil(t, od, "resolved output def must be populated after Do")
+	require.Equal(t, "yes", od.Standalone,
+		"the validation=strict primary result-document's standalone override must reach the effective output def")
+}
+
 // XTDE1490 duplicate detection must collapse dot-segments in ABSOLUTE hrefs.
 // "file:///base/dir/a/../out.xml" and "file:///base/dir/out.xml" denote the same
 // file and must collide. (Regression: absolute hrefs were keyed without

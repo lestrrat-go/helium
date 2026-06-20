@@ -355,6 +355,54 @@ func isItemSerializationMethod(method string) bool {
 	return method == methodJSON || method == methodAdaptive
 }
 
+// commitPrimaryOutputState publishes the serialization overrides and
+// character-map state that a primary xsl:result-document contributes to the
+// final primary output. It is the single commit point shared by EVERY primary
+// sub-branch (default direct-write, build-tree="no", type="...",
+// validation="strict|lax"): each branch evaluates the preflight overrides up
+// front (before touching the primary tree) and calls this only after its body
+// and post-body checks succeed. Calling it uniformly guarantees that the
+// serialization AVTs and character maps declared on a primary result-document
+// take effect regardless of which validation/type/build-tree branch handled it.
+func (ec *execContext) commitPrimaryOutputState(inst *resultDocumentInst, effectiveFormat string, primaryOverrides *OutputDef) {
+	// Propagate character map names to the primary output frame.
+	// Include maps from the named format (xsl:output) first, then
+	// maps from xsl:result-document itself (higher priority).
+	var allMaps []string
+	if effectiveFormat != "" {
+		if fmtDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok {
+			allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
+			// Also propagate resolved character maps from parameter-document.
+			// Clone the compiled map so the later maps.Copy merge below never
+			// mutates the compiled format's ResolvedCharMap.
+			if len(fmtDef.ResolvedCharMap) > 0 {
+				ec.primaryResolvedCharMap = maps.Clone(fmtDef.ResolvedCharMap)
+			}
+		}
+	}
+	allMaps = append(allMaps, inst.UseCharacterMaps...)
+	if len(allMaps) > 0 {
+		ec.primaryCharacterMaps = allMaps
+		// Resolve character maps now while currentPackage is correct
+		// (package-scoped isolation). Merge into primaryResolvedCharMap.
+		resolved := resolveCharacterMaps(ec.effectiveStylesheet(), allMaps)
+		if len(resolved) > 0 {
+			if ec.primaryResolvedCharMap == nil {
+				ec.primaryResolvedCharMap = resolved
+			} else {
+				maps.Copy(ec.primaryResolvedCharMap, resolved)
+			}
+		}
+	}
+	// Capture serialization parameter overrides from xsl:result-document.
+	// These were already evaluated up front (before any primary output was
+	// emitted) so that an AVT error releases the URI reservation without
+	// leaving partial primary output behind.
+	if primaryOverrides != nil {
+		ec.primaryOutputOverrides = primaryOverrides
+	}
+}
+
 func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocumentInst) error {
 	// XTDE1480: xsl:result-document is not allowed in a temporary output state.
 	if ec.temporaryOutputDepth > 0 {
@@ -488,6 +536,24 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	defer func() { ec.currentOutputURI = savedOutputURI }()
 
 	if isPrimary {
+		// PREFLIGHT (uniform across EVERY primary sub-branch): evaluate the
+		// error-prone serialization parameter AVTs (method, standalone, indent,
+		// doctype, omit-xml-declaration, etc.) BEFORE any branch executes its body
+		// or mutates/emits primary output. This MUST run above the early type=/
+		// validation= returns: those branches previously returned before the
+		// preflight, so a serialization AVT that raises a dynamic error (e.g.
+		// standalone="{1 idiv 0}") was silently swallowed and primaryOutputOverrides/
+		// character-map state was never applied for them. Computing the overrides up
+		// front guarantees that any such error happens before the primary output is
+		// touched: the deferred cleanup releases the URI reservation so an xsl:catch
+		// may write the primary result document, and no partial primary output is
+		// left behind. The staged overrides are committed (via commitPrimaryOutputState)
+		// only after each branch's body and post-body checks succeed.
+		primaryOverrides, err := ec.evalResultDocOutputDef(ctx, inst)
+		if err != nil {
+			return err
+		}
+
 		v := inst.Validation
 		if inst.TypeName != "" && v == "" {
 			// type attribute without explicit validation: build into temp doc, validate type, copy.
@@ -512,6 +578,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if err := moveChildren(tmpDoc, primaryFrame.doc); err != nil {
 				return err
 			}
+			ec.commitPrimaryOutputState(inst, effectiveFormat, primaryOverrides)
 			committed = true
 			return nil
 		}
@@ -556,26 +623,12 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if err := moveChildren(tmpDoc, primaryFrame.doc); err != nil {
 				return err
 			}
+			ec.commitPrimaryOutputState(inst, effectiveFormat, primaryOverrides)
 			committed = true
 			return nil
 		}
 		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
 		buildTreeNo := inst.BuildTree != nil && !*inst.BuildTree
-
-		// Evaluate the error-prone serialization parameter AVTs (method,
-		// standalone, indent, doctype, etc.) BEFORE mutating or emitting any
-		// primary output. If one of these AVTs raises a dynamic error, the
-		// reservation is released by the deferred cleanup and an xsl:catch may
-		// write the primary result document. Were these AVTs evaluated AFTER the
-		// body had already emitted content to the primary output, a caught
-		// failure could leave partial primary output in place while also letting
-		// the catch write a SECOND primary result document. Computing the
-		// overrides up front guarantees that any such error happens before the
-		// primary output is touched.
-		primaryOverrides, err := ec.evalResultDocOutputDef(ctx, inst)
-		if err != nil {
-			return err
-		}
 
 		// When build-tree="no", execute into a temporary document,
 		// then extract children and pending items as a raw sequence
@@ -611,9 +664,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			out := ec.outputStack[0]
 			out.pendingItems = append(out.pendingItems, frame.pendingItems...)
 
-			if primaryOverrides != nil {
-				ec.primaryOutputOverrides = primaryOverrides
-			}
+			ec.commitPrimaryOutputState(inst, effectiveFormat, primaryOverrides)
 			committed = true
 			return nil
 		}
@@ -704,42 +755,11 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		realBase.outputSerial = bufFrame.outputSerial
 		realBase.emptyAtomicGen = bufFrame.emptyAtomicGen
 		realBase.seqConstructorGen = bufFrame.seqConstructorGen
-		// Propagate character map names to the primary output frame.
-		// Include maps from the named format (xsl:output) first, then
-		// maps from xsl:result-document itself (higher priority).
-		var allMaps []string
-		if effectiveFormat != "" {
-			if fmtDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok {
-				allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
-				// Also propagate resolved character maps from parameter-document.
-				// Clone the compiled map so the later maps.Copy merge below never
-				// mutates the compiled format's ResolvedCharMap.
-				if len(fmtDef.ResolvedCharMap) > 0 {
-					ec.primaryResolvedCharMap = maps.Clone(fmtDef.ResolvedCharMap)
-				}
-			}
-		}
-		allMaps = append(allMaps, inst.UseCharacterMaps...)
-		if len(allMaps) > 0 {
-			ec.primaryCharacterMaps = allMaps
-			// Resolve character maps now while currentPackage is correct
-			// (package-scoped isolation). Merge into primaryResolvedCharMap.
-			resolved := resolveCharacterMaps(ec.effectiveStylesheet(), allMaps)
-			if len(resolved) > 0 {
-				if ec.primaryResolvedCharMap == nil {
-					ec.primaryResolvedCharMap = resolved
-				} else {
-					maps.Copy(ec.primaryResolvedCharMap, resolved)
-				}
-			}
-		}
-		// Capture serialization parameter overrides from xsl:result-document.
-		// These were already evaluated up front (before any primary output was
-		// emitted) so that an AVT error releases the URI reservation without
-		// leaving partial primary output behind.
-		if primaryOverrides != nil {
-			ec.primaryOutputOverrides = primaryOverrides
-		}
+		// Commit the serialization overrides + character-map state. The overrides
+		// were evaluated up front (before any primary output was emitted) so that
+		// an AVT error releases the URI reservation without leaving partial primary
+		// output behind.
+		ec.commitPrimaryOutputState(inst, effectiveFormat, primaryOverrides)
 		committed = true
 		return nil
 	}
