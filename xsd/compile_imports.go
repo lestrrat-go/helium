@@ -708,10 +708,13 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	if err := impC.processIncludes(ctx, impRoot); err != nil {
 		// Depth-exceeded errors propagate so a hostile import cycle
 		// is reported to the caller rather than being silently truncated.
-		// A FatalSchemaLoader load failure (e.g. a resource-limit breach
-		// from the configured FS) propagates for the same reason: the cap
-		// must not be silently defeated for a nested xs:import target.
-		if errors.Is(err, errImportDepthExceeded) || isFatalSchemaLoad(err) {
+		// A baseDir-escape is a security limit, fatal exactly like in the
+		// outer import path, so a nested escaping schemaLocation cannot be
+		// swallowed as an I/O warning. A FatalSchemaLoader load failure
+		// (e.g. a resource-limit breach from the configured FS) propagates
+		// for the same reason: the cap must not be silently defeated for a
+		// nested xs:import target.
+		if errors.Is(err, errImportDepthExceeded) || errors.Is(err, errSchemaPathEscape) || isFatalSchemaLoad(err) {
 			return err
 		}
 		// Other errors in nested processing are non-fatal — the import
