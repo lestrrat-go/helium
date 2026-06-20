@@ -470,7 +470,11 @@ Three-phase parsing:
 
 Message content parsed into `[]messagePart`: text literals, `<name path="..."/>` (element name), `<value-of select="..."/>` (XPath value).
 
-**Namespace gating:** structural elements are only recognized when in the detected Schematron namespace (`isSchematronElement`/`elementInNamespace`); foreign-namespaced markup (e.g. `<x:rule>`) is ignored, not executed. Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri`, `value`, `path`) are read unqualified-only via `getStructuralAttr` (`NSPredicate{..., NamespaceURI: ""}`); a prefixed `x:test` is not read as Schematron.
+**Namespace gating:** structural elements are only recognized when in the detected Schematron namespace (`isSchematronElement`/`elementInNamespace`). Foreign-namespaced elements are handled differently depending on position:
+- **Required structural position → fatal/rejected.** Where a specific Schematron element is expected (e.g. a `<rule>` under `<pattern>`, checked via `isSchematronElement(elem, schNS, "rule")` in `compilePattern`), a foreign element like `<x:rule>` does NOT satisfy the requirement and is rejected with a fatal `Expecting a rule element instead of ...` diagnostic. The same applies at the top level (`Expecting a pattern element instead of ...`).
+- **Free-content children → ignored.** Foreign-namespaced children inside rules, asserts, and reports are skipped as free content. `compileRuleChild` returns early when `!elementInNamespace(...)`, so e.g. `<x:assert>` inside a `<rule>` is not executed; likewise foreign `<name>`/`<value-of>` inside message content (`parseMessageElement`) are ignored, not interpolated.
+
+Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri`, `value`, `path`) are read unqualified-only via `getStructuralAttr` (`NSPredicate{..., NamespaceURI: ""}`); a prefixed `x:test` is not read as Schematron.
 
 **Fatal compile errors:** `compileSchema` wraps the configured handler in a `fatalTrackingHandler`. If any `ErrorLevelFatal` diagnostic is emitted (no pattern, pattern with no rule, rule with no test, etc.), `Compile`/`CompileFile` return `ErrCompileFailed` with a **nil** `*Schema` — even when no error handler is configured, so a broken schema can never validate as success.
 
