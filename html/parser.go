@@ -1244,10 +1244,13 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 //
 //   - no ';': resolve the longest legacy prefix of the run (which lies entirely
 //     within head, ≤6 chars) and emit the unmatched remainder as ordinary text.
-//     The remainder is the rest of head plus the un-consumed tail still in the
-//     stream, so we resolve from head, emit head's leftover, and leave the tail
-//     for the outer chunked-text scan — never buffering the (possibly unbounded)
-//     tail. If head has no legacy prefix the whole run is literal (see below).
+//     The remainder is the rest of head plus the alphanumeric tail still in the
+//     stream. This function drains that tail ITSELF (it must, to learn whether a
+//     trailing ';' exists): we resolve from head, emit head's leftover, then emit
+//     the tail — buffering it while the literal it would form stays within cap, or
+//     streaming over-cap legacy-tail chunks instead of retaining them so a
+//     (possibly unbounded) tail is never held whole. If head has no legacy prefix
+//     the whole run is literal (see below).
 //   - ';'-terminated: an over-long UNKNOWN name. parseCharRef does NOT
 //     legacy-resolve it; the WHOLE run plus ';' is emitted literally and charged
 //     against MaxContentSize, failing with ErrContentSizeExceeded once it

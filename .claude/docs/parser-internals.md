@@ -351,7 +351,7 @@ In RCDATA, `&` is handled by `parseCharRefBounded`, which mirrors `parseCharRef`
 The legacy-prefix-resolves-vs-literal decision exactly mirrors `parseCharRef`:
 
 - A `;`-terminated name is NOT legacy-prefix-resolved (the prefix loop in `resolveNamedEntity` is gated on `!hasSemicolon`); an over-long `;`-terminated unknown name is emitted literally and charged against the cap.
-- An over-long no-`;` run resolves only its longest legacy prefix (which lies within the 32-byte head), emits the resolution + the head's leftover, and leaves the tail for the outer chunked-text scan — `parseSaturatedCharRefLiteral` handles this saturated case, streaming an over-cap legacy tail instead of buffering it, and failing IMMEDIATELY (bounded WORK, not just bounded memory) when the head does not legacy-resolve and the run is already over-cap.
+- An over-long no-`;` run resolves only its longest legacy prefix (which lies within the 32-byte head) and emits the resolution + the head's leftover followed by the tail as ordinary text. `parseSaturatedCharRefLiteral` handles this saturated case and DRAINS the alphanumeric tail itself (it must, to learn whether a trailing `;` ends the run): it buffers the tail while the literal it would form stays within cap, and streams over-cap legacy-tail chunks instead of retaining them so a (possibly unbounded) tail is never held whole. A `;`-terminated over-cap run is the literal/hard-fail case (an over-long unknown name is emitted literally and the cap is exceeded), and it fails IMMEDIATELY (bounded WORK, not just bounded memory) when the head does not legacy-resolve and the run is already over-cap.
 
 ## Key Parser Fluent Method Effects
 
