@@ -12,15 +12,20 @@ import (
 func TestUTF8CursorZeroProgressReaderDoesNotHang(t *testing.T) {
 	cur := NewUTF8Cursor(zeroProgressReader{})
 
-	done := make(chan struct{})
+	type result struct {
+		done bool
+		err  error
+	}
+	done := make(chan result, 1)
 	go func() {
-		defer close(done)
-		require.True(t, cur.Done(), "a zero-progress reader must terminate fill, not spin")
-		require.ErrorIs(t, cur.Err(), io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress after the bounded retry count")
+		d := cur.Done()
+		done <- result{done: d, err: cur.Err()}
 	}()
 
 	select {
-	case <-done:
+	case res := <-done:
+		require.True(t, res.done, "a zero-progress reader must terminate fill, not spin")
+		require.ErrorIs(t, res.err, io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress after the bounded retry count")
 	case <-time.After(5 * time.Second):
 		t.Fatal("UTF8Cursor fillBuffer hung on a zero-progress reader")
 	}
@@ -29,15 +34,20 @@ func TestUTF8CursorZeroProgressReaderDoesNotHang(t *testing.T) {
 func TestUTF8CursorSlowSplitReaderMakesProgress(t *testing.T) {
 	cur := NewUTF8Cursor(&slowSplitReader{data: []byte("héllo")})
 
-	done := make(chan struct{})
+	type result struct {
+		peeked string
+		err    error
+	}
+	done := make(chan result, 1)
 	go func() {
-		defer close(done)
-		require.Equal(t, "héllo", cur.PeekString(len("héllo")), "a slow reader that emits (0, nil) between bytes must still be consumed")
-		require.NoError(t, cur.Err(), "a progressing reader must not surface io.ErrNoProgress")
+		s := cur.PeekString(len("héllo"))
+		done <- result{peeked: s, err: cur.Err()}
 	}()
 
 	select {
-	case <-done:
+	case res := <-done:
+		require.Equal(t, "héllo", res.peeked, "a slow reader that emits (0, nil) between bytes must still be consumed")
+		require.NoError(t, res.err, "a progressing reader must not surface io.ErrNoProgress")
 	case <-time.After(5 * time.Second):
 		t.Fatal("UTF8Cursor fillBuffer hung on a slow split reader")
 	}

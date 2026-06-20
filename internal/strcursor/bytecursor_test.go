@@ -59,15 +59,20 @@ func (zeroProgressReader) Read(p []byte) (int, error) {
 func TestByteCursorZeroProgressReaderDoesNotHang(t *testing.T) {
 	cur := NewByteCursor(zeroProgressReader{})
 
-	done := make(chan struct{})
+	type result struct {
+		done bool
+		err  error
+	}
+	done := make(chan result, 1)
 	go func() {
-		defer close(done)
-		require.True(t, cur.Done(), "a zero-progress reader must terminate fill, not spin")
-		require.ErrorIs(t, cur.Err(), io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress after the bounded retry count")
+		d := cur.Done()
+		done <- result{done: d, err: cur.Err()}
 	}()
 
 	select {
-	case <-done:
+	case res := <-done:
+		require.True(t, res.done, "a zero-progress reader must terminate fill, not spin")
+		require.ErrorIs(t, res.err, io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress after the bounded retry count")
 	case <-time.After(5 * time.Second):
 		t.Fatal("ByteCursor fillBuffer hung on a zero-progress reader")
 	}
@@ -102,15 +107,20 @@ func (r *slowSplitReader) Read(p []byte) (int, error) {
 func TestByteCursorSlowSplitReaderMakesProgress(t *testing.T) {
 	cur := NewByteCursor(&slowSplitReader{data: []byte("<root/>")})
 
-	done := make(chan struct{})
+	type result struct {
+		hasPrefix bool
+		err       error
+	}
+	done := make(chan result, 1)
 	go func() {
-		defer close(done)
-		require.True(t, cur.HasPrefix([]byte("<root/>")), "a slow reader that emits (0, nil) between bytes must still be consumed")
-		require.NoError(t, cur.Err(), "a progressing reader must not surface io.ErrNoProgress")
+		hp := cur.HasPrefix([]byte("<root/>"))
+		done <- result{hasPrefix: hp, err: cur.Err()}
 	}()
 
 	select {
-	case <-done:
+	case res := <-done:
+		require.True(t, res.hasPrefix, "a slow reader that emits (0, nil) between bytes must still be consumed")
+		require.NoError(t, res.err, "a progressing reader must not surface io.ErrNoProgress")
 	case <-time.After(5 * time.Second):
 		t.Fatal("ByteCursor fillBuffer hung on a slow split reader")
 	}

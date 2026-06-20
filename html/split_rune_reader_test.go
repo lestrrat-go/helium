@@ -1,7 +1,6 @@
 package html_test
 
 import (
-	"context"
 	"io"
 	"strings"
 	"testing"
@@ -48,12 +47,12 @@ func TestParseReaderSplitMultibyteRuneAfterPrescan(t *testing.T) {
 	rdr := &oneBytePerReadReader{data: []byte(html5)}
 
 	type result struct {
-		doc interface{}
+		doc any
 		err error
 	}
 	done := make(chan result, 1)
 	go func() {
-		doc, err := html.NewParser().ParseReader(context.Background(), rdr)
+		doc, err := html.NewParser().ParseReader(t.Context(), rdr)
 		done <- result{doc: doc, err: err}
 	}()
 
