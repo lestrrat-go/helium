@@ -545,7 +545,9 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 		}
 		return staticErrorCause(errCodeXTSE0090, err, "cannot read parameter-document %q: %v", href, err)
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
+	// Serialization parameter documents have a fixed W3C schema and never use
+	// external entities; parse with XXE blocked unconditionally.
+	doc, err := secureXMLParser("").Parse(ctx, data)
 	if err != nil {
 		if runtime {
 			return dynamicError(errCodeFODC0002, "cannot parse parameter-document %q: %v", href, err)

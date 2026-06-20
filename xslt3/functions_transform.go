@@ -338,6 +338,9 @@ func (ss *Stylesheet) newNestedCompiler() Compiler {
 	if ss.maxResourceBytes != 0 {
 		c = c.MaxResourceBytes(ss.maxResourceBytes)
 	}
+	if ss.allowExternalEntities {
+		c = c.AllowExternalEntities(true)
+	}
 	return c
 }
 
@@ -439,7 +442,9 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	// resources loaded while COMPILING the nested stylesheet/package
 	// (its include/import/schema/param-doc reads) honor the same
 	// MaxResourceBytes override rather than falling back to the default.
-	nestedCompiler := ec.stylesheet.newNestedCompiler().MaxResourceBytes(ec.resourceLimit())
+	nestedCompiler := ec.stylesheet.newNestedCompiler().
+		MaxResourceBytes(ec.resourceLimit()).
+		AllowExternalEntities(ec.allowExternalEntities())
 
 	// Apply static-params from the options map to the nested compiler.
 	// Static params affect both compile time (use-when, shadow attributes)
@@ -483,7 +488,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI)
+		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
 		}
@@ -508,7 +513,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, location)
+		doc, parseErr := parseStylesheetDocument(ctx, data, location, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse package %q: %v", packageName, parseErr)
 		}
@@ -591,6 +596,11 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	// the same MaxResourceBytes override. Without this the inner reads would
 	// silently fall back to the default cap, ignoring Invocation.MaxResourceBytes.
 	fnTransformCfg.maxResourceBytes = ec.resourceLimit()
+	// Inherit the outer Invocation's external-entity opt-in so doc() /
+	// xsl:source-document inside the nested transform see the same posture as the
+	// caller. Without this the nested transform would force the secure (blocked)
+	// parse even when the outer invocation opted in.
+	fnTransformCfg.allowExternalEntities = ec.allowExternalEntities()
 
 	// Apply map-valued options from the fn:transform options map.
 	for _, mp := range []struct {
