@@ -190,6 +190,25 @@ func (n docnode) Content() []byte {
 	return b.Bytes()
 }
 
+// rawContentNode is implemented by leaf nodes (Text, Comment, CDATASection)
+// that store their textual content in an internal mutable byte slice. It
+// exposes that slice directly (without the defensive copy the exported
+// Content() makes) for internal read-only hot paths such as serialization.
+type rawContentNode interface {
+	rawContent() []byte
+}
+
+// rawContent returns the internal content byte slice of n WITHOUT copying when
+// n is a leaf node that aliases its content (Text, Comment, CDATASection).
+// Callers MUST treat the result as read-only; mutating it corrupts the DOM.
+// For any other node it falls back to the (already copy-safe) Content().
+func rawContent(n Node) []byte {
+	if rc, ok := n.(rawContentNode); ok {
+		return rc.rawContent()
+	}
+	return n.Content()
+}
+
 func appendText(n MutableNode, b []byte) error {
 	// Fast path: if last child is already a text node, append directly
 	// without allocating a new Text node.
