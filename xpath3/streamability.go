@@ -73,7 +73,7 @@ func computeStreamInfo(ast Expr) streamInfo {
 				}
 			}
 		case FunctionCall:
-			if v.Prefix == "" {
+			if isFnNamespacePrefix(v.Prefix) {
 				si.usedFunctions[v.Name] = true
 			}
 		}
@@ -280,6 +280,17 @@ func walkChildren(expr Expr, fn func(Expr) bool) {
 	}
 }
 
+// isFnNamespacePrefix reports whether a FunctionCall prefix refers to the
+// XPath functions namespace (http://www.w3.org/2005/xpath-functions). For
+// function calls an empty prefix defaults to that namespace, and the
+// conventional "fn" prefix is bound to it, so both lexical forms name the
+// same function. Streamability analysis special-cases functions such as
+// position()/last() by (namespace, local-name), so it must treat the
+// unprefixed and "fn:"-prefixed spellings identically.
+func isFnNamespacePrefix(prefix string) bool {
+	return prefix == "" || prefix == "fn"
+}
+
 // predicateIsNonMotionless returns true if a predicate expression navigates
 // downward (uses child/descendant axes), uses last(), or uses position() in
 // a non-trivial way.
@@ -316,11 +327,11 @@ func predicateIsNonMotionlessWithStep(pred Expr, step *Step) bool {
 				return false
 			}
 		case FunctionCall:
-			if v.Prefix == "" && (v.Name == "last" || v.Name == lexicon.FnPosition) {
+			if isFnNamespacePrefix(v.Prefix) && (v.Name == "last" || v.Name == lexicon.FnPosition) {
 				nonMotionless = true
 				return false
 			}
-			if v.Prefix == "" {
+			if isFnNamespacePrefix(v.Prefix) {
 				switch v.Name {
 				case "name", "local-name", "namespace-uri", "node-name",
 					"self", "generate-id", "base-uri", "document-uri",
