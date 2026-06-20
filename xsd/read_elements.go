@@ -359,7 +359,7 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 		qn := c.resolveQName(ctx, elem, typeRef)
 		c.elemRefs[decl] = qn
 		c.markChameleonEligible(decl, elem, typeRef)
-		c.elemRefSources[decl] = elemRefSource{elemName: sourceName, line: elem.Line()}
+		c.elemRefSources[decl] = elemRefSource{elemName: sourceName, line: elem.Line(), source: c.diagSource()}
 		return nil
 	}
 
@@ -494,7 +494,7 @@ func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element)
 		return err
 	}
 
-	c.globalElemSources[decl] = elemRefSource{elemName: name, line: elem.Line()}
+	c.globalElemSources[decl] = elemRefSource{elemName: name, line: elem.Line(), source: c.diagSource()}
 	c.schema.elements[decl.Name] = decl
 	return nil
 }
@@ -536,7 +536,7 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 			IsRef:     true,
 		}
 		c.elemRefs[edecl] = qn
-		c.elemRefSources[edecl] = elemRefSource{elemName: elem.LocalName(), line: elem.Line()}
+		c.elemRefSources[edecl] = elemRefSource{elemName: elem.LocalName(), line: elem.Line(), source: c.diagSource()}
 		return &Particle{
 			MinOccurs: minOcc,
 			MaxOccurs: maxOcc,

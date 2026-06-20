@@ -433,6 +433,116 @@ func TestComplexTypeContentModelExclusivity(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	// XSD 3.4.2 fixes the child ordering: an optional leading model-group
+	// particle, then attribute uses, then an optional anyAttribute. A model
+	// group that appears AFTER an attribute declaration is out of order and
+	// must be rejected, not silently kept as the content model.
+	t.Run("rejects sequence after attribute", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "must appear before the attribute declaration")
+	})
+
+	t.Run("rejects choice after attributeGroup", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g"><xs:attribute name="x" type="xs:string"/></xs:attributeGroup>
+  <xs:complexType name="T">
+    <xs:attributeGroup ref="g"/>
+    <xs:choice><xs:element name="a" type="xs:string"/></xs:choice>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "must appear before the attribute declaration")
+	})
+
+	t.Run("rejects sequence after attribute in extension", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base">
+        <xs:attribute name="x" type="xs:string"/>
+        <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "must appear before the attribute declaration")
+	})
+
+	t.Run("rejects sequence after attribute in restriction", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:attribute name="x" type="xs:string"/>
+        <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), "must appear before the attribute declaration")
+	})
+
+	// The correct order — model group first, then attributes, then anyAttribute
+	// — compiles cleanly in a plain complex type and in both derivations.
+	t.Run("accepts correct order in extension", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:extension base="Base">
+        <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+        <xs:attribute name="x" type="xs:string"/>
+        <xs:anyAttribute/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("accepts correct order in restriction", func(t *testing.T) {
+		t.Parallel()
+		// The base supplies the attribute and wildcard; the restriction repeats
+		// them in the correct order (model group, then attribute, then
+		// anyAttribute) so the derivation is valid.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:anyAttribute/>
+  </xs:complexType>
+  <xs:complexType name="T">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
+        <xs:attribute name="x" type="xs:string"/>
+        <xs:anyAttribute/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
 }
 
 // TestDuplicateAttributeUse (C-010) verifies that two attribute uses with the
@@ -654,6 +764,61 @@ func TestDuplicateAttributeUse(t *testing.T) {
   <xs:element name="root" type="t:Derived"/>
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
+	})
+}
+
+// TestSimpleContentExtensionProhibitedAttr verifies that a simpleContent
+// EXTENSION treats use="prohibited" as pointless (warn + skip) just like a
+// complexContent extension, instead of propagating a prohibited attribute use
+// that would wrongly block an attribute the base's wildcard admits.
+func TestSimpleContentExtensionProhibitedAttr(t *testing.T) {
+	t.Parallel()
+
+	const warn = "Skipping attribute use prohibition, since it is pointless when extending a type."
+
+	// Base is a complex type with simple content and an attribute wildcard, so a
+	// foreign/extra attribute would normally be admitted via the wildcard. The
+	// derived simpleContent extension carries a pointless use="prohibited"; that
+	// prohibition must be warned+skipped, not turned into a real prohibited use
+	// that blocks the attribute.
+	schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:t="urn:t" targetNamespace="urn:t" attributeFormDefault="unqualified">
+  <xs:attribute name="a" type="xs:string"/>
+  <xs:complexType name="Base">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:anyAttribute processContents="lax"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:simpleContent>
+      <xs:extension base="t:Base">
+        <xs:attribute ref="t:a" use="prohibited"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+
+	t.Run("warns and compiles clean", func(t *testing.T) {
+		t.Parallel()
+		require.Empty(t, compileFatalErrors(t, schema))
+		require.Contains(t, compileWarnings(t, schema), warn)
+	})
+
+	t.Run("attribute admitted by base wildcard", func(t *testing.T) {
+		t.Parallel()
+		sdoc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+		require.NoError(t, err)
+		s, err := xsd.NewCompiler().Compile(t.Context(), sdoc)
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<root xmlns="urn:t" a="hi">text</root>`))
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		require.NoError(t, xsd.NewValidator(s).ErrorHandler(collector).Validate(t.Context(), doc),
+			"the prohibited use must be skipped so the base wildcard admits @a")
 	})
 }
 

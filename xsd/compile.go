@@ -189,6 +189,12 @@ const defaultMaxImportDepth = 40
 type elemRefSource struct {
 	elemName string
 	line     int
+	// source is the declaring file captured at collection time (c.diagSource()):
+	// the included/imported schema when the element/ref was parsed inside an
+	// xs:include/xs:import/xs:redefine, else empty (top-level). Diagnostics report
+	// via c.diagSourceOrRecorded(source) so an unresolved ref in an imported
+	// schema cites the imported file, not the importing one.
+	source string
 }
 
 // groupRefSource tracks where an xs:group ref="..." particle appeared so the
@@ -262,6 +268,11 @@ type typeDefSource struct {
 	// types declared directly in the top-level schema. Diagnostics cite this
 	// so a type's line number matches the file it is reported against.
 	source string
+	// elemKind is the XSD element local name the type was parsed from
+	// ("complexType" or "simpleType"), recorded at parse time so a diagnostic
+	// (e.g. an unresolved base/itemType/memberTypes ref) reports the actual
+	// element kind instead of a hard-coded "simpleType".
+	elemKind string
 	// ordinal is a stable parse-order sequence number, used as the final
 	// tie-breaker when ordering diagnostics for types that share a source line
 	// and have empty (anonymous) names. See recordTypeDefSource.
@@ -273,12 +284,12 @@ type typeDefSource struct {
 // overwrites (e.g. parseSimpleType records a type as local, then
 // parseNamedSimpleType overwrites it as a named global) so the ordinal always
 // reflects when the type was first seen.
-func (c *compiler) recordTypeDefSource(td *TypeDef, line int, isLocal bool) {
+func (c *compiler) recordTypeDefSource(td *TypeDef, line int, isLocal bool, elemKind string) {
 	if existing, ok := c.typeDefSources[td]; ok {
-		c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: existing.source, ordinal: existing.ordinal}
+		c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: existing.source, elemKind: elemKind, ordinal: existing.ordinal}
 		return
 	}
-	c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: c.includeFile, ordinal: c.nextTypeDefOrdinal}
+	c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: c.includeFile, elemKind: elemKind, ordinal: c.nextTypeDefOrdinal}
 	c.nextTypeDefOrdinal++
 }
 

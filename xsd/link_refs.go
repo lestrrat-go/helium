@@ -58,7 +58,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			if edecl.IsRef {
 				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, src.line, src.elemName, elemElement, attrRef, msg), helium.ErrorLevelFatal))
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, elemElement, attrRef, msg), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
 				edecl.Type = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
@@ -79,7 +79,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// silently compile and validate as if the type existed.
 				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
 				td = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
@@ -869,12 +869,24 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 	if !hasSrc {
 		return
 	}
+	// Component label and the reporting element kind follow the owner type's
+	// actual element kind (complexType vs simpleType), captured at parse time,
+	// rather than assuming a simpleType. A local complexType base ref that does
+	// not resolve must report "element complexType" / "local complex type".
+	elemKind := src.elemKind
+	if elemKind == "" {
+		elemKind = elemSimpleType
+	}
 	component := owner.Name.Local
 	if component == "" || src.isLocal {
-		component = "local simple type"
+		if elemKind == elemComplexType {
+			component = componentLocalComplexType
+		} else {
+			component = "local simple type"
+		}
 	}
 	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", component, msg), helium.ErrorLevelFatal))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, elemKind, component, msg), helium.ErrorLevelFatal))
 	c.errorCount++
 }
 
