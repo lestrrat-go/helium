@@ -140,6 +140,39 @@ func TestUPADeterminism(t *testing.T) {
   </xs:element>
 </xs:schema>`,
 			},
+			{
+				// An optional `##any` followed by `##targetNamespace`: ##any
+				// matches every namespace, so after the optional wildcard is
+				// skipped a target-namespace element could match either
+				// wildcard. The namespace sets INTERSECT → non-deterministic.
+				name: "overlapping wildcards (##any then ##targetNamespace)",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="##any" processContents="skip" minOccurs="0"/>
+        <xs:any namespace="##targetNamespace" processContents="skip"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// Two optional `##any` wildcards in sequence: an input in any
+				// namespace can match either, and skipping the first
+				// re-introduces the ambiguity. Non-deterministic.
+				name: "overlapping wildcards (two ##any)",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="##any" processContents="skip" minOccurs="0"/>
+        <xs:any namespace="##any" processContents="skip"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
@@ -253,6 +286,26 @@ func TestUPADeterminism(t *testing.T) {
       <xs:sequence>
         <xs:element name="a" type="xs:int"/>
         <xs:element name="a" type="xs:int" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// `##other?, ##targetNamespace`: the two wildcards match DISJOINT
+				// namespace sets — ##other matches any namespace except the target
+				// namespace (and absent), ##targetNamespace matches only the
+				// target namespace. After an element you can always tell which
+				// wildcard matched, so the model is deterministic. xmllint accepts
+				// it; a conservative "two wildcards always overlap" check falsely
+				// rejected it.
+				name: "disjoint wildcards (##other then ##targetNamespace)",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="##other" processContents="skip" minOccurs="0"/>
+        <xs:any namespace="##targetNamespace" processContents="skip"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>

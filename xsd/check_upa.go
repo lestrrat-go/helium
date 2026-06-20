@@ -451,44 +451,52 @@ func entriesOverlap(a, b firstSetEntry) bool {
 	return wildcardsOverlap(a, b)
 }
 
-// wildcardsOverlap checks if two wildcard entries can match the same namespace.
+// wildcardsOverlap reports whether two wildcards can both match some common
+// element name — i.e. whether their namespace constraints INTERSECT. Two
+// wildcards whose namespace sets are DISJOINT are deterministic when adjacent
+// (after an element you can always tell which wildcard matched), so they must
+// NOT be treated as a UPA overlap.
+//
+// A namespace constraint is one of two shapes (XSD 3.10.6, matching this
+// package's ##other = not(targetNS) and not(absent) semantics — see
+// wildcardMatchesNS): a finite SET of namespace URIs, or the NEGATION of a
+// single namespace (##other negates the target namespace, ##not-absent negates
+// the absent namespace, ##any negates nothing). The cases below cover every
+// set/negation combination so a negation (open-ended) constraint no longer
+// falls through to a blanket "always overlaps".
 func wildcardsOverlap(a, b firstSetEntry) bool {
-	aNS, aTarget := a.wildcard, a.targetNS
-	bNS, bTarget := b.wildcard, b.targetNS
+	aSet := upaWildcardNSSet(a.wildcard, a.targetNS)
+	bSet := upaWildcardNSSet(b.wildcard, b.targetNS)
 
-	// ##any overlaps with everything.
-	if aNS == WildcardNSAny || bNS == WildcardNSAny {
-		return true
-	}
-
-	// ##other matches any NS except targetNS and empty.
-	// ##local matches only empty NS.
-	// So ##other and ##local are always disjoint.
-	if (aNS == WildcardNSOther && bNS == WildcardNSLocal) || (aNS == WildcardNSLocal && bNS == WildcardNSOther) {
+	// Both are finite sets: overlap iff they share a member.
+	if aSet != nil && bSet != nil {
+		for ns := range aSet {
+			if bSet[ns] {
+				return true
+			}
+		}
 		return false
 	}
 
-	// ##other vs ##other: overlap if there's any NS outside both targets
-	// (practically always true unless both have the same target).
-	if aNS == WildcardNSOther && bNS == WildcardNSOther {
+	// Both are negations: not(x) and not(y) always share something (any
+	// namespace other than x and y, and there are infinitely many).
+	if aSet == nil && bSet == nil {
 		return true
 	}
 
-	// ##local vs ##local: obviously overlap.
-	if aNS == WildcardNSLocal && bNS == WildcardNSLocal {
-		return true
+	// One negation, one finite set. They overlap iff the negation admits any
+	// namespace in the set. wildcardMatchesNS already encodes this package's
+	// negation semantics (##other = not(targetNS) and not(absent),
+	// ##not-absent = not(absent), ##any = everything), so reuse it per member
+	// rather than re-deriving the excluded namespaces here.
+	neg := a
+	set := bSet
+	if aSet != nil {
+		neg = b
+		set = aSet
 	}
-
-	// For enumerated sets vs keywords, expand and check.
-	aSet := upaWildcardNSSet(aNS, aTarget)
-	bSet := upaWildcardNSSet(bNS, bTarget)
-
-	// If either is nil, it means "any except target" — use conservative overlap.
-	if aSet == nil || bSet == nil {
-		return true
-	}
-	for ns := range aSet {
-		if bSet[ns] {
+	for ns := range set {
+		if wildcardMatchesNS(neg.wildcard, neg.targetNS, ns) {
 			return true
 		}
 	}
@@ -496,7 +504,8 @@ func wildcardsOverlap(a, b firstSetEntry) bool {
 }
 
 // upaWildcardNSSet returns the explicit set of namespaces a wildcard can match,
-// or nil if the wildcard matches an open-ended set (##other, ##any).
+// or nil if the wildcard is a NEGATION constraint (##any, ##other,
+// ##not-absent) whose membership is open-ended.
 func upaWildcardNSSet(wcNS, targetNS string) map[string]bool {
 	switch wcNS {
 	case WildcardNSAny, WildcardNSOther, WildcardNSNotAbsent:
