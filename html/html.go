@@ -181,8 +181,9 @@ func (sp saxParser) ParseReader(ctx context.Context, r io.Reader) (*helium.Docum
 // (libxml2: htmlCreatePushParserCtxt).
 // Data is pushed via Push or Write. A background goroutine consumes the
 // pushed chunks. Parsing becomes progressive only AFTER the initial
-// 1024-byte (or EOF) charset prescan: the prescan does an
-// io.ReadFull of up to 1024 bytes, so an input smaller than 1024 bytes
+// 1024-byte (or EOF) charset prescan: the prescan uses a manual read
+// loop reading up to 1024 bytes until the buffer is full, EOF, or a read
+// error, so an input smaller than 1024 bytes
 // is buffered until [PushParser.Close], and larger inputs only parse
 // progressively once those first 1024 bytes have arrived.
 // Call [PushParser.Close] to signal end-of-input and retrieve the
