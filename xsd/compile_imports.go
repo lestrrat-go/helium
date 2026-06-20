@@ -505,8 +505,8 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				case isXSDElement(gce, elemAttributeGroup):
 					if ref := getAttr(gce, attrRef); ref != "" {
 						refQN := c.resolveQName(ctx, gce, ref)
-						switch {
-						case refQN == qn:
+						switch refQN {
+						case qn:
 							// A self-reference resolves to the Phase-A group content.
 							if origAttrs != nil {
 								attrs = append(attrs, origAttrs...)
@@ -784,7 +784,17 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		}
 		c.attrUseConstraintSources[au] = src
 	}
-	maps.Copy(c.attrUseSources, impC.attrUseSources)
+	// Merge prohibited/ref'd attribute-use sources, preserving the originating
+	// file. An attribute use parsed directly in the imported document (not via a
+	// nested include) has an empty source; attribute it to the imported file so
+	// warnPointlessProhibition cites the file whose line it carries, not the
+	// importing schema.
+	for au, src := range impC.attrUseSources {
+		if src.source == "" {
+			src.source = impC.filename
+		}
+		c.attrUseSources[au] = src
+	}
 
 	return nil
 }

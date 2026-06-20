@@ -649,9 +649,10 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 		// simple type once resolveRefs copies the type in.
 		if au.Default != nil || au.Fixed != nil {
 			c.attrUseConstraintSources[au] = attrConstraintSource{
-				line:  elem.Line(),
-				local: qn.Local,
-				nsMap: collectNSContext(elem),
+				line:   elem.Line(),
+				local:  qn.Local,
+				nsMap:  collectNSContext(elem),
+				source: c.includeFile,
 			}
 		}
 		c.attrRefs[au] = qn
