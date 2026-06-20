@@ -49,7 +49,6 @@ type Decoder struct {
 	// DefaultSpace sets the default namespace for elements without an explicit namespace.
 	DefaultSpace string
 
-	initErr         error // permanent construction error (e.g. nil reader); returned by every read
 	tokenReader     TokenReader
 	events          chan tokenEvent
 	done            <-chan struct{} // cancellation signal from cancel context; avoids storing context.Context
@@ -73,16 +72,6 @@ type Decoder struct {
 }
 
 func newDecoderFromReader(ctx context.Context, r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
-	// A nil reader cannot be read from; rather than panicking on the first
-	// read, construct a decoder that returns a clear error from every read.
-	if r == nil {
-		return &Decoder{
-			Strict:  true,
-			line:    1,
-			column:  1,
-			initErr: errors.New("xml: NewDecoder called with nil io.Reader"),
-		}, nil
-	}
 	// Pre-scan the prolog to extract Directive, ProcInst, Comment, and
 	// CharData tokens. The SAX parser does not emit these for the prolog,
 	// so we handle them ourselves. The combined reader replays the full
@@ -110,17 +99,6 @@ func newDecoderFromReader(ctx context.Context, r io.Reader) (*Decoder, error) { 
 }
 
 func newDecoderFromTokenReader(_ context.Context, tr TokenReader) *Decoder {
-	// A nil TokenReader has nowhere to read tokens from. Without the SAX
-	// reader path set up either, a read would dereference a nil startSAX and
-	// panic; return a clear error from every read instead.
-	if tr == nil {
-		return &Decoder{
-			Strict:  true,
-			line:    1,
-			column:  1,
-			initErr: errors.New("xml: NewTokenDecoder called with nil TokenReader"),
-		}
-	}
 	return &Decoder{
 		Strict:      true,
 		tokenReader: tr,
@@ -415,12 +393,6 @@ func (d *Decoder) RawToken() (Token, error) {
 }
 
 func (d *Decoder) readToken(raw bool) (Token, error) {
-	// A permanent construction error (e.g. nil reader/TokenReader) is returned
-	// from every read.
-	if d.initErr != nil {
-		return nil, d.initErr
-	}
-
 	// Drain pre-scanned prolog tokens first.
 	if d.prologIdx < len(d.prologTokens) {
 		tok := stdxml.CopyToken(d.prologTokens[d.prologIdx])
