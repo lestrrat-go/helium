@@ -393,27 +393,39 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 // space, a list literal item-by-item against the item type (so a list
 // itemType="xs:float" rejects a "+NaN" enumeration member), and a union literal
 // against whichever member type accepts it (so a union with an xs:float member
-// rejects "+NaN" when no member admits it). The ONLY literals skipped are
-// QName/NOTATION carriers — at any nesting depth within the variety structure —
-// whose prefix-binding validity is already checked (with libxml2-matching
-// phrasing) by checkEnumQNameAndNotation; validating those here would produce
-// duplicate / differently-phrased diagnostics.
+// rejects "+NaN" when no member admits it).
+//
+// Suppression is PER LITERAL, not per type: only a literal that
+// enumLiteralHasUnboundQName flags — a QName/NOTATION carrier, at any nesting
+// depth within the variety structure, whose prefix is unbound — is skipped here,
+// because checkEnumQNameAndNotation already reports that exact case with
+// libxml2-matching phrasing; validating it here too would produce a duplicate /
+// differently-phrased diagnostic. Every OTHER enumeration literal of a
+// QName/NOTATION-carrying type is still validated against the base value space,
+// so a QName base restricted with (e.g.) xs:length value="2" still rejects an
+// out-of-space "abc" enumeration member.
 func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, fs *FacetSet, line int, component string) {
 	base := td.BaseType
 	if base == nil || len(fs.Enumeration) == 0 {
 		return
 	}
-	// QName/NOTATION enumeration literals (including ones carried inside a list
-	// item type or a union member) are validated by checkEnumQNameAndNotation;
-	// skip them here to avoid duplicate / differently-phrased diagnostics.
-	if typeHasQNameNotationCarrier(base) {
-		return
-	}
+	variety := resolveVariety(td)
 
 	for i, ev := range fs.Enumeration {
 		var enumNS map[string]string
 		if i < len(fs.EnumerationNS) {
 			enumNS = fs.EnumerationNS[i]
+		}
+		// A QName/NOTATION literal whose prefix is unbound (at any nesting depth
+		// within the variety structure) is already reported by
+		// checkEnumQNameAndNotation; suppress the report HERE for just that literal
+		// to avoid a duplicate / differently-phrased diagnostic. This is per-literal,
+		// not a blanket skip of the whole type: a QName/NOTATION base still has its
+		// other enumeration literals validated against the base value space, so e.g.
+		// a QName base restricted with xs:length value="2" rejects an out-of-space
+		// "abc" enumeration member rather than silently compiling it.
+		if c.enumLiteralHasUnboundQName(ctx, ev, enumNS, td, variety) {
+			continue
 		}
 		// Validate the member against the base type's value space with errors
 		// suppressed; only the pass/fail verdict matters. A non-nil result means the
