@@ -758,7 +758,7 @@ func (n node) Namespace() *Namespace {
 }
 
 func (n node) Namespaces() []*Namespace {
-	return n.nsDefs
+	return slices.Clone(n.nsDefs)
 }
 
 // RemoveNamespaceByPrefix removes a namespace declaration with the given prefix.
