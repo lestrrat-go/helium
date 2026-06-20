@@ -275,7 +275,11 @@ func parseXmlnsBody(body string) (prefix, uri string, ok bool) {
 	if !found {
 		return "", "", false
 	}
-	prefix = strings.Trim(rawPrefix, xmlSpaceCutset)
+	// XmlnsSchemeData ::= NCName S? '=' S? EscapedNamespaceName — the data
+	// starts with the NCName, so only whitespace AFTER the prefix (and after
+	// '=') is permitted. Trim the prefix on the right only; any leading
+	// whitespace stays attached so the NCName validation rejects it.
+	prefix = strings.TrimRight(rawPrefix, xmlSpaceCutset)
 	if prefix == "" {
 		return "", "", false
 	}

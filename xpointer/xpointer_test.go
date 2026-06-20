@@ -808,6 +808,26 @@ func TestEvaluate_XmlnsWhitespaceAroundEquals(t *testing.T) {
 	}
 }
 
+// XmlnsSchemeData starts with the NCName prefix, so whitespace is allowed only
+// after the prefix and after '='. Leading whitespace before the prefix makes it
+// a non-NCName and must be rejected, not silently trimmed.
+func TestCompile_XmlnsLeadingWhitespaceRejected(t *testing.T) {
+	t.Parallel()
+
+	exprs := []string{
+		`xmlns( p=urn:test)xpointer(/root)`,
+		"xmlns(\tp=urn:test)xpointer(/root)",
+	}
+	for _, expr := range exprs {
+		t.Run(expr, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := xpointer.Compile(expr)
+			require.Error(t, err)
+		})
+	}
+}
+
 // The one-shot Evaluate must report a nil document as ErrNilDocument before
 // attempting to compile the expression, even when the expression is itself
 // invalid (which would otherwise surface a compile error first).
