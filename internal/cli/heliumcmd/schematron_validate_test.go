@@ -94,6 +94,26 @@ func TestSchematronValidateSchemaCompileError(t *testing.T) {
 	require.Equal(t, heliumcmd.ExitSchemaComp, code)
 }
 
+func TestSchematronValidateCompileDiagnostics(t *testing.T) {
+	dir := t.TempDir()
+	// A pattern with no rule element triggers a fatal compile diagnostic.
+	schemaFile := writeFile(t, dir, "schema.sch", `<?xml version="1.0"?>
+<schema xmlns="http://www.ascc.net/xml/schematron">
+  <pattern>
+  </pattern>
+</schema>`)
+	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root/>`)
+
+	var stderr bytes.Buffer
+	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
+	ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile, xmlFile})
+	require.Equal(t, heliumcmd.ExitSchemaComp, code)
+	require.Contains(t, stderr.String(), "Pattern has no rule element")
+	require.Contains(t, stderr.String(), "failed to compile schema")
+}
+
 func TestSchematronValidateFileReadError(t *testing.T) {
 	dir := t.TempDir()
 	schemaFile := writeFile(t, dir, "schema.sch", `<?xml version="1.0"?>
