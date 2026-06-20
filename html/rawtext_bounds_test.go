@@ -753,6 +753,75 @@ func TestRCDATALongSemicolonNameNotLegacyResolved(t *testing.T) {
 	}
 }
 
+// TestRCDATASaturatedLegacyPrefixNoPartialEmit is the regression for the
+// partial-emit-before-error bug: a saturated char-ref run that BEGINS with a
+// legacy prefix and is ';'-terminated over the cap (`&amp` + a long tail + `;`)
+// must NOT deliver ANY Characters callback before it hard-fails. The earlier
+// code optimistically emitted the legacy resolution ('&') and the tail chunk by
+// chunk while draining the run, then discovered the trailing ';' — which makes
+// the whole run an over-cap unresolved literal — and returned
+// ErrContentSizeExceeded. That left a partial emission ('&' plus a truncated,
+// 'amp'-dropped tail) sitting ahead of the error, corrupting downstream output.
+//
+// The fix settles the ';' decision via a non-consuming lookahead BEFORE any
+// emit, so the error path delivers nothing. The no-';' sibling is re-pinned
+// alongside to prove the genuine legacy-resolve case still emits correctly.
+func TestRCDATASaturatedLegacyPrefixNoPartialEmit(t *testing.T) {
+	const limit = 4
+	const tailLen = 40 // run far exceeds maxEntityNameLen (32) so the scan saturates
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		// ';'-terminated over-cap legacy-prefix run: hard-fail with NOTHING
+		// emitted to the SAX Characters handler before the error.
+		t.Run(elem+"_semicolon_emits_nothing_before_error", func(t *testing.T) {
+			body := "&amp" + strings.Repeat("x", tailLen) + ";"
+			input := "<" + elem + ">" + body + "</" + elem + ">"
+
+			var events [][]byte
+			record := html.CharactersFunc(func(data []byte) error {
+				cp := make([]byte, len(data))
+				copy(cp, data)
+				events = append(events, cp)
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			err := html.NewParser().MaxContentSize(limit).
+				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"a ';'-terminated over-cap legacy-prefix run must hard-fail")
+			require.Empty(t, events,
+				"no Characters callback may be delivered before the ErrContentSizeExceeded; got %q", events)
+		})
+
+		// The genuine no-';' legacy-resolve sibling under the same tiny cap still
+		// emits the resolved '&' and the echoed tail — proving the fix did not
+		// regress the resolve path.
+		t.Run(elem+"_no_semicolon_still_resolves", func(t *testing.T) {
+			tail := strings.Repeat("x", tailLen)
+			input := "<" + elem + ">&amp" + tail + "</" + elem + ">"
+
+			var got strings.Builder
+			record := html.CharactersFunc(func(data []byte) error {
+				got.Write(data)
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			err := html.NewParser().MaxContentSize(limit).
+				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.NoError(t, err,
+				"a no-';' legacy-prefix run must still resolve, not fail")
+			require.Equal(t, "&"+tail, got.String(),
+				"legacy 'amp' resolves to '&' and the tail is echoed literally")
+		})
+	}
+}
+
 // TestRCDATANumericRefContextCancellation verifies Finding 2: a context
 // cancelled WHILE the parser drains a long numeric character reference inside
 // RCDATA (e.g. <title>&#9999...) aborts promptly with context.Canceled instead
