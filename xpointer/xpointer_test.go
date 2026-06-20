@@ -691,8 +691,9 @@ func TestEvaluate_NilGuards(t *testing.T) {
 	}
 }
 
-// The xmlns() scheme must reject prefixes that are not valid NCNames as well
-// as the reserved prefixes "xml" and "xmlns", which may not be (re)bound.
+// The xmlns() scheme must reject prefixes that are not valid NCNames. The
+// reserved prefixes "xml" and "xmlns" are NOT rejected: per the XPointer
+// xmlns() scheme they are no-ops at evaluation time (see TestEvaluate_XmlnsNoOp).
 func TestEvaluate_XmlnsPrefixValidation(t *testing.T) {
 	t.Parallel()
 
@@ -700,8 +701,6 @@ func TestEvaluate_XmlnsPrefixValidation(t *testing.T) {
 		name string
 		expr string
 	}{
-		{name: "reserved xmlns", expr: "xmlns(xmlns=http://example.com/ns)xpointer(/r)"},
-		{name: "reserved xml", expr: "xmlns(xml=http://example.com/ns)xpointer(/r)"},
 		{name: "non-NCName prefix", expr: "xmlns(1bad=http://example.com/ns)xpointer(/r)"},
 		{name: "prefix with colon", expr: "xmlns(a:b=http://example.com/ns)xpointer(/r)"},
 	}
@@ -711,6 +710,90 @@ func TestEvaluate_XmlnsPrefixValidation(t *testing.T) {
 
 			_, err := xpointer.Compile(tt.expr)
 			require.Error(t, err)
+		})
+	}
+}
+
+// Per the XPointer xmlns() scheme, attempting to bind the reserved prefixes
+// "xml"/"xmlns", or to bind any prefix to the XML or xmlns namespace URIs, must
+// be a no-op: it compiles, evaluates without error, and leaves the namespace
+// binding context unchanged so a subsequent scheme part still resolves.
+func TestEvaluate_XmlnsNoOp(t *testing.T) {
+	t.Parallel()
+
+	const (
+		xmlNS   = "http://www.w3.org/XML/1998/namespace"
+		xmlnsNS = "http://www.w3.org/2000/xmlns/"
+	)
+
+	noop := []struct {
+		name string
+		expr string
+	}{
+		{name: "reserved xml prefix", expr: "xmlns(xml=http://example.com/ns)"},
+		{name: "reserved xmlns prefix", expr: "xmlns(xmlns=http://example.com/ns)"},
+		{name: "bind to XML namespace URI", expr: "xmlns(p=" + xmlNS + ")"},
+		{name: "bind to xmlns namespace URI", expr: "xmlns(p=" + xmlnsNS + ")"},
+	}
+	for _, tt := range noop {
+		t.Run(tt.name+" compiles", func(t *testing.T) {
+			t.Parallel()
+
+			_, err := xpointer.Compile(tt.expr + "xpointer(/r)")
+			require.NoError(t, err)
+		})
+	}
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r><a/></r>`))
+	require.NoError(t, err)
+
+	for _, tt := range noop {
+		t.Run(tt.name+" evaluates as no-op", func(t *testing.T) {
+			t.Parallel()
+
+			// The no-op xmlns() leaves the binding context untouched, so the
+			// following real xpointer() part still resolves the document root.
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr+"xpointer(/r)")
+			require.NoError(t, err)
+			require.Len(t, nodes, 1)
+		})
+	}
+
+	// A no-op binding must not shadow a real binding declared elsewhere: the
+	// reserved-prefix attempt is ignored, and a real prefix bound afterwards
+	// still resolves a namespaced element.
+	t.Run("no-op does not disturb real binding", func(t *testing.T) {
+		t.Parallel()
+
+		nsDoc, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<root xmlns:ns="urn:test"><ns:child>hi</ns:child></root>`))
+		require.NoError(t, err)
+
+		nodes, err := xpointer.Evaluate(t.Context(), nsDoc,
+			`xmlns(xml=http://example.com/ns) xmlns(n=urn:test) xpointer(/root/n:child)`)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+}
+
+// The one-shot Evaluate must report a nil document as ErrNilDocument before
+// attempting to compile the expression, even when the expression is itself
+// invalid (which would otherwise surface a compile error first).
+func TestEvaluate_NilDocumentBeforeCompile(t *testing.T) {
+	t.Parallel()
+
+	exprs := []string{
+		"xpointer(/r)",
+		"xpointer(:::invalid)",
+		"1bad(/x)",
+		"",
+	}
+	for _, expr := range exprs {
+		t.Run(expr, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := xpointer.Evaluate(t.Context(), nil, expr)
+			require.ErrorIs(t, err, xpointer.ErrNilDocument)
 		})
 	}
 }

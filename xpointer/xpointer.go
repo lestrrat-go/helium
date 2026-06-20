@@ -77,6 +77,9 @@ func Compile(expr string) (*Expression, error) {
 			if err := validateXmlnsPrefix(prefix); err != nil {
 				return nil, err
 			}
+			// Reserved-prefix / reserved-namespace bindings are accepted here:
+			// per the XPointer xmlns() scheme they are no-ops at evaluation
+			// time (they leave the binding context unchanged), not errors.
 		}
 	}
 	return &Expression{parts: parts, compiled: compiled}, nil
@@ -101,6 +104,11 @@ func (e *Expression) Evaluate(ctx context.Context, doc *helium.Document) ([]heli
 	for i, p := range e.parts {
 		if p.scheme == "xmlns" {
 			prefix, uri, _ := parseXmlnsBody(p.body) // validated in Compile
+			// Reserved-prefix and reserved-namespace bindings are no-ops per
+			// the XPointer xmlns() scheme: leave the binding context unchanged.
+			if isXmlnsNoOp(prefix, uri) {
+				continue
+			}
 			if nsMap == nil {
 				nsMap = make(map[string]string)
 			}
@@ -188,6 +196,13 @@ func (e *Expression) evaluatePart(ctx context.Context, doc *helium.Document, p x
 // [Expression.Evaluate]. When the same XPointer is reused across documents,
 // call Compile once and reuse the resulting [*Expression].
 func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.Node, error) {
+	// Check the nil document before Compile so that a nil document is reported
+	// as ErrNilDocument (as documented) even when expr would also fail to
+	// compile. Expression.Evaluate keeps its own nil-doc check for the
+	// pre-compiled path.
+	if doc == nil {
+		return nil, ErrNilDocument
+	}
 	e, err := Compile(expr)
 	if err != nil {
 		return nil, err
@@ -195,19 +210,39 @@ func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.
 	return e.Evaluate(ctx, doc)
 }
 
-// validateXmlnsPrefix rejects xmlns() scheme prefixes that are not legal to
-// bind. The XPointer xmlns() scheme binds a NamespacePrefix (an XML NCName) to
-// a namespace URI; a prefix that is not a valid NCName is malformed. The
-// prefixes "xml" and "xmlns" are reserved by the Namespaces in XML spec and may
-// not be (re)declared, so binding either of them is an error.
+// validateXmlnsPrefix rejects xmlns() scheme prefixes that are syntactically
+// malformed. The XPointer xmlns() scheme binds a NamespacePrefix (an XML
+// NCName) to a namespace URI; a prefix that is not a valid NCName is malformed
+// and is a compile-time error.
+//
+// The reserved prefixes "xml" and "xmlns" are NOT rejected here: per the
+// XPointer xmlns() scheme, attempting to (re)bind them is a no-op that leaves
+// the namespace binding context unchanged, not an error. The no-op is applied
+// during evaluation (see isXmlnsNoOp).
 func validateXmlnsPrefix(prefix string) error {
 	if !xmlchar.IsValidNCName(prefix) {
 		return fmt.Errorf("xpointer: invalid xmlns() prefix %q (not an NCName)", prefix)
 	}
-	if prefix == "xml" || prefix == "xmlns" {
-		return fmt.Errorf("xpointer: reserved xmlns() prefix %q cannot be bound", prefix)
-	}
 	return nil
+}
+
+// Reserved namespace URIs that an xmlns() scheme part may not bind a prefix to.
+// Per the XPointer xmlns() scheme, attempting to bind any prefix to one of
+// these is a no-op (the binding context is left unchanged), not an error.
+const (
+	xmlNamespaceURI   = "http://www.w3.org/XML/1998/namespace"
+	xmlnsNamespaceURI = "http://www.w3.org/2000/xmlns/"
+)
+
+// isXmlnsNoOp reports whether an xmlns(prefix=uri) binding must be ignored
+// (left as a no-op) per the XPointer xmlns() scheme. The reserved prefixes
+// "xml" and "xmlns" may not be (re)bound, and no prefix may be bound to the XML
+// or xmlns namespace URIs.
+func isXmlnsNoOp(prefix, uri string) bool {
+	if prefix == "xml" || prefix == "xmlns" {
+		return true
+	}
+	return uri == xmlNamespaceURI || uri == xmlnsNamespaceURI
 }
 
 // parseXmlnsBody parses "prefix=uri" from an xmlns() body.
