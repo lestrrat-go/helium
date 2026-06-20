@@ -68,7 +68,10 @@ func (c *schematronValidateCommand) runContext(ctx context.Context, args []strin
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	schema, err := schematron.NewCompiler().Label(cfg.schemaFile).CompileFile(ctx, cfg.schemaFile)
+	// Attach an ErrorHandler so fatal schema diagnostics (file/line/detail)
+	// reach stderr before the summary error, rather than being discarded.
+	ceh := &writerErrorHandler{w: c.stderr}
+	schema, err := schematron.NewCompiler().Label(cfg.schemaFile).ErrorHandler(ceh).CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
