@@ -62,11 +62,11 @@ func TestExternalRefScopingIsIndependent(t *testing.T) {
 </grammar>`
 
 		fsys := fstest.MapFS{
-			"schemas/main.rng":   &fstest.MapFile{Data: []byte(main)},
+			testMainRNGPath:      &fstest.MapFile{Data: []byte(main)},
 			"schemas/extref.rng": &fstest.MapFile{Data: []byte(extref)},
 		}
 
-		got := compileExternalRefErrors(t, fsys, "schemas/main.rng")
+		got := compileExternalRefErrors(t, fsys, testMainRNGPath)
 		require.NotEmpty(t, got,
 			"parentRef in an externalRef target must not reach the includer scope")
 		require.True(t, strings.Contains(got, "parent grammar scope") ||
@@ -94,11 +94,11 @@ func TestExternalRefScopingIsIndependent(t *testing.T) {
 </element>`
 
 		fsys := fstest.MapFS{
-			"schemas/main.rng":   &fstest.MapFile{Data: []byte(main)},
+			testMainRNGPath:      &fstest.MapFile{Data: []byte(main)},
 			"schemas/extref.rng": &fstest.MapFile{Data: []byte(extref)},
 		}
 
-		got := compileExternalRefErrors(t, fsys, "schemas/main.rng")
+		got := compileExternalRefErrors(t, fsys, testMainRNGPath)
 		require.NotEmpty(t, got,
 			"a bare external <ref> must not bind to the includer's defines")
 		require.True(t, strings.Contains(got, "no matching definition") ||
@@ -129,14 +129,14 @@ func TestExternalRefScopingIsIndependent(t *testing.T) {
 </grammar>`
 
 		fsys := fstest.MapFS{
-			"schemas/main.rng":   &fstest.MapFile{Data: []byte(main)},
+			testMainRNGPath:      &fstest.MapFile{Data: []byte(main)},
 			"schemas/extref.rng": &fstest.MapFile{Data: []byte(extref)},
 		}
 
-		got := compileExternalRefErrors(t, fsys, "schemas/main.rng")
+		got := compileExternalRefErrors(t, fsys, testMainRNGPath)
 		require.Empty(t, got, "self-contained externalRef must compile cleanly; got: %s", got)
 
-		data, err := fsys.ReadFile("schemas/main.rng")
+		data, err := fsys.ReadFile(testMainRNGPath)
 		require.NoError(t, err)
 		doc, err := helium.NewParser().Parse(t.Context(), data)
 		require.NoError(t, err)

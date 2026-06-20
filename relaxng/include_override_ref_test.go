@@ -66,10 +66,10 @@ func TestIncludeOverrideRemovesDanglingRef(t *testing.T) {
 </grammar>`
 
 		fsys := fstest.MapFS{
-			"schemas/main.rng":     &fstest.MapFile{Data: []byte(main)},
+			testMainRNGPath:        &fstest.MapFile{Data: []byte(main)},
 			"schemas/included.rng": &fstest.MapFile{Data: []byte(included)},
 		}
-		got := compileIncludeErrors(t, fsys, "schemas/main.rng")
+		got := compileIncludeErrors(t, fsys, testMainRNGPath)
 		require.Empty(t, got,
 			"overriding the define that contained the dangling ref must remove it; got: %s", got)
 	})
@@ -104,10 +104,10 @@ func TestIncludeOverrideRemovesDanglingRef(t *testing.T) {
 </grammar>`
 
 		fsys := fstest.MapFS{
-			"schemas/main.rng":     &fstest.MapFile{Data: []byte(main)},
+			testMainRNGPath:        &fstest.MapFile{Data: []byte(main)},
 			"schemas/included.rng": &fstest.MapFile{Data: []byte(included)},
 		}
-		got := compileIncludeErrors(t, fsys, "schemas/main.rng")
+		got := compileIncludeErrors(t, fsys, testMainRNGPath)
 		require.True(t, strings.Contains(got, "missing"),
 			"a dangling ref in a NON-overridden define must still be a fatal compile error; got: %s", got)
 	})
