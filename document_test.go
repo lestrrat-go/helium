@@ -153,6 +153,9 @@ func TestCreateAttributeNilDocWithEntityValue(t *testing.T) {
 	require.NoError(t, err, "CreateAttribute on a nil document must not panic")
 	require.NotNil(t, attr)
 	require.Equal(t, "name", attr.Name())
+	// Predefined entities are not document-dependent, so they must resolve
+	// to their literal characters even when the document is nil.
+	require.Equal(t, "a&b", attr.Value(), "predefined entity must resolve on a nil document")
 }
 
 func TestCreateCharRefRejectsEmptyName(t *testing.T) {

@@ -760,7 +760,16 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			}
 
 			val := entbuf.String()
-			ent, ok := d.GetEntity(val)
+
+			// Predefined entities (amp, lt, gt, apos, quot) are not
+			// document-dependent, so resolve them up front. This ensures
+			// they inline correctly even when the document (and thus its
+			// internal/external subset) is nil.
+			ent, err2 := resolvePredefinedEntity(val)
+			ok := err2 == nil
+			if !ok {
+				ent, ok = d.GetEntity(val)
+			}
 
 			// Predefined entities are inlined; all others (resolved or not)
 			// become entity reference nodes. This matches libxml2's
