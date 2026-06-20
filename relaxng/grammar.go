@@ -44,6 +44,13 @@ type pattern struct {
 	nameClass *nameClass // for element/attribute name matching
 	params    []*param   // for data patterns
 	line      int        // source line number
+	// resolved is the define pattern a patternRef/patternParentRef points at,
+	// fixed at compile time against the node's lexical grammar scope (ref →
+	// current grammar scope, parentRef → parent grammar scope). Validation and
+	// the compile-time ref checks follow this pointer instead of doing a
+	// by-name lookup in a single flat global define map, so nested grammars
+	// that reuse a define name keep distinct scopes.
+	resolved *pattern
 }
 
 // dataType identifies a datatype from a datatype library.

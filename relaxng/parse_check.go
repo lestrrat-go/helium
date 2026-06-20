@@ -26,13 +26,15 @@ func (c *compiler) checkRules(ctx context.Context) {
 	if c.grammar.start == nil {
 		return
 	}
-	visited := make(map[string]int8) // 0=unseen, 1=in-progress, 2=done
+	visited := make(map[*pattern]int8) // 0=unseen, 1=in-progress, 2=done
 	c.checkPattern(ctx, c.grammar.start, inStart, visited)
 }
 
 // checkPattern recursively checks a pattern node for forbidden nestings,
-// then recurses into children with updated flags.
-func (c *compiler) checkPattern(ctx context.Context, pat *pattern, flags ruleFlags, visited map[string]int8) {
+// then recurses into children with updated flags. Refs are followed via their
+// compile-time-resolved scoped target; the visited set is keyed by define
+// pattern pointer so distinct same-named scopes are tracked independently.
+func (c *compiler) checkPattern(ctx context.Context, pat *pattern, flags ruleFlags, visited map[*pattern]int8) {
 	if pat == nil {
 		return
 	}
@@ -159,17 +161,17 @@ func (c *compiler) checkPattern(ctx context.Context, pat *pattern, flags ruleFla
 		if flags&inDataExcept != 0 {
 			c.addPatternError(ctx, pat, "Found forbidden pattern data/except//ref")
 		}
-		def, ok := c.grammar.defines[pat.name]
-		if !ok {
+		def := pat.resolved
+		if def == nil {
 			return
 		}
-		state := visited[pat.name]
+		state := visited[def]
 		if state != 0 {
 			return // in-progress or done
 		}
-		visited[pat.name] = 1 // in-progress
+		visited[def] = 1 // in-progress
 		c.checkPattern(ctx, def, flags, visited)
-		visited[pat.name] = 2 // done
+		visited[def] = 2 // done
 		return
 	}
 
