@@ -427,4 +427,58 @@ func TestDeepCloneValueSemantics(t *testing.T) {
 		clonedFT.ParamTypes[0].Occurrence = xpath3.OccurrenceOneOrMore
 		require.Equal(t, xpath3.OccurrenceExactlyOne, nestedFT.ParamTypes[0].Occurrence, "nested FunctionTest.ParamTypes must be detached")
 	})
+
+	// A FunctionTest can also be reached through MapTest.ValType and
+	// ArrayTest.MemberType. cloneSequenceType must recurse through those nested
+	// SequenceTypes so the FunctionTest's ParamTypes/ReturnType slices are
+	// detached on the clone.
+	t.Run("FunctionTest nested in MapTest.ValType is detached", func(t *testing.T) {
+		t.Parallel()
+
+		nestedFT := xpath3.FunctionTest{
+			ParamTypes: []xpath3.SequenceType{{Occurrence: xpath3.OccurrenceExactlyOne}},
+			ReturnType: xpath3.SequenceType{Occurrence: xpath3.OccurrenceExactlyOne},
+		}
+		mapTest := xpath3.MapTest{ValType: xpath3.SequenceType{ItemTest: nestedFT}}
+		src := xpath3.FunctionItem{
+			Invoke:     func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) { return xpath3.ItemSlice{}, nil },
+			ParamTypes: []xpath3.SequenceType{{ItemTest: mapTest}},
+		}
+
+		cloned := xpath3.CloneSequence(xpath3.ItemSlice{src}).Materialize()
+		require.Len(t, cloned, 1)
+		ci := cloned[0].(xpath3.FunctionItem)
+		clonedMapTest := ci.ParamTypes[0].ItemTest.(xpath3.MapTest)
+		clonedFT := clonedMapTest.ValType.ItemTest.(xpath3.FunctionTest)
+
+		clonedFT.ParamTypes[0].Occurrence = xpath3.OccurrenceOneOrMore
+		clonedFT.ReturnType.Occurrence = xpath3.OccurrenceZeroOrOne
+		require.Equal(t, xpath3.OccurrenceExactlyOne, nestedFT.ParamTypes[0].Occurrence, "FunctionTest.ParamTypes nested in MapTest.ValType must be detached")
+		require.Equal(t, xpath3.OccurrenceExactlyOne, nestedFT.ReturnType.Occurrence, "FunctionTest.ReturnType nested in MapTest.ValType must be detached")
+	})
+
+	t.Run("FunctionTest nested in ArrayTest.MemberType is detached", func(t *testing.T) {
+		t.Parallel()
+
+		nestedFT := xpath3.FunctionTest{
+			ParamTypes: []xpath3.SequenceType{{Occurrence: xpath3.OccurrenceExactlyOne}},
+			ReturnType: xpath3.SequenceType{Occurrence: xpath3.OccurrenceExactlyOne},
+		}
+		arrTest := xpath3.ArrayTest{MemberType: xpath3.SequenceType{ItemTest: nestedFT}}
+		src := xpath3.FunctionItem{
+			Invoke:     func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) { return xpath3.ItemSlice{}, nil },
+			ParamTypes: []xpath3.SequenceType{{ItemTest: arrTest}},
+		}
+
+		cloned := xpath3.CloneSequence(xpath3.ItemSlice{src}).Materialize()
+		require.Len(t, cloned, 1)
+		ci := cloned[0].(xpath3.FunctionItem)
+		clonedArrTest := ci.ParamTypes[0].ItemTest.(xpath3.ArrayTest)
+		clonedFT := clonedArrTest.MemberType.ItemTest.(xpath3.FunctionTest)
+
+		clonedFT.ParamTypes[0].Occurrence = xpath3.OccurrenceOneOrMore
+		clonedFT.ReturnType.Occurrence = xpath3.OccurrenceZeroOrOne
+		require.Equal(t, xpath3.OccurrenceExactlyOne, nestedFT.ParamTypes[0].Occurrence, "FunctionTest.ParamTypes nested in ArrayTest.MemberType must be detached")
+		require.Equal(t, xpath3.OccurrenceExactlyOne, nestedFT.ReturnType.Occurrence, "FunctionTest.ReturnType nested in ArrayTest.MemberType must be detached")
+	})
 }

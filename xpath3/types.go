@@ -142,15 +142,25 @@ func cloneSequenceTypes(sts []SequenceType) []SequenceType {
 	return cloned
 }
 
-// cloneSequenceType deep-copies a SequenceType's mutable metadata. Only the
-// FunctionTest item test carries mutable slices (ParamTypes); every other
+// cloneSequenceType deep-copies a SequenceType's mutable metadata. Three item
+// tests carry mutable backing reachable from a SequenceType: FunctionTest
+// (ParamTypes slice + ReturnType, each itself a SequenceType), MapTest
+// (ValType) and ArrayTest (MemberType). Those nested SequenceTypes can in turn
+// hold a FunctionTest, so cloning recurses through all three. Every other
 // NodeTest is an immutable value with no shared mutable backing, so it is kept
 // as-is.
 func cloneSequenceType(st SequenceType) SequenceType {
-	if ft, ok := st.ItemTest.(FunctionTest); ok {
-		ft.ParamTypes = cloneSequenceTypes(ft.ParamTypes)
-		ft.ReturnType = cloneSequenceType(ft.ReturnType)
-		st.ItemTest = ft
+	switch t := st.ItemTest.(type) {
+	case FunctionTest:
+		t.ParamTypes = cloneSequenceTypes(t.ParamTypes)
+		t.ReturnType = cloneSequenceType(t.ReturnType)
+		st.ItemTest = t
+	case MapTest:
+		t.ValType = cloneSequenceType(t.ValType)
+		st.ItemTest = t
+	case ArrayTest:
+		t.MemberType = cloneSequenceType(t.MemberType)
+		st.ItemTest = t
 	}
 	return st
 }
