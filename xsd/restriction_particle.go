@@ -96,7 +96,7 @@ func (c *compiler) reportInvalidRestriction(ctx context.Context, td, base *TypeD
 	}
 	baseQualified := "'{" + base.Name.NS + "}" + base.Name.Local + "'"
 	msg := "The content model is not a valid restriction of the content model of the base complex type definition " + baseQualified + "."
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg), helium.ErrorLevelFatal))
 	c.errorCount++
 }
 
@@ -119,9 +119,10 @@ func particleValidRestriction(r, b *Particle) bool {
 			}
 			return wildcardAllowsName(bt, rt.Name)
 		case *ModelGroup:
-			// Recurse-As-If-Group: an element against a group. Conservatively
-			// accept (do not attempt to prove containment in a group).
-			return true
+			// Recurse-As-If-Group (XSD §3.9.6): a derived element against a base
+			// model group. Treat the element as a singleton group and map it through
+			// the base group's compositor-specific children.
+			return elementRestrictsGroup(r, b, bt)
 		}
 	case *Wildcard:
 		switch bt := b.Term.(type) {
@@ -150,10 +151,11 @@ func particleValidRestriction(r, b *Particle) bool {
 		case *ModelGroup:
 			return groupRestrictsGroup(r, rt, b, bt)
 		case *Wildcard:
-			// NSRecurseCheckCardinality: every particle in the group must be a
-			// valid restriction of the wildcard. Conservatively accept unless an
-			// occurrence widening is obvious at the group level.
-			return true
+			// NSRecurseCheckCardinality (XSD §3.9.6): the derived group's effective
+			// occurrence range must be within the base wildcard's range, and every
+			// element/wildcard LEAF inside the derived group must be admitted by the
+			// base wildcard (namespace) and within its cardinality.
+			return groupRestrictsWildcard(r, rt, b, bt)
 		case *ElementDecl:
 			// A group against a single base element — conservatively accept.
 			return true
@@ -295,6 +297,128 @@ func recurseAll(rParticles, bParticles []*Particle) bool {
 		}
 	}
 	return true
+}
+
+// elementRestrictsGroup implements Recurse-As-If-Group (XSD §3.9.6): a derived
+// ELEMENT particle restricting a base MODEL GROUP particle. The derived element
+// is treated as a singleton group and mapped through the base group's children
+// according to the base compositor:
+//   - sequence/all: the element must restrict EXACTLY ONE base child, and every
+//     OTHER base child must be emptiable;
+//   - choice: the element must restrict SOME base alternative.
+//
+// The element particle's occurrence range must also be a valid restriction of
+// the base group particle's range. When the recursion cannot decide a sub-case
+// with confidence it stays conservative (accepts) rather than risk a false
+// rejection.
+func elementRestrictsGroup(r *Particle, b *Particle, bg *ModelGroup) bool {
+	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+		return false
+	}
+	switch bg.Compositor {
+	case CompositorChoice:
+		// The element must restrict SOME alternative of the base choice.
+		return slices.ContainsFunc(bg.Particles, func(bp *Particle) bool {
+			return particleValidRestriction(r, bp)
+		})
+	case CompositorSequence, CompositorAll:
+		// The element must restrict exactly one base child; every unmatched base
+		// child must be emptiable.
+		matched := false
+		for _, bp := range bg.Particles {
+			if !matched && particleValidRestriction(r, bp) {
+				matched = true
+				continue
+			}
+			if !particleEmptiable(bp) {
+				return false
+			}
+		}
+		return matched
+	default:
+		// Unknown compositor — stay conservative.
+		return true
+	}
+}
+
+// groupRestrictsWildcard implements NSRecurseCheckCardinality (XSD §3.9.6): a
+// derived MODEL GROUP particle restricting a base WILDCARD particle. The derived
+// group's EFFECTIVE occurrence range (the product of the nesting occurrence
+// ranges down to each leaf) must be within the base wildcard particle's range,
+// and every element/wildcard LEAF reachable inside the derived group must be
+// admitted by the base wildcard's namespace constraint. When a sub-case cannot
+// be decided with confidence (e.g. a nested group whose effective range is
+// genuinely undecidable) it stays conservative (accepts).
+func groupRestrictsWildcard(r *Particle, rg *ModelGroup, b *Particle, bw *Wildcard) bool {
+	// The whole derived group particle's occurrence range must be within the base
+	// wildcard particle's range.
+	if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+		return false
+	}
+	// Each leaf inside the derived group must be admitted by the wildcard, and its
+	// effective occurrence (folding in the enclosing group ranges) must be within
+	// the base wildcard particle's range.
+	return groupLeavesWithinWildcard(rg, r.MinOccurs, r.MaxOccurs, b)
+}
+
+// groupLeavesWithinWildcard walks the derived group's particles, threading the
+// accumulated effective occurrence range (encMin/encMax = the product of the
+// enclosing groups' occurrence ranges), and checks every element/wildcard leaf
+// against the base wildcard particle bw: the leaf's namespace must be admitted
+// and its effective occurrence range (enclosing × the leaf's own) must be a
+// valid restriction of the base wildcard particle's range. Returns false on the
+// first clear violation.
+func groupLeavesWithinWildcard(rg *ModelGroup, encMin, encMax int, bw *Particle) bool {
+	for _, p := range rg.Particles {
+		leafMin := mulOccurs(encMin, p.MinOccurs)
+		leafMax := mulOccurs(encMax, p.MaxOccurs)
+		switch t := p.Term.(type) {
+		case *ElementDecl:
+			wc, ok := bw.Term.(*Wildcard)
+			if !ok {
+				return true
+			}
+			if !wildcardAllowsName(wc, t.Name) {
+				return false
+			}
+			if !occurrenceValidRestriction(leafMin, leafMax, bw.MinOccurs, bw.MaxOccurs) {
+				return false
+			}
+		case *Wildcard:
+			bwc, ok := bw.Term.(*Wildcard)
+			if !ok {
+				return true
+			}
+			// A derived wildcard leaf must be a namespace subset of the base
+			// wildcard, with at-least-as-strong processContents and within range.
+			if processContentsStrength(t.ProcessContents) < processContentsStrength(bwc.ProcessContents) {
+				return false
+			}
+			if !wildcardConstraintSubset(t, bwc) {
+				return false
+			}
+			if !occurrenceValidRestriction(leafMin, leafMax, bw.MinOccurs, bw.MaxOccurs) {
+				return false
+			}
+		case *ModelGroup:
+			if !groupLeavesWithinWildcard(t, leafMin, leafMax, bw) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// mulOccurs multiplies two occurrence bounds, treating -1 as unbounded
+// (unbounded × anything non-zero = unbounded; anything × 0 = 0).
+func mulOccurs(a, b int) int {
+	if a == 0 || b == 0 {
+		return 0
+	}
+	if a == -1 || b == -1 {
+		return -1
+	}
+	return a * b
 }
 
 // occurrenceValidRestriction reports whether the occurrence range [rMin,rMax] is

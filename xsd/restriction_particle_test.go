@@ -348,4 +348,234 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 </xs:schema>`
 		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
 	})
+
+	// Recurse-As-If-Group (derived element restricts a base nested model group).
+	// The derived element is treated as a singleton group mapped through the base
+	// group's children: for a base sequence/all every UNMATCHED base child must
+	// be emptiable; for a base choice the element must restrict SOME alternative.
+	// The base nested group is reached during the order-preserving recurse over
+	// the outer sequence.
+	t.Run("rejects element restricting nested sequence leaving required base child", func(t *testing.T) {
+		t.Parallel()
+		// Base outer sequence holds a nested sequence (a,b both required). The
+		// derived outer sequence maps a single element a onto that nested group;
+		// the required base child b is unmatched, so it drops required content.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects element restricting nested sequence with no matching base child", func(t *testing.T) {
+		t.Parallel()
+		// Base nested sequence (a, b?); derived maps element c onto it — c matches
+		// no base child, so it is an added/renamed particle.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="c" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts element restricting nested sequence with emptiable remainder", func(t *testing.T) {
+		t.Parallel()
+		// Base nested sequence (a, b?); derived maps element a onto it. The
+		// unmatched base child b is optional (emptiable) — a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("accepts element restricting nested choice alternative", func(t *testing.T) {
+		t.Parallel()
+		// Base nested choice (a|b); derived maps element a onto it — restricting
+		// one alternative of the base choice is valid.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects element restricting nested choice with no matching alternative", func(t *testing.T) {
+		t.Parallel()
+		// Base nested choice (a|b); derived maps element c onto it — c matches no
+		// alternative, so it admits content the base choice does not.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="Base">
+        <xs:sequence>
+          <xs:element name="c" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	// NSRecurseCheckCardinality (derived model GROUP restricts a base wildcard
+	// particle). The derived group replaces the base <xs:any>; every
+	// element/wildcard LEAF inside the derived group must be admitted by the base
+	// wildcard's namespace constraint, and the group's effective occurrence range
+	// must be within the base wildcard's range.
+	t.Run("rejects group restricting wildcard with out-of-namespace element", func(t *testing.T) {
+		t.Parallel()
+		// Base outer sequence holds a wildcard restricted to ##other (urn:t
+		// excluded). The derived group (replacing the wildcard) contains an element
+		// in urn:t, which the base wildcard does not admit — not a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:any namespace="##other" processContents="lax" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="g" type="xs:string"/>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence>
+          <xs:sequence>
+            <xs:element ref="t:g"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts group within base wildcard namespace", func(t *testing.T) {
+		t.Parallel()
+		// Base wildcard admits ##any unbounded; the derived group (replacing the
+		// wildcard) holds an in-range element within cardinality — a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:any namespace="##any" processContents="lax" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="g" type="xs:string"/>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence>
+          <xs:sequence>
+            <xs:element ref="t:g"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	t.Run("rejects group restricting wildcard widening cardinality", func(t *testing.T) {
+		t.Parallel()
+		// Base wildcard admits ##any at most once; the derived group (replacing the
+		// wildcard) is itself unbounded — its effective occurrence range exceeds
+		// the base wildcard's, not a valid restriction.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:any namespace="##any" processContents="lax" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="g" type="xs:string"/>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence>
+          <xs:sequence maxOccurs="unbounded">
+            <xs:element ref="t:g"/>
+          </xs:sequence>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
 }
