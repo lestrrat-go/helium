@@ -225,10 +225,11 @@ func arrayLookup(a ArrayItem, args []Sequence) (Sequence, error) {
 }
 
 func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionRef) (Sequence, error) {
-	fn, err := resolveFunction(ctx, ec, e.Prefix, e.Name, e.Arity)
+	r, err := resolveFunctionInfo(ctx, ec, e.Prefix, e.Name, e.Arity)
 	if err != nil {
 		return nil, err
 	}
+	fn := r.fn
 
 	// Check if the function needs to capture state at reference creation time.
 	if sp, ok := fn.(DynamicRefSnapshotProvider); ok {
@@ -262,10 +263,17 @@ func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionR
 	// context.Context at invocation time for cancellation propagation.
 	capturedECValue := *ec
 	capturedEC := &capturedECValue
-	// Populate type signature from built-in registry or TypedFunction interface
+	// Populate type signature. The built-in signature registry is consulted only
+	// when the resolved function is the built-in itself; a user override of a
+	// built-in name (e.g. abs#1) binds its own signature, mirroring the direct
+	// call path (lookupParamTypes).
 	var paramTypes []SequenceType
 	var returnType *SequenceType
-	if sig := lookupFunctionSignature(ns, e.Name, e.Arity); sig != nil {
+	var sig *functionSignature
+	if r.isBuiltin {
+		sig = lookupFunctionSignature(r.uri, r.name, e.Arity)
+	}
+	if sig != nil {
 		paramTypes = sig.ParamTypes
 		returnType = sig.ReturnType
 	} else if tf, ok := fn.(TypedFunction); ok {
