@@ -166,5 +166,5 @@ These are architectural choices, not bugs:
 - Go interfaces for node types vs xmlNode.type enum switch
 - No global state: explicit context passing
 - Functional options (WithX()) vs bitmask flags
-- XML push parser parses incrementally as chunks arrive; HTML push parser buffers only through the initial ~1024-byte charset prescan, then streams
+- XML push parser parses incrementally as chunks arrive; HTML push parser buffers through the initial ~1024-byte charset prescan, then streams only once a streamable encoding is settled (declared/detected charset=utf-8, or a non-UTF-8 head routed to Latin-1). An undeclared input that keeps proving valid UTF-8 stays undecided and buffers until Close/EOF (a later non-UTF-8 byte would re-interpret the whole prefix as Latin-1/Windows-1252).
 - Namespace stack: frame-based visibleNSStack vs flat arrays
