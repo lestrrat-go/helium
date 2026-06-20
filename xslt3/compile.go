@@ -970,9 +970,12 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 	// relative stylesheet-location paths resolve correctly. The compile-time
 	// URIResolver is propagated so fn:transform stylesheet-location loading is
 	// permitted at compile time exactly when the compiler opts in (it is
-	// default-deny without a resolver).
+	// default-deny without a resolver). The compiler's MaxResourceBytes cap is
+	// seeded on both the temp Stylesheet (consulted by nested compiles via
+	// newNestedCompiler) and the transformConfig (consulted by runtime reads)
+	// so Compiler.MaxResourceBytes governs static-variable transform() loads.
 	ec := &execContext{
-		stylesheet:          &Stylesheet{baseURI: c.baseURI, uriResolver: c.resolver},
+		stylesheet:          &Stylesheet{baseURI: c.baseURI, uriResolver: c.resolver, maxResourceBytes: c.maxResourceBytes},
 		resultDoc:           helium.NewDefaultDocument(),
 		globalVars:          make(map[string]xpath3.Sequence),
 		outputStack:         []*outputFrame{{doc: helium.NewDefaultDocument(), current: helium.NewDefaultDocument()}},
@@ -982,6 +985,7 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 		accumulatorState:    make(map[string]xpath3.Sequence),
 		resultDocuments:     make(map[string]*helium.Document),
 		usedResultURIs:      make(map[string]struct{}),
+		transformConfig:     &transformConfig{maxResourceBytes: c.maxResourceBytes},
 	}
 	ec.setCurrentTemplate(nil)
 	return ec.fnTransform(ctx, args)

@@ -19,7 +19,9 @@ const MaxResourceBytes = 10 << 20 // 10 MiB
 // ErrResourceTooLarge is returned when an external resource exceeds
 // [MaxResourceBytes]. The cap is enforced against the actual number of bytes
 // read, not a Content-Length header, so a server that lies about its size
-// cannot bypass it.
+// cannot bypass it. When a runtime read (fn:doc / document(), fn:transform
+// stylesheet / package sources) trips the cap, the resulting error wraps both
+// this sentinel and [ErrDynamicError]: errors.Is matches either one.
 var ErrResourceTooLarge = errors.New("xslt3: external resource exceeds maximum allowed size")
 
 // resolveResourceLimit maps a configured cap to the value actually enforced:

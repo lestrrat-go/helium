@@ -177,6 +177,39 @@ func TestFnDoc_OverLimitResourceRejected(t *testing.T) {
 		"client must stop reading near the cap, not drain the whole stream")
 }
 
+// An over-cap doc() read must surface [xslt3.ErrResourceTooLarge] through the
+// XSLTError wrapper, as the public API documents, while still matching
+// [xslt3.ErrDynamicError]. The wrapped error previously discarded the cause
+// (it was formatted with %v), so errors.Is(err, ErrResourceTooLarge) was false.
+func TestFnDoc_OverLimitErrorIsResourceTooLarge(t *testing.T) {
+	t.Parallel()
+
+	const u = "http://example.invalid/big.xml"
+	// A well-formed document comfortably larger than the default cap.
+	body := "<root>" + strings.Repeat("a", int(xslt3.MaxResourceBytes)+1024) + "</root>"
+
+	resolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
+		if uri != u {
+			return nil, &xpath3.XPathError{Code: "FOUT1170", Message: "not found: " + uri}
+		}
+		return io.NopCloser(strings.NewReader(body)), nil
+	})
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+	ss := compileFnDocStylesheet(t)
+
+	_, err = ss.Transform(source).
+		SetParameter("url", xpath3.SingleString(u)).
+		URIResolver(resolver).
+		Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+		"over-cap read must remain matchable via errors.Is(err, ErrResourceTooLarge)")
+	require.ErrorIs(t, err, xslt3.ErrDynamicError,
+		"over-cap read must still match ErrDynamicError")
+}
+
 // A resource larger than the default cap is accepted when the per-invocation
 // cap is raised via Invocation.MaxResourceBytes. Exercises the full doc()
 // retrieval path, confirming the configured override actually threads through.

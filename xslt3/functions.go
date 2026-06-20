@@ -344,10 +344,10 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 		// XTDE1160: when the URI contains a fragment identifier, use XTDE1160
 		// (fragment identifier error) instead of FODC0002.
 		if strings.ContainsRune(uri, '#') {
-			return nil, dynamicError(errCodeXTDE1160,
+			return nil, dynamicErrorCause(errCodeXTDE1160, err,
 				"cannot load document %q with fragment identifier: %v", uri, err)
 		}
-		return nil, dynamicError(errCodeFODC0002, "cannot load document %q: %v", uri, err)
+		return nil, dynamicErrorCause(errCodeFODC0002, err, "cannot load document %q: %v", uri, err)
 	}
 	// helium's parser currently rejects literal U+FFFD from RuneCursor-backed
 	// input, but accepts the equivalent character reference. Normalizing here

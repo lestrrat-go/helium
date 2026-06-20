@@ -308,6 +308,20 @@ func dynamicError(code, format string, args ...any) *XSLTError {
 	}
 }
 
+// dynamicErrorCause builds a dynamic error whose Cause preserves both
+// [ErrDynamicError] and the underlying cause, so that callers can match the
+// specific cause (e.g. [ErrResourceTooLarge]) via errors.Is while
+// errors.Is(err, ErrDynamicError) continues to hold. Use this at sites where a
+// distinguishable sentinel (documented in the public API) must remain
+// observable through the XSLTError wrapper.
+func dynamicErrorCause(code string, cause error, format string, args ...any) *XSLTError {
+	return &XSLTError{
+		Code:    code,
+		Message: fmt.Sprintf(format, args...),
+		Cause:   errors.Join(ErrDynamicError, cause),
+	}
+}
+
 // isXSLTError returns true if err is an XSLTError with the given code.
 func isXSLTError(err error, code string) bool {
 	if xe, ok := errors.AsType[*XSLTError](err); ok {

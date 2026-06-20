@@ -177,3 +177,62 @@ func TestFnTransformStylesheetLocationDefaultDeny(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "transformed")
 }
+
+// TestStaticFnTransformHonorsCompilerCap verifies that the compile-time
+// fn:transform used for static="yes" variables respects Compiler.MaxResourceBytes.
+// Before the fix, the temporary stylesheet / transform context built for static
+// evaluation ignored the compiler cap, so an over-cap inner stylesheet loaded
+// regardless. The compiler cap must now bound the static transform() read: an
+// inner stylesheet larger than the cap is refused, surfacing
+// [xslt3.ErrResourceTooLarge].
+func TestStaticFnTransformHonorsCompilerCap(t *testing.T) {
+	const outerURI = "mem://stylesheets/outer.xsl"
+	const innerURI = "mem://stylesheets/inner.xsl"
+
+	innerSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><inner>transformed</inner></xsl:template>
+</xsl:stylesheet>`
+
+	// A static variable whose select calls transform() at compile time.
+	outerSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:variable name="r" static="yes" select="transform(map{
+    'stylesheet-location': 'inner.xsl',
+    'delivery-format': 'serialized'
+  })('output')"/>
+  <xsl:template match="/"><out><xsl:value-of select="$r"/></out></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{innerURI: innerSrc}}
+
+	// MaxResourceBytes(1): the inner stylesheet is far larger than 1 byte, so
+	// the static transform() read is rejected.
+	doc, err := helium.NewParser().Parse(ctx, []byte(outerSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().
+		BaseURI(outerURI).
+		URIResolver(resolver).
+		MaxResourceBytes(1).
+		Compile(ctx, doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	_, err = ss.Transform(src).Serialize(ctx)
+	require.Error(t, err, "MaxResourceBytes(1) must reject the over-cap static transform read")
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge)
+
+	// Sanity: with the default cap the same static transform succeeds.
+	doc2, err := helium.NewParser().Parse(ctx, []byte(outerSrc))
+	require.NoError(t, err)
+	ss2, err := xslt3.NewCompiler().BaseURI(outerURI).URIResolver(resolver).Compile(ctx, doc2)
+	require.NoError(t, err)
+	src2, err := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+	require.NoError(t, err)
+	out, err := ss2.Transform(src2).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, "transformed")
+}

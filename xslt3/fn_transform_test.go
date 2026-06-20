@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -379,6 +380,79 @@ func TestFnTransformInheritsRuntimeResolver(t *testing.T) {
 	require.Contains(t, out, "hello-from-resolver",
 		"inner fn:unparsed-text should resolve via outer Invocation's URIResolver")
 	require.Contains(t, calledWith, dataURI)
+}
+
+// TestFnTransformInheritsRuntimeResourceCap verifies that fn:doc /
+// fn:unparsed-text inside a stylesheet invoked via fn:transform() honors the
+// outer Invocation's MaxResourceBytes override rather than silently falling
+// back to the default cap. The inner stylesheet reads a resolver-backed
+// resource larger than the default cap: it must be refused at the default cap
+// and accepted once the outer Invocation raises (or disables) the bound.
+func TestFnTransformInheritsRuntimeResourceCap(t *testing.T) {
+	const dataURI = "http://example.invalid/data/big.txt"
+	big := strings.Repeat("z", int(xslt3.MaxResourceBytes)+(1<<10))
+
+	runtimeResolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
+		if uri != dataURI {
+			return nil, &xpath3.XPathError{Code: "FOUT1170", Message: "not found: " + uri}
+		}
+		return io.NopCloser(strings.NewReader(big)), nil
+	})
+
+	innerXSLT := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <inner><xsl:value-of select="string-length(unparsed-text('` + dataURI + `'))"/></inner>
+  </xsl:template>
+</xsl:stylesheet>`
+	outerXSLT := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:template match="/">
+    <xsl:variable name="result" select="transform(map{
+      'stylesheet-location': 'mem://stylesheets/inner.xsl',
+      'delivery-format': 'serialized'
+    })"/>
+    <result><xsl:value-of select="$result('output')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	compileResolver := &memResolver{
+		files: map[string]string{
+			"mem://stylesheets/inner.xsl": innerXSLT,
+		},
+	}
+
+	ctx := t.Context()
+	doc, err := helium.NewParser().Parse(ctx, []byte(outerXSLT))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().URIResolver(compileResolver).Compile(ctx, doc)
+	require.NoError(t, err)
+
+	src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+
+	// Default cap: the inner read exceeds MaxResourceBytes and is refused.
+	_, err = ss.Transform(src).URIResolver(runtimeResolver).Serialize(ctx)
+	require.Error(t, err, "inner read must be refused at the default cap")
+
+	// Raised cap: the outer Invocation's MaxResourceBytes must thread into the
+	// inner transform so the same read now succeeds.
+	out, err := ss.Transform(src).
+		URIResolver(runtimeResolver).
+		MaxResourceBytes(int64(len(big)) + 1).
+		Serialize(ctx)
+	require.NoError(t, err, "raised cap must thread into the inner fn:transform")
+	require.Contains(t, out, strconv.Itoa(len(big)),
+		"inner unparsed-text should read the full resource under the raised cap")
+
+	// Disabled cap (negative): also threads through and lifts the bound.
+	out, err = ss.Transform(src).
+		URIResolver(runtimeResolver).
+		MaxResourceBytes(-1).
+		Serialize(ctx)
+	require.NoError(t, err, "disabled cap must thread into the inner fn:transform")
+	require.Contains(t, out, strconv.Itoa(len(big)))
 }
 
 // TestFnTransformInitialMatchSelectionResultDocument is a regression test for a

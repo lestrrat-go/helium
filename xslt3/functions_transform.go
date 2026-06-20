@@ -478,7 +478,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		// hold the source handle open across that work.
 		_ = rc.Close()
 		if readErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
+			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
 		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI)
 		if parseErr != nil {
@@ -503,7 +503,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		data, readErr := readResourceBounded(rc, ec.resourceLimit())
 		_ = rc.Close()
 		if readErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read package %q: %v", packageName, readErr)
+			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
 		}
 		doc, parseErr := parseStylesheetDocument(ctx, data, location)
 		if parseErr != nil {
@@ -583,6 +583,11 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		fnTransformCfg.uriResolver = ec.transformConfig.uriResolver
 		fnTransformCfg.httpClient = ec.transformConfig.httpClient
 	}
+	// Inherit the outer Invocation's effective per-resource read cap so that
+	// fn:doc / fn:unparsed-text / fn:json-doc inside the inner transform honor
+	// the same MaxResourceBytes override. Without this the inner reads would
+	// silently fall back to the default cap, ignoring Invocation.MaxResourceBytes.
+	fnTransformCfg.maxResourceBytes = ec.resourceLimit()
 
 	// Apply map-valued options from the fn:transform options map.
 	for _, mp := range []struct {
