@@ -643,3 +643,68 @@ func TestNSAttrXMLWhitespaceTrim(t *testing.T) {
 			"the trimmed inherited namespace urn:x must match a urn:x instance")
 	})
 }
+
+// TestForeignStructuralAttrIgnored covers the presence-aware-lookup regression:
+// RELAX NG structural attributes (name, ns, type, ...) are UNQUALIFIED, so a
+// foreign-namespaced annotation attribute sharing the local name (e.g.
+// ann:name="p:x" with p unbound) must be IGNORED, not mistaken for the
+// structural attribute. With local-name-only lookup the foreign ann:name was
+// read as the RELAX NG name, and — because its value carries an unbound prefix —
+// the new fail-closed validation wrongly poisoned an otherwise valid schema.
+func TestForeignStructuralAttrIgnored(t *testing.T) {
+	t.Parallel()
+
+	t.Run("element with foreign ann:name compiles via real structural name", func(t *testing.T) {
+		t.Parallel()
+		// The element carries an annotation attribute ann:name="p:x" whose prefix
+		// p is unbound. It must be ignored: the real structural name="root" is
+		// used, the schema compiles cleanly, and a matching instance validates.
+		// ann:name is declared BEFORE the structural name so a local-name-only
+		// lookup (matching the first attribute in property order) would pick the
+		// foreign one — the exact regression this guards.
+		schema := `<element ann:name="p:x" name="root"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    xmlns:ann="urn:example:ann">
+  <empty/>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"a foreign ann:name must be ignored, not read as the RELAX NG structural name")
+		require.NoError(t, validateWith(t, schema, `<root/>`),
+			"the real structural name=\"root\" must match a no-namespace <root/>")
+	})
+
+	t.Run("attribute with foreign ann:name compiles via real structural name", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="root"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    xmlns:ann="urn:example:ann">
+  <attribute ann:name="p:x" name="id"/>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"a foreign ann:name on <attribute> must be ignored, not poison the schema")
+		require.NoError(t, validateWith(t, schema, `<root id="v"/>`),
+			"the real structural name=\"id\" must match the id attribute")
+		require.Error(t, validateWith(t, schema, `<root other="v"/>`),
+			"the schema still requires the real structural name=\"id\"")
+	})
+
+	t.Run("default handler: foreign ann:name does not fail closed", func(t *testing.T) {
+		t.Parallel()
+		// On the DEFAULT compile path (no error collector) a wrongly-read unbound
+		// prefix would silently fail the grammar closed. The foreign ann:name must
+		// be ignored so a matching instance still validates.
+		schema := `<element ann:name="p:x" name="root"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    xmlns:ann="urn:example:ann">
+  <empty/>
+</element>`
+
+		grammar := compileWithDefaultHandler(t, schema)
+
+		instanceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err, "instance should parse")
+
+		require.NoError(t, relaxng.NewValidator(grammar).Validate(t.Context(), instanceDoc),
+			"a foreign ann:name must not fail an otherwise valid grammar closed")
+	})
+}

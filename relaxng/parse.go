@@ -237,7 +237,7 @@ func (c *compiler) parseGrammarContent(ctx context.Context, grammarElem *helium.
 
 // parseStart parses a <start> element.
 func (c *compiler) parseStart(ctx context.Context, elem *helium.Element) {
-	combine := getAttr(elem, "combine")
+	combine := getUnqualifiedAttr(elem, "combine")
 	pat := c.parseChildren(ctx, elem)
 	if pat == nil {
 		return
@@ -279,11 +279,11 @@ func (c *compiler) parseStart(ctx context.Context, elem *helium.Element) {
 
 // parseDefine parses a <define> element.
 func (c *compiler) parseDefine(ctx context.Context, elem *helium.Element) {
-	name := getAttr(elem, "name")
+	name := getUnqualifiedAttr(elem, "name")
 	if name == "" {
 		return
 	}
-	combine := getAttr(elem, "combine")
+	combine := getUnqualifiedAttr(elem, "combine")
 	pat := c.parseChildren(ctx, elem)
 	if pat == nil {
 		pat = &pattern{kind: patternEmpty}
@@ -462,7 +462,7 @@ func uriScheme(s string) string {
 
 // parseInclude parses an <include> element.
 func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
-	href := getAttr(elem, "href")
+	href := getUnqualifiedAttr(elem, "href")
 	if href == "" {
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError("include has no href attribute"), helium.ErrorLevelFatal))
 		c.errorCount++
@@ -557,7 +557,7 @@ func (c *compiler) collectOverrideNames(ctx context.Context, elem *helium.Elemen
 		case "start":
 			names = append(names, "##start")
 		case "define":
-			name := getAttr(childElem, "name")
+			name := getUnqualifiedAttr(childElem, "name")
 			if name != "" {
 				names = append(names, name)
 			}
@@ -645,7 +645,7 @@ func (c *compiler) parsePattern(ctx context.Context, node *helium.Element) *patt
 		}
 		return p
 	case "ref":
-		name := getAttr(node, "name")
+		name := getUnqualifiedAttr(node, "name")
 		if name == "" {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError("ref has no name"), helium.ErrorLevelFatal))
 			c.errorCount++
@@ -653,7 +653,7 @@ func (c *compiler) parsePattern(ctx context.Context, node *helium.Element) *patt
 		}
 		return &pattern{kind: patternRef, name: name, line: node.Line()}
 	case "parentRef":
-		name := getAttr(node, "name")
+		name := getUnqualifiedAttr(node, "name")
 		if name == "" {
 			c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError("parentRef has no name"), helium.ErrorLevelFatal))
 			c.errorCount++
@@ -687,7 +687,7 @@ func (c *compiler) parsePattern(ctx context.Context, node *helium.Element) *patt
 func (c *compiler) parseElement(ctx context.Context, node *helium.Element) *pattern {
 	p := &pattern{kind: patternElement, line: node.Line()}
 
-	if name, ok := getAttrOpt(node, "name"); ok {
+	if name, ok := getUnqualifiedAttrOpt(node, "name"); ok {
 		if nc := c.resolveNameAttr(ctx, node, name, false); nc != nil {
 			p.nameClass = nc
 			p.name = nc.name
@@ -767,7 +767,7 @@ attrConflictDone:
 func (c *compiler) parseAttribute(ctx context.Context, node *helium.Element) *pattern {
 	p := &pattern{kind: patternAttribute, line: node.Line()}
 
-	if name, ok := getAttrOpt(node, "name"); ok {
+	if name, ok := getUnqualifiedAttrOpt(node, "name"); ok {
 		if nc := c.resolveNameAttr(ctx, node, name, true); nc != nil {
 			p.nameClass = nc
 			p.name = nc.name
@@ -812,7 +812,7 @@ func (c *compiler) parseAttribute(ctx context.Context, node *helium.Element) *pa
 func (c *compiler) parseData(ctx context.Context, node *helium.Element) *pattern {
 	p := &pattern{kind: patternData, line: node.Line()}
 
-	typeName := getAttr(node, "type")
+	typeName := getUnqualifiedAttr(node, "type")
 	library, declared := getDatatypeLibrary(node)
 
 	p.dataType = &dataType{
@@ -833,7 +833,7 @@ func (c *compiler) parseData(ctx context.Context, node *helium.Element) *pattern
 
 		switch elem.LocalName() {
 		case "param":
-			paramName := getAttr(elem, "name")
+			paramName := getUnqualifiedAttr(elem, "name")
 			paramValue := textContent(elem)
 			p.params = append(p.params, &param{name: paramName, value: paramValue})
 		case "except":
@@ -852,7 +852,7 @@ func (c *compiler) parseData(ctx context.Context, node *helium.Element) *pattern
 func (c *compiler) parseValue(_ context.Context, node *helium.Element) *pattern {
 	p := &pattern{kind: patternValue, line: node.Line()}
 
-	typeName := getAttr(node, "type")
+	typeName := getUnqualifiedAttr(node, "type")
 	library, declared := getDatatypeLibrary(node)
 
 	if typeName == "" {
@@ -870,14 +870,14 @@ func (c *compiler) parseValue(_ context.Context, node *helium.Element) *pattern 
 	p.value = textContent(node)
 
 	// Resolve namespace for the value
-	p.ns = getAttr(node, "ns")
+	p.ns = getUnqualifiedAttr(node, "ns")
 
 	return p
 }
 
 // parseExternalRef parses an <externalRef> pattern.
 func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *pattern {
-	href := getAttr(node, "href")
+	href := getUnqualifiedAttr(node, "href")
 	if href == "" {
 		c.errorHandler.Handle(ctx, helium.NewLeveledError(rngParserError("externalRef has no href attribute"), helium.ErrorLevelFatal))
 		c.errorCount++
@@ -962,7 +962,7 @@ func (c *compiler) parseNameClass(ctx context.Context, node *helium.Element) *na
 		// stays significant, but a bound prefix surrounded by ordinary spaces
 		// (e.g. <name> p:admin </name>) still resolves correctly.
 		qname := trimXMLSpace(textContent(node))
-		ns, hasNS := getAttrOpt(node, "ns")
+		ns, hasNS := getUnqualifiedAttrOpt(node, "ns")
 		name := qname
 		if !xmlchar.IsValidQName(qname) {
 			c.addSchemaError(ctx, node, fmt.Sprintf("xmlRelaxNGParseName: %q is not a valid QName", qname))
@@ -1002,7 +1002,7 @@ func (c *compiler) parseNameClass(ctx context.Context, node *helium.Element) *na
 		}
 		return nc
 	case "nsName":
-		ns, hasNS := getAttrOpt(node, "ns")
+		ns, hasNS := getUnqualifiedAttrOpt(node, "ns")
 		if !hasNS {
 			ns = getAncestorNS(node)
 		}
@@ -1160,30 +1160,26 @@ func trimXMLSpace(s string) string {
 	return strings.TrimFunc(s, isXMLSpace)
 }
 
-func getAttr(elem *helium.Element, name string) string {
-	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
+// getUnqualifiedAttr returns the value of an UNQUALIFIED (no-namespace)
+// attribute, or "" if absent. RELAX NG structural attributes (name, ns,
+// combine, href, type, datatypeLibrary, ...) are always unqualified, so a
+// foreign-namespaced attribute sharing the local name (e.g. ann:name) must not
+// be mistaken for the RELAX NG attribute. Foreign attributes are removed during
+// simplification (spec §§4.1, 4.3), so they must never satisfy a structural
+// attribute read.
+func getUnqualifiedAttr(elem *helium.Element, name string) string {
+	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
 	if !ok {
 		return ""
 	}
 	return trimXMLSpace(attr.Value())
 }
 
-// getAttrOpt returns the value and presence of an attribute.
-func getAttrOpt(elem *helium.Element, name string) (string, bool) {
-	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
-	if !ok {
-		return "", false
-	}
-	return trimXMLSpace(attr.Value()), true
-}
-
 // getUnqualifiedAttrOpt returns the value and presence of an UNQUALIFIED
-// (no-namespace) attribute. RELAX NG structural attributes such as
-// datatypeLibrary are always unqualified, so a foreign-namespaced attribute
-// sharing the local name (e.g. f:datatypeLibrary) must not be mistaken for the
-// RELAX NG attribute. Foreign attributes are removed during simplification
-// (spec §§4.1, 4.3) before datatypeLibrary inheritance is computed, so they
-// must not affect the inherited library.
+// (no-namespace) attribute. See getUnqualifiedAttr for why structural RELAX NG
+// attributes must ignore foreign-namespaced look-alikes. This presence-aware
+// form is used where an explicit empty value differs from absence (e.g.
+// datatypeLibrary reset, explicit ns="").
 func getUnqualifiedAttrOpt(elem *helium.Element, name string) (string, bool) {
 	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
 	if !ok {
@@ -1198,7 +1194,7 @@ func getAncestorNS(node *helium.Element) string {
 	current := node.Parent()
 	for current != nil {
 		if elem, ok := current.(*helium.Element); ok {
-			if ns, hasNS := getAttrOpt(elem, "ns"); hasNS {
+			if ns, hasNS := getUnqualifiedAttrOpt(elem, "ns"); hasNS {
 				return ns
 			}
 			current = elem.Parent()
@@ -1213,11 +1209,12 @@ func getAncestorNS(node *helium.Element) string {
 // Per RELAX NG, datatypeLibrary is inherited from the nearest ancestor that
 // carries it, but an explicit datatypeLibrary="" RESETS to the built-in
 // library even under an inherited XSD library. The walk therefore tests for
-// attribute PRESENCE (via getAttrOpt) rather than non-emptiness, so an explicit
-// empty value stops the walk and returns "" instead of leaking the inherited
-// XSD library. The second return value reports whether datatypeLibrary was
-// declared anywhere (on the element or an ancestor), so callers can tell an
-// explicit empty reset from a truly-absent library.
+// attribute PRESENCE (via the presence-aware unqualified lookup
+// getUnqualifiedAttrOpt) rather than non-emptiness, so an explicit empty value
+// stops the walk and returns "" instead of leaking the inherited XSD library.
+// The second return value reports whether datatypeLibrary was declared anywhere
+// (on the element or an ancestor), so callers can tell an explicit empty reset
+// from a truly-absent library.
 func getDatatypeLibrary(node *helium.Element) (string, bool) {
 	// Check the element itself first. Only the UNQUALIFIED datatypeLibrary
 	// counts: a foreign-namespaced f:datatypeLibrary is removed during
@@ -1338,7 +1335,7 @@ func (c *compiler) resolveNameAttr(ctx context.Context, node *helium.Element, na
 	// For attributes, the default namespace is "" (not inherited) for an
 	// unprefixed name, unless an explicit ns attribute is provided.
 	if forAttribute && !strings.Contains(name, ":") {
-		ns = getAttr(node, "ns")
+		ns = getUnqualifiedAttr(node, "ns")
 	}
 
 	return &nameClass{kind: ncName, name: localName, ns: ns}
