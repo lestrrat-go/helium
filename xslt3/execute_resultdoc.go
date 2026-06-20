@@ -629,17 +629,24 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		// as before; only the destination tree changes, and only until commit.
 		realBase := ec.outputStack[0]
 		bufDoc := helium.NewDefaultDocument()
-		bufFrame := &outputFrame{
-			doc:           bufDoc,
-			current:       bufDoc,
-			itemSeparator: itemSep,
-			// Seed the adjacency/separator accumulators from the real base frame
-			// so spacing of atomic values and item separators is byte-identical
-			// to a direct write.
-			prevWasAtomic: realBase.prevWasAtomic,
-			prevHadOutput: realBase.prevHadOutput,
-			outputSerial:  realBase.outputSerial,
-		}
+		// Clone the REAL base frame so every output flag (captureItems,
+		// sequenceMode, documentConstructor, mapConstructor, wherePopulated,
+		// separateTextNodes, …) and accumulator (prevWasAtomic, prevHadOutput,
+		// outputSerial, …) is preserved. If the real primary frame captures items
+		// (raw delivery via cfg.rawCapture, or a json/adaptive default output
+		// method), atomics from xsl:sequence MUST be preserved as XDM items, not
+		// stringified into the DOM. Override ONLY the per-buffer destination
+		// (doc/current), the per-buffer item-separator, and the per-buffer
+		// accumulators that must start fresh for this buffer (pendingItems,
+		// seqPlaceholders, conditionalScopes). Everything else carries over.
+		bufFrameVal := *realBase
+		bufFrame := &bufFrameVal
+		bufFrame.doc = bufDoc
+		bufFrame.current = bufDoc
+		bufFrame.itemSeparator = itemSep
+		bufFrame.pendingItems = nil
+		bufFrame.seqPlaceholders = nil
+		bufFrame.conditionalScopes = nil
 		savedStack := ec.outputStack
 		bufferedStack := make([]*outputFrame, len(ec.outputStack))
 		copy(bufferedStack, ec.outputStack)
@@ -690,6 +697,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		realBase.prevWasAtomic = bufFrame.prevWasAtomic
 		realBase.prevHadOutput = bufFrame.prevHadOutput
 		realBase.outputSerial = bufFrame.outputSerial
+		realBase.emptyAtomicGen = bufFrame.emptyAtomicGen
+		realBase.seqConstructorGen = bufFrame.seqConstructorGen
 		// Propagate character map names to the primary output frame.
 		// Include maps from the named format (xsl:output) first, then
 		// maps from xsl:result-document itself (higher priority).
@@ -758,17 +767,26 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	ec.currentResultDocMethod = savedMethod
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
-	// For json/adaptive serialization, store captured items.
+	// Stage ALL per-href state locally; publish into the shared evaluator maps
+	// only at the single commit point below, after the body AND every post-body
+	// validation step has succeeded. If a validation error is thrown here (and
+	// possibly caught by an enclosing xsl:try), NO per-href side effect may
+	// persist: a stale resultDocItems/resultDocOutputDefs entry would otherwise
+	// be materialized at end-of-transform or contaminate an xsl:catch that writes
+	// the same href (spurious XTDE1490 / wrong output). The three staged pieces
+	// are: the captured json/adaptive items, the effective output definition, and
+	// the result-document tree itself.
+	var stagedItems xpath3.Sequence
 	if isItemSerializationMethod(effectiveMethod) && len(frame.pendingItems) > 0 {
-		ec.resultDocItems[href] = frame.pendingItems
+		stagedItems = frame.pendingItems
 	}
 
-	// Always store the effective output definition for secondary result documents
+	// Always build the effective output definition for secondary result documents
 	// so that serialization parameters (omit-xml-declaration, indent, etc.) from
 	// the named format are applied when serializing the result.
-	effOutDef, err := ec.buildEffectiveOutputDef(ctx, inst, effectiveFormat, effectiveMethod)
-	if err == nil && effOutDef != nil {
-		ec.resultDocOutputDefs[href] = effOutDef
+	stagedOutDef, err := ec.buildEffectiveOutputDef(ctx, inst, effectiveFormat, effectiveMethod)
+	if err != nil {
+		return err
 	}
 
 	// Apply type validation for secondary result documents (type="...").
@@ -833,7 +851,15 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		}
 	}
 
-	// Store the secondary result document.
+	// COMMIT POINT: body and every post-body validation step succeeded. Publish
+	// all staged per-href state atomically, then mark the transaction committed
+	// so the deferred rollback leaves the usedResultURIs reservation in place.
+	if stagedItems != nil {
+		ec.resultDocItems[href] = stagedItems
+	}
+	if stagedOutDef != nil {
+		ec.resultDocOutputDefs[href] = stagedOutDef
+	}
 	ec.resultDocuments[href] = tmpDoc
 	committed = true
 	return nil
