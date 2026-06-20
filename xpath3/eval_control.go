@@ -72,10 +72,12 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 			var boundErr error
 			// Bounded internal walk: iterate the stored values in place without
 			// cloning (mirroring the get0/entries0 walkers) so a borrowed lazy
-			// value is bound-checked rather than eagerly cloned. The result is
-			// materialized into a fresh slice by appendBounded.
+			// value is bound-checked rather than eagerly cloned. appendBoundedSeq
+			// drains each value lazily, enforcing maxNodes (and OpLimit /
+			// cancellation) BEFORE the value is materialized — so a lazy value
+			// whose Materialize is unbounded/panics trips the bound first.
 			_ = v.forEach0(func(_ AtomicValue, val Sequence) error {
-				result, boundErr = appendBounded(result, seqMaterialize(val), ec.maxNodes)
+				result, boundErr = appendBoundedSeq(ctx, ec, result, val, ec.maxNodes)
 				return boundErr
 			})
 			if boundErr != nil {

@@ -226,11 +226,20 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	ec := getFnContext(ctx)
 	maxNodes := fnMaxNodes(ec)
 	var result ItemSlice
-	mapErr := m.ForEach(func(k AtomicValue, v Sequence) error {
-		if err := fnCountOp(ctx, ec); err != nil {
+	// Iterate without cloning (forEach0) so a borrowed lazy value is never
+	// materialized by ForEach's clone before the bound/op guards run. For each
+	// entry: bound the value length against maxNodes and charge the value's
+	// length (min 1) of ops BEFORE cloning the key/value into the callback, so a
+	// pathological lazy value is rejected rather than eagerly materialized.
+	mapErr := m.forEach0(func(k AtomicValue, v Sequence) error {
+		vLen := seqLen(v)
+		if maxNodes > 0 && vLen > maxNodes {
+			return ErrNodeSetLimit
+		}
+		if err := fnCountOps(ctx, ec, max(vLen, 1)); err != nil {
 			return err
 		}
-		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{k}, v})
+		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{cloneMapKey(k)}, cloneSequence(v)})
 		if err != nil {
 			return err
 		}

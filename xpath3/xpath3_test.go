@@ -376,6 +376,28 @@ func TestUnaryLookupLimit(t *testing.T) {
 		require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
 	})
 
+	t.Run("over/map-all-lazy-panic", func(t *testing.T) {
+		t.Parallel()
+		// `?*` over a map whose single value is a panicOnMaterializeSeq: the
+		// all-values walk must drain the value lazily and trip the size bound
+		// BEFORE materializing it. A regression that materializes the value up
+		// front (the original appendBounded(seqMaterialize(val), ...)) would call
+		// Materialize and panic instead of returning ErrNodeSetLimit. The map is
+		// built with map:entry inside the expression (which borrows the value, not
+		// clones it) under EvalBorrowing so the value reaches lookupItem
+		// un-materialized; only lookupItem's own bound can fire.
+		compiled, err := xpath3.NewCompiler().Compile(`map:entry("k", $panic) ! ?*`)
+		require.NoError(t, err)
+		var evalErr error
+		require.NotPanics(t, func() {
+			_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(varsSet("panic", panicOnMaterializeSeq{n: limit + 1})).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+		})
+		require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+	})
+
 	t.Run("within/array-all", func(t *testing.T) {
 		t.Parallel()
 		compiled, err := xpath3.NewCompiler().Compile(`?*`)
