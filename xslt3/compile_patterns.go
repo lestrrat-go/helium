@@ -58,7 +58,19 @@ func isNeverMatchingPattern(alt string) bool {
 
 // compilePattern compiles an XSLT match pattern string.
 // XSLT patterns are a restricted subset of XPath expressions.
-func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS string) (*pattern, error) {
+//
+// The pattern's namespace context is captured as a LEXICAL snapshot of the
+// xmlns declarations in scope at elem's position (elem and its ancestors), not
+// from the mutable compiler-global nsBindings map. The compiler-global map is
+// polluted in document order by every top-level declaration's namespaces (see
+// collectNamespaces), so an unrelated earlier xmlns:math="urn:custom" would
+// otherwise leak into a later pattern that has no local xmlns:math. Snapshotting
+// the element's own in-scope namespaces gives each pattern exactly its lexical
+// context, so both compile-time validation and runtime matching resolve prefixes
+// identically and the predeclared XPath namespaces (fn/math/map/...) apply as a
+// fallback only when a prefix is not lexically bound.
+func compilePattern(s string, elem *helium.Element, xpathDefaultNS string) (*pattern, error) {
+	nsBindings := inScopeNamespaces(elem)
 	alts := splitPatternUnion(s)
 	p := &pattern{source: s, xpathDefaultNS: xpathDefaultNS, nsBindings: nsBindings}
 	for _, alt := range alts {
@@ -385,7 +397,7 @@ func (c *compiler) validatePatternFunctions(_ context.Context, p *pattern, sourc
 			// the identical existence/arity validation below — a nonexistent
 			// no-such-function() or a wrong-arity key() must be rejected, not
 			// silently allowed.
-			nsURI := resolvePatternFunctionNamespace(fc.Prefix, c.nsBindings)
+			nsURI := resolvePatternFunctionNamespace(fc.Prefix, p.nsBindings)
 			displayName := local
 			if fc.Prefix != "" {
 				displayName = fc.Prefix + ":" + local
@@ -665,6 +677,7 @@ func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium
 	savedCurrent := ec.currentNode
 	savedItem := ec.contextItem
 	savedInPattern := ec.inPatternMatch
+	savedPatternNS := ec.patternNamespaces
 	ec.xpathDefaultNS = p.xpathDefaultNS
 	ec.hasXPathDefaultNS = p.xpathDefaultNS != ""
 	ec.regexGroups = nil
@@ -672,6 +685,7 @@ func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium
 	ec.currentNode = node
 	ec.contextItem = nil
 	ec.inPatternMatch = true
+	ec.patternNamespaces = p.nsBindings
 	defer func() {
 		ec.xpathDefaultNS = saved
 		ec.hasXPathDefaultNS = savedHas
@@ -680,6 +694,7 @@ func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium
 		ec.currentNode = savedCurrent
 		ec.contextItem = savedItem
 		ec.inPatternMatch = savedInPattern
+		ec.patternNamespaces = savedPatternNS
 	}()
 
 	for _, alt := range p.Alternatives {
@@ -707,17 +722,20 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 	savedGroups := ec.regexGroups
 	savedItem := ec.contextItem
 	savedInPattern := ec.inPatternMatch
+	savedPatternNS := ec.patternNamespaces
 	ec.xpathDefaultNS = p.xpathDefaultNS
 	ec.hasXPathDefaultNS = p.xpathDefaultNS != ""
 	ec.regexGroups = nil
 	ec.contextItem = item
 	ec.inPatternMatch = true
+	ec.patternNamespaces = p.nsBindings
 	defer func() {
 		ec.xpathDefaultNS = saved
 		ec.hasXPathDefaultNS = savedHas
 		ec.regexGroups = savedGroups
 		ec.contextItem = savedItem
 		ec.inPatternMatch = savedInPattern
+		ec.patternNamespaces = savedPatternNS
 	}()
 
 	for _, alt := range p.Alternatives {

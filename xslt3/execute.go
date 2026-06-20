@@ -99,6 +99,7 @@ type execContext struct {
 	staticBaseURIOverride        string                        // non-empty when xml:base on an LRE overrides the template's base URI
 	currentOutputURI             string                        // current output URI for current-output-uri() function
 	inPatternMatch               bool                          // true during pattern matching (current-output-uri() returns empty)
+	patternNamespaces            map[string]string             // the matching pattern's lexical xmlns snapshot (prefix→URI) during pattern matching
 	patternMatchErr              error                         // non-nil if a fatal error occurred during pattern matching
 	inSortKeyEval                bool                          // true during sort key evaluation (current-output-uri() returns empty)
 	atomicTextNodes              map[helium.Node]struct{}      // text nodes created from atomic item serialization
@@ -127,6 +128,7 @@ type execContext struct {
 	cachedBaseEvalBaseURI           string
 	cachedBaseEvalPackage           *Stylesheet
 	cachedBaseEvalInPattern         bool
+	cachedBaseEvalPatternNSPtr      uintptr // identity of the pattern ns snapshot baked into the cached evaluator
 }
 
 func (ec *execContext) setCurrentTemplate(tmpl *template) {
@@ -534,6 +536,24 @@ func (ec *execContext) lookupTypeNamespaceOK(prefix string) (string, bool) {
 }
 
 func (ec *execContext) resolvePrefix(prefix string) string {
+	// During pattern matching, resolve prefixes against the pattern's own
+	// lexical namespace snapshot (and the predeclared XPath prefixes as a
+	// fallback), never the mutable stylesheet-global map. This keeps node-test
+	// prefixes (e.g. prefix:* in a match pattern) consistent with the rest of
+	// pattern resolution and prevents an earlier top-level declaration from
+	// leaking into a later pattern.
+	if ec.inPatternMatch {
+		if uri, ok := ec.patternNamespaces[prefix]; ok {
+			return uri
+		}
+		if uri, ok := xpath3.PredeclaredNamespace(prefix); ok {
+			return uri
+		}
+		if prefix == lexicon.PrefixXML {
+			return lexicon.NamespaceXML
+		}
+		return ""
+	}
 	ss := ec.effectiveStylesheet()
 	if uri, ok := ss.namespaces[prefix]; ok {
 		return uri
@@ -953,7 +973,8 @@ func (ec *execContext) baseXPathEvaluator() xpath3.Evaluator {
 		ec.cachedBaseEvalHasXPathDefaultNS == ec.hasXPathDefaultNS &&
 		ec.cachedBaseEvalBaseURI == baseURI &&
 		ec.cachedBaseEvalPackage == ec.currentPackage &&
-		ec.cachedBaseEvalInPattern == ec.inPatternMatch {
+		ec.cachedBaseEvalInPattern == ec.inPatternMatch &&
+		ec.cachedBaseEvalPatternNSPtr == mapIdentity(ec.patternNamespaces) {
 		return ec.cachedBaseEval
 	}
 
@@ -966,6 +987,7 @@ func (ec *execContext) baseXPathEvaluator() xpath3.Evaluator {
 	ec.cachedBaseEvalBaseURI = baseURI
 	ec.cachedBaseEvalPackage = ec.currentPackage
 	ec.cachedBaseEvalInPattern = ec.inPatternMatch
+	ec.cachedBaseEvalPatternNSPtr = mapIdentity(ec.patternNamespaces)
 	return eval
 }
 
@@ -1020,17 +1042,42 @@ func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator 
 // built with StrictPrefixes(), so it does NOT consult the XPath predeclared
 // fallback (fn/math/map/array/xs/err) on its own. Stylesheet-declared bindings
 // always take precedence; explicit declarations override the fallback.
+// mapIdentity returns a stable identity value for a namespace-bindings map so
+// the cached base evaluator can be invalidated when the active pattern's lexical
+// snapshot changes. A nil map yields 0; two non-nil maps share an identity iff
+// they are the same underlying map (patterns reuse the same snapshot instance).
+func mapIdentity(m map[string]string) uintptr {
+	if m == nil {
+		return 0
+	}
+	return reflect.ValueOf(m).Pointer()
+}
+
 func (ec *execContext) effectiveXPathNamespaces() map[string]string {
-	if len(ec.stylesheet.namespaces) == 0 && !ec.hasXPathDefaultNS && !ec.inPatternMatch {
+	// During pattern matching, prefix resolution must use the PATTERN's own
+	// lexical namespace snapshot (captured at compile time from the xmlns
+	// declarations in scope at the pattern's position), overlaid on the XPath
+	// predeclared prefixes (fn/math/map/...). It must NOT consult the mutable
+	// stylesheet-global namespace map, which is polluted in document order by
+	// every top-level declaration's namespaces — using it would let an earlier
+	// unrelated xmlns:math="urn:custom" override the predeclared math namespace
+	// for a later pattern that has no local xmlns:math. This keeps runtime
+	// resolution symmetric with compile-time pattern validation.
+	if ec.inPatternMatch {
+		ns := make(map[string]string, len(xpath3.PredeclaredNamespaces())+len(ec.patternNamespaces)+1)
+		// Seed the predeclared bindings first so the pattern's explicit lexical
+		// declarations below override them.
+		maps.Copy(ns, xpath3.PredeclaredNamespaces())
+		maps.Copy(ns, ec.patternNamespaces)
+		if ec.hasXPathDefaultNS {
+			ns[""] = ec.xpathDefaultNS
+		}
+		return ns
+	}
+	if len(ec.stylesheet.namespaces) == 0 && !ec.hasXPathDefaultNS {
 		return nil
 	}
-	ns := make(map[string]string, len(ec.stylesheet.namespaces)+len(xpath3.PredeclaredNamespaces())+1)
-	// Pattern matching is symmetric with compile-time pattern validation, which
-	// allows the XPath predeclared prefixes without an explicit xmlns. Seed the
-	// predeclared bindings first so stylesheet declarations below override them.
-	if ec.inPatternMatch {
-		maps.Copy(ns, xpath3.PredeclaredNamespaces())
-	}
+	ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
 	collectPackageNamespaces(ec.stylesheet, ns)
 	for k, v := range ec.stylesheet.namespaces {
 		if k == "" && !ec.hasXPathDefaultNS {

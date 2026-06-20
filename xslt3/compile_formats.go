@@ -118,7 +118,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 		return staticError(errCodeXTSE0110, "xsl:key requires match attribute")
 	}
 
-	matchPat, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)
+	matchPat, err := compilePattern(matchAttr, elem, c.xpathDefaultNS)
 	if err != nil {
 		return err
 	}

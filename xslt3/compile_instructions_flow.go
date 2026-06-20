@@ -845,14 +845,14 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 		inst.GroupAdjacent = gaExpr
 	}
 	if gs := getAttr(elem, "group-starting-with"); gs != "" {
-		gsPat, gsErr := compilePattern(gs, c.nsBindings, c.xpathDefaultNS)
+		gsPat, gsErr := compilePattern(gs, elem, c.xpathDefaultNS)
 		if gsErr != nil {
 			return nil, gsErr
 		}
 		inst.GroupStartingWith = gsPat
 	}
 	if ge := getAttr(elem, "group-ending-with"); ge != "" {
-		gePat, geErr := compilePattern(ge, c.nsBindings, c.xpathDefaultNS)
+		gePat, geErr := compilePattern(ge, elem, c.xpathDefaultNS)
 		if geErr != nil {
 			return nil, geErr
 		}

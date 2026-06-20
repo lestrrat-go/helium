@@ -72,7 +72,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
-		p, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)
+		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS)
 		if err != nil {
 			return err
 		}

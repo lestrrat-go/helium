@@ -249,6 +249,55 @@ func TestPatternForbiddenFunctionRespectsExplicitBinding(t *testing.T) {
 	require.Error(t, err, "unprefixed current-group() in a pattern must be forbidden")
 }
 
+// TestPatternLexicalNamespaceSnapshot verifies that each match pattern resolves
+// prefixes against its OWN lexical namespace context (the xmlns declarations in
+// scope at the pattern's position), not against a mutable stylesheet-global map.
+// An unrelated earlier top-level declaration carrying xmlns:math="urn:custom"
+// must NOT leak into a later template whose match pattern has no local
+// xmlns:math — there, math: must resolve to the predeclared XPath math namespace
+// (http://www.w3.org/2005/xpath-functions/math) so math:pi() is valid and the
+// pattern matches. A pattern that DOES carry a local xmlns:math override uses
+// that override (and consequently rejects a builtin-only call).
+func TestPatternLexicalNamespaceSnapshot(t *testing.T) {
+	t.Parallel()
+
+	// An earlier top-level xsl:variable carries xmlns:math="urn:custom". The
+	// later template has NO xmlns:math, so its pattern must resolve math: to the
+	// predeclared math namespace, NOT the leaked urn:custom.
+	leakSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:variable name="v" xmlns:math="urn:custom" select="1"/>
+  <xsl:template match="/"><out><xsl:apply-templates select="root/a"/></out></xsl:template>
+  <xsl:template match="a[math:pi() > 3]">[matched]</xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(leakSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err, "earlier xmlns:math='urn:custom' must not leak into a later pattern's math: prefix")
+
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a>x</a></root>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "[matched]",
+		"math: must resolve to the predeclared math namespace, not leaked urn:custom")
+
+	// A pattern WITH a local xmlns:math override binds math: to urn:x. There
+	// math:pi() is a user-namespace function that is not declared, so compilation
+	// must reject it (explicit lexical binding wins over the predeclared fallback).
+	overrideSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="a[math:pi() > 3]" xmlns:math="urn:x">[matched]</xsl:template>
+</xsl:stylesheet>`
+
+	doc, err = helium.NewParser().Parse(t.Context(), []byte(overrideSrc))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.Error(t, err,
+		"a local xmlns:math override must bind math: to urn:x, making math:pi() an unknown function")
+}
+
 // TestPatternFnCurrentCompiles verifies fn:current() is accepted (not rejected
 // as XPST0017) inside a pattern predicate.
 func TestPatternFnCurrentCompiles(t *testing.T) {
