@@ -264,9 +264,9 @@ const xmlSpaceCutset = " \t\r\n"
 // exactly (no internal or trailing trimming); circumflex-escaping in the body has
 // already been undone by parseScheme/unescapeXPointer before this function sees it.
 //
-// A leading-whitespace allowance before the NCName is also applied defensively;
-// the framework strips whitespace around scheme bodies before this point, but
-// trimming here keeps parsing robust to bodies fed in directly.
+// Leading whitespace before the NCName is intentionally NOT trimmed: the data
+// begins with the NCName, so a leading space leaves a non-NCName prefix that
+// validateXmlnsPrefix rejects as malformed.
 //
 // ok is false when there is no '=' or the prefix portion is empty after
 // trimming surrounding whitespace.
