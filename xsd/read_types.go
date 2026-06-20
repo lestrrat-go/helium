@@ -105,6 +105,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 	var contentModelChild string   // local name of the first model-group particle seen
 	var contentWrapperChild string // "simpleContent" or "complexContent" if seen
 	var directAttrChild string     // local name of the first direct attribute/attributeGroup/anyAttribute seen
+	var anyAttributeSeen bool      // whether an anyAttribute wildcard has been seen; it must be the optional final child
 
 	reportExtraContent := func(ce *helium.Element, what string) {
 		if c.filename == "" {
@@ -236,6 +237,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' is not allowed together with '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
 				continue
 			}
+			if anyAttributeSeen {
+				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName()))
+				continue
+			}
 			if directAttrChild == "" {
 				directAttrChild = ce.LocalName()
 			}
@@ -244,6 +249,10 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		case isXSDElement(ce, elemAttributeGroup):
 			if contentWrapperChild != "" {
 				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' is not allowed together with '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if anyAttributeSeen {
+				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName()))
 				continue
 			}
 			if directAttrChild == "" {
@@ -258,9 +267,14 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				reportExtraContent(ce, fmt.Sprintf("The attribute wildcard '%s' is not allowed together with '%s'; the wildcard must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
 				continue
 			}
+			if anyAttributeSeen {
+				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one attribute wildcard (found a second '%s').", ce.LocalName()))
+				continue
+			}
 			if directAttrChild == "" {
 				directAttrChild = ce.LocalName()
 			}
+			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		}
 	}
@@ -305,8 +319,20 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 	// first model-group particle and the first attribute-region child so a
 	// second particle (which would silently overwrite td.ContentModel) and a
 	// particle that appears AFTER an attribute declaration are both rejected.
+	// anyAttributeSeen tracks the optional trailing attribute wildcard so a
+	// later attribute/attributeGroup use, or a second wildcard, is rejected.
 	var contentModelChild string
 	var directAttrChild string
+	var anyAttributeSeen bool
+
+	reportOrder := func(ce *helium.Element, what string) {
+		if c.filename == "" {
+			return
+		}
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+			elem.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
 
 	// Parse child model groups and attributes.
 	for child := range helium.Children(elem) {
@@ -395,14 +421,27 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 				}
 			}
 		case isXSDElement(ce, elemAttribute):
+			if anyAttributeSeen {
+				reportOrder(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName()))
+				continue
+			}
 			au := c.parseAttributeUse(ctx, ce)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ce, elemAttributeGroup):
+			if anyAttributeSeen {
+				reportOrder(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName()))
+				continue
+			}
 			if ref := getAttr(ce, attrRef); ref != "" {
 				qn := c.resolveQName(ctx, ce, ref)
 				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
 			}
 		case isXSDElement(ce, elemAnyAttribute):
+			if anyAttributeSeen {
+				reportOrder(ce, fmt.Sprintf("A complex type definition must not have more than one attribute wildcard (found a second '%s').", ce.LocalName()))
+				continue
+			}
+			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		}
 	}
@@ -423,8 +462,20 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 	// first model-group particle and the first attribute-region child so a
 	// second particle (which would silently overwrite td.ContentModel) and a
 	// particle that appears AFTER an attribute declaration are both rejected.
+	// anyAttributeSeen tracks the optional trailing attribute wildcard so a
+	// later attribute/attributeGroup use, or a second wildcard, is rejected.
 	var contentModelChild string
 	var directAttrChild string
+	var anyAttributeSeen bool
+
+	reportOrder := func(ce *helium.Element, what string) {
+		if c.filename == "" {
+			return
+		}
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+			elem.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
 
 	// Parse child content model (if any).
 	for child := range helium.Children(elem) {
@@ -513,6 +564,10 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 				}
 			}
 		case isXSDElement(ce, elemAttribute):
+			if anyAttributeSeen {
+				reportOrder(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName()))
+				continue
+			}
 			if getAttr(ce, attrUse) == attrValProhibited {
 				if c.filename != "" {
 					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, ce.Line(), ce.LocalName(), "attribute",
@@ -523,11 +578,20 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 			au := c.parseAttributeUse(ctx, ce)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ce, elemAttributeGroup):
+			if anyAttributeSeen {
+				reportOrder(ce, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ce.LocalName()))
+				continue
+			}
 			if ref := getAttr(ce, attrRef); ref != "" {
 				qn := c.resolveQName(ctx, ce, ref)
 				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
 			}
 		case isXSDElement(ce, elemAnyAttribute):
+			if anyAttributeSeen {
+				reportOrder(ce, fmt.Sprintf("A complex type definition must not have more than one attribute wildcard (found a second '%s').", ce.LocalName()))
+				continue
+			}
+			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		}
 	}
@@ -574,6 +638,21 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 // complexContent xs:extension (parseExtension), so it does not propagate and
 // wrongly block an attribute the base wildcard would otherwise admit.
 func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *helium.Element, td *TypeDef, kind DerivationKind) {
+	// XSD 3.4.2: within a simpleContent derivation the attribute/attributeGroup
+	// uses come first, followed by an optional trailing anyAttribute wildcard.
+	// anyAttributeSeen tracks the wildcard so a later attribute/attributeGroup
+	// use, or a second wildcard, is rejected.
+	var anyAttributeSeen bool
+
+	reportOrder := func(ae *helium.Element, what string) {
+		if c.filename == "" {
+			return
+		}
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ae.Line(),
+			derivation.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+
 	for child := range helium.Children(derivation) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -584,6 +663,10 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 		}
 		switch {
 		case isXSDElement(ae, elemAttribute):
+			if anyAttributeSeen {
+				reportOrder(ae, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ae.LocalName()))
+				continue
+			}
 			if kind == DerivationExtension && getAttr(ae, attrUse) == attrValProhibited {
 				if c.filename != "" {
 					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, ae.Line(), ae.LocalName(), "attribute",
@@ -594,11 +677,20 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			au := c.parseAttributeUse(ctx, ae)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ae, elemAttributeGroup):
+			if anyAttributeSeen {
+				reportOrder(ae, fmt.Sprintf("The attribute declaration '%s' must appear before the attribute wildcard 'anyAttribute'.", ae.LocalName()))
+				continue
+			}
 			if ref := getAttr(ae, attrRef); ref != "" {
 				qn := c.resolveQName(ctx, ae, ref)
 				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
 			}
 		case isXSDElement(ae, elemAnyAttribute):
+			if anyAttributeSeen {
+				reportOrder(ae, fmt.Sprintf("A complex type definition must not have more than one attribute wildcard (found a second '%s').", ae.LocalName()))
+				continue
+			}
+			anyAttributeSeen = true
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ae)
 		}
 	}
