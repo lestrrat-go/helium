@@ -677,3 +677,72 @@ func TestEncryptElementRootInPlace(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, xml, "hidden")
 }
+
+// TestParseElementMatchingRequiresNamespace verifies that XMLEnc child
+// elements are matched by both local name AND namespace URI. A foreign
+// namespace that happens to reuse the same local names (EncryptedData,
+// CipherData, CipherValue, EncryptionMethod, KeyInfo) must NOT be
+// treated as the XMLEnc element.
+func TestParseElementMatchingRequiresNamespace(t *testing.T) {
+	const xencNS = "http://www.w3.org/2001/04/xmlenc#"
+	const dsigNS = "http://www.w3.org/2000/09/xmldsig#"
+	const foreignNS = "urn:example:not-xmlenc"
+
+	t.Run("foreign namespace is not matched", func(t *testing.T) {
+		// Every child reuses the XMLEnc local names but lives in a
+		// foreign namespace. None should be picked up, so CipherData
+		// resolution fails (missing CipherData/CipherValue).
+		xml := `<EncryptedData xmlns="` + foreignNS + `">` +
+			`<EncryptionMethod Algorithm="x"/>` +
+			`<KeyInfo/>` +
+			`<CipherData><CipherValue>aGVsbG8=</CipherValue></CipherData>` +
+			`</EncryptedData>`
+		doc := mustParseXML(t, xml)
+
+		_, err := xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+		require.Error(t, err, "foreign-namespaced CipherData must not be matched")
+	})
+
+	t.Run("correct namespace is matched", func(t *testing.T) {
+		// Same structure but correctly namespace-qualified: xenc for
+		// the XMLEnc elements, ds for KeyInfo. CipherValue must resolve.
+		xml := `<xenc:EncryptedData xmlns:xenc="` + xencNS + `" xmlns:ds="` + dsigNS + `">` +
+			`<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>` +
+			`<ds:KeyInfo/>` +
+			`<xenc:CipherData><xenc:CipherValue>aGVsbG8=</xenc:CipherValue></xenc:CipherData>` +
+			`</xenc:EncryptedData>`
+		doc := mustParseXML(t, xml)
+
+		ed, err := xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+		require.NoError(t, err)
+		require.NotNil(t, ed.EncryptionMethod)
+		require.Equal(t, []byte("hello"), ed.CipherValue)
+	})
+
+	t.Run("foreign root with valid xenc children is rejected", func(t *testing.T) {
+		// The entry element itself is foreign-namespaced even though all
+		// of its children are correctly xenc-qualified. The parser must
+		// reject the entry element rather than trusting the children.
+		xml := `<foo:EncryptedData xmlns:foo="` + foreignNS + `" xmlns:xenc="` + xencNS + `">` +
+			`<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>` +
+			`<xenc:CipherData><xenc:CipherValue>aGVsbG8=</xenc:CipherValue></xenc:CipherData>` +
+			`</foo:EncryptedData>`
+		doc := mustParseXML(t, xml)
+
+		_, err := xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+		require.Error(t, err, "foreign-namespaced EncryptedData root must not be accepted")
+	})
+
+	t.Run("foreign CipherValue inside correct CipherData is not matched", func(t *testing.T) {
+		// The CipherData is correctly namespaced but its CipherValue
+		// child is foreign. The foreign CipherValue must be ignored,
+		// leaving CipherData without a usable value.
+		xml := `<xenc:EncryptedData xmlns:xenc="` + xencNS + `" xmlns:foo="` + foreignNS + `">` +
+			`<xenc:CipherData><foo:CipherValue>aGVsbG8=</foo:CipherValue></xenc:CipherData>` +
+			`</xenc:EncryptedData>`
+		doc := mustParseXML(t, xml)
+
+		_, err := xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+		require.Error(t, err, "foreign-namespaced CipherValue must not be matched")
+	})
+}
