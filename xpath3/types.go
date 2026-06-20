@@ -1218,6 +1218,14 @@ func (a ArrayItem) SubArray(start, length int) (ArrayItem, error) {
 
 // Flatten returns all members concatenated into a single sequence.
 // Nested arrays are recursively flattened per XPath 3.1 spec.
+//
+// Leaf items are deep-cloned via deepCloneItem so that pointer-backed atomics
+// (*big.Int, *big.Rat, *FloatValue, []byte) held in the array's internal
+// storage are not exposed to the caller; mutating the returned sequence must
+// not mutate the original array. Nested arrays/maps are flattened recursively
+// (their own leaves are cloned at that level) and any non-flattened maps are
+// kept shared by value — they are immutable and were detached at ingress — to
+// avoid O(N^2) deep recursion and stay within the resource bounds.
 func (a ArrayItem) Flatten() Sequence {
 	var result ItemSlice
 	for _, m := range a.members {
@@ -1225,7 +1233,7 @@ func (a ArrayItem) Flatten() Sequence {
 			if nested, ok := item.(ArrayItem); ok {
 				result = append(result, nested.Flatten().Materialize()...)
 			} else {
-				result = append(result, item)
+				result = append(result, deepCloneItem(item))
 			}
 		}
 	}

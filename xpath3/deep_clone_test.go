@@ -202,6 +202,28 @@ func TestDeepCloneValueSemantics(t *testing.T) {
 		require.Equal(t, int64(7), readInt(t, got), "map value must be unaffected by mutation through the ForEach callback")
 	})
 
+	t.Run("Flatten detaches pointer-backed atomic", func(t *testing.T) {
+		t.Parallel()
+
+		seq := xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(7)}}
+		arr := xpath3.NewArray([]xpath3.Sequence{seq})
+
+		flat := arr.Flatten().Materialize()
+		require.Len(t, flat, 1)
+		av, ok := flat[0].(xpath3.AtomicValue)
+		require.True(t, ok, "expected AtomicValue, got %T", flat[0])
+		bi, ok := av.Value.(*big.Int)
+		require.True(t, ok, "expected *big.Int, got %T", av.Value)
+
+		// Mutate the *big.Int obtained from Flatten; the original array's stored
+		// member must be unaffected.
+		bi.SetInt64(999)
+
+		got, err := arr.Get(1)
+		require.NoError(t, err)
+		require.Equal(t, int64(7), readInt(t, got), "array member must be unaffected by mutation of a value obtained from Flatten")
+	})
+
 	t.Run("byte-slice atomic is detached", func(t *testing.T) {
 		t.Parallel()
 
