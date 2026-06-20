@@ -93,6 +93,8 @@ type invocationConfig struct {
 	onMultipleMatch     OnMultipleMatchMode
 	traceWriter         io.Writer
 	globalContextSelect string // XPath for global context item (evaluated post-strip-space)
+	maxResourceBytes    int64  // per-resource read cap; 0 = inherit compiler/default, <0 = unbounded
+	maxResourceBytesSet bool   // true once MaxResourceBytes is explicitly configured
 
 	// resolved holds the effective output definition for the primary result
 	// after a terminal method (Do/Serialize/WriteTo) completes. It is stored
@@ -341,6 +343,30 @@ func (inv Invocation) GlobalContextSelect(expr string) Invocation {
 	return inv
 }
 
+// MaxResourceBytes sets the maximum number of bytes read from a single
+// external resource fetched at runtime through the configured URIResolver /
+// HTTPClient. It governs the resource reads performed by XSLT's own loader —
+// fn:doc / document(), fn:doc-available, xsl:source-document, xsl:merge,
+// xsl:result-document parameter documents, xsi:schemaLocation source schemas,
+// and fn:transform stylesheet / package sources — which fail with
+// [ErrResourceTooLarge] when the cap is exceeded.
+//
+// A value of 0 inherits the cap configured on the Compiler (or the
+// [MaxResourceBytes] default); a negative value disables the bound.
+//
+// The XPath built-ins fn:unparsed-text, fn:unparsed-text-lines, and
+// fn:json-doc read through the xpath3 layer rather than the XSLT loader: they
+// honor the same byte cap but do NOT surface [ErrResourceTooLarge]. An over-cap
+// fn:unparsed-text / fn:unparsed-text-lines read surfaces FOUT1170
+// (fn:unparsed-text-available returns false), and an over-cap fn:json-doc read
+// surfaces FODC0002.
+func (inv Invocation) MaxResourceBytes(n int64) Invocation {
+	inv = inv.clone()
+	inv.cfg.maxResourceBytes = n
+	inv.cfg.maxResourceBytesSet = true
+	return inv
+}
+
 // Do executes the transformation and returns the principal result document.
 func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 	if err := inv.validate(); err != nil {
@@ -467,6 +493,18 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		sourceSchemas:      c.sourceSchemas,
 		onMultipleMatch:    c.onMultipleMatch.String(),
 		traceWriter:        c.traceWriter,
+	}
+
+	// Resource cap: a non-zero explicit per-invocation setting wins; an explicit
+	// 0 (or no setting at all) inherits the cap configured on the Compiler
+	// (stored on the stylesheet). A negative value disables the bound; a stylesheet
+	// value of 0 then falls through to the MaxResourceBytes default at the read
+	// sites. This keeps MaxResourceBytes(0) meaning "inherit" per its contract.
+	switch {
+	case c.maxResourceBytesSet && c.maxResourceBytes != 0:
+		tcfg.maxResourceBytes = c.maxResourceBytes
+	case c.ss != nil:
+		tcfg.maxResourceBytes = c.ss.maxResourceBytes
 	}
 
 	// Entry mode

@@ -36,6 +36,7 @@ type compiler struct {
 	moduleKey                 string
 	resolver                  URIResolver
 	packageResolver           PackageResolver
+	maxResourceBytes          int64                      // per-resource read cap; 0 = MaxResourceBytes default, <0 = unbounded
 	localExcludes             map[string]struct{}        // accumulated LRE-level exclude-result-prefixes (stores URIs, not prefixes)
 	extensionURIs             map[string]struct{}        // namespace URIs declared as extension-element-prefixes
 	defaultMode               string                     // current default-mode (inherited through instruction nesting)
@@ -84,11 +85,12 @@ type Compiler struct {
 }
 
 type xsltCompilerCfg struct {
-	baseURI         string
-	uriResolver     URIResolver
-	packageResolver PackageResolver
-	staticParams    *Parameters
-	importSchemas   []*xsd.Schema
+	baseURI          string
+	uriResolver      URIResolver
+	packageResolver  PackageResolver
+	staticParams     *Parameters
+	importSchemas    []*xsd.Schema
+	maxResourceBytes int64
 }
 
 // NewCompiler creates a new Compiler with default settings.
@@ -157,6 +159,32 @@ func (c Compiler) ImportSchemas(schemas ...*xsd.Schema) Compiler {
 	return c
 }
 
+// MaxResourceBytes sets the maximum number of bytes read from a single
+// external resource loaded during compilation through the configured
+// URIResolver / PackageResolver — xsl:import / xsl:include, xsl:use-package
+// package loads, xsl:import-schema, and serialization parameter documents. It
+// also governs the runtime resource reads performed by XSLT's own loader —
+// fn:doc / document(), xsl:source-document, xsl:merge, xsl:result-document
+// parameter documents, xsi:schemaLocation source schemas, and fn:transform
+// stylesheet / package sources — unless overridden per-invocation by
+// [Invocation.MaxResourceBytes].
+//
+// A value of 0 selects the [MaxResourceBytes] default; a negative value
+// disables the bound. Reads exceeding the cap on these XSLT-owned paths fail
+// with [ErrResourceTooLarge].
+//
+// The XPath built-ins fn:unparsed-text, fn:unparsed-text-lines, and
+// fn:json-doc read through the xpath3 layer rather than the XSLT loader: they
+// honor the same byte cap but do NOT surface [ErrResourceTooLarge]. An over-cap
+// fn:unparsed-text / fn:unparsed-text-lines read surfaces FOUT1170
+// (fn:unparsed-text-available returns false), and an over-cap fn:json-doc read
+// surfaces FODC0002.
+func (c Compiler) MaxResourceBytes(n int64) Compiler {
+	c = c.clone()
+	c.cfg.maxResourceBytes = n
+	return c
+}
+
 // ClearStaticParameters removes all static parameter bindings.
 func (c Compiler) ClearStaticParameters() Compiler {
 	c = c.clone()
@@ -190,10 +218,11 @@ func (c Compiler) toCompileConfig() *compileConfig {
 		return &compileConfig{}
 	}
 	cfg := &compileConfig{
-		baseURI:         c.cfg.baseURI,
-		resolver:        c.cfg.uriResolver,
-		packageResolver: c.cfg.packageResolver,
-		importSchemas:   c.cfg.importSchemas,
+		baseURI:          c.cfg.baseURI,
+		resolver:         c.cfg.uriResolver,
+		packageResolver:  c.cfg.packageResolver,
+		importSchemas:    c.cfg.importSchemas,
+		maxResourceBytes: c.cfg.maxResourceBytes,
 	}
 	if c.cfg.staticParams != nil {
 		cfg.staticParams = maps.Clone(c.cfg.staticParams.toMap())
@@ -953,9 +982,12 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 	// relative stylesheet-location paths resolve correctly. The compile-time
 	// URIResolver is propagated so fn:transform stylesheet-location loading is
 	// permitted at compile time exactly when the compiler opts in (it is
-	// default-deny without a resolver).
+	// default-deny without a resolver). The compiler's MaxResourceBytes cap is
+	// seeded on both the temp Stylesheet (consulted by nested compiles via
+	// newNestedCompiler) and the transformConfig (consulted by runtime reads)
+	// so Compiler.MaxResourceBytes governs static-variable transform() loads.
 	ec := &execContext{
-		stylesheet:          &Stylesheet{baseURI: c.baseURI, uriResolver: c.resolver},
+		stylesheet:          &Stylesheet{baseURI: c.baseURI, uriResolver: c.resolver, maxResourceBytes: c.maxResourceBytes},
 		resultDoc:           helium.NewDefaultDocument(),
 		globalVars:          make(map[string]xpath3.Sequence),
 		outputStack:         []*outputFrame{{doc: helium.NewDefaultDocument(), current: helium.NewDefaultDocument()}},
@@ -965,6 +997,7 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 		accumulatorState:    make(map[string]xpath3.Sequence),
 		resultDocuments:     make(map[string]*helium.Document),
 		usedResultURIs:      make(map[string]struct{}),
+		transformConfig:     &transformConfig{maxResourceBytes: c.maxResourceBytes},
 	}
 	ec.setCurrentTemplate(nil)
 	return ec.fnTransform(ctx, args)
@@ -1074,6 +1107,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.packageResolver = cfg.packageResolver
 		c.externalStaticParams = cfg.staticParams
 		c.importSchemas = cfg.importSchemas
+		c.maxResourceBytes = cfg.maxResourceBytes
 	}
 	if c.moduleKey == "" {
 		c.moduleKey = "<main>"
@@ -1392,6 +1426,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	if len(c.importSchemas) > 0 {
 		c.stylesheet.compilerImportSchemas = c.importSchemas
 	}
+	c.stylesheet.maxResourceBytes = c.maxResourceBytes
 
 	// Topologically sort accumulators so dependencies are evaluated first.
 	sortAccumulatorOrder(c.stylesheet)

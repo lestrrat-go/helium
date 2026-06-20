@@ -3,7 +3,6 @@ package xslt3
 import (
 	"bytes"
 	"context"
-	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -337,6 +336,9 @@ func (ss *Stylesheet) newNestedCompiler() Compiler {
 	if len(ss.compilerImportSchemas) > 0 {
 		c = c.ImportSchemas(ss.compilerImportSchemas...)
 	}
+	if ss.maxResourceBytes != 0 {
+		c = c.MaxResourceBytes(ss.maxResourceBytes)
+	}
 	return c
 }
 
@@ -434,7 +436,11 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	functionParamsSeq := getSeq("function-params")
 
 	// Build a compiler that inherits the outer stylesheet's configuration.
-	nestedCompiler := ec.stylesheet.newNestedCompiler()
+	// Apply the outer Invocation's effective per-resource read cap so that
+	// resources loaded while COMPILING the nested stylesheet/package
+	// (its include/import/schema/param-doc reads) honor the same
+	// MaxResourceBytes override rather than falling back to the default.
+	nestedCompiler := ec.stylesheet.newNestedCompiler().MaxResourceBytes(ec.resourceLimit())
 
 	// Apply static-params from the options map to the nested compiler.
 	// Static params affect both compile time (use-when, shadow attributes)
@@ -470,13 +476,13 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve stylesheet %q: %v", stylesheetLoc, resolveErr)
 		}
 		var readErr error
-		data, readErr = io.ReadAll(rc)
+		data, readErr = readResourceBounded(rc, ec.resourceLimit())
 		// Close right after reading rather than deferring: the rest of this
 		// function parses, compiles and runs the stylesheet, and we must not
 		// hold the source handle open across that work.
 		_ = rc.Close()
 		if readErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
+			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
 		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI)
 		if parseErr != nil {
@@ -485,7 +491,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		var compileErr error
 		ss, compileErr = nestedCompiler.BaseURI(baseURI).Compile(ctx, doc)
 		if compileErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
+			return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
 		}
 	} else if packageName != "" {
 		// Resolve via package-name / package-version using the PackageResolver
@@ -498,10 +504,10 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if resolveErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve package %q (version %q): %v", packageName, packageVersion, resolveErr)
 		}
-		data, readErr := io.ReadAll(rc)
+		data, readErr := readResourceBounded(rc, ec.resourceLimit())
 		_ = rc.Close()
 		if readErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read package %q: %v", packageName, readErr)
+			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
 		}
 		doc, parseErr := parseStylesheetDocument(ctx, data, location)
 		if parseErr != nil {
@@ -514,7 +520,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		var compileErr error
 		ss, compileErr = compiler.Compile(ctx, doc)
 		if compileErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile package %q: %v", packageName, compileErr)
+			return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile package %q: %v", packageName, compileErr)
 		}
 	} else {
 		// Check for stylesheet-node
@@ -537,7 +543,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 				var compileErr error
 				ss, compileErr = nestedCompiler.Compile(ctx, doc)
 				if compileErr != nil {
-					return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile stylesheet: %v", compileErr)
+					return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet: %v", compileErr)
 				}
 			}
 		}
@@ -581,6 +587,11 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		fnTransformCfg.uriResolver = ec.transformConfig.uriResolver
 		fnTransformCfg.httpClient = ec.transformConfig.httpClient
 	}
+	// Inherit the outer Invocation's effective per-resource read cap so that
+	// fn:doc / fn:unparsed-text / fn:json-doc inside the inner transform honor
+	// the same MaxResourceBytes override. Without this the inner reads would
+	// silently fall back to the default cap, ignoring Invocation.MaxResourceBytes.
+	fnTransformCfg.maxResourceBytes = ec.resourceLimit()
 
 	// Apply map-valued options from the fn:transform options map.
 	for _, mp := range []struct {

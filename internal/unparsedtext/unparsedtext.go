@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -43,6 +44,50 @@ type Config struct {
 	BaseURI     string
 	HTTPClient  *http.Client
 	URIResolver URIResolver
+	// MaxBytes bounds the number of bytes read from a single resolver- or
+	// HTTP-backed resource. Reads larger than MaxBytes fail with an
+	// ErrCodeRetrieval error rather than buffering an unbounded body. A value
+	// of 0 selects DefaultMaxBytes; a negative value disables the bound.
+	MaxBytes int64
+}
+
+// DefaultMaxBytes is the default per-resource read cap applied when
+// Config.MaxBytes is 0. It guards against a hostile or pathological resource
+// (an effectively unbounded HTTP body or a "/dev/zero"-style stream) exhausting
+// process memory through an unbounded io.ReadAll.
+const DefaultMaxBytes int64 = 10 << 20 // 10 MiB
+
+// effectiveMaxBytes resolves the configured cap to the value actually enforced:
+// 0 selects DefaultMaxBytes and a negative value disables the bound.
+func effectiveMaxBytes(cfg *Config) int64 {
+	if cfg == nil || cfg.MaxBytes == 0 {
+		return DefaultMaxBytes
+	}
+	return cfg.MaxBytes
+}
+
+// readAllBounded reads r fully unless limit is non-negative, in which case it
+// reads at most limit bytes and returns an ErrCodeRetrieval error when the
+// source exceeds the cap. The check is against bytes actually read, so a server
+// that understates its size in a Content-Length header cannot bypass it.
+func readAllBounded(r io.Reader, limit int64) ([]byte, error) {
+	if limit < 0 {
+		return io.ReadAll(r)
+	}
+	// Read one byte past the cap so a resource exactly at the limit succeeds
+	// while anything larger is detected.
+	readLimit := limit
+	if readLimit < math.MaxInt64 {
+		readLimit++
+	}
+	data, err := io.ReadAll(io.LimitReader(r, readLimit))
+	if int64(len(data)) > limit {
+		return nil, &Error{Code: ErrCodeRetrieval, Message: fmt.Sprintf("resource exceeds maximum allowed size of %d bytes", limit)}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // Error codes defined by the XPath 3.1 specification for unparsed-text functions.
@@ -169,36 +214,38 @@ func readURIWithEncoding(ctx context.Context, cfg *Config, uri string) ([]byte, 
 		return nil, "", err
 	}
 
+	limit := effectiveMaxBytes(cfg)
+
 	if parsed.Scheme == lexicon.SchemeHTTP || parsed.Scheme == lexicon.SchemeHTTPS {
 		if cfg != nil && cfg.HTTPClient != nil {
-			return doHTTPGet(ctx, cfg.HTTPClient, uri)
+			return doHTTPGet(ctx, cfg.HTTPClient, uri, limit)
 		}
 		if cfg != nil && cfg.URIResolver != nil {
-			return readViaResolver(cfg.URIResolver, uri)
+			return readViaResolver(cfg.URIResolver, uri, limit)
 		}
 		return nil, "", fmt.Errorf("network retrieval requires an explicit HTTPClient or URIResolver: %s", uri)
 	}
 
 	if cfg != nil && cfg.URIResolver != nil {
-		return readViaResolver(cfg.URIResolver, uri)
+		return readViaResolver(cfg.URIResolver, uri, limit)
 	}
 
 	// file:// and bare paths require an explicit URIResolver.
 	return nil, "", fmt.Errorf("retrieval of %q requires a URIResolver", uri)
 }
 
-func readViaResolver(r URIResolver, uri string) ([]byte, string, error) {
+func readViaResolver(r URIResolver, uri string, limit int64) ([]byte, string, error) {
 	rc, err := r.ResolveURI(uri)
 	if err != nil {
 		return nil, "", err
 	}
 	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
+	data, err := readAllBounded(rc, limit)
 	return data, "", err
 }
 
 // doHTTPGet performs an HTTP GET using the caller-supplied client.
-func doHTTPGet(ctx context.Context, client *http.Client, uri string) ([]byte, string, error) {
+func doHTTPGet(ctx context.Context, client *http.Client, uri string, limit int64) ([]byte, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, "", err
@@ -211,7 +258,7 @@ func doHTTPGet(ctx context.Context, client *http.Client, uri string) ([]byte, st
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := readAllBounded(resp.Body, limit)
 	if err != nil {
 		return nil, "", err
 	}

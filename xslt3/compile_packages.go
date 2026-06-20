@@ -3,7 +3,6 @@ package xslt3
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -35,7 +34,7 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 	}
 	defer func() { _ = rc.Close() }()
 
-	data, err := io.ReadAll(rc)
+	data, err := readResourceBounded(rc, c.maxResourceBytes)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot read package %q: %w", pkgName, err)
 	}
@@ -47,10 +46,11 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 
 	// Compile the package with its own compiler
 	pkgCfg := &compileConfig{
-		baseURI:         pkgBaseURI,
-		resolver:        c.resolver,
-		packageResolver: c.packageResolver,
-		isSubPackage:    true,
+		baseURI:          pkgBaseURI,
+		resolver:         c.resolver,
+		packageResolver:  c.packageResolver,
+		isSubPackage:     true,
+		maxResourceBytes: c.maxResourceBytes,
 	}
 	pkgSS, err := compile(ctx, doc, pkgCfg)
 	if err != nil {

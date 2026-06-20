@@ -300,11 +300,39 @@ func staticError(code, format string, args ...any) *XSLTError {
 	}
 }
 
+// staticErrorCause builds a static error whose Cause preserves both
+// [ErrStaticError] and the underlying cause, so that callers can match the
+// specific cause (e.g. [ErrResourceTooLarge]) via errors.Is while
+// errors.Is(err, ErrStaticError) continues to hold. Use this at compile-time
+// sites where a distinguishable sentinel (documented in the public API) must
+// remain observable through the XSLTError wrapper.
+func staticErrorCause(code string, cause error, format string, args ...any) *XSLTError {
+	return &XSLTError{
+		Code:    code,
+		Message: fmt.Sprintf(format, args...),
+		Cause:   errors.Join(ErrStaticError, cause),
+	}
+}
+
 func dynamicError(code, format string, args ...any) *XSLTError {
 	return &XSLTError{
 		Code:    code,
 		Message: fmt.Sprintf(format, args...),
 		Cause:   ErrDynamicError,
+	}
+}
+
+// dynamicErrorCause builds a dynamic error whose Cause preserves both
+// [ErrDynamicError] and the underlying cause, so that callers can match the
+// specific cause (e.g. [ErrResourceTooLarge]) via errors.Is while
+// errors.Is(err, ErrDynamicError) continues to hold. Use this at sites where a
+// distinguishable sentinel (documented in the public API) must remain
+// observable through the XSLTError wrapper.
+func dynamicErrorCause(code string, cause error, format string, args ...any) *XSLTError {
+	return &XSLTError{
+		Code:    code,
+		Message: fmt.Sprintf(format, args...),
+		Cause:   errors.Join(ErrDynamicError, cause),
 	}
 }
 

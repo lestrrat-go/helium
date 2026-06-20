@@ -61,7 +61,8 @@ type evaluatorCfg struct {
 	allowXML11Chars        bool
 	docOrder               *DocOrderCache
 	traceWriter            io.Writer
-	maxNodes               int // 0 means use the package default (maxNodeSetLength)
+	maxNodes               int   // 0 means use the package default (maxNodeSetLength)
+	maxResourceBytes       int64 // per-resource read cap for fn:unparsed-text / fn:doc / fn:json-doc; 0 = unparsedtext default
 }
 
 // NewEvaluator creates a new Evaluator with the given options.
@@ -217,6 +218,21 @@ func (e Evaluator) HTTPClient(client *http.Client) Evaluator {
 	return e
 }
 
+// MaxResourceBytes sets the maximum number of bytes read from a single
+// external resource fetched through the URIResolver or HTTPClient by
+// fn:unparsed-text, fn:unparsed-text-lines, fn:unparsed-text-available,
+// fn:doc, fn:doc-available, and fn:json-doc. A value of 0 selects the default cap; a
+// negative value disables the bound. Reads exceeding the cap fail rather than
+// buffering an unbounded body. fn:unparsed-text and fn:unparsed-text-lines
+// surface the over-cap error as FOUT1170 (fn:unparsed-text-available returns
+// false); fn:doc and fn:json-doc surface it as a retrieval error (FODC0002),
+// and fn:doc-available returns false.
+func (e Evaluator) MaxResourceBytes(n int64) Evaluator {
+	e = e.clone()
+	e.cfg.maxResourceBytes = n
+	return e
+}
+
 // Position sets the initial context position.
 func (e Evaluator) Position(pos int) Evaluator {
 	e = e.clone()
@@ -365,6 +381,7 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	ec.uriResolver = cfg.uriResolver
 	ec.collectionResolver = cfg.collectionResolver
 	ec.httpClient = cfg.httpClient
+	ec.maxResourceBytes = cfg.maxResourceBytes
 
 	// limits
 	ec.opLimit = cfg.opLimit

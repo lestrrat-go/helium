@@ -23,6 +23,7 @@ func unparsedTextConfig(ctx context.Context) *unparsedtext.Config {
 	cfg := &unparsedtext.Config{
 		BaseURI:    ec.baseURI,
 		HTTPClient: ec.httpClient,
+		MaxBytes:   ec.maxResourceBytes,
 	}
 	if ec.uriResolver != nil {
 		cfg.URIResolver = ec.uriResolver

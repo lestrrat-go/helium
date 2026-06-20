@@ -62,6 +62,7 @@ type evalContext struct {
 	// withNode/withContextItem are negligible. The net/http dependency is
 	// already transitively required by golang.org/x/text.
 	httpClient             *http.Client
+	maxResourceBytes       int64                  // per-resource read cap for fn:unparsed-text / fn:doc / fn:json-doc (0 = unparsedtext default)
 	typeAnnotations        map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
 	preservedIDAnnotations map[helium.Node]string // ID/IDREF annotations preserved after input-type-annotations="strip"
 	variableResolver       VariableResolver       // lazy resolver for variables not in static scope

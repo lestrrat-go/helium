@@ -115,15 +115,17 @@ type XSLTError struct {
 
 **Format** (`Error()`): `CODE: MESSAGE` (or just `MESSAGE` when Code is empty).
 
-Unwraps to `Cause` via `Unwrap()`.
+Unwraps to `Cause` via `Unwrap()`. When `Cause` is an `errors.Join`, `errors.Is`
+matches any joined sentinel (see `dynamicErrorCause`).
 
 | Constructor | Usage |
 |-------------|-------|
 | `staticError(code, fmt, args...)` | Compile-time XSLT errors (XTSE*) |
-| `dynamicError(code, fmt, args...)` | Runtime XSLT errors (XTDE*, XTTE*, etc.) |
+| `dynamicError(code, fmt, args...)` | Runtime XSLT errors (XTDE*, XTTE*, etc.); `Cause = ErrDynamicError` |
+| `dynamicErrorCause(code, cause, fmt, args...)` | Like `dynamicError` but `Cause = errors.Join(ErrDynamicError, cause)` so a distinguishable sentinel (e.g. `ErrResourceTooLarge`) stays observable via `errors.Is` |
 
 **Sentinel errors** (exported):
-- `ErrStaticError`, `ErrDynamicError`, `ErrCircularRef`, `ErrNoTemplate`, `ErrTerminated`, `ErrInvalidOutput`
+- `ErrStaticError`, `ErrDynamicError`, `ErrCircularRef`, `ErrNoTemplate`, `ErrTerminated`, `ErrInvalidOutput`, `ErrResourceTooLarge`
 
 **Internal sentinels**:
 - `errNilStylesheet` — returned by convenience wrappers (`Transform`, `TransformString`, `TransformToWriter`) when `*Stylesheet` is nil; prevents nil-pointer panic

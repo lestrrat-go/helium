@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"strings"
 	"time"
@@ -125,7 +126,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	runtimeSchemas := append([]*xsd.Schema(nil), ss.schemas...)
 	if effectiveSource != nil {
 		sourceSchemas, schemaErr := ec.loadSchemasFromSchemaLocation(ctx, effectiveSource)
-		if schemaErr != nil && ss.defaultValidation == validationStrict {
+		// A schema-location load failure is normally non-fatal under lax
+		// validation (the source is simply not validated). A resource-limit
+		// breach must NOT be demoted that way, or the cap is defeated for a
+		// schema referenced via xsi:schemaLocation; propagate it regardless of
+		// the validation mode, preserving ErrResourceTooLarge for callers.
+		if schemaErr != nil && (ss.defaultValidation == validationStrict || errors.Is(schemaErr, ErrResourceTooLarge)) {
 			return nil, schemaErr
 		}
 		runtimeSchemas = mergeRuntimeSchemas(runtimeSchemas, sourceSchemas)

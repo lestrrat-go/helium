@@ -364,15 +364,25 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	if inst.ParameterDocAVT != nil && inst.ParameterDocOutputDef == nil {
 		if _, cached := ec.paramDocOutputDefs[inst]; !cached {
 			pdHref, pdErr := inst.ParameterDocAVT.evaluate(ctx, ec.contextNode)
-			if pdErr == nil && pdHref != "" {
+			if pdErr != nil {
+				return pdErr
+			}
+			if pdHref != "" {
 				outDef := &OutputDef{}
 				baseURI := ec.effectiveStaticBaseURI()
-				if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref, ec.retrieveDocumentBytes); loadErr == nil {
-					if ec.paramDocOutputDefs == nil {
-						ec.paramDocOutputDefs = make(map[*resultDocumentInst]*OutputDef)
-					}
-					ec.paramDocOutputDefs[inst] = outDef
+				// runtime=true so the helper classifies a load/parse failure as
+				// a dynamic error (FODC0002), never a static one. A failure must
+				// not be silently dropped: the transformation has to fail so
+				// callers can observe it, and an over-cap read keeps
+				// [ErrResourceTooLarge] in the chain (matched via errors.Is)
+				// while errors.Is(err, ErrStaticError) stays false.
+				if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref, ec.retrieveDocumentBytes, true); loadErr != nil {
+					return loadErr
 				}
+				if ec.paramDocOutputDefs == nil {
+					ec.paramDocOutputDefs = make(map[*resultDocumentInst]*OutputDef)
+				}
+				ec.paramDocOutputDefs[inst] = outDef
 			}
 		}
 	}

@@ -83,7 +83,7 @@ func (c *compiler) loadSchemaBytes(_ context.Context, uri string) ([]byte, error
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve schema %q: %w", uri, err)
 	}
-	data, err := readCloserToBytes(rc)
+	data, err := readCloserToBytes(rc, c.maxResourceBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read schema %q: %w", uri, err)
 	}
@@ -181,6 +181,20 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 
 		schema, err := c.compileSchemaFromURI(ctx, uri)
 		if err != nil {
+			// A genuine "schema not found / not applicable" error may fall back
+			// to a pre-compiled import schema registered for the namespace. But a
+			// fatal schema-load (resource-limit breach, path escape, or
+			// import-depth overflow) must NOT be papered over by the fallback —
+			// doing so would let an over-cap or path-traversal schema-location
+			// silently succeed, defeating the guard. The single classifier
+			// recognizes every fatal-load condition (including a nested path
+			// escape, which surfaces as a plain xsd sentinel that an interface-only
+			// check would miss); propagate those, preserving the sentinel for
+			// errors.Is. Decided BEFORE findImportSchema so no fatal load can fall
+			// through to the precompiled-schema path.
+			if isFatalSchemaLoadError(err) {
+				return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
+			}
 			// File not found — try pre-compiled import schemas by namespace.
 			if declaredNS != "" {
 				if resolved := c.findImportSchema(ctx, declaredNS); resolved != nil {

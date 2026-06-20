@@ -344,10 +344,10 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 		// XTDE1160: when the URI contains a fragment identifier, use XTDE1160
 		// (fragment identifier error) instead of FODC0002.
 		if strings.ContainsRune(uri, '#') {
-			return nil, dynamicError(errCodeXTDE1160,
+			return nil, dynamicErrorCause(errCodeXTDE1160, err,
 				"cannot load document %q with fragment identifier: %v", uri, err)
 		}
-		return nil, dynamicError(errCodeFODC0002, "cannot load document %q: %v", uri, err)
+		return nil, dynamicErrorCause(errCodeFODC0002, err, "cannot load document %q: %v", uri, err)
 	}
 	// helium's parser currently rejects literal U+FFFD from RuneCursor-backed
 	// input, but accepts the equivalent character reference. Normalizing here
@@ -434,29 +434,40 @@ func (ec *execContext) retrieveDocumentBytes(ctx context.Context, resolvedURI st
 		httpClient = ec.transformConfig.httpClient
 	}
 
+	limit := ec.resourceLimit()
+
 	if isHTTP {
 		if httpClient != nil {
-			return fetchHTTPBytes(ctx, httpClient, resolvedURI)
+			return fetchHTTPBytes(ctx, httpClient, resolvedURI, limit)
 		}
 		if resolver != nil {
-			return fetchViaResolver(resolver, resolvedURI)
+			return fetchViaResolver(resolver, resolvedURI, limit)
 		}
 		return nil, fmt.Errorf("no HTTPClient or URIResolver configured for %q", resolvedURI)
 	}
 
 	if resolver != nil {
-		return fetchViaResolver(resolver, resolvedURI)
+		return fetchViaResolver(resolver, resolvedURI, limit)
 	}
 	return nil, fmt.Errorf("no URIResolver configured for %q", resolvedURI)
 }
 
-func fetchViaResolver(r xpath3.URIResolver, uri string) ([]byte, error) {
+// resourceLimit returns the per-resource read cap for runtime resolver/HTTP
+// reads, taken from the transformConfig (0 = MaxResourceBytes default).
+func (ec *execContext) resourceLimit() int64 {
+	if ec != nil && ec.transformConfig != nil {
+		return ec.transformConfig.maxResourceBytes
+	}
+	return 0
+}
+
+func fetchViaResolver(r xpath3.URIResolver, uri string, limit int64) ([]byte, error) {
 	rc, err := r.ResolveURI(uri)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rc.Close() }()
-	return io.ReadAll(rc)
+	return readResourceBounded(rc, limit)
 }
 
 // retrieveDocumentPrefix opens the resource through the configured
@@ -529,7 +540,7 @@ func fetchHTTPPrefix(ctx context.Context, client *http.Client, uri string, n int
 	return readPrefix(resp.Body, n)
 }
 
-func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string) ([]byte, error) {
+func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string, limit int64) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
@@ -542,7 +553,7 @@ func fetchHTTPBytes(ctx context.Context, client *http.Client, uri string) ([]byt
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("HTTP %d for %q", resp.StatusCode, uri)
 	}
-	return io.ReadAll(resp.Body)
+	return readResourceBounded(resp.Body, limit)
 }
 
 // resolveAgainstBaseURI resolves a relative URI against an effective base URI.

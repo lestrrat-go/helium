@@ -3,7 +3,6 @@ package xslt3
 import (
 	"context"
 	"fmt"
-	"io"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -203,7 +202,7 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 		return nil, fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
 	}
 	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
+	data, err := readResourceBounded(rc, c.maxResourceBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %q: %w", uri, err)
 	}
@@ -514,7 +513,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		return fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
 	}
 	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
+	data, err := readResourceBounded(rc, c.maxResourceBytes)
 	if err != nil {
 		return fmt.Errorf("cannot read %q: %w", uri, err)
 	}
@@ -560,7 +559,12 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 	if importedRoot.URI() != lexicon.NamespaceXSLT {
 		if _, ok := importedRoot.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
 			// Simplified stylesheet — compile as a single template matching "/"
-			simplified, err := compileSimplified(ctx, doc, importedRoot, &compileConfig{baseURI: uri})
+			simplified, err := compileSimplified(ctx, doc, importedRoot, &compileConfig{
+				baseURI:          uri,
+				resolver:         c.resolver,
+				packageResolver:  c.packageResolver,
+				maxResourceBytes: c.maxResourceBytes,
+			})
 			if err != nil {
 				return err
 			}
@@ -702,7 +706,9 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 		c.baseURI = cfg.baseURI
 		c.resolver = cfg.resolver
 		c.packageResolver = cfg.packageResolver
+		c.maxResourceBytes = cfg.maxResourceBytes
 	}
+	c.stylesheet.maxResourceBytes = c.maxResourceBytes
 
 	c.collectNamespaces(ctx, root)
 
