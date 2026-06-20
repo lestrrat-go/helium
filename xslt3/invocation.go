@@ -346,8 +346,9 @@ func (inv Invocation) GlobalContextSelect(expr string) Invocation {
 // MaxResourceBytes sets the maximum number of bytes read from a single
 // external resource fetched at runtime through the configured URIResolver /
 // HTTPClient. It governs the resource reads performed by XSLT's own loader —
-// fn:doc / document(), fn:doc-available, xsl:source-document, xsl:merge, and
-// fn:transform stylesheet / package sources — which fail with
+// fn:doc / document(), fn:doc-available, xsl:source-document, xsl:merge,
+// xsl:result-document parameter documents, xsi:schemaLocation source schemas,
+// and fn:transform stylesheet / package sources — which fail with
 // [ErrResourceTooLarge] when the cap is exceeded.
 //
 // A value of 0 inherits the cap configured on the Compiler (or the

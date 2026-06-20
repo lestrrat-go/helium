@@ -369,3 +369,103 @@ func TestParameterDocumentOverCapPreservesSentinel(t *testing.T) {
 	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
 		"serialization parameter-document over-cap read must preserve ErrResourceTooLarge")
 }
+
+// A runtime xsl:result-document parameter-document (an AVT, so it is loaded
+// during execution rather than at compile time) that exceeds the cap must FAIL
+// the transformation rather than be silently swallowed. Before the fix the
+// runtime loader cached the OutputDef only on success and otherwise continued,
+// so the over-cap read never surfaced and callers could not observe the
+// ErrResourceTooLarge sentinel.
+func TestResultDocumentParameterDocumentOverCapIsFatal(t *testing.T) {
+	t.Parallel()
+
+	const u = "http://example.invalid/big-rd-params.xml"
+	body := `<serialization-parameters xmlns="http://www.w3.org/2010/xslt-xquery-serialization">` +
+		`<!-- ` + strings.Repeat("p", 8192) + ` -->` +
+		`<indent value="yes"/>` +
+		`</serialization-parameters>`
+
+	resolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
+		if uri != u {
+			return nil, os.ErrNotExist
+		}
+		return io.NopCloser(strings.NewReader(body)), nil
+	})
+
+	// parameter-document is an AVT ({...}) so the load happens at runtime.
+	sheet := `<?xml version="1.0"?>` +
+		`<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">` +
+		`<xsl:output name="o" method="xml"/>` +
+		`<xsl:template match="/">` +
+		`<xsl:result-document href="out.xml" format="o" parameter-document="{'` + u + `'}">` +
+		`<got/></xsl:result-document>` +
+		`</xsl:template>` +
+		`</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(sheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(source).
+		MaxResourceBytes(64).
+		URIResolver(resolver).
+		Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+		"runtime xsl:result-document parameter-document over-cap read must fail with ErrResourceTooLarge")
+}
+
+// A source schema referenced via xsi:schemaLocation that exceeds the cap must
+// FAIL the transformation even under lax (non-strict) validation. The
+// schema-location load failure is normally non-fatal when validation is lax,
+// but a resource-limit breach must not be demoted that way or the cap is
+// defeated for the referenced schema; ErrResourceTooLarge must survive.
+func TestSourceSchemaLocationOverCapIsFatal(t *testing.T) {
+	t.Parallel()
+
+	const schemaURI = "http://example.invalid/big-src-schema.xsd"
+	schemaBody := `<?xml version="1.0"?>` +
+		`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` +
+		` targetNamespace="http://example.com/n"` +
+		` elementFormDefault="qualified">` +
+		`<!-- ` + strings.Repeat("z", 8192) + ` -->` +
+		`<xs:element name="root" type="xs:string"/>` +
+		`</xs:schema>`
+
+	resolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
+		if uri != schemaURI {
+			return nil, os.ErrNotExist
+		}
+		return io.NopCloser(strings.NewReader(schemaBody)), nil
+	})
+
+	// Stylesheet does not declare strict validation, so a schema-location load
+	// failure would normally be non-fatal — except for the resource cap.
+	sheet := `<?xml version="1.0"?>` +
+		`<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">` +
+		`<xsl:template match="/"><out/></xsl:template>` +
+		`</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(sheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	source := `<root xmlns="http://example.com/n"` +
+		` xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"` +
+		` xsi:schemaLocation="http://example.com/n ` + schemaURI + `">x</root>`
+	src, err := helium.NewParser().Parse(t.Context(), []byte(source))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(src).
+		MaxResourceBytes(64).
+		URIResolver(resolver).
+		Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+		"over-cap xsi:schemaLocation source-schema read must fail with ErrResourceTooLarge under lax validation")
+}

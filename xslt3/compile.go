@@ -164,7 +164,8 @@ func (c Compiler) ImportSchemas(schemas ...*xsd.Schema) Compiler {
 // URIResolver / PackageResolver — xsl:import / xsl:include, xsl:use-package
 // package loads, xsl:import-schema, and serialization parameter documents. It
 // also governs the runtime resource reads performed by XSLT's own loader —
-// fn:doc / document(), xsl:source-document, xsl:merge, and fn:transform
+// fn:doc / document(), xsl:source-document, xsl:merge, xsl:result-document
+// parameter documents, xsi:schemaLocation source schemas, and fn:transform
 // stylesheet / package sources — unless overridden per-invocation by
 // [Invocation.MaxResourceBytes].
 //
