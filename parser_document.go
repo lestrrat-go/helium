@@ -83,7 +83,7 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 			return pctx.error(ctx, err)
 		}
 		cur := pctx.getCursor()
-		if cur != nil && cur.HasPrefixString("<?xml") {
+		if cur != nil && looksLikeXMLDeclString(cur) {
 			if err := pctx.parseXMLDeclFromCursor(ctx); err != nil {
 				return pctx.error(ctx, err)
 			}

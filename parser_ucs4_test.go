@@ -62,3 +62,45 @@ func TestParseUCS4FirstByteNotConsumed(t *testing.T) {
 		})
 	}
 }
+
+// TestParseUCS4LeadingStylesheetPI is a regression for the UCS-4 fixed-width
+// prolog probe misclassifying a legal leading PI as an XML declaration. The
+// probe used HasPrefixString("<?xml"), which matches "<?xml-stylesheet ...?>"
+// and then failed with "blank needed after '<?xml'". The probe must use
+// looksLikeXMLDeclString to distinguish "<?xml " (decl) from "<?xml-stylesheet"
+// (PI), so a UCS-4 document beginning with such a PI parses with the PI intact.
+func TestParseUCS4LeadingStylesheetPI(t *testing.T) {
+	const doc = `<?xml-stylesheet type="text/xsl" href="x.xsl"?><root>hi</root>`
+
+	orders := map[string][4]uint{
+		"BE":   {24, 16, 8, 0},
+		"LE":   {0, 8, 16, 24},
+		"2143": {16, 24, 0, 8},
+		"3412": {8, 0, 24, 16},
+	}
+
+	for name, order := range orders {
+		t.Run(name, func(t *testing.T) {
+			in := encodeUCS4(doc, order)
+
+			parsed, err := helium.NewParser().Parse(t.Context(), in)
+			require.NoError(t, err, "UCS-4 document with a leading PI must not be misread as an XML declaration")
+
+			var pi *helium.ProcessingInstruction
+			for c := parsed.FirstChild(); c != nil; c = c.NextSibling() {
+				if got, ok := helium.AsNode[*helium.ProcessingInstruction](c); ok {
+					pi = got
+					break
+				}
+			}
+			require.NotNil(t, pi, "leading processing instruction must be preserved")
+			require.Equal(t, "xml-stylesheet", pi.Name())
+			require.Equal(t, `type="text/xsl" href="x.xsl"`, string(pi.Content()))
+
+			root := parsed.DocumentElement()
+			require.NotNil(t, root, "document element must be present")
+			require.Equal(t, "root", root.Name())
+			require.Equal(t, "hi", string(root.Content()))
+		})
+	}
+}
