@@ -194,6 +194,24 @@ func isDSigCoreNS(e *helium.Element) bool {
 	return elementNamespaceURI(e) == NamespaceDSig
 }
 
+// isDSig11NS reports whether e is in the XML-Signature 1.1 namespace
+// (http://www.w3.org/2009/xmldsig11#). The 1.1-specific elements (ECKeyValue,
+// NamedCurve, PublicKey, DEREncodedKeyValue, ...) live ONLY in this namespace;
+// they are not part of the core xmldsig# namespace. As with the core check,
+// matching such elements on local name alone would let a foreign-namespace
+// look-alike supply attacker-chosen key material, so the exact namespace is
+// required.
+func isDSig11NS(e *helium.Element) bool {
+	return elementNamespaceURI(e) == NamespaceDSig11
+}
+
+// isExcC14NNS reports whether e is in the Exclusive XML Canonicalization
+// namespace (http://www.w3.org/2001/10/xml-exc-c14n#). The InclusiveNamespaces
+// element lives only here, not in the core XML-Signature namespace.
+func isExcC14NNS(e *helium.Element) bool {
+	return elementNamespaceURI(e) == ExcC14N10
+}
+
 func elementNamespaceURI(e *helium.Element) string {
 	name := e.Name()
 	for i := range len(name) {

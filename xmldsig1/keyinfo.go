@@ -193,6 +193,15 @@ func parseKeyInfo(keyInfoElem *helium.Element) (*KeyInfoData, error) {
 		if !ok {
 			continue
 		}
+		// Core KeyInfo children (X509Data, KeyValue) live only in the core
+		// XML-Signature namespace. Matching on local name alone would let a
+		// foreign-namespace look-alike (e.g. <evil:X509Data>) supply an
+		// attacker-chosen verification key, so require the core namespace. The
+		// 1.1 xmldsig11# namespace is for new 1.1 elements and must not satisfy
+		// this check.
+		if !isDSigCoreNS(elem) {
+			continue
+		}
 		switch localName(elem) {
 		case "X509Data":
 			if err := parseX509Data(elem, data); err != nil {
@@ -211,6 +220,11 @@ func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		certElem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
+			continue
+		}
+		// X509Certificate is a core XML-Signature element; a foreign-namespace
+		// look-alike must not supply a verification certificate.
+		if !isDSigCoreNS(certElem) {
 			continue
 		}
 		if localName(certElem) != "X509Certificate" {
@@ -237,8 +251,19 @@ func parseKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		}
 		switch localName(kvElem) {
 		case "RSAKeyValue":
+			// RSAKeyValue is a core XML-Signature element; reject
+			// foreign-namespace look-alikes.
+			if !isDSigCoreNS(kvElem) {
+				continue
+			}
 			return parseRSAKeyValue(kvElem, data)
 		case "ECKeyValue":
+			// ECKeyValue is an XML-Signature 1.1 element, so it lives in the
+			// xmldsig11# namespace rather than the core namespace. Require that
+			// exact namespace and reject foreign-namespace look-alikes.
+			if !isDSig11NS(kvElem) {
+				continue
+			}
 			return parseECKeyValue(kvElem, data)
 		}
 	}
@@ -250,6 +275,11 @@ func parseRSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
+			continue
+		}
+		// Modulus and Exponent are core XML-Signature elements; reject
+		// foreign-namespace look-alikes before consuming their base64 content.
+		if !isDSigCoreNS(e) {
 			continue
 		}
 		decoded, err := decodeBase64(textContent(e))
@@ -277,6 +307,11 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
+			continue
+		}
+		// NamedCurve and PublicKey are XML-Signature 1.1 elements; require the
+		// xmldsig11# namespace and reject foreign-namespace look-alikes.
+		if !isDSig11NS(e) {
 			continue
 		}
 		switch localName(e) {
