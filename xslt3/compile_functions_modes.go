@@ -17,7 +17,28 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 		return err
 	}
 	asAttr := getAttr(elem, "as")
-	if err := c.validateAsSequenceType(ctx, asAttr, "xsl:global-context-item"); err != nil {
+
+	// Capture the declaration-site static namespace context BEFORE validating
+	// the @as sequence type, so that schema-element()/schema-attribute() (and
+	// plain element/attribute tests) resolve their prefixes against the context
+	// in scope at this element rather than against the runtime stylesheet-wide
+	// map. The in-scope bindings are derived from the element's own and ancestor
+	// xmlns declarations on the DOM tree — that is authoritative and immune to
+	// pollution of the mutable c.nsBindings by earlier xsl:include processing.
+	nsBindings := inScopeNamespaces(elem)
+
+	// xpath-default-namespace on this element takes precedence over the
+	// inherited value. An explicitly present empty value clears any inherited
+	// default element namespace, so distinguish absent from empty via the
+	// presence-aware accessor.
+	xpathDefaultNS := c.xpathDefaultNS
+	hasXPathDefaultNS := c.xpathDefaultNS != ""
+	if xdn, has := elem.GetAttribute("xpath-default-namespace"); has {
+		xpathDefaultNS = xdn
+		hasXPathDefaultNS = true
+	}
+
+	if err := c.validateAsSequenceTypeWithNS(ctx, asAttr, "xsl:global-context-item", nsBindings, xpathDefaultNS, hasXPathDefaultNS); err != nil {
 		return err
 	}
 	def := &globalContextItemDef{
@@ -27,6 +48,9 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 	if def.Use == "" {
 		def.Use = ctxItemOptional
 	}
+	def.Namespaces = nsBindings
+	def.XPathDefaultNS = xpathDefaultNS
+	def.HasXPathDefaultNS = hasXPathDefaultNS
 	if def.Use == ctxItemAbsent && def.As != "" {
 		return staticError(errCodeXTSE3089, "xsl:global-context-item with use=\"absent\" must not specify @as")
 	}
@@ -55,6 +79,48 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 	}
 	c.stylesheet.globalContextItem = def
 	return nil
+}
+
+// isBuiltinXSDLocalName reports whether an unprefixed type name denotes a
+// built-in XML Schema type (interpreted in the XSD namespace) per the runtime
+// normalizeTypeName mapping, rather than a user type in no namespace.
+func isBuiltinXSDLocalName(local string) bool {
+	switch local {
+	case lexicon.TypeString, "integer", "decimal", "double", "float",
+		lexicon.TypeBoolean, "date", "dateTime", "time", "duration",
+		"dayTimeDuration", "yearMonthDuration", "anyURI", "untypedAtomic":
+		return true
+	}
+	return false
+}
+
+// inScopeNamespaces returns the in-scope namespace bindings (prefix→URI) for
+// elem by walking the DOM tree from the element up through its ancestors.
+// Nearer declarations take precedence over more distant ones, matching XML
+// namespace scoping. This reflects the namespaces actually written on the
+// element and its ancestors, independent of any mutable compiler state.
+func inScopeNamespaces(elem *helium.Element) map[string]string {
+	bindings := make(map[string]string)
+	for cur := helium.Node(elem); cur != nil; cur = cur.Parent() {
+		ce, ok := cur.(*helium.Element)
+		if !ok {
+			continue
+		}
+		// Closer declarations win: only record a prefix not already seen on a
+		// nearer (already-visited) element.
+		for _, ns := range ce.Namespaces() {
+			if _, seen := bindings[ns.Prefix()]; !seen {
+				bindings[ns.Prefix()] = ns.URI()
+			}
+		}
+	}
+	// The xml prefix is implicitly in scope on every element (XML Namespaces
+	// spec), so it must resolve even without an explicit xmlns:xml declaration.
+	// An explicit declaration recorded above takes precedence over this default.
+	if _, seen := bindings[lexicon.PrefixXML]; !seen {
+		bindings[lexicon.PrefixXML] = lexicon.NamespaceXML
+	}
+	return bindings
 }
 
 // isReservedFunctionNS returns true if the given namespace URI is reserved
