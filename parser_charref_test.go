@@ -54,6 +54,24 @@ func TestGetEntityHandlerNilErrorDoesNotPanic(t *testing.T) {
 	})
 }
 
+func TestGetEntityForeignTypeInAttrValueDoesNotPanic(t *testing.T) {
+	// The attribute-value entity-resolution path (parseStringEntityRef ->
+	// entityCheck) also receives the sax.Entity returned by a custom handler.
+	// A foreign (non-*helium.Entity) value must be handled gracefully via the
+	// comma-ok assertion in entityCheck rather than triggering a forced-cast
+	// panic.
+	h := sax.New()
+	h.SetOnGetEntity(sax.GetEntityFunc(func(_ context.Context, name string) (sax.Entity, error) {
+		return &foreignEntity{name: name, content: []byte("hello")}, nil
+	}))
+
+	const input = `<!DOCTYPE root [<!ENTITY foo "ignored">]><root attr="&foo;"/>`
+
+	require.NotPanics(t, func() {
+		_, _ = helium.NewParser().SAXHandler(h).Parse(t.Context(), []byte(input))
+	})
+}
+
 func TestCharRefMissingSemicolonRejected(t *testing.T) {
 	for _, input := range []string{
 		`<root>&#65</root>`,
