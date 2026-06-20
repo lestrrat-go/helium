@@ -319,8 +319,9 @@ func fnFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
 
 func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (FunctionItem, bool) {
 	var (
-		fn Function
-		ok bool
+		fn        Function
+		ok        bool
+		isBuiltin bool
 	)
 
 	if ec := getFnContext(ctx); ec != nil {
@@ -342,6 +343,7 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 		if ok && checkArity(fn, qv.Local, arity) != nil {
 			ok = false
 		}
+		isBuiltin = ok
 	}
 	if !ok {
 		return FunctionItem{}, false
@@ -357,7 +359,14 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 
 	var paramTypes []SequenceType
 	var returnType *SequenceType
-	if sig := lookupFunctionSignature(qv.URI, qv.Local, arity); sig != nil {
+	var sig *functionSignature
+	// The built-in signature registry is consulted only when the resolved function
+	// is the built-in itself; a user override of a built-in name binds its own
+	// signature, mirroring the direct call path (lookupParamTypes).
+	if isBuiltin {
+		sig = lookupFunctionSignature(qv.URI, qv.Local, arity)
+	}
+	if sig != nil {
 		paramTypes = sig.ParamTypes
 		returnType = sig.ReturnType
 	} else if tf, ok := fn.(TypedFunction); ok {
