@@ -136,6 +136,7 @@ matches any joined sentinel (see `dynamicErrorCause`).
 
 **Internal sentinels**:
 - `errNilStylesheet` — returned by convenience wrappers (`Transform`, `TransformString`, `TransformToWriter`) when `*Stylesheet` is nil; prevents nil-pointer panic
+- `errNilWriter` — returned by `Invocation.WriteTo(ctx, nil)` before the transform executes; prevents running the transform (and its side effects) only to panic on the nil writer
 
 **Error code checker**: `isXSLTError(err, code) → bool` — unwraps and matches `XSLTError.Code`.
 
