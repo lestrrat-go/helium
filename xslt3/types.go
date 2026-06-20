@@ -651,7 +651,7 @@ func normalizeTypeName(name string, ec ...*execContext) string {
 		prefix := name[:idx]
 		local := name[idx+1:]
 		if len(ec) > 0 && ec[0] != nil {
-			if ns, ok := ec[0].stylesheet.namespaces[prefix]; ok {
+			if ns, ok := ec[0].lookupTypeNamespaceOK(prefix); ok {
 				if ns == lexicon.NamespaceXSD {
 					return "xs:" + local
 				}
@@ -765,7 +765,9 @@ func isAnyURIType(typeName string, ec ...*execContext) bool {
 }
 
 // resolveSchemaQName resolves a QName string (e.g. "my:userNode" or "localName")
-// to (localName, namespace) using the stylesheet's namespace bindings.
+// to (localName, namespace) using the stylesheet's namespace bindings, or the
+// exec context's namespace override when one is set (e.g. the declaration-site
+// context of an xsl:global-context-item).
 func resolveSchemaQName(qname string, ec *execContext) (local, ns string) {
 	prefix, l, ok := strings.Cut(qname, ":")
 	if !ok {
@@ -776,8 +778,8 @@ func resolveSchemaQName(qname string, ec *execContext) (local, ns string) {
 		return qname, ""
 	}
 	local = l
-	if ec != nil && ec.stylesheet != nil {
-		ns = ec.stylesheet.namespaces[prefix]
+	if ec != nil {
+		ns = ec.lookupTypeNamespace(prefix)
 	}
 	return local, ns
 }

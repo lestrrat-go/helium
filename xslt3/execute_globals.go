@@ -78,7 +78,7 @@ func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig)
 // xsl:global-context-item declaration. Returns XTDE3086 when the declaration
 // requires a context item but none is supplied, and XTTE0590 if the supplied
 // source doesn't match the declared type.
-func (ec *execContext) validateGlobalContextItem(source *helium.Document) error {
+func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *helium.Document) error {
 	if err := validateUsedPackageGlobalContextItem(ec.stylesheet, map[*Stylesheet]struct{}{}); err != nil {
 		return err
 	}
@@ -99,10 +99,26 @@ func (ec *execContext) validateGlobalContextItem(source *helium.Document) error 
 	// against the declared sequence type using the namespace-aware type
 	// machinery, so that prefixed element tests like
 	// document-node(element(p:root)) compare both local name and namespace
-	// rather than local name alone.
+	// rather than local name alone. Prefixes and the default element namespace
+	// in the @as type must resolve against the namespace context of the
+	// xsl:global-context-item declaration itself, not the runtime
+	// stylesheet-wide context, so install the saved declaration-site context
+	// for the duration of the check.
+	savedNSOverride := ec.nsOverride
+	savedXPathDefaultNS := ec.xpathDefaultNS
+	savedHasXPathDefaultNS := ec.hasXPathDefaultNS
+	ec.nsOverride = gci.Namespaces
+	ec.xpathDefaultNS = gci.XPathDefaultNS
+	ec.hasXPathDefaultNS = gci.HasXPathDefaultNS
+	defer func() {
+		ec.nsOverride = savedNSOverride
+		ec.xpathDefaultNS = savedXPathDefaultNS
+		ec.hasXPathDefaultNS = savedHasXPathDefaultNS
+	}()
+
 	st := parseSequenceType(gci.As)
 	seq := xpath3.ItemSlice{xpath3.NodeItem{Node: source}}
-	if _, err := checkSequenceType(context.Background(), seq, st, errCodeXTTE0590, "global-context-item", ec); err != nil {
+	if _, err := checkSequenceType(ctx, seq, st, errCodeXTTE0590, "global-context-item", ec); err != nil {
 		return err
 	}
 	return nil

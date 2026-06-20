@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -27,6 +28,25 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 	if def.Use == "" {
 		def.Use = ctxItemOptional
 	}
+
+	// Capture the declaration-site static namespace context so the @as
+	// sequence type is validated against the prefixes and default element
+	// namespace in scope at this element, not the runtime stylesheet-wide map.
+	// The in-scope bindings are the inherited ones (c.nsBindings) overlaid with
+	// any namespace declarations on this element itself.
+	nsBindings := make(map[string]string, len(c.nsBindings)+len(elem.Namespaces()))
+	maps.Copy(nsBindings, c.nsBindings)
+	for _, ns := range elem.Namespaces() {
+		nsBindings[ns.Prefix()] = ns.URI()
+	}
+	def.Namespaces = nsBindings
+	// xpath-default-namespace on this element takes precedence over the
+	// inherited value (c.xpathDefaultNS already reflects the module root).
+	def.XPathDefaultNS = c.xpathDefaultNS
+	if xdn := getAttr(elem, "xpath-default-namespace"); xdn != "" {
+		def.XPathDefaultNS = xdn
+	}
+	def.HasXPathDefaultNS = def.XPathDefaultNS != ""
 	if def.Use == ctxItemAbsent && def.As != "" {
 		return staticError(errCodeXTSE3089, "xsl:global-context-item with use=\"absent\" must not specify @as")
 	}
