@@ -525,6 +525,55 @@ func TestRCDATAOverCapNamedEntityFails(t *testing.T) {
 	}
 }
 
+// TestRCDATAUnresolvedSemicolonCharged is the regression for the trailing-';'
+// undercount: an unresolved short-name reference whose name fits the fixed
+// lookahead emits the consumed ';' as part of the LITERAL run, so the cap check
+// must charge it. With MaxContentSize(4), `&zzz;` emits 5 literal bytes
+// (`&`,`z`,`z`,`z`,`;`) and must hard-fail (5 > 4); `&zz;` emits exactly 4 and
+// is accepted (4 == 4), matching the strict '>' cap convention used elsewhere.
+func TestRCDATAUnresolvedSemicolonCharged(t *testing.T) {
+	const limit = 4
+
+	cases := []struct {
+		name    string
+		body    string // RCDATA content
+		wantErr bool
+		want    string // expected literal echo when accepted
+	}{
+		{"over_cap_with_semicolon", "&zzz;", true, ""},
+		{"at_cap_with_semicolon", "&zz;", false, "&zz;"},
+	}
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		for _, tc := range cases {
+			t.Run(elem+"_"+tc.name, func(t *testing.T) {
+				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
+
+				var got strings.Builder
+				record := html.CharactersFunc(func(data []byte) error {
+					got.Write(data)
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				if tc.wantErr {
+					require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+						"unresolved %s reference whose literal (incl. ';') exceeds the cap must fail", tc.name)
+					return
+				}
+				require.NoError(t, err,
+					"unresolved %s reference whose literal equals the cap must be accepted", tc.name)
+				require.Equal(t, tc.want, got.String(),
+					"accepted literal must echo the full unresolved run including ';'")
+			})
+		}
+	}
+}
+
 // TestRCDATASmallCapKnownEntityResolves pins the convergent invariant that
 // entity resolution uses a FIXED maxEntityNameLen lookahead, NOT MaxContentSize:
 // a known named reference whose resolved value is tiny (a single '&', '<', …)

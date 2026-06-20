@@ -1221,9 +1221,16 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 			}
 			p.emitLiteralChunked(chunk, limit)
 		}
-		// Run ended within the cap without resolving; emit any trailing ';' too.
+		// Run ended within the cap without resolving; emit any trailing ';' too,
+		// charging it against the cap like every other literal byte so the ';'
+		// cannot push the literal past the cap unaccounted for.
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
+			emitted++
+			if emitted > sizeCap {
+				p.fatalErr = fmt.Errorf("unresolved character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
+				return
+			}
 			p.emitLiteralChunked(";", limit)
 		}
 		return
@@ -1239,7 +1246,14 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	if sizeCap <= 0 {
 		sizeCap = defaultMaxContentSize
 	}
-	if 1+len(name) > sizeCap {
+	// Charge the full literal that will be emitted: '&' + name plus the trailing
+	// ';' when one was consumed as part of the unresolved run. Omitting the ';'
+	// would undercount the literal and let an over-cap run slip past.
+	literalLen := 1 + len(name)
+	if hasSemicolon {
+		literalLen++
+	}
+	if literalLen > sizeCap {
 		p.fatalErr = fmt.Errorf("unresolved character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
 		return
 	}
