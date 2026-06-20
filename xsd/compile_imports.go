@@ -477,6 +477,15 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				continue
 			}
 			origAttrs := c.schema.attrGroups[qn]
+			// The override REPLACES the Phase-A attribute group, so the nested
+			// attribute-group ref set must be rebuilt from the redefining group's
+			// children. Snapshot the Phase-A refs first (for self-reference
+			// expansion), then clear the slot so stale Phase-A refs cannot leak and
+			// the override's own non-self refs are recorded below. Without this,
+			// checkAttrGroupDuplicates would flatten the wrong reference set (old
+			// refs leak, new refs are ignored).
+			origRefChildren := c.attrGroupRefChildren[qn]
+			delete(c.attrGroupRefChildren, qn)
 			// Build the new attribute list manually, expanding self-references
 			// inline. parseNamedAttributeGroup only collects xs:attribute children
 			// and doesn't handle xs:attributeGroup ref children within a definition.
@@ -491,18 +500,46 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				}
 				switch {
 				case isXSDElement(gce, elemAttribute):
+					// A use="prohibited" attribute is pointless inside an
+					// <xs:attributeGroup> (including a redefine override): libxml2
+					// warns and skips it so a referencing wildcard still admits the
+					// attribute. Mirror parseNamedAttributeGroup here.
+					if getAttr(gce, attrUse) == attrValProhibited {
+						if c.filename != "" {
+							c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.diagSource(), gce.Line(), gce.LocalName(), "attribute",
+								"Skipping attribute use prohibition, since it is pointless inside an <attributeGroup>."), helium.ErrorLevelWarning))
+						}
+						continue
+					}
 					au := c.parseAttributeUse(ctx, gce)
 					attrs = append(attrs, au)
 				case isXSDElement(gce, elemAttributeGroup):
 					if ref := getAttr(gce, attrRef); ref != "" {
 						refQN := c.resolveQName(ctx, gce, ref)
-						if refQN == qn && origAttrs != nil {
-							attrs = append(attrs, origAttrs...)
+						switch refQN {
+						case qn:
+							// A self-reference resolves to the Phase-A group content.
+							if origAttrs != nil {
+								attrs = append(attrs, origAttrs...)
+							}
+							if len(origRefChildren) > 0 {
+								c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], origRefChildren...)
+							}
+						default:
+							// A non-self nested ref in the override is recorded so
+							// checkAttrGroupDuplicates flattens the redefining ref set.
+							c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], refQN)
 						}
 					}
 				}
 			}
 			c.schema.attrGroups[qn] = attrs
+			// The override REPLACES the Phase-A attribute group, so re-record its
+			// source to the redefining file/line (c.includeFile is the redefining
+			// label here). Without this the duplicate-attribute-use diagnostic over
+			// this group would keep the stale Phase-A source from parseNamedAttribute
+			// Group and cite the redefined (base) file instead of the redefine.
+			c.attrGroupSources[qn] = attrGroupSource{line: elem.Line(), source: c.diagSource()}
 		}
 	}
 
@@ -596,7 +633,9 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		groupRefs:                make(map[*ModelGroup]QName),
 		groupRefSources:          make(map[*ModelGroup]groupRefSource),
 		groupSources:             make(map[QName]groupSource),
+		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
+		attrGroupRefChildren:     make(map[QName][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
 		typeKinds:                make(map[QName]redefineKind),
@@ -720,14 +759,53 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 			c.groupSources[qn] = src
 		}
 	}
+	// Merge attribute-group source info (mirroring the schema.attrGroups merge
+	// above): a group present in both keeps the parent's declaration and source.
+	for qn, src := range impC.attrGroupSources {
+		if _, exists := c.attrGroupSources[qn]; !exists {
+			// An attribute group parsed directly in the imported document (not via
+			// a nested include) has an empty source; attribute it to the imported
+			// file so its duplicate-attribute-use diagnostic cites the file whose
+			// line number it carries, not the importing schema.
+			if src.source == "" {
+				src.source = impC.filename
+			}
+			c.attrGroupSources[qn] = src
+		}
+	}
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)
+	for qn, refs := range impC.attrGroupRefChildren {
+		if _, exists := c.attrGroupRefChildren[qn]; !exists {
+			c.attrGroupRefChildren[qn] = refs
+		}
+	}
 	maps.Copy(c.globalElemSources, impC.globalElemSources)
 	maps.Copy(c.itemTypeRefs, impC.itemTypeRefs)
 	maps.Copy(c.chameleonEligible, impC.chameleonEligible)
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
 	maps.Copy(c.attrRefs, impC.attrRefs)
-	maps.Copy(c.attrUseConstraintSources, impC.attrUseConstraintSources)
-	maps.Copy(c.attrUseSources, impC.attrUseSources)
+	// Merge attribute-use default/fixed constraint sources, preserving the
+	// originating file. An attribute use parsed directly in the imported document
+	// (not via a nested include) has an empty source; attribute it to the
+	// imported file so the invalid-default/fixed diagnostic cites the file whose
+	// line number it carries, not the importing schema.
+	for au, src := range impC.attrUseConstraintSources {
+		if src.source == "" {
+			src.source = impC.filename
+		}
+		c.attrUseConstraintSources[au] = src
+	}
+	// Merge prohibited/ref'd attribute-use sources, preserving the originating
+	// file. An attribute use parsed directly in the imported document (not via a
+	// nested include) has an empty source; attribute it to the imported file so
+	// warnPointlessProhibition cites the file whose line it carries, not the
+	// importing schema.
+	for au, src := range impC.attrUseSources {
+		if src.source == "" {
+			src.source = impC.filename
+		}
+		c.attrUseSources[au] = src
+	}
 
 	return nil
 }

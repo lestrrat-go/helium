@@ -100,6 +100,9 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 	line := elem.Line()
 	local := elem.LocalName()
 	xsdElem := local
+	// Attribute to the declaring file (the included/imported schema when inside
+	// an xs:include/xs:import/xs:redefine), not the top-level compiler filename.
+	src := c.diagSource()
 
 	minPresent := hasAttr(elem, attrMinOccurs)
 	maxPresent := hasAttr(elem, attrMaxOccurs)
@@ -110,7 +113,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		n, ok := parseNonNegativeOccurs(v, false)
 		if !ok {
 			minOK = false
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMinOccurs,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
 				"The value '"+v+"' is not valid. Expected is 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
@@ -124,7 +127,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		n, ok := parseNonNegativeOccurs(v, true)
 		if !ok {
 			maxOK = false
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMaxOccurs,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMaxOccurs,
 				"The value '"+v+"' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
@@ -144,7 +147,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		}
 		if effMin >= 1 {
 			maxBelowOne = true
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMaxOccurs,
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMaxOccurs,
 				"The value must be greater than or equal to 1."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -154,7 +157,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 	// can never be exceeded). Suppress this when the ">= 1" rule already fired on
 	// maxOccurs; libxml2 reports only the maxOccurs error there.
 	if minPresent && maxPresent && minOK && maxOK && maxVal != Unbounded && !maxBelowOne && minVal > maxVal {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, xsdElem, attrMinOccurs,
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
 			"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -176,26 +179,94 @@ func readDefaultOrFixed(elem *helium.Element) (*string, *string) {
 	return defaultValue, fixedValue
 }
 
-func readProcessContents(elem *helium.Element) ProcessContentsKind {
-	switch getAttr(elem, attrProcessContents) {
+// readProcessContents reads and validates the @processContents attribute of a
+// wildcard. An absent attribute defaults to "strict". An invalid value is
+// reported as a schema parser error and treated as the "strict" default.
+func (c *compiler) readProcessContents(ctx context.Context, elem *helium.Element) ProcessContentsKind {
+	if !hasAttr(elem, attrProcessContents) {
+		return ProcessStrict
+	}
+	switch v := normalizeWhiteSpace(getAttr(elem, attrProcessContents), "collapse"); v {
+	case attrValStrict:
+		return ProcessStrict
 	case attrValLax:
 		return ProcessLax
 	case attrValSkip:
 		return ProcessSkip
 	default:
+		if c.filename != "" {
+			msg := fmt.Sprintf("'%s' is not a valid value of the union type '#processContents'.", v)
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSource(), elem.Line(),
+				elem.LocalName(), elem.LocalName(), attrProcessContents, msg), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
 		return ProcessStrict
 	}
 }
 
-func (c *compiler) readWildcard(_ context.Context, elem *helium.Element) *Wildcard {
+// validateWildcardNamespace validates the namespace-constraint grammar of a
+// wildcard's @namespace attribute (XSD 3.10.2). The value is either the keyword
+// "##any" or "##other", or a whitespace-separated list whose members are each an
+// anyURI, "##targetNamespace", or "##local". The "##any"/"##other" keywords
+// must stand alone, and no other "##"-prefixed token is allowed.
+func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.Element, raw string) {
+	if c.filename == "" {
+		return
+	}
+	reject := func(msg string) {
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSource(), elem.Line(),
+			elem.LocalName(), elem.LocalName(), attrNamespace, msg), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+
+	// The "##any" / "##other" keywords are EXACT singleton lexical forms: the
+	// value must equal the keyword with no surrounding whitespace and no other
+	// tokens. libxml2 rejects e.g. "  ##any  ". Compare against the raw value
+	// (NOT the whitespace-collapsed value) so padding is caught. True list forms
+	// like "##local ##targetNamespace" are still whitespace-collapsed below, so
+	// surrounding/inner whitespace around list members remains valid.
+	switch raw {
+	case WildcardNSAny, WildcardNSOther:
+		return
+	}
+
+	tokens := splitSpace(normalizeWhiteSpace(raw, "collapse"))
+	if len(tokens) == 0 {
+		return
+	}
+	for _, tok := range tokens {
+		switch tok {
+		case WildcardNSAny, WildcardNSOther:
+			// A bare keyword reaching here means raw != keyword (it had padding
+			// or extra tokens), so it is never a valid standalone keyword form.
+			reject(fmt.Sprintf("The value '%s' is not a valid namespace constraint: '%s' must not be combined with other items.", raw, tok))
+			return
+		case WildcardNSTargetNamespace, WildcardNSLocal:
+			// Valid only as list members.
+		default:
+			if strings.HasPrefix(tok, "##") {
+				reject(fmt.Sprintf("The value '%s' is not a valid namespace constraint: '%s' is not a recognized '##' token.", raw, tok))
+				return
+			}
+			// Otherwise treated as an anyURI namespace name.
+		}
+	}
+}
+
+func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wildcard {
 	namespace := getAttr(elem, attrNamespace)
-	if namespace == "" {
+	if !hasAttr(elem, attrNamespace) {
+		// ABSENT namespace defaults to ##any. A present-but-empty
+		// namespace="" is preserved: it is a (degenerate) namespace list
+		// that matches nothing, which is distinct from the ##any default.
 		namespace = WildcardNSAny
+	} else {
+		c.validateWildcardNamespace(ctx, elem, namespace)
 	}
 
 	return &Wildcard{
 		Namespace:       namespace,
-		ProcessContents: readProcessContents(elem),
+		ProcessContents: c.readProcessContents(ctx, elem),
 		TargetNS:        c.schema.targetNamespace,
 	}
 }
@@ -209,7 +280,7 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	}
 
 	if opts.allowAbstract {
-		decl.Abstract = getAttr(elem, attrAbstract) == attrValTrue
+		decl.Abstract = c.readBooleanAttr(ctx, elem, attrAbstract)
 	}
 
 	if opts.allowSubstitutionGroup {
@@ -246,26 +317,40 @@ func (c *compiler) readElementDecl(ctx context.Context, elem *helium.Element, op
 	return decl, nil
 }
 
-// readBooleanAttr reads a schema-side xs:boolean attribute (e.g. nillable),
-// applying whitespace-collapse lexical rules (true/false/1/0). An absent
-// attribute is false. An invalid lexical is reported as a schema parser error
-// and treated as false.
+// readBooleanAttr reads a schema-side xs:boolean attribute (e.g. nillable,
+// abstract, mixed) applying whitespace-collapse lexical rules. It accepts the
+// four canonical xs:boolean lexical forms (true/false/1/0); an absent attribute
+// is false. An invalid lexical form is reported as a schema parser error and
+// treated as false. The owning element's local name is used in the diagnostic
+// so the same helper serves every boolean schema attribute.
 func (c *compiler) readBooleanAttr(ctx context.Context, elem *helium.Element, attr string) bool {
 	if !hasAttr(elem, attr) {
 		return false
 	}
-	v := normalizeWhiteSpace(getAttr(elem, attr), "collapse")
-	switch v {
-	case "true", "1":
-		return true
-	case "false", "0":
-		return false
+	v, ok := parseSchemaBool(getAttr(elem, attr))
+	if ok {
+		return v
 	}
-	msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", v)
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, elem.Line(),
-		elem.LocalName(), elemElement, attr, msg), helium.ErrorLevelFatal))
+	msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", normalizeWhiteSpace(getAttr(elem, attr), "collapse"))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSource(), elem.Line(),
+		elem.LocalName(), elem.LocalName(), attr, msg), helium.ErrorLevelFatal))
 	c.errorCount++
 	return false
+}
+
+// parseSchemaBool parses an xs:boolean lexical value, applying the
+// whitespace-collapse rule and accepting the four canonical forms
+// "true"/"false"/"1"/"0". The second return value is false when the value is
+// not a valid xs:boolean lexical form.
+func parseSchemaBool(raw string) (bool, bool) {
+	switch normalizeWhiteSpace(raw, "collapse") {
+	case "true", "1":
+		return true, true
+	case "false", "0":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, decl *ElementDecl, sourceName string) error {
@@ -274,7 +359,7 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 		qn := c.resolveQName(ctx, elem, typeRef)
 		c.elemRefs[decl] = qn
 		c.markChameleonEligible(decl, elem, typeRef)
-		c.elemRefSources[decl] = elemRefSource{elemName: sourceName, line: elem.Line()}
+		c.elemRefSources[decl] = elemRefSource{elemName: sourceName, line: elem.Line(), source: c.diagSource()}
 		return nil
 	}
 
@@ -356,8 +441,9 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 		}
 	}
 	c.attrUseSources[au] = attrConstraintSource{
-		line:  elem.Line(),
-		local: opts.name.Local,
+		line:   elem.Line(),
+		local:  opts.name.Local,
+		source: c.includeFile,
 	}
 	au.Default, au.Fixed = readDefaultOrFixed(elem)
 	if au.Fixed != nil {
@@ -367,9 +453,10 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 	// against the attribute's declared simple type once type refs are resolved.
 	if au.Default != nil || au.Fixed != nil {
 		c.attrUseConstraintSources[au] = attrConstraintSource{
-			line:  elem.Line(),
-			local: opts.name.Local,
-			nsMap: collectNSContext(elem),
+			line:   elem.Line(),
+			local:  opts.name.Local,
+			nsMap:  collectNSContext(elem),
+			source: c.includeFile,
 		}
 	}
 	return au
@@ -407,7 +494,7 @@ func (c *compiler) parseGlobalElement(ctx context.Context, elem *helium.Element)
 		return err
 	}
 
-	c.globalElemSources[decl] = elemRefSource{elemName: name, line: elem.Line()}
+	c.globalElemSources[decl] = elemRefSource{elemName: name, line: elem.Line(), source: c.diagSource()}
 	c.schema.elements[decl.Name] = decl
 	return nil
 }
@@ -449,7 +536,7 @@ func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) 
 			IsRef:     true,
 		}
 		c.elemRefs[edecl] = qn
-		c.elemRefSources[edecl] = elemRefSource{elemName: elem.LocalName(), line: elem.Line()}
+		c.elemRefSources[edecl] = elemRefSource{elemName: elem.LocalName(), line: elem.Line(), source: c.diagSource()}
 		return &Particle{
 			MinOccurs: minOcc,
 			MaxOccurs: maxOcc,
@@ -534,8 +621,22 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 	if ref := getAttr(elem, attrRef); ref != "" {
 		qn := c.resolveQName(ctx, elem, ref)
 		au := &AttrUse{Name: qn}
-		if getAttr(elem, attrUse) == attrValRequired {
+		switch getAttr(elem, attrUse) {
+		case attrValRequired:
 			au.Required = true
+		case attrValProhibited:
+			au.Prohibited = true
+		}
+		// Record the source for a prohibited ref'd use so the pointless-prohibition
+		// warning can cite its line and declaring file. Only prohibited uses need
+		// this here; a non-prohibited ref'd use carries no inline type to feed the
+		// other attrUseSources consumers (e.g. the NOTATION enumeration check).
+		if au.Prohibited {
+			c.attrUseSources[au] = attrConstraintSource{
+				line:   elem.Line(),
+				local:  qn.Local,
+				source: c.includeFile,
+			}
 		}
 		if hasAttr(elem, attrDefault) {
 			v := getAttr(elem, attrDefault)
@@ -551,9 +652,10 @@ func (c *compiler) parseAttributeUse(ctx context.Context, elem *helium.Element) 
 		// simple type once resolveRefs copies the type in.
 		if au.Default != nil || au.Fixed != nil {
 			c.attrUseConstraintSources[au] = attrConstraintSource{
-				line:  elem.Line(),
-				local: qn.Local,
-				nsMap: collectNSContext(elem),
+				line:   elem.Line(),
+				local:  qn.Local,
+				nsMap:  collectNSContext(elem),
+				source: c.includeFile,
 			}
 		}
 		c.attrRefs[au] = qn
