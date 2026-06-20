@@ -10,6 +10,9 @@
 //	schema, err := schematron.NewCompiler().
 //	    CompileFile(ctx, "rules.sch")
 //
+// [Compiler.Compile] and [Compiler.CompileFile] return [ErrCompileFailed]
+// (with a nil schema) on fatal schema errors.
+//
 // # Validation
 //
 // Use [NewValidator] to validate a document against a compiled schema:
@@ -18,10 +21,11 @@
 //	    Label("input.xml").
 //	    Validate(ctx, doc)
 //
-// On failure, the returned error is [ErrValidationFailed]. Individual
-// errors are delivered as [*ValidationError] values to the configured
-// [helium.ErrorHandler] (structured fields: Filename, Line, Element,
-// Path, Message).
+// [Validator.Validate] returns [ErrNoSchema] when the Validator has no (or a
+// zero) compiled schema, and [ErrValidationFailed] when assertions fail.
+// Individual errors are delivered as [*ValidationError] values to the
+// configured [helium.ErrorHandler] (structured fields: Filename, Line,
+// Element, Path, Message).
 //
 // # Examples
 //

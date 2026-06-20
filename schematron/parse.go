@@ -18,7 +18,33 @@ const (
 var (
 	errNoRootElement    = errors.New("schematron: no root element")
 	errNotSchemaElement = errors.New("schematron: root element is not a Schematron <schema>")
+
+	// ErrCompileFailed is returned by [Compiler.Compile] and
+	// [Compiler.CompileFile] when the Schematron document contains one or
+	// more fatal compilation errors (for example, a schema with no valid
+	// pattern, or a malformed rule). When this error is returned the
+	// resulting *Schema is nil. Individual errors are also delivered to the
+	// configured [helium.ErrorHandler], if any.
+	ErrCompileFailed = errors.New("schematron: compilation failed")
 )
+
+// fatalTrackingHandler wraps an ErrorHandler and records whether any
+// fatal-level error has passed through it. This lets compileSchema fail the
+// overall Compile when fatal errors occur, regardless of whether the caller
+// supplied an error handler.
+type fatalTrackingHandler struct {
+	inner helium.ErrorHandler
+	fatal bool
+}
+
+func (h *fatalTrackingHandler) Handle(ctx context.Context, err error) {
+	if l, ok := err.(helium.ErrorLeveler); ok && l.ErrorLevel() == helium.ErrorLevelFatal {
+		h.fatal = true
+	}
+	if h.inner != nil {
+		h.inner.Handle(ctx, err)
+	}
+}
 
 func compileSchema(compileCtx context.Context, doc *helium.Document, cfg *compileConfig) (*Schema, error) {
 	root := findDocumentElement(doc)
@@ -35,30 +61,31 @@ func compileSchema(compileCtx context.Context, doc *helium.Document, cfg *compil
 		namespaces: make(map[string]string),
 	}
 
-	var eh helium.ErrorHandler = helium.NilErrorHandler{}
+	var inner helium.ErrorHandler = helium.NilErrorHandler{}
 	if cfg != nil && cfg.errorHandler != nil {
-		eh = cfg.errorHandler
+		inner = cfg.errorHandler
 	}
+	eh := &fatalTrackingHandler{inner: inner}
 
 	// Phase-based parsing matching libxml2's xmlSchematronParse ordering:
 	// title, then ns elements, then pattern elements.
 	elem := nextSchematronElement(root.FirstChild())
 
 	// Phase 1: optional title
-	if elem != nil && stripPrefix(elem.Name()) == "title" {
+	if elem != nil && isSchematronElement(elem, schNS, "title") {
 		schema.title = elemTextContent(elem)
 		elem = nextSchematronElement(elem.NextSibling())
 	}
 
 	// Phase 2: ns elements
-	for elem != nil && stripPrefix(elem.Name()) == "ns" {
+	for elem != nil && isSchematronElement(elem, schNS, "ns") {
 		addNamespace(schema.namespaces, elem)
 		elem = nextSchematronElement(elem.NextSibling())
 	}
 
 	// Phase 3: pattern elements (anything else is an error)
 	for elem != nil {
-		if stripPrefix(elem.Name()) == "pattern" {
+		if isSchematronElement(elem, schNS, "pattern") {
 			if p := compilePattern(compileCtx, elem, schNS, eh); p != nil {
 				schema.patterns = append(schema.patterns, p)
 			}
@@ -72,15 +99,19 @@ func compileSchema(compileCtx context.Context, doc *helium.Document, cfg *compil
 		eh.Handle(compileCtx, helium.NewLeveledError("schema has no pattern element\n", helium.ErrorLevelFatal))
 	}
 
+	if eh.fatal {
+		return nil, ErrCompileFailed
+	}
+
 	return schema, nil
 }
 
 func compilePattern(compileCtx context.Context, elem *helium.Element, schNS string, eh helium.ErrorHandler) *pattern {
 	p := &pattern{
-		name: getAttr(elem, "name"),
+		name: getStructuralAttr(elem, "name"),
 	}
 	if p.name == "" {
-		p.name = getAttr(elem, "id")
+		p.name = getStructuralAttr(elem, "id")
 	}
 
 	for child := range helium.Children(elem) {
@@ -88,7 +119,7 @@ func compilePattern(compileCtx context.Context, elem *helium.Element, schNS stri
 		if !ok {
 			continue
 		}
-		if stripPrefix(ruleElem.Name()) != "rule" {
+		if !isSchematronElement(ruleElem, schNS, "rule") {
 			eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("Expecting a rule element instead of %s\n", ruleElem.Name()), helium.ErrorLevelFatal))
 			continue
 		}
@@ -106,7 +137,7 @@ func compilePattern(compileCtx context.Context, elem *helium.Element, schNS stri
 }
 
 func compileRule(compileCtx context.Context, elem *helium.Element, schNS string, eh helium.ErrorHandler) *rule {
-	ctxExpr := getAttr(elem, "context")
+	ctxExpr := getStructuralAttr(elem, "context")
 	if ctxExpr == "" {
 		eh.Handle(compileCtx, helium.NewLeveledError("rule has an empty context attribute\n", helium.ErrorLevelFatal))
 		return nil
@@ -143,6 +174,11 @@ func compileRule(compileCtx context.Context, elem *helium.Element, schNS string,
 
 // compileRuleChild processes a single child element of a <rule>.
 func compileRuleChild(compileCtx context.Context, r *rule, childElem *helium.Element, schNS string, eh helium.ErrorHandler) {
+	// Only Schematron-namespaced children carry structural meaning; foreign
+	// elements (e.g. <x:assert>) are ignored rather than executed.
+	if !elementInNamespace(childElem, schNS) {
+		return
+	}
 	switch stripPrefix(childElem.Name()) {
 	case "let":
 		lb, err := compileLet(childElem)
@@ -168,8 +204,8 @@ func compileRuleChild(compileCtx context.Context, r *rule, childElem *helium.Ele
 }
 
 func compileLet(elem *helium.Element) (*letBinding, error) {
-	name := getAttr(elem, "name")
-	value := getAttr(elem, "value")
+	name := getStructuralAttr(elem, "name")
+	value := getStructuralAttr(elem, "value")
 	if name == "" || value == "" {
 		return nil, nil //nolint:nilnil
 	}
@@ -186,7 +222,7 @@ func compileLet(elem *helium.Element) (*letBinding, error) {
 }
 
 func compileTest(compileCtx context.Context, elem *helium.Element, typ testType, schNS string, eh helium.ErrorHandler) *test {
-	testExpr := getAttr(elem, "test")
+	testExpr := getStructuralAttr(elem, "test")
 	if testExpr == "" {
 		return nil
 	}
@@ -208,7 +244,7 @@ func compileTest(compileCtx context.Context, elem *helium.Element, typ testType,
 	}
 }
 
-func parseMessage(compileCtx context.Context, elem *helium.Element, _ string, eh helium.ErrorHandler) []messagePart {
+func parseMessage(compileCtx context.Context, elem *helium.Element, schNS string, eh helium.ErrorHandler) []messagePart {
 	var parts []messagePart
 
 	for child := range helium.Children(elem) {
@@ -220,7 +256,7 @@ func parseMessage(compileCtx context.Context, elem *helium.Element, _ string, eh
 			if !ok {
 				continue
 			}
-			parts = parseMessageElement(compileCtx, childElem, parts, eh)
+			parts = parseMessageElement(compileCtx, childElem, schNS, parts, eh)
 		}
 	}
 
@@ -229,10 +265,15 @@ func parseMessage(compileCtx context.Context, elem *helium.Element, _ string, eh
 
 // parseMessageElement processes a single element child of a message/assert/report,
 // appending the appropriate messagePart to parts and returning the updated slice.
-func parseMessageElement(compileCtx context.Context, childElem *helium.Element, parts []messagePart, eh helium.ErrorHandler) []messagePart {
+func parseMessageElement(compileCtx context.Context, childElem *helium.Element, schNS string, parts []messagePart, eh helium.ErrorHandler) []messagePart {
+	// Only Schematron-namespaced <name>/<value-of> carry structural meaning;
+	// foreign elements contribute nothing to the message.
+	if !elementInNamespace(childElem, schNS) {
+		return parts
+	}
 	switch stripPrefix(childElem.Name()) {
 	case "name":
-		path := getAttr(childElem, "path")
+		path := getStructuralAttr(childElem, "path")
 		if path == "" {
 			path = "."
 		}
@@ -243,7 +284,7 @@ func parseMessageElement(compileCtx context.Context, childElem *helium.Element, 
 		}
 		return append(parts, namePart{path: path, expr: compiled})
 	case "value-of":
-		sel := getAttr(childElem, "select")
+		sel := getStructuralAttr(childElem, "select")
 		if sel == "" {
 			eh.Handle(compileCtx, helium.NewLeveledError("value-of has no select attribute\n", helium.ErrorLevelFatal))
 			return parts
@@ -353,13 +394,34 @@ func stripPrefix(name string) string {
 	return name
 }
 
-// getAttr returns the value of an attribute on the element by local name.
-func getAttr(elem *helium.Element, name string) string {
-	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
+// getStructuralAttr returns the value of an unqualified (no namespace)
+// attribute on the element. Schematron structural attributes such as
+// context/test/select are defined to have no namespace; a prefixed attribute
+// like x:test belongs to a foreign vocabulary and must not be read as
+// Schematron.
+func getStructuralAttr(elem *helium.Element, name string) string {
+	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
 	if !ok {
 		return ""
 	}
 	return attr.Value()
+}
+
+// elementInNamespace reports whether elem belongs to the given Schematron
+// namespace. Foreign-namespaced elements (e.g. <x:rule>) must not be treated
+// as Schematron constructs.
+func elementInNamespace(elem *helium.Element, schNS string) bool {
+	ns := elem.Namespace()
+	if ns == nil {
+		return false
+	}
+	return ns.URI() == schNS
+}
+
+// isSchematronElement reports whether elem is the named Schematron element in
+// the detected Schematron namespace.
+func isSchematronElement(elem *helium.Element, schNS, localName string) bool {
+	return elementInNamespace(elem, schNS) && elem.LocalName() == localName
 }
 
 // elemTextContent returns the concatenated text content of an element's children.
@@ -393,8 +455,8 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 // addNamespace registers a namespace binding from a <ns> element if
 // both the prefix and uri attributes are non-empty.
 func addNamespace(namespaces map[string]string, elem *helium.Element) {
-	prefix := getAttr(elem, "prefix")
-	uri := getAttr(elem, "uri")
+	prefix := getStructuralAttr(elem, "prefix")
+	uri := getStructuralAttr(elem, "uri")
 	if prefix != "" && uri != "" {
 		namespaces[prefix] = uri
 	}
