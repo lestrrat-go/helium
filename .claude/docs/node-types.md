@@ -95,7 +95,9 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 `Document.GetElementByID(id)` — O(1) via `ids map[string]*Element` (populated during parse). Falls back to O(n) tree walk if map empty.
 
 ### Content() Default
-`docnode.Content()` walks children and concatenates. Overridden by Text, CDATA, Comment, PI, EntityRef (which return their own content directly).
+`docnode.Content()` walks children and concatenates (returns a fresh buffer). Overridden by Text, CDATA, Comment, PI, EntityRef.
+
+The text-bearing leaves (Text, Comment, CDATASection) store content in an internal mutable `content []byte`. Their exported `Content()` returns a **defensive copy** (`bytes.Clone`) so a caller mutating the result cannot corrupt the DOM. Internal read-only hot paths (serializers in `writer.go`/`writer_xhtml.go`) use the package-level `rawContent(Node)` helper — backed by an unexported `rawContent()` method on each of those three leaf types — to get the raw slice without the copy. The `rawContentNode` interface gates the no-copy path; for any other node `rawContent` falls back to `Content()`. PI/EntityRef/Entity/NamespaceNodeWrapper already returned string-derived copies and are unaffected.
 
 ### Predefined Entities
 5 singletons: `EntityLT`, `EntityGT`, `EntityAmpersand`, `EntityApostrophe`, `EntityQuote`. Type `InternalPredefinedEntity`. Cannot be redeclared.
