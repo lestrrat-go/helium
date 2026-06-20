@@ -129,6 +129,20 @@ func deepCloneAtomicValue(a AtomicValue) (AtomicValue, bool) {
 	return a, true
 }
 
+// cloneMapKey returns a value-semantics copy of a map key. Map keys are single
+// AtomicValues, so this is O(1). A pointer-backed key (e.g. xs:integer backed by
+// *big.Int) could otherwise be mutated by the caller after insertion and, because
+// single-entry maps recompute the stored key in Get, the map's key would change
+// after construction. Cloning at every map ingress detaches the stored key from
+// caller-held storage. Immutable payloads keep their original (already-boxed)
+// AtomicValue and skip the re-allocation.
+func cloneMapKey(key AtomicValue) AtomicValue {
+	if cloned, copied := deepCloneAtomicValue(key); copied {
+		return cloned
+	}
+	return key
+}
+
 // CloneSequence returns a deep copy of the Sequence.
 func CloneSequence(seq Sequence) Sequence {
 	return cloneSequence(seq)
@@ -824,7 +838,7 @@ func normalizeMapKey(key AtomicValue) mapKey {
 // Used by map:entry where the value is already owned by the caller.
 func newSingleEntryMap(key AtomicValue, value Sequence) MapItem {
 	return MapItem{
-		entries: []mapEntry{{key: key, value: value}},
+		entries: []mapEntry{{key: cloneMapKey(key), value: value}},
 	}
 }
 
@@ -834,7 +848,7 @@ func NewMap(entries []MapEntry) MapItem {
 	// skip the index map allocation entirely.
 	if len(entries) == 1 {
 		return MapItem{
-			entries: []mapEntry{{key: entries[0].Key, value: cloneSequence(entries[0].Value)}},
+			entries: []mapEntry{{key: cloneMapKey(entries[0].Key), value: cloneSequence(entries[0].Value)}},
 		}
 	}
 	m := MapItem{
@@ -842,7 +856,7 @@ func NewMap(entries []MapEntry) MapItem {
 		index:   make(map[mapKey]int, len(entries)),
 	}
 	for i, e := range entries {
-		m.entries[i] = mapEntry{key: e.Key, value: cloneSequence(e.Value)}
+		m.entries[i] = mapEntry{key: cloneMapKey(e.Key), value: cloneSequence(e.Value)}
 		m.index[normalizeMapKey(e.Key)] = i
 	}
 	return m
@@ -895,9 +909,9 @@ func (m MapItem) Put(key AtomicValue, value Sequence) MapItem {
 	}
 
 	if idx, ok := newIndex[nk]; ok {
-		newEntries[idx] = mapEntry{key: key, value: cloneSequence(value)}
+		newEntries[idx] = mapEntry{key: cloneMapKey(key), value: cloneSequence(value)}
 	} else {
-		newEntries = append(newEntries, mapEntry{key: key, value: cloneSequence(value)})
+		newEntries = append(newEntries, mapEntry{key: cloneMapKey(key), value: cloneSequence(value)})
 		newIndex[nk] = len(newEntries) - 1
 	}
 	return MapItem{entries: newEntries, index: newIndex}
@@ -912,8 +926,20 @@ func (m MapItem) Contains(key AtomicValue) bool {
 	return ok
 }
 
-// Keys returns all keys in insertion order.
+// Keys returns all keys in insertion order. Keys are cloned so a caller cannot
+// mutate a pointer-backed key and change the stored map key.
 func (m MapItem) Keys() []AtomicValue {
+	keys := make([]AtomicValue, len(m.entries))
+	for i, e := range m.entries {
+		keys[i] = cloneMapKey(e.key)
+	}
+	return keys
+}
+
+// keys0 returns the map's keys in insertion order without cloning. The returned
+// AtomicValues are the map's own stored keys; callers must not mutate them.
+// Used by trusted internal paths that only read keys.
+func (m MapItem) keys0() []AtomicValue {
 	keys := make([]AtomicValue, len(m.entries))
 	for i, e := range m.entries {
 		keys[i] = e.key
@@ -927,7 +953,24 @@ func (m MapItem) Size() int {
 }
 
 // ForEach calls fn for each entry in insertion order. Stops on first error.
+// The key and value passed to fn are clones of the map's stored entry, so a
+// caller that mutates a pointer-backed atomic through fn cannot change the
+// supposedly-immutable map. Trusted internal callers that need to avoid the
+// clone (e.g. bounded/lazy iteration) use forEach0 instead.
 func (m MapItem) ForEach(fn func(AtomicValue, Sequence) error) error {
+	for _, e := range m.entries {
+		if err := fn(cloneMapKey(e.key), cloneSequence(e.value)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// forEach0 calls fn for each entry in insertion order WITHOUT cloning the key or
+// value. The key and value passed to fn are the map's own backing storage;
+// callers must not mutate either and must clone before exposing them outward.
+// Used by trusted internal/lazy/bounded paths that preserve laziness and bounds.
+func (m MapItem) forEach0(fn func(AtomicValue, Sequence) error) error {
 	for _, e := range m.entries {
 		if err := fn(e.key, e.value); err != nil {
 			return err
@@ -993,7 +1036,7 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 				case MergeUseFirst:
 					continue
 				case MergeUseLast:
-					allEntries[idx] = mapEntry{key: e.key, value: cloneSequence(e.value)}
+					allEntries[idx] = mapEntry{key: cloneMapKey(e.key), value: cloneSequence(e.value)}
 					continue
 				case MergeReject:
 					return MapItem{}, &XPathError{
@@ -1010,7 +1053,7 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 				}
 			}
 			seen[nk] = len(allEntries)
-			allEntries = append(allEntries, mapEntry{key: e.key, value: cloneSequence(e.value)})
+			allEntries = append(allEntries, mapEntry{key: cloneMapKey(e.key), value: cloneSequence(e.value)})
 		}
 	}
 
@@ -1044,7 +1087,9 @@ func NewMapBuilder(policy MergePolicy, sizeHint int) *MapBuilder {
 // Add inserts a key-value pair into the builder, applying the merge policy
 // for duplicate keys. The value is NOT cloned — the caller must ensure the
 // value is not mutated after this call (which is the case for values produced
-// by the evaluator, since XPath values are immutable).
+// by the evaluator, since XPath values are immutable). The key IS cloned
+// (an O(1) single-atomic copy) so a pointer-backed key cannot be mutated
+// after insertion and silently change the stored map key.
 func (b *MapBuilder) Add(key AtomicValue, value Sequence) error {
 	nk := normalizeMapKey(key)
 	if idx, ok := b.index[nk]; ok {
@@ -1052,7 +1097,7 @@ func (b *MapBuilder) Add(key AtomicValue, value Sequence) error {
 		case MergeUseFirst:
 			return nil
 		case MergeUseLast:
-			b.entries[idx] = mapEntry{key: key, value: value}
+			b.entries[idx] = mapEntry{key: cloneMapKey(key), value: value}
 			return nil
 		case MergeReject:
 			return &XPathError{
@@ -1069,7 +1114,7 @@ func (b *MapBuilder) Add(key AtomicValue, value Sequence) error {
 		}
 	}
 	b.index[nk] = len(b.entries)
-	b.entries = append(b.entries, mapEntry{key: key, value: value})
+	b.entries = append(b.entries, mapEntry{key: cloneMapKey(key), value: value})
 	return nil
 }
 

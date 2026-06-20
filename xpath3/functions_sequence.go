@@ -408,8 +408,8 @@ func deepEqualMap(a, b MapItem, opts deepEqualOptions) (bool, error) {
 	}
 	// For each key in a, find a matching key in b using deep-equal comparison
 	// (handles cross-type numeric keys like xs:integer(1) == xs:double(1.0))
-	aKeys := a.Keys()
-	bKeys := b.Keys()
+	aKeys := a.keys0()
+	bKeys := b.keys0()
 	bUsed := make([]bool, len(bKeys))
 	for _, ak := range aKeys {
 		found := false

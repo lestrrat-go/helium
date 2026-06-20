@@ -80,9 +80,7 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		if !ok {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "map:merge requires sequence of maps"}
 		}
-		mergeErr := m.ForEach(func(k AtomicValue, v Sequence) error {
-			return builder.Add(k, v)
-		})
+		mergeErr := m.forEach0(builder.Add)
 		if mergeErr != nil {
 			return nil, mergeErr
 		}

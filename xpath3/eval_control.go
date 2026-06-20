@@ -70,7 +70,11 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 		if all {
 			var result ItemSlice
 			var boundErr error
-			_ = v.ForEach(func(_ AtomicValue, val Sequence) error {
+			// Bounded internal walk: iterate the stored values in place without
+			// cloning (mirroring the get0/entries0 walkers) so a borrowed lazy
+			// value is bound-checked rather than eagerly cloned. The result is
+			// materialized into a fresh slice by appendBounded.
+			_ = v.forEach0(func(_ AtomicValue, val Sequence) error {
 				result, boundErr = appendBounded(result, seqMaterialize(val), ec.maxNodes)
 				return boundErr
 			})

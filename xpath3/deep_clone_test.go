@@ -125,6 +125,83 @@ func TestDeepCloneValueSemantics(t *testing.T) {
 		require.Equal(t, int64(7), readInt(t, gotVal), "nested map value must be detached from the source pointer")
 	})
 
+	// bigIntKey builds a *big.Int-backed xs:integer AtomicValue suitable for use
+	// as a map key, returning the shared backing pointer so the caller can mutate
+	// it after insertion.
+	bigIntKey := func(n int64) (xpath3.AtomicValue, *big.Int) {
+		bi := big.NewInt(n)
+		return xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: bi}, bi
+	}
+
+	keyInt := func(t *testing.T, k xpath3.AtomicValue) int64 {
+		t.Helper()
+		return k.BigInt().Int64()
+	}
+
+	t.Run("NewMap detaches pointer-backed key", func(t *testing.T) {
+		t.Parallel()
+
+		key, bi := bigIntKey(7)
+		val := xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "v"}}
+		m := xpath3.NewMap([]xpath3.MapEntry{{Key: key, Value: val}})
+
+		// Mutate the original *big.Int after it was inserted as a key.
+		bi.SetInt64(999)
+
+		// The stored key must still be 7: lookup with a fresh 7 key must hit, and
+		// the key returned by Keys must read 7.
+		lookup, _ := bigIntKey(7)
+		_, ok := m.Get(lookup)
+		require.True(t, ok, "stored key must be unaffected by mutation of the source pointer")
+
+		keys := m.Keys()
+		require.Len(t, keys, 1)
+		require.Equal(t, int64(7), keyInt(t, keys[0]), "Keys must return the detached stored key")
+	})
+
+	t.Run("map:put detaches pointer-backed key", func(t *testing.T) {
+		t.Parallel()
+
+		base := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "x"}, Value: xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(1)}}},
+		})
+
+		key, bi := bigIntKey(7)
+		val := xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "v"}}
+		m2 := base.Put(key, val)
+
+		bi.SetInt64(999)
+
+		lookup, _ := bigIntKey(7)
+		_, ok := m2.Get(lookup)
+		require.True(t, ok, "Put-stored key must be unaffected by mutation of the source pointer")
+	})
+
+	t.Run("ForEach callback cannot mutate stored map", func(t *testing.T) {
+		t.Parallel()
+
+		key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "k"}
+		seq, _ := bigIntSeq(7)
+		m := xpath3.NewMap([]xpath3.MapEntry{{Key: key, Value: seq}})
+
+		// Mutate the value's pointer-backed atomic through the ForEach callback.
+		err := m.ForEach(func(_ xpath3.AtomicValue, v xpath3.Sequence) error {
+			items := v.Materialize()
+			require.Len(t, items, 1)
+			av, ok := items[0].(xpath3.AtomicValue)
+			require.True(t, ok)
+			bi, ok := av.Value.(*big.Int)
+			require.True(t, ok, "expected *big.Int, got %T", av.Value)
+			bi.SetInt64(999)
+			return nil
+		})
+		require.NoError(t, err)
+
+		got, ok := m.Get(key)
+		require.True(t, ok)
+		require.Equal(t, int64(7), readInt(t, got), "map value must be unaffected by mutation through the ForEach callback")
+	})
+
 	t.Run("byte-slice atomic is detached", func(t *testing.T) {
 		t.Parallel()
 
