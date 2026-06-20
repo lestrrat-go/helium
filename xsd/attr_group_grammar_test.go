@@ -41,10 +41,12 @@ func TestAttrGroupSiblingRefDuplicate(t *testing.T) {
 		"two sibling refs to the same group must surface the duplicated attribute; got: %q", errs)
 }
 
-// TestAttrGroupCycleStillCut verifies that the recursion-stack guard added for
-// sibling expansion still cuts a genuine reference CYCLE (h -> i -> h) without
-// looping or false-rejecting. The schema is structurally valid (no duplicate
-// names) and must compile cleanly.
+// TestAttrGroupCycleStillCut verifies an INDIRECT attribute-group reference cycle
+// (h -> i -> h) is reported as a circular reference (src-attribute_group.3),
+// matching the direct-self-reference behavior — an invalid (circular) schema must
+// NOT compile silently. The cycle's back-edge is cut so the duplicate-detection
+// walk still terminates without misreporting the structurally-valid names 'a'/'b'
+// as duplicates.
 func TestAttrGroupCycleStillCut(t *testing.T) {
 	t.Parallel()
 
@@ -63,14 +65,82 @@ func TestAttrGroupCycleStillCut(t *testing.T) {
   <xs:element name="root" type="t"/>
 </xs:schema>`
 
-	// An indirect cycle is itself a circular reference, but the point of this test
-	// is that the duplicate-detection walk terminates: it must not loop, and it
-	// must not falsely report 'a'/'b' as duplicates.
 	_, errs := compileWithErrors(t, schemaXML)
+	require.Contains(t, errs, "Circular reference to the attribute group",
+		"an indirect attribute-group cycle must be reported as circular; got: %q", errs)
+	// The back-edge cut must not turn the structurally-valid names into duplicates.
 	require.NotContains(t, errs, "Duplicate attribute use 'a'",
 		"a cycle must not be misreported as a duplicate of 'a'; got: %q", errs)
 	require.NotContains(t, errs, "Duplicate attribute use 'b'",
 		"a cycle must not be misreported as a duplicate of 'b'; got: %q", errs)
+}
+
+// TestAttrGroupIndirectCycleThreeNode verifies a 3-node indirect cycle
+// (a -> b -> c -> a) is reported as a circular attribute-group reference rather
+// than silently compiling.
+func TestAttrGroupIndirectCycleThreeNode(t *testing.T) {
+	t.Parallel()
+
+	schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="a">
+    <xs:attribute name="pa" type="xs:string"/>
+    <xs:attributeGroup ref="b"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="b">
+    <xs:attribute name="pb" type="xs:string"/>
+    <xs:attributeGroup ref="c"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="c">
+    <xs:attribute name="pc" type="xs:string"/>
+    <xs:attributeGroup ref="a"/>
+  </xs:attributeGroup>
+  <xs:complexType name="t">
+    <xs:attributeGroup ref="a"/>
+  </xs:complexType>
+  <xs:element name="root" type="t"/>
+</xs:schema>`
+
+	_, errs := compileWithErrors(t, schemaXML)
+	require.Contains(t, errs, "Circular reference to the attribute group",
+		"a 3-node indirect attribute-group cycle must be reported as circular; got: %q", errs)
+	require.NotContains(t, errs, "Duplicate attribute use",
+		"a cycle must not be misreported as a duplicate attribute use; got: %q", errs)
+}
+
+// TestAttrGroupDiamondNoCycle verifies a NON-cyclic diamond of attribute-group
+// references (a -> b, a -> c, b -> d, c -> d) compiles WITHOUT a false circular-
+// reference error: d is reachable by two paths but no path returns to a node
+// already on the reference chain.
+func TestAttrGroupDiamondNoCycle(t *testing.T) {
+	t.Parallel()
+
+	schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="d">
+    <xs:attribute name="pd" type="xs:string"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="b">
+    <xs:attribute name="pb" type="xs:string"/>
+    <xs:attributeGroup ref="d"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="c">
+    <xs:attribute name="pc" type="xs:string"/>
+    <xs:attributeGroup ref="d"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="a">
+    <xs:attribute name="pa" type="xs:string"/>
+    <xs:attributeGroup ref="b"/>
+    <xs:attributeGroup ref="c"/>
+  </xs:attributeGroup>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attributeGroup ref="a"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	_, errs := compileWithErrors(t, schemaXML)
+	require.NotContains(t, errs, "Circular reference to the attribute group",
+		"a non-cyclic diamond must not be reported as circular; got: %q", errs)
 }
 
 // TestAttrGroupSelfReferenceCircular verifies that a SELF-referential attribute
