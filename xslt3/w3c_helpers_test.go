@@ -1032,13 +1032,13 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		// Extract embedded stylesheet from source document
 		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
 		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver)
+		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
 		ss, err = compiler.Compile(t.Context(), ssDoc)
 	} else if len(tc.PackageDeps) > 0 || len(tc.Params) > 0 || len(tc.ImportSchemaPaths) > 0 {
 		// When package deps, external params, or import schemas exist, compile without caching.
 		ssPath := w3cResolvePath(tc.StylesheetPath)
 		absPath, _ := filepath.Abs(ssPath)
-		compiler := xslt3.NewCompiler().BaseURI(absPath).URIResolver(w3cTestCompileResolver)
+		compiler := xslt3.NewCompiler().BaseURI(absPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
 		if len(tc.PackageDeps) > 0 {
 			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps, versionResolution: tc.VersionResolution})
 		}
@@ -1086,7 +1086,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		// standalone stylesheet. Extract and compile the embedded one.
 		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
 		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver)
+		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
 		ss, err = compiler.Compile(t.Context(), ssDoc)
 	} else {
 		ssPath := w3cResolvePath(tc.StylesheetPath)
@@ -1276,7 +1276,11 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	// also fetch real http(s) URLs from www.w3.org. The harness opts in
 	// to both — production callers must NOT replicate this; supply a
 	// tightly scoped URIResolver / scoped HTTPClient instead.
-	inv = inv.URIResolver(w3cTestFileResolver).HTTPClient(w3cTestHTTPClient)
+	// The W3C suite includes tests (e.g. base-uri-051) that load documents
+	// containing external SYSTEM entities via doc()/document(). XXE is blocked
+	// by default; the harness runs against trusted local test data and opts in.
+	// Production callers must NOT replicate this for untrusted documents.
+	inv = inv.URIResolver(w3cTestFileResolver).HTTPClient(w3cTestHTTPClient).AllowExternalEntities(true)
 
 	// Set base output URI for current-output-uri(). Use explicit value if
 	// provided, otherwise auto-compute for tests in the known list.
@@ -2602,7 +2606,7 @@ func w3cCompileCached(ctx context.Context, path string) (*xslt3.Stylesheet, erro
 	if err != nil {
 		return nil, err
 	}
-	ss, err := xslt3.NewCompiler().BaseURI(absPath).URIResolver(w3cTestCompileResolver).Compile(ctx, doc)
+	ss, err := xslt3.NewCompiler().BaseURI(absPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true).Compile(ctx, doc)
 	if err != nil {
 		return nil, err
 	}

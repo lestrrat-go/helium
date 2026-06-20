@@ -27,7 +27,11 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	if err != nil {
 		return nil, err
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
+	// Imported XSD schemas are ALWAYS parsed XXE-blocked: the entity opt-in
+	// (Compiler.AllowExternalEntities) does NOT extend to schema documents.
+	// External DTDs / general entities in a schema are neither loaded nor
+	// substituted regardless of the compiler's allowExternalEntities setting.
+	doc, err := parseExternalXML(ctx, data, "", false, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
 	}
@@ -68,6 +72,24 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
 	}
 	return schema, nil
+}
+
+// loadResourceBytes loads an arbitrary resource (e.g. an opted-in external
+// DTD/general entity referenced by a stylesheet module) through the compile-time
+// URIResolver, preserving the default-deny policy (no resolver → refused, no
+// os.Open fallback) and the per-resource read cap. It is the compile-time
+// entity loader handed to parseExternalXML so that opted-in external entities go
+// through the SAME resolver-mediated, bounded channel as the parent module.
+func (c *compiler) loadResourceBytes(_ context.Context, uri string) ([]byte, error) {
+	if c.resolver == nil {
+		return nil, staticError(errCodeXTSE0165,
+			"cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
+	}
+	rc, err := c.resolver.Resolve(uri)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve %q: %w", uri, err)
+	}
+	return readCloserToBytes(rc, c.maxResourceBytes)
 }
 
 // loadSchemaBytes loads a nested-schema document referenced by

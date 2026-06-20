@@ -140,6 +140,7 @@ type Stylesheet struct {
 	uriResolver           URIResolver                 // resolver used at compile time (for fn:transform nested compiles)
 	compilerImportSchemas []*xsd.Schema               // pre-compiled schemas from compiler (for fn:transform nested compiles)
 	maxResourceBytes      int64                       // per-resource read cap from compiler; 0 = MaxResourceBytes default, <0 = unbounded
+	allowExternalEntities bool                        // compile-time opt-in: legacy permissive external-entity parsing (for fn:transform nested compiles)
 }
 
 // globalContextItemDef represents a compiled xsl:global-context-item declaration.

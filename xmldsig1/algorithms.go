@@ -15,43 +15,56 @@ import (
 
 type signatureAlgorithm struct {
 	hash crypto.Hash // 0 for Ed25519 (no pre-hash)
+	weak bool        // true for SHA-1-based algorithms (rejected by default)
 }
 
 type digestAlgorithm struct {
 	hash crypto.Hash
+	weak bool // true for SHA-1 (rejected by default)
 }
 
 var signatureAlgorithms = map[string]signatureAlgorithm{
-	AlgRSASHA1:     {hash: crypto.SHA1},
+	AlgRSASHA1:     {hash: crypto.SHA1, weak: true},
 	AlgRSASHA256:   {hash: crypto.SHA256},
 	AlgECDSASHA256: {hash: crypto.SHA256},
 	AlgECDSASHA384: {hash: crypto.SHA384},
-	AlgHMACSHA1:    {hash: crypto.SHA1},
+	AlgHMACSHA1:    {hash: crypto.SHA1, weak: true},
 	AlgHMACSHA256:  {hash: crypto.SHA256},
 	AlgEd25519:     {hash: 0},
 }
 
 var digestAlgorithms = map[string]digestAlgorithm{
-	DigestSHA1:   {hash: crypto.SHA1},
+	DigestSHA1:   {hash: crypto.SHA1, weak: true},
 	DigestSHA256: {hash: crypto.SHA256},
 	DigestSHA384: {hash: crypto.SHA384},
 	DigestSHA512: {hash: crypto.SHA512},
 }
 
-func computeDigest(algURI string, data []byte) ([]byte, error) {
+// computeDigest hashes data with the algorithm identified by algURI. SHA-1 is
+// rejected with ErrWeakAlgorithm unless allowSHA1 is true.
+func computeDigest(algURI string, data []byte, allowSHA1 bool) ([]byte, error) {
 	da, ok := digestAlgorithms[algURI]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, algURI)
+	}
+	if da.weak && !allowSHA1 {
+		return nil, fmt.Errorf("%w: %s", ErrWeakAlgorithm, algURI)
 	}
 	h := da.hash.New()
 	h.Write(data)
 	return h.Sum(nil), nil
 }
 
-func signBytes(algURI string, key any, data []byte) ([]byte, error) {
+// signBytes signs data with the algorithm identified by algURI. SHA-1-based
+// signature algorithms are rejected with ErrWeakAlgorithm unless allowSHA1 is
+// true.
+func signBytes(algURI string, key any, data []byte, allowSHA1 bool) ([]byte, error) {
 	sa, ok := signatureAlgorithms[algURI]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, algURI)
+	}
+	if sa.weak && !allowSHA1 {
+		return nil, fmt.Errorf("%w: %s", ErrWeakAlgorithm, algURI)
 	}
 
 	switch algURI {
@@ -66,10 +79,16 @@ func signBytes(algURI string, key any, data []byte) ([]byte, error) {
 	}
 }
 
-func verifyBytes(algURI string, key any, data, sig []byte) error {
+// verifyBytes verifies sig over data with the algorithm identified by algURI.
+// SHA-1-based signature algorithms are rejected with ErrWeakAlgorithm unless
+// allowSHA1 is true.
+func verifyBytes(algURI string, key any, data, sig []byte, allowSHA1 bool) error {
 	sa, ok := signatureAlgorithms[algURI]
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, algURI)
+	}
+	if sa.weak && !allowSHA1 {
+		return fmt.Errorf("%w: %s", ErrWeakAlgorithm, algURI)
 	}
 
 	switch algURI {

@@ -80,7 +80,36 @@ func TestSignVerifyRoundTripRSASHA256(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// signRSASHA1Doc signs samlAssertion with rsa-sha1 + sha1 digest, opting in to
+// SHA-1 on the signer (required since SHA-1 is rejected by default).
+func signRSASHA1Doc(t *testing.T, key *rsa.PrivateKey) *helium.Document {
+	t.Helper()
+	doc := mustParseXML(t, samlAssertion)
+	signer := xmldsig1.NewSigner().
+		AllowSHA1(true).
+		SignatureAlgorithm(xmldsig1.AlgRSASHA1).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "",
+			DigestAlgorithm: xmldsig1.DigestSHA1,
+			Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
+		})
+	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+	return doc
+}
+
 func TestSignVerifyRoundTripRSASHA1(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := signRSASHA1Doc(t, key)
+
+	// SHA-1 verification must be opted into; the default verifier rejects it.
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).AllowSHA1(true)
+	_, err := verifier.Verify(t.Context(), doc)
+	require.NoError(t, err)
+}
+
+// TestSignSHA1RejectedByDefault confirms that signing with SHA-1 is rejected
+// unless Signer.AllowSHA1(true) is set.
+func TestSignSHA1RejectedByDefault(t *testing.T) {
 	key := generateRSAKey(t)
 	doc := mustParseXML(t, samlAssertion)
 
@@ -93,10 +122,46 @@ func TestSignVerifyRoundTripRSASHA1(t *testing.T) {
 		})
 
 	err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
+}
+
+// TestVerifySHA1RejectedByDefault confirms an rsa-sha1 + sha1 signature is
+// rejected by the default verifier with ErrWeakAlgorithm.
+func TestVerifySHA1RejectedByDefault(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := signRSASHA1Doc(t, key)
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	_, err = verifier.Verify(t.Context(), doc)
+	_, err := verifier.Verify(t.Context(), doc)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
+}
+
+// TestVerifySHA1AcceptedWithOptIn confirms the same signature verifies once
+// SHA-1 is opted in on the verifier.
+func TestVerifySHA1AcceptedWithOptIn(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := signRSASHA1Doc(t, key)
+
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).AllowSHA1(true)
+	_, err := verifier.Verify(t.Context(), doc)
+	require.NoError(t, err)
+}
+
+// TestVerifySHA256AcceptedByDefault confirms strong algorithms still verify
+// without any opt-in.
+func TestVerifySHA256AcceptedByDefault(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.NewEnvelopedReference())
+	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+	_, err := verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
 

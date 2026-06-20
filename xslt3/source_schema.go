@@ -73,7 +73,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		if err != nil {
 			return nil, fmt.Errorf("load source schema %q: %w", uri, err)
 		}
-		schemaDoc, err := helium.NewParser().Parse(ctx, data)
+		schemaDoc, err := secureXMLParser("").Parse(ctx, data)
 		if err != nil {
 			return nil, fmt.Errorf("parse source schema %q: %w", uri, err)
 		}

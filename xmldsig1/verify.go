@@ -2,7 +2,6 @@ package xmldsig1
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -67,6 +66,14 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		return nil, err
 	}
 
+	// Reject weak (SHA-1) signature/digest algorithms before resolving KeyInfo
+	// or invoking KeySource, so a rejected SHA-1 input returns ErrWeakAlgorithm
+	// without triggering key resolution or surfacing unrelated key/signature
+	// errors.
+	if err := preflightParsedWeakAlgorithms(parsed, cfg.allowSHA1); err != nil {
+		return nil, err
+	}
+
 	// Resolve key.
 	var keyInfoData *KeyInfoData
 	if parsed.keyInfoElem != nil {
@@ -87,8 +94,9 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		return nil, err
 	}
 
-	// Verify signature value.
-	if err := verifyBytes(parsed.signatureAlg, key, canonical, parsed.signatureValue); err != nil {
+	// Verify signature value. SHA-1-based signature algorithms are rejected
+	// here unless the caller opted in via Verifier.AllowSHA1(true).
+	if err := verifyBytes(parsed.signatureAlg, key, canonical, parsed.signatureValue, cfg.allowSHA1); err != nil {
 		return nil, &VerificationError{Reference: -1, Err: err}
 	}
 
@@ -96,7 +104,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	// confirm that the element they intend to consume is actually covered.
 	result := &VerifyResult{Signature: sigElem}
 	for i, ref := range parsed.references {
-		target, err := verifyReference(doc, sigElem, ref)
+		target, err := verifyReference(doc, sigElem, ref, cfg.allowSHA1)
 		if err != nil {
 			return nil, &VerificationError{Reference: i, URI: ref.uri, Err: err}
 		}
@@ -110,7 +118,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	return result, nil
 }
 
-func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, error) {
+func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedReference, allowSHA1 bool) (*helium.Element, error) {
 	target, err := resolveReference(doc, ref.uri)
 	if err != nil {
 		return nil, err
@@ -125,16 +133,6 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		}
 	}
 
-	// Temporarily detach the Signature element for enveloped signatures,
-	// remembering its exact position so we can restore it after
-	// canonicalization. Naive reattach-via-AddChild would move the
-	// Signature to the end of its parent and silently restructure the doc.
-	var anchor sigAnchor
-	if hasEnveloped {
-		anchor = captureAnchor(sigElem)
-		helium.UnlinkNode(sigElem)
-	}
-
 	// Find the c14n method. Fail closed: any transform whose URI we cannot
 	// apply must be rejected before digesting, otherwise a Reference could
 	// declare an unsupported transform (XPath, Base64, custom URI) and still
@@ -147,44 +145,33 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 			c14nMethod = t.algorithm
 			prefixes = t.prefixes
 		case TransformEnvelopedSignature:
-			// Handled in the separate enveloped-signature pass above; no-op here.
+			// Handled by canonicalizeEnveloped below; no-op here.
 		default:
-			// Reattach the Signature element we detached above before
-			// bailing out, so a rejected reference does not leave the
-			// document structurally modified. The rejection is the primary
-			// error, but if restore itself fails the document is left mutated,
-			// so surface that failure too (joined) rather than dropping it
-			// silently. errors.Is(ErrUnsupportedTransform) still holds.
-			rejectErr := fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
-			if hasEnveloped {
-				if rerr := anchor.restore(sigElem); rerr != nil {
-					rejectErr = errors.Join(rejectErr, fmt.Errorf("failed to restore detached Signature element: %w", rerr))
-				}
-			}
-			return nil, rejectErr
+			return nil, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
 		}
 	}
 
+	// For enveloped signatures the Signature element and its descendants must
+	// be omitted from the canonical input. canonicalizeEnveloped does this on a
+	// deep copy of the document, never mutating the caller's live DOM (which
+	// would race with concurrent readers and risk leaving the tree corrupted if
+	// a restore failed).
 	var canonical []byte
-	if ref.uri == "" {
+	switch {
+	case hasEnveloped:
+		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, ref.uri == "", prefixes)
+	case ref.uri == "":
 		canonical, err = canonicalize(c14nMethod, doc, prefixes)
-	} else {
+	default:
 		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
 	}
-
-	// Reattach the Signature element at its original sibling position.
-	if hasEnveloped {
-		if rerr := anchor.restore(sigElem); rerr != nil && err == nil {
-			err = rerr
-		}
-	}
-
 	if err != nil {
 		return nil, err
 	}
 
-	// Compute and compare digest.
-	computed, err := computeDigest(ref.digestAlgorithm, canonical)
+	// Compute and compare digest. A SHA-1 digest is rejected unless the
+	// caller opted in via Verifier.AllowSHA1(true).
+	computed, err := computeDigest(ref.digestAlgorithm, canonical, allowSHA1)
 	if err != nil {
 		return nil, err
 	}

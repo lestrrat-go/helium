@@ -32,6 +32,7 @@ type compiler struct {
 	importPrec                int
 	minImportPrec             int                 // importPrec value before processing this module's xsl:import elements
 	importStack               map[string]struct{} // circular import detection
+	allowExternalEntities     bool                // opt-in: legacy permissive parse of external stylesheet modules
 	baseURI                   string
 	moduleKey                 string
 	resolver                  URIResolver
@@ -85,12 +86,13 @@ type Compiler struct {
 }
 
 type xsltCompilerCfg struct {
-	baseURI          string
-	uriResolver      URIResolver
-	packageResolver  PackageResolver
-	staticParams     *Parameters
-	importSchemas    []*xsd.Schema
-	maxResourceBytes int64
+	baseURI               string
+	uriResolver           URIResolver
+	packageResolver       PackageResolver
+	staticParams          *Parameters
+	importSchemas         []*xsd.Schema
+	maxResourceBytes      int64
+	allowExternalEntities bool
 }
 
 // NewCompiler creates a new Compiler with default settings.
@@ -185,6 +187,23 @@ func (c Compiler) MaxResourceBytes(n int64) Compiler {
 	return c
 }
 
+// AllowExternalEntities controls whether external stylesheet modules loaded at
+// compile time (xsl:import / xsl:include / xsl:use-package, and fn:transform
+// stylesheets compiled during static-variable evaluation) may load and
+// substitute external DTDs and external general entities.
+//
+// Default false: XML External Entity (XXE) processing is blocked — external
+// entities are not resolved, eliminating the local-file-disclosure / SSRF
+// vector. Set to true to restore the legacy permissive behavior, in which
+// external entities are resolved through the configured URIResolver subject to
+// the configured resource limits. Enable this only for fully trusted stylesheet
+// sources.
+func (c Compiler) AllowExternalEntities(v bool) Compiler {
+	c = c.clone()
+	c.cfg.allowExternalEntities = v
+	return c
+}
+
 // ClearStaticParameters removes all static parameter bindings.
 func (c Compiler) ClearStaticParameters() Compiler {
 	c = c.clone()
@@ -218,11 +237,12 @@ func (c Compiler) toCompileConfig() *compileConfig {
 		return &compileConfig{}
 	}
 	cfg := &compileConfig{
-		baseURI:          c.cfg.baseURI,
-		resolver:         c.cfg.uriResolver,
-		packageResolver:  c.cfg.packageResolver,
-		importSchemas:    c.cfg.importSchemas,
-		maxResourceBytes: c.cfg.maxResourceBytes,
+		baseURI:               c.cfg.baseURI,
+		resolver:              c.cfg.uriResolver,
+		packageResolver:       c.cfg.packageResolver,
+		importSchemas:         c.cfg.importSchemas,
+		maxResourceBytes:      c.cfg.maxResourceBytes,
+		allowExternalEntities: c.cfg.allowExternalEntities,
 	}
 	if c.cfg.staticParams != nil {
 		cfg.staticParams = maps.Clone(c.cfg.staticParams.toMap())
@@ -987,7 +1007,7 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 	// newNestedCompiler) and the transformConfig (consulted by runtime reads)
 	// so Compiler.MaxResourceBytes governs static-variable transform() loads.
 	ec := &execContext{
-		stylesheet:          &Stylesheet{baseURI: c.baseURI, uriResolver: c.resolver, maxResourceBytes: c.maxResourceBytes},
+		stylesheet:          &Stylesheet{baseURI: c.baseURI, uriResolver: c.resolver, maxResourceBytes: c.maxResourceBytes, allowExternalEntities: c.allowExternalEntities},
 		resultDoc:           helium.NewDefaultDocument(),
 		globalVars:          make(map[string]xpath3.Sequence),
 		outputStack:         []*outputFrame{{doc: helium.NewDefaultDocument(), current: helium.NewDefaultDocument()}},
@@ -997,7 +1017,7 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 		accumulatorState:    make(map[string]xpath3.Sequence),
 		resultDocuments:     make(map[string]*helium.Document),
 		usedResultURIs:      make(map[string]struct{}),
-		transformConfig:     &transformConfig{maxResourceBytes: c.maxResourceBytes},
+		transformConfig:     &transformConfig{maxResourceBytes: c.maxResourceBytes, allowExternalEntities: c.allowExternalEntities},
 	}
 	ec.setCurrentTemplate(nil)
 	return ec.fnTransform(ctx, args)
@@ -1108,6 +1128,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.externalStaticParams = cfg.staticParams
 		c.importSchemas = cfg.importSchemas
 		c.maxResourceBytes = cfg.maxResourceBytes
+		c.allowExternalEntities = cfg.allowExternalEntities
 	}
 	if c.moduleKey == "" {
 		c.moduleKey = "<main>"
@@ -1427,6 +1448,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.stylesheet.compilerImportSchemas = c.importSchemas
 	}
 	c.stylesheet.maxResourceBytes = c.maxResourceBytes
+	c.stylesheet.allowExternalEntities = c.allowExternalEntities
 
 	// Topologically sort accumulators so dependencies are evaluated first.
 	sortAccumulatorOrder(c.stylesheet)
