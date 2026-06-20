@@ -31,10 +31,21 @@ type compiler struct {
 	groupRefSources map[*ModelGroup]groupRefSource
 	// unresolved attribute group references: maps from TypeDef to list of QNames
 	attrGroupRefs map[*TypeDef][]QName
+	// nested xs:attributeGroup ref children of a GLOBAL attribute group, keyed by
+	// the containing group's QName. These are flattened (recursively, cycle-guarded)
+	// before checkAttrGroupDuplicates so a duplicate attribute use introduced
+	// through a referenced group — not just direct xs:attribute children — is
+	// reported (ag-props-correct.2).
+	attrGroupRefChildren map[QName][]QName
 	// source info for named model group definitions (xs:group name="..."), keyed
 	// by group QName. Used to run cos-element-consistent over standalone named
 	// groups that no complex type references, reporting against the declaring file.
 	groupSources map[QName]groupSource
+	// source info for global attribute group definitions (xs:attributeGroup
+	// name="..."), keyed by group QName. Used to run the duplicate-attribute-use
+	// check (ag-props-correct.2) over attribute groups that no complex type
+	// references — duplicates inside such a group are otherwise never inspected.
+	attrGroupSources map[QName]attrGroupSource
 	// source info for global elements, used in substitution group error messages
 	globalElemSources map[*ElementDecl]elemRefSource
 	// source info for type definitions, used in duplicate attribute errors
@@ -178,6 +189,12 @@ const defaultMaxImportDepth = 40
 type elemRefSource struct {
 	elemName string
 	line     int
+	// source is the declaring file captured at collection time (c.diagSource()):
+	// the included/imported schema when the element/ref was parsed inside an
+	// xs:include/xs:import/xs:redefine, else empty (top-level). Diagnostics report
+	// via c.diagSourceOrRecorded(source) so an unresolved ref in an imported
+	// schema cites the imported file, not the importing one.
+	source string
 }
 
 // groupRefSource tracks where an xs:group ref="..." particle appeared so the
@@ -194,12 +211,26 @@ type groupRefSource struct {
 	// ("" if absent, which defaults to 1). A reference to an 'all' model group
 	// must have maxOccurs == 1.
 	maxOccursRaw string
+	// source is the declaring file recorded at parse time (c.diagSource()): the
+	// included/imported schema when the ref was parsed inside an
+	// xs:include/xs:import/xs:redefine, else the compiler filename. checkAllGroupRef
+	// runs after parsing (from resolveRefs / the redefine loop) when c.includeFile
+	// has been restored, so the source must be captured here rather than recomputed.
+	source string
 }
 
 // groupSource tracks where a named model group definition (xs:group name="...")
 // appeared so cos-element-consistent diagnostics over standalone named groups
 // cite the declaring file and line.
 type groupSource struct {
+	line   int
+	source string // declaring file (this compiler's filename, or an imported file)
+}
+
+// attrGroupSource tracks where a global attribute group definition
+// (xs:attributeGroup name="...") appeared so the duplicate-attribute-use check
+// over unreferenced attribute groups cites the declaring file and line.
+type attrGroupSource struct {
 	line   int
 	source string // declaring file (this compiler's filename, or an imported file)
 }
@@ -221,6 +252,10 @@ type attrConstraintSource struct {
 	line  int
 	local string            // attribute display name (local name)
 	nsMap map[string]string // in-scope namespaces for value validation (QName/NOTATION)
+	// source is the declaring file when the attribute use was parsed from an
+	// xs:include/xs:import/xs:redefine document (c.includeFile), empty for a
+	// top-level declaration. Diagnostics cite this so the line matches the file.
+	source string
 }
 
 // typeDefSource tracks source location and context for type definitions.
@@ -233,6 +268,11 @@ type typeDefSource struct {
 	// types declared directly in the top-level schema. Diagnostics cite this
 	// so a type's line number matches the file it is reported against.
 	source string
+	// elemKind is the XSD element local name the type was parsed from
+	// ("complexType" or "simpleType"), recorded at parse time so a diagnostic
+	// (e.g. an unresolved base/itemType/memberTypes ref) reports the actual
+	// element kind instead of a hard-coded "simpleType".
+	elemKind string
 	// ordinal is a stable parse-order sequence number, used as the final
 	// tie-breaker when ordering diagnostics for types that share a source line
 	// and have empty (anonymous) names. See recordTypeDefSource.
@@ -244,13 +284,38 @@ type typeDefSource struct {
 // overwrites (e.g. parseSimpleType records a type as local, then
 // parseNamedSimpleType overwrites it as a named global) so the ordinal always
 // reflects when the type was first seen.
-func (c *compiler) recordTypeDefSource(td *TypeDef, line int, isLocal bool) {
+func (c *compiler) recordTypeDefSource(td *TypeDef, line int, isLocal bool, elemKind string) {
 	if existing, ok := c.typeDefSources[td]; ok {
-		c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: existing.source, ordinal: existing.ordinal}
+		c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: existing.source, elemKind: elemKind, ordinal: existing.ordinal}
 		return
 	}
-	c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: c.includeFile, ordinal: c.nextTypeDefOrdinal}
+	c.typeDefSources[td] = typeDefSource{line: line, isLocal: isLocal, source: c.includeFile, elemKind: elemKind, ordinal: c.nextTypeDefOrdinal}
 	c.nextTypeDefOrdinal++
+}
+
+// diagSource returns the file label a diagnostic should be attributed to during
+// parsing. A component parsed while inside an xs:include/xs:redefine (or the
+// Phase-A pass of a redefining schema) carries that file in c.includeFile; a
+// top-level component has no includeFile, so it falls back to the compiler's own
+// filename. Using c.filename directly would mis-attribute an included-file line
+// number to the including schema. This is the parse-time counterpart to using a
+// per-component recorded source (typeDefSource.source / attrGroupSource.source).
+func (c *compiler) diagSource() string {
+	if c.includeFile != "" {
+		return c.includeFile
+	}
+	return c.filename
+}
+
+// diagSourceOrRecorded prefers a per-component recorded source (e.g.
+// typeDefSource.source / attrGroupSource.source captured at parse time) and
+// falls back to the live parse-time source (c.includeFile, then c.filename) when
+// the recorded source is empty.
+func (c *compiler) diagSourceOrRecorded(recorded string) string {
+	if recorded != "" {
+		return recorded
+	}
+	return c.diagSource()
 }
 
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {
@@ -284,7 +349,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		groupRefs:                make(map[*ModelGroup]QName),
 		groupRefSources:          make(map[*ModelGroup]groupRefSource),
 		groupSources:             make(map[QName]groupSource),
+		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
+		attrGroupRefChildren:     make(map[QName][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
 		typeKinds:                make(map[QName]redefineKind),
@@ -730,6 +797,13 @@ func lookupNS(elem *helium.Element, prefix string) string {
 			}
 		}
 		node = node.Parent()
+	}
+	// The "xml" prefix is predeclared (bound to the XML namespace) and never
+	// needs an explicit xmlns:xml declaration, so it is always in scope. Without
+	// this, a ref="xml:lang" would resolve to no namespace and could spuriously
+	// collide with an unrelated unprefixed "lang" attribute use.
+	if prefix == "xml" {
+		return lexicon.NamespaceXML
 	}
 	return ""
 }

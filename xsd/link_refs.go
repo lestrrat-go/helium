@@ -58,7 +58,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			if edecl.IsRef {
 				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, src.line, src.elemName, elemElement, attrRef, msg), helium.ErrorLevelFatal))
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, elemElement, attrRef, msg), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
 				edecl.Type = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
@@ -79,7 +79,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// silently compile and validate as if the type existed.
 				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaElemDeclErrorAttr(c.diagSourceOrRecorded(src.source), src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
 				td = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
@@ -197,14 +197,47 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		c.checkAllGroupRef(ctx, placeholder)
 	}
 
+	// Reject duplicate attribute uses inside a global attribute group definition
+	// (ag-props-correct.2) BEFORE expanding the group into the types that
+	// reference it. This both reports duplicates in attribute groups that NO type
+	// references — which the per-type check below would never inspect — and
+	// removes the duplicate use from the group so a referencing type does not
+	// re-report the same collision (xmllint reports it once, at the group).
+	c.checkAttrGroupDuplicates(ctx)
+
 	// Resolve attribute group references.
+	//
+	// An attribute group's effective attribute uses are NOT only the uses it
+	// declares directly: an xs:attributeGroup may itself contain nested
+	// xs:attributeGroup ref children, whose attribute uses are pulled in
+	// transitively (XSD §3.6.2 / §3.4.2 — {attribute uses} is the union over
+	// the group and all groups it references). c.schema.attrGroups[qn] holds
+	// only the group's OWN direct uses; the nested refs live in
+	// c.attrGroupRefChildren. Expand each referenced group recursively
+	// (cycle-guarded) so the type's effective attributes include the
+	// transitively-referenced uses — otherwise a required/defaulted/prohibited
+	// attribute declared in a nested group is silently dropped.
+	//
+	// The expansion dedups WITHIN a single referenced group's transitive closure
+	// (override semantics), but the result is appended to td.Attributes WITHOUT
+	// further dedup, so a name that a type declares directly AND pulls in via a
+	// group — or via two distinct groups — still surfaces as a duplicate use for
+	// checkDuplicateAttrUses below (ct-props-correct.4), preserving the prior
+	// behavior of appending raw group attributes.
 	for td, qns := range c.attrGroupRefs {
 		for _, qn := range qns {
-			if attrs, ok := c.schema.attrGroups[qn]; ok {
-				td.Attributes = append(td.Attributes, attrs...)
-			}
+			td.Attributes = append(td.Attributes, c.expandAttrGroupUses(qn, map[QName]struct{}{})...)
 		}
 	}
+
+	// Reject duplicate attribute uses within a single type's own attribute set
+	// (XSD 3.4.6 ct-props-correct.4 / 3.6.6 ag-props-correct.2). After
+	// attribute-group expansion a type may carry two uses with the same expanded
+	// name; the validation-time map would silently coalesce them, so catch the
+	// collision here. This runs BEFORE base-type attribute merging so it only
+	// inspects each type's OWN declared/expanded uses — duplicates between a base
+	// type and its extension are reported separately during the merge below.
+	c.checkDuplicateAttrUses(ctx)
 
 	// Resolve attribute references: copy Default/Fixed/TypeName from global attr.
 	for au, qn := range c.attrRefs {
@@ -283,7 +316,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// filtered to extension types with a base, so no per-item guard is needed.
 	for _, td := range extensionTypes {
 		if td.ContentType == ContentTypeSimple {
-			// simpleContent extension — inherit attributes and wildcard from base.
+			// simpleContent extension — check for base-vs-derived duplicate
+			// attributes BEFORE inheriting the base attributes, then merge.
+			c.checkExtensionAttrDuplicates(ctx, td)
 			if td.BaseType.Attributes != nil {
 				td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
 			}
@@ -303,7 +338,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				if !src.isLocal {
 					component = "complex type '" + td.Name.Local + "'"
 				}
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
 					"The content type of both, the type and its base type, must either 'mixed' or 'element-only'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -311,6 +346,25 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 		baseMG := td.BaseType.ContentModel
 		derivedMG := td.ContentModel
+		// cos-all-limited.1.2 / §3.8.2: an 'all' model group may only constitute
+		// the WHOLE content of a type definition. When an extension appends an
+		// 'all' group (directly, or via an xs:group ref that resolves to one) onto
+		// a non-empty base content model, the merge below would build a sequence
+		// CONTAINING an 'all' group, which is forbidden. The base-as-sole-content
+		// and direct-group-ref paths are checked elsewhere; this catches the
+		// extension-merge path, which they miss. libxml2 rejects this.
+		if baseMG != nil && derivedMG != nil && derivedMG.MaxOccurs != 0 && derivedMG.Compositor == CompositorAll && modelGroupHasContent(baseMG) {
+			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
+				component := componentLocalComplexType
+				if !src.isLocal {
+					component = "complex type '" + td.Name.Local + "'"
+				}
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component,
+					"The 'all' model group needs to be the only child of the model group."), helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+			continue
+		}
 		if baseMG != nil && derivedMG != nil {
 			// Merge: create a sequence of base content + derived content.
 			merged := &ModelGroup{
@@ -331,25 +385,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			td.ContentType = td.BaseType.ContentType
 		}
 		// Check for duplicate attributes before merging base type attributes.
-		if td.BaseType.Attributes != nil && td.Attributes != nil && c.filename != "" {
-			baseAttrNames := make(map[string]bool, len(td.BaseType.Attributes))
-			for _, au := range td.BaseType.Attributes {
-				baseAttrNames[au.Name.Local] = true
-			}
-			for _, au := range td.Attributes {
-				if baseAttrNames[au.Name.Local] {
-					if src, ok := c.typeDefSources[td]; ok {
-						component := componentLocalComplexType
-						if !src.isLocal {
-							component = td.Name.Local
-						}
-						msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-						c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
-						c.errorCount++
-					}
-				}
-			}
-		}
+		c.checkExtensionAttrDuplicates(ctx, td)
 		// Inherit attributes from base.
 		if td.BaseType.Attributes != nil {
 			td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
@@ -411,6 +447,323 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	}
 }
 
+// expandAttrGroupUses returns the effective attribute uses contributed by the
+// attribute group qn: its OWN direct uses (c.schema.attrGroups[qn]) plus, for
+// each nested xs:attributeGroup ref child, that group's effective uses computed
+// recursively. visited guards against reference cycles.
+//
+// Deduplication follows XSD attribute-group semantics: a use declared closer to
+// the referencing group (the group's own use, or an earlier-referenced group)
+// overrides one inherited from a more deeply / later referenced group, keyed by
+// expanded attribute QName. A prohibited use removes the corresponding use from
+// the effective set. The group's own uses take precedence over its nested refs.
+func (c *compiler) expandAttrGroupUses(qn QName, visited map[QName]struct{}) []*AttrUse {
+	if _, seen := visited[qn]; seen {
+		return nil
+	}
+	visited[qn] = struct{}{}
+
+	// The group's own direct uses come first (closest), then each nested ref's
+	// expanded uses in declaration order.
+	var uses []*AttrUse
+	uses = append(uses, c.schema.attrGroups[qn]...)
+	for _, refQN := range c.attrGroupRefChildren[qn] {
+		uses = appendAttrUses(uses, c.expandAttrGroupUses(refQN, visited))
+	}
+	return uses
+}
+
+// appendAttrUses merges the attribute uses in extra into dst applying
+// attribute-group override semantics: a use already present in dst (by expanded
+// QName) is kept and the incoming inherited use is discarded (closer wins). A
+// prohibited incoming use whose name is not yet present is still appended so a
+// later merge can observe the prohibition. The merge is order-preserving so the
+// closest-declared use stays first.
+func appendAttrUses(dst, extra []*AttrUse) []*AttrUse {
+	seen := make(map[QName]struct{}, len(dst))
+	for _, au := range dst {
+		seen[au.Name] = struct{}{}
+	}
+	for _, au := range extra {
+		if _, ok := seen[au.Name]; ok {
+			continue
+		}
+		seen[au.Name] = struct{}{}
+		dst = append(dst, au)
+	}
+	return dst
+}
+
+// checkExtensionAttrDuplicates reports an attribute use redeclared by a
+// (simpleContent or complexContent) extension type that its base type already
+// declares. Prohibited uses do not contribute an attribute use and are skipped
+// on both sides (mirroring checkDuplicateAttrUses), so a prohibited use carried
+// in via an attribute group does not falsely trigger a duplicate diagnostic.
+// Must run BEFORE the base attributes are merged into td.Attributes.
+func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef) {
+	if c.filename == "" || td.BaseType == nil {
+		return
+	}
+	if td.BaseType.Attributes == nil || td.Attributes == nil {
+		return
+	}
+	baseAttrNames := make(map[QName]bool, len(td.BaseType.Attributes))
+	for _, au := range td.BaseType.Attributes {
+		if au.Prohibited {
+			continue
+		}
+		baseAttrNames[au.Name] = true
+	}
+	for _, au := range td.Attributes {
+		if au.Prohibited {
+			continue
+		}
+		if !baseAttrNames[au.Name] {
+			continue
+		}
+		src, ok := c.typeDefSources[td]
+		if !ok {
+			continue
+		}
+		component := componentLocalComplexType
+		if !src.isLocal {
+			component = td.Name.Local
+		}
+		msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+		c.errorCount++
+	}
+}
+
+// checkDuplicateAttrUses reports duplicate attribute uses (by expanded QName)
+// within a single complex type's own attribute set. Prohibited uses do not
+// contribute an attribute use and are skipped for the duplicate-error check.
+//
+// A prohibited use that shares its QName with a non-prohibited use in the same
+// expanded set is, however, pointless: the prohibition cannot remove a use that
+// the type itself declares. libxml2 strips such a prohibition and emits a schema
+// parser WARNING attributed to the prohibited xs:attribute element, which the
+// golden tests compare. We mirror that warning here.
+//
+// Types are processed in source line order for deterministic diagnostics.
+func (c *compiler) checkDuplicateAttrUses(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	tds := make([]*TypeDef, 0, len(c.typeDefSources))
+	for td := range c.typeDefSources {
+		if len(td.Attributes) > 1 {
+			tds = append(tds, td)
+		}
+	}
+	sort.Slice(tds, func(i, j int) bool {
+		return c.typeDefSources[tds[i]].line < c.typeDefSources[tds[j]].line
+	})
+	for _, td := range tds {
+		// Collect the QNames of every non-prohibited use so a pointless
+		// prohibition (one whose QName already has a real use) can be detected.
+		realUse := make(map[QName]struct{}, len(td.Attributes))
+		for _, au := range td.Attributes {
+			if au.Prohibited {
+				continue
+			}
+			realUse[au.Name] = struct{}{}
+		}
+
+		seen := make(map[QName]bool, len(td.Attributes))
+		reported := make(map[QName]bool)
+		warnedProhib := make(map[QName]bool)
+		for _, au := range td.Attributes {
+			if au.Prohibited {
+				if _, ok := realUse[au.Name]; !ok {
+					continue
+				}
+				if warnedProhib[au.Name] {
+					continue
+				}
+				warnedProhib[au.Name] = true
+				c.warnPointlessProhibition(ctx, au)
+				continue
+			}
+			if seen[au.Name] {
+				if reported[au.Name] {
+					continue
+				}
+				reported[au.Name] = true
+				src := c.typeDefSources[td]
+				component := componentLocalComplexType
+				if !src.isLocal {
+					component = td.Name.Local
+				}
+				msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+				c.errorCount++
+				continue
+			}
+			seen[au.Name] = true
+		}
+	}
+}
+
+// warnPointlessProhibition emits the libxml2-compatible schema parser WARNING for
+// a prohibited attribute use whose QName already names a real (non-prohibited)
+// use in the same type definition. The diagnostic is attributed to the
+// prohibited xs:attribute element at its recorded source line/file (covering
+// xs:include/xs:import cases). If no source was recorded, the warning falls back
+// to the compiler's own filename and line 0.
+func (c *compiler) warnPointlessProhibition(ctx context.Context, au *AttrUse) {
+	file := c.filename
+	line := 0
+	if src, ok := c.attrUseSources[au]; ok {
+		line = src.line
+		file = c.diagSourceOrRecorded(src.source)
+	}
+	msg := fmt.Sprintf("Skipping pointless attribute use prohibition '%s', since a corresponding attribute use exists already in the type definition.", formatAttrQName(au.Name))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(file, line, "attribute", "attribute", msg), helium.ErrorLevelWarning))
+}
+
+// formatAttrQName renders an attribute QName the way libxml2's
+// xmlSchemaFormatQName does: "{ns}local" when a namespace is present, otherwise
+// the bare local name (no braces).
+func formatAttrQName(qn QName) string {
+	if qn.NS == "" {
+		return qn.Local
+	}
+	return fmt.Sprintf("{%s}%s", qn.NS, qn.Local)
+}
+
+// checkAttrGroupDuplicates reports duplicate attribute uses (by expanded QName)
+// within a single GLOBAL attribute group definition (ag-props-correct.2) and
+// strips the later duplicate from the stored group. It must run BEFORE the
+// attribute groups are expanded into the types that reference them, so that:
+//
+//   - a group that NO type references — which the per-type checkDuplicateAttrUses
+//     never inspects — still has its internal duplicates rejected, and
+//   - a referencing type does not re-report the same collision (xmllint reports
+//     an attribute group's internal duplicate once, attributed to the group).
+//
+// Prohibited uses do not contribute an attribute use and are skipped. Groups are
+// processed in source line order for deterministic diagnostics. The diagnostic
+// matches xmllint's wording, attributed to the xs:attributeGroup element.
+func (c *compiler) checkAttrGroupDuplicates(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	qns := make([]QName, 0, len(c.attrGroupSources))
+	for qn := range c.attrGroupSources {
+		// A group needs inspection when it has more than one own attribute use OR
+		// when it pulls in attribute uses through nested xs:attributeGroup ref
+		// children, either of which can produce a duplicate (ag-props-correct.2).
+		if len(c.schema.attrGroups[qn]) > 1 || len(c.attrGroupRefChildren[qn]) > 0 {
+			qns = append(qns, qn)
+		}
+	}
+	sort.Slice(qns, func(i, j int) bool {
+		return c.attrGroupSources[qns[i]].line < c.attrGroupSources[qns[j]].line
+	})
+	for _, qn := range qns {
+		attrs := c.schema.attrGroups[qn]
+		seen := make(map[QName]bool, len(attrs))
+		reported := make(map[QName]bool)
+		deduped := attrs[:0]
+		for _, au := range attrs {
+			if au.Prohibited {
+				deduped = append(deduped, au)
+				continue
+			}
+			if !seen[au.Name] {
+				seen[au.Name] = true
+				deduped = append(deduped, au)
+				continue
+			}
+			if reported[au.Name] {
+				continue
+			}
+			reported[au.Name] = true
+			c.reportAttrGroupDuplicate(ctx, qn, au.Name)
+		}
+		c.schema.attrGroups[qn] = deduped
+
+		// After deduping the group's OWN attribute uses, flatten the attribute uses
+		// brought in through nested xs:attributeGroup ref children (recursively,
+		// cycle-guarded) and report any name that collides with a use already
+		// present in the group or another referenced group.
+		visited := map[QName]bool{qn: true}
+		for _, refQN := range c.attrGroupRefChildren[qn] {
+			c.flattenAttrGroupRefDuplicates(ctx, qn, refQN, seen, reported, visited)
+		}
+	}
+}
+
+// flattenAttrGroupRefDuplicates walks a nested attribute-group reference,
+// recording each (non-prohibited) attribute use it contributes into seen and
+// reporting — once, attributed to the owning group ownerQN — any name already
+// present. visited is a RECURSION STACK (the groups currently on the path being
+// expanded), not a global "seen ever" set: a group is added on entry and removed
+// on exit, so a true reference CYCLE is still cut, but two SIBLING refs to the
+// same group are each expanded — so a name contributed by both siblings surfaces
+// as a duplicate (g -> h, h with h carrying attribute x is a duplicate use of x,
+// which xmllint rejects). The walk descends into the referenced group's own
+// nested refs as well.
+func (c *compiler) flattenAttrGroupRefDuplicates(ctx context.Context, ownerQN, refQN QName, seen, reported map[QName]bool, visited map[QName]bool) {
+	if visited[refQN] {
+		return
+	}
+	visited[refQN] = true
+	defer delete(visited, refQN)
+	// A name repeated WITHIN this referenced group is that group's own internal
+	// duplicate (reported when the group is processed as owner), not a collision to
+	// attribute to ownerQN. Track this group's local names so each distinct name is
+	// merged into seen once and only a cross-group collision is reported here.
+	local := make(map[QName]bool)
+	for _, au := range c.schema.attrGroups[refQN] {
+		if au.Prohibited {
+			continue
+		}
+		if local[au.Name] {
+			continue
+		}
+		local[au.Name] = true
+		if !seen[au.Name] {
+			seen[au.Name] = true
+			continue
+		}
+		if reported[au.Name] {
+			continue
+		}
+		reported[au.Name] = true
+		c.reportAttrGroupDuplicate(ctx, ownerQN, au.Name)
+	}
+	for _, nextQN := range c.attrGroupRefChildren[refQN] {
+		c.flattenAttrGroupRefDuplicates(ctx, ownerQN, nextQN, seen, reported, visited)
+	}
+}
+
+// reportCircularAttrGroupRef emits the src-attribute_group.3 circular-reference
+// diagnostic for a self-referential <xs:attributeGroup ref="..."> that resolves
+// to the group being defined (groupQN). A circular attribute-group reference is
+// disallowed outside <redefine>; libxml2 reports it against the referencing
+// <attributeGroup> element and cuts the reference. The diagnostic is attributed
+// to the ref element's source line (ce) via diagSource so an included schema is
+// cited correctly.
+func (c *compiler) reportCircularAttrGroupRef(ctx context.Context, ce *helium.Element, groupQN QName) {
+	if c.filename == "" {
+		return
+	}
+	msg := fmt.Sprintf("Circular reference to the attribute group '%s' defined.", formatAttrQName(groupQN))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup", msg), helium.ErrorLevelFatal))
+	c.errorCount++
+}
+
+// reportAttrGroupDuplicate emits the ag-props-correct.2 duplicate-attribute-use
+// diagnostic for name, attributed to the attribute group ownerQN's source.
+func (c *compiler) reportAttrGroupDuplicate(ctx context.Context, ownerQN, name QName) {
+	src := c.attrGroupSources[ownerQN]
+	msg := fmt.Sprintf("Duplicate attribute use '%s'.", name.Local)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSourceOrRecorded(src.source), src.line, "attributeGroup", "attributeGroup", msg), helium.ErrorLevelFatal))
+	c.errorCount++
+}
+
 // checkAllGroupRef enforces the constraints on an xs:group reference that
 // resolves to an 'all' model group (XSD §3.8.6 cos-all-limited / §3.8.2):
 //
@@ -437,8 +790,13 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 		return
 	}
 
+	// Attribute to the declaring file recorded at parse time (an included/imported
+	// schema when the ref was parsed inside an xs:include/xs:import/xs:redefine),
+	// not the top-level compiler filename. c.includeFile has been restored by the
+	// time this deferred check runs, so the recorded source is used.
+	file := c.diagSourceOrRecorded(src.source)
 	if src.nested {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, src.local, elemGroup,
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(file, src.line, src.local, elemGroup,
 			"A model group definition is referenced, but it contains an 'all' model group, which cannot be contained by model groups."), helium.ErrorLevelFatal))
 		c.errorCount++
 		return
@@ -466,9 +824,36 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 	if n != Unbounded && n < 1 && placeholder.MinOccurs >= 1 {
 		return
 	}
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, src.local, elemGroup,
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(file, src.line, src.local, elemGroup,
 		"The particle's {max occurs} must be 1, since the reference resolves to an 'all' model group."), helium.ErrorLevelFatal))
 	c.errorCount++
+}
+
+// modelGroupHasContent reports whether mg carries any actual content particle
+// (an element, wildcard, or nested non-empty group). A nil group, a group whose
+// own occurrence is prohibited (maxOccurs=0), or a group that wraps only empty
+// or prohibited sub-particles, has no content. Used to decide whether an
+// extension base content model is "effectively non-empty" before merging. A
+// prohibited particle (minOccurs=0 maxOccurs=0) maps to no particle at all, so
+// it must not be counted as content.
+func modelGroupHasContent(mg *ModelGroup) bool {
+	if mg == nil || mg.MaxOccurs == 0 {
+		return false
+	}
+	for _, p := range mg.Particles {
+		if p.MaxOccurs == 0 {
+			continue
+		}
+		switch term := p.Term.(type) {
+		case *ModelGroup:
+			if modelGroupHasContent(term) {
+				return true
+			}
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // reportUnresolvedTypeRef reports a fatal schema parser error for a type
@@ -484,12 +869,24 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 	if !hasSrc {
 		return
 	}
+	// Component label and the reporting element kind follow the owner type's
+	// actual element kind (complexType vs simpleType), captured at parse time,
+	// rather than assuming a simpleType. A local complexType base ref that does
+	// not resolve must report "element complexType" / "local complex type".
+	elemKind := src.elemKind
+	if elemKind == "" {
+		elemKind = elemSimpleType
+	}
 	component := owner.Name.Local
 	if component == "" || src.isLocal {
-		component = "local simple type"
+		if elemKind == elemComplexType {
+			component = componentLocalComplexType
+		} else {
+			component = "local simple type"
+		}
 	}
 	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", component, msg), helium.ErrorLevelFatal))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, elemKind, component, msg), helium.ErrorLevelFatal))
 	c.errorCount++
 }
 
@@ -529,7 +926,7 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 		}
 		if err := td.Validate(ctx, *val, it.src.nsMap); err != nil {
 			msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", *val, typeDisplayName(td))
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, it.src.line, it.src.local, "attribute", it.src.local, msg), helium.ErrorLevelFatal))
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSourceOrRecorded(it.src.source), it.src.line, it.src.local, "attribute", it.src.local, msg), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
