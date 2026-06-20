@@ -50,9 +50,23 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	dst.SetProperties(src.Properties())
 	dst.SetSkipIDs(src.SkipIDs())
 
-	// Deep-copy the DTD first (metadata + entities/elements/attributes/notations),
-	// matching helium.CopyDoc's ordering so the copy round-trips identically.
+	// Deep-copy the internal DTD subset first (metadata + entities/elements/
+	// attributes/notations), matching helium.CopyDoc's ordering so the copy
+	// round-trips identically.
 	helium.CopyDTDInfo(src, dst)
+
+	// Carry over the source's EXTERNAL DTD subset too. CopyDTDInfo (like
+	// helium.CopyDoc) only handles the internal subset, but GetElementByID's lazy
+	// tree walk consults BOTH subsets for ID-typed attribute declarations. The
+	// copy drops the source ID table (it points at the source's elements), so id()
+	// on the copy falls back to that walk; without the external subset, IDs
+	// declared in an external DTD would resolve under no-strip (which transforms
+	// the source directly) but not under strip-space (which transforms this copy).
+	// The external subset is only read by ID resolution, so sharing the pointer is
+	// safe and keeps the two paths in agreement.
+	if ext := src.ExtSubset(); ext != nil {
+		dst.SetExtSubset(ext)
+	}
 
 	sc := &stripCopier{dst: dst, strip: strip, preserve: preserve}
 	// When the initial match selection must be remapped onto the copy, record the

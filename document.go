@@ -221,6 +221,17 @@ func (d *Document) ExtSubset() *DTD {
 	return d.extSubset
 }
 
+// SetExtSubset sets the document's external DTD subset. The DTD is referenced
+// directly, not deep-copied. This is used when a derived document (e.g. an
+// xsl:strip-space copy) must stand in for a source document for ID resolution:
+// GetElementByID consults the external subset's ID-typed attribute declarations
+// during its lazy tree walk, so a copy that omits the external subset would lose
+// IDs declared there. The external subset is only read (never mutated) by ID
+// resolution, so sharing the pointer is safe.
+func (d *Document) SetExtSubset(dtd *DTD) {
+	d.extSubset = dtd
+}
+
 func (d *Document) Replace(_ ...Node) error {
 	return ErrInvalidOperation
 }

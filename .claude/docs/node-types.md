@@ -95,7 +95,7 @@ A `ProcessingInstruction` stores its content in the `data` string field (mirrors
 - Entities: `name` (flat)
 
 ### Document ID Lookup
-`Document.GetElementByID(id)` — O(1) via `ids map[string]*Element` (populated during parse). Falls back to O(n) tree walk if map empty, unless `idsSkip` is set (returns nil immediately). `Document.SkipIDs()`/`SetSkipIDs(bool)` read/write that flag (set from parser `SkipIDs(true)`); carry it onto derived docs so id() semantics match the source.
+`Document.GetElementByID(id)` — O(1) via `ids map[string]*Element` (populated during parse). Falls back to O(n) tree walk if map empty, unless `idsSkip` is set (returns nil immediately). The fallback walk consults ID-typed attribute declarations in BOTH the internal and external DTD subsets (`intSubset`, `extSubset`). `Document.SkipIDs()`/`SetSkipIDs(bool)` read/write the `idsSkip` flag (set from parser `SkipIDs(true)`); carry it onto derived docs so id() semantics match the source. A derived doc that drops the ID table (e.g. an xsl:strip-space copy) relies on the fallback walk, so it must also carry over `extSubset` — `Document.ExtSubset()`/`SetExtSubset(*DTD)` get/set it (set shares the pointer; the external subset is only read by ID resolution). `CopyDTDInfo`/`CopyDoc` copy only the internal subset.
 
 ### Content() Default
 `docnode.Content()` walks children and concatenates (returns a fresh buffer). Overridden by Text, CDATA, Comment, PI, EntityRef.
