@@ -39,18 +39,19 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 		return fmt.Errorf("xsl:use-package: cannot read package %q: %w", pkgName, err)
 	}
 
-	doc, err := helium.NewParser().Parse(ctx, data)
+	doc, err := parseStylesheetDocument(ctx, data, pkgBaseURI, c.allowExternalEntities)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot parse package %q: %w", pkgName, err)
 	}
 
 	// Compile the package with its own compiler
 	pkgCfg := &compileConfig{
-		baseURI:          pkgBaseURI,
-		resolver:         c.resolver,
-		packageResolver:  c.packageResolver,
-		isSubPackage:     true,
-		maxResourceBytes: c.maxResourceBytes,
+		baseURI:               pkgBaseURI,
+		resolver:              c.resolver,
+		packageResolver:       c.packageResolver,
+		isSubPackage:          true,
+		maxResourceBytes:      c.maxResourceBytes,
+		allowExternalEntities: c.allowExternalEntities,
 	}
 	pkgSS, err := compile(ctx, doc, pkgCfg)
 	if err != nil {

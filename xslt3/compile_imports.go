@@ -207,7 +207,7 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 		return nil, fmt.Errorf("cannot read %q: %w", uri, err)
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, uri)
+	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
@@ -518,7 +518,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		return fmt.Errorf("cannot read %q: %w", uri, err)
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, uri)
+	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities)
 	if err != nil {
 		return fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
@@ -560,10 +560,11 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		if _, ok := importedRoot.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
 			// Simplified stylesheet — compile as a single template matching "/"
 			simplified, err := compileSimplified(ctx, doc, importedRoot, &compileConfig{
-				baseURI:          uri,
-				resolver:         c.resolver,
-				packageResolver:  c.packageResolver,
-				maxResourceBytes: c.maxResourceBytes,
+				baseURI:               uri,
+				resolver:              c.resolver,
+				packageResolver:       c.packageResolver,
+				maxResourceBytes:      c.maxResourceBytes,
+				allowExternalEntities: c.allowExternalEntities,
 			})
 			if err != nil {
 				return err

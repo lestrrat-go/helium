@@ -339,6 +339,9 @@ func (ss *Stylesheet) newNestedCompiler() Compiler {
 	if ss.maxResourceBytes != 0 {
 		c = c.MaxResourceBytes(ss.maxResourceBytes)
 	}
+	if ss.allowExternalEntities {
+		c = c.AllowExternalEntities(true)
+	}
 	return c
 }
 
@@ -440,7 +443,9 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	// resources loaded while COMPILING the nested stylesheet/package
 	// (its include/import/schema/param-doc reads) honor the same
 	// MaxResourceBytes override rather than falling back to the default.
-	nestedCompiler := ec.stylesheet.newNestedCompiler().MaxResourceBytes(ec.resourceLimit())
+	nestedCompiler := ec.stylesheet.newNestedCompiler().
+		MaxResourceBytes(ec.resourceLimit()).
+		AllowExternalEntities(ec.allowExternalEntities())
 
 	// Apply static-params from the options map to the nested compiler.
 	// Static params affect both compile time (use-when, shadow attributes)
@@ -484,7 +489,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI)
+		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI, ec.allowExternalEntities())
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
 		}
@@ -509,7 +514,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, location)
+		doc, parseErr := parseStylesheetDocument(ctx, data, location, ec.allowExternalEntities())
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse package %q: %v", packageName, parseErr)
 		}

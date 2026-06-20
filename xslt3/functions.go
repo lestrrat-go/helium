@@ -354,17 +354,16 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// preserves the infoset for XSLT document() loads over the W3C source tree.
 	data = bytes.ReplaceAll(data, []byte("\uFFFD"), []byte("&#xFFFD;"))
 
-	// NOTE: this inner parser intentionally keeps LoadExternalDTD /
-	// SubstituteEntities enabled. The xpath3 fn:doc landed in #417 uses
-	// BlockXXE(true).AllowNetwork(false), but XSLT 3.0 W3C tests
-	// (e.g. base-uri-051) rely on resolving external SYSTEM entities in
-	// documents loaded via doc()/document(). Hardening this against XXE
-	// requires a coordinated opt-in flag plus harness updates and is
-	// scoped to a separate PR. The default-deny on retrieval above
-	// already blocks the most common SSRF/LFI vector — callers cannot
-	// fn:doc anything without first installing a URIResolver.
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).SubstituteEntities(true).FixBaseURIs(false).BaseURI(resolvedURI)
-	doc, err := p.Parse(ctx, data)
+	// Parse the retrieved document with XXE blocked by default: external DTDs
+	// and external general entities are neither loaded nor substituted, which
+	// eliminates the local-file-disclosure / SSRF vector. Callers that need the
+	// legacy permissive behavior (e.g. XSLT 3.0 W3C tests such as base-uri-051
+	// that resolve external SYSTEM entities) must opt in via
+	// Invocation.AllowExternalEntities(true).
+	doc, err := parseExternalXML(ctx, data, resolvedURI, ec.allowExternalEntities(),
+		func(p helium.Parser) helium.Parser {
+			return p.DefaultDTDAttributes(true).FixBaseURIs(false)
+		})
 	if err != nil {
 		return nil, dynamicError(errCodeFODC0002, "cannot parse document %q: %v", uri, err)
 	}
@@ -459,6 +458,13 @@ func (ec *execContext) resourceLimit() int64 {
 		return ec.transformConfig.maxResourceBytes
 	}
 	return 0
+}
+
+// allowExternalEntities reports whether the legacy permissive parse of runtime
+// documents (resolver-mediated external entity / DTD loading) is opted into for
+// this transformation. Default false: XXE is blocked.
+func (ec *execContext) allowExternalEntities() bool {
+	return ec != nil && ec.transformConfig != nil && ec.transformConfig.allowExternalEntities
 }
 
 func fetchViaResolver(r xpath3.URIResolver, uri string, limit int64) ([]byte, error) {

@@ -27,7 +27,7 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	if err != nil {
 		return nil, err
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
+	doc, err := parseExternalXML(ctx, data, "", c.allowExternalEntities, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
 	}
