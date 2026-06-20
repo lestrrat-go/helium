@@ -26,10 +26,15 @@ func canonicalResultURIKey(href, base string) string {
 		return href
 	}
 	if ref.IsAbs() {
-		return ref.String()
+		// Collapse "." / ".." dot-segments so that
+		// "file:///base/dir/a/../out.xml" and "file:///base/dir/out.xml" produce
+		// the SAME key (XTDE1490 duplicate detection). Resolving an absolute
+		// hierarchical reference against itself runs RFC 3986 remove_dot_segments
+		// while preserving the scheme/authority.
+		return ref.ResolveReference(ref).String()
 	}
 	if base == "" {
-		return ref.String()
+		return ref.ResolveReference(ref).String()
 	}
 	baseURL, err := url.Parse(base)
 	if err != nil || !baseURL.IsAbs() {
@@ -753,7 +758,34 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	}
 	tmpDoc.SetURL(resolvedHref)
 
-	effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
+	// PREFLIGHT (symmetric with the primary path): evaluate the secondary
+	// effective output definition — which evaluates EVERY error-prone
+	// serialization parameter AVT (method, standalone, indent, doctype, etc.) via
+	// evalResultDocOutputDef — BEFORE running the body. A serialization AVT that
+	// raises a dynamic error (e.g. method="{1 idiv 0}") inside xsl:try must roll
+	// the transaction back with NO body executed and NO per-href side effect: were
+	// the AVTs evaluated AFTER the body (the prior order), a NESTED secondary
+	// result-document inside the body could commit before the outer instruction's
+	// AVT error surfaced, leaving the enclosing xsl:catch to observe a stale nested
+	// result document. Building the output def up front guarantees any such error
+	// happens before inst.Body executes.
+	stagedOutDef, err := ec.buildEffectiveOutputDef(ctx, inst, effectiveFormat, "")
+	if err != nil {
+		return err
+	}
+
+	// Derive the effective output method from the preflighted output definition so
+	// a MethodAVT error is NOT swallowed (resolveResultDocMethod silently ignores
+	// MethodAVT failures): buildEffectiveOutputDef already surfaced any AVT error
+	// above. Fall back to resolveResultDocMethod only for the non-AVT resolution
+	// chain (static method, parameter-document, named format, default).
+	effectiveMethod := stagedOutDef.Method
+	if effectiveMethod == "" {
+		effectiveMethod = ec.resolveResultDocMethod(ctx, inst)
+		stagedOutDef.Method = effectiveMethod
+		stagedOutDef.MethodExplicit = true
+	}
+
 	savedMethod := ec.currentResultDocMethod
 	ec.currentResultDocMethod = effectiveMethod
 	captureSecondary := isItemSerializationMethod(effectiveMethod)
@@ -774,19 +806,11 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	// persist: a stale resultDocItems/resultDocOutputDefs entry would otherwise
 	// be materialized at end-of-transform or contaminate an xsl:catch that writes
 	// the same href (spurious XTDE1490 / wrong output). The three staged pieces
-	// are: the captured json/adaptive items, the effective output definition, and
-	// the result-document tree itself.
+	// are: the captured json/adaptive items, the effective output definition (built
+	// up front in the preflight above), and the result-document tree itself.
 	var stagedItems xpath3.Sequence
 	if isItemSerializationMethod(effectiveMethod) && len(frame.pendingItems) > 0 {
 		stagedItems = frame.pendingItems
-	}
-
-	// Always build the effective output definition for secondary result documents
-	// so that serialization parameters (omit-xml-declaration, indent, etc.) from
-	// the named format are applied when serializing the result.
-	stagedOutDef, err := ec.buildEffectiveOutputDef(ctx, inst, effectiveFormat, effectiveMethod)
-	if err != nil {
-		return err
 	}
 
 	// Apply type validation for secondary result documents (type="...").

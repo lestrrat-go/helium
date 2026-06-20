@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,6 +143,66 @@ func TestResultDocumentPrimaryThrowingBodyNoDoublePrimary(t *testing.T) {
 	require.NoError(t, err, "the caught primary result-document must succeed without a spurious conflict")
 	require.Contains(t, out, "<b/>", "the catch's primary result document must be emitted")
 	require.NotContains(t, out, "<a/>", "the thrown body must not leave partial primary output behind")
+}
+
+// A SECONDARY xsl:result-document whose serialization parameter AVT raises a
+// dynamic error (method="{1 idiv 0}") must fail in a PREFLIGHT, BEFORE its body
+// executes — symmetric with the primary path. When wrapped in xsl:try and
+// caught, the body (which itself writes a NESTED result document) must never run,
+// so the handler must NOT receive the nested result document: the failed outer
+// instruction's transaction rolls back with no body executed and no nested
+// commit. (Regression: the secondary path evaluated serialization AVTs AFTER the
+// body, so the nested result document committed before the outer AVT error
+// surfaced, leaking a stale nested document into the caught state.)
+func TestResultDocumentSecondarySerializationAVTErrorNoNestedCommit(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:try>
+      <xsl:result-document href="outer.xml" method="{1 idiv 0}">
+        <xsl:result-document href="nested.xml"><nested/></xsl:result-document>
+      </xsl:result-document>
+      <xsl:catch>
+        <xsl:result-document href="caught.xml"><caught/></xsl:result-document>
+      </xsl:catch>
+    </xsl:try>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	collector := &resultDocCollect{docs: map[string]*helium.Document{}}
+	_, err := ss.Transform(parseTransformSource(t)).
+		BaseOutputURI("file:///base/dir/main.xml").
+		ResultDocumentHandler(collector).
+		Do(t.Context())
+	require.NoError(t, err,
+		"the caught secondary result-document must release its URI and the catch must succeed")
+
+	_, gotNested := collector.docs["nested.xml"]
+	require.False(t, gotNested,
+		"the outer serialization AVT must fail in a preflight before the body runs; no nested result document may commit")
+	_, gotCaught := collector.docs["caught.xml"]
+	require.True(t, gotCaught, "the catch's result document must be delivered")
+}
+
+// XTDE1490 duplicate detection must collapse dot-segments in ABSOLUTE hrefs.
+// "file:///base/dir/a/../out.xml" and "file:///base/dir/out.xml" denote the same
+// file and must collide. (Regression: absolute hrefs were keyed without
+// dot-segment normalization, so the "a/.." form did not collide with the plain
+// form.)
+func TestResultDocumentDuplicateAbsoluteDotSegments(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="file:///base/dir/a/../out.xml"><a/></xsl:result-document>
+    <xsl:result-document href="file:///base/dir/out.xml"><b/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).
+		BaseOutputURI("file:///base/dir/main.xml").
+		Do(t.Context())
+	require.Error(t, err, "two absolute file: hrefs denoting the same file (after dot-segment collapse) must collide")
+	require.Contains(t, err.Error(), "XTDE1490")
 }
 
 // Inside a secondary result-document, a NESTED secondary result-document that
