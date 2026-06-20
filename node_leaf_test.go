@@ -322,7 +322,8 @@ func TestLeafReplaceGuards(t *testing.T) {
 
 // TestLeafFastPathNilOperand verifies that the leaf-node AddChild/AddSibling
 // overrides which run a content-merge fast path (Text.AddChild, Text.AddSibling,
-// Comment.AddChild) reject a nil operand with ErrNilNode instead of panicking,
+// Comment.AddChild, ProcessingInstruction.AddChild) reject a nil operand with
+// ErrNilNode instead of panicking,
 // and leave the linked leaf untouched. Both a literal nil interface and a
 // matching typed-nil concrete pointer (Go's interface nil trap) are exercised,
 // since the overrides run a type assertion / debug log / preflight before the
@@ -371,6 +372,19 @@ func TestLeafFastPathNilOperand(t *testing.T) {
 			},
 			newLeaf: func(t *testing.T, doc *helium.Document) helium.MutableNode {
 				return mustCreateComment(t, doc, []byte("x"))
+			},
+		},
+		{
+			name: "PI.AddChild",
+			op:   func(leaf helium.MutableNode, cur helium.Node) error { return leaf.AddChild(cur) },
+			typedNil: func() helium.Node {
+				// A typed-nil *Text would otherwise reach the Text/CDATA
+				// content-merge fast path and panic on cur.Type().
+				var tn *helium.Text
+				return tn
+			},
+			newLeaf: func(t *testing.T, doc *helium.Document) helium.MutableNode {
+				return mustCreatePI(t, doc)
 			},
 		},
 	}
@@ -497,6 +511,26 @@ func TestPIContentIsStringNotChildren(t *testing.T) {
 
 		require.Nil(t, pi.FirstChild(), "PI must not gain child nodes")
 		require.Equal(t, "abc", string(pi.Content()), "PI data must absorb text/cdata content")
+	})
+
+	t.Run("AddChild unlinks an already-linked text/cdata operand", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		oldParent := mustCreateElement(t, doc, "old")
+		txt := doc.CreateText([]byte("b"))
+		require.NoError(t, oldParent.AddChild(txt), "text starts under oldParent")
+		require.Equal(t, helium.Node(oldParent), txt.Parent(), "text parent is oldParent")
+
+		pi := doc.CreatePI("target", "a")
+		require.NoError(t, pi.AddChild(txt), "Text AddChild must succeed")
+
+		// Content is merged into the PI data...
+		require.Equal(t, "ab", string(pi.Content()), "PI data must absorb the text content")
+		require.Nil(t, pi.FirstChild(), "PI must not gain a child")
+		// ...and the source node is unlinked from its old parent, honoring the
+		// AddChild auto-unlink contract instead of leaving it linked twice.
+		require.Nil(t, txt.Parent(), "merged text must be unlinked from its old parent")
+		require.Nil(t, oldParent.FirstChild(), "oldParent must no longer reference the text")
 	})
 
 	t.Run("AddChild of a non-text node is rejected", func(t *testing.T) {

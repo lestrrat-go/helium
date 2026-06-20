@@ -145,11 +145,21 @@ func (p *ProcessingInstruction) Type() ElementType {
 // xmlNodeAddContent on a PI). Any other node type is rejected, since attaching
 // it would corrupt the tree and break serialization.
 func (p *ProcessingInstruction) AddChild(cur Node) error {
-	if cur == nil {
+	// Reject a nil or typed-nil operand BEFORE any method call on cur (a typed
+	// nil is a non-nil interface wrapping a nil pointer, so cur.Type() would
+	// panic) so the call returns ErrNilNode and leaves the tree untouched.
+	if isNilNode(cur) {
 		return ErrNilNode
 	}
 	switch cur.Type() {
 	case TextNode, CDATASectionNode:
+		// Run the shared self/cycle guard and auto-unlink BEFORE merging the
+		// source content into the PI data. Otherwise merging an already-linked
+		// text/CDATA node would copy its content while leaving it linked under
+		// its old parent, violating the AddChild auto-unlink contract.
+		if err := addChildPreflight(p, cur); err != nil {
+			return err
+		}
 		p.data += string(cur.Content())
 		return nil
 	default:
