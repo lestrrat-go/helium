@@ -85,7 +85,11 @@ func Compile(expr string) (*Expression, error) {
 // Evaluate evaluates the compiled XPointer against a document, returning
 // the matching nodes. Cascading fallback semantics match [Evaluate].
 func (e *Expression) Evaluate(ctx context.Context, doc *helium.Document) ([]helium.Node, error) {
-	if e == nil {
+	// A nil receiver or a zero-value Expression (e.g. var e Expression) has
+	// never been through Compile. A successfully compiled expression always
+	// holds at least one part because parseParts rejects the empty expression,
+	// so an empty parts slice reliably marks an uncompiled value.
+	if e == nil || len(e.parts) == 0 {
 		return nil, ErrNilExpression
 	}
 	if doc == nil {

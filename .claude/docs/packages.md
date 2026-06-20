@@ -211,6 +211,9 @@ XPointer expression evaluation with scheme cascading.
 - **Evaluate(*Document, string) → ([]Node, error)**
 - Schemes: xpointer(), xpath1() → XPath; element(/1/2/3) → child-sequence; xmlns() → ns binding; shorthand → ID lookup
 - Multiple scheme parts left-to-right; first non-empty result wins
+- `Compile(string) → (*Expression, error)` + `Expression.Evaluate(*Document) → ([]Node, error)` for reuse across documents
+- `ErrNilExpression` — sentinel returned by `Expression.Evaluate` when the receiver is nil or an uncompiled (zero-value) `Expression`
+- `ErrNilDocument` — sentinel returned by `Expression.Evaluate`/`Evaluate` when the document is nil
 - Files: `xpointer.go`
 - Imports: helium, xpath1/, internal/xmlchar/
 

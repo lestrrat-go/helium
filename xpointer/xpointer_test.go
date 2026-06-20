@@ -656,7 +656,18 @@ func TestEvaluate_NilGuards(t *testing.T) {
 
 		var e *xpointer.Expression
 		_, err = e.Evaluate(t.Context(), doc)
-		require.Error(t, err)
+		require.ErrorIs(t, err, xpointer.ErrNilExpression)
+	})
+
+	t.Run("zero-value expression", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r><a/></r>`))
+		require.NoError(t, err)
+
+		var e xpointer.Expression
+		_, err = e.Evaluate(t.Context(), doc)
+		require.ErrorIs(t, err, xpointer.ErrNilExpression)
 	})
 
 	docExprs := []struct {
@@ -675,7 +686,7 @@ func TestEvaluate_NilGuards(t *testing.T) {
 			require.NoError(t, err)
 
 			_, err = e.Evaluate(t.Context(), nil)
-			require.Error(t, err)
+			require.ErrorIs(t, err, xpointer.ErrNilDocument)
 		})
 	}
 }
