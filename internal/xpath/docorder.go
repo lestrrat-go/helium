@@ -258,15 +258,48 @@ func sortByPrecomputedKeys(result []helium.Node, keys []sortKey) {
 	copy(result, tmp)
 }
 
+// boundedCap returns a capacity for a dedup buffer (result or seen map) that is
+// bounded by the node-set limit so duplicate-heavy input does not over-allocate
+// proportional to the full input length. The returned capacity is min(n,
+// maxNodes+1): never more than one slot past the limit (the extra slot lets the
+// callers detect overflow before returning ErrNodeSetLimit).
+//
+// This bounds allocation only; it does not enforce the limit. Enforcement is the
+// caller's job via the len(result) > maxNodes checks below, which reject any
+// result that exceeds the limit. Every caller of DeduplicateNodes,
+// DeduplicateNodesPreserveOrder, and MergeNodeSets passes a positive maxNodes
+// (DefaultMaxNodeSetLength or a config override), so the limit is always active.
+// maxNodes <= 0 is treated as "no allocation cap" here purely as a defensive
+// fallback for sizing; it is not a supported "unlimited" mode, because the
+// enforcement checks below would reject a non-empty result in that case.
+// maxNodes+1 is guarded against integer overflow.
+func boundedCap(n, maxNodes int) int {
+	if maxNodes <= 0 {
+		return n
+	}
+	limit := maxNodes + 1
+	if limit < maxNodes { // overflow: maxNodes was math.MaxInt
+		return n
+	}
+	if n < limit {
+		return n
+	}
+	return limit
+}
+
 // DeduplicateNodes removes duplicate nodes and sorts by document order.
 // Returns ErrNodeSetLimit if the result exceeds maxNodes.
 func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error) {
 	if len(nodes) <= 1 {
 		return nodes, nil
 	}
-	seen := make(map[helium.Node]struct{}, len(nodes))
+	// Cap the seen-map and result allocations at the limit (plus one slot to
+	// detect overflow) so a large, duplicate-heavy input does not over-allocate
+	// buffers sized to the full input when the deduplicated result fits well
+	// within maxNodes.
+	seen := make(map[helium.Node]struct{}, boundedCap(len(nodes), maxNodes))
 	var nsKeys map[NSNodeKey]struct{}
-	result := make([]helium.Node, 0, len(nodes))
+	result := make([]helium.Node, 0, boundedCap(len(nodes), maxNodes))
 	// Track distinct roots to avoid calling BuildFrom for every node.
 	var roots map[helium.Node]struct{}
 	for _, n := range nodes {
@@ -285,6 +318,9 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 		}
 		seen[n] = struct{}{}
 		result = append(result, n)
+		if len(result) > maxNodes {
+			return nil, ErrNodeSetLimit
+		}
 		// Track the root for this node.
 		root := DocumentRoot(n)
 		if roots == nil {
@@ -294,9 +330,6 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 			roots[root] = struct{}{}
 			cache.BuildFrom(root)
 		}
-	}
-	if len(result) > maxNodes {
-		return nil, ErrNodeSetLimit
 	}
 
 	// Precompute sort keys to avoid repeated map lookups during sort.
@@ -316,9 +349,13 @@ func DeduplicateNodesPreserveOrder(nodes []helium.Node, maxNodes int) ([]helium.
 	if len(nodes) <= 1 {
 		return nodes, nil
 	}
-	seen := make(map[helium.Node]struct{}, len(nodes))
+	// Cap the seen-map and result allocations at the limit (plus one slot to
+	// detect overflow) so a large, duplicate-heavy input does not over-allocate
+	// buffers sized to the full input when the deduplicated result fits well
+	// within maxNodes.
+	seen := make(map[helium.Node]struct{}, boundedCap(len(nodes), maxNodes))
 	var nsKeys map[NSNodeKey]struct{}
-	result := make([]helium.Node, 0, len(nodes))
+	result := make([]helium.Node, 0, boundedCap(len(nodes), maxNodes))
 	for _, n := range nodes {
 		if _, ok := seen[n]; ok {
 			continue
@@ -335,9 +372,9 @@ func DeduplicateNodesPreserveOrder(nodes []helium.Node, maxNodes int) ([]helium.
 		}
 		seen[n] = struct{}{}
 		result = append(result, n)
-	}
-	if len(result) > maxNodes {
-		return nil, ErrNodeSetLimit
+		if len(result) > maxNodes {
+			return nil, ErrNodeSetLimit
+		}
 	}
 	return result, nil
 }
@@ -471,14 +508,18 @@ func compareElementOrder(a, b helium.Node) int {
 
 // MergeNodeSets merges two node slices, deduplicates, and sorts by document order.
 func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error) {
-	seen := make(map[helium.Node]struct{}, len(a)+len(b))
+	// Cap the seen-map and result allocations at the limit (plus one slot to
+	// detect overflow) so a large, duplicate-heavy input does not over-allocate
+	// buffers sized to the full input when the deduplicated result fits well
+	// within maxNodes.
+	seen := make(map[helium.Node]struct{}, boundedCap(len(a)+len(b), maxNodes))
 	var nsKeys map[NSNodeKey]struct{}
-	var result []helium.Node
+	result := make([]helium.Node, 0, boundedCap(len(a)+len(b), maxNodes))
 	var roots map[helium.Node]struct{}
 
-	addNode := func(n helium.Node) {
+	addNode := func(n helium.Node) error {
 		if _, ok := seen[n]; ok {
-			return
+			return nil
 		}
 		if n.Type() == helium.NamespaceNode {
 			if nsKeys == nil {
@@ -486,12 +527,18 @@ func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]he
 			}
 			key := NSNodeKey{Parent: n.Parent(), Prefix: n.Name()}
 			if _, ok := nsKeys[key]; ok {
-				return
+				return nil
 			}
 			nsKeys[key] = struct{}{}
 		}
 		seen[n] = struct{}{}
 		result = append(result, n)
+		// Early-exit as soon as the result exceeds the limit so we neither
+		// process the rest of the input nor grow the result buffer past the
+		// bounded capacity.
+		if len(result) > maxNodes {
+			return ErrNodeSetLimit
+		}
 		// Track the root for this node.
 		root := DocumentRoot(n)
 		if roots == nil {
@@ -501,16 +548,18 @@ func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]he
 			roots[root] = struct{}{}
 			cache.BuildFrom(root)
 		}
+		return nil
 	}
 
 	for _, n := range a {
-		addNode(n)
+		if err := addNode(n); err != nil {
+			return nil, err
+		}
 	}
 	for _, n := range b {
-		addNode(n)
-	}
-	if len(result) > maxNodes {
-		return nil, ErrNodeSetLimit
+		if err := addNode(n); err != nil {
+			return nil, err
+		}
 	}
 
 	// Precompute sort keys to avoid repeated map lookups during sort.
