@@ -19,6 +19,7 @@ import (
 const (
 	tagPlaintext = "plaintext"
 	tagTextarea  = "textarea"
+	tagTitle     = "title"
 )
 
 // cancelAfterReader is an io.Reader that streams a fixed body and invokes a
@@ -69,7 +70,7 @@ func TestRawTextContextCancellationAborts(t *testing.T) {
 		{"script", "<script>" + body},
 		{"style", "<style>" + body},
 		{tagTextarea, "<textarea>" + body},
-		{"title", "<title>" + body},
+		{tagTitle, "<title>" + body},
 		{tagPlaintext, "<plaintext>" + body},
 	}
 	for _, tc := range chunked {
@@ -143,7 +144,7 @@ func TestRawTextChunksAreValidUTF8(t *testing.T) {
 		{"script", "<script>", "</script>"},
 		{"style", "<style>", "</style>"},
 		{tagTextarea, "<textarea>", "</textarea>"}, // RCDATA
-		{"title", "<title>", "</title>"},           // RCDATA
+		{tagTitle, "<title>", "</title>"},          // RCDATA
 		{tagPlaintext, "<plaintext>", ""},
 	}
 
@@ -453,7 +454,7 @@ func TestRCDATAUnknownEntityChunked(t *testing.T) {
 		{"named_semicolon", "&" + strings.Repeat("a", runLen) + ";"},
 	}
 
-	for _, elem := range []string{"title", tagTextarea} {
+	for _, elem := range []string{tagTitle, tagTextarea} {
 		for _, tc := range cases {
 			t.Run(elem+"_"+tc.name, func(t *testing.T) {
 				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
@@ -491,6 +492,68 @@ func TestRCDATAUnknownEntityChunked(t *testing.T) {
 	}
 }
 
+// TestRCDATALegacyPrefixOverCapLiteral is the regression for the over-cap
+// legacy-prefix bug: a long alphanumeric named-reference run that begins with a
+// legacy entity prefix (e.g. "&amp" + thousands of letters + ";") must be
+// emitted LITERALLY in the bounded RCDATA path, exactly as the normal-text path
+// does, NOT resolved to "&" plus the tail. The bug truncated the name scan at
+// the entity-name cap and then ran legacy-prefix matching on the truncated
+// name, wrongly turning "&ampxxx…;" into "&xxx…;". An over-cap run, whose true
+// delimiter (and possibly a ';') is still in the stream, can never match an
+// entity and must pass through verbatim.
+func TestRCDATALegacyPrefixOverCapLiteral(t *testing.T) {
+	const limit = 4
+	const runLen = 4096 // far larger than any valid entity name or legacy prefix
+
+	cases := []struct {
+		name string
+		body string // RCDATA content (the literal text expected back out)
+	}{
+		// "amp" is a legacy entity prefix; the runaway tail makes the whole run
+		// unknown. With a trailing ';' the normal-text path emits it literally,
+		// so the bounded path must too.
+		{"amp_semicolon", "&amp" + strings.Repeat("x", runLen) + ";"},
+		// Same run without the trailing ';' — still over-cap, still literal.
+		{"amp_no_semicolon", "&amp" + strings.Repeat("x", runLen)},
+		// "lt" is another legacy prefix; guard against any prefix, not just amp.
+		{"lt_semicolon", "&lt" + strings.Repeat("y", runLen) + ";"},
+	}
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		for _, tc := range cases {
+			t.Run(elem+"_"+tc.name, func(t *testing.T) {
+				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
+
+				var got strings.Builder
+				maxChunk := 0
+				var nchunks int
+				record := html.CharactersFunc(func(data []byte) error {
+					got.Write(data)
+					if len(data) > maxChunk {
+						maxChunk = len(data)
+					}
+					nchunks++
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				require.NoError(t, err,
+					"over-cap legacy-prefix entity in RCDATA must parse, not error")
+				require.Equal(t, tc.body, got.String(),
+					"over-cap legacy-prefix run must be emitted literally, not legacy-prefix-resolved")
+				require.LessOrEqual(t, maxChunk, limit+16,
+					"no single Characters chunk may exceed the cap")
+				require.Greater(t, nchunks, 1,
+					"runaway RCDATA entity must be split into multiple chunks")
+			})
+		}
+	}
+}
+
 // TestRCDATANumericEntityNormalized verifies that the bounded RCDATA char-ref
 // scanner makes the SAME entity-resolution decision as the normal-text scanner
 // for numeric references, even with a tiny MaxContentSize: an overlong numeric
@@ -517,7 +580,7 @@ func TestRCDATANumericEntityNormalized(t *testing.T) {
 		{"leading_zero_hex", "&#x" + strings.Repeat("0", runLen) + "41;", "A"},
 	}
 
-	for _, elem := range []string{"title", tagTextarea} {
+	for _, elem := range []string{tagTitle, tagTextarea} {
 		for _, tc := range cases {
 			t.Run(elem+"_"+tc.name, func(t *testing.T) {
 				input := "<" + elem + ">" + tc.body + "</" + elem + ">"

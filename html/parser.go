@@ -1116,14 +1116,26 @@ func (p *parser) parseCharRefBounded(limit int) {
 	// match (and every legacy prefix), while still bounding the scan.
 	name := p.parseWhileMax(isAlphanumeric, maxEntityNameLen)
 
-	// More alphanumeric bytes may follow when the run hit the cap; they are not
-	// part of any entity name and are left in the stream to be emitted as normal
-	// text by the caller. resolveNamedEntity still runs on the bounded name so a
-	// legacy prefix (e.g. "&ampxxxx…") resolves exactly as in parseCharRef.
+	// When the alphanumeric run hit the cap, it is longer than every known
+	// entity name (and longer than every legacy prefix that could plausibly
+	// stand alone), so it cannot match any entity. Crucially, we have NOT yet
+	// consumed the run's delimiter, and the bytes still in the stream — more
+	// alphanumerics and possibly a trailing ';' — are part of this same
+	// unresolved run. Resolving a legacy prefix here (e.g. "amp" out of
+	// "&ampxxxx…;") would diverge from the normal-text path, which reads the
+	// whole run and, on seeing the ';', treats the over-long name as unknown
+	// and emits it literally. So for an over-cap run, skip resolveNamedEntity
+	// entirely and emit the whole run (the bounded name plus its remaining
+	// alphanumeric bytes and ';') as literal text in capped chunks.
 	overCap := len(name) >= maxEntityNameLen
+	if overCap {
+		p.emitLiteralChunked("&"+name, limit)
+		p.flushAlnumLiteral(isAlphanumeric, limit)
+		return
+	}
 
 	hasSemicolon := false
-	if !overCap && p.cur.Peek() == ';' {
+	if p.cur.Peek() == ';' {
 		hasSemicolon = true
 		_ = p.cur.Advance(1)
 	}
@@ -1139,16 +1151,12 @@ func (p *parser) parseCharRefBounded(limit int) {
 	}
 
 	// Unknown entity — emit "&" + name (and any ';') as literal text in capped
-	// chunks. When the run overflowed the cap, drain the remaining alphanumeric
-	// bytes as literal text too.
+	// chunks.
 	text := "&" + name
 	if hasSemicolon {
 		text += ";"
 	}
 	p.emitLiteralChunked(text, limit)
-	if overCap {
-		p.flushAlnumLiteral(isAlphanumeric, limit)
-	}
 }
 
 // consumeNumericCharRefBounded reads a numeric character reference's digit run
