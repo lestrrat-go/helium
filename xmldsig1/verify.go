@@ -67,6 +67,14 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		return nil, err
 	}
 
+	// Reject weak (SHA-1) signature/digest algorithms before resolving KeyInfo
+	// or invoking KeySource, so a rejected SHA-1 input returns ErrWeakAlgorithm
+	// without triggering key resolution or surfacing unrelated key/signature
+	// errors.
+	if err := preflightParsedWeakAlgorithms(parsed, cfg.allowSHA1); err != nil {
+		return nil, err
+	}
+
 	// Resolve key.
 	var keyInfoData *KeyInfoData
 	if parsed.keyInfoElem != nil {

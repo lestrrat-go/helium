@@ -17,6 +17,12 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 		return fmt.Errorf("%w: signature algorithm not set", ErrInvalidSignature)
 	}
 
+	// Reject weak (SHA-1) algorithms before building or mutating any nodes, so a
+	// rejected default-SHA-1 request leaves the input tree untouched.
+	if err := preflightSignerWeakAlgorithms(cfg); err != nil {
+		return err
+	}
+
 	sigElem, signedInfo, sigValueElem, err := buildSignatureSkeleton(doc, cfg)
 	if err != nil {
 		return err
@@ -64,6 +70,13 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 	}
 	if cfg.signatureAlgorithm == "" {
 		return nil, fmt.Errorf("%w: signature algorithm not set", ErrInvalidSignature)
+	}
+
+	// Reject weak (SHA-1) algorithms before building nodes or moving caller
+	// content into the <Object>, so a rejected default-SHA-1 request leaves the
+	// input nodes unmoved and the input tree untouched.
+	if err := preflightSignerWeakAlgorithms(cfg); err != nil {
+		return nil, err
 	}
 
 	sigElem, signedInfo, sigValueElem, err := buildSignatureSkeleton(doc, cfg)
@@ -119,6 +132,11 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 	}
 	if cfg.signatureAlgorithm == "" {
 		return nil, fmt.Errorf("%w: signature algorithm not set", ErrInvalidSignature)
+	}
+
+	// Reject weak (SHA-1) algorithms before building or mutating any nodes.
+	if err := preflightSignerWeakAlgorithms(cfg); err != nil {
+		return nil, err
 	}
 
 	sigElem, signedInfo, sigValueElem, err := buildSignatureSkeleton(doc, cfg)
