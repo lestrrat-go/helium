@@ -197,6 +197,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		c.checkAllGroupRef(ctx, placeholder)
 	}
 
+	// Detect and cut INDIRECT xs:attributeGroup reference cycles (e.g. h -> i,
+	// i -> h) BEFORE any flattening or expansion. A circular attribute-group
+	// reference is disallowed outside <redefine> (XSD §3.6.2 src-attribute_group.3),
+	// just like the DIRECT self-reference caught at parse time in read_particles.go.
+	// Reporting and cutting the back-edge here both surfaces the schema error and
+	// keeps the cycle-guarded flatten/expand walks below from silently relying on a
+	// recursion-stack guard that produced no diagnostic.
+	c.checkCircularAttrGroupRefs(ctx)
+
 	// Reject duplicate attribute uses inside a global attribute group definition
 	// (ag-props-correct.2) BEFORE expanding the group into the types that
 	// reference it. This both reports duplicates in attribute groups that NO type
@@ -752,6 +761,110 @@ func (c *compiler) reportCircularAttrGroupRef(ctx context.Context, ce *helium.El
 	}
 	msg := fmt.Sprintf("Circular reference to the attribute group '%s' defined.", formatAttrQName(groupQN))
 	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup", msg), helium.ErrorLevelFatal))
+	c.errorCount++
+}
+
+// checkCircularAttrGroupRefs detects INDIRECT xs:attributeGroup reference cycles
+// over the c.attrGroupRefChildren adjacency (e.g. h -> i, i -> h, or the 3-node
+// h -> i -> j -> h) and reports each as a circular reference
+// (src-attribute_group.3), matching the DIRECT self-reference caught at parse
+// time in read_particles.go. Direct self-references never reach here — they are
+// reported and dropped during parsing — so this catches only multi-node cycles.
+//
+// The back-edge that closes a cycle is CUT (removed from the adjacency) so the
+// downstream cycle-guarded flatten (flattenAttrGroupRefDuplicates) and expand
+// (expandAttrGroupUses) walks no longer rely on their recursion-stack guard to
+// silently truncate the cycle, and so a circular schema can never compile as if
+// it were valid. Cutting also guarantees no duplicate-attribute false positive
+// is introduced by the cycle.
+//
+// Groups and their ref children are visited in a deterministic order (sorted
+// QName, declaration order within a group) so the reported cycle and any cut
+// edge are independent of Go map iteration order.
+func (c *compiler) checkCircularAttrGroupRefs(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	roots := make([]QName, 0, len(c.attrGroupRefChildren))
+	for qn := range c.attrGroupRefChildren {
+		roots = append(roots, qn)
+	}
+	sort.Slice(roots, func(i, j int) bool {
+		if roots[i].NS != roots[j].NS {
+			return roots[i].NS < roots[j].NS
+		}
+		return roots[i].Local < roots[j].Local
+	})
+
+	// onStack is the current DFS recursion stack; done marks fully-explored nodes
+	// so a shared subtree reachable from two roots is not re-walked.
+	onStack := make(map[QName]bool)
+	done := make(map[QName]bool)
+
+	var visit func(qn QName)
+	visit = func(qn QName) {
+		onStack[qn] = true
+		// Re-read the slice each iteration: a cut splices out the back-edge in place.
+		for i := 0; i < len(c.attrGroupRefChildren[qn]); i++ {
+			child := c.attrGroupRefChildren[qn][i]
+			if onStack[child] {
+				// Back-edge qn -> child closes a cycle through child. Report it as a
+				// circular reference to child, attributed to THIS back-edge ref
+				// element's recorded source (index-aligned with attrGroupRefChildren),
+				// then cut the edge so the flatten/expand walks below terminate
+				// without a diagnostic-less truncation.
+				edgeSrc := c.attrGroupRefSourceAt(qn, i)
+				c.reportCircularAttrGroupRefQName(ctx, child, edgeSrc)
+				children := c.attrGroupRefChildren[qn]
+				c.attrGroupRefChildren[qn] = append(children[:i], children[i+1:]...)
+				if srcs := c.attrGroupRefSources[qn]; i < len(srcs) {
+					c.attrGroupRefSources[qn] = append(srcs[:i], srcs[i+1:]...)
+				}
+				i--
+				continue
+			}
+			if done[child] {
+				continue
+			}
+			visit(child)
+		}
+		onStack[qn] = false
+		done[qn] = true
+	}
+
+	for _, qn := range roots {
+		if done[qn] {
+			continue
+		}
+		visit(qn)
+	}
+}
+
+// attrGroupRefSourceAt returns the per-edge source recorded for the i-th nested
+// xs:attributeGroup ref child of ownerQN (index-aligned with
+// c.attrGroupRefChildren[ownerQN]), falling back to the owning group's
+// declaration source if the parallel slice is short (which should not happen).
+func (c *compiler) attrGroupRefSourceAt(ownerQN QName, i int) attrGroupSource {
+	if srcs := c.attrGroupRefSources[ownerQN]; i < len(srcs) {
+		return srcs[i]
+	}
+	return c.attrGroupSources[ownerQN]
+}
+
+// reportCircularAttrGroupRefQName emits the src-attribute_group.3 circular-
+// reference diagnostic for an INDIRECT attribute-group cycle. The diagnostic
+// names the group being circularly referenced (targetQN) and is attributed to
+// the BACK-EDGE <xs:attributeGroup ref="..."> element's recorded source
+// (edgeSrc) — the ref that actually closed the cycle — so the reported line is
+// the ref line, matching the direct-self-reference path's attribution and
+// pointing at the right file when the cycle spans included/redefined schemas.
+func (c *compiler) reportCircularAttrGroupRefQName(ctx context.Context, targetQN QName, edgeSrc attrGroupSource) {
+	if c.filename == "" {
+		return
+	}
+	msg := fmt.Sprintf("Circular reference to the attribute group '%s' defined.", formatAttrQName(targetQN))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSourceOrRecorded(edgeSrc.source), edgeSrc.line, "attributeGroup", "attributeGroup", msg), helium.ErrorLevelFatal))
 	c.errorCount++
 }
 
