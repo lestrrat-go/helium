@@ -113,3 +113,62 @@ func TestResultDocumentPrimarySerializationAVTErrorNoDoublePrimary(t *testing.T)
 	require.Contains(t, out, "<b/>", "the catch's primary result document must be emitted")
 	require.NotContains(t, out, "<a/>", "the failed primary result document must not leave partial output behind")
 }
+
+// A primary xsl:result-document whose body EMITS content ("<a/>") and THEN
+// throws (xsl:message terminate="yes") inside xsl:try must not leave that
+// partial content in the primary tree. The deferred release of the "" URI
+// reservation lets the xsl:catch write a fresh primary result document, so the
+// catch's "<b/>" must be the SOLE primary output — never "<a/><b/>". This is the
+// double-primary regression the buffered direct-write path prevents: the
+// body's content is staged in a temporary frame and only spliced into the
+// primary tree after the body succeeds.
+func TestResultDocumentPrimaryThrowingBodyNoDoublePrimary(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:try>
+      <xsl:result-document>
+        <a/>
+        <xsl:message terminate="yes">boom</xsl:message>
+      </xsl:result-document>
+      <xsl:catch>
+        <xsl:result-document><b/></xsl:result-document>
+      </xsl:catch>
+    </xsl:try>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err, "the caught primary result-document must succeed without a spurious conflict")
+	require.Contains(t, out, "<b/>", "the catch's primary result document must be emitted")
+	require.NotContains(t, out, "<a/>", "the thrown body must not leave partial primary output behind")
+}
+
+// Inside a secondary result-document, a NESTED secondary result-document that
+// targets a relative href ("inner.xml") and another that targets the equivalent
+// absolute file: href ("file:///base/dir/inner.xml") denote the SAME file and
+// must collide with XTDE1490. This requires the enclosing secondary output to
+// update current-output-uri() with a scheme-preserving (canonical) URI so the
+// nested relative href resolves to the same key as its absolute equivalent.
+// (Regression: helium.BuildURI strips the file: scheme for file: bases, so the
+// nested relative href keyed as "/base/dir/inner.xml" while the absolute href
+// stayed "file:///base/dir/inner.xml", missing the duplicate.)
+func TestResultDocumentNestedDuplicateRelativeVsAbsoluteFileURI(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="outer.xml">
+      <outer>
+        <xsl:result-document href="inner.xml"><a/></xsl:result-document>
+        <xsl:result-document href="file:///base/dir/inner.xml"><b/></xsl:result-document>
+      </outer>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).
+		BaseOutputURI("file:///base/dir/main.xml").
+		Do(t.Context())
+	require.Error(t, err, "nested relative and absolute file: hrefs denoting the same file must collide")
+	require.Contains(t, err.Error(), "XTDE1490")
+}

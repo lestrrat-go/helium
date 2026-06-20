@@ -467,17 +467,17 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	}
 
 	// Track the current output URI for current-output-uri().
-	// For secondary outputs, resolve relative href against the current output URI.
+	// For secondary outputs, resolve relative href against the current output URI
+	// using the SAME URI-preserving resolver as the XTDE1490 duplicate key
+	// (canonicalResultURIKey). helium.BuildURI strips the file: scheme for file:
+	// bases, so a nested result-document inside a secondary output would compute a
+	// scheme-stripped base ("/base/dir/inner.xml") that no longer matches the
+	// duplicate key's scheme-preserving form ("file:///base/dir/inner.xml"),
+	// causing a relative href and its absolute file: equivalent to miss inside the
+	// secondary output. Canonicalizing here keeps both forms consistent.
 	savedOutputURI := ec.currentOutputURI
-	if href != "" && savedOutputURI != "" {
-		resolved := helium.BuildURI(href, savedOutputURI)
-		if resolved != "" {
-			ec.currentOutputURI = resolved
-		} else {
-			ec.currentOutputURI = href
-		}
-	} else if href != "" {
-		ec.currentOutputURI = href
+	if href != "" {
+		ec.currentOutputURI = canonicalResultURIKey(href, savedOutputURI)
 	}
 	// For primary output (href==""), currentOutputURI stays unchanged.
 	defer func() { ec.currentOutputURI = savedOutputURI }()
@@ -613,18 +613,46 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			return nil
 		}
 
-		// Write directly to the primary output (base frame).
+		// Buffer the primary direct-write path: execute the body into a
+		// temporary frame and splice it into the real primary output ONLY after
+		// the body and all post-body checks succeed. A body that throws (e.g.
+		// inside xsl:try) must leave NO partial primary output behind, so that
+		// the deferred release of the "" reservation is sound and an xsl:catch
+		// that writes another primary result document does not produce a
+		// double-primary result.
+		//
+		// The buffer frame stands IN for the base frame: it temporarily replaces
+		// ec.outputStack[0] (rather than being pushed on top), so that the body
+		// observes the same outputStack depth (1) and the same insideResultDocPrimary
+		// state as a true direct write. This keeps every depth-sensitive branch
+		// (XTRE1495 suppression, rawResultSequence capture, etc.) behaving exactly
+		// as before; only the destination tree changes, and only until commit.
+		realBase := ec.outputStack[0]
+		bufDoc := helium.NewDefaultDocument()
+		bufFrame := &outputFrame{
+			doc:           bufDoc,
+			current:       bufDoc,
+			itemSeparator: itemSep,
+			// Seed the adjacency/separator accumulators from the real base frame
+			// so spacing of atomic values and item separators is byte-identical
+			// to a direct write.
+			prevWasAtomic: realBase.prevWasAtomic,
+			prevHadOutput: realBase.prevHadOutput,
+			outputSerial:  realBase.outputSerial,
+		}
 		savedStack := ec.outputStack
-		ec.outputStack = ec.outputStack[:1] // keep only the base frame
+		bufferedStack := make([]*outputFrame, len(ec.outputStack))
+		copy(bufferedStack, ec.outputStack)
+		bufferedStack[0] = bufFrame
+		ec.outputStack = bufferedStack[:1] // keep only the (buffered) base frame
 		ec.insideResultDocPrimary = true
-		savedSep := ec.outputStack[0].itemSeparator
-		ec.outputStack[0].itemSeparator = itemSep
 		savedMethod := ec.currentResultDocMethod
 		ec.currentResultDocMethod = effectiveMethod
+		savedRawResult := ec.rawResultSequence
 		if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
 			ec.insideResultDocPrimary = false
 			ec.currentResultDocMethod = savedMethod
-			ec.outputStack[0].itemSeparator = savedSep
+			ec.rawResultSequence = savedRawResult
 			ec.outputStack = savedStack
 			return err
 		}
@@ -641,11 +669,10 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 				}
 			}
 			if !allowDupes {
-				out := ec.outputStack[0]
-				if err := validateJSONItems(out.pendingItems); err != nil {
+				if err := validateJSONItems(bufFrame.pendingItems); err != nil {
 					ec.insideResultDocPrimary = false
 					ec.currentResultDocMethod = savedMethod
-					ec.outputStack[0].itemSeparator = savedSep
+					ec.rawResultSequence = savedRawResult
 					ec.outputStack = savedStack
 					return err
 				}
@@ -653,8 +680,16 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		}
 		ec.insideResultDocPrimary = false
 		ec.currentResultDocMethod = savedMethod
-		ec.outputStack[0].itemSeparator = savedSep
 		ec.outputStack = savedStack
+		// Body and all post-body checks succeeded: splice the buffered content
+		// into the real primary output and propagate the accumulator state.
+		if err := moveChildren(bufDoc, realBase.doc); err != nil {
+			return err
+		}
+		realBase.pendingItems = append(realBase.pendingItems, bufFrame.pendingItems...)
+		realBase.prevWasAtomic = bufFrame.prevWasAtomic
+		realBase.prevHadOutput = bufFrame.prevHadOutput
+		realBase.outputSerial = bufFrame.outputSerial
 		// Propagate character map names to the primary output frame.
 		// Include maps from the named format (xsl:output) first, then
 		// maps from xsl:result-document itself (higher priority).
