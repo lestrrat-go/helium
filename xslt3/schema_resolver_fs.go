@@ -70,6 +70,17 @@ func (e fatalSchemaLoadError) Unwrap() error { return e.err }
 
 func (e fatalSchemaLoadError) FatalSchemaLoad() bool { return true }
 
+// isFatalSchemaLoadError reports whether err (or anything in its chain) is a
+// [xsd.FatalSchemaLoader] — a schema-load failure (resource-limit breach, path
+// escape, or import-depth overflow) that must never be demoted to a warning or
+// papered over by a fallback to a pre-compiled schema. It mirrors the xsd
+// compiler's own fatal-load detection so the xslt3 boundary keeps the same
+// classification.
+func isFatalSchemaLoadError(err error) bool {
+	var f xsd.FatalSchemaLoader
+	return errors.As(err, &f) && f.FatalSchemaLoad()
+}
+
 // resolveSchemaURI resolves a schema-location reference against a base URI.
 //
 // The URI cases (absolute-URI ref pass-through, and RFC 3986 resolution against

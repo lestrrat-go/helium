@@ -8,6 +8,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -331,6 +332,72 @@ func TestImportSchemaNestedImportOverCapIsFatal(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
 		"over-cap nested xs:import under xsl:import-schema must fail with ErrResourceTooLarge, not be silently skipped")
+}
+
+// An xsl:import-schema schema-location that exceeds the Compiler cap must FAIL
+// compilation with ErrResourceTooLarge even when a pre-compiled schema for the
+// SAME target namespace was registered via Compiler.ImportSchemas. The
+// import-schema error branch normally falls back to that pre-compiled schema and
+// reports success; a resource-limit breach (or any fatal schema-load) must NOT
+// be papered over by that fallback or the byte cap is defeated for the primary
+// schema-location load.
+func TestImportSchemaOverCapNotMaskedByPrecompiledFallback(t *testing.T) {
+	t.Parallel()
+
+	const baseURI = "mem://stylesheets/main.xsl"
+	const schemaURI = "mem:/stylesheets/big.xsd"
+	const ns = "http://example.com/s"
+
+	// The schema-location target is padded well past the configured cap.
+	bigSchema := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="` + ns + `"
+           elementFormDefault="qualified">
+  <!-- ` + strings.Repeat("z", 8192) + ` -->
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	// A small, valid pre-compiled schema for the same namespace, registered as a
+	// fallback via Compiler.ImportSchemas. Before the fix this satisfied the
+	// import-schema declaration after the over-cap load failed, masking the cap.
+	preSchema := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="` + ns + `"
+           elementFormDefault="qualified">
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	mainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:s="` + ns + `">
+  <xsl:import-schema namespace="` + ns + `" schema-location="big.xsd"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+
+	preDoc, err := helium.NewParser().Parse(ctx, []byte(preSchema))
+	require.NoError(t, err)
+	precompiled, err := xsd.NewCompiler().Compile(ctx, preDoc)
+	require.NoError(t, err)
+
+	resolver := fileMapResolver{files: map[string]string{schemaURI: bigSchema}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(mainSrc))
+	require.NoError(t, err)
+
+	// Cap below the schema-location target. The fallback to the pre-compiled
+	// schema must NOT mask the over-cap read.
+	_, err = xslt3.NewCompiler().
+		BaseURI(baseURI).
+		URIResolver(resolver).
+		ImportSchemas(precompiled).
+		MaxResourceBytes(64).
+		Compile(ctx, doc)
+	require.Error(t, err,
+		"over-cap import-schema schema-location must fail even with a pre-compiled fallback registered")
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+		"over-cap import-schema must surface ErrResourceTooLarge, not silently fall back to ImportSchemas")
 }
 
 // A serialization parameter-document over-cap read wraps in a static error
