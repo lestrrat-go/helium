@@ -671,6 +671,59 @@ func TestFunctionLookupCoercesTypedParam(t *testing.T) {
 	require.Equal(t, xpath3.TypeDouble, s)
 }
 
+// userAbsLib registers an untyped user function under the built-in local name
+// "abs" that accepts (and echoes) a single xs:string argument. The built-in
+// fn:abs signature is (xs:numeric?) as xs:numeric?, which would reject a string,
+// so this library distinguishes "built-in signature applied" from "user function
+// invoked".
+func userAbsLib() *xpath3.FunctionLibrary {
+	lib := xpath3.NewFunctionLibrary()
+	lib.Set("abs", userFunc{
+		min: 1, max: 1,
+		call: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+			av, err := xpath3.AtomizeItem(args[0].Get(0))
+			if err != nil {
+				return nil, err
+			}
+			return xpath3.SingleString("user:" + av.TypeName), nil
+		},
+	})
+	return lib
+}
+
+// Finding B-XPATH3-FUNCREF-BUILTIN-SIG: a named function reference to a user
+// override of a built-in name (abs#1) must bind the user function's own
+// signature, not the built-in's. Calling it with an xs:string — which the
+// built-in fn:abs signature would reject — must reach the user function.
+func TestNamedFunctionRefUserOverrideSkipsBuiltinSignature(t *testing.T) {
+	t.Parallel()
+
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(userAbsLib()).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`(abs#1)("hello")`), nil)
+	require.NoError(t, err)
+
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "user:"+xpath3.TypeString, s)
+}
+
+// Finding B-XPATH3-FUNCREF-BUILTIN-SIG: fn:function-lookup of a user override of
+// a built-in name must likewise bind the user function's own signature, not the
+// built-in's.
+func TestFunctionLookupUserOverrideSkipsBuiltinSignature(t *testing.T) {
+	t.Parallel()
+
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(userAbsLib()).
+		Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(`function-lookup(QName("", "abs"), 1)("hello")`), nil)
+	require.NoError(t, err)
+
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "user:"+xpath3.TypeString, s)
+}
+
 // Finding 2 (round 7): a fixed (curried) argument must also be coerced — when the
 // double parameter is curried with an xs:integer literal, the body still observes
 // xs:double.
