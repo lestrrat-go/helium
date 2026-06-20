@@ -27,6 +27,10 @@ type validateConfig struct {
 // to the configured [helium.ErrorHandler].
 var ErrValidationFailed = errors.New("schematron: validation failed")
 
+// ErrNoSchema is returned by [Validator.Validate] when the Validator has no
+// compiled schema (for example, NewValidator(nil) or a zero-value Validator).
+var ErrNoSchema = errors.New("schematron: no schema")
+
 // Compiler compiles Schematron documents into Schema values.
 // It uses clone-on-write semantics: each builder method returns
 // a new Compiler sharing the underlying config until mutation.
@@ -173,8 +177,11 @@ func (v Validator) closeHandler() {
 }
 
 // Validate validates a document against the compiled schema.
-// It returns nil if the document is valid, or [ErrValidationFailed].
-// Individual validation errors are delivered to the configured [helium.ErrorHandler].
+//
+// It returns [ErrNoSchema] when the Validator has no compiled schema and
+// [ErrValidationFailed] when the document is invalid; it returns nil when
+// the document is valid. Individual validation errors are delivered to the
+// configured [helium.ErrorHandler].
 // (libxml2: xmlSchematronValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	cfg := v.cfg
@@ -187,8 +194,16 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 		handler = helium.NilErrorHandler{}
 	}
 
+	// Close the handler on every exit path, including the nil-schema guard
+	// below, so a closable ErrorHandler (e.g. helium.ErrorCollector) is not
+	// leaked.
+	defer v.closeHandler()
+
+	if v.schema == nil || len(v.schema.patterns) == 0 {
+		return ErrNoSchema
+	}
+
 	valid := validateDocument(ctx, doc, v.schema, cfg, handler)
-	v.closeHandler()
 	if valid {
 		return nil
 	}

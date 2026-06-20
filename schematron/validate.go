@@ -23,6 +23,11 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	ev := xpath1.NewEvaluator().Namespaces(schema.namespaces)
 
 	for _, pat := range schema.patterns {
+		// ISO Schematron: within a pattern, each node is processed by only
+		// the FIRST rule whose context matches it. Track nodes already
+		// claimed by an earlier rule in this pattern and skip them in later
+		// rules. The set is reset for each pattern.
+		matched := make(map[helium.Node]bool)
 		for _, r := range pat.rules {
 			result, err := ev.Evaluate(ctx, r.contextExpr, doc)
 			if err != nil {
@@ -46,6 +51,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				if node.Type() != helium.ElementNode && node.Type() != helium.AttributeNode {
 					continue
 				}
+
+				// Skip nodes already matched by an earlier rule in this
+				// pattern (first-match-only semantics).
+				if matched[node] {
+					continue
+				}
+				matched[node] = true
 
 				// Set up let variables for this rule.
 				// Variables are accumulated so that each let can
