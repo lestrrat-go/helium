@@ -53,4 +53,37 @@ func TestPrefixedFnStreamabilityXSLTLayer(t *testing.T) {
 		require.True(t, exprUsesFunctionOutsideGrounding(plain, "position"),
 			"unprefixed position() must be detected")
 	})
+
+	t.Run("higher-order filter with consuming arg", func(t *testing.T) {
+		plain := compile(t, "filter(child::a, function($x) { true() })")
+		pref := compile(t, "fn:filter(child::a, function($x) { true() })")
+		require.Equal(t,
+			exprHasHigherOrderWithConsumingArg(plain),
+			exprHasHigherOrderWithConsumingArg(pref),
+			"filter() HOF classification must match unprefixed vs fn:-prefixed")
+		// Sanity: the unprefixed form is rejected, so this is a meaningful assertion.
+		require.True(t, exprHasHigherOrderWithConsumingArg(plain),
+			"unprefixed filter() with consuming arg must be detected")
+	})
+
+	t.Run("higher-order fold-right with consuming arg", func(t *testing.T) {
+		plain := compile(t, "fold-right(child::a, 0, function($x, $y) { $y })")
+		pref := compile(t, "fn:fold-right(child::a, 0, function($x, $y) { $y })")
+		require.Equal(t,
+			exprHasHigherOrderWithConsumingArg(plain),
+			exprHasHigherOrderWithConsumingArg(pref),
+			"fold-right() HOF classification must match unprefixed vs fn:-prefixed")
+		require.True(t, exprHasHigherOrderWithConsumingArg(plain),
+			"unprefixed fold-right() with consuming arg must be detected")
+	})
+
+	t.Run("forbidden current-group in pattern", func(t *testing.T) {
+		plain := compile(t, "current-group()")
+		pref := compile(t, "fn:current-group()")
+		plainErr := checkPatternForbiddenFunctions(plain.AST())
+		prefErr := checkPatternForbiddenFunctions(pref.AST())
+		require.Error(t, plainErr, "unprefixed current-group() must be forbidden in pattern")
+		require.Error(t, prefErr,
+			"fn:current-group() must be forbidden in pattern, same as unprefixed")
+	})
 }

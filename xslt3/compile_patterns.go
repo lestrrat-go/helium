@@ -415,7 +415,7 @@ func checkPatternForbiddenFunctions(ast xpath3.Expr) error {
 		if !ok {
 			return true
 		}
-		if fc.Prefix != "" {
+		if !isFnNamespacePrefix(fc.Prefix) {
 			return true
 		}
 		switch fc.Name {

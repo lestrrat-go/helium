@@ -353,7 +353,7 @@ func exprHasHigherOrderWithConsumingArg(expr *xpath3.Expression) bool {
 			return false
 		}
 		fc, ok := e.(xpath3.FunctionCall)
-		if !ok || fc.Prefix != "" || len(fc.Args) < 2 {
+		if !ok || !isFnNamespacePrefix(fc.Prefix) || len(fc.Args) < 2 {
 			return true
 		}
 		switch fc.Name {
