@@ -375,10 +375,13 @@ func (c *compiler) validatePatternFunctions(_ context.Context, p *pattern, sourc
 				}
 			}
 			displayName := fc.Prefix + ":" + local
-			// Known XPath/XSLT function namespaces are always OK.
-			switch nsURI {
-			case lexicon.NamespaceFn, lexicon.NamespaceMath, lexicon.NamespaceMap, lexicon.NamespaceArray,
-				lexicon.NamespaceXSD, lexicon.NamespaceXSLT:
+			// Resolving the prefix to a known function namespace is not enough:
+			// the function must actually exist with an acceptable arity. Confirm
+			// against xpath3's built-in registry (covers fn:, math:, map:, array:,
+			// err: and the xs: constructor functions). An invalid call such as
+			// math:no-such-function() falls through to the declared-function
+			// lookup below and is rejected as XPST0017.
+			if xpath3.BuiltinFunctionAcceptsArity(nsURI, local, len(fc.Args)) {
 				return true
 			}
 			// Check if declared as xsl:function in the stylesheet.

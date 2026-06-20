@@ -35,10 +35,26 @@ func TestPatternPredeclaredFunctionNamespace(t *testing.T) {
 			match:   "fn:id('x')",
 		},
 		{name: "math-predeclared-predicate", match: "*[math:pi() > 3]"},
+		{name: "math-sqrt-predeclared", match: "*[math:sqrt(4) = 2]"},
 		{name: "map-predeclared-predicate", match: "*[map:size(map{}) = 0]"},
 		{
 			name:    "unknown-prefix-fails",
 			match:   "bogus:id('x')",
+			wantErr: true,
+		},
+		{
+			name:    "math-unknown-function-fails",
+			match:   "*[math:no-such-function()]",
+			wantErr: true,
+		},
+		{
+			name:    "fn-unknown-function-fails",
+			match:   "*[fn:no-such-function()]",
+			wantErr: true,
+		},
+		{
+			name:    "map-unknown-function-fails",
+			match:   "*[map:no-such-function()]",
 			wantErr: true,
 		},
 	}
