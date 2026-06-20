@@ -253,10 +253,14 @@ func fnArrayJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 		if maxNodes > 0 && len(allMembers)+len(members) > maxNodes {
 			return nil, ErrNodeSetLimit
 		}
-		// Charge the member count against the op-counter before the bulk append:
-		// a member slice below maxNodes but above OpLimit must still be rejected.
-		if err := fnCountOps(ctx, ec, len(members)); err != nil {
-			return nil, err
+		// Charge the member item count against the op-counter before the bulk
+		// append. NewArray clones each member sequence, so charge each member's
+		// item length (not just one per member): a single member with many items
+		// below maxNodes but above OpLimit must still be rejected.
+		for _, member := range members {
+			if err := fnCountOps(ctx, ec, seqLen(member)); err != nil {
+				return nil, err
+			}
 		}
 		allMembers = append(allMembers, members...)
 	}
@@ -374,26 +378,27 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		// Each result should be an array; collect members one at a time, checking
 		// the limit before each append so neither a lazy callback result nor a
-		// wide array member list can overshoot the limit before the check.
+		// wide array member list can overshoot the limit before the check. Charge
+		// one op per result item up front (even when the item is an empty array, so
+		// many empty arrays cannot bypass OpLimit).
 		for item := range seqItems(r) {
+			if err := fnCountOp(ctx, ec); err != nil {
+				return nil, err
+			}
 			if ra, ok := item.(ArrayItem); ok {
-				members := ra.members0()
-				// Charge the member count against the op-counter before the bulk
-				// append: a member slice below maxNodes but above OpLimit must
-				// still be rejected.
-				if err := fnCountOps(ctx, ec, len(members)); err != nil {
-					return nil, err
-				}
-				for _, member := range members {
+				for _, member := range ra.members0() {
+					// NewArray clones each member sequence, so charge its item
+					// length (not just one per member): a single member with many
+					// items below maxNodes but above OpLimit must still be rejected.
+					if err := fnCountOps(ctx, ec, seqLen(member)); err != nil {
+						return nil, err
+					}
 					if maxNodes > 0 && len(allMembers)+1 > maxNodes {
 						return nil, ErrNodeSetLimit
 					}
 					allMembers = append(allMembers, member)
 				}
 				continue
-			}
-			if err := fnCountOp(ctx, ec); err != nil {
-				return nil, err
 			}
 			if maxNodes > 0 && len(allMembers)+1 > maxNodes {
 				return nil, ErrNodeSetLimit
@@ -535,6 +540,13 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err := fnCountOps(ctx, ec, rLen); err != nil {
 			return nil, err
 		}
+		// Each callback result becomes one array MEMBER. An empty result adds no
+		// items (total is unchanged) but still adds a member, so bound the member
+		// count independently: many empty results could otherwise build an array
+		// with more than maxNodes members.
+		if maxNodes > 0 && len(results)+1 > maxNodes {
+			return nil, ErrNodeSetLimit
+		}
 		total += rLen
 		results = append(results, r)
 	}
@@ -583,6 +595,13 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 		// it: a result below maxNodes but above OpLimit must still be rejected.
 		if err := fnCountOps(ctx, ec, rLen); err != nil {
 			return nil, err
+		}
+		// Each callback result becomes one array MEMBER. An empty result adds no
+		// items (total is unchanged) but still adds a member, so bound the member
+		// count independently: many empty results could otherwise build an array
+		// with more than maxNodes members.
+		if maxNodes > 0 && len(results)+1 > maxNodes {
+			return nil, ErrNodeSetLimit
 		}
 		total += rLen
 		results = append(results, r)

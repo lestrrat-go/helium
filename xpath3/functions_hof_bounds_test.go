@@ -8,6 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Shared subtest names reused across the bound tests (kept as constants to
+// satisfy goconst).
+const (
+	tcArrayForEach     = "array-for-each"
+	tcArrayForEachPair = "array-for-each-pair"
+)
+
 // panicOnMaterializeSeq is a Sequence of n items where realizing the WHOLE
 // sequence at once via Materialize panics. Len and Get are O(1), and Items
 // yields lazily one item at a time, so any streaming consumer — whether it
@@ -137,10 +144,10 @@ func TestHOFMaterializationLimit(t *testing.T) {
 		{name: "array-filter", expr: `array:filter($arr, function($x) { true() })`, vars: varsSet("arr", wideArray(1100))},
 		// array:for-each producing one member per member of a variable-bound wide
 		// array past the limit.
-		{name: "array-for-each", expr: `array:for-each($arr, function($x) { $x })`, vars: varsSet("arr", wideArray(1100))},
+		{name: tcArrayForEach, expr: `array:for-each($arr, function($x) { $x })`, vars: varsSet("arr", wideArray(1100))},
 		// array:for-each-pair producing one member per pair of two variable-bound
 		// wide arrays past the limit.
-		{name: "array-for-each-pair", expr: `array:for-each-pair($arr, $arr, function($a, $b) { ($a, $b) })`, vars: varsSet("arr", wideArray(1100))},
+		{name: tcArrayForEachPair, expr: `array:for-each-pair($arr, $arr, function($a, $b) { ($a, $b) })`, vars: varsSet("arr", wideArray(1100))},
 	}
 	for _, tc := range overLimit {
 		t.Run("over/"+tc.name, func(t *testing.T) {
@@ -175,8 +182,8 @@ func TestHOFMaterializationLimit(t *testing.T) {
 		{"array-fold-left", `array:fold-left(array { 1 to 10 }, 0, function($acc, $x) { $acc + $x })`, 1},
 		{"array-fold-right", `array:fold-right(array { 1 to 10 }, 0, function($x, $acc) { $x + $acc })`, 1},
 		{"array-filter", `array:flatten(array:filter(array { 1 to 10 }, function($x) { $x mod 2 = 0 }))`, 5},
-		{"array-for-each", `array:flatten(array:for-each(array { 1 to 10 }, function($x) { $x * 2 }))`, 10},
-		{"array-for-each-pair", `array:flatten(array:for-each-pair(array { 1 to 5 }, array { 1 to 5 }, function($a, $b) { $a + $b }))`, 5},
+		{tcArrayForEach, `array:flatten(array:for-each(array { 1 to 10 }, function($x) { $x * 2 }))`, 10},
+		{tcArrayForEachPair, `array:flatten(array:for-each-pair(array { 1 to 5 }, array { 1 to 5 }, function($a, $b) { $a + $b }))`, 5},
 		{"map-find", `array:flatten(map:find(map { "k": 1, "m": map { "k": 2 } }, "k"))`, 2},
 	}
 	for _, tc := range withinLimit {
@@ -232,8 +239,8 @@ func TestHOFLazySequenceLimit(t *testing.T) {
 		// array:for-each / array:for-each-pair cap the NUMBER of result members,
 		// but NewArray clones each callback result; a single oversized lazy result
 		// must be rejected by the per-result seqLen bound before it is cloned.
-		{"array-for-each", `array:for-each(array { 1, 2, 3 }, function($x) { $lazy })`},
-		{"array-for-each-pair", `array:for-each-pair(array { 1, 2, 3 }, array { 1, 2, 3 }, function($a, $b) { $lazy })`},
+		{tcArrayForEach, `array:for-each(array { 1, 2, 3 }, function($x) { $lazy })`},
+		{tcArrayForEachPair, `array:for-each-pair(array { 1, 2, 3 }, array { 1, 2, 3 }, function($a, $b) { $lazy })`},
 		// fold accumulator becomes the huge lazy sequence; the seqLen check (O(1)
 		// on a lazy range) must reject it without materializing.
 		{"fold-left", `fold-left(1 to 3, (), function($acc, $x) { $lazy })`},
@@ -342,13 +349,13 @@ func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
 		// array:for-each callback returns one oversized sequence; NewArray would
 		// clone it. The op-charge on the result length must fire first.
 		{
-			name: "array-for-each",
+			name: tcArrayForEach,
 			expr: `array:for-each(array { 1 }, function($x) { $wide })`,
 			vars: varsSet("wide", wideSeq(wide)),
 		},
 		// array:for-each-pair, same: a single oversized callback result.
 		{
-			name: "array-for-each-pair",
+			name: tcArrayForEachPair,
 			expr: `array:for-each-pair(array { 1 }, array { 1 }, function($a, $b) { $wide })`,
 			vars: varsSet("wide", wideSeq(wide)),
 		},
@@ -395,6 +402,132 @@ func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
 					Evaluate(t.Context(), compiled, nil)
 			})
 			require.ErrorIs(t, evalErr, xpath3.ErrOpLimit)
+		})
+	}
+}
+
+// TestArrayMemberCountBound proves that the built-ins which build a result array
+// with one MEMBER per callback result / matched value (array:for-each,
+// array:for-each-pair, map:find) bound the MEMBER count independently of the
+// item count. A callback that yields an empty sequence (or a map value that is
+// empty) adds zero items but still adds a member, so without a member-count
+// bound many empty results could build an array with more than maxNodes members
+// while the item total stays at zero. Each case keeps every result empty and
+// drives the member count past the limit; the result must be rejected with
+// ErrNodeSetLimit.
+func TestArrayMemberCountBound(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+
+	// wideMapsEmpty builds a sequence of n single-entry maps {"k": ()}; map:find
+	// matches "k" in each, collecting one EMPTY value per map -> n members, 0 items.
+	wideMapsEmpty := func(n int) xpath3.Sequence {
+		key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "k"}
+		items := make([]xpath3.Item, n)
+		for i := range items {
+			items[i] = xpath3.NewMap([]xpath3.MapEntry{{Key: key, Value: xpath3.ItemSlice{}}})
+		}
+		return xpath3.ItemSlice(items)
+	}
+	wideArray := func(n int) xpath3.Sequence {
+		members := make([]xpath3.Sequence, n)
+		for i := range members {
+			members[i] = xpath3.SingleInteger(int64(i + 1))
+		}
+		return xpath3.ItemSlice{xpath3.NewArray(members)}
+	}
+
+	cases := []struct {
+		name string
+		expr string
+		vars *xpath3.Variables
+	}{
+		// 1100 members, each callback returns () -> 1100 members, 0 items > 1000.
+		{name: tcArrayForEach, expr: `array:for-each($arr, function($x) { () })`, vars: varsSet("arr", wideArray(1100))},
+		// 1100 pairs, each callback returns () -> 1100 members, 0 items.
+		{name: tcArrayForEachPair, expr: `array:for-each-pair($arr, $arr, function($a, $b) { () })`, vars: varsSet("arr", wideArray(1100))},
+		// 1100 maps each with an empty value for "k" -> 1100 empty members.
+		{name: "map-find", expr: `map:find($maps, "k")`, vars: varsSet("maps", wideMapsEmpty(1100))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(tc.vars).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+		})
+	}
+}
+
+// TestFlatMapEmptyArrayOpLimit proves array:flat-map charges an op for every
+// callback result ITEM — including items that are EMPTY arrays whose member
+// expansion appends nothing. A regression that charged ops only per appended
+// member (rather than once per result item) would let a callback returning many
+// empty arrays run unbounded. The callback returns a variable-bound sequence of
+// `wide` empty arrays (bound via EvalBorrowing so producing it costs no ops), so
+// ONLY flat-map's per-result-item op-charge can stop the run; with no node-set
+// limit and a low op-limit it must trip ErrOpLimit.
+func TestFlatMapEmptyArrayOpLimit(t *testing.T) {
+	t.Parallel()
+
+	const opLimit = 1000
+	const wide = 5000
+
+	// A sequence of `wide` empty arrays. Each adds zero members on expansion, so a
+	// regression that charged ops per appended member would never fire.
+	emptyArrays := make([]xpath3.Item, wide)
+	for i := range emptyArrays {
+		emptyArrays[i] = xpath3.NewArray(nil)
+	}
+	vars := varsSet("empties", xpath3.ItemSlice(emptyArrays))
+
+	compiled, err := xpath3.NewCompiler().Compile(`array:flat-map(array { 1 }, function($x) { $empties })`)
+	require.NoError(t, err)
+
+	_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+		Variables(vars).
+		OpLimit(opLimit).
+		Evaluate(t.Context(), compiled, nil)
+	require.ErrorIs(t, err, xpath3.ErrOpLimit)
+}
+
+// TestArrayMemberSeqLenOpLimit proves array:join and array:flat-map charge the
+// ITEM length of each member sequence (seqLen), not just one op per member,
+// before appending it. NewArray clones each member sequence, so a SINGLE member
+// holding many items — below maxNodes but above opLimit — must be rejected with
+// ErrOpLimit before being cloned. Each input array has exactly one member (a wide
+// sequence of `wide` items), so a regression that charged only len(members) (= 1)
+// would pass opLimit(1000); only the per-member seqLen charge (= wide) trips it.
+func TestArrayMemberSeqLenOpLimit(t *testing.T) {
+	t.Parallel()
+
+	const opLimit = 1000
+
+	cases := []struct {
+		name string
+		expr string
+	}{
+		// array:join over a single 1-member array whose member holds many items.
+		// The op-charge on that member's seqLen must fire before NewArray clones it.
+		{name: "array-join", expr: `array:join([ 1 to 5000 ])`},
+		// array:flat-map's callback returns a 1-member array whose member holds
+		// `wide` items; the per-member seqLen op-charge must fire first.
+		{name: "array-flat-map", expr: `array:flat-map(array { 1 }, function($x) { [ 1 to 5000 ] })`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				OpLimit(opLimit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrOpLimit)
 		})
 	}
 }

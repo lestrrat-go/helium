@@ -314,6 +314,13 @@ func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequen
 				if err := fnCountOps(ctx, ec, valLen); err != nil {
 					return nil, err
 				}
+				// Each matched value becomes one member of the result array. An empty
+				// matched value adds no items (total is unchanged) but still adds a
+				// member, so bound the member count independently: many empty matches
+				// could otherwise build an array with more than maxNodes members.
+				if maxNodes > 0 && len(results)+1 > maxNodes {
+					return nil, ErrNodeSetLimit
+				}
 				total += valLen
 				results = append(results, cloneSequence(val))
 			}
