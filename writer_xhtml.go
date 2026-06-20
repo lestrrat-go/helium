@@ -224,7 +224,8 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 		} else {
 			for achld := range Children(attr) {
 				if achld.Type() == TextNode {
-					d.check(escapeAttrValue(out, achld.Content(), d.escapeNonASCII))
+					// Read-only escape pass: use the internal slice without a copy.
+					d.check(escapeAttrValue(out, rawContent(achld), d.escapeNonASCII))
 				} else {
 					d.check(d.writeNode(out, achld))
 				}
