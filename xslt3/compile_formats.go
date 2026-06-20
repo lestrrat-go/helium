@@ -1235,62 +1235,6 @@ func isLocalWildcardNameTest(nt nameTest) bool {
 	return nt.Prefix == "*"
 }
 
-// overlapRegion returns the intersection of two NameTest match-sets as a single
-// NameTest, together with a flag reporting whether the sets overlap at all. The
-// intersection of any two of the four NameTest kinds is itself expressible as one
-// of the four kinds (the MORE specific of the two when one contains the other,
-// or an exact name when a namespace wildcard meets a local-name wildcard). The
-// returned region is used both to decide overlap (XTSE0270 candidacy) and to ask
-// whether a higher-precedence rule covers the whole overlap.
-func overlapRegion(a, b nameTest) (nameTest, bool) {
-	switch {
-	case isUniversalNameTest(a):
-		return b, true // a matches everything; overlap is exactly b's set
-	case isUniversalNameTest(b):
-		return a, true
-	case isNSWildcardNameTest(a) && isNSWildcardNameTest(b):
-		if nameTestURI(a) == nameTestURI(b) {
-			return a, true
-		}
-		return nameTest{}, false
-	case isNSWildcardNameTest(a) && isLocalWildcardNameTest(b):
-		// {any local in uri(a)} ∩ {local(b) in any ns} = exact Q{uri(a)}local(b).
-		return nameTest{Local: b.Local, URI: nameTestURI(a), HasURI: true}, true
-	case isLocalWildcardNameTest(a) && isNSWildcardNameTest(b):
-		return nameTest{Local: a.Local, URI: nameTestURI(b), HasURI: true}, true
-	case isNSWildcardNameTest(a): // b is exact
-		if nameTestURI(a) == nameTestURI(b) {
-			return b, true
-		}
-		return nameTest{}, false
-	case isNSWildcardNameTest(b): // a is exact
-		if nameTestURI(a) == nameTestURI(b) {
-			return a, true
-		}
-		return nameTest{}, false
-	case isLocalWildcardNameTest(a) && isLocalWildcardNameTest(b):
-		if a.Local == b.Local {
-			return a, true
-		}
-		return nameTest{}, false
-	case isLocalWildcardNameTest(a): // b is exact
-		if a.Local == b.Local {
-			return b, true
-		}
-		return nameTest{}, false
-	case isLocalWildcardNameTest(b): // a is exact
-		if a.Local == b.Local {
-			return a, true
-		}
-		return nameTest{}, false
-	default: // both exact
-		if nameTestURI(a) == nameTestURI(b) && a.Local == b.Local {
-			return a, true
-		}
-		return nameTest{}, false
-	}
-}
-
 // ruleCoversRegion reports whether NameTest h matches EVERY expanded name in
 // region's match-set (h's set ⊇ region's set). A region is one of the four
 // NameTest kinds. Because a wildcard region has infinitely many names, only a
@@ -1338,51 +1282,49 @@ func ruleCoversRegion(h, region nameTest) bool {
 // match priority: for a given element name, the rule of highest import precedence
 // (then highest match priority) decides whether it is stripped or preserved.
 //
-// A strip/preserve pair at the SAME import precedence and SAME match priority
-// with OVERLAPPING NameTest sets is only a genuine XTSE0270 conflict when, for
-// some name in their overlap, NO rule of HIGHER import precedence also matches
-// that name. A higher-precedence rule of either kind "covers" (resolves) the
-// names it matches, removing them from the unresolved conflict set: per XSLT's
-// per-name precedence resolution, XTSE0270 fires only at the HIGHEST precedence
-// that matches a given name.
+// Per the W3C XTSE0270 semantics, a STATIC conflict requires a strip rule and a
+// preserve rule with the SAME resolved NameTest (the same matched-name SET) at
+// the SAME highest import precedence. The conflict key is nameTestKey, which
+// encodes both the NameTest kind and — for the distinguished kinds — its match
+// priority, so equal keys imply equal kinds and equal priority (the same
+// name-set). Two GENUINELY DIFFERENT NameTests that merely intersect
+// (e.g. "*:item" vs "Q{urn:A}*") are NOT a static conflict: their distinct match
+// priorities (or, for same-priority distinct kinds, the per-name precedence rule)
+// resolve them at RUNTIME, so they are deliberately left to runtime resolution.
 //
-// Equivalently: the conflict set is the pair's overlap region minus the union of
-// all higher-precedence rules' match-sets. XTSE0270 fires iff that set is
-// non-empty. A wildcard overlap region has infinitely many names, so it is fully
-// covered only by a SINGLE higher-precedence rule at least as general as the
-// region; that makes single-rule coverage sound and complete (see
-// ruleCoversRegion).
+// A same-key strip/preserve pair at the same import precedence is still NOT a
+// genuine conflict when a rule of STRICTLY HIGHER import precedence (of either
+// kind) covers that name-set: per XSLT's per-name precedence resolution,
+// XTSE0270 fires only at the HIGHEST precedence that matches a given name, so a
+// higher-precedence rule resolves the names it matches (see spaceRegionCovered).
 //
 // The check must NOT be filtered by each kind's globally-highest precedence: an
 // unrelated higher-precedence rule (e.g. a higher-precedence strip-space for "b")
-// does not cover the overlap region of an "a" vs "a" conflict, so it must not
-// cancel that genuine same-precedence conflict.
+// does not cover the name-set of an "a" vs "a" conflict, so it must not cancel
+// that genuine same-precedence conflict.
 func (c *compiler) checkSpaceConflicts(_ context.Context) error {
 	if len(c.stylesheet.stripSpace) == 0 || len(c.stylesheet.preserveSpace) == 0 {
 		return nil
 	}
 	// Scan every strip/preserve pair. A pair is a candidate conflict when its
-	// rules carry equal import precedence, equal match priority, and overlapping
-	// NameTest sets. It is a genuine conflict only if some name in the overlap is
-	// left uncovered by every higher-precedence rule.
+	// rules carry the SAME resolved NameTest key (same name-set) at equal import
+	// precedence. It is a genuine conflict only if no rule of higher import
+	// precedence covers that name-set.
 	for _, sNT := range c.stylesheet.stripSpace {
+		sKey := nameTestKey(sNT)
 		for _, pNT := range c.stylesheet.preserveSpace {
 			if sNT.ImportPrec != pNT.ImportPrec {
 				continue
 			}
-			if nameTestPriority(sNT) != nameTestPriority(pNT) {
+			if sKey != nameTestKey(pNT) {
 				continue
 			}
-			region, ok := overlapRegion(sNT, pNT)
-			if !ok {
-				continue
-			}
-			if c.spaceRegionCovered(region, sNT.ImportPrec) {
+			if c.spaceRegionCovered(sNT, sNT.ImportPrec) {
 				continue
 			}
 			return staticError(errCodeXTSE0270,
-				"conflicting xsl:strip-space %q and xsl:preserve-space %q at the same import precedence and priority",
-				nameTestKey(sNT), nameTestKey(pNT))
+				"conflicting xsl:strip-space and xsl:preserve-space for %q at the same import precedence",
+				sKey)
 		}
 	}
 	return nil

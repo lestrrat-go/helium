@@ -377,14 +377,15 @@ func TestStripSpaceSameKindWildcardConflict(t *testing.T) {
 	require.Contains(t, err.Error(), "XTSE0270")
 }
 
-// TestStripSpaceWildcardOverlapConflict verifies that two wildcard NameTests of
-// DIFFERENT shapes but the SAME match priority whose match SETS genuinely
-// overlap raise XTSE0270 at the same import precedence — even though their
-// canonical keys differ. "*:item" (local-name wildcard) and "Q{urn:A}*"
-// (namespace wildcard) both match Q{urn:A}item at priority -0.25, so declaring
-// one strip and the other preserve is a genuine conflict. Both orderings are
-// checked because conflict detection must be symmetric.
-func TestStripSpaceWildcardOverlapConflict(t *testing.T) {
+// TestStripSpaceWildcardOverlapNoConflict verifies that two wildcard NameTests
+// of DIFFERENT shapes (different resolved keys) whose match SETS merely intersect
+// do NOT raise a static XTSE0270 at the same import precedence. "*:item"
+// (local-name wildcard) and "Q{urn:A}*" (namespace wildcard) both match
+// Q{urn:A}item, but they are genuinely different NameTests; per the W3C XTSE0270
+// semantics a static conflict requires the SAME resolved NameTest (same
+// name-set), so this intersection is deliberately left to RUNTIME priority
+// resolution. Both orderings are checked because the rule is symmetric.
+func TestStripSpaceWildcardOverlapNoConflict(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -416,10 +417,10 @@ func TestStripSpaceWildcardOverlapConflict(t *testing.T) {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
 			require.NoError(t, err)
 
-			_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
-			require.Error(t, err,
-				"overlapping same-priority strip=%q preserve=%q must raise XTSE0270", tc.strip, tc.preserve)
-			require.Contains(t, err.Error(), "XTSE0270")
+			ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+			require.NoError(t, err,
+				"different-shape intersecting strip=%q preserve=%q must NOT raise a static XTSE0270", tc.strip, tc.preserve)
+			require.NotNil(t, ss)
 		})
 	}
 }
