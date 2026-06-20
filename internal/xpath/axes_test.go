@@ -2,6 +2,7 @@ package xpath_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -197,12 +198,74 @@ func TestTraverseAxisDescendant_WideChildEnumerationChecksContext(t *testing.T) 
 		"wide child enumeration must check ctx.Err() per child while enqueuing and popping")
 }
 
+// TestTraverseAxisChild_WideContextCancelledMidWalk verifies that the child
+// axis (routed through TraverseAxisSimple) aborts promptly when the context is
+// cancelled partway through enumeration, rather than materializing the full
+// node-set after cancellation. cancelAfterNContext lets the TraverseAxis-entry
+// ctx.Err() succeed and only reports cancellation once enumeration is underway,
+// so this genuinely exercises the in-loop ctx check inside axisChild.
+func TestTraverseAxisChild_WideContextCancelledMidWalk(t *testing.T) {
+	const width = 20000
+	const cancelAfter = 10
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+	for range width {
+		child := doc.CreateElement("child")
+		require.NoError(t, root.AddChild(child))
+	}
+
+	ctx := &cancelAfterNContext{cancelAfter: cancelAfter}
+
+	nodes, err := ixpath.TraverseAxis(ctx, ixpath.AxisChild, root, ixpath.DefaultMaxNodeSetLength)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, nodes)
+	require.LessOrEqual(t, ctx.calls, cancelAfter+1,
+		"child enumeration should stop on the first cancelled Err() observation")
+}
+
+// TestTraverseAxisAttribute_WideContextCancelledMidWalk verifies the same
+// in-loop ctx check for the attribute axis (also routed through
+// TraverseAxisSimple). Without it, a wide attribute list would be returned in
+// full with a nil error after cancellation occurred mid-enumeration.
+func TestTraverseAxisAttribute_WideContextCancelledMidWalk(t *testing.T) {
+	const width = 5000
+	const cancelAfter = 10
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+	elem := doc.CreateElement("e")
+	require.NoError(t, root.AddChild(elem))
+	for i := range width {
+		_, err := elem.SetAttribute("a"+strconv.Itoa(i), "v")
+		require.NoError(t, err)
+	}
+
+	ctx := &cancelAfterNContext{cancelAfter: cancelAfter}
+
+	nodes, err := ixpath.TraverseAxis(ctx, ixpath.AxisAttribute, elem, ixpath.DefaultMaxNodeSetLength)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, nodes)
+	require.LessOrEqual(t, ctx.calls, cancelAfter+1,
+		"attribute enumeration should stop on the first cancelled Err() observation")
+}
+
 // TestTraverseAxisPreceding_WideChildEnumerationChecksContext verifies the same
 // per-child ctx.Err() guarantee for the reverse traversal used by the preceding
 // axis, whose collectDescendantsReverse helper has its own child-enumeration
-// (push) loops. Each of the width leaf children is enqueued once (push-loop
-// check) and visited via two stack frames (unexpanded + expanded pop), so a
-// correct implementation yields well over 2*width Err() consultations.
+// (push/enqueue) loops.
+//
+// The leaf-pop path alone already yields ~2*width Err() consultations: each of
+// the width leaf children is visited via two stack frames (unexpanded pop +
+// expanded pop), and each pop consults ctx. A >= 2*width assertion would
+// therefore STILL pass even if the enqueue loop stopped checking ctx, so it
+// does not genuinely guard the enqueue-loop check. The initial enqueue loop
+// over left's children adds another ~width consultations, so a correct
+// implementation reaches ~3*width. Requiring >= 3*width fails if the enqueue
+// loop drops its ctx check, which is the condition that would let a cancelled
+// context push all O(width) children before aborting.
 func TestTraverseAxisPreceding_WideChildEnumerationChecksContext(t *testing.T) {
 	const width = 20000
 
@@ -228,6 +291,6 @@ func TestTraverseAxisPreceding_WideChildEnumerationChecksContext(t *testing.T) {
 	require.NoError(t, err)
 	// left + its width children all precede ctx0.
 	require.Len(t, nodes, width+1)
-	require.GreaterOrEqual(t, ctx.calls, 2*width,
-		"wide reverse child enumeration must check ctx.Err() per child while enqueuing and popping")
+	require.GreaterOrEqual(t, ctx.calls, 3*width,
+		"wide reverse child enumeration must check ctx.Err() in the enqueue loop too, not only on pop")
 }

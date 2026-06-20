@@ -2,6 +2,7 @@ package xpath1_test
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -62,6 +63,56 @@ func TestEvaluateContextCancelled(t *testing.T) {
 
 	_, err = expr.Evaluate(ctx, doc)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// TestEvaluateContextCancelledSimpleAxis verifies that a context cancelled
+// before evaluation aborts even the "simple" (bounded result size) axes
+// promptly with context.Canceled, rather than materializing the full node-set.
+// child::* and attribute::* route through TraverseAxisSimple, which previously
+// never consulted ctx — so a wide node could yield a full result with a nil
+// error after cancellation occurred.
+func TestEvaluateContextCancelledSimpleAxis(t *testing.T) {
+	const width = 5000
+
+	t.Run("child::*", func(t *testing.T) {
+		var sb strings.Builder
+		sb.WriteString("<root>")
+		for range width {
+			sb.WriteString("<c/>")
+		}
+		sb.WriteString("</root>")
+		doc := parseXML(t, sb.String())
+
+		expr, err := xpath1.Compile("/root/child::*")
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		_, err = expr.Evaluate(ctx, doc)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("attribute::*", func(t *testing.T) {
+		var sb strings.Builder
+		sb.WriteString("<root><e ")
+		for i := range width {
+			sb.WriteString("a")
+			sb.WriteString(strconv.Itoa(i))
+			sb.WriteString(`="v" `)
+		}
+		sb.WriteString("/></root>")
+		doc := parseXML(t, sb.String())
+
+		expr, err := xpath1.Compile("/root/e/attribute::*")
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		_, err = expr.Evaluate(ctx, doc)
+		require.ErrorIs(t, err, context.Canceled)
+	})
 }
 
 // TestEvaluateContextOK confirms the cancellation guard does not break
