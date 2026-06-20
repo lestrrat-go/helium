@@ -1086,16 +1086,29 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 
 	oldBaseDir := c.baseDir
 	c.baseDir = filepath.Dir(path)
+
+	// An <externalRef> target is an INDEPENDENT schema (unlike <include>, which
+	// merges into the includer). It must NOT see the includer's grammar scope:
+	// a <parentRef> inside it must not resolve to the including grammar, and a
+	// bare external <ref> must not bind to the includer's defines. Parse the
+	// target in a fresh, standalone grammar-stack so the new scope's parent is
+	// nil (a <parentRef> with no parent is a fatal compile error) and a bare
+	// external ref resolves only within the external grammar.
+	oldStack := c.grammarStack
+	c.grammarStack = nil
+
 	var result *pattern
+	c.pushGrammar(ctx)
 	if isRNG(root, "grammar") {
-		c.pushGrammar(ctx)
 		c.parseGrammarContent(ctx, root)
 		result = c.resolveStart(ctx)
-		c.resolveRefs(ctx)
-		c.popGrammar(ctx)
 	} else {
 		result = c.parsePattern(ctx, root)
 	}
+	c.resolveRefs(ctx)
+	c.popGrammar(ctx)
+
+	c.grammarStack = oldStack
 	c.baseDir = oldBaseDir
 
 	return result
