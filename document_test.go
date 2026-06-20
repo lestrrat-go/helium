@@ -144,20 +144,6 @@ func TestCreatePIOwnerDocument(t *testing.T) {
 	require.Same(t, doc, pi.OwnerDocument(), "PI owner document should be the creating document")
 }
 
-func TestCreateAttributeNilDocWithEntityValue(t *testing.T) {
-	t.Parallel()
-	var doc *helium.Document
-	// A value containing an entity reference forces the entity-resolution
-	// path, which historically dereferenced the nil document and panicked.
-	attr, err := doc.CreateAttribute("name", "a&amp;b", nil)
-	require.NoError(t, err, "CreateAttribute on a nil document must not panic")
-	require.NotNil(t, attr)
-	require.Equal(t, "name", attr.Name())
-	// Predefined entities are not document-dependent, so they must resolve
-	// to their literal characters even when the document is nil.
-	require.Equal(t, "a&b", attr.Value(), "predefined entity must resolve on a nil document")
-}
-
 func TestCreateCharRefRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)

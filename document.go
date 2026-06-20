@@ -587,9 +587,6 @@ func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
 			}
 		}()
 	}
-	if d == nil {
-		return nil, false
-	}
 	if ints := d.intSubset; ints != nil {
 		if pdebug.Enabled {
 			pdebug.Printf("Looking into internal subset...")
