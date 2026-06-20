@@ -96,9 +96,16 @@ func (p Parser) parseConfig() parseConfig {
 	return p.cfg.parseConfig
 }
 
-// ParseReader parses HTML from an io.Reader. The input is streamed through
-// encoding detection and normalization wrappers without reading it all into
-// memory first.
+// ParseReader parses HTML from an io.Reader, feeding the input through
+// encoding detection and normalization wrappers.
+//
+// Whether the input is processed incrementally depends on its encoding. Once a
+// streamable encoding is determined - either declared (BOM or meta charset) or
+// detected as a genuine non-UTF-8 byte sequence - bytes are converted and
+// consumed incrementally. However, an input with no declared encoding that
+// turns out to be valid UTF-8 cannot be distinguished from a Latin-1/Windows
+// -1252 stream until end of input, so it is buffered to EOF before being
+// flushed. This matches the materialization behavior of Parse with a []byte.
 func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*helium.Document, error) {
 	tb := newTreeBuilder()
 	hp := newParserFromReader(ctx, r, tb, p.parseConfig())
