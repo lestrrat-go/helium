@@ -38,7 +38,7 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 		hasXPathDefaultNS = true
 	}
 
-	if err := c.validateAsSequenceTypeWithNS(ctx, asAttr, "xsl:global-context-item", nsBindings); err != nil {
+	if err := c.validateAsSequenceTypeWithNS(ctx, asAttr, "xsl:global-context-item", nsBindings, xpathDefaultNS, hasXPathDefaultNS); err != nil {
 		return err
 	}
 	def := &globalContextItemDef{
@@ -68,17 +68,127 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 	c.stylesheet.globalContextModules[moduleKey] = def
 
 	// XTSE3087: declarations in different modules of one package must agree.
+	// Compare the @as types by their CANONICAL EXPANDED form: each declaration's
+	// QNames are resolved against ITS OWN captured declaration-site namespace and
+	// xpath-default-namespace context, then compared as {uri}local. Two
+	// declarations that write the same element/schema type with different lexical
+	// prefixes (or different xpath-default-namespace) are equivalent and must NOT
+	// conflict; two that write the same lexical form bound to different URIs DO
+	// conflict.
 	if existing := c.stylesheet.globalContextItem; existing != nil {
-		normalizeAs := func(s string) string {
-			return strings.Join(strings.Fields(s), "")
-		}
-		if existing.Use != def.Use || normalizeAs(existing.As) != normalizeAs(def.As) {
+		if existing.Use != def.Use || canonicalGlobalContextAs(existing) != canonicalGlobalContextAs(def) {
 			return staticError(errCodeXTSE3087, "conflicting xsl:global-context-item declarations")
 		}
 		return nil
 	}
 	c.stylesheet.globalContextItem = def
 	return nil
+}
+
+// canonicalGlobalContextAs returns a canonical, prefix-independent form of a
+// global-context-item @as sequence type. Whitespace is collapsed and every
+// QName inside an element()/attribute()/schema-element()/schema-attribute()
+// test is rewritten to its expanded Q{uri}local form using the declaration's
+// own captured namespace context — so two declarations whose @as types denote
+// the same type compare equal regardless of the lexical prefixes used, and two
+// that denote different types compare unequal even with identical lexical text.
+func canonicalGlobalContextAs(def *globalContextItemDef) string {
+	collapsed := strings.Join(strings.Fields(def.As), "")
+	return expandSequenceTypeQNames(collapsed, def.Namespaces, def.XPathDefaultNS, def.HasXPathDefaultNS)
+}
+
+// expandSequenceTypeQNames rewrites every QName argument of an
+// element()/attribute()/schema-element()/schema-attribute() kind test in a
+// (whitespace-collapsed) sequence-type string to its expanded Q{uri}local form,
+// resolving prefixes against nsBindings and an unprefixed name against
+// xpathDefaultNS (when present) — identical to the runtime resolveSchemaQName
+// decision used to interpret the same declaration. Wildcards ("*") and names
+// that are already in Q{...} form are left unchanged.
+func expandSequenceTypeQNames(as string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) string {
+	for _, kind := range []string{"schema-element", "schema-attribute", "element", "attribute"} {
+		as = expandKindTestQNames(as, kind, nsBindings, xpathDefaultNS, hasXPathDefaultNS)
+	}
+	return as
+}
+
+// expandKindTestQNames rewrites the leading QName of every kind(...) test in as.
+// It scans for the kind name followed by "(" and expands the first comma- or
+// paren-terminated argument (the element/attribute name).
+func expandKindTestQNames(as, kind string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) string {
+	search := kind + "("
+	var b strings.Builder
+	rest := as
+	for {
+		idx := indexKindTest(rest, kind)
+		if idx < 0 {
+			b.WriteString(rest)
+			break
+		}
+		b.WriteString(rest[:idx+len(search)])
+		rest = rest[idx+len(search):]
+		// The name argument ends at the first ',' (element(name, type)) or ')'.
+		nameEnd := strings.IndexAny(rest, ",)")
+		if nameEnd < 0 {
+			b.WriteString(rest)
+			break
+		}
+		name := strings.TrimSpace(rest[:nameEnd])
+		b.WriteString(expandTestName(name, nsBindings, xpathDefaultNS, hasXPathDefaultNS))
+		rest = rest[nameEnd:]
+	}
+	return b.String()
+}
+
+// indexKindTest finds the next occurrence of kind+"(" in s that is a real kind
+// test rather than a suffix of a longer kind name (e.g. "element" inside
+// "schema-element"). It returns the index of the kind name, or -1.
+func indexKindTest(s, kind string) int {
+	search := kind + "("
+	offset := 0
+	for {
+		idx := strings.Index(s[offset:], search)
+		if idx < 0 {
+			return -1
+		}
+		abs := offset + idx
+		prev := byte(0)
+		if abs > 0 {
+			prev = s[abs-1]
+		}
+		// A kind name preceded by an NCName char (letter, digit, '-', '.', '_')
+		// is part of a longer name (e.g. "element" within "schema-element");
+		// skip it.
+		if !isNCNameByte(prev) {
+			return abs
+		}
+		offset = abs + len(search)
+	}
+}
+
+func isNCNameByte(b byte) bool {
+	switch {
+	case b >= 'a' && b <= 'z':
+		return true
+	case b >= 'A' && b <= 'Z':
+		return true
+	case b >= '0' && b <= '9':
+		return true
+	case b == '-' || b == '.' || b == '_':
+		return true
+	}
+	return false
+}
+
+// expandTestName expands a single kind-test name argument to Q{uri}local form.
+func expandTestName(name string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) string {
+	if name == "" || name == "*" {
+		return name
+	}
+	if strings.HasPrefix(name, "Q{") {
+		return name
+	}
+	local, ns := resolveQNameToLocalNS(name, nsBindings, xpathDefaultNS, hasXPathDefaultNS)
+	return "Q{" + ns + "}" + local
 }
 
 // inScopeNamespaces returns the in-scope namespace bindings (prefix→URI) for

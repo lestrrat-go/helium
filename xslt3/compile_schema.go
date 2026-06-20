@@ -499,15 +499,19 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 // This covers the most common case where compile-time static errors arise:
 // using schema-element() or schema-attribute() with an undeclared name.
 func (c *compiler) validateAsSequenceType(ctx context.Context, as string, context string) error {
-	return c.validateAsSequenceTypeWithNS(ctx, as, context, c.nsBindings)
+	return c.validateAsSequenceTypeWithNS(ctx, as, context, c.nsBindings, "", false)
 }
 
 // validateAsSequenceTypeWithNS is like validateAsSequenceType but resolves
 // schema-element()/schema-attribute() QNames against the supplied namespace
-// bindings instead of the mutable compiler-wide c.nsBindings. This lets
-// declarations such as xsl:global-context-item validate their @as type against
-// the namespace context in scope at the declaration element itself.
-func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, context string, nsBindings map[string]string) error {
+// bindings instead of the mutable compiler-wide c.nsBindings, and resolves an
+// UNPREFIXED schema-element()/schema-attribute() name against the supplied
+// xpath-default-namespace when hasXPathDefaultNS is set. This lets declarations
+// such as xsl:global-context-item validate their @as type against the exact
+// namespace context in scope at the declaration element itself — matching the
+// runtime resolveSchemaQName logic so an unprefixed name with an in-scope
+// xpath-default-namespace is not wrongly resolved to {}name at compile time.
+func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, context string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) error {
 	if as == "" {
 		return nil
 	}
@@ -546,8 +550,9 @@ func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, co
 			if qname == "" {
 				continue
 			}
-			// Resolve the QName to (local, ns) using the supplied bindings.
-			local, ns := resolveQNameToLocalNS(qname, nsBindings)
+			// Resolve the QName to (local, ns) using the supplied bindings and
+			// the declaration-site xpath-default-namespace for unprefixed names.
+			local, ns := resolveQNameToLocalNS(qname, nsBindings, xpathDefaultNS, hasXPathDefaultNS)
 			if local == "" {
 				continue
 			}
@@ -569,9 +574,13 @@ func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, co
 }
 
 // resolveQNameToLocalNS resolves a QName (prefix:local or NCName) using the
-// given namespace bindings and returns (local, ns). For bare NCNames with no
-// prefix the ns is the empty string (no default namespace for type references).
-func resolveQNameToLocalNS(qname string, nsBindings map[string]string) (local, ns string) {
+// given namespace bindings and returns (local, ns). A prefixed name resolves
+// its prefix against nsBindings. An unprefixed name resolves against
+// xpathDefaultNS when hasXPathDefaultNS is set (the declaration-site default
+// element namespace, matching runtime resolveSchemaQName), otherwise to the
+// empty namespace. This keeps compile-time schema-element()/schema-attribute()
+// resolution identical to the runtime resolution for the same declaration.
+func resolveQNameToLocalNS(qname string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) (local, ns string) {
 	qname = strings.TrimSpace(qname)
 	// EQName form: Q{uri}local
 	if strings.HasPrefix(qname, "Q{") {
@@ -587,6 +596,9 @@ func resolveQNameToLocalNS(qname string, nsBindings map[string]string) (local, n
 			return loc, ""
 		}
 		return loc, uri
+	}
+	if hasXPathDefaultNS {
+		return qname, xpathDefaultNS
 	}
 	return qname, ""
 }

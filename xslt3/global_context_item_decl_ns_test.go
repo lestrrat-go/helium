@@ -139,3 +139,115 @@ func TestGlobalContextItemSchemaElementDeclSiteNS(t *testing.T) {
 	require.NoError(t, err, "schema-element(p:root) must resolve p against the declaration site (urn:right) and find the imported {urn:right}root element")
 	require.NotNil(t, ss)
 }
+
+// TestGlobalContextItemSchemaElementXPathDefaultNS verifies that an UNPREFIXED
+// schema-element() name in an xsl:global-context-item @as type resolves against
+// the declaration-site xpath-default-namespace, not {}name. Without threading
+// the default element namespace into the schema-aware QName resolution, this
+// valid declaration is wrongly rejected at compile time (false-reject).
+func TestGlobalContextItemSchemaElementXPathDefaultNS(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const schemaURI = "mem:/stylesheets/s.xsd"
+
+	schema := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:right"
+           elementFormDefault="qualified">
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+
+	// schema-element(root) is UNPREFIXED; xpath-default-namespace selects urn:right.
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:import-schema namespace="urn:right" schema-location="s.xsd"/>
+  <xsl:global-context-item xpath-default-namespace="urn:right"
+    as="document-node(schema-element(root))"/>
+  <xsl:template match="/">
+    <out><xsl:value-of select="name(/*)"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{
+		schemaURI: schema,
+	}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "schema-element(root) must resolve against xpath-default-namespace (urn:right) and bind {urn:right}root, not {}root")
+	require.NotNil(t, ss)
+
+	// A root in urn:right must be accepted.
+	right, err := helium.NewParser().Parse(ctx, []byte(`<root xmlns="urn:right"/>`))
+	require.NoError(t, err)
+	out, err := xslt3.TransformString(ctx, right, ss)
+	require.NoError(t, err, "{urn:right}root must satisfy document-node(schema-element(root))")
+	require.Contains(t, out, "root")
+}
+
+// TestGlobalContextItemDupDeclDifferentPrefixSameType verifies that two
+// xsl:global-context-item declarations in different modules whose @as types
+// expand to the SAME sequence type via different lexical prefixes do NOT raise
+// XTSE3087. element(p:root) and element(q:root) both bind {urn:same}root.
+func TestGlobalContextItemDupDeclDifferentPrefixSameType(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const includeURI = "mem:/stylesheets/inc.xsl"
+
+	included := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:q="urn:same">
+  <xsl:global-context-item as="element(q:root)"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:p="urn:same">
+  <xsl:include href="inc.xsl"/>
+  <xsl:global-context-item as="element(p:root)"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "element(p:root) and element(q:root) expand to the same {urn:same}root; no XTSE3087")
+	require.NotNil(t, ss)
+}
+
+// TestGlobalContextItemDupDeclDifferentPrefixDifferentType verifies that two
+// xsl:global-context-item declarations whose @as types use the SAME lexical
+// form element(p:root) but DIFFERENT xmlns:p bindings expand to different
+// sequence types and DO raise XTSE3087.
+func TestGlobalContextItemDupDeclDifferentPrefixDifferentType(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const includeURI = "mem:/stylesheets/inc.xsl"
+
+	included := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:p="urn:wrong">
+  <xsl:global-context-item as="element(p:root)"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:p="urn:right">
+  <xsl:include href="inc.xsl"/>
+  <xsl:global-context-item as="element(p:root)"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.Error(t, err, "element(p:root) with different xmlns:p expands to different types; XTSE3087 expected")
+	require.Contains(t, err.Error(), "XTSE3087")
+}
