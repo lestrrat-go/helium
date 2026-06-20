@@ -30,14 +30,15 @@ type leafCase struct {
 	// new builds a fresh, unlinked instance of the leaf type.
 	new leafCtor
 	// canContainChildren is true when the type's AddChild can legally accept a
-	// foreign child (PI, EntityRef). For those the ancestor-insertion guard is
-	// exercised. Types whose AddChild only ever rejects (CDATASection) or only
-	// content-merges its own kind (Text, Comment) set this false.
+	// foreign child (EntityRef). For those the ancestor-insertion guard is
+	// exercised. Types whose AddChild only ever rejects (CDATASection, PI) or
+	// only content-merges its own kind (Text, Comment) set this false.
 	canContainChildren bool
 	// addChildSelfErr is the exact error AddChild(self) must return. For Text,
-	// Comment, PI and EntityRef the shared cycle guard fires; CDATASection has
-	// no merge/insert path and rejects every AddChild with ErrInvalidOperation
-	// before the guard, so self-insertion surfaces that error instead.
+	// Comment and EntityRef the shared cycle guard fires; CDATASection and PI
+	// reject AddChild before reaching the shared cycle guard (CDATASection with
+	// ErrInvalidOperation, PI with errPIAddChild for a non-text node), so
+	// self-insertion surfaces that rejection instead.
 	addChildSelfErr string
 }
 
@@ -65,10 +66,13 @@ func leafCases() []leafCase {
 			addChildSelfErr: helium.ErrInvalidOperation.Error(),
 		},
 		{
-			name:               "ProcessingInstruction",
-			new:                func(t *testing.T, doc *helium.Document) helium.MutableNode { return mustCreatePI(t, doc) },
-			canContainChildren: true,
-			addChildSelfErr:    errAddChildCycle,
+			// A PI carries its content as a string, not as element/text
+			// children, so its AddChild rejects a foreign (non-text) node
+			// before the shared cycle guard, just like CDATASection. A PI is
+			// not a text node, so PI.AddChild(self) hits that rejection.
+			name:            "ProcessingInstruction",
+			new:             func(t *testing.T, doc *helium.Document) helium.MutableNode { return mustCreatePI(t, doc) },
+			addChildSelfErr: errPIAddChild,
 		},
 		{
 			name:               "EntityRef",
@@ -82,6 +86,7 @@ func leafCases() []leafCase {
 const (
 	errAddChildCycle   = "cannot add a node as a child of itself or one of its descendants"
 	errAddSiblingCycle = "cannot add a node as a sibling of itself or one of its descendants"
+	errPIAddChild      = "helium: cannot add ProcessingInstructionNode as a child of a processing instruction"
 )
 
 // TestLeafAddChildGuards exercises every leaf-type AddChild override against the
@@ -318,7 +323,8 @@ func TestLeafReplaceGuards(t *testing.T) {
 
 // TestLeafFastPathNilOperand verifies that the leaf-node AddChild/AddSibling
 // overrides which run a content-merge fast path (Text.AddChild, Text.AddSibling,
-// Comment.AddChild) reject a nil operand with ErrNilNode instead of panicking,
+// Comment.AddChild, ProcessingInstruction.AddChild) reject a nil operand with
+// ErrNilNode instead of panicking,
 // and leave the linked leaf untouched. Both a literal nil interface and a
 // matching typed-nil concrete pointer (Go's interface nil trap) are exercised,
 // since the overrides run a type assertion / debug log / preflight before the
@@ -367,6 +373,19 @@ func TestLeafFastPathNilOperand(t *testing.T) {
 			},
 			newLeaf: func(t *testing.T, doc *helium.Document) helium.MutableNode {
 				return mustCreateComment(t, doc, []byte("x"))
+			},
+		},
+		{
+			name: "PI.AddChild",
+			op:   func(leaf helium.MutableNode, cur helium.Node) error { return leaf.AddChild(cur) },
+			typedNil: func() helium.Node {
+				// A typed-nil *Text would otherwise reach the Text/CDATA
+				// content-merge fast path and panic on cur.Type().
+				var tn *helium.Text
+				return tn
+			},
+			newLeaf: func(t *testing.T, doc *helium.Document) helium.MutableNode {
+				return mustCreatePI(t, doc)
 			},
 		},
 	}
@@ -460,6 +479,94 @@ func TestTextAddSiblingNonTextFallback(t *testing.T) {
 			requireNoCycle(t, src)
 		})
 	}
+}
+
+// TestPIContentIsStringNotChildren verifies that a processing instruction
+// carries its content as a string (the "data" portion), not as child nodes.
+// AppendText and a Text/CDATA AddChild route into the PI data; any other node
+// type is rejected. A PI must never gain element/text children, and must
+// serialize as "<?target data?>".
+func TestPIContentIsStringNotChildren(t *testing.T) {
+	t.Parallel()
+
+	t.Run("AppendText routes into data and creates no children", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		pi := doc.CreatePI("target", "")
+
+		require.NoError(t, pi.AppendText([]byte("hello")), "AppendText must succeed")
+		require.NoError(t, pi.AppendText([]byte(" world")), "second AppendText must succeed")
+
+		require.Nil(t, pi.FirstChild(), "PI must not gain child nodes")
+		require.Nil(t, pi.LastChild(), "PI must not gain child nodes")
+		require.Equal(t, "hello world", string(pi.Content()), "PI data must hold the appended text")
+	})
+
+	t.Run("AddChild of text/cdata routes into data and creates no children", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		pi := doc.CreatePI("target", "a")
+
+		require.NoError(t, pi.AddChild(doc.CreateText([]byte("b"))), "Text AddChild must succeed")
+		require.NoError(t, pi.AddChild(doc.CreateCDATASection([]byte("c"))), "CDATA AddChild must succeed")
+
+		require.Nil(t, pi.FirstChild(), "PI must not gain child nodes")
+		require.Equal(t, "abc", string(pi.Content()), "PI data must absorb text/cdata content")
+	})
+
+	t.Run("AddChild unlinks an already-linked text/cdata operand", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		oldParent := mustCreateElement(t, doc, "old")
+		txt := doc.CreateText([]byte("b"))
+		require.NoError(t, oldParent.AddChild(txt), "text starts under oldParent")
+		require.Equal(t, helium.Node(oldParent), txt.Parent(), "text parent is oldParent")
+
+		pi := doc.CreatePI("target", "a")
+		require.NoError(t, pi.AddChild(txt), "Text AddChild must succeed")
+
+		// Content is merged into the PI data...
+		require.Equal(t, "ab", string(pi.Content()), "PI data must absorb the text content")
+		require.Nil(t, pi.FirstChild(), "PI must not gain a child")
+		// ...and the source node is unlinked from its old parent, honoring the
+		// AddChild auto-unlink contract instead of leaving it linked twice.
+		require.Nil(t, txt.Parent(), "merged text must be unlinked from its old parent")
+		require.Nil(t, oldParent.FirstChild(), "oldParent must no longer reference the text")
+	})
+
+	t.Run("AddChild of a non-text node is rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		pi := doc.CreatePI("target", "data")
+
+		err := pi.AddChild(mustCreateElement(t, doc, "child"))
+		require.Error(t, err, "adding an element child to a PI must be rejected")
+		require.Nil(t, pi.FirstChild(), "PI must not gain a child")
+		require.Equal(t, "data", string(pi.Content()), "PI data must be unchanged")
+	})
+
+	t.Run("AddChild rejects a nil operand", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		pi := doc.CreatePI("target", "data")
+
+		require.ErrorIs(t, pi.AddChild(nil), helium.ErrNilNode, "nil operand must be rejected")
+	})
+
+	t.Run("PI serializes as <?target data?>", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		pi := doc.CreatePI("target", "")
+		require.NoError(t, pi.AppendText([]byte("data")), "AppendText must succeed")
+		require.NoError(t, root.AddChild(pi), "PI must attach under root")
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, str, "<?target data?>", "PI must serialize from its data string")
+	})
 }
 
 // TestAddChildNonMutableOperand verifies that inserting an already-linked
