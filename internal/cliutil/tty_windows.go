@@ -29,8 +29,8 @@ func setStdHandle(stdhandle int32, handle syscall.Handle) error {
 // IsTty checks if the given fd is a tty
 func IsTty(fd uintptr) bool {
 	var st uint32
-	r1, _, err := procGetConsoleMode.Call(fd, uintptr(unsafe.Pointer(&st)))
-	return r1 != 0 && err != nil
+	r1, _, _ := procGetConsoleMode.Call(fd, uintptr(unsafe.Pointer(&st)))
+	return r1 != 0
 }
 
 var stdin = os.Stdin
