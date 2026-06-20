@@ -149,6 +149,26 @@ func appendBoundedSeq(ctx context.Context, ec *evalContext, dst ItemSlice, src S
 	return dst, nil
 }
 
+// appendBoundedClonedSeq behaves like appendBoundedSeq but appends a defensive
+// deep clone of each item rather than the item itself. It is used by lookup /
+// map:get paths that drain a BORROWED (no-clone) stored map value via get0:
+// draining lazily charges op (and honors cancellation) and enforces maxNodes
+// BEFORE each item is appended, so a borrowed lazy value whose Materialize is
+// unbounded/panics trips the bound first; cloning each appended item then keeps
+// value semantics so mutating the exposed result cannot reach the source map.
+func appendBoundedClonedSeq(ctx context.Context, ec *evalContext, dst ItemSlice, src Sequence, maxNodes int) (ItemSlice, error) {
+	for item := range seqItems(src) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
+		if maxNodes > 0 && len(dst)+1 > maxNodes {
+			return nil, ErrNodeSetLimit
+		}
+		dst = append(dst, deepCloneItem(item))
+	}
+	return dst, nil
+}
+
 func evalSimpleMapExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e SimpleMapExpr) (Sequence, error) {
 	left, err := evalFn(ctx, ec, e.Left)
 	if err != nil {

@@ -157,7 +157,7 @@ func fnMapContains(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleBoolean(m.Contains(ka)), nil
 }
 
-func fnMapGet(_ context.Context, args []Sequence) (Sequence, error) {
+func fnMapGet(ctx context.Context, args []Sequence) (Sequence, error) {
 	m, err := extractMap(args[0])
 	if err != nil {
 		return nil, err
@@ -172,11 +172,18 @@ func fnMapGet(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	val, ok := m.Get(ka)
+	// Borrow the stored value WITHOUT cloning (get0), then drain it through
+	// appendBoundedClonedSeq so maxNodes / OpLimit / cancellation fire BEFORE the
+	// value is materialized. Public Get deep-clones by materializing eagerly,
+	// which would defeat the bound for a borrowed lazy value (and panic if its
+	// Materialize panics). Cloning each appended item keeps value semantics, so
+	// mutating the result cannot reach the source map.
+	val, ok := m.get0(ka)
 	if !ok {
 		return validNilSequence, nil
 	}
-	return val, nil
+	ec := getFnContext(ctx)
+	return appendBoundedClonedSeq(ctx, ec, nil, val, fnMaxNodes(ec))
 }
 
 func fnMapPut(_ context.Context, args []Sequence) (Sequence, error) {

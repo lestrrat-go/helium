@@ -18,6 +18,8 @@ const (
 	tcArrayFlatten     = "array-flatten"
 	tcMapFind          = "map-find"
 	tcMapForEach       = "map-for-each"
+	tcMapKeyedLookup   = "map-keyed-lookup"
+	tcMapGet           = "map-get"
 )
 
 // panicOnMaterializeSeq is a Sequence of n items where realizing the WHOLE
@@ -398,6 +400,25 @@ func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
 		{
 			name: tcMapForEach,
 			expr: `map:for-each(map:entry("k", $panic), function($k, $v) { () })`,
+			vars: varsSet("panic", panicOnMaterializeSeq{n: wide}),
+		},
+		// Keyed `?key` lookup borrows the stored value via get0 and drains it
+		// through the bounded cloning helper, so the per-item op-charge fires
+		// before materialization. The value is a panicOnMaterializeSeq stored via
+		// map:entry (borrowed, not cloned): a regression that uses the public Get
+		// (which deep-clones by materializing) calls Materialize and panics instead
+		// of returning ErrOpLimit.
+		{
+			name: tcMapKeyedLookup,
+			expr: `map:entry("k", $panic) ! ?k`,
+			vars: varsSet("panic", panicOnMaterializeSeq{n: wide}),
+		},
+		// map:get likewise borrows via get0 and drains through the bounded cloning
+		// helper, so the op-charge fires before materialization. A regression that
+		// uses public Get materializes the borrowed value and panics.
+		{
+			name: tcMapGet,
+			expr: `map:get(map:entry("k", $panic), "k")`,
 			vars: varsSet("panic", panicOnMaterializeSeq{n: wide}),
 		},
 	}

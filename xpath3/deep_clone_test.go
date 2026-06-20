@@ -224,6 +224,57 @@ func TestDeepCloneValueSemantics(t *testing.T) {
 		require.Equal(t, int64(7), readInt(t, got), "array member must be unaffected by mutation of a value obtained from Flatten")
 	})
 
+	// mutateBigInt finds the single *big.Int-backed atomic in seq and overwrites
+	// it in place, simulating a caller mutating a value it got back from a lookup.
+	mutateBigInt := func(t *testing.T, seq xpath3.Sequence) {
+		t.Helper()
+		items := seq.Materialize()
+		require.Len(t, items, 1)
+		av, ok := items[0].(xpath3.AtomicValue)
+		require.True(t, ok, "expected AtomicValue, got %T", items[0])
+		bi, ok := av.Value.(*big.Int)
+		require.True(t, ok, "expected *big.Int, got %T", av.Value)
+		bi.SetInt64(999)
+	}
+
+	// The `?*` and keyed `?key` lookup paths, and map:get, must hand back a
+	// defensive clone of the borrowed stored value — not the map's own backing
+	// sequence. Under EvalBorrowing the variable map is the same Go MapItem we
+	// hold here, so a regression that returns the stored value lets a mutation of
+	// the lookup output reach the source map. Each case mutates the lookup result
+	// and asserts the source map still reads its original value.
+	for _, tc := range []struct {
+		name string
+		expr string
+	}{
+		{name: "wildcard lookup output is detached", expr: `$m ! ?*`},
+		{name: "keyed lookup output is detached", expr: `$m ! ?k`},
+		{name: "map:get output is detached", expr: `map:get($m, "k")`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "k"}
+			seq, _ := bigIntSeq(7)
+			m := xpath3.NewMap([]xpath3.MapEntry{{Key: key, Value: seq}})
+
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+
+			result, err := xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(varsSet("m", xpath3.ItemSlice{m})).
+				Evaluate(t.Context(), compiled, nil)
+			require.NoError(t, err)
+
+			// Mutate the *big.Int returned by the lookup.
+			mutateBigInt(t, result.Sequence())
+
+			got, ok := m.Get(key)
+			require.True(t, ok)
+			require.Equal(t, int64(7), readInt(t, got), "source map value must be unaffected by mutation of the lookup output")
+		})
+	}
+
 	t.Run("byte-slice atomic is detached", func(t *testing.T) {
 		t.Parallel()
 
