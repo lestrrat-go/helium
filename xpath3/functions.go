@@ -99,22 +99,14 @@ type resolvedFunction struct {
 	isBuiltin bool   // true only when fn came from the built-in registry
 }
 
-// resolveFunction finds a function by prefix, local name, and arity.
+// resolveFunctionInfo finds a function by prefix, local name, and arity,
+// reporting the resolved identity (URI + local name) and whether the result is
+// the built-in function.
 // Resolution order:
 //  1. User-registered functions by local name (ec.functions)
 //  2. User-registered functions by QualifiedName (ec.fnsNS)
 //  3. Built-in functions by QualifiedName (builtinFunctions3)
 //  4. Default fn: namespace (no prefix = fn:)
-func resolveFunction(ctx context.Context, ec *evalContext, prefix, name string, arity int) (Function, error) {
-	r, err := resolveFunctionInfo(ctx, ec, prefix, name, arity)
-	if err != nil {
-		return nil, err
-	}
-	return r.fn, nil
-}
-
-// resolveFunctionInfo is resolveFunction but additionally reports the resolved
-// identity (URI + local name) and whether the result is the built-in function.
 func resolveFunctionInfo(ctx context.Context, ec *evalContext, prefix, name string, arity int) (resolvedFunction, error) {
 	// Handle Q{uri}local URIQualifiedName syntax from the lexer
 	if prefix == "" && strings.HasPrefix(name, "Q{") {
