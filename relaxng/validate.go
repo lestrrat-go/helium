@@ -1065,12 +1065,12 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		}
 		return -1
 	case patternEmpty:
-		if strings.TrimSpace(text) == "" {
+		if isXMLSpaceOnly(text) {
 			return 0
 		}
 		return -1
 	case patternOptional:
-		if strings.TrimSpace(text) == "" {
+		if isXMLSpaceOnly(text) {
 			return 0
 		}
 		content := wrapChildren(pat.children)
@@ -2005,6 +2005,15 @@ func xmlFields(s string) []string {
 	return strings.FieldsFunc(s, isXMLSpace)
 }
 
+// isXMLSpaceOnly reports whether s consists entirely of XML whitespace (or is
+// empty), using XML's whitespace definition rather than Unicode's. Unlike
+// strings.TrimSpace-based emptiness checks it does not treat other Unicode
+// whitespace (such as NBSP) as whitespace, since those characters are
+// significant content in XML and must not be silently discarded.
+func isXMLSpaceOnly(s string) bool {
+	return strings.IndexFunc(s, func(r rune) bool { return !isXMLSpace(r) }) < 0
+}
+
 // addError adds a validation error (suppressed when inside choice branches).
 func (v *validator) addError(elem *helium.Element, msg string) {
 	if v.suppressDepth > 0 {
@@ -2132,7 +2141,7 @@ func skipIgnored(nodes []helium.Node) []helium.Node {
 		}
 		if n.Type() == helium.TextNode {
 			if t, ok := n.(*helium.Text); ok {
-				if strings.TrimSpace(string(t.Content())) == "" {
+				if isXMLSpaceOnly(string(t.Content())) {
 					nodes = nodes[1:]
 					continue
 				}
