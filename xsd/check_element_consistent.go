@@ -191,12 +191,15 @@ func sortedNames(byName map[QName][]*ElementDecl) []QName {
 
 // collectContentModelElements walks a model group recursively, appending every
 // element declaration term to byName keyed by its expanded name. For each
-// element term it also folds in the term's substitution-group MEMBERS (the
-// declarations the term's particle implicitly stands in for), keyed by each
-// member's own name, so a head reference colliding by name with a different-typed
-// same-named element elsewhere in the model is detected. The visited set bounds
-// shared/recursive model-group structures (e.g. a group referenced from multiple
-// places resolves to a shared *ModelGroup).
+// element term it also folds in the term's substitution-group MEMBERS that can
+// actually substitute for the head (the declarations the term's particle
+// implicitly stands in for), keyed by each member's own name, so a head reference
+// colliding by name with a different-typed same-named element elsewhere in the
+// model is detected. Members the head blocks from substituting (block="substitution"
+// on the head, or a derivation-blocked member) are NOT implicitly contained and so
+// are not folded in, mirroring elemMatchesDeclOrSubst's eligibility. The visited
+// set bounds shared/recursive model-group structures (e.g. a group referenced from
+// multiple places resolves to a shared *ModelGroup).
 func (c *compiler) collectContentModelElements(mg *ModelGroup, byName map[QName][]*ElementDecl, visited map[*ModelGroup]struct{}) {
 	if mg == nil {
 		return
@@ -225,7 +228,22 @@ func (c *compiler) collectContentModelElements(mg *ModelGroup, byName map[QName]
 			// implicitly contains its members, so a member declaration is
 			// effectively present in this content model under its own name. An
 			// abstract head is itself never present, but its members still are.
+			//
+			// Only fold in members that can ACTUALLY substitute for the head,
+			// mirroring the substitution eligibility enforced at validation time
+			// (elemMatchesDeclOrSubst): a head with block="substitution" admits no
+			// members, and an individual member whose derivation chain to the head's
+			// type uses a blocked method cannot substitute. A member that genuinely
+			// cannot substitute is not implicitly contained, so folding it in would
+			// false-reject otherwise-valid schemas.
+			if term.Block&BlockSubstitution != 0 {
+				continue
+			}
+			headType := c.resolveDeclaredType(term)
 			for _, member := range c.schema.substGroups[term.Name] {
+				if isDerivationBlocked(c.resolveDeclaredType(member), headType, term.Block) {
+					continue
+				}
 				byName[member.Name] = append(byName[member.Name], member)
 			}
 		case *ModelGroup:

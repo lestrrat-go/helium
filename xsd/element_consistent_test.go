@@ -345,6 +345,56 @@ func TestElementConsistent(t *testing.T) {
 </xs:schema>`,
 			},
 			{
+				// The head carries block="substitution", so NO member may
+				// substitute for it. A head reference therefore implicitly
+				// contains none of its members, and a same-named local element
+				// 'a' of a genuinely different type (xs:string) does NOT collide
+				// with the (non-folded) member. This must compile cleanly,
+				// mirroring elemMatchesDeclOrSubst's block="substitution" gate.
+				// Before the fix the member was folded in regardless of block and
+				// false-rejected.
+				name: "head with block=substitution does not fold members",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="head" type="xs:int" block="substitution"/>
+  <xs:element name="a" type="xs:int" substitutionGroup="head"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+        <xs:element name="a" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// The member 'a' derives its type from the head's type by
+				// extension, but the head blocks extension (block="extension"),
+				// so 'a' cannot actually substitute for the head. The member is
+				// therefore not implicitly contained, and a same-named local 'a'
+				// of a different type (xs:string) does not collide with it. This
+				// exercises the per-member isDerivationBlocked gate.
+				name: "derivation-blocked member is not folded",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="base"/>
+  <xs:complexType name="ext">
+    <xs:complexContent>
+      <xs:extension base="base"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="head" type="base" block="extension"/>
+  <xs:element name="a" type="ext" substitutionGroup="head"/>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="head"/>
+        <xs:element name="a" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
 				// A prohibited group reference (maxOccurs="0") maps to NO
 				// particle, so the element declarations it would otherwise
 				// expand to do not enter the effective content model.
