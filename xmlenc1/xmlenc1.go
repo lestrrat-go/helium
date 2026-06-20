@@ -377,19 +377,27 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 
 	var nodes []helium.Node
 	if isContent {
-		// Content may be multiple children; wrap in a temporary root.
-		// The decrypted fragment may reference namespace prefixes that
-		// were declared on an ancestor of the EncryptedData element (the
-		// content's original location), not inside the ciphertext itself.
-		// Re-declare those in-scope namespaces on the wrapper so the
-		// prefixes resolve; otherwise valid content fails to parse.
-		wrapped := "<_wrap" + inScopeNamespaceAttrs(elem) + ">" + string(plaintext) + "</_wrap>"
-		tmpDoc, err := parser.Parse(ctx, []byte(wrapped))
+		// Content may be multiple children. The decrypted fragment takes the
+		// place of the EncryptedData element among its parent's children, so
+		// it must be parsed in the in-scope-namespace context of that PARENT
+		// — not EncryptedData's own declarations, which could wrongly shadow
+		// the parent context (e.g. an EncryptedData carrying its own default
+		// xmlns would make unprefixed plaintext resolve in the wrong
+		// namespace). ParseInNodeContext resolves prefixes/default-ns exactly
+		// as the replacement position requires and avoids any manual splicing
+		// of attacker-controlled namespace strings.
+		//
+		// If EncryptedData is detached (no parent), fall back to its own
+		// in-scope context so ancestor-declared prefixes still resolve.
+		contextNode := elem.Parent()
+		if contextNode == nil {
+			contextNode = elem
+		}
+		first, err := parser.ParseInNodeContext(ctx, contextNode, plaintext)
 		if err != nil {
 			return nil, ErrDecryptionFailed
 		}
-		root := tmpDoc.DocumentElement()
-		for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := first; child != nil; child = child.NextSibling() {
 			nodes = append(nodes, child)
 		}
 	} else {
@@ -401,53 +409,6 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	}
 
 	return nodes, nil
-}
-
-// inScopeNamespaceAttrs returns the serialized xmlns attributes for all
-// namespace declarations in scope at elem, collected by walking elem and its
-// ancestors (a nearer declaration shadows a farther one for the same prefix).
-// The result is a leading-space-prefixed string suitable for splicing into an
-// element start tag, e.g. ` xmlns:saml="urn:..."`. URIs are XML-attribute
-// escaped because the recovered plaintext (and thus its declared namespaces)
-// is attacker-controlled.
-func inScopeNamespaceAttrs(elem *helium.Element) string {
-	seen := map[string]bool{}
-	var b strings.Builder
-	var cur helium.Node = elem
-	for cur != nil {
-		if e, ok := cur.(*helium.Element); ok {
-			for _, ns := range e.Namespaces() {
-				prefix := ns.Prefix()
-				if seen[prefix] {
-					continue
-				}
-				seen[prefix] = true
-				if prefix == "" {
-					b.WriteString(` xmlns="`)
-				} else {
-					b.WriteString(` xmlns:`)
-					b.WriteString(prefix)
-					b.WriteString(`="`)
-				}
-				b.WriteString(escapeNamespaceURI(ns.URI()))
-				b.WriteString(`"`)
-			}
-		}
-		cur = cur.Parent()
-	}
-	return b.String()
-}
-
-// escapeNamespaceURI escapes a namespace URI for inclusion in a double-quoted
-// XML attribute value.
-func escapeNamespaceURI(uri string) string {
-	replacer := strings.NewReplacer(
-		"&", "&amp;",
-		"<", "&lt;",
-		">", "&gt;",
-		`"`, "&quot;",
-	)
-	return replacer.Replace(uri)
 }
 
 // newHardenedInnerParser returns the helium parser used to parse the
