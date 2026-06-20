@@ -96,6 +96,14 @@ type invocationConfig struct {
 	maxResourceBytes    int64  // per-resource read cap; 0 = inherit compiler/default, <0 = unbounded
 	maxResourceBytesSet bool   // true once MaxResourceBytes is explicitly configured
 
+	// allowExternalEntities opts into the legacy permissive parse of runtime
+	// documents (resolver-mediated external entity / DTD loading). Default
+	// false: XXE is blocked. allowExternalEntitiesSet records whether it was
+	// explicitly configured so that, when unset, the value compiled into the
+	// stylesheet is inherited.
+	allowExternalEntities    bool
+	allowExternalEntitiesSet bool
+
 	// resolved holds the effective output definition for the primary result
 	// after a terminal method (Do/Serialize/WriteTo) completes. It is stored
 	// behind a pointer with its own mutex so that concurrent terminal-method
@@ -302,6 +310,27 @@ func (inv Invocation) HTTPClient(client *http.Client) Invocation {
 	return inv
 }
 
+// AllowExternalEntities controls whether runtime documents loaded during the
+// transformation (via fn:doc / document(), xsl:source-document, xsl:merge, and
+// fn:transform stylesheet sources) may load and substitute external DTDs and
+// external general entities.
+//
+// Default false: XML External Entity (XXE) processing is blocked — external
+// entities are not resolved, eliminating the local-file-disclosure / SSRF
+// vector. Set to true to restore the legacy permissive behavior, in which
+// external entities are resolved through the configured URIResolver / HTTPClient
+// subject to the configured resource limits. Enable this only when loading
+// fully trusted documents.
+//
+// When left unset, the value configured on the Compiler
+// (Compiler.AllowExternalEntities) for the stylesheet is inherited.
+func (inv Invocation) AllowExternalEntities(v bool) Invocation {
+	inv = inv.clone()
+	inv.cfg.allowExternalEntities = v
+	inv.cfg.allowExternalEntitiesSet = true
+	return inv
+}
+
 // BaseOutputURI sets the base output URI for current-output-uri().
 func (inv Invocation) BaseOutputURI(uri string) Invocation {
 	inv = inv.clone()
@@ -505,6 +534,15 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		tcfg.maxResourceBytes = c.maxResourceBytes
 	case c.ss != nil:
 		tcfg.maxResourceBytes = c.ss.maxResourceBytes
+	}
+
+	// External-entity policy: an explicit per-invocation setting wins; otherwise
+	// inherit the value compiled into the stylesheet. Default is blocked (false).
+	switch {
+	case c.allowExternalEntitiesSet:
+		tcfg.allowExternalEntities = c.allowExternalEntities
+	case c.ss != nil:
+		tcfg.allowExternalEntities = c.ss.allowExternalEntities
 	}
 
 	// Entry mode

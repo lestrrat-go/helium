@@ -359,7 +359,10 @@ func TestCompileFileLoadsDTDDefinedExternalEntityInIncludedStylesheet(t *testing
 	require.NoError(t, err)
 	doc, err := p.Parse(t.Context(), mainData)
 	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().BaseURI(mainPath).URIResolver(osOpenResolver{}).Compile(t.Context(), doc)
+	// This test exercises the legacy permissive parse of an included stylesheet
+	// module that pulls in content via an external DTD-defined general entity.
+	// XXE is blocked by default, so opt in explicitly.
+	ss, err := xslt3.NewCompiler().BaseURI(mainPath).URIResolver(osOpenResolver{}).AllowExternalEntities(true).Compile(t.Context(), doc)
 	require.NoError(t, err)
 
 	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
