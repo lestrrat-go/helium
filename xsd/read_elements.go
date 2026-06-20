@@ -216,6 +216,17 @@ func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.E
 		c.errorCount++
 	}
 
+	// The "##any" / "##other" keywords are EXACT singleton lexical forms: the
+	// value must equal the keyword with no surrounding whitespace and no other
+	// tokens. libxml2 rejects e.g. "  ##any  ". Compare against the raw value
+	// (NOT the whitespace-collapsed value) so padding is caught. True list forms
+	// like "##local ##targetNamespace" are still whitespace-collapsed below, so
+	// surrounding/inner whitespace around list members remains valid.
+	switch raw {
+	case WildcardNSAny, WildcardNSOther:
+		return
+	}
+
 	tokens := splitSpace(normalizeWhiteSpace(raw, "collapse"))
 	if len(tokens) == 0 {
 		return
@@ -223,10 +234,10 @@ func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.E
 	for _, tok := range tokens {
 		switch tok {
 		case WildcardNSAny, WildcardNSOther:
-			if len(tokens) != 1 {
-				reject(fmt.Sprintf("The value '%s' is not a valid namespace constraint: '%s' must not be combined with other items.", raw, tok))
-				return
-			}
+			// A bare keyword reaching here means raw != keyword (it had padding
+			// or extra tokens), so it is never a valid standalone keyword form.
+			reject(fmt.Sprintf("The value '%s' is not a valid namespace constraint: '%s' must not be combined with other items.", raw, tok))
+			return
 		case WildcardNSTargetNamespace, WildcardNSLocal:
 			// Valid only as list members.
 		default:

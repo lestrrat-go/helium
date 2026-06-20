@@ -566,6 +566,22 @@ func TestWildcardConstraintValidation(t *testing.T) {
 		require.Contains(t, compileFatalErrors(t, schema), "namespace constraint")
 	})
 
+	// The "##any" / "##other" keywords are EXACT singleton lexical forms: they
+	// must not be padded with whitespace. Before the fix the value was
+	// whitespace-collapsed before validation, so "  ##any  " wrongly compiled.
+	// libxml2 rejects the padded keyword forms.
+	t.Run("rejects padded ##any", func(t *testing.T) {
+		t.Parallel()
+		schema := wildcardSchema(`<xs:any namespace="  ##any  "/>`)
+		require.Contains(t, compileFatalErrors(t, schema), "namespace constraint")
+	})
+
+	t.Run("rejects padded ##other", func(t *testing.T) {
+		t.Parallel()
+		schema := wildcardSchema(`<xs:any namespace="  ##other  "/>`)
+		require.Contains(t, compileFatalErrors(t, schema), "namespace constraint")
+	})
+
 	t.Run("rejects bad processContents on anyAttribute", func(t *testing.T) {
 		t.Parallel()
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -585,6 +601,9 @@ func TestWildcardConstraintValidation(t *testing.T) {
 			`<xs:any namespace="##other" processContents="skip"/>`,
 			`<xs:any namespace="##local ##targetNamespace" processContents="strict"/>`,
 			`<xs:any namespace="http://example.com ##local"/>`,
+			// True list forms tolerate surrounding/inner whitespace: only the
+			// ##any / ##other keywords are exact singletons.
+			`<xs:any namespace="  ##local   ##targetNamespace  " processContents="strict"/>`,
 		} {
 			t.Run(w, func(t *testing.T) {
 				t.Parallel()

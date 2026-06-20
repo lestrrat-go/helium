@@ -559,3 +559,79 @@ func TestRedefineAllGroupNesting(t *testing.T) {
 		require.Empty(t, compileErrors(t, schema))
 	})
 }
+
+// TestExtensionAllGroupPlacement verifies that an xs:extension appending an
+// 'all' model group (directly, or via an xs:group ref that resolves to one)
+// onto a NON-EMPTY base content model is rejected (cos-all-limited.1.2 /
+// §3.8.2). The extension merge would otherwise build a sequence CONTAINING an
+// 'all' group, which is forbidden — an 'all' group may only constitute the
+// whole content of a type definition. Before the fix these compiled with zero
+// diagnostics. Extending an EMPTY base with an 'all' group is still valid and
+// must compile cleanly.
+func TestExtensionAllGroupPlacement(t *testing.T) {
+	t.Parallel()
+
+	compileErrors := func(t *testing.T, schemaXML string) string {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+		requireCompileResultErr(t, err)
+		_, errors := partitionCompileErrors(collector.Errors())
+		return errors
+	}
+
+	const wantMsg = "The 'all' model group needs to be the only child of the model group."
+
+	t.Run("rejects group ref to all over non-empty base", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:all><xs:element name="x" type="xs:string"/></xs:all></xs:group>
+  <xs:complexType name="Base"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="Base"><xs:group ref="g"/></xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schema), wantMsg)
+	})
+
+	t.Run("rejects direct all over non-empty base", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="Base"><xs:all><xs:element name="x" type="xs:string"/></xs:all></xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`
+		require.Contains(t, compileErrors(t, schema), wantMsg)
+	})
+
+	// Extending an EMPTY base with an 'all' group is valid: the merge does not
+	// run (the base has no content model), so the 'all' group remains the whole
+	// content of the derived type.
+	t.Run("accepts all over empty base", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base"/>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="Base"><xs:all><xs:element name="x" type="xs:string"/></xs:all></xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="Derived"/>
+</xs:schema>`))
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		_, errors := partitionCompileErrors(collector.Errors())
+		require.Empty(t, errors)
+	})
+}

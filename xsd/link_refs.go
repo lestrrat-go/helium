@@ -322,6 +322,25 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 		baseMG := td.BaseType.ContentModel
 		derivedMG := td.ContentModel
+		// cos-all-limited.1.2 / §3.8.2: an 'all' model group may only constitute
+		// the WHOLE content of a type definition. When an extension appends an
+		// 'all' group (directly, or via an xs:group ref that resolves to one) onto
+		// a non-empty base content model, the merge below would build a sequence
+		// CONTAINING an 'all' group, which is forbidden. The base-as-sole-content
+		// and direct-group-ref paths are checked elsewhere; this catches the
+		// extension-merge path, which they miss. libxml2 rejects this.
+		if baseMG != nil && derivedMG != nil && derivedMG.Compositor == CompositorAll && modelGroupHasContent(baseMG) {
+			if src, ok := c.typeDefSources[td]; ok && c.filename != "" {
+				component := componentLocalComplexType
+				if !src.isLocal {
+					component = "complex type '" + td.Name.Local + "'"
+				}
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+					"The 'all' model group needs to be the only child of the model group."), helium.ErrorLevelFatal))
+				c.errorCount++
+			}
+			continue
+		}
 		if baseMG != nil && derivedMG != nil {
 			// Merge: create a sequence of base content + derived content.
 			merged := &ModelGroup{
@@ -528,6 +547,27 @@ func (c *compiler) checkAllGroupRef(ctx context.Context, placeholder *ModelGroup
 	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, src.local, elemGroup,
 		"The particle's {max occurs} must be 1, since the reference resolves to an 'all' model group."), helium.ErrorLevelFatal))
 	c.errorCount++
+}
+
+// modelGroupHasContent reports whether mg carries any actual content particle
+// (an element, wildcard, or nested non-empty group). A nil group, or a group
+// that wraps only empty sub-groups, has no content. Used to decide whether an
+// extension base content model is "effectively non-empty" before merging.
+func modelGroupHasContent(mg *ModelGroup) bool {
+	if mg == nil {
+		return false
+	}
+	for _, p := range mg.Particles {
+		switch term := p.Term.(type) {
+		case *ModelGroup:
+			if modelGroupHasContent(term) {
+				return true
+			}
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // reportUnresolvedTypeRef reports a fatal schema parser error for a type
