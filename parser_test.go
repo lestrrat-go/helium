@@ -2535,6 +2535,31 @@ func TestParseReaderSurfacesErrorReturnedWithData(t *testing.T) {
 	require.ErrorIs(t, err, wantErr, "a reader error returned alongside the final bytes must not be swallowed")
 }
 
+// zeroProgressReader always returns (0, nil) for a non-empty request, never
+// advancing and never erroring. A naive fill loop spins on it forever.
+type zeroProgressReader struct{}
+
+func (zeroProgressReader) Read(p []byte) (int, error) {
+	return 0, nil
+}
+
+func TestParseReaderZeroProgressReaderDoesNotHang(t *testing.T) {
+	p := helium.NewParser()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := p.ParseReader(t.Context(), zeroProgressReader{})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, io.ErrNoProgress, "a zero-progress reader must fail with io.ErrNoProgress, not be accepted")
+	case <-time.After(5 * time.Second):
+		t.Fatal("ParseReader hung on a zero-progress reader instead of failing fast")
+	}
+}
+
 // startElementRecorder builds a SAX handler that records start-element local
 // names, so a test can prove the buffered bytes were parsed before any read
 // error was surfaced.

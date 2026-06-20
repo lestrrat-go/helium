@@ -4,9 +4,54 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestUTF8CursorZeroProgressReaderDoesNotHang(t *testing.T) {
+	cur := NewUTF8Cursor(zeroProgressReader{})
+
+	type result struct {
+		done bool
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		d := cur.Done()
+		done <- result{done: d, err: cur.Err()}
+	}()
+
+	select {
+	case res := <-done:
+		require.True(t, res.done, "a zero-progress reader must terminate fill, not spin")
+		require.ErrorIs(t, res.err, io.ErrNoProgress, "a zero-progress reader must surface io.ErrNoProgress after the bounded retry count")
+	case <-time.After(5 * time.Second):
+		t.Fatal("UTF8Cursor fillBuffer hung on a zero-progress reader")
+	}
+}
+
+func TestUTF8CursorSlowSplitReaderMakesProgress(t *testing.T) {
+	cur := NewUTF8Cursor(&slowSplitReader{data: []byte("héllo")})
+
+	type result struct {
+		peeked string
+		err    error
+	}
+	done := make(chan result, 1)
+	go func() {
+		s := cur.PeekString(len("héllo"))
+		done <- result{peeked: s, err: cur.Err()}
+	}()
+
+	select {
+	case res := <-done:
+		require.Equal(t, "héllo", res.peeked, "a slow reader that emits (0, nil) between bytes must still be consumed")
+		require.NoError(t, res.err, "a progressing reader must not surface io.ErrNoProgress")
+	case <-time.After(5 * time.Second):
+		t.Fatal("UTF8Cursor fillBuffer hung on a slow split reader")
+	}
+}
 
 type chunkedReader struct {
 	data  []byte
