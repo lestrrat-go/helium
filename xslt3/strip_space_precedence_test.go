@@ -11,6 +11,10 @@ import (
 // memResolver (defined in fn_transform_test.go) serves stylesheet modules from
 // an in-memory URI->content map.
 
+// importedModuleURI is the URI under which strip-space precedence tests serve
+// their imported stylesheet module.
+const importedModuleURI = "mem:/imported.xsl"
+
 // TestStripSpaceImportPrecedence verifies that a conflicting strip-space /
 // preserve-space NameTest across an import boundary is resolved by import
 // precedence (the importing module wins) rather than raising a false XTSE0270,
@@ -29,7 +33,7 @@ func TestStripSpaceImportPrecedence(t *testing.T) {
 	// strip-space and preserve-space would falsely raise XTSE0270.
 	main := `<?xml version="1.0"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
-  <xsl:import href="mem:/imported.xsl"/>
+  <xsl:import href="` + importedModuleURI + `"/>
   <xsl:preserve-space elements="item"/>
   <xsl:output method="xml" omit-xml-declaration="yes"/>
   <xsl:template match="/">
@@ -38,7 +42,7 @@ func TestStripSpaceImportPrecedence(t *testing.T) {
 </xsl:stylesheet>`
 
 	resolver := &memResolver{files: map[string]string{
-		"mem:/imported.xsl": imported,
+		importedModuleURI: imported,
 	}}
 
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
@@ -107,13 +111,13 @@ func TestStripSpaceLowerPrecedenceConflictNotMasked(t *testing.T) {
 	// Importing module adds a higher-precedence, unrelated strip-space for "b".
 	main := `<?xml version="1.0"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
-  <xsl:import href="mem:/imported.xsl"/>
+  <xsl:import href="` + importedModuleURI + `"/>
   <xsl:strip-space elements="b"/>
   <xsl:template match="/"><out/></xsl:template>
 </xsl:stylesheet>`
 
 	resolver := &memResolver{files: map[string]string{
-		"mem:/imported.xsl": imported,
+		importedModuleURI: imported,
 	}}
 
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
@@ -125,6 +129,84 @@ func TestStripSpaceLowerPrecedenceConflictNotMasked(t *testing.T) {
 		Compile(t.Context(), doc)
 	require.Error(t, err,
 		"same-precedence strip/preserve conflict over \"a\" must still raise XTSE0270 despite an unrelated higher-precedence strip-space for \"b\"")
+	require.Contains(t, err.Error(), "XTSE0270")
+}
+
+// TestStripSpaceHigherPrecedenceCoversConflict verifies that a genuine
+// same-precedence strip/preserve overlap in a LOWER-precedence imported module is
+// NOT reported as XTSE0270 when the importing (higher-precedence) module declares
+// a rule that COVERS the conflicting name. The imported module has both
+// strip-space="a" and preserve-space="a" (a same-precedence conflict over "a"),
+// but the importing module's higher-precedence strip-space="*" matches "a", so
+// import precedence resolves it per-name and no conflict survives.
+func TestStripSpaceHigherPrecedenceCoversConflict(t *testing.T) {
+	t.Parallel()
+
+	// Imported module: a same-precedence overlap over "a".
+	imported := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="a"/>
+  <xsl:preserve-space elements="a"/>
+</xsl:stylesheet>`
+
+	// Importing module: higher-precedence universal strip-space covers "a".
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:import href="` + importedModuleURI + `"/>
+  <xsl:strip-space elements="*"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	resolver := &memResolver{files: map[string]string{
+		importedModuleURI: imported,
+	}}
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+
+	ss, err := xslt3.NewCompiler().
+		BaseURI("mem:/main.xsl").
+		URIResolver(resolver).
+		Compile(t.Context(), doc)
+	require.NoError(t, err,
+		"higher-precedence strip-space=\"*\" covers the imported \"a\" overlap; XTSE0270 must NOT fire")
+	require.NotNil(t, ss)
+}
+
+// TestStripSpaceHigherPrecedencePartialCoverConflict verifies that a
+// higher-precedence rule which covers only PART of a same-precedence overlap does
+// NOT suppress XTSE0270 for the uncovered part. The imported module has a genuine
+// "a" vs "a" overlap; the importing module's higher-precedence strip-space="b"
+// matches "b" only, leaving "a" uncovered, so the conflict still fires.
+func TestStripSpaceHigherPrecedencePartialCoverConflict(t *testing.T) {
+	t.Parallel()
+
+	imported := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="a"/>
+  <xsl:preserve-space elements="a"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:import href="` + importedModuleURI + `"/>
+  <xsl:strip-space elements="b"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	resolver := &memResolver{files: map[string]string{
+		importedModuleURI: imported,
+	}}
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+	require.NoError(t, err)
+
+	_, err = xslt3.NewCompiler().
+		BaseURI("mem:/main.xsl").
+		URIResolver(resolver).
+		Compile(t.Context(), doc)
+	require.Error(t, err,
+		"higher-precedence strip-space=\"b\" does not cover \"a\"; the \"a\" overlap must still raise XTSE0270")
 	require.Contains(t, err.Error(), "XTSE0270")
 }
 
@@ -149,7 +231,7 @@ func TestStripSpacePrefixNamespaceContext(t *testing.T) {
 	main := `<?xml version="1.0"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                 xmlns:p="urn:B" version="3.0">
-  <xsl:import href="mem:/imported.xsl"/>
+  <xsl:import href="` + importedModuleURI + `"/>
   <xsl:output method="xml" omit-xml-declaration="yes"/>
   <xsl:template match="/">
     <xsl:copy-of select="."/>
@@ -157,7 +239,7 @@ func TestStripSpacePrefixNamespaceContext(t *testing.T) {
 </xsl:stylesheet>`
 
 	resolver := &memResolver{files: map[string]string{
-		"mem:/imported.xsl": imported,
+		importedModuleURI: imported,
 	}}
 
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
@@ -207,13 +289,13 @@ func TestStripSpaceUndeclaredPrefix(t *testing.T) {
 	// accepted because the imported module happened to bind "p".
 	main := `<?xml version="1.0"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
-  <xsl:import href="mem:/imported.xsl"/>
+  <xsl:import href="` + importedModuleURI + `"/>
   <xsl:strip-space elements="p:item"/>
   <xsl:template match="/"><out/></xsl:template>
 </xsl:stylesheet>`
 
 	resolver := &memResolver{files: map[string]string{
-		"mem:/imported.xsl": imported,
+		importedModuleURI: imported,
 	}}
 
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
