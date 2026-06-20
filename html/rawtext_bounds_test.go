@@ -495,9 +495,12 @@ func TestRawTextChunkSlicesAreIndependent(t *testing.T) {
 // literal exceeds the cap before any terminator the parser fails with
 // ErrContentSizeExceeded, keeping peak retained memory bounded.
 //
-// Legacy-prefix runs are NOT here: `&amp` + a long tail resolves the legacy
-// "amp" prefix within the fixed lookahead and emits the tail as ordinary
-// (chunked) text, never failing — see TestRCDATALegacyPrefixLongTailResolves.
+// Legacy-prefix runs are charged the same way: a `&amp` + tail run that fits
+// within MaxContentSize resolves the legacy "amp" prefix and emits the tail as
+// ordinary text (see TestRCDATAWithinCapSaturatedLegacyResolves), but an
+// over-cap ambiguous legacy-prefix run hard-fails with ErrContentSizeExceeded
+// rather than streaming a partial result (see
+// TestRCDATAOverCapLegacyPrefixLongTailFails).
 //
 // Numeric references are unaffected (see TestRCDATANumericEntityNormalized):
 // they accumulate a saturating value without retaining the digit run, so an
