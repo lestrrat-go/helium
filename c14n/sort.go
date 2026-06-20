@@ -26,7 +26,8 @@ type attrSortEntry struct {
 	attr       *helium.Attribute
 	nsURI      string
 	localName  string
-	fixupValue string // non-empty for synthetic xml:base fixup attrs (C14N 1.1)
+	fixupValue string // synthetic xml:base fixup value (C14N 1.1); may be empty
+	hasFixup   bool   // true when fixupValue is a real fixup (even if empty)
 }
 
 // sortAttributes sorts attributes per C14N rules:
