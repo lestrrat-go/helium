@@ -514,16 +514,10 @@ func (ec *execContext) setVarDeferred(name string, err error) {
 	ec.localVars.deferredErrors[name] = err
 }
 
-// lookupTypeNamespace resolves a namespace prefix used inside a sequence type,
-// honoring nsOverride when set (e.g. the declaration-site context of an
+// lookupTypeNamespaceOK resolves a namespace prefix used inside a sequence
+// type, honoring nsOverride when set (e.g. the declaration-site context of an
 // xsl:global-context-item), falling back to the stylesheet-wide namespace map.
-func (ec *execContext) lookupTypeNamespace(prefix string) string {
-	ns, _ := ec.lookupTypeNamespaceOK(prefix)
-	return ns
-}
-
-// lookupTypeNamespaceOK is like lookupTypeNamespace but reports whether the
-// prefix was bound.
+// It reports whether the prefix was bound.
 func (ec *execContext) lookupTypeNamespaceOK(prefix string) (string, bool) {
 	if ec.nsOverride != nil {
 		if ns, ok := ec.nsOverride[prefix]; ok {

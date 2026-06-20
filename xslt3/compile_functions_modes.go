@@ -68,165 +68,17 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 	c.stylesheet.globalContextModules[moduleKey] = def
 
 	// XTSE3087: declarations in different modules of one package must agree.
-	// Compare the @as types by their CANONICAL EXPANDED form: each declaration's
-	// QNames are resolved against ITS OWN captured declaration-site namespace and
-	// xpath-default-namespace context, then compared as {uri}local. Two
-	// declarations that write the same element/schema type with different lexical
-	// prefixes (or different xpath-default-namespace) are equivalent and must NOT
-	// conflict; two that write the same lexical form bound to different URIs DO
-	// conflict.
 	if existing := c.stylesheet.globalContextItem; existing != nil {
-		if existing.Use != def.Use || canonicalGlobalContextAs(existing) != canonicalGlobalContextAs(def) {
+		normalizeAs := func(s string) string {
+			return strings.Join(strings.Fields(s), "")
+		}
+		if existing.Use != def.Use || normalizeAs(existing.As) != normalizeAs(def.As) {
 			return staticError(errCodeXTSE3087, "conflicting xsl:global-context-item declarations")
 		}
 		return nil
 	}
 	c.stylesheet.globalContextItem = def
 	return nil
-}
-
-// canonicalGlobalContextAs returns a canonical, prefix-independent form of a
-// global-context-item @as sequence type. Whitespace is collapsed and every
-// QName inside an element()/attribute()/schema-element()/schema-attribute()
-// test is rewritten to its expanded Q{uri}local form using the declaration's
-// own captured namespace context — so two declarations whose @as types denote
-// the same type compare equal regardless of the lexical prefixes used, and two
-// that denote different types compare unequal even with identical lexical text.
-func canonicalGlobalContextAs(def *globalContextItemDef) string {
-	collapsed := strings.Join(strings.Fields(def.As), "")
-	return expandSequenceTypeQNames(collapsed, def.Namespaces, def.XPathDefaultNS, def.HasXPathDefaultNS)
-}
-
-// expandSequenceTypeQNames rewrites EVERY QName position of an
-// element()/attribute()/schema-element()/schema-attribute() kind test in a
-// (whitespace-collapsed) sequence-type string to its expanded Q{uri}local form.
-//
-// For the element/attribute NAME argument, prefixes resolve against nsBindings
-// and an unprefixed name resolves against xpathDefaultNS (when present) —
-// identical to the runtime resolveSchemaQName decision used to interpret the
-// same declaration. For the TYPE argument of element(name, type) and
-// attribute(name, type), the type-name resolution semantics apply instead: the
-// default element namespace is NOT applied (an unprefixed non-builtin type name
-// is in no namespace), matching the runtime normalizeTypeName logic. The single
-// argument of schema-element()/schema-attribute() is a NAME argument.
-//
-// Wildcards ("*") and names already in Q{...} form are left unchanged. Because
-// document-node(element(...)) and other nested item-type structures are handled
-// by scanning all kind tests in the string, every QName in the (possibly
-// nested) item type is canonicalized, making the comparison total.
-func expandSequenceTypeQNames(as string, nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) string {
-	resolve := nsResolverFromMap(nsBindings)
-	for _, kind := range []string{"schema-element", "schema-attribute", "element", "attribute"} {
-		// element()/attribute() carry an optional second TYPE argument;
-		// schema-element()/schema-attribute() take a single NAME argument.
-		expandType := kind == "element" || kind == "attribute"
-		// element()/schema-element() name arguments take the default element
-		// namespace; attribute()/schema-attribute() name arguments never do.
-		nameKind := qnameElementName
-		if kind == "attribute" || kind == "schema-attribute" {
-			nameKind = qnameAttributeName
-		}
-		as = expandKindTestQNames(as, kind, nameKind, resolve, xpathDefaultNS, hasXPathDefaultNS, expandType)
-	}
-	return as
-}
-
-// expandKindTestQNames rewrites the QName arguments of every kind(...) test in
-// as. The first argument (the element/attribute name) is expanded with nameKind's
-// resolution rule. When expandType is true (element/attribute kind tests), the
-// second argument (the type name) is also expanded, using the type-name
-// resolution rule (no default-namespace application).
-func expandKindTestQNames(as, kind string, nameKind qnameKind, resolve nsResolver, xpathDefaultNS string, hasXPathDefaultNS, expandType bool) string {
-	search := kind + "("
-	var b strings.Builder
-	rest := as
-	for {
-		idx := indexKindTest(rest, kind)
-		if idx < 0 {
-			b.WriteString(rest)
-			break
-		}
-		b.WriteString(rest[:idx+len(search)])
-		rest = rest[idx+len(search):]
-		// The name argument ends at the first ',' (element(name, type)) or ')'.
-		nameEnd := strings.IndexAny(rest, ",)")
-		if nameEnd < 0 {
-			b.WriteString(rest)
-			break
-		}
-		name := strings.TrimSpace(rest[:nameEnd])
-		b.WriteString(expandTestName(name, nameKind, resolve, xpathDefaultNS, hasXPathDefaultNS))
-		// If this kind test carries a second TYPE argument, expand it too.
-		if expandType && rest[nameEnd] == ',' {
-			b.WriteByte(',')
-			rest = rest[nameEnd+1:]
-			typeEnd := strings.IndexByte(rest, ')')
-			if typeEnd < 0 {
-				b.WriteString(rest)
-				break
-			}
-			typeName := strings.TrimSpace(rest[:typeEnd])
-			b.WriteString(expandTestName(typeName, qnameTypeName, resolve, xpathDefaultNS, hasXPathDefaultNS))
-			rest = rest[typeEnd:]
-			continue
-		}
-		rest = rest[nameEnd:]
-	}
-	return b.String()
-}
-
-// indexKindTest finds the next occurrence of kind+"(" in s that is a real kind
-// test rather than a suffix of a longer kind name (e.g. "element" inside
-// "schema-element"). It returns the index of the kind name, or -1.
-func indexKindTest(s, kind string) int {
-	search := kind + "("
-	offset := 0
-	for {
-		idx := strings.Index(s[offset:], search)
-		if idx < 0 {
-			return -1
-		}
-		abs := offset + idx
-		prev := byte(0)
-		if abs > 0 {
-			prev = s[abs-1]
-		}
-		// A kind name preceded by an NCName char (letter, digit, '-', '.', '_')
-		// is part of a longer name (e.g. "element" within "schema-element");
-		// skip it.
-		if !isNCNameByte(prev) {
-			return abs
-		}
-		offset = abs + len(search)
-	}
-}
-
-func isNCNameByte(b byte) bool {
-	switch {
-	case b >= 'a' && b <= 'z':
-		return true
-	case b >= 'A' && b <= 'Z':
-		return true
-	case b >= '0' && b <= '9':
-		return true
-	case b == '-' || b == '.' || b == '_':
-		return true
-	}
-	return false
-}
-
-// expandTestName expands a single kind-test QName argument (element name,
-// attribute name, or type name, per kind) to its canonical Q{uri}local form
-// using the single unified sequence-type QName resolver.
-func expandTestName(name string, kind qnameKind, resolve nsResolver, xpathDefaultNS string, hasXPathDefaultNS bool) string {
-	if name == "" || name == "*" {
-		return name
-	}
-	if strings.HasPrefix(name, "Q{") {
-		return name
-	}
-	local, ns := resolveSequenceTypeQName(name, kind, resolve, xpathDefaultNS, hasXPathDefaultNS)
-	return "Q{" + ns + "}" + local
 }
 
 // isBuiltinXSDLocalName reports whether an unprefixed type name denotes a

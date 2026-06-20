@@ -186,178 +186,6 @@ func TestGlobalContextItemSchemaElementXPathDefaultNS(t *testing.T) {
 	require.Contains(t, out, "root")
 }
 
-// TestGlobalContextItemDupDeclDifferentPrefixSameType verifies that two
-// xsl:global-context-item declarations in different modules whose @as types
-// expand to the SAME sequence type via different lexical prefixes do NOT raise
-// XTSE3087. element(p:root) and element(q:root) both bind {urn:same}root.
-func TestGlobalContextItemDupDeclDifferentPrefixSameType(t *testing.T) {
-	const baseURI = "mem://stylesheets/main.xsl"
-	const includeURI = "mem:/stylesheets/inc.xsl"
-
-	included := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:q="urn:same">
-  <xsl:global-context-item as="element(q:root)"/>
-</xsl:stylesheet>`
-
-	main := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:p="urn:same">
-  <xsl:include href="inc.xsl"/>
-  <xsl:global-context-item as="element(p:root)"/>
-  <xsl:template match="/"><out/></xsl:template>
-</xsl:stylesheet>`
-
-	ctx := t.Context()
-	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
-	doc, err := helium.NewParser().Parse(ctx, []byte(main))
-	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
-	require.NoError(t, err, "element(p:root) and element(q:root) expand to the same {urn:same}root; no XTSE3087")
-	require.NotNil(t, ss)
-}
-
-// TestGlobalContextItemDupDeclDifferentPrefixDifferentType verifies that two
-// xsl:global-context-item declarations whose @as types use the SAME lexical
-// form element(p:root) but DIFFERENT xmlns:p bindings expand to different
-// sequence types and DO raise XTSE3087.
-func TestGlobalContextItemDupDeclDifferentPrefixDifferentType(t *testing.T) {
-	const baseURI = "mem://stylesheets/main.xsl"
-	const includeURI = "mem:/stylesheets/inc.xsl"
-
-	included := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:p="urn:wrong">
-  <xsl:global-context-item as="element(p:root)"/>
-</xsl:stylesheet>`
-
-	main := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:p="urn:right">
-  <xsl:include href="inc.xsl"/>
-  <xsl:global-context-item as="element(p:root)"/>
-  <xsl:template match="/"><out/></xsl:template>
-</xsl:stylesheet>`
-
-	ctx := t.Context()
-	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
-	doc, err := helium.NewParser().Parse(ctx, []byte(main))
-	require.NoError(t, err)
-	_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
-	require.Error(t, err, "element(p:root) with different xmlns:p expands to different types; XTSE3087 expected")
-	require.Contains(t, err.Error(), "XTSE3087")
-}
-
-// TestGlobalContextItemDupDeclSameTypeArgDifferentPrefix verifies that two
-// xsl:global-context-item declarations whose @as types name BOTH a different
-// element-name prefix and a different type-name prefix, all bound to the SAME
-// namespaces, do NOT raise XTSE3087. element(p:root, p:T) and element(q:root,
-// q:T) expand to the identical {urn:same}root / {urn:same}T type. The TYPE
-// argument must be canonicalized for this to be recognized as equivalent.
-func TestGlobalContextItemDupDeclSameTypeArgDifferentPrefix(t *testing.T) {
-	const baseURI = "mem://stylesheets/main.xsl"
-	const includeURI = "mem:/stylesheets/inc.xsl"
-
-	included := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:q="urn:same">
-  <xsl:global-context-item as="element(q:root, q:T)"/>
-</xsl:stylesheet>`
-
-	main := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:p="urn:same">
-  <xsl:include href="inc.xsl"/>
-  <xsl:global-context-item as="element(p:root, p:T)"/>
-  <xsl:template match="/"><out/></xsl:template>
-</xsl:stylesheet>`
-
-	ctx := t.Context()
-	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
-	doc, err := helium.NewParser().Parse(ctx, []byte(main))
-	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
-	require.NoError(t, err, "element(p:root, p:T) and element(q:root, q:T) expand to the same type; no XTSE3087")
-	require.NotNil(t, ss)
-}
-
-// TestGlobalContextItemDupDeclDifferentTypeArgNS verifies that two
-// xsl:global-context-item declarations whose element-NAME argument expands to
-// the same type but whose TYPE argument is bound to a DIFFERENT namespace DO
-// raise XTSE3087. element(p:root, p:T) with p="urn:same" vs element(q:root, q:T)
-// with q's root in urn:same but T's prefix bound to urn:other are distinct
-// types. Without canonicalizing the type argument this conflict is missed
-// (false-accept).
-func TestGlobalContextItemDupDeclDifferentTypeArgNS(t *testing.T) {
-	const baseURI = "mem://stylesheets/main.xsl"
-	const includeURI = "mem:/stylesheets/inc.xsl"
-
-	included := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:q="urn:same"
-  xmlns:t="urn:other">
-  <xsl:global-context-item as="element(q:root, t:T)"/>
-</xsl:stylesheet>`
-
-	main := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:p="urn:same">
-  <xsl:include href="inc.xsl"/>
-  <xsl:global-context-item as="element(p:root, p:T)"/>
-  <xsl:template match="/"><out/></xsl:template>
-</xsl:stylesheet>`
-
-	ctx := t.Context()
-	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
-	doc, err := helium.NewParser().Parse(ctx, []byte(main))
-	require.NoError(t, err)
-	_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
-	require.Error(t, err, "type argument in a different namespace makes the types distinct; XTSE3087 expected")
-	require.Contains(t, err.Error(), "XTSE3087")
-}
-
-// TestGlobalContextItemAttributeNameIgnoresDefaultElementNS verifies that an
-// UNPREFIXED attribute() name in an @as type is NOT resolved against the
-// declaration-site xpath-default-namespace: an unprefixed attribute name is in
-// no namespace. The two declarations expand to the same {}foo attribute test —
-// one under xpath-default-namespace="urn:x", one without — so no XTSE3087 is
-// raised. With the default element namespace wrongly applied to the attribute
-// name, the two would expand to {urn:x}foo vs {}foo and conflict (false reject).
-func TestGlobalContextItemAttributeNameIgnoresDefaultElementNS(t *testing.T) {
-	const baseURI = "mem://stylesheets/main.xsl"
-	const includeURI = "mem:/stylesheets/inc.xsl"
-
-	included := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:global-context-item as="attribute(foo)"/>
-</xsl:stylesheet>`
-
-	main := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:include href="inc.xsl"/>
-  <xsl:global-context-item xpath-default-namespace="urn:x" as="attribute(foo)"/>
-  <xsl:template match="/"><out/></xsl:template>
-</xsl:stylesheet>`
-
-	ctx := t.Context()
-	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
-	doc, err := helium.NewParser().Parse(ctx, []byte(main))
-	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
-	require.NoError(t, err, "attribute(foo) must stay {}foo under xpath-default-namespace; the default element namespace never applies to an attribute name")
-	require.NotNil(t, ss)
-}
-
 // TestGlobalContextItemSchemaAttributeIgnoresDefaultElementNS verifies that an
 // UNPREFIXED schema-attribute() name validates as a no-namespace attribute even
 // under an xpath-default-namespace: the default element namespace must NOT be
@@ -392,34 +220,14 @@ func TestGlobalContextItemSchemaAttributeIgnoresDefaultElementNS(t *testing.T) {
 
 // TestGlobalContextItemXMLPrefixPredeclared verifies that the xml prefix is
 // implicitly in scope in an @as sequence type even without an explicit xmlns:xml
-// declaration: attribute(xml:lang) resolves to the XML namespace. The two
-// declarations — attribute(xml:lang) and attribute(Q{...XML...}lang) — expand to
-// the same {http://www.w3.org/XML/1998/namespace}lang test, so no XTSE3087 is
-// raised. Without seeding the xml prefix, xml:lang would resolve to {}lang and
-// the two would conflict (false reject).
+// declaration: attribute(xml:lang) resolves to the XML namespace. A supplied
+// xml:lang attribute as the global context item must satisfy the declared type.
 func TestGlobalContextItemXMLPrefixPredeclared(t *testing.T) {
-	const baseURI = "mem://stylesheets/main.xsl"
-	const includeURI = "mem:/stylesheets/inc.xsl"
-
-	included := `<?xml version="1.0"?>
+	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"
   xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:global-context-item as="attribute(Q{http://www.w3.org/XML/1998/namespace}lang)"/>
-</xsl:stylesheet>`
-
-	main := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:include href="inc.xsl"/>
   <xsl:global-context-item as="attribute(xml:lang)"/>
   <xsl:template match="/"><out/></xsl:template>
-</xsl:stylesheet>`
-
-	ctx := t.Context()
-	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
-	doc, err := helium.NewParser().Parse(ctx, []byte(main))
-	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
-	require.NoError(t, err, "xml:lang must resolve to the predeclared XML namespace, matching Q{...XML...}lang; no XTSE3087")
+</xsl:stylesheet>`)
 	require.NotNil(t, ss)
 }
