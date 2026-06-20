@@ -587,6 +587,9 @@ func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
 			}
 		}()
 	}
+	if d == nil {
+		return nil, false
+	}
 	if ints := d.intSubset; ints != nil {
 		if pdebug.Enabled {
 			pdebug.Printf("Looking into internal subset...")
@@ -859,18 +862,24 @@ func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
 		return nil, errors.New("empty name")
 	}
 
-	n := newEntityRef()
-	n.doc = d
+	var decoded string
 	if name[0] != '&' {
-		n.name = name
+		decoded = name
 	} else {
 		// the name should be everything but '&' and ';'
 		if name[len(name)-1] == ';' {
-			n.name = name[1 : len(name)-1]
+			decoded = name[1 : len(name)-1]
 		} else {
-			n.name = name[1:]
+			decoded = name[1:]
 		}
 	}
+	if decoded == "" {
+		return nil, fmt.Errorf("char ref %q has an empty name", name)
+	}
+
+	n := newEntityRef()
+	n.doc = d
+	n.name = decoded
 	return n, nil
 }
 
