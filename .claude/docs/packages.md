@@ -163,7 +163,7 @@ RELAX NG schema compilation and validation.
 - `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError`
 - `ValidationError{Filename, Line, Element, Message}` — per-error structured type
 - Files: `relaxng.go` (API + config), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `parse_check.go` (compile checks), `validate.go` (engine), `errors.go` (error types + formatting)
-- Imports: helium
+- Imports: helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar
 - Status: 159/159 golden tests passing
 
 ## html/

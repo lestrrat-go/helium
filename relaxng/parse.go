@@ -1057,6 +1057,15 @@ func buildNameClassChoice(classes []*nameClass) *nameClass {
 	if len(classes) == 0 {
 		return nil
 	}
+	// A poisoned (ncNoMatch) branch — e.g. a <name> with an unbound prefix —
+	// is a fatal compile error that must taint the whole choice. Otherwise a
+	// <choice> would silently validate via its remaining branches and mask the
+	// error. Propagate the taint so the choice never matches.
+	for _, nc := range classes {
+		if nameClassContainsNoMatch(nc) {
+			return &nameClass{kind: ncNoMatch}
+		}
+	}
 	if len(classes) == 1 {
 		return classes[0]
 	}
