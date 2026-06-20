@@ -16,10 +16,16 @@ import (
 
 // pattern is a compiled XSLT match pattern.
 type pattern struct {
-	Alternatives   []*patternAlt
-	source         string
-	xpathDefaultNS string            // xpath-default-namespace at compile site
-	nsBindings     map[string]string // prefix→URI bindings from compile context
+	Alternatives []*patternAlt
+	source       string
+	// xpathDefaultNS is the effective xpath-default-namespace at the compile
+	// site; hasXPathDefaultNS records whether one is in effect at all.
+	// An explicit xpath-default-namespace="" sets hasXPathDefaultNS=true with an
+	// empty xpathDefaultNS, which RESETS an inherited default to no-namespace —
+	// distinct from no xpath-default-namespace ever being declared (false).
+	xpathDefaultNS    string
+	hasXPathDefaultNS bool
+	nsBindings        map[string]string // prefix→URI bindings from compile context
 }
 
 // patternAlt is one alternative in a union pattern (separated by |).
@@ -69,10 +75,10 @@ func isNeverMatchingPattern(alt string) bool {
 // context, so both compile-time validation and runtime matching resolve prefixes
 // identically and the predeclared XPath namespaces (fn/math/map/...) apply as a
 // fallback only when a prefix is not lexically bound.
-func compilePattern(s string, elem *helium.Element, xpathDefaultNS string) (*pattern, error) {
+func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXPathDefaultNS bool) (*pattern, error) {
 	nsBindings := inScopeNamespaces(elem)
 	alts := splitPatternUnion(s)
-	p := &pattern{source: s, xpathDefaultNS: xpathDefaultNS, nsBindings: nsBindings}
+	p := &pattern{source: s, xpathDefaultNS: xpathDefaultNS, hasXPathDefaultNS: hasXPathDefaultNS, nsBindings: nsBindings}
 	for _, alt := range alts {
 		alt = strings.TrimSpace(alt)
 		if alt == "" {
@@ -88,7 +94,7 @@ func compilePattern(s string, elem *helium.Element, xpathDefaultNS string) (*pat
 		// namespace (the "" key) must NOT become the XPath default element
 		// namespace for unprefixed names unless xpath-default-namespace is set.
 		// This keeps compile-time and runtime prefix resolution symmetric.
-		validateNS := patternValidateNamespaces(nsBindings, xpathDefaultNS)
+		validateNS := patternValidateNamespaces(nsBindings, xpathDefaultNS, hasXPathDefaultNS)
 		if valErr := compiled.Validate(validateNS); valErr != nil {
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %v", alt, valErr)
 		}
@@ -150,7 +156,7 @@ func compilePattern(s string, elem *helium.Element, xpathDefaultNS string) (*pat
 // namespace) binding is applied only when xpath-default-namespace is declared.
 // An XML default namespace (xmlns="...") must not govern unprefixed pattern
 // names; they default to no-namespace.
-func patternValidateNamespaces(nsBindings map[string]string, xpathDefaultNS string) map[string]string {
+func patternValidateNamespaces(nsBindings map[string]string, xpathDefaultNS string, hasXPathDefaultNS bool) map[string]string {
 	ns := make(map[string]string, len(nsBindings)+1)
 	for prefix, uri := range nsBindings {
 		if prefix == "" {
@@ -158,7 +164,11 @@ func patternValidateNamespaces(nsBindings map[string]string, xpathDefaultNS stri
 		}
 		ns[prefix] = uri
 	}
-	if xpathDefaultNS != "" {
+	// Only an explicitly declared xpath-default-namespace governs unprefixed
+	// names. A non-empty value sets the default element namespace; an explicit
+	// "" (hasXPathDefaultNS true, empty value) resets to no-namespace, so no ""
+	// binding is added.
+	if hasXPathDefaultNS && xpathDefaultNS != "" {
 		ns[""] = xpathDefaultNS
 	}
 	return ns
@@ -704,7 +714,7 @@ func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium
 	savedInPattern := ec.inPatternMatch
 	savedPatternNS := ec.patternNamespaces
 	ec.xpathDefaultNS = p.xpathDefaultNS
-	ec.hasXPathDefaultNS = p.xpathDefaultNS != ""
+	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
 	ec.regexGroups = nil
 	ec.contextNode = node
 	ec.currentNode = node
@@ -749,7 +759,7 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 	savedInPattern := ec.inPatternMatch
 	savedPatternNS := ec.patternNamespaces
 	ec.xpathDefaultNS = p.xpathDefaultNS
-	ec.hasXPathDefaultNS = p.xpathDefaultNS != ""
+	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
 	ec.regexGroups = nil
 	ec.contextItem = item
 	ec.inPatternMatch = true
@@ -1197,14 +1207,10 @@ func matchSchemaElementTest(_ context.Context, ec *execContext, t xpath3.SchemaE
 		return false
 	}
 	elem, _ := helium.AsNode[*helium.Element](node)
-	// Resolve the schema element name.
-	prefix, local := splitQNamePair(t.Name)
-	ns := ""
-	if prefix != "" {
-		ns = ec.stylesheet.namespaces[prefix]
-	} else if ec.hasXPathDefaultNS {
-		ns = ec.xpathDefaultNS
-	}
+	// Resolve the schema element name through the shared pattern-name resolver so
+	// the pattern's lexical namespace snapshot (and xpath-default-namespace)
+	// governs prefix resolution, identical to NameTest/element().
+	local, ns := resolvePatternKindTestName(ec, t.Name)
 	// Check name match (direct or substitution group).
 	nameMatch := elem.LocalName() == local && elem.URI() == ns
 	if !nameMatch && ec.schemaRegistry != nil {
@@ -1241,10 +1247,14 @@ func matchSchemaAttributeTest(_ context.Context, ec *execContext, t xpath3.Schem
 		return false
 	}
 	attr, _ := helium.AsNode[*helium.Attribute](node)
-	prefix, local := splitQNamePair(t.Name)
-	ns := ""
-	if prefix != "" {
-		ns = ec.stylesheet.namespaces[prefix]
+	// Resolve through the shared pattern-name resolver. Note: an unprefixed
+	// schema-attribute() name is in no namespace (attributes are not governed by
+	// xpath-default-namespace); resolvePatternKindTestName returns no namespace
+	// for a bare name unless a default is in effect, but for attributes we never
+	// apply the element default, so strip any default-namespace result here.
+	local, ns := resolvePatternKindTestName(ec, t.Name)
+	if !strings.HasPrefix(t.Name, "Q{") && !strings.Contains(t.Name, ":") {
+		ns = ""
 	}
 	if attr.LocalName() != local || attr.URI() != ns {
 		return false
@@ -1256,12 +1266,40 @@ func matchSchemaAttributeTest(_ context.Context, ec *execContext, t xpath3.Schem
 	return found
 }
 
-// splitQNamePair splits "prefix:local" into (prefix, local) or ("", name).
-func splitQNamePair(name string) (string, string) {
-	if prefix, local, ok := strings.Cut(name, ":"); ok {
-		return prefix, local
+// resolvePatternKindTestName resolves a kind-test name string (used by
+// element(), attribute(), schema-element(), schema-attribute()) to its expected
+// local name and namespace URI within a pattern's namespace context. It is the
+// single shared resolution path for every pattern-name site so compile-time and
+// runtime resolution stay symmetric. The parse order is:
+//
+//  1. Q{uri}local — braced EQName/URIQualifiedName (checked FIRST so that a name
+//     like Q{http://x}a is not mis-split on the ':' inside the URI).
+//  2. prefix:local — lexical QName; the prefix resolves via the pattern's
+//     namespace snapshot (ec.resolvePrefix during pattern matching).
+//  3. bare local — unprefixed; resolves to xpath-default-namespace when one is
+//     in effect (including an explicit "" reset → no namespace), else to no
+//     namespace.
+func resolvePatternKindTestName(ec *execContext, name string) (string, string) {
+	if strings.HasPrefix(name, "Q{") {
+		if closeIdx := strings.IndexByte(name, '}'); closeIdx >= 0 {
+			return name[closeIdx+1:], name[2:closeIdx]
+		}
+		// Malformed Q{...} without a closing brace: treat the whole thing as a
+		// local name in no namespace.
+		return name, ""
 	}
-	return "", name
+	if prefix, local, ok := strings.Cut(name, ":"); ok {
+		uri := ""
+		if ec != nil {
+			uri = ec.resolvePrefix(prefix)
+		}
+		return local, uri
+	}
+	uri := ""
+	if ec != nil && ec.hasXPathDefaultNS {
+		uri = ec.xpathDefaultNS
+	}
+	return name, uri
 }
 
 func matchTypeTest(tt xpath3.TypeTest, node helium.Node) bool {
@@ -1403,33 +1441,12 @@ func matchElementTest(ctx context.Context, ec *execContext, et xpath3.ElementTes
 	if !ok {
 		return false
 	}
-	// Check local name match (may contain prefix:local or Q{uri}local)
-	name := et.Name
-	nameMatch := false
-	if strings.HasPrefix(name, "Q{") {
-		closeIdx := strings.IndexByte(name, '}')
-		if closeIdx > 0 {
-			uri := name[2:closeIdx]
-			local := name[closeIdx+1:]
-			nameMatch = elem.LocalName() == local && elem.URI() == uri
-		}
-	} else if prefix, local, ok := strings.Cut(name, ":"); ok {
-		uri := ""
-		if ec != nil {
-			uri = ec.resolvePrefix(prefix)
-		}
-		nameMatch = elem.LocalName() == local && elem.URI() == uri
-	} else {
-		// Unprefixed name: resolve the expected namespace the same way a
-		// NameTest does — xpath-default-namespace when set, otherwise
-		// no-namespace. Compare BOTH local name and namespace URI.
-		expectedURI := ""
-		if ec != nil && ec.hasXPathDefaultNS {
-			expectedURI = ec.xpathDefaultNS
-		}
-		nameMatch = elem.LocalName() == name && elem.URI() == expectedURI
-	}
-	if !nameMatch {
+	// Resolve the test name through the shared pattern-name resolver (Q{}-first
+	// EQName parsing, lexical-snapshot prefix resolution, xpath-default-namespace
+	// for bare names) so element() resolves identically to NameTest. Compare BOTH
+	// local name and namespace URI.
+	local, uri := resolvePatternKindTestName(ec, et.Name)
+	if elem.LocalName() != local || elem.URI() != uri {
 		return false
 	}
 	// Check type annotation if specified
@@ -1467,27 +1484,16 @@ func matchAttributeTest(ctx context.Context, ec *execContext, at xpath3.Attribut
 	if idx := strings.IndexByte(attrLocal, ':'); idx >= 0 {
 		attrLocal = attrLocal[idx+1:]
 	}
-	name := at.Name
-	nameMatch := false
-	if prefix, local, ok := strings.Cut(name, ":"); ok {
-		uri := ""
-		if ec != nil {
-			uri = ec.resolvePrefix(prefix)
-		}
-		nameMatch = attrLocal == local && attr.URI() == uri
-	} else if strings.HasPrefix(name, "Q{") {
-		// URIQualifiedName: Q{uri}local
-		closeIdx := strings.IndexByte(name, '}')
-		if closeIdx >= 0 {
-			uri := name[2:closeIdx]
-			local := name[closeIdx+1:]
-			nameMatch = attrLocal == local && attr.URI() == uri
-		}
-	} else {
-		// Bare name (no prefix): matches only attributes in no namespace.
-		nameMatch = attrLocal == name && attr.URI() == ""
+	// Resolve the test name through the shared pattern-name resolver (Q{}-first
+	// EQName parsing, then prefix:local via the lexical snapshot). A bare,
+	// unprefixed attribute name is always in no namespace — the
+	// xpath-default-namespace governs element names, not attribute names — so
+	// override the resolver's default for the bare case.
+	local, uri := resolvePatternKindTestName(ec, at.Name)
+	if !strings.HasPrefix(at.Name, "Q{") && !strings.Contains(at.Name, ":") {
+		uri = ""
 	}
-	if !nameMatch {
+	if attrLocal != local || attr.URI() != uri {
 		return false
 	}
 	// Check type annotation if specified

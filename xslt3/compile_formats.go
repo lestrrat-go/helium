@@ -118,7 +118,17 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 		return staticError(errCodeXTSE0110, "xsl:key requires match attribute")
 	}
 
-	matchPat, err := compilePattern(matchAttr, elem, c.xpathDefaultNS)
+	// Apply a local xpath-default-namespace on the xsl:key element (presence,
+	// even an empty value, overrides the inherited default) so the @match
+	// pattern's unprefixed names resolve consistently with NameTest semantics.
+	xpathDefaultNS := c.xpathDefaultNS
+	hasXPathDefaultNS := c.hasXPathDefaultNS
+	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
+		xpathDefaultNS = xdn
+		hasXPathDefaultNS = true
+	}
+
+	matchPat, err := compilePattern(matchAttr, elem, xpathDefaultNS, hasXPathDefaultNS)
 	if err != nil {
 		return err
 	}

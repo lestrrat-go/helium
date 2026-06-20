@@ -190,10 +190,12 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			// Push element-local namespace declarations into scope
 			savedBindings := c.pushElementNamespaces(ctx, childElem)
 			savedNS := c.xpathDefaultNS
+			savedHasNS := c.hasXPathDefaultNS
 			savedET := c.expandText
 			hasLocal := false
 			if xdn, ok := childElem.GetAttribute("xpath-default-namespace"); ok {
 				c.xpathDefaultNS = xdn
+				c.hasXPathDefaultNS = true
 				hasLocal = true
 			}
 			if et := getAttr(childElem, "expand-text"); et != "" {
@@ -205,6 +207,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			if testAttr == "" {
 				c.nsBindings = savedBindings
 				c.xpathDefaultNS = savedNS
+				c.hasXPathDefaultNS = savedHasNS
 				c.expandText = savedET
 				return nil, staticError(errCodeXTSE0110, "xsl:when requires test attribute")
 			}
@@ -212,6 +215,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			if err != nil {
 				c.nsBindings = savedBindings
 				c.xpathDefaultNS = savedNS
+				c.hasXPathDefaultNS = savedHasNS
 				c.expandText = savedET
 				return nil, err
 			}
@@ -228,6 +232,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			wc.HasXPathDefaultNS = hasLocal
 			c.nsBindings = savedBindings
 			c.xpathDefaultNS = savedNS
+			c.hasXPathDefaultNS = savedHasNS
 			c.expandText = savedET
 			if err != nil {
 				return nil, err
@@ -240,10 +245,12 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			}
 			hasOtherwise = true
 			savedNS := c.xpathDefaultNS
+			savedHasNS := c.hasXPathDefaultNS
 			savedET := c.expandText
 			hasLocal := false
 			if xdn, ok := childElem.GetAttribute("xpath-default-namespace"); ok {
 				c.xpathDefaultNS = xdn
+				c.hasXPathDefaultNS = true
 				hasLocal = true
 			}
 			if et := getAttr(childElem, "expand-text"); et != "" {
@@ -257,6 +264,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 				inst.HasOtherwiseXPNS = true
 			}
 			c.xpathDefaultNS = savedNS
+			c.hasXPathDefaultNS = savedHasNS
 			c.expandText = savedET
 			if err != nil {
 				return nil, err
@@ -845,14 +853,14 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 		inst.GroupAdjacent = gaExpr
 	}
 	if gs := getAttr(elem, "group-starting-with"); gs != "" {
-		gsPat, gsErr := compilePattern(gs, elem, c.xpathDefaultNS)
+		gsPat, gsErr := compilePattern(gs, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
 		if gsErr != nil {
 			return nil, gsErr
 		}
 		inst.GroupStartingWith = gsPat
 	}
 	if ge := getAttr(elem, "group-ending-with"); ge != "" {
-		gePat, geErr := compilePattern(ge, elem, c.xpathDefaultNS)
+		gePat, geErr := compilePattern(ge, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
 		if geErr != nil {
 			return nil, geErr
 		}

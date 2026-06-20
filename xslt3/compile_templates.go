@@ -27,19 +27,25 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	// evaluating use-when so the expression has the correct namespace context.
 	c.collectNamespaces(ctx, elem)
 	savedXPathDefaultNS := c.xpathDefaultNS
-	if xdn := getAttr(elem, "xpath-default-namespace"); xdn != "" {
+	savedHasXPathDefaultNS := c.hasXPathDefaultNS
+	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
 		c.xpathDefaultNS = xdn
+		c.hasXPathDefaultNS = true
+	}
+	restoreXPathDefaultNS := func() {
+		c.xpathDefaultNS = savedXPathDefaultNS
+		c.hasXPathDefaultNS = savedHasXPathDefaultNS
 	}
 
 	// Evaluate use-when before compiling the template.
 	if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
 		include, err := c.evaluateUseWhen(ctx, uw)
 		if err != nil {
-			c.xpathDefaultNS = savedXPathDefaultNS
+			restoreXPathDefaultNS()
 			return err
 		}
 		if !include {
-			c.xpathDefaultNS = savedXPathDefaultNS
+			restoreXPathDefaultNS()
 			return nil
 		}
 	}
@@ -58,7 +64,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		BaseURI:       templateBaseURI,
 	}
 	tmpl.XPathDefaultNS = c.xpathDefaultNS
-	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+	defer restoreXPathDefaultNS()
 
 	// Inherit or override default-collation
 	savedDefaultCollation := c.defaultCollation
@@ -72,7 +78,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
-		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS)
+		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
 		if err != nil {
 			return err
 		}
@@ -296,10 +302,11 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 			for _, alt := range tmpl.Match.Alternatives {
 				split := *tmpl // shallow copy shares Body, Params, etc.
 				split.Match = &pattern{
-					source:         tmpl.Match.source,
-					Alternatives:   []*patternAlt{alt},
-					xpathDefaultNS: tmpl.Match.xpathDefaultNS,
-					nsBindings:     tmpl.Match.nsBindings,
+					source:            tmpl.Match.source,
+					Alternatives:      []*patternAlt{alt},
+					xpathDefaultNS:    tmpl.Match.xpathDefaultNS,
+					hasXPathDefaultNS: tmpl.Match.hasXPathDefaultNS,
+					nsBindings:        tmpl.Match.nsBindings,
 				}
 				split.Priority = alt.priority
 				splitCopy := split // allocate separate heap object

@@ -251,17 +251,23 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 	// On XSLT elements: check unprefixed attribute.
 	// On LREs: only check xsl:-prefixed (in XSLT namespace).
 	savedXPathDefaultNS := c.xpathDefaultNS
+	savedHasXPathDefaultNS := c.hasXPathDefaultNS
 	hasLocalXPNS := false
 	if elem.URI() == lexicon.NamespaceXSLT {
 		if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
 			c.xpathDefaultNS = xdn
+			c.hasXPathDefaultNS = true
 			hasLocalXPNS = true
 		}
 	} else if xdn, ok := elem.GetAttributeNS("xpath-default-namespace", lexicon.NamespaceXSLT); ok {
 		c.xpathDefaultNS = xdn
+		c.hasXPathDefaultNS = true
 		hasLocalXPNS = true
 	}
-	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+	defer func() {
+		c.xpathDefaultNS = savedXPathDefaultNS
+		c.hasXPathDefaultNS = savedHasXPathDefaultNS
+	}()
 
 	// Handle per-instruction default-collation
 	savedDefaultCollation := c.defaultCollation

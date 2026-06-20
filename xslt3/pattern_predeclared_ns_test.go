@@ -473,6 +473,146 @@ func TestPatternElementKindTestNamespace(t *testing.T) {
 	})
 }
 
+// TestPatternXPathDefaultNamespaceEmptyResets verifies that an explicit
+// xpath-default-namespace="" RESETS an inherited default to no-namespace for
+// match patterns. The stylesheet root sets xpath-default-namespace="urn:x", but
+// a template re-declares xpath-default-namespace="" — there unprefixed pattern
+// names must resolve to NO namespace, not the inherited urn:x.
+func TestPatternXPathDefaultNamespaceEmptyResets(t *testing.T) {
+	t.Parallel()
+
+	// Root default is urn:x. The matching template explicitly clears it with
+	// xpath-default-namespace="". So match="a" there must resolve to no-namespace
+	// and MATCH a no-namespace <a/>, while NOT matching {urn:x}a.
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xpath-default-namespace="urn:x">
+  <xsl:template match="/"><out><xsl:apply-templates select="//*"/></out></xsl:template>
+  <xsl:template match="a" xpath-default-namespace=""><xsl:text>[matched]</xsl:text></xsl:template>
+  <xsl:template match="*"/>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err)
+
+	noNS, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/></root>`))
+	require.NoError(t, err)
+	outNoNS, err := ss.Transform(noNS).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, outNoNS, "[matched]",
+		"xpath-default-namespace=\"\" must reset the inherited default, so match=\"a\" matches no-namespace <a/>")
+
+	withNS, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root xmlns="urn:x"><a/></root>`))
+	require.NoError(t, err)
+	outNS, err := ss.Transform(withNS).Serialize(t.Context())
+	require.NoError(t, err)
+	require.NotContains(t, outNS, "[matched]",
+		"xpath-default-namespace=\"\" must reset the inherited default, so match=\"a\" must NOT match {urn:x}a")
+}
+
+// TestKeyMatchHonorsLocalXPathDefaultNamespace verifies that xsl:key/@match
+// honors a local xpath-default-namespace set on the xsl:key element itself
+// (not only an inherited one). With xpath-default-namespace="urn:x" on the
+// xsl:key, an unprefixed match="a" must resolve to {urn:x}a.
+func TestKeyMatchHonorsLocalXPathDefaultNamespace(t *testing.T) {
+	t.Parallel()
+
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:key name="k" match="a" use="@id" xpath-default-namespace="urn:x"/>
+  <xsl:template match="/"><out><xsl:value-of select="count(key('k','1'))"/></out></xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err)
+
+	// {urn:x}a present: the key's match (resolved to {urn:x}a via the local
+	// xpath-default-namespace) must index it, so count is 1.
+	withNS, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root xmlns="urn:x"><a id="1"/></root>`))
+	require.NoError(t, err)
+	outNS, err := ss.Transform(withNS).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, outNS, "<out>1</out>",
+		"xsl:key/@match must honor a local xpath-default-namespace and index {urn:x}a")
+
+	// No-namespace <a> must NOT be indexed by a key whose match resolves to {urn:x}a.
+	noNS, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a id="1"/></root>`))
+	require.NoError(t, err)
+	outNoNS, err := ss.Transform(noNS).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, outNoNS, "<out>0</out>",
+		"key whose match resolves to {urn:x}a must NOT index a no-namespace <a>")
+}
+
+// TestPatternAttributeKindTestEQName verifies that attribute(Q{uri}local) in a
+// match pattern parses the braced EQName form FIRST, not as prefix "Q{http".
+// attribute(Q{http://x}a) must match an attribute named a in namespace http://x.
+func TestPatternAttributeKindTestEQName(t *testing.T) {
+	t.Parallel()
+
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="root/e/@*"/></out></xsl:template>
+  <xsl:template match="attribute(Q{http://x}a)"><xsl:text>[matched]</xsl:text></xsl:template>
+  <xsl:template match="@*"/>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err)
+
+	// Attribute a in namespace http://x must match.
+	withNS, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root><e xmlns:p="http://x" p:a="v"/></root>`))
+	require.NoError(t, err)
+	outNS, err := ss.Transform(withNS).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, outNS, "[matched]",
+		"attribute(Q{http://x}a) must parse as EQName {http://x}a and match p:a")
+
+	// A no-namespace attribute "a" must NOT match.
+	noNS, err := helium.NewParser().Parse(t.Context(), []byte(`<root><e a="v"/></root>`))
+	require.NoError(t, err)
+	outNoNS, err := ss.Transform(noNS).Serialize(t.Context())
+	require.NoError(t, err)
+	require.NotContains(t, outNoNS, "[matched]",
+		"attribute(Q{http://x}a) must NOT match a no-namespace attribute a")
+}
+
+// TestPatternSchemaElementTestUsesPatternSnapshot verifies that
+// schema-element()/schema-attribute() resolve the test name through the
+// pattern's lexical namespace snapshot, not the stylesheet-global map. A locally
+// overridden prefix must bind to the overriding namespace so that compile-time
+// and runtime resolution agree. (Schema-awareness is limited here, so without a
+// registered schema these patterns never match; the assertion is that the
+// stylesheet compiles and that prefix resolution does not crash/mis-resolve.)
+func TestPatternSchemaElementTestUsesPatternSnapshot(t *testing.T) {
+	t.Parallel()
+
+	// p is bound globally to urn:global but locally overridden to urn:local on
+	// the matching template. The schema-element(p:a) name must resolve to
+	// urn:local (the pattern snapshot), not urn:global.
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:p="urn:global">
+  <xsl:template match="/"><out><xsl:apply-templates select="//*"/></out></xsl:template>
+  <xsl:template match="schema-element(p:a)" xmlns:p="urn:local"><xsl:text>[elem]</xsl:text></xsl:template>
+  <xsl:template match="schema-attribute(p:b)" xmlns:p="urn:local"><xsl:text>[attr]</xsl:text></xsl:template>
+  <xsl:template match="*"/>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	_, err = xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err,
+		"schema-element/schema-attribute with a locally overridden prefix must compile")
+}
+
 // TestPatternFnCurrentCompiles verifies fn:current() is accepted (not rejected
 // as XPST0017) inside a pattern predicate.
 func TestPatternFnCurrentCompiles(t *testing.T) {
