@@ -810,11 +810,17 @@ func (c *compiler) checkCircularAttrGroupRefs(ctx context.Context) {
 			child := c.attrGroupRefChildren[qn][i]
 			if onStack[child] {
 				// Back-edge qn -> child closes a cycle through child. Report it as a
-				// circular reference to child and cut the edge so the flatten/expand
-				// walks below terminate without a diagnostic-less truncation.
-				c.reportCircularAttrGroupRefQName(ctx, qn, child)
+				// circular reference to child, attributed to THIS back-edge ref
+				// element's recorded source (index-aligned with attrGroupRefChildren),
+				// then cut the edge so the flatten/expand walks below terminate
+				// without a diagnostic-less truncation.
+				edgeSrc := c.attrGroupRefSourceAt(qn, i)
+				c.reportCircularAttrGroupRefQName(ctx, child, edgeSrc)
 				children := c.attrGroupRefChildren[qn]
 				c.attrGroupRefChildren[qn] = append(children[:i], children[i+1:]...)
+				if srcs := c.attrGroupRefSources[qn]; i < len(srcs) {
+					c.attrGroupRefSources[qn] = append(srcs[:i], srcs[i+1:]...)
+				}
 				i--
 				continue
 			}
@@ -835,19 +841,30 @@ func (c *compiler) checkCircularAttrGroupRefs(ctx context.Context) {
 	}
 }
 
+// attrGroupRefSourceAt returns the per-edge source recorded for the i-th nested
+// xs:attributeGroup ref child of ownerQN (index-aligned with
+// c.attrGroupRefChildren[ownerQN]), falling back to the owning group's
+// declaration source if the parallel slice is short (which should not happen).
+func (c *compiler) attrGroupRefSourceAt(ownerQN QName, i int) attrGroupSource {
+	if srcs := c.attrGroupRefSources[ownerQN]; i < len(srcs) {
+		return srcs[i]
+	}
+	return c.attrGroupSources[ownerQN]
+}
+
 // reportCircularAttrGroupRefQName emits the src-attribute_group.3 circular-
-// reference diagnostic for an INDIRECT attribute-group cycle whose back-edge runs
-// from ownerQN to targetQN. The diagnostic names the group being circularly
-// referenced (targetQN) and is attributed to the referencing group's (ownerQN)
-// recorded source line/file so an included schema is cited correctly, matching
-// the direct-self-reference path's attribution.
-func (c *compiler) reportCircularAttrGroupRefQName(ctx context.Context, ownerQN, targetQN QName) {
+// reference diagnostic for an INDIRECT attribute-group cycle. The diagnostic
+// names the group being circularly referenced (targetQN) and is attributed to
+// the BACK-EDGE <xs:attributeGroup ref="..."> element's recorded source
+// (edgeSrc) — the ref that actually closed the cycle — so the reported line is
+// the ref line, matching the direct-self-reference path's attribution and
+// pointing at the right file when the cycle spans included/redefined schemas.
+func (c *compiler) reportCircularAttrGroupRefQName(ctx context.Context, targetQN QName, edgeSrc attrGroupSource) {
 	if c.filename == "" {
 		return
 	}
-	src := c.attrGroupSources[ownerQN]
 	msg := fmt.Sprintf("Circular reference to the attribute group '%s' defined.", formatAttrQName(targetQN))
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSourceOrRecorded(src.source), src.line, "attributeGroup", "attributeGroup", msg), helium.ErrorLevelFatal))
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.diagSourceOrRecorded(edgeSrc.source), edgeSrc.line, "attributeGroup", "attributeGroup", msg), helium.ErrorLevelFatal))
 	c.errorCount++
 }
 

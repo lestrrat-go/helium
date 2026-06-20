@@ -485,7 +485,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 			// checkAttrGroupDuplicates would flatten the wrong reference set (old
 			// refs leak, new refs are ignored).
 			origRefChildren := c.attrGroupRefChildren[qn]
+			origRefSources := c.attrGroupRefSources[qn]
 			delete(c.attrGroupRefChildren, qn)
+			delete(c.attrGroupRefSources, qn)
 			// Build the new attribute list manually, expanding self-references
 			// inline. parseNamedAttributeGroup only collects xs:attribute children
 			// and doesn't handle xs:attributeGroup ref children within a definition.
@@ -524,11 +526,13 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 							}
 							if len(origRefChildren) > 0 {
 								c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], origRefChildren...)
+								c.attrGroupRefSources[qn] = append(c.attrGroupRefSources[qn], origRefSources...)
 							}
 						default:
 							// A non-self nested ref in the override is recorded so
 							// checkAttrGroupDuplicates flattens the redefining ref set.
 							c.attrGroupRefChildren[qn] = append(c.attrGroupRefChildren[qn], refQN)
+							c.attrGroupRefSources[qn] = append(c.attrGroupRefSources[qn], attrGroupSource{line: gce.Line(), source: c.diagSource()})
 						}
 					}
 				}
@@ -636,6 +640,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		attrGroupRefChildren:     make(map[QName][]QName),
+		attrGroupRefSources:      make(map[QName][]attrGroupSource),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
 		typeKinds:                make(map[QName]redefineKind),
@@ -778,6 +783,23 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		if _, exists := c.attrGroupRefChildren[qn]; !exists {
 			c.attrGroupRefChildren[qn] = refs
 		}
+	}
+	// Merge the per-edge ref sources alongside attrGroupRefChildren. A ref edge
+	// parsed directly in the imported document (not via a nested include) has an
+	// empty source; attribute it to the imported file so an indirect-cycle
+	// diagnostic cites the file whose ref line number it carries.
+	for qn, srcs := range impC.attrGroupRefSources {
+		if _, exists := c.attrGroupRefSources[qn]; exists {
+			continue
+		}
+		merged := make([]attrGroupSource, len(srcs))
+		for i, src := range srcs {
+			if src.source == "" {
+				src.source = impC.filename
+			}
+			merged[i] = src
+		}
+		c.attrGroupRefSources[qn] = merged
 	}
 	maps.Copy(c.globalElemSources, impC.globalElemSources)
 	maps.Copy(c.itemTypeRefs, impC.itemTypeRefs)

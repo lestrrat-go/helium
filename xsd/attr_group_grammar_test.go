@@ -198,6 +198,103 @@ func TestAttrGroupSelfReferenceSourceInclude(t *testing.T) {
 		"circular-reference diagnostic must not cite the top-level label; got: %q", errStr)
 }
 
+// TestAttrGroupIndirectCycleBackEdgeLine verifies that an INDIRECT
+// attribute-group cycle's circular-reference diagnostic is attributed to the
+// BACK-EDGE <xs:attributeGroup ref="..."> element's line — the ref that actually
+// closed the cycle — not to the owning group's declaration line. The owner
+// declaration and the back-edge ref are on deliberately different lines.
+func TestAttrGroupIndirectCycleBackEdgeLine(t *testing.T) {
+	t.Parallel()
+
+	// DFS visits roots in sorted QName order (h before i): visit(h)->visit(i),
+	// where i's <xs:attributeGroup ref="h"/> is the back-edge closing the cycle.
+	// Line numbers (1-based): line 1 is <xs:schema>.
+	//   2: <xs:attributeGroup name="h">
+	//   3:   <xs:attribute name="a"/>
+	//   4:   <xs:attributeGroup ref="i"/>
+	//   5: </xs:attributeGroup>
+	//   6: <xs:attributeGroup name="i">   <- owner declaration line
+	//   7:   <xs:attribute name="b"/>
+	//   8:   <xs:attributeGroup ref="h"/> <- BACK-EDGE ref line (expected)
+	schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="h">
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:attributeGroup ref="i"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="i">
+    <xs:attribute name="b" type="xs:string"/>
+    <xs:attributeGroup ref="h"/>
+  </xs:attributeGroup>
+  <xs:complexType name="t">
+    <xs:attributeGroup ref="h"/>
+  </xs:complexType>
+  <xs:element name="root" type="t"/>
+</xs:schema>`
+
+	_, errs := compileWithErrors(t, schemaXML)
+	require.Contains(t, errs, "Circular reference to the attribute group",
+		"an indirect attribute-group cycle must be reported as circular; got: %q", errs)
+	// The diagnostic must cite the back-edge ref line (8), not the owner 'i'
+	// declaration line (6).
+	require.Contains(t, errs, ":8:",
+		"circular-reference diagnostic must cite the back-edge ref line; got: %q", errs)
+	require.NotContains(t, errs, ":6:",
+		"circular-reference diagnostic must not cite the owner group declaration line; got: %q", errs)
+}
+
+// TestAttrGroupIndirectCycleBackEdgeSourceInclude verifies that an INDIRECT
+// attribute-group cycle spanning an xs:include is attributed to the FILE and
+// LINE of the back-edge <xs:attributeGroup ref="..."> element that closed the
+// cycle, not to the owning group's declaration (which lives in a different
+// file). This is the cross-file case the per-edge source map exists for.
+func TestAttrGroupIndirectCycleBackEdgeSourceInclude(t *testing.T) {
+	t.Parallel()
+
+	const (
+		mainXSD = "agcycle_main.xsd"
+		incXSD  = "agcycle_inc.xsd"
+	)
+
+	// Group h is declared in the main file and refs i; group i is declared in the
+	// included file and refs h. DFS visits h (main) then i (inc): i's ref-to-h is
+	// the back-edge. The diagnostic must cite the included file's ref line, since
+	// that ref element lives in the included file.
+	//
+	// Included file line numbers (1-based):
+	//   1: <xs:schema>
+	//   2: <xs:attributeGroup name="i">   <- owner declaration
+	//   3:   <xs:attribute name="b"/>
+	//   4:   <xs:attributeGroup ref="h"/> <- BACK-EDGE ref (expected line 4)
+	fsys := fstest.MapFS{
+		mainXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="agcycle_inc.xsd"/>
+  <xs:attributeGroup name="h">
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:attributeGroup ref="i"/>
+  </xs:attributeGroup>
+  <xs:complexType name="t">
+    <xs:attributeGroup ref="h"/>
+  </xs:complexType>
+  <xs:element name="root" type="t"/>
+</xs:schema>`)},
+		incXSD: &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="i">
+    <xs:attribute name="b" type="xs:string"/>
+    <xs:attributeGroup ref="h"/>
+  </xs:attributeGroup>
+</xs:schema>`)},
+	}
+
+	errStr := compileFSErrors(t, fsys, mainXSD)
+	require.Contains(t, errStr, "Circular reference to the attribute group",
+		"expected the circular-reference diagnostic; got: %q", errStr)
+	// The back-edge ref lives in the included file at line 4.
+	require.Contains(t, errStr, incXSD+":4:",
+		"circular-reference diagnostic must cite the back-edge ref file and line; got: %q", errStr)
+	require.False(t, strings.Contains(errStr, mainXSD+":"),
+		"circular-reference diagnostic must not cite the file holding the owner declaration; got: %q", errStr)
+}
+
 // TestOccursDiagnosticSourceInclude verifies that the occurrence/all schema
 // diagnostics introduced for cos-all-limited / xs:nonNegativeInteger occurrence
 // validation are attributed to the DECLARING file when the offending particle
