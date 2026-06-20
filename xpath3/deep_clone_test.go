@@ -311,6 +311,33 @@ func TestDeepCloneValueSemantics(t *testing.T) {
 		})
 	}
 
+	// The array:flatten() function (not just the ArrayItem.Flatten() method)
+	// must hand back deep-cloned leaf items. Under EvalBorrowing the variable
+	// array is the same Go ArrayItem we hold here, so a regression that appends
+	// the borrowed stored item lets a mutation of the flattened output reach the
+	// source array. Mutate the result and assert the source array is unchanged.
+	t.Run("array:flatten output is detached", func(t *testing.T) {
+		t.Parallel()
+
+		seq, _ := bigIntSeq(7)
+		arr := xpath3.NewArray([]xpath3.Sequence{seq})
+
+		compiled, err := xpath3.NewCompiler().Compile(`array:flatten($a)`)
+		require.NoError(t, err)
+
+		result, err := xpath3.NewEvaluator(xpath3.EvalBorrowing).
+			Variables(varsSet("a", xpath3.ItemSlice{arr})).
+			Evaluate(t.Context(), compiled, nil)
+		require.NoError(t, err)
+
+		// Mutate the *big.Int returned by flatten.
+		mutateBigInt(t, result.Sequence())
+
+		got, err := arr.Get(1)
+		require.NoError(t, err)
+		require.Equal(t, int64(7), readInt(t, got), "source array member must be unaffected by mutation of the array:flatten output")
+	})
+
 	t.Run("byte-slice atomic is detached", func(t *testing.T) {
 		t.Parallel()
 
