@@ -376,6 +376,67 @@ func TestUnaryLookupLimit(t *testing.T) {
 		require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
 	})
 
+	t.Run("over/map-all-lazy-panic", func(t *testing.T) {
+		t.Parallel()
+		// `?*` over a map whose single value is a panicOnMaterializeSeq: the
+		// all-values walk must drain the value lazily and trip the size bound
+		// BEFORE materializing it. A regression that materializes the value up
+		// front (the original appendBounded(seqMaterialize(val), ...)) would call
+		// Materialize and panic instead of returning ErrNodeSetLimit. The map is
+		// built with map:entry inside the expression (which borrows the value, not
+		// clones it) under EvalBorrowing so the value reaches lookupItem
+		// un-materialized; only lookupItem's own bound can fire.
+		compiled, err := xpath3.NewCompiler().Compile(`map:entry("k", $panic) ! ?*`)
+		require.NoError(t, err)
+		var evalErr error
+		require.NotPanics(t, func() {
+			_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(varsSet("panic", panicOnMaterializeSeq{n: limit + 1})).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+		})
+		require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+	})
+
+	t.Run("over/array-all-lazy-panic", func(t *testing.T) {
+		t.Parallel()
+		// `?*` over an array whose single member is a panicOnMaterializeSeq: the
+		// all-values walk must drain the member lazily and trip the size bound
+		// BEFORE materializing it. A regression that materializes the member up
+		// front (the original appendBounded(seqMaterialize(m), ...)) would call
+		// Materialize and panic instead of returning ErrNodeSetLimit. The array is
+		// handed in via a variable under EvalBorrowing so the member reaches
+		// lookupItem un-materialized; only lookupItem's own bound can fire.
+		arr := xpath3.NewArrayBorrowingForTesting([]xpath3.Sequence{panicOnMaterializeSeq{n: limit + 1}})
+		compiled, err := xpath3.NewCompiler().Compile(`$a ! ?*`)
+		require.NoError(t, err)
+		var evalErr error
+		require.NotPanics(t, func() {
+			_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(varsSet("a", xpath3.ItemSlice{arr})).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+		})
+		require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+	})
+
+	t.Run("over/array-keyed-lazy-panic", func(t *testing.T) {
+		t.Parallel()
+		// Same as above but for the keyed lookup `?1`: the keyed branch must also
+		// drain the borrowed member lazily and trip the bound before materializing.
+		arr := xpath3.NewArrayBorrowingForTesting([]xpath3.Sequence{panicOnMaterializeSeq{n: limit + 1}})
+		compiled, err := xpath3.NewCompiler().Compile(`$a ! ?1`)
+		require.NoError(t, err)
+		var evalErr error
+		require.NotPanics(t, func() {
+			_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(varsSet("a", xpath3.ItemSlice{arr})).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+		})
+		require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+	})
+
 	t.Run("within/array-all", func(t *testing.T) {
 		t.Parallel()
 		compiled, err := xpath3.NewCompiler().Compile(`?*`)

@@ -70,8 +70,16 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 		if all {
 			var result ItemSlice
 			var boundErr error
-			_ = v.ForEach(func(_ AtomicValue, val Sequence) error {
-				result, boundErr = appendBounded(result, seqMaterialize(val), ec.maxNodes)
+			// Bounded internal walk: iterate the stored values in place without
+			// cloning (mirroring the get0/entries0 walkers) so a borrowed lazy
+			// value is bound-checked rather than eagerly cloned.
+			// appendBoundedClonedSeq drains each value lazily, enforcing maxNodes
+			// (and OpLimit / cancellation) BEFORE the value is materialized — so a
+			// lazy value whose Materialize is unbounded/panics trips the bound
+			// first — and appends a defensive clone of each item so mutating the
+			// `?*` output cannot reach the source map's stored values.
+			_ = v.forEach0(func(_ AtomicValue, val Sequence) error {
+				result, boundErr = appendBoundedClonedSeq(ctx, ec, result, val, ec.maxNodes)
 				return boundErr
 			})
 			if boundErr != nil {
@@ -92,11 +100,16 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 			if err != nil {
 				return nil, err
 			}
-			val, ok := v.Get(ka)
+			// Use get0 to borrow the stored value WITHOUT cloning, then drain it
+			// through appendBoundedClonedSeq so maxNodes / OpLimit / cancellation
+			// fire BEFORE the value is materialized (public Get deep-clones by
+			// materializing eagerly, defeating the bound for a borrowed lazy
+			// value). Cloning each appended item keeps value semantics.
+			val, ok := v.get0(ka)
 			if !ok {
 				continue
 			}
-			result, err = appendBounded(result, seqMaterialize(val), ec.maxNodes)
+			result, err = appendBoundedClonedSeq(ctx, ec, result, val, ec.maxNodes)
 			if err != nil {
 				return nil, err
 			}
@@ -105,9 +118,14 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 	case ArrayItem:
 		if all {
 			var result ItemSlice
+			// Borrow each stored member WITHOUT cloning (members0), then drain
+			// it through appendBoundedClonedSeq so maxNodes / OpLimit /
+			// cancellation fire BEFORE the member is materialized, and each
+			// appended item is a defensive clone — so mutating the `?*` output
+			// cannot reach the source array's pointer-backed atomics.
 			for _, m := range v.members0() {
 				var err error
-				result, err = appendBounded(result, seqMaterialize(m), ec.maxNodes)
+				result, err = appendBoundedClonedSeq(ctx, ec, result, m, ec.maxNodes)
 				if err != nil {
 					return nil, err
 				}
@@ -140,11 +158,16 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 			if err != nil {
 				return nil, err
 			}
+			// Borrow the stored member WITHOUT cloning (get0), then drain it
+			// through appendBoundedClonedSeq so maxNodes / OpLimit /
+			// cancellation fire BEFORE the member is materialized, and each
+			// appended item is a defensive clone — so mutating the keyed lookup
+			// output cannot reach the source array's pointer-backed atomics.
 			member, err := v.get0(idx)
 			if err != nil {
 				return nil, err
 			}
-			result, err = appendBounded(result, seqMaterialize(member), ec.maxNodes)
+			result, err = appendBoundedClonedSeq(ctx, ec, result, member, ec.maxNodes)
 			if err != nil {
 				return nil, err
 			}

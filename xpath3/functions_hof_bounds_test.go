@@ -17,6 +17,9 @@ const (
 	tcArrayFlatMap     = "array-flat-map"
 	tcArrayFlatten     = "array-flatten"
 	tcMapFind          = "map-find"
+	tcMapForEach       = "map-for-each"
+	tcMapKeyedLookup   = "map-keyed-lookup"
+	tcMapGet           = "map-get"
 )
 
 // panicOnMaterializeSeq is a Sequence of n items where realizing the WHOLE
@@ -387,6 +390,37 @@ func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
 			expr: `map:find(map:entry("k", $panic), "k")`,
 			vars: varsSet("panic", panicOnMaterializeSeq{n: wide}),
 		},
+		// map:for-each clones each entry value before invoking the callback; the
+		// op-charge on the value length must fire before that clone. The value is
+		// a panicOnMaterializeSeq stored via map:entry (borrowed, not cloned), and
+		// the callback returns () so it never iterates $v itself — so ONLY
+		// map:for-each's own per-value precharge can stop the run. A regression
+		// that clones the borrowed value before charging ops calls Materialize and
+		// panics instead of returning ErrOpLimit.
+		{
+			name: tcMapForEach,
+			expr: `map:for-each(map:entry("k", $panic), function($k, $v) { () })`,
+			vars: varsSet("panic", panicOnMaterializeSeq{n: wide}),
+		},
+		// Keyed `?key` lookup borrows the stored value via get0 and drains it
+		// through the bounded cloning helper, so the per-item op-charge fires
+		// before materialization. The value is a panicOnMaterializeSeq stored via
+		// map:entry (borrowed, not cloned): a regression that uses the public Get
+		// (which deep-clones by materializing) calls Materialize and panics instead
+		// of returning ErrOpLimit.
+		{
+			name: tcMapKeyedLookup,
+			expr: `map:entry("k", $panic) ! ?k`,
+			vars: varsSet("panic", panicOnMaterializeSeq{n: wide}),
+		},
+		// map:get likewise borrows via get0 and drains through the bounded cloning
+		// helper, so the op-charge fires before materialization. A regression that
+		// uses public Get materializes the borrowed value and panics.
+		{
+			name: tcMapGet,
+			expr: `map:get(map:entry("k", $panic), "k")`,
+			vars: varsSet("panic", panicOnMaterializeSeq{n: wide}),
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -394,9 +428,9 @@ func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
 			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
 			require.NoError(t, err)
 			var evalErr error
-			// NotPanics guards the map-find case against a regression that clones
-			// the borrowed value before charging ops (which calls Materialize and
-			// panics).
+			// NotPanics guards the map-find / map-for-each cases against a
+			// regression that clones the borrowed value before charging ops (which
+			// calls Materialize and panics).
 			require.NotPanics(t, func() {
 				// EvalBorrowing keeps the value out of the variable-clone path, and
 				// no MaxNodesForTesting is set, so only the op-counter can fire.
