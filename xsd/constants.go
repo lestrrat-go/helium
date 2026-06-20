@@ -84,6 +84,7 @@ const (
 	attrValRequired     = "required"
 	attrValRestriction  = "restriction"
 	attrValSkip         = "skip"
+	attrValStrict       = "strict"
 	attrValSubstitution = "substitution"
 	attrValUnbounded    = "unbounded"
 	attrValUnion        = "union"
