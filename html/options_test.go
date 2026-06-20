@@ -234,6 +234,14 @@ func TestParseFileSetsURL(t *testing.T) {
 	require.Equal(t, abs, doc.URL())
 }
 
+func TestParseFileMissingFileErrors(t *testing.T) {
+	tmpDir := t.TempDir()
+	f := filepath.Join(tmpDir, "does-not-exist.html")
+
+	_, err := html.NewParser().ParseFile(t.Context(), f)
+	require.Error(t, err, "parsing a missing file must error")
+}
+
 func TestOptionsPushParserCarriesOptions(t *testing.T) {
 	pp := html.NewParser().SuppressImplied(true).NewPushParser(t.Context())
 	require.NoError(t, pp.Push([]byte(`<p>hello</p>`)))
