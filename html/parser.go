@@ -67,6 +67,12 @@ type parser struct {
 	// this value as the parse error. Outside strict mode it stays nil.
 	fatalSAXErr error
 
+	// fatalErr is set by a sub-parser that hits an unrecoverable condition
+	// (e.g. a comment/PI exceeding MaxContentSize). The main parse loop checks
+	// it and aborts, surfacing the value. Unlike fatalSAXErr this is always
+	// fatal regardless of strict mode.
+	fatalErr error
+
 	cfg parseConfig
 }
 
@@ -490,9 +496,16 @@ func (p *parser) parse(ctx context.Context) error {
 	p.handleSAXErr(p.sax.SetDocumentLocator(p.locator))
 	p.handleSAXErr(p.sax.StartDocument())
 
-	for !p.cur.Done() {
+	// Check ctx/fatalErr/read-error BEFORE Done() so a condition set during the
+	// previous iteration aborts immediately. Done() refills the buffer with a
+	// blocking Read; checking afterward would let an over-cap fatalErr (or a
+	// cancellation) trigger one more blocking read before the parse returns.
+	for {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if p.fatalErr != nil {
+			return p.fatalErr
 		}
 		// A non-EOF read error from the underlying reader (e.g. the push
 		// parser's stream returning the context error when its blocking wait
@@ -502,23 +515,26 @@ func (p *parser) parse(ctx context.Context) error {
 		if err := p.cur.Err(); err != nil {
 			return err
 		}
+		if p.cur.Done() {
+			break
+		}
 		if p.cur.Peek() == '<' {
 			if p.cur.PeekAt(1) == '/' {
 				p.parseEndTag()
 			} else if p.cur.PeekAt(1) == '!' {
 				if p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
-					p.parseComment()
+					p.parseComment(ctx)
 				} else if p.hasPrefixFold("<!DOCTYPE") {
 					p.parseDoctype()
 				} else {
 					// Bogus comment or similar — treat as comment
-					p.parseBogusComment()
+					p.parseBogusComment(ctx)
 				}
 			} else if p.cur.PeekAt(1) == '?' {
 				// Processing instruction — in HTML mode, treated as comment
-				p.parsePI()
+				p.parsePI(ctx)
 			} else if isASCIIAlpha(p.cur.PeekAt(1)) {
-				p.parseStartTag()
+				p.parseStartTag(ctx)
 			} else {
 				// Lone '<' — emit as character data
 				_ = p.emitCharacters([]byte("<"))
@@ -529,6 +545,9 @@ func (p *parser) parse(ctx context.Context) error {
 		}
 	}
 
+	if p.fatalErr != nil {
+		return p.fatalErr
+	}
 	// A clean Done() may mask an underlying read error (e.g. a truncated or
 	// checksummed stream that returned data together with a non-EOF error, or a
 	// cancelled push-stream wait). Surface it as a fatal parse error rather than
@@ -544,7 +563,7 @@ func (p *parser) parse(ctx context.Context) error {
 }
 
 // parseStartTag parses an HTML start tag: <tagname attrs...>
-func (p *parser) parseStartTag() {
+func (p *parser) parseStartTag(ctx context.Context) {
 	_ = p.cur.Advance(1) // skip '<'
 
 	name := p.parseName()
@@ -594,11 +613,11 @@ func (p *parser) parseStartTag() {
 	if desc != nil {
 		switch desc.dataMode {
 		case dataScript, dataRawText:
-			p.parseRawContent(name)
+			p.parseRawContent(ctx, name)
 		case dataRCDATA:
-			p.parseRCDATAContent(name)
+			p.parseRCDATAContent(ctx, name)
 		case dataPlaintext:
-			p.parsePlaintext()
+			p.parsePlaintext(ctx)
 		}
 	}
 }
@@ -667,7 +686,7 @@ func (p *parser) parseEndTag() {
 }
 
 // parseComment parses an HTML comment: <!-- ... -->
-func (p *parser) parseComment() {
+func (p *parser) parseComment(ctx context.Context) {
 	_ = p.cur.Advance(4) // skip '<!--'
 
 	// Handle short comments: <!-->  and <!--->
@@ -684,12 +703,22 @@ func (p *parser) parseComment() {
 		return
 	}
 
+	limit := p.cfg.contentLimit()
 	n := 0
-	for {
-		b := p.cur.PeekAt(n)
-		if b == 0 {
+	// A comment maps to a single indivisible SAX event / DOM node, so it cannot
+	// be chunked: emitting a truncated first chunk and returning mid-construct
+	// would corrupt the document (the remainder leaks as stray text). Enforce
+	// the content limit as a HARD cap — fail the parse if the comment exceeds
+	// it before its terminator. Also abort promptly on cancellation rather than
+	// scanning the whole (possibly unterminated) comment.
+	for ctx.Err() == nil {
+		// Use HasByteAt to distinguish EOF from a real NUL byte: PeekAt returns 0
+		// for both, so a NUL inside the comment would otherwise be mistaken for
+		// end-of-input and bypass the hard cap. A NUL counts as content.
+		if !p.cur.HasByteAt(n) {
 			break
 		}
+		b := p.cur.PeekAt(n)
 		// Check for end of comment: -->
 		if b == '-' && p.cur.PeekAt(n+1) == '-' && p.cur.PeekAt(n+2) == '>' {
 			data := p.cur.PeekString(n)
@@ -704,25 +733,63 @@ func (p *parser) parseComment() {
 			p.handleSAXErr(p.sax.Comment([]byte(data)))
 			return
 		}
+		// No terminator at offset n: this byte is content. Accepting it would
+		// make the content length n+1; fail only if that strictly exceeds the
+		// limit. Content of exactly `limit` bytes followed by its terminator is
+		// fine (the terminator checks above already ran for offset == limit).
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("comment exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return
+		}
 		n++
 	}
 
-	// Unterminated comment — emit everything as comment
+	// The loop also exits on cancellation mid-scan. A comment is an indivisible
+	// node, so emitting the bytes scanned so far would publish a truncated
+	// comment with the remainder leaking as stray text. Abort without emitting.
+	if ctx.Err() != nil {
+		return
+	}
+
+	// Unterminated comment reaching EOF — emit everything as comment. (n is
+	// bounded by limit, so this allocation is bounded.)
 	data := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
 	p.handleSAXErr(p.sax.Comment([]byte(data)))
 }
 
 // parseBogusComment parses a bogus comment: <! ... >
-func (p *parser) parseBogusComment() {
+func (p *parser) parseBogusComment(ctx context.Context) {
 	_ = p.cur.Advance(2) // skip '<!'
+	limit := p.cfg.contentLimit()
 	n := 0
-	for {
-		b := p.cur.PeekAt(n)
-		if b == 0 || b == '>' {
+	// A bogus comment maps to a single indivisible SAX event / DOM node and
+	// cannot be chunked, so enforce the content limit as a HARD cap: fail the
+	// parse if it exceeds the limit before its '>' terminator rather than
+	// emitting a truncated comment. Abort promptly on cancellation too.
+	for ctx.Err() == nil {
+		// HasByteAt distinguishes EOF from a real NUL (PeekAt returns 0 for both),
+		// so a NUL inside the bogus comment is counted as content rather than
+		// mistaken for end-of-input and bypassing the hard cap.
+		if !p.cur.HasByteAt(n) {
 			break
 		}
+		b := p.cur.PeekAt(n)
+		if b == '>' {
+			break
+		}
+		// No terminator at offset n: this byte is content. Accepting it would
+		// make the content length n+1; fail only if that strictly exceeds the
+		// limit so that exactly `limit` content bytes before '>' is accepted.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("bogus comment exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return
+		}
 		n++
+	}
+	// Cancellation mid-scan must not publish a truncated (indivisible) comment.
+	if ctx.Err() != nil {
+		return
 	}
 	data := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
@@ -734,23 +801,42 @@ func (p *parser) parseBogusComment() {
 
 // parsePI parses a processing instruction in HTML mode.
 // In HTML, <?...> is treated as a comment by libxml2.
-func (p *parser) parsePI() {
+func (p *parser) parsePI(ctx context.Context) {
 	// libxml2 emits the entire <?...> content as a comment (without the < and >).
 	_ = p.cur.Advance(1) // skip '<' — keep the '?' as part of comment content
 
+	limit := p.cfg.contentLimit()
 	n := 0
-	for {
-		b := p.cur.PeekAt(n)
-		if b == 0 {
+	// A PI is emitted as a single indivisible comment SAX event / DOM node and
+	// cannot be chunked, so enforce the content limit as a HARD cap: fail the
+	// parse if it exceeds the limit before its '>' terminator rather than
+	// emitting a truncated comment. Abort promptly on cancellation too.
+	for ctx.Err() == nil {
+		// HasByteAt distinguishes EOF from a real NUL (PeekAt returns 0 for both),
+		// so a NUL inside the PI is counted as content rather than mistaken for
+		// end-of-input and bypassing the hard cap.
+		if !p.cur.HasByteAt(n) {
 			break
 		}
+		b := p.cur.PeekAt(n)
 		if b == '>' {
 			data := p.cur.PeekString(n)
 			_ = p.cur.Advance(n + 1) // skip data + '>'
 			p.handleSAXErr(p.sax.Comment([]byte(data)))
 			return
 		}
+		// No terminator at offset n: this byte is content. Accepting it would
+		// make the content length n+1; fail only if that strictly exceeds the
+		// limit so that exactly `limit` content bytes before '>' is accepted.
+		if n >= limit {
+			p.fatalErr = fmt.Errorf("processing instruction exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return
+		}
 		n++
+	}
+	// Cancellation mid-scan must not publish a truncated (indivisible) PI/comment.
+	if ctx.Err() != nil {
+		return
 	}
 	data := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
@@ -918,6 +1004,58 @@ func parseNumericCharRef(digits string, base int) (int, bool) {
 	return int(v), true
 }
 
+// emitNumericCharRef emits the normalized output of a numeric character
+// reference. codepoint/haveDigits come from parsing the digit run (decimal or
+// hex). Per HTML5 a U+0000 reference, an overflowing/out-of-range value, or a
+// surrogate maps to U+FFFD via normalizeNumericCharRef rather than being
+// dropped; nothing is emitted only when no digits were present at all.
+func (p *parser) emitNumericCharRef(codepoint int, haveDigits bool) {
+	if !haveDigits {
+		return
+	}
+	cp := normalizeNumericCharRef(codepoint)
+	var buf [4]byte
+	n := utf8.EncodeRune(buf[:], cp)
+	_ = p.emitCharacters(buf[:n])
+}
+
+// resolveNamedEntity applies the HTML5 named-character-reference matching rules
+// to an already-scanned entity name (without the leading '&' or trailing ';').
+// hasSemicolon reports whether a ';' followed the name. It returns the resolved
+// replacement bytes and true when the name (or a legacy prefix of it) resolves;
+// the remainder string holds any unmatched suffix that follows a legacy-prefix
+// match and must be emitted as literal text after the replacement. When nothing
+// resolves it returns ok==false and the caller emits the run as literal text.
+func resolveNamedEntity(name string, hasSemicolon bool) (val, remainder string, ok bool) {
+	if name == "" {
+		return "", "", false
+	}
+	if v, found := lookupEntity(name); found {
+		if hasSemicolon {
+			return v, "", true
+		}
+		// Without semicolon — only resolve legacy (HTML4) entities.
+		// HTML5-only entities require a trailing semicolon.
+		if isLegacyEntity(name) {
+			return v, "", true
+		}
+	}
+	// No semicolon and full name is not a legacy entity.
+	// Try prefix matching: find the longest legacy entity prefix.
+	if !hasSemicolon {
+		for i := len(name) - 1; i > 0; i-- {
+			prefix := name[:i]
+			if !isLegacyEntity(prefix) {
+				continue
+			}
+			if v, found := lookupEntity(prefix); found {
+				return v, name[i:], true
+			}
+		}
+	}
+	return "", "", false
+}
+
 // parseCharRef handles entity references (&name; or &#num; or &#xhex;).
 // Emits the resolved value as a Characters SAX event (entity splitting behavior).
 func (p *parser) parseCharRef() {
@@ -941,15 +1079,7 @@ func (p *parser) parseCharRef() {
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
 		}
-		// Per HTML5, a U+0000 numeric character reference (&#0; / &#x0;) is a
-		// parse error that maps to U+FFFD rather than being dropped. Only emit
-		// nothing when no digits were present at all (a bare "&#" / "&#x").
-		if haveDigits {
-			cp := normalizeNumericCharRef(codepoint)
-			var buf [4]byte
-			n := utf8.EncodeRune(buf[:], cp)
-			_ = p.emitCharacters(buf[:n])
-		}
+		p.emitNumericCharRef(codepoint, haveDigits)
 		return
 	}
 
@@ -961,34 +1091,12 @@ func (p *parser) parseCharRef() {
 		_ = p.cur.Advance(1)
 	}
 
-	if name != "" {
-		if val, ok := lookupEntity(name); ok {
-			if hasSemicolon {
-				_ = p.emitCharacters([]byte(val))
-				return
-			}
-			// Without semicolon — only resolve legacy (HTML4) entities.
-			// HTML5-only entities require a trailing semicolon.
-			if isLegacyEntity(name) {
-				_ = p.emitCharacters([]byte(val))
-				return
-			}
+	if val, remainder, ok := resolveNamedEntity(name, hasSemicolon); ok {
+		_ = p.emitCharacters([]byte(val))
+		if remainder != "" {
+			_ = p.emitCharacters([]byte(remainder))
 		}
-		// No semicolon and full name is not a legacy entity.
-		// Try prefix matching: find the longest legacy entity prefix.
-		if !hasSemicolon {
-			for i := len(name) - 1; i > 0; i-- {
-				prefix := name[:i]
-				if isLegacyEntity(prefix) {
-					if val, ok := lookupEntity(prefix); ok {
-						_ = p.emitCharacters([]byte(val))
-						remainder := name[i:]
-						_ = p.emitCharacters([]byte(remainder))
-						return
-					}
-				}
-			}
-		}
+		return
 	}
 
 	// Unknown entity — emit as literal text
@@ -997,6 +1105,417 @@ func (p *parser) parseCharRef() {
 		text += ";"
 	}
 	_ = p.emitCharacters([]byte(text))
+}
+
+// maxEntityNameLen is one past the length of the longest named HTML entity
+// ("CounterClockwiseContourIntegral", 31 chars). An alphanumeric run reaching
+// this length cannot match any known entity, so the char-ref scan can stop and
+// treat the run as unresolved literal text without consulting the entity table.
+const maxEntityNameLen = 32
+
+// saturatedCharRefChunk bounds how many bytes parseSaturatedCharRefLiteral
+// consumes per iteration while spooling a saturated alphanumeric char-ref run.
+// It caps both per-chunk buffering and the interval between context-cancellation
+// and over-cap checks, independent of (and never larger than) MaxContentSize.
+const saturatedCharRefChunk = 4096
+
+// parseCharRefBounded handles an entity reference inside cap-aware content
+// (RCDATA: title/textarea) where the surrounding text is flushed to SAX in
+// chunks no larger than limit. It makes the SAME entity-resolution decisions as
+// parseCharRef — numeric references (including overlong/leading-zero/overflow
+// runs) normalize to their HTML5 output (U+FFFD on overflow/invalid), and named
+// references resolve identically including legacy-prefix matching.
+//
+// Memory AND bytes-read work are kept bounded by two independent budgets:
+//
+//   - Entity-name resolution uses a FIXED lookahead of maxEntityNameLen bytes,
+//     a constant independent of MaxContentSize. No known entity (longest 31
+//     chars) or legacy prefix (≤6 chars) is longer, so a SHORT resolvable
+//     reference whose run fits the cap is always decided within that constant
+//     window — and therefore never rejected for being a small name. `&amp;`
+//     resolves even under MaxContentSize(2).
+//
+//   - The MaxContentSize cap governs the LITERAL text that an UNRESOLVED run
+//     would emit AND the work spent deciding an AMBIGUOUS legacy-prefix run.
+//     An unbounded digit run is consumed in fixed-size chunks while tracking
+//     value/overflow rather than buffered whole; an unresolved reference is
+//     flushed as literal text in capped chunks; and a run that genuinely
+//     EXCEEDS the cap before its outcome is decided fails the parse with
+//     ErrContentSizeExceeded.
+//
+//     IMPORTANT — over-cap ambiguous legacy-prefix runs HARD-FAIL: `&amp` + an
+//     alphanumeric tail is ambiguous until the run ends, because a trailing ';'
+//     turns it into an over-long unknown LITERAL (no legacy resolution) while
+//     its absence legacy-resolves the "amp" prefix and emits the tail. Settling
+//     that requires reaching the run's end. To keep BOTH peak memory and
+//     bytes-read bounded, the decision is made while CONSUMING the tail into a
+//     spool capped at MaxContentSize: if the run exceeds the cap before the end
+//     is reached, the parse hard-fails with ErrContentSizeExceeded and emits
+//     NOTHING, rather than streaming an unbounded tail. A no-';' legacy-prefix
+//     run is therefore resolved only when its whole run fits the cap.
+//
+// ctx is checked between bounded chunks so a cancelled parse aborts promptly
+// without first draining a long digit or alphanumeric run.
+func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
+	// Entity content is non-whitespace — ensure implied elements.
+	p.htmlStartCharData()
+
+	_ = p.cur.Advance(1) // skip '&'
+
+	if p.cur.Peek() == '#' {
+		_ = p.cur.Advance(1) // skip '#'
+		base := 10
+		pred := isDigit
+		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
+			base = 16
+			pred = isHexDigit
+			_ = p.cur.Advance(1) // skip 'x'
+		}
+		// Consume the digit run in bounded chunks, accumulating the code point
+		// with overflow saturation so an arbitrarily long (e.g. leading-zero or
+		// overflowing) run never materializes as one string. The result matches
+		// parseNumericCharRef: a value above U+10FFFF maps to U+FFFD via
+		// emitNumericCharRef, and a leading-zero run still resolves to its value.
+		// A cancelled context unwinds without emitting a partial entity.
+		codepoint, haveDigits, cancelled := p.consumeNumericCharRefBounded(ctx, pred, base, limit)
+		if cancelled {
+			return
+		}
+		semicolon := p.cur.Peek() == ';'
+		// Peek may refill the buffer when the digit run ended at a buffer
+		// boundary; abort without emitting if that hit a read error / cancel.
+		if ctx.Err() != nil || p.cur.Err() != nil {
+			return
+		}
+		if semicolon {
+			_ = p.cur.Advance(1)
+		}
+		p.emitNumericCharRef(codepoint, haveDigits)
+		return
+	}
+
+	// Named entity. Resolution uses a FIXED maxEntityNameLen-byte lookahead — a
+	// constant, NOT MaxContentSize — because every known entity and legacy
+	// prefix is shorter than that window, so this is O(1) memory regardless of
+	// the user's cap.
+	name, scanErr := p.parseWhileMaxErr(isAlphanumeric, maxEntityNameLen)
+	// A short name scan is ambiguous: the name ended (next byte is not
+	// alphanumeric, e.g. ';' or EOF) OR PeekAt/fillBuffer hit a read error /
+	// cancellation. Disambiguate BEFORE resolving/emitting so a cancelled read
+	// is never mistaken for a finished entity name that would then emit a
+	// (partial) resolution or literal. The main loop re-checks ctx/p.cur.Err().
+	if scanErr != nil || ctx.Err() != nil {
+		return
+	}
+
+	// The lookahead SATURATES when the alphanumeric run reaches the fixed window
+	// AND keeps going. parseCharRef scans the WHOLE run before deciding, so its
+	// resolveNamedEntity sees the full (over-long) name; a long ';'-terminated
+	// name is NOT legacy-prefix-resolved (that loop is gated on !hasSemicolon),
+	// and an over-long no-semicolon name resolves only its longest legacy prefix.
+	// Resolving from the truncated 32-byte window here — before knowing whether a
+	// ';' eventually terminates the run — would wrongly legacy-resolve the prefix
+	// of a ';'-terminated name. So when the run saturates the decision is DEFERRED
+	// to parseSaturatedCharRefLiteral, which consumes the rest of the run into a
+	// cap-bounded spool to learn whether a ';' terminates it. No known entity (≤31
+	// chars) reaches the window, so a saturated run can never be a named-entity
+	// match; the only resolution it could ever produce is a legacy prefix, and
+	// that applies only when there is no ';' AND the whole run fits the cap (an
+	// over-cap saturated run hard-fails — see that function).
+	if len(name) >= maxEntityNameLen && isAlphanumeric(p.cur.Peek()) {
+		p.parseSaturatedCharRefLiteral(ctx, name, limit)
+		return
+	}
+
+	hasSemicolon := false
+	semicolon := p.cur.Peek() == ';'
+	// Peek may refill the buffer when the name ended at a buffer boundary; abort
+	// without emitting if that hit a read error / cancellation.
+	if ctx.Err() != nil || p.cur.Err() != nil {
+		return
+	}
+	if semicolon {
+		hasSemicolon = true
+		_ = p.cur.Advance(1)
+	}
+
+	if val, remainder, ok := resolveNamedEntity(name, hasSemicolon); ok {
+		// A ';'-terminated match is a KNOWN entity — a resolved character
+		// reference that is always emitted intact and exempt from the cap (the
+		// resolved value is one entity's worth of bytes within the fixed
+		// lookahead). A NO-';' match is a LEGACY resolution (a full legacy
+		// entity OR a legacy-prefix whose unmatched tail is echoed as literal
+		// text); per the documented contract it is exempt ONLY when its whole
+		// consumed run ("&" + name) fits the cap. Charge that run BEFORE emitting
+		// so a legacy/legacy-prefix run over a tiny cap hard-fails with NOTHING
+		// emitted, identical to the saturated path. (Example: `&ampZ` under
+		// MaxContentSize(2) — the 5-byte run "&ampZ" exceeds 2, so it must fail
+		// rather than emit "&" + "Z".)
+		if !hasSemicolon {
+			sizeCap := limit
+			if sizeCap <= 0 {
+				sizeCap = defaultMaxContentSize
+			}
+			if 1+len(name) > sizeCap {
+				p.fatalErr = fmt.Errorf("legacy character reference run exceeds %d bytes: %w", sizeCap, ErrContentSizeExceeded)
+				return
+			}
+		}
+		_ = p.emitCharacters([]byte(val))
+		if remainder != "" {
+			// remainder is ASCII (alphanumeric tail of the run); chunk it so it
+			// is never emitted as one oversized Characters event.
+			p.emitLiteralChunked(remainder, limit)
+		}
+		return
+	}
+
+	// Unknown entity within the lookahead — emit "&" + name (and any ';') as
+	// literal text in capped chunks. Even though the name fits the fixed
+	// lookahead window, the LITERAL run it produces is still charged against
+	// MaxContentSize: "&" plus the name length (plus any ';'). If that exceeds
+	// the cap, fail with ErrContentSizeExceeded rather than emitting an over-cap
+	// literal.
+	sizeCap := limit
+	if sizeCap <= 0 {
+		sizeCap = defaultMaxContentSize
+	}
+	// Charge the full literal that will be emitted: '&' + name plus the trailing
+	// ';' when one was consumed as part of the unresolved run. Omitting the ';'
+	// would undercount the literal and let an over-cap run slip past.
+	literalLen := 1 + len(name)
+	if hasSemicolon {
+		literalLen++
+	}
+	if literalLen > sizeCap {
+		p.fatalErr = fmt.Errorf("unresolved character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
+		return
+	}
+	text := "&" + name
+	if hasSemicolon {
+		text += ";"
+	}
+	p.emitLiteralChunked(text, limit)
+}
+
+// parseSaturatedCharRefLiteral handles a named char-ref whose alphanumeric run
+// overflowed the fixed maxEntityNameLen lookahead window: head holds the first
+// maxEntityNameLen bytes already CONSUMED and the run is known to continue. Such
+// a run can never match a KNOWN entity (the longest is 31 chars), so the only
+// resolution parseCharRef could ever apply to it is a legacy-prefix match — and
+// that applies ONLY when the run is NOT ';'-terminated (resolveNamedEntity gates
+// its prefix loop on !hasSemicolon). The two interpretations differ:
+//
+//   - no ';': resolve the longest legacy prefix of the run (which lies entirely
+//     within head, ≤6 chars) and emit the unmatched remainder (rest of head plus
+//     the alphanumeric tail) as ordinary text. If head has no legacy prefix the
+//     whole run is an unresolved literal (see below).
+//   - ';'-terminated: an over-long UNKNOWN name. parseCharRef does NOT
+//     legacy-resolve it; the WHOLE run plus ';' is an unresolved literal.
+//
+// Because the two interpretations EMIT DIFFERENT bytes, nothing may be emitted
+// before the ';'-vs-not decision is final — an optimistic legacy emit followed by
+// the discovery of a trailing ';' would leave a partial Characters callback ahead
+// of an error. The decision can only be settled at the run's END.
+//
+// BOUNDED SPOOL — peak memory AND bytes-read are both capped by MaxContentSize.
+// The tail is CONSUMED in chunks no larger than sizeCap into a spool while the
+// accumulated would-be literal length is tracked. As soon as that length exceeds
+// sizeCap BEFORE the run's end is reached, the outcome is fixed (an over-cap
+// unresolved literal if ';'-terminated, an over-cap ambiguous legacy run
+// otherwise) and the parse HARD-FAILS with ErrContentSizeExceeded, emitting
+// NOTHING — it never streams or buffers an unbounded tail. A no-';' legacy-prefix
+// run therefore resolves only when its WHOLE run fits the cap; an over-cap one
+// hard-fails. Once the decision is reached within cap, and only then, the chosen
+// interpretation is emitted, so no partial emission ever precedes an error.
+//
+// ctx is checked between bounded chunks so a cancelled parse aborts promptly
+// without consuming the whole run.
+func (p *parser) parseSaturatedCharRefLiteral(ctx context.Context, head string, limit int) {
+	sizeCap := limit
+	if sizeCap <= 0 {
+		sizeCap = defaultMaxContentSize
+	}
+
+	// Does head begin with a resolvable legacy prefix? This is the ONLY way a
+	// saturated run can resolve, and it depends solely on head (a legacy entity
+	// is ≤6 chars). Compute it once: it selects between the resolve path and the
+	// literal path, gated on the absence of a ';' (settled below).
+	val, remainder, legacyResolves := resolveNamedEntity(head, false)
+
+	// Consume the rest of the alphanumeric run into a cap-bounded spool, tracking
+	// the would-be literal length ("&" + head + tail). chunkSize keeps each fill
+	// bounded; the loop ends when a chunk shorter than chunkSize is returned (the
+	// run is exhausted) — at which point the next byte settles the ';' question.
+	// chunkSize is bounded by both sizeCap (so a single chunk never retains more
+	// than the cap) and a small constant (so ctx cancellation and the over-cap
+	// check are observed at fine granularity rather than once per huge chunk).
+	chunkSize := min(saturatedCharRefChunk, sizeCap)
+	literalLen := 1 + len(head) // '&' + head; grows as the tail is consumed
+	var tail strings.Builder
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		chunk, scanErr := p.parseWhileMaxErr(isAlphanumeric, chunkSize)
+		// A short chunk is ambiguous: it can mean the alphanumeric run ended OR
+		// that PeekAt/fillBuffer hit a read error / context cancellation (e.g. a
+		// cancelled push-stream wait). Disambiguate BEFORE concluding "run
+		// ended" or emitting: on a read error / cancel, unwind without emitting
+		// any Characters/partial resolution and let the main loop surface the
+		// error (it re-checks ctx.Err() and p.cur.Err()).
+		if scanErr != nil || ctx.Err() != nil {
+			return
+		}
+		literalLen += len(chunk)
+		// Fail BEFORE retaining an over-cap spool: once the literal exceeds the
+		// cap the outcome is ErrContentSizeExceeded regardless of any trailing
+		// ';' (the run is either an over-cap literal or an over-cap ambiguous
+		// legacy run, both hard failures), so stop consuming and emit nothing.
+		if literalLen > sizeCap {
+			p.fatalErr = fmt.Errorf("unresolved character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
+			return
+		}
+		tail.WriteString(chunk)
+		if len(chunk) < chunkSize {
+			break // run exhausted; cursor now sits just past the last alphanumeric
+		}
+	}
+
+	// Run end reached within cap. Settle the ';' (it can only follow the run's
+	// end, where the cursor now sits). Peek may refill the buffer when the run
+	// ended exactly at a buffer boundary; if that refill hit a read error /
+	// cancellation, abort without emitting so a cancelled push parse never
+	// resolves a partial run.
+	hasSemicolon := p.cur.Peek() == ';'
+	if ctx.Err() != nil || p.cur.Err() != nil {
+		return
+	}
+	if hasSemicolon {
+		literalLen++
+		if literalLen > sizeCap {
+			p.fatalErr = fmt.Errorf("unresolved character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
+			return
+		}
+		_ = p.cur.Advance(1)
+	}
+
+	// No ';' and head legacy-resolves: mirror parseCharRef's no-semicolon
+	// legacy-prefix path. The run fit the cap, so emit the resolution + head's
+	// leftover + the spooled tail as ordinary text. Only now, with ';' ruled out,
+	// does emission begin, so nothing was emitted prematurely.
+	if !hasSemicolon && legacyResolves {
+		_ = p.emitCharacters([]byte(val))
+		if remainder != "" {
+			p.emitLiteralChunked(remainder, limit)
+		}
+		p.emitLiteralChunked(tail.String(), limit)
+		return
+	}
+
+	// ';'-terminated (over-long unknown name) or a no-';' run with no legacy
+	// prefix: the WHOLE run is an unresolved literal. It fit the cap, so echo it
+	// verbatim including any ';'.
+	text := "&" + head + tail.String()
+	if hasSemicolon {
+		text += ";"
+	}
+	p.emitLiteralChunked(text, limit)
+}
+
+// consumeNumericCharRefBounded reads a numeric character reference's digit run
+// (digits matching pred, interpreted in the given base) in chunks no larger
+// than limit, accumulating the code-point value with overflow saturation so an
+// arbitrarily long run is never buffered whole. It returns the accumulated code
+// point, whether any digits were present, and whether ctx was cancelled
+// mid-run. A value that exceeds U+10FFFF (or otherwise overflows) saturates
+// above the valid range so emitNumericCharRef maps it to U+FFFD, matching
+// parseNumericCharRef; leading zeros are tolerated.
+//
+// ctx is checked between bounded chunks so a cancelled parse inside a long
+// digit run (e.g. <title>&#9999...) aborts promptly instead of consuming the
+// whole run. On cancellation it returns cancelled=true and the caller emits no
+// (partial) entity, letting the outer parse surface context.Canceled.
+func (p *parser) consumeNumericCharRefBounded(ctx context.Context, pred func(byte) bool, base, limit int) (int, bool, bool) {
+	chunkSize := limit
+	if chunkSize <= 0 {
+		chunkSize = maxNumericRefLen
+	}
+	const overflow = 0x110000 // one past U+10FFFF — normalizes to U+FFFD
+	value := 0
+	haveDigits := false
+	saturated := false
+	for {
+		if ctx.Err() != nil {
+			return 0, false, true
+		}
+		chunk, scanErr := p.parseWhileMaxErr(pred, chunkSize)
+		// An empty chunk is ambiguous: the digit run ended (next byte is not a
+		// digit, e.g. ';' or EOF) OR PeekAt/fillBuffer hit a read error /
+		// cancellation. Disambiguate so a cancelled read is NOT mistaken for a
+		// finished run that would then emit a (partial) numeric entity: report
+		// cancelled=true so the caller emits nothing and the main loop surfaces
+		// the error.
+		if scanErr != nil || ctx.Err() != nil {
+			return 0, false, true
+		}
+		if chunk == "" {
+			break
+		}
+		haveDigits = true
+		if saturated {
+			continue // value already pinned above the valid range
+		}
+		for i := range len(chunk) {
+			value = value*base + digitValue(chunk[i], base)
+			if value > overflow {
+				value = overflow
+				saturated = true
+				break
+			}
+		}
+	}
+	if !haveDigits {
+		return 0, false, false
+	}
+	return value, true, false
+}
+
+// digitValue returns the numeric value of an ASCII hex/decimal digit byte for
+// the given base. The byte is assumed to satisfy the matching digit predicate.
+func digitValue(b byte, base int) int {
+	switch {
+	case b >= '0' && b <= '9':
+		return int(b - '0')
+	case base == 16 && b >= 'a' && b <= 'f':
+		return int(b-'a') + 10
+	case base == 16 && b >= 'A' && b <= 'F':
+		return int(b-'A') + 10
+	}
+	return 0
+}
+
+// maxNumericRefLen is the fallback chunk size for draining a numeric digit run
+// when no positive content limit is configured. It is generous so legitimate
+// (zero-padded) references still resolve while keeping per-chunk allocations
+// bounded.
+const maxNumericRefLen = 32
+
+// emitLiteralChunked emits s as literal text in Characters events no larger
+// than limit bytes. s contains only ASCII (the '&', '#', 'x', and alphanumeric
+// or digit bytes of a character reference), so splitting on byte boundaries
+// never breaks a multi-byte rune.
+func (p *parser) emitLiteralChunked(s string, limit int) {
+	if limit <= 0 {
+		limit = defaultMaxContentSize
+	}
+	for len(s) > limit {
+		_ = p.emitCharacters([]byte(s[:limit]))
+		s = s[limit:]
+	}
+	if len(s) > 0 {
+		_ = p.emitCharacters([]byte(s))
+	}
 }
 
 // emitError fires a SAX Error event unless suppressed by WithNoError.
@@ -1068,19 +1587,63 @@ const (
 // - Normal: </script> closes; <!-- enters escaped
 // - Escaped: </script> closes; --> returns to normal; <script enters double-escaped
 // - Double-escaped: </script> returns to escaped; --> returns to normal
-func (p *parser) parseRawContent(tagName string) {
+func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 	endTag := "</" + tagName
 	startTag := "<" + tagName
 	isScript := tagName == "script"
 	state := scriptNormal
+	limit := p.cfg.contentLimit()
 	var content bytes.Buffer
 
-	for !p.cur.Done() {
+	flushChunk := func() {
+		// Clone the bytes before Reset: bytes.Buffer.Reset reuses the same
+		// backing array, so a SAX handler that retains the slice would see
+		// this chunk overwritten by subsequent content.
+		if content.Len() > 0 {
+			p.handleSAXErr(p.sax.CDataBlock(bytes.Clone(content.Bytes())))
+			content.Reset()
+		}
+	}
+	// append writes a whole token (a single rune or a complete ASCII tag
+	// fragment) to the buffer, flushing first if it would push the chunk past
+	// the cap. Flushing on whole-token boundaries keeps every emitted chunk
+	// valid UTF-8: a multi-byte rune is never split across two chunks. A single
+	// token larger than the cap is emitted whole as its own chunk rather than
+	// split, so no partial rune is ever produced.
+	appendToken := func(s string) {
+		if content.Len() > 0 && content.Len()+len(s) > limit {
+			flushChunk()
+		}
+		content.WriteString(s)
+	}
+
+	// Check ctx/fatalErr BEFORE Done() so a condition set during the previous
+	// iteration aborts immediately. Done() refills via a blocking Read; checking
+	// afterward would let an over-cap fatalErr (or a cancellation) trigger one
+	// more blocking read before this loop returns.
+	for {
+		// Abort promptly on context cancellation rather than buffering the
+		// entire (possibly gigantic or unterminated) section first. The main
+		// parse loop re-checks ctx.Err() and surfaces it.
+		if ctx.Err() != nil {
+			flushChunk()
+			return
+		}
+		// An over-cap construct (e.g. via emitted SAX content in strict mode)
+		// may set fatalErr; stop scanning immediately so the main loop surfaces
+		// it instead of issuing another blocking read.
+		if p.fatalErr != nil {
+			flushChunk()
+			return
+		}
+		if p.cur.Done() {
+			break
+		}
 		// Check for <!-- to enter escaped state
 		if isScript && state == scriptNormal && p.cur.Peek() == '<' && p.cur.PeekAt(1) == '!' &&
 			p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
 			state = scriptEscaped
-			content.WriteString(p.cur.PeekString(4))
+			appendToken(p.cur.PeekString(4))
 			_ = p.cur.Advance(4)
 			continue
 		}
@@ -1088,7 +1651,7 @@ func (p *parser) parseRawContent(tagName string) {
 		// Check for --> to exit escaped/double-escaped state
 		if isScript && state != scriptNormal && p.cur.Peek() == '-' && p.cur.PeekAt(1) == '-' && p.cur.PeekAt(2) == '>' {
 			state = scriptNormal
-			content.WriteString(p.cur.PeekString(3))
+			appendToken(p.cur.PeekString(3))
 			_ = p.cur.Advance(3)
 			continue
 		}
@@ -1100,7 +1663,7 @@ func (p *parser) parseRawContent(tagName string) {
 				afterTag := len(startTag)
 				if p.cur.PeekAt(afterTag) == 0 || !isNameChar(p.cur.PeekAt(afterTag)) {
 					state = scriptDoubleEscaped
-					content.WriteString(p.cur.PeekString(afterTag))
+					appendToken(p.cur.PeekString(afterTag))
 					_ = p.cur.Advance(afterTag)
 					continue
 				}
@@ -1127,18 +1690,16 @@ func (p *parser) parseRawContent(tagName string) {
 					if state == scriptDoubleEscaped {
 						// In double-escaped, </script> returns to escaped
 						state = scriptEscaped
-						content.WriteString(p.cur.PeekString(afterTag))
+						appendToken(p.cur.PeekString(afterTag))
 						_ = p.cur.Advance(afterTag)
 						if p.cur.Peek() == '>' {
-							content.WriteByte('>')
+							appendToken(">")
 							_ = p.cur.Advance(1)
 						}
 						continue
 					}
 					// In normal or escaped state, </script> closes the element
-					if content.Len() > 0 {
-						p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
-					}
+					flushChunk()
 					return // Let the main loop handle the end tag
 				}
 			}
@@ -1147,26 +1708,121 @@ func (p *parser) parseRawContent(tagName string) {
 		// The loop already advances on every byte (so no spin), but emit the
 		// replacement character instead of a literal NUL for correctness.
 		if p.cur.Peek() == 0 {
-			content.WriteString("�")
+			appendToken("�")
 			_ = p.cur.Advance(1)
 			continue
 		}
-		content.WriteByte(p.cur.Peek())
-		_ = p.cur.Advance(1)
+		// Consume a whole rune at a time and append it as one indivisible
+		// token, so the cap-aware flush in appendToken never splits a
+		// multi-byte UTF-8 sequence across two chunks.
+		s, n := p.peekRuneToken()
+		appendToken(s)
+		_ = p.cur.Advance(n)
 	}
 
 	// Unterminated — emit everything as cdata
-	if content.Len() > 0 {
-		p.handleSAXErr(p.sax.CDataBlock(content.Bytes()))
+	flushChunk()
+}
+
+// peekRuneToken returns the next whole UTF-8 rune at the cursor as a string
+// together with its byte length, without advancing. A byte that is not a valid
+// UTF-8 lead/sequence is returned as a single byte (length 1) so the scan
+// always makes progress and the caller never emits a partial rune. A validly
+// encoded U+FFFD is returned whole (length 3), unlike a lone bad byte. Callers
+// must have already confirmed at least one byte is available (not Done).
+func (p *parser) peekRuneToken() (string, int) {
+	b := p.cur.Peek()
+	if b < 0x80 {
+		return string([]byte{b}), 1
 	}
+	// Determine the expected UTF-8 sequence width from the lead byte alone and
+	// peek only that many bytes. Requesting utf8.UTFMax unconditionally would,
+	// under PUSH parsing, block until four bytes are buffered (or EOF) even
+	// though a complete 2- or 3-byte rune is already present — stalling
+	// progressive emission of raw-text/RCDATA/plaintext content. The lead byte
+	// tells us exactly how many bytes a valid sequence needs:
+	//   0xC0-0xDF -> 2, 0xE0-0xEF -> 3, 0xF0-0xF7 -> 4; anything else is an
+	// invalid lead (a stray continuation byte or 0xF8+) handled as one byte.
+	width := utf8ExpectedWidth(b)
+	if width == 1 {
+		// Invalid lead byte: consume a single byte so the scan makes progress
+		// and the caller never emits a partial rune.
+		return string([]byte{b}), 1
+	}
+	// Peek exactly the bytes a valid sequence needs. DecodeRuneInString reports
+	// a size of 1 for an invalid sequence and the true size for a valid rune
+	// (including a genuine U+FFFD), so the size distinguishes the two cases.
+	s := p.cur.PeekString(width)
+	if s == "" {
+		// Fewer than width bytes remain. Near true EOF, peek whatever is left
+		// and decode/replace it; this is not a block-on-more-input case because
+		// a complete rune of this width cannot fit in the remaining bytes.
+		for n := width - 1; n >= 1; n-- {
+			if s = p.cur.PeekString(n); s != "" {
+				break
+			}
+		}
+	}
+	if s == "" {
+		return string([]byte{b}), 1
+	}
+	_, size := utf8.DecodeRuneInString(s)
+	if size <= 0 {
+		size = 1
+	}
+	return s[:size], size
+}
+
+// utf8ExpectedWidth returns the number of bytes a valid UTF-8 sequence starting
+// with lead byte b occupies: 1 for ASCII, 2/3/4 for multi-byte leads. Any byte
+// that cannot begin a valid sequence (a continuation byte 0x80-0xBF or 0xF8+)
+// returns 1 so callers treat it as a single invalid byte.
+func utf8ExpectedWidth(b byte) int {
+	switch {
+	case b < 0x80:
+		return 1
+	case b >= 0xF0 && b <= 0xF7:
+		return 4
+	case b >= 0xE0 && b <= 0xEF:
+		return 3
+	case b >= 0xC0 && b <= 0xDF:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// isUTF8Continuation reports whether b is a UTF-8 continuation byte
+// (0b10xxxxxx). A rune boundary is any byte that is not a continuation byte, so
+// backing a byte index off continuation bytes lands on a whole-rune boundary.
+func isUTF8Continuation(b byte) bool {
+	return b&0xC0 == 0x80
 }
 
 // parseRCDATAContent parses RCDATA content (title, textarea).
 // Like raw text but entities are expanded.
-func (p *parser) parseRCDATAContent(tagName string) {
+func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 	endTag := "</" + tagName
+	limit := p.cfg.contentLimit()
 
-	for !p.cur.Done() {
+	// Check ctx/fatalErr BEFORE Done() so a condition set during the previous
+	// iteration aborts immediately. Done() refills via a blocking Read; checking
+	// afterward would let an over-cap fatalErr (set by parseCharRefBounded at a
+	// buffer boundary) or a cancellation trigger one more blocking read.
+	for {
+		// Abort promptly on context cancellation. The main parse loop
+		// re-checks ctx.Err() and surfaces it.
+		if ctx.Err() != nil {
+			return
+		}
+		// A char-ref over the content cap sets fatalErr; stop scanning so the
+		// main loop surfaces it instead of issuing another blocking read.
+		if p.fatalErr != nil {
+			return
+		}
+		if p.cur.Done() {
+			break
+		}
 		if p.cur.Peek() == '<' && p.cur.PeekAt(1) == '/' {
 			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
@@ -1193,9 +1849,17 @@ func (p *parser) parseRCDATAContent(tagName string) {
 		}
 
 		if p.cur.Peek() == '&' {
-			p.parseCharRef()
+			p.parseCharRefBounded(ctx, limit)
+			// A char-ref over the content cap sets fatalErr; return from the
+			// current iteration immediately rather than scanning further. The
+			// loop-top fatalErr guard already prevents another blocking read.
+			if p.fatalErr != nil {
+				return
+			}
 		} else {
-			// Collect text up to next & or potential end tag
+			// Collect text up to next & or potential end tag, but cap the run
+			// at the content limit so one huge text span is emitted in bounded
+			// chunks instead of buffered whole.
 			n := 0
 			for {
 				b := p.cur.PeekAt(n)
@@ -1203,6 +1867,27 @@ func (p *parser) parseRCDATAContent(tagName string) {
 					break
 				}
 				n++
+				if n >= limit {
+					break
+				}
+			}
+			// The cap may land mid-rune. Back off to the last whole-rune
+			// boundary so the emitted chunk is valid UTF-8 — but only while a
+			// complete rune still precedes the boundary. If the run begins with
+			// a single rune that is itself larger than the cap, keep extending
+			// until that rune is whole rather than splitting it.
+			if n >= limit {
+				for n > 0 && isUTF8Continuation(p.cur.PeekAt(n)) {
+					n--
+				}
+				if n == 0 {
+					// A lone rune exceeds the cap. Extend to cover it whole so a
+					// partial rune is never emitted.
+					n = limit
+					for p.cur.HasByteAt(n) && isUTF8Continuation(p.cur.PeekAt(n)) {
+						n++
+					}
+				}
 			}
 			if n > 0 {
 				text := p.cur.PeekString(n)
@@ -1241,25 +1926,62 @@ func (p *parser) parseRCDATAContent(tagName string) {
 }
 
 // parsePlaintext parses plaintext content — everything until EOF.
-func (p *parser) parsePlaintext() {
+func (p *parser) parsePlaintext(ctx context.Context) {
+	limit := p.cfg.contentLimit()
 	var content bytes.Buffer
-	for !p.cur.Done() {
+	flushChunk := func() {
+		// Clone the bytes before Reset: bytes.Buffer.Reset reuses the same
+		// backing array, so a SAX handler that retains the slice would see
+		// this chunk overwritten by subsequent content.
+		if content.Len() > 0 {
+			p.handleSAXErr(p.sax.Characters(bytes.Clone(content.Bytes())))
+			content.Reset()
+		}
+	}
+	// appendToken writes a whole rune to the buffer, flushing first if it would
+	// push the chunk past the cap. Flushing on rune boundaries keeps every
+	// emitted chunk valid UTF-8 (no multi-byte rune split across chunks); a
+	// single rune larger than the cap is emitted whole rather than split.
+	appendToken := func(s string) {
+		if content.Len() > 0 && content.Len()+len(s) > limit {
+			flushChunk()
+		}
+		content.WriteString(s)
+	}
+	// Check ctx/fatalErr BEFORE Done() so a condition set during the previous
+	// iteration aborts immediately. Done() refills via a blocking Read; checking
+	// afterward would let a fatalErr or cancellation trigger one more blocking
+	// read before this loop returns.
+	for {
+		// Abort promptly on context cancellation rather than buffering the
+		// entire (possibly endless) plaintext section first.
+		if ctx.Err() != nil {
+			flushChunk()
+			return
+		}
+		// An over-cap construct may set fatalErr; stop scanning immediately so
+		// the main loop surfaces it instead of issuing another blocking read.
+		if p.fatalErr != nil {
+			flushChunk()
+			return
+		}
+		if p.cur.Done() {
+			break
+		}
 		// A real U+0000 (NUL) byte reads as 0, which the previous PeekAt-based
 		// scan treated as EOF, truncating plaintext early. Per HTML5 the
 		// PLAINTEXT state replaces U+0000 with U+FFFD; consume the rest of the
 		// input verbatim, distinguishing genuine EOF via Done().
-		b := p.cur.Peek()
-		if b == 0 {
-			content.WriteString("�")
+		if p.cur.Peek() == 0 {
+			appendToken("�")
 			_ = p.cur.Advance(1)
 			continue
 		}
-		content.WriteByte(b)
-		_ = p.cur.Advance(1)
+		s, n := p.peekRuneToken()
+		appendToken(s)
+		_ = p.cur.Advance(n)
 	}
-	if content.Len() > 0 {
-		p.handleSAXErr(p.sax.Characters(content.Bytes()))
-	}
+	flushChunk()
 }
 
 // parseName parses an HTML tag name (letters, digits, colons, hyphens).
@@ -1496,6 +2218,54 @@ func (p *parser) parseWhile(pred func(byte) bool) string {
 	s := p.cur.PeekString(n)
 	_ = p.cur.Advance(n)
 	return s
+}
+
+// parseWhileMaxErr is parseWhile with an upper bound: it consumes at most limit
+// matching bytes, leaving any further matching bytes for the next call. It lets
+// a caller bound an otherwise unbounded scan (e.g. a runaway entity name) and
+// drain it in fixed-size pieces. A limit <= 0 is treated as unbounded.
+//
+// It ALSO reports whether the scan was cut short by a read error / context
+// cancellation rather than by genuine exhaustion. PeekAt returns 0 both at true
+// EOF and when fillBuffer hit a non-EOF read error (e.g. the push stream
+// returning context.Canceled when its blocking wait is cancelled). Both stop the
+// scan and produce a chunk shorter than limit, so length alone cannot tell "run
+// ended" from "read failed". This is the disambiguation the bounded char-ref
+// scanners need: a short chunk is EITHER true exhaustion (next byte does not
+// match pred, or clean EOF) OR a read error (p.cur.Err() != nil). When the scan
+// stops short, this consults p.cur.Err() so callers never conclude "run ended" —
+// and never emit — on a cancelled/failed read.
+//
+// err is non-nil ONLY when the scan stopped short because the cursor could not
+// supply the next byte AND that was due to a recorded read error. A scan that
+// stops on a genuine non-matching byte, on clean EOF, or that fills the whole
+// limit returns a nil err.
+func (p *parser) parseWhileMaxErr(pred func(byte) bool, limit int) (string, error) {
+	n := 0
+	stoppedShort := false
+	for limit <= 0 || n < limit {
+		if !p.cur.HasByteAt(n) {
+			// No byte available at n: either clean EOF or a read error. Mark it
+			// so we can disambiguate against p.cur.Err() below.
+			stoppedShort = true
+			break
+		}
+		b := p.cur.PeekAt(n)
+		if b == 0 || !pred(b) {
+			break
+		}
+		n++
+	}
+	var err error
+	if stoppedShort {
+		err = p.cur.Err()
+	}
+	if n == 0 {
+		return "", err
+	}
+	s := p.cur.PeekString(n)
+	_ = p.cur.Advance(n)
+	return s, err
 }
 
 // skipWhitespace skips whitespace characters.
