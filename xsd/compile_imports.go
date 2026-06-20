@@ -596,6 +596,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		groupRefs:                make(map[*ModelGroup]QName),
 		groupRefSources:          make(map[*ModelGroup]groupRefSource),
 		groupSources:             make(map[QName]groupSource),
+		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),
@@ -718,6 +719,13 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	for qn, src := range impC.groupSources {
 		if _, exists := c.groupSources[qn]; !exists {
 			c.groupSources[qn] = src
+		}
+	}
+	// Merge attribute-group source info (mirroring the schema.attrGroups merge
+	// above): a group present in both keeps the parent's declaration and source.
+	for qn, src := range impC.attrGroupSources {
+		if _, exists := c.attrGroupSources[qn]; !exists {
+			c.attrGroupSources[qn] = src
 		}
 	}
 	maps.Copy(c.attrGroupRefs, impC.attrGroupRefs)

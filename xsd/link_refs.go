@@ -197,6 +197,14 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		c.checkAllGroupRef(ctx, placeholder)
 	}
 
+	// Reject duplicate attribute uses inside a global attribute group definition
+	// (ag-props-correct.2) BEFORE expanding the group into the types that
+	// reference it. This both reports duplicates in attribute groups that NO type
+	// references — which the per-type check below would never inspect — and
+	// removes the duplicate use from the group so a referencing type does not
+	// re-report the same collision (xmllint reports it once, at the group).
+	c.checkAttrGroupDuplicates(ctx)
+
 	// Resolve attribute group references.
 	for td, qns := range c.attrGroupRefs {
 		for _, qn := range qns {
@@ -505,6 +513,60 @@ func (c *compiler) checkDuplicateAttrUses(ctx context.Context) {
 			}
 			seen[au.Name] = true
 		}
+	}
+}
+
+// checkAttrGroupDuplicates reports duplicate attribute uses (by expanded QName)
+// within a single GLOBAL attribute group definition (ag-props-correct.2) and
+// strips the later duplicate from the stored group. It must run BEFORE the
+// attribute groups are expanded into the types that reference them, so that:
+//
+//   - a group that NO type references — which the per-type checkDuplicateAttrUses
+//     never inspects — still has its internal duplicates rejected, and
+//   - a referencing type does not re-report the same collision (xmllint reports
+//     an attribute group's internal duplicate once, attributed to the group).
+//
+// Prohibited uses do not contribute an attribute use and are skipped. Groups are
+// processed in source line order for deterministic diagnostics. The diagnostic
+// matches xmllint's wording, attributed to the xs:attributeGroup element.
+func (c *compiler) checkAttrGroupDuplicates(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+	qns := make([]QName, 0, len(c.attrGroupSources))
+	for qn := range c.attrGroupSources {
+		if len(c.schema.attrGroups[qn]) > 1 {
+			qns = append(qns, qn)
+		}
+	}
+	sort.Slice(qns, func(i, j int) bool {
+		return c.attrGroupSources[qns[i]].line < c.attrGroupSources[qns[j]].line
+	})
+	for _, qn := range qns {
+		attrs := c.schema.attrGroups[qn]
+		seen := make(map[QName]bool, len(attrs))
+		reported := make(map[QName]bool)
+		deduped := attrs[:0]
+		for _, au := range attrs {
+			if au.Prohibited {
+				deduped = append(deduped, au)
+				continue
+			}
+			if !seen[au.Name] {
+				seen[au.Name] = true
+				deduped = append(deduped, au)
+				continue
+			}
+			if reported[au.Name] {
+				continue
+			}
+			reported[au.Name] = true
+			src := c.attrGroupSources[qn]
+			msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
+			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, src.line, "attributeGroup", "attributeGroup", msg), helium.ErrorLevelFatal))
+			c.errorCount++
+		}
+		c.schema.attrGroups[qn] = deduped
 	}
 }
 

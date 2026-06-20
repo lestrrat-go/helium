@@ -35,6 +35,11 @@ type compiler struct {
 	// by group QName. Used to run cos-element-consistent over standalone named
 	// groups that no complex type references, reporting against the declaring file.
 	groupSources map[QName]groupSource
+	// source info for global attribute group definitions (xs:attributeGroup
+	// name="..."), keyed by group QName. Used to run the duplicate-attribute-use
+	// check (ag-props-correct.2) over attribute groups that no complex type
+	// references — duplicates inside such a group are otherwise never inspected.
+	attrGroupSources map[QName]attrGroupSource
 	// source info for global elements, used in substitution group error messages
 	globalElemSources map[*ElementDecl]elemRefSource
 	// source info for type definitions, used in duplicate attribute errors
@@ -204,6 +209,14 @@ type groupSource struct {
 	source string // declaring file (this compiler's filename, or an imported file)
 }
 
+// attrGroupSource tracks where a global attribute group definition
+// (xs:attributeGroup name="...") appeared so the duplicate-attribute-use check
+// over unreferenced attribute groups cites the declaring file and line.
+type attrGroupSource struct {
+	line   int
+	source string // declaring file (this compiler's filename, or an imported file)
+}
+
 // unionMemberRef tracks an unresolved union member type reference.
 type unionMemberRef struct {
 	owner *TypeDef
@@ -284,6 +297,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		groupRefs:                make(map[*ModelGroup]QName),
 		groupRefSources:          make(map[*ModelGroup]groupRefSource),
 		groupSources:             make(map[QName]groupSource),
+		attrGroupSources:         make(map[QName]attrGroupSource),
 		attrGroupRefs:            make(map[*TypeDef][]QName),
 		globalElemSources:        make(map[*ElementDecl]elemRefSource),
 		typeDefSources:           make(map[*TypeDef]typeDefSource),

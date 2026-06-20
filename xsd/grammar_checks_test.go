@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -402,6 +403,43 @@ func TestDuplicateAttributeUse(t *testing.T) {
   <xs:element name="root" type="T"/>
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
+	})
+
+	// An attribute group with two attributes of the same expanded QName is
+	// invalid (ag-props-correct.2) even when NO complex type references it. Such
+	// a group is never merged into any type's attribute set, so the per-type
+	// duplicate check never inspects it; the dedicated attribute-group check must
+	// catch it. xmllint rejects this schema.
+	t.Run("rejects duplicate in unreferenced attribute group", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g">
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:attribute name="x" type="xs:int"/>
+  </xs:attributeGroup>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), dup)
+	})
+
+	// An attribute group with an internal duplicate is reported exactly once,
+	// attributed to the attribute group, even when a complex type references it
+	// (xmllint does not also report it against the referencing type).
+	t.Run("reports internal group duplicate once when referenced", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="g">
+    <xs:attribute name="x" type="xs:string"/>
+    <xs:attribute name="x" type="xs:int"/>
+  </xs:attributeGroup>
+  <xs:complexType name="T">
+    <xs:attributeGroup ref="g"/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		errs := compileFatalErrors(t, schema)
+		require.Equal(t, 1, strings.Count(errs, dup),
+			"internal attribute-group duplicate must be reported once: %s", errs)
 	})
 
 	// Extension duplicate detection must key on the expanded QName, not the

@@ -91,6 +91,7 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		}
 	}
 	c.schema.attrGroups[qn] = attrs
+	c.attrGroupSources[qn] = attrGroupSource{line: elem.Line(), source: c.includeFile}
 	return nil
 }
 
