@@ -56,6 +56,40 @@ func fnCountOps(ctx context.Context, ec *evalContext, n int) error {
 	return ctx.Err()
 }
 
+// appendArrayMember enforces BOTH result-array bounds before adding one member
+// to an array builder (array:for-each, array:filter, array:join, array:flat-map,
+// map:find, ...) and charges the per-member op cost. It returns the grown member
+// slice and the running item total.
+//
+// Two independent limits must hold at every append site, because a member can
+// add zero items yet still add a member:
+//
+//   - member count: many EMPTY members (each seqLen 0) could otherwise build an
+//     array with more than maxNodes members while the item total stays at zero,
+//     so len(dst)+1 is bounded against maxNodes.
+//   - item count: a single member with a huge (possibly lazy) sequence could
+//     otherwise be cloned by NewArray past maxNodes items, so member length is
+//     bounded against the remaining headroom (maxNodes-total). The subtraction is
+//     overflow-safe because it only runs when maxNodes > 0.
+//
+// The op charge is max(seqLen(member), 1): NewArray clones each member, so a
+// member with many items below maxNodes but above OpLimit must be rejected, AND
+// empty members must still each cost an op so a flood of them cannot bypass
+// OpLimit.
+func appendArrayMember(ctx context.Context, ec *evalContext, maxNodes int, dst []Sequence, total int, member Sequence) ([]Sequence, int, error) {
+	if maxNodes > 0 && len(dst)+1 > maxNodes {
+		return dst, total, ErrNodeSetLimit
+	}
+	mLen := seqLen(member)
+	if maxNodes > 0 && mLen > maxNodes-total {
+		return dst, total, ErrNodeSetLimit
+	}
+	if err := fnCountOps(ctx, ec, max(mLen, 1)); err != nil {
+		return dst, total, err
+	}
+	return append(dst, member), total + mLen, nil
+}
+
 func fnForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
 	fi, err := extractFunctionItem(args[1])

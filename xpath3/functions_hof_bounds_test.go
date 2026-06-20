@@ -709,6 +709,69 @@ func TestArrayJoinFlatMapEmptyMemberOpLimit(t *testing.T) {
 	}
 }
 
+// TestFlatMapScalarMemberCountBound proves array:flat-map bounds the result
+// MEMBER count at its NON-array (scalar) append site too. A callback result item
+// that is NOT an array becomes one scalar member; without the member-count bound
+// at that site, maxNodes EMPTY array members (each adding a member but 0 items)
+// can fill the member count to the limit, then a single scalar (item count 1,
+// which passes the item-count bound 1 <= maxNodes-0) pushes the member count to
+// maxNodes+1. The callback yields one array with maxNodes empty members followed
+// by one scalar item, so only the scalar-branch member-count bound can trip
+// ErrNodeSetLimit.
+func TestFlatMapScalarMemberCountBound(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+
+	// One array with `limit` EMPTY members (each becomes a member, 0 items),
+	// followed by a single scalar integer item. The empty members fill the result
+	// member count to exactly the limit; the trailing scalar adds member limit+1
+	// via the non-array branch.
+	empties := make([]xpath3.Sequence, limit)
+	for i := range empties {
+		empties[i] = xpath3.ItemSlice{}
+	}
+	items := []xpath3.Item{xpath3.NewArray(empties), xpath3.SingleInteger(42).Get(0)}
+	vars := varsSet("mix", xpath3.ItemSlice(items))
+
+	compiled, err := xpath3.NewCompiler().Compile(`array:flat-map(array { 1 }, function($x) { $mix })`)
+	require.NoError(t, err)
+
+	_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+		Variables(vars).
+		MaxNodesForTesting(limit).
+		Evaluate(t.Context(), compiled, nil)
+	require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+}
+
+// TestArrayFilterEmptyMemberCountBound proves array:filter bounds the SELECTED
+// MEMBER count independently of the item count. A selected member that is an
+// EMPTY sequence adds zero items but still adds a member, so without a
+// member-count bound 1100 selected empty members would build an array with 1100
+// members under a 1000-node limit while the item total stays at zero. The input
+// array holds 1100 empty members and the callback selects every one, so only the
+// member-count bound can trip ErrNodeSetLimit.
+func TestArrayFilterEmptyMemberCountBound(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+
+	members := make([]xpath3.Sequence, 1100)
+	for i := range members {
+		members[i] = xpath3.ItemSlice{}
+	}
+	vars := varsSet("arr", xpath3.ItemSlice{xpath3.NewArray(members)})
+
+	compiled, err := xpath3.NewCompiler().Compile(`array:filter($arr, function($x) { true() })`)
+	require.NoError(t, err)
+
+	_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+		Variables(vars).
+		MaxNodesForTesting(limit).
+		Evaluate(t.Context(), compiled, nil)
+	require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+}
+
 // TestMapFindSingleClone proves map:find clones each matched value EXACTLY ONCE.
 // The function collects matched values into a slice that is then handed to
 // NewArray, which clones every member defensively. A regression that also cloned

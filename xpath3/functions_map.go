@@ -304,29 +304,18 @@ func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequen
 			// range stored via map:entry, which does not clone) must be rejected
 			// with ErrNodeSetLimit rather than materialized by the clone in Get.
 			if val, found := v.get0(key); found {
-				valLen := seqLen(val)
-				if maxNodes > 0 && valLen > maxNodes-total {
-					return nil, ErrNodeSetLimit
+				// Each matched value becomes one member of the result array.
+				// appendArrayMember bounds both the member count (many empty
+				// matches must not exceed maxNodes members) and the item count (a
+				// borrowed lazy value must be rejected before NewArray clones it),
+				// and charges max(valLen, 1) ops so empty matches still cost an op.
+				// The borrowed (uncloned) value is appended; the single defensive
+				// clone happens once in NewArray(results) at the call site.
+				var aerr error
+				results, total, aerr = appendArrayMember(ctx, ec, maxNodes, results, total, val)
+				if aerr != nil {
+					return nil, aerr
 				}
-				// Charge the value length against the op-counter before cloning
-				// it: a value below maxNodes but above OpLimit must still be
-				// rejected rather than materialized by cloneSequence.
-				if err := fnCountOps(ctx, ec, valLen); err != nil {
-					return nil, err
-				}
-				// Each matched value becomes one member of the result array. An empty
-				// matched value adds no items (total is unchanged) but still adds a
-				// member, so bound the member count independently: many empty matches
-				// could otherwise build an array with more than maxNodes members.
-				if maxNodes > 0 && len(results)+1 > maxNodes {
-					return nil, ErrNodeSetLimit
-				}
-				total += valLen
-				// Append the borrowed (uncloned) value. The single defensive clone
-				// happens once, in NewArray(results) at the call site; cloning here
-				// too would double-clone and exceed the single-clone op precharge
-				// above.
-				results = append(results, val)
 			}
 			// Then descend into the map's values, in insertion order, iterating
 			// the entries in place so a wide map is not duplicated into a
