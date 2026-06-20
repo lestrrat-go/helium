@@ -322,7 +322,11 @@ func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequen
 					return nil, ErrNodeSetLimit
 				}
 				total += valLen
-				results = append(results, cloneSequence(val))
+				// Append the borrowed (uncloned) value. The single defensive clone
+				// happens once, in NewArray(results) at the call site; cloning here
+				// too would double-clone and exceed the single-clone op precharge
+				// above.
+				results = append(results, val)
 			}
 			// Then descend into the map's values, in insertion order, iterating
 			// the entries in place so a wide map is not duplicated into a

@@ -239,6 +239,9 @@ func fnArrayJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 	ec := getFnContext(ctx)
 	maxNodes := fnMaxNodes(ec)
 	var allMembers []Sequence
+	// totalItems counts items already accumulated across all member sequences so
+	// NewArray's per-member clone cannot materialize more than maxNodes items.
+	totalItems := 0
 	for item := range seqItems(args[0]) {
 		if err := fnCountOp(ctx, ec); err != nil {
 			return nil, err
@@ -248,21 +251,25 @@ func fnArrayJoin(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "array:join requires sequence of arrays"}
 		}
 		members := a.members0()
-		// Check before the bulk append so the accumulator cannot overshoot the
-		// limit by a whole member slice.
-		if maxNodes > 0 && len(allMembers)+len(members) > maxNodes {
-			return nil, ErrNodeSetLimit
-		}
-		// Charge the member item count against the op-counter before the bulk
-		// append. NewArray clones each member sequence, so charge each member's
-		// item length (not just one per member): a single member with many items
-		// below maxNodes but above OpLimit must still be rejected.
 		for _, member := range members {
-			if err := fnCountOps(ctx, ec, seqLen(member)); err != nil {
+			// Bound the total member item count before appending so NewArray's
+			// clone cannot materialize a member that pushes the accumulated item
+			// count past maxNodes. The subtraction is overflow-safe.
+			mLen := seqLen(member)
+			if maxNodes > 0 && mLen > maxNodes-totalItems {
+				return nil, ErrNodeSetLimit
+			}
+			// Charge the member item count against the op-counter before the
+			// append. NewArray clones each member sequence, so charge each
+			// member's item length (not just one per member): a single member
+			// with many items below maxNodes but above OpLimit must still be
+			// rejected.
+			if err := fnCountOps(ctx, ec, mLen); err != nil {
 				return nil, err
 			}
+			totalItems += mLen
+			allMembers = append(allMembers, member)
 		}
-		allMembers = append(allMembers, members...)
 	}
 	return ItemSlice{NewArray(allMembers)}, nil
 }
@@ -368,6 +375,9 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 	ec := getFnContext(ctx)
 	maxNodes := fnMaxNodes(ec)
 	var allMembers []Sequence
+	// totalItems counts items already accumulated across all member sequences so
+	// NewArray's per-member clone cannot materialize more than maxNodes items.
+	totalItems := 0
 	for _, m := range a.members0() {
 		if err := fnCountOp(ctx, ec); err != nil {
 			return nil, err
@@ -387,22 +397,29 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 			}
 			if ra, ok := item.(ArrayItem); ok {
 				for _, member := range ra.members0() {
+					// Bound the total member item count before appending so
+					// NewArray's clone cannot materialize a member that pushes the
+					// accumulated item count past maxNodes. The subtraction is
+					// overflow-safe.
+					mLen := seqLen(member)
+					if maxNodes > 0 && mLen > maxNodes-totalItems {
+						return nil, ErrNodeSetLimit
+					}
 					// NewArray clones each member sequence, so charge its item
 					// length (not just one per member): a single member with many
 					// items below maxNodes but above OpLimit must still be rejected.
-					if err := fnCountOps(ctx, ec, seqLen(member)); err != nil {
+					if err := fnCountOps(ctx, ec, mLen); err != nil {
 						return nil, err
 					}
-					if maxNodes > 0 && len(allMembers)+1 > maxNodes {
-						return nil, ErrNodeSetLimit
-					}
+					totalItems += mLen
 					allMembers = append(allMembers, member)
 				}
 				continue
 			}
-			if maxNodes > 0 && len(allMembers)+1 > maxNodes {
+			if maxNodes > 0 && 1 > maxNodes-totalItems {
 				return nil, ErrNodeSetLimit
 			}
+			totalItems++
 			allMembers = append(allMembers, ItemSlice{item})
 		}
 	}

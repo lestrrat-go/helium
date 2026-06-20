@@ -532,6 +532,104 @@ func TestArrayMemberSeqLenOpLimit(t *testing.T) {
 	}
 }
 
+// TestArrayMemberSeqLenNodeLimit proves array:join and array:flat-map bound the
+// total ITEM count of the members they accumulate against maxNodes (not merely
+// the member COUNT) before NewArray clones/materializes them. Each input array
+// has a single member whose item count alone exceeds maxNodes, so a regression
+// that checked only the member count (= 1 <= maxNodes) would clone the oversized
+// member; only the per-member item-count bound trips ErrNodeSetLimit. The wide
+// member is bound via a variable under EvalBorrowing so the input construction
+// does not trip the `1 to N` range guard first.
+func TestArrayMemberSeqLenNodeLimit(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+
+	wideSeq := func(n int) xpath3.Sequence {
+		items := make([]xpath3.Item, n)
+		for i := range items {
+			items[i] = xpath3.SingleInteger(int64(i + 1)).Get(0)
+		}
+		return xpath3.ItemSlice(items)
+	}
+	// wideMemberArray builds an array with ONE member: a wide sequence of n items.
+	wideMemberArray := func(n int) xpath3.Sequence {
+		return xpath3.ItemSlice{xpath3.NewArray([]xpath3.Sequence{wideSeq(n)})}
+	}
+
+	cases := []struct {
+		name string
+		expr string
+		vars *xpath3.Variables
+	}{
+		// array:join over a single 1-member array whose member holds 1100 items.
+		// The member-count check (1 <= 1000) passes; only the item-count bound fires.
+		{name: "array-join", expr: `array:join($arr)`, vars: varsSet("arr", wideMemberArray(1100))},
+		// array:flat-map's callback returns a 1-member array whose member holds
+		// 1100 items; same — only the per-member item-count bound trips the limit.
+		{name: "array-flat-map", expr: `array:flat-map(array { 1 }, function($x) { $arr })`, vars: varsSet("arr", wideMemberArray(1100))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(tc.vars).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+		})
+	}
+}
+
+// TestMapFindSingleClone proves map:find clones each matched value EXACTLY ONCE.
+// The function collects matched values into a slice that is then handed to
+// NewArray, which clones every member defensively. A regression that also cloned
+// the value when appending it would clone each matched value twice — doubling the
+// per-value allocation and exceeding the single-clone op precharge. The result is
+// correct and the clone work stays at one clone per matched value, observed as a
+// stable allocation count: appending the uncloned value keeps allocs at the
+// single-clone level; a double-clone roughly doubles the per-value allocations.
+func TestMapFindSingleClone(t *testing.T) {
+	// No t.Parallel(): testing.AllocsPerRun panics if called from a parallel test.
+
+	const n = 200
+
+	key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "k"}
+	items := make([]xpath3.Item, n)
+	for i := range items {
+		items[i] = xpath3.NewMap([]xpath3.MapEntry{{Key: key, Value: xpath3.SingleInteger(int64(i))}})
+	}
+	vars := varsSet("maps", xpath3.ItemSlice(items))
+
+	compiled, err := xpath3.NewCompiler().Compile(`map:find($maps, "k")`)
+	require.NoError(t, err)
+
+	// Sanity: every value is collected once into the result array.
+	res, err := xpath3.NewEvaluator(xpath3.EvalBorrowing).
+		Variables(vars).
+		Evaluate(t.Context(), compiled, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, res.Sequence().Len())
+	arr, ok := res.Sequence().Get(0).(xpath3.ArrayItem)
+	require.True(t, ok)
+	require.Equal(t, n, arr.Size())
+
+	// A single clone of n matched values allocates close to one clone's worth per
+	// value; a double-clone regression allocates roughly twice as much. The
+	// threshold sits between the two regimes (measured: ~430 single vs ~830
+	// double), so it locks in single-clone behavior without being brittle.
+	allocs := testing.AllocsPerRun(50, func() {
+		_, evalErr := xpath3.NewEvaluator(xpath3.EvalBorrowing).
+			Variables(vars).
+			Evaluate(t.Context(), compiled, nil)
+		require.NoError(t, evalErr)
+	})
+	require.Less(t, allocs, float64(600),
+		"map:find should clone each matched value once; a higher alloc count indicates a double clone")
+}
+
 // TestMapFindNeverMaterializesValue proves map:find applies its size bound to a
 // matched map VALUE before cloning/materializing it. A map value stored via
 // map:entry / map:merge is NOT cloned at construction (the single-entry and
