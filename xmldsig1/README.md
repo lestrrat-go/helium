@@ -83,3 +83,34 @@ func Example_xmldsig1_sign_verify() {
 ```
 source: [examples/xmldsig1_sign_verify_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmldsig1_sign_verify_example_test.go)
 <!-- END INCLUDE -->
+
+## Security: SHA-1 rejected by default
+
+SHA-1-based algorithms (`rsa-sha1`, `hmac-sha1`, and the `sha1` digest) are
+**rejected by default** for both signing and verification. SHA-1 is
+cryptographically weak; accepting it silently exposes callers to algorithm
+downgrade and collision attacks. When a SHA-1 algorithm is encountered without
+an explicit opt-in, the operation fails with `ErrWeakAlgorithm`.
+
+If you must interoperate with a legacy system that cannot be upgraded, opt in
+explicitly:
+
+```go
+// Verify a legacy SHA-1 signature.
+_, err := xmldsig1.NewVerifier(keySource).
+    AllowSHA1(true).
+    Verify(ctx, doc)
+
+// Produce a legacy SHA-1 signature (discouraged).
+err := xmldsig1.NewSigner().
+    AllowSHA1(true).
+    SignatureAlgorithm(xmldsig1.AlgRSASHA1).
+    Reference(ref).
+    SignEnveloped(ctx, doc, parent, key)
+```
+
+> **Note (breaking default change):** earlier versions accepted SHA-1
+> signatures and digests without any opt-in. Code that relied on verifying
+> SHA-1 signatures must now call `Verifier.AllowSHA1(true)`; code that produced
+> SHA-1 signatures must call `Signer.AllowSHA1(true)`. SHA-256 and stronger
+> algorithms are unaffected.

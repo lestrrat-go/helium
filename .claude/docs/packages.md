@@ -281,9 +281,10 @@ Generic push parser infrastructure shared by both XML and HTML push parsers.
 XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 
 - **NewSigner() → Signer** — create fluent builder for signing (clone-on-write value type)
-  - `SignatureAlgorithm(uri)`, `CanonicalizationMethod(uri)`, `Reference(ReferenceConfig)`, `KeyInfo(KeyInfoBuilder)`, `SignatureID(id)` — builder methods
+  - `SignatureAlgorithm(uri)`, `CanonicalizationMethod(uri)`, `Reference(ReferenceConfig)`, `KeyInfo(KeyInfoBuilder)`, `SignatureID(id)`, `AllowSHA1(bool)` — builder methods
   - `SignEnveloped(ctx, doc, parent, key)`, `SignEnveloping(ctx, doc, content, key)`, `SignDetached(ctx, doc, key)` — terminal methods
-- **NewVerifier(KeySource) → Verifier** — create fluent builder for verification
+- **NewVerifier(KeySource) → Verifier** — create fluent builder for verification (clone-on-write value type)
+  - `AllowSHA1(bool)` — builder method
   - `Verify(ctx, doc)`, `VerifyElement(ctx, doc, sigElem)` — terminal methods
 - **NewEnvelopedReference() → ReferenceConfig** — SAML-optimized defaults (enveloped + ExcC14N + SHA-256)
 - Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeySourceFunc`
@@ -291,7 +292,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 - Transforms: `Enveloped()`, `C14NTransform(uri)`, `ExcC14NTransform(prefixes...)`
 - Algorithms: RSA-SHA1/SHA256, ECDSA-SHA256/SHA384, HMAC-SHA1/SHA256, Ed25519
 - Digests: SHA-1, SHA-256, SHA-384, SHA-512
-- Errors: `ErrNoKeySource` sentinel — returned by verify when no usable KeySource is configured (nil cfg, untyped-nil, or typed-nil KeySource/func)
+- **SHA-1 rejected by default** (rsa-sha1/hmac-sha1/sha1) on both sign and verify → `ErrWeakAlgorithm`; opt in with `Signer.AllowSHA1(true)` / `Verifier.AllowSHA1(true)` for legacy interop. SHA-256+ unaffected.
+- Errors: `ErrNoKeySource` sentinel — returned by verify when no usable KeySource is configured (nil cfg, untyped-nil, or typed-nil KeySource/func); `ErrWeakAlgorithm` — SHA-1 used without opt-in
 - Files: `xmldsig1.go` (API), `constants.go`, `algorithms.go`, `sign.go`, `verify.go`, `transforms.go`, `keyinfo.go`, `errors.go`
 - Imports: helium, c14n/
 

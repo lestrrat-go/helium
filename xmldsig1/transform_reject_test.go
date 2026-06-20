@@ -31,7 +31,7 @@ func TestVerifyReferenceRejectsUnsupportedTransform(t *testing.T) {
 		},
 	}
 
-	_, err = verifyReference(doc, nil, ref)
+	_, err = verifyReference(doc, nil, ref, false)
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
 }
 
@@ -56,7 +56,7 @@ func TestVerifyReferenceRejectsUnsupportedTransformWithEnveloped(t *testing.T) {
 		},
 	}
 
-	_, err = verifyReference(doc, sigElem, ref)
+	_, err = verifyReference(doc, sigElem, ref, false)
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
 
 	// The Signature element must have been reattached, not left detached.
@@ -79,7 +79,7 @@ func TestUnsupportedTransformErrorWrapping(t *testing.T) {
 		},
 	}
 
-	_, refErr := verifyReference(doc, nil, ref)
+	_, refErr := verifyReference(doc, nil, ref, false)
 	require.Error(t, refErr)
 
 	// Wrap in the actual type callers receive and confirm errors.Is still

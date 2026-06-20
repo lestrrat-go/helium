@@ -29,7 +29,7 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 
 	// Process references: compute digests and add Reference elements.
 	for _, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref); err != nil {
+		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
 			// Detach the signature on failure.
 			helium.UnlinkNode(sigElem)
 			return err
@@ -90,7 +90,7 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 	}
 
 	for _, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref); err != nil {
+		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
 			return nil, err
 		}
 	}
@@ -127,7 +127,7 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 	}
 
 	for _, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref); err != nil {
+		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1); err != nil {
 			return nil, err
 		}
 	}
@@ -208,7 +208,7 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 
 // processReference computes the digest for a single Reference and adds the
 // Reference element to SignedInfo.
-func processReference(_ context.Context, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig) error {
+func processReference(_ context.Context, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig, allowSHA1 bool) error {
 	// Resolve the reference target.
 	target, err := resolveReference(doc, ref.URI)
 	if err != nil {
@@ -265,8 +265,9 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		return err
 	}
 
-	// Compute digest.
-	digest, err := computeDigest(ref.DigestAlgorithm, canonical)
+	// Compute digest. A SHA-1 digest is rejected unless the caller opted in
+	// via Signer.AllowSHA1(true).
+	digest, err := computeDigest(ref.DigestAlgorithm, canonical, allowSHA1)
 	if err != nil {
 		return err
 	}
@@ -386,7 +387,7 @@ func computeAndSetSignatureValue(cfg *signerConfig, sigElem *helium.Element, sig
 		return err
 	}
 
-	sigBytes, err := signBytes(cfg.signatureAlgorithm, key, canonical)
+	sigBytes, err := signBytes(cfg.signatureAlgorithm, key, canonical, cfg.allowSHA1)
 	if err != nil {
 		return err
 	}

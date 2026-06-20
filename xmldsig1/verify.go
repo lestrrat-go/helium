@@ -87,8 +87,9 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		return nil, err
 	}
 
-	// Verify signature value.
-	if err := verifyBytes(parsed.signatureAlg, key, canonical, parsed.signatureValue); err != nil {
+	// Verify signature value. SHA-1-based signature algorithms are rejected
+	// here unless the caller opted in via Verifier.AllowSHA1(true).
+	if err := verifyBytes(parsed.signatureAlg, key, canonical, parsed.signatureValue, cfg.allowSHA1); err != nil {
 		return nil, &VerificationError{Reference: -1, Err: err}
 	}
 
@@ -96,7 +97,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	// confirm that the element they intend to consume is actually covered.
 	result := &VerifyResult{Signature: sigElem}
 	for i, ref := range parsed.references {
-		target, err := verifyReference(doc, sigElem, ref)
+		target, err := verifyReference(doc, sigElem, ref, cfg.allowSHA1)
 		if err != nil {
 			return nil, &VerificationError{Reference: i, URI: ref.uri, Err: err}
 		}
@@ -110,7 +111,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	return result, nil
 }
 
-func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, error) {
+func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedReference, allowSHA1 bool) (*helium.Element, error) {
 	target, err := resolveReference(doc, ref.uri)
 	if err != nil {
 		return nil, err
@@ -183,8 +184,9 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		return nil, err
 	}
 
-	// Compute and compare digest.
-	computed, err := computeDigest(ref.digestAlgorithm, canonical)
+	// Compute and compare digest. A SHA-1 digest is rejected unless the
+	// caller opted in via Verifier.AllowSHA1(true).
+	computed, err := computeDigest(ref.digestAlgorithm, canonical, allowSHA1)
 	if err != nil {
 		return nil, err
 	}
