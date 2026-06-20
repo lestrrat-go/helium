@@ -346,3 +346,31 @@ func TestSchemaAttrNBSPNotTrimmed(t *testing.T) {
 			"a trailing NBSP on the type name must not be trimmed, so 'integer ' is not xs:integer")
 	})
 }
+
+// TestPrefixedNameOverridesNSAttr covers RELAX NG §4.10: resolving a prefixed
+// <name> QName replaces any existing ns attribute (inherited or explicit) with
+// the prefix's namespace. A <name ns="urn:wrong">p:admin</name> with a bound
+// prefix p must therefore match an element in p's namespace, not in urn:wrong.
+func TestPrefixedNameOverridesNSAttr(t *testing.T) {
+	t.Parallel()
+
+	schema := `<element name="root"
+    xmlns="http://relaxng.org/ns/structure/1.0"
+    xmlns:p="urn:p">
+  <element>
+    <name ns="urn:wrong">p:admin</name>
+    <empty/>
+  </element>
+</element>`
+
+	require.Empty(t, compileErrorsFor(t, schema),
+		"a prefixed <name> with a bound prefix must compile cleanly")
+
+	require.NoError(t,
+		validateWith(t, schema, `<root><admin xmlns="urn:p"/></root>`),
+		"the resolved prefix namespace urn:p must override the ns attribute")
+
+	require.Error(t,
+		validateWith(t, schema, `<root><admin xmlns="urn:wrong"/></root>`),
+		"the ns attribute urn:wrong must be overridden by the prefix namespace")
+}

@@ -968,9 +968,9 @@ func (c *compiler) parseNameClass(ctx context.Context, node *helium.Element) *na
 				return &nameClass{kind: ncNoMatch}
 			}
 			name = localName
-			if !hasNS {
-				ns = resolvedNS
-			}
+			// RELAX NG §4.10: resolving a prefixed <name> replaces any existing
+			// (inherited or explicit) ns attribute with the prefix's namespace.
+			ns = resolvedNS
 		} else if !hasNS {
 			ns = getAncestorNS(node)
 		}
