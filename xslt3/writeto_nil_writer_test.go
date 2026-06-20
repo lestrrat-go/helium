@@ -65,3 +65,34 @@ func TestWriteToNilWriterRejectsBeforeTransform(t *testing.T) {
 		require.False(t, h.called, "transform side effects must not run when writer is a typed nil")
 	})
 }
+
+// TestWriteToValidationPrecedesNilWriter verifies that configuration
+// validation errors keep precedence over the nil-writer guard: an invalid
+// invocation invoked with a nil writer must surface the more-specific
+// validation error, not the generic nil-writer error.
+func TestWriteToValidationPrecedesNilWriter(t *testing.T) {
+	ctx := t.Context()
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+	require.NoError(t, err)
+
+	// A nil stylesheet produces an invocation that fails validation. Calling
+	// WriteTo with a nil writer must return the validation error, not the
+	// nil-writer error.
+	var nilSS *xslt3.Stylesheet
+
+	t.Run("nil interface writer", func(t *testing.T) {
+		err := nilSS.Transform(src).WriteTo(ctx, nil)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "nil stylesheet",
+			"validation error must take precedence over the nil-writer error")
+	})
+
+	t.Run("typed nil writer", func(t *testing.T) {
+		var b *bytes.Buffer
+		err := nilSS.Transform(src).WriteTo(ctx, b)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "nil stylesheet",
+			"validation error must take precedence over the nil-writer error")
+	})
+}

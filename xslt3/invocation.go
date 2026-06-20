@@ -421,11 +421,16 @@ func isNilWriter(w io.Writer) bool {
 // WriteTo executes the transformation and writes the serialized result to w.
 // Secondary result documents are delivered through the handler only.
 func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
-	if isNilWriter(w) {
-		return errNilWriter
-	}
+	// validate() first so configuration errors (nil stylesheet, unconfigured
+	// invocation, kind-specific misuse) keep their established precedence.
 	if err := inv.validate(); err != nil {
 		return err
+	}
+	// Guard the nil writer only after validation, but before executing the
+	// transform, so a usable invocation never runs its side effects when the
+	// result cannot be written anywhere.
+	if isNilWriter(w) {
+		return errNilWriter
 	}
 	tcfg := inv.toTransformConfig()
 	resultDoc, err := executeTransform(ctx, inv.cfg.source, inv.cfg.ss, tcfg)
