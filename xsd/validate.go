@@ -1256,7 +1256,7 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 	if derived == base {
 		return true
 	}
-	if base.Name.Local == "anyType" && base.Name.NS == lexicon.NamespaceXSD {
+	if base.Name.Local == typeAnyType && base.Name.NS == lexicon.NamespaceXSD {
 		return true
 	}
 	for cur := derived.BaseType; cur != nil; cur = cur.BaseType {
