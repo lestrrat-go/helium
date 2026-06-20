@@ -266,7 +266,10 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 	}
 	seen := make(map[helium.Node]struct{}, len(nodes))
 	var nsKeys map[NSNodeKey]struct{}
-	result := make([]helium.Node, 0, len(nodes))
+	// Cap the result allocation at the limit (plus one slot to detect overflow)
+	// so a large, duplicate-heavy input does not over-allocate a full-size
+	// buffer when the deduplicated result fits well within maxNodes.
+	result := make([]helium.Node, 0, min(len(nodes), maxNodes+1))
 	// Track distinct roots to avoid calling BuildFrom for every node.
 	var roots map[helium.Node]struct{}
 	for _, n := range nodes {
@@ -285,6 +288,9 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 		}
 		seen[n] = struct{}{}
 		result = append(result, n)
+		if len(result) > maxNodes {
+			return nil, ErrNodeSetLimit
+		}
 		// Track the root for this node.
 		root := DocumentRoot(n)
 		if roots == nil {
@@ -294,9 +300,6 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 			roots[root] = struct{}{}
 			cache.BuildFrom(root)
 		}
-	}
-	if len(result) > maxNodes {
-		return nil, ErrNodeSetLimit
 	}
 
 	// Precompute sort keys to avoid repeated map lookups during sort.
@@ -318,7 +321,10 @@ func DeduplicateNodesPreserveOrder(nodes []helium.Node, maxNodes int) ([]helium.
 	}
 	seen := make(map[helium.Node]struct{}, len(nodes))
 	var nsKeys map[NSNodeKey]struct{}
-	result := make([]helium.Node, 0, len(nodes))
+	// Cap the result allocation at the limit (plus one slot to detect overflow)
+	// so a large, duplicate-heavy input does not over-allocate a full-size
+	// buffer when the deduplicated result fits well within maxNodes.
+	result := make([]helium.Node, 0, min(len(nodes), maxNodes+1))
 	for _, n := range nodes {
 		if _, ok := seen[n]; ok {
 			continue
@@ -335,9 +341,9 @@ func DeduplicateNodesPreserveOrder(nodes []helium.Node, maxNodes int) ([]helium.
 		}
 		seen[n] = struct{}{}
 		result = append(result, n)
-	}
-	if len(result) > maxNodes {
-		return nil, ErrNodeSetLimit
+		if len(result) > maxNodes {
+			return nil, ErrNodeSetLimit
+		}
 	}
 	return result, nil
 }

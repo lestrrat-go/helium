@@ -151,6 +151,97 @@ func TestDeduplicateNodes_ExceedsLimit(t *testing.T) {
 	require.ErrorIs(t, err, ixpath.ErrNodeSetLimit)
 }
 
+// buildWideDoc creates a document whose root has childCount element children,
+// returning the children in document order.
+func buildWideDoc(t *testing.T, childCount int) (*helium.Document, []helium.Node) {
+	t.Helper()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+
+	children := make([]helium.Node, 0, childCount)
+	for i := 0; i < childCount; i++ {
+		child := doc.CreateElement("child")
+		require.NoError(t, root.AddChild(child))
+		children = append(children, child)
+	}
+	return doc, children
+}
+
+// dupHeavyInput returns a slice of length inputSize built by repeating a small
+// set of distinct nodes, so that after deduplication only len(distinct) unique
+// nodes remain. This drives the over-allocation case: the input is large but
+// the result is small.
+func dupHeavyInput(distinct []helium.Node, inputSize int) []helium.Node {
+	out := make([]helium.Node, 0, inputSize)
+	for i := 0; i < inputSize; i++ {
+		out = append(out, distinct[i%len(distinct)])
+	}
+	return out
+}
+
+// TestDeduplicateNodes_CapBoundedByMaxNodes verifies that a large, duplicate-
+// heavy input does not cause the dedup to allocate a full-input-size result
+// buffer. The unique result fits within maxNodes, so the returned slice
+// capacity must stay bounded by maxNodes (plus the overflow detection slot),
+// not balloon to the input length. This is a memory-efficiency guarantee.
+func TestDeduplicateNodes_CapBoundedByMaxNodes(t *testing.T) {
+	const inputSize = 1000
+	const maxNodes = 4
+	_, children := buildWideDoc(t, maxNodes)
+	cache := &ixpath.DocOrderCache{}
+
+	nodes := dupHeavyInput(children, inputSize)
+	result, err := ixpath.DeduplicateNodes(nodes, cache, maxNodes)
+	require.NoError(t, err)
+	require.Len(t, result, maxNodes)
+	// Output order/content unchanged: document order of the distinct children.
+	for i := range children {
+		require.Equal(t, children[i], result[i])
+	}
+	require.LessOrEqual(t, cap(result), maxNodes+1,
+		"result capacity should be bounded by maxNodes, not the input size")
+}
+
+// TestDeduplicateNodes_ExceedsLimitLargeInput verifies truncation semantics
+// (error, not silent truncation) are preserved for a large over-limit input.
+func TestDeduplicateNodes_ExceedsLimitLargeInput(t *testing.T) {
+	const inputSize = 1000
+	const maxNodes = 4
+	_, children := buildWideDoc(t, inputSize)
+	cache := &ixpath.DocOrderCache{}
+
+	result, err := ixpath.DeduplicateNodes(children, cache, maxNodes)
+	require.ErrorIs(t, err, ixpath.ErrNodeSetLimit)
+	require.Nil(t, result)
+}
+
+func TestDeduplicateNodesPreserveOrder_CapBoundedByMaxNodes(t *testing.T) {
+	const inputSize = 1000
+	const maxNodes = 4
+	_, children := buildWideDoc(t, maxNodes)
+
+	nodes := dupHeavyInput(children, inputSize)
+	result, err := ixpath.DeduplicateNodesPreserveOrder(nodes, maxNodes)
+	require.NoError(t, err)
+	require.Len(t, result, maxNodes)
+	for i := range children {
+		require.Equal(t, children[i], result[i])
+	}
+	require.LessOrEqual(t, cap(result), maxNodes+1,
+		"result capacity should be bounded by maxNodes, not the input size")
+}
+
+func TestDeduplicateNodesPreserveOrder_ExceedsLimitLargeInput(t *testing.T) {
+	const inputSize = 1000
+	const maxNodes = 4
+	_, children := buildWideDoc(t, inputSize)
+
+	result, err := ixpath.DeduplicateNodesPreserveOrder(children, maxNodes)
+	require.ErrorIs(t, err, ixpath.ErrNodeSetLimit)
+	require.Nil(t, result)
+}
+
 func TestDocOrderCache_BuildFromMultipleDocuments(t *testing.T) {
 	doc1, root1, _ := buildDoc(t)
 	doc2, root2, child2 := buildDoc(t)
