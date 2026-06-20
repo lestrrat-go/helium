@@ -74,6 +74,16 @@ var defaultPrefixNS = map[string]string{
 	"xs":              NSXS,
 }
 
+// PredeclaredNamespace returns the namespace URI bound to one of the XPath 3.0
+// predeclared namespace prefixes (fn, math, map, array, err, xs) in the static
+// context. The second return value is false when the prefix is not predeclared.
+// Callers must let an explicit in-scope namespace declaration take precedence
+// over this fallback.
+func PredeclaredNamespace(prefix string) (string, bool) {
+	ns, ok := defaultPrefixNS[prefix]
+	return ns, ok
+}
+
 // namespacePrefixFor returns the conventional prefix for a known namespace URI.
 func namespacePrefixFor(uri string) string {
 	for prefix, ns := range defaultPrefixNS {

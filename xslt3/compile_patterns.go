@@ -365,7 +365,15 @@ func (c *compiler) validatePatternFunctions(_ context.Context, p *pattern, sourc
 				return true
 			}
 			local := fc.Name
-			nsURI := c.nsBindings[fc.Prefix]
+			nsURI, bound := c.nsBindings[fc.Prefix]
+			// An explicit in-scope xmlns declaration takes precedence; only
+			// fall back to the XPath 3.0 predeclared bindings (fn:, math:,
+			// map:, array:, err:, xs:) when the prefix is otherwise undeclared.
+			if !bound {
+				if ns, ok := xpath3.PredeclaredNamespace(fc.Prefix); ok {
+					nsURI = ns
+				}
+			}
 			displayName := fc.Prefix + ":" + local
 			// Known XPath/XSLT function namespaces are always OK.
 			switch nsURI {
