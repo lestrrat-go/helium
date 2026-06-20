@@ -42,6 +42,7 @@ type execContext struct {
 	currentPackage               *Stylesheet                // owning package of currently executing template/function
 	xpathDefaultNS               string                     // current xpath-default-namespace
 	hasXPathDefaultNS            bool                       // true when xpathDefaultNS is explicitly set
+	nsOverride                   map[string]string          // when non-nil, overrides stylesheet.namespaces for sequence-type prefix resolution
 	defaultValidation            string                     // runtime copy of stylesheet.defaultValidation (save/restore per scope)
 	defaultCollation             string                     // current default-collation URI (empty = codepoint)
 	tunnelParams                 map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
@@ -511,6 +512,24 @@ func (ec *execContext) setVarDeferred(name string, err error) {
 		ec.localVars.deferredErrors = make(map[string]error, 2)
 	}
 	ec.localVars.deferredErrors[name] = err
+}
+
+// lookupTypeNamespaceOK resolves a namespace prefix used inside a sequence
+// type, honoring nsOverride when set (e.g. the declaration-site context of an
+// xsl:global-context-item), falling back to the stylesheet-wide namespace map.
+// It reports whether the prefix was bound.
+func (ec *execContext) lookupTypeNamespaceOK(prefix string) (string, bool) {
+	if ec.nsOverride != nil {
+		if ns, ok := ec.nsOverride[prefix]; ok {
+			return ns, true
+		}
+		return "", false
+	}
+	if ec.stylesheet != nil {
+		ns, ok := ec.stylesheet.namespaces[prefix]
+		return ns, ok
+	}
+	return "", false
 }
 
 func (ec *execContext) resolvePrefix(prefix string) string {
