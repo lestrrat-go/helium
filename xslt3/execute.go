@@ -1010,9 +1010,7 @@ func (ec *execContext) effectiveXPathNamespaces() map[string]string {
 	// allows the XPath predeclared prefixes without an explicit xmlns. Seed the
 	// predeclared bindings first so stylesheet declarations below override them.
 	if ec.inPatternMatch {
-		for prefix, uri := range xpath3.PredeclaredNamespaces() {
-			ns[prefix] = uri
-		}
+		maps.Copy(ns, xpath3.PredeclaredNamespaces())
 	}
 	collectPackageNamespaces(ec.stylesheet, ns)
 	for k, v := range ec.stylesheet.namespaces {

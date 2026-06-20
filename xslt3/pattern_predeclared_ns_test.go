@@ -156,6 +156,99 @@ func TestPatternXSLTFunctionAllowed(t *testing.T) {
 	require.Contains(t, out, "[plain]")
 }
 
+// TestPatternUnprefixedFunctionValidation verifies that unprefixed function
+// calls in patterns get the same existence/arity validation as their fn:-prefixed
+// forms. An unprefixed call names the XPath functions namespace, so a nonexistent
+// function must be rejected (XPST0017) and a wrong-arity call must not escape to
+// runtime.
+func TestPatternUnprefixedFunctionValidation(t *testing.T) {
+	t.Parallel()
+
+	const tmpl = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:key name="k" match="a" use="@id"/>
+  <xsl:template match="%s"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	tests := []struct {
+		name    string
+		match   string
+		wantErr bool
+	}{
+		{name: "unprefixed-unknown-function", match: "*[no-such-function()]", wantErr: true},
+		{name: "unprefixed-wrong-arity-key", match: "key('k')", wantErr: true},
+		{name: "unprefixed-correct-arity-key", match: "key('k', '1')"},
+		{name: "unprefixed-known-function", match: "*[true()]"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := strings.Replace(tmpl, "%s", tc.match, 1)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+
+			_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestPatternForbiddenFunctionRespectsExplicitBinding verifies that the
+// forbidden-in-pattern check (current-group, current-merge-key, ...) is applied
+// only when the call actually resolves to the XPath functions namespace. An
+// explicit xmlns:fn override pointing at a custom namespace means fn:current-group
+// is a user function, not the XSLT builtin, so it must NOT be rejected. A real
+// fn:current-group() (no override) must still be forbidden.
+func TestPatternForbiddenFunctionRespectsExplicitBinding(t *testing.T) {
+	t.Parallel()
+
+	// fn rebound to a custom namespace: fn:current-group() is a user function
+	// declared as xsl:function. It must compile (not be rejected as the builtin).
+	overrideSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:fn="urn:custom">
+  <xsl:function name="fn:current-group" as="xs:boolean">
+    <xsl:sequence select="true()"/>
+  </xsl:function>
+  <xsl:template match="a[fn:current-group()]"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(overrideSrc))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err, "fn:current-group() in custom namespace must not be rejected as the XSLT builtin")
+
+	// No override: real fn:current-group() in a pattern is forbidden (XTSE1060).
+	realSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="a[fn:current-group()]"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	doc, err = helium.NewParser().Parse(t.Context(), []byte(realSrc))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.Error(t, err, "real fn:current-group() in a pattern must be forbidden")
+
+	// Unprefixed current-group() resolves to the XPath functions namespace and
+	// must also be forbidden.
+	plainSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="a[current-group()]"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	doc, err = helium.NewParser().Parse(t.Context(), []byte(plainSrc))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.Error(t, err, "unprefixed current-group() in a pattern must be forbidden")
+}
+
 // TestPatternFnCurrentCompiles verifies fn:current() is accepted (not rejected
 // as XPST0017) inside a pattern predicate.
 func TestPatternFnCurrentCompiles(t *testing.T) {

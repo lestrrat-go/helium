@@ -91,7 +91,7 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %s", alt, err)
 		}
 		// XTSE3500: current-merge-key() must not be used within a pattern.
-		if err := checkPatternForbiddenFunctions(ast); err != nil {
+		if err := checkPatternForbiddenFunctions(ast, nsBindings); err != nil {
 			return nil, err
 		}
 		compiledExpr, compErr := xpath3.NewCompiler().CompileExpr(ast)
@@ -346,6 +346,25 @@ func isPatternFunctionArg(expr xpath3.Expr) bool {
 	return false
 }
 
+// resolvePatternFunctionNamespace resolves a function-call prefix to its
+// namespace URI using the same precedence everywhere in pattern validation:
+// an unprefixed call names the XPath functions namespace; a prefixed call
+// resolves through the EXPLICIT in-scope xmlns bindings first, falling back to
+// the XPath 3.0 predeclared bindings (fn:, math:, map:, array:, err:, xs:) only
+// when the prefix is otherwise undeclared. An unresolved prefix returns "".
+func resolvePatternFunctionNamespace(prefix string, nsBindings map[string]string) string {
+	if prefix == "" {
+		return lexicon.NamespaceFn
+	}
+	if uri, bound := nsBindings[prefix]; bound {
+		return uri
+	}
+	if ns, ok := xpath3.PredeclaredNamespace(prefix); ok {
+		return ns
+	}
+	return ""
+}
+
 // validatePatternFunctions checks that all function calls in a pattern
 // reference known functions (built-in XPath or declared xsl:function).
 // Unknown functions like f:special() raise XPST0017 at compile time.
@@ -360,21 +379,17 @@ func (c *compiler) validatePatternFunctions(_ context.Context, p *pattern, sourc
 			if !ok {
 				return true
 			}
-			// Unprefixed functions are built-in XPath functions — always OK.
-			if fc.Prefix == "" {
-				return true
-			}
 			local := fc.Name
-			nsURI, bound := c.nsBindings[fc.Prefix]
-			// An explicit in-scope xmlns declaration takes precedence; only
-			// fall back to the XPath 3.0 predeclared bindings (fn:, math:,
-			// map:, array:, err:, xs:) when the prefix is otherwise undeclared.
-			if !bound {
-				if ns, ok := xpath3.PredeclaredNamespace(fc.Prefix); ok {
-					nsURI = ns
-				}
+			// An unprefixed function call names the XPath functions namespace,
+			// the same as the prefixed path. Resolve it explicitly so it gets
+			// the identical existence/arity validation below — a nonexistent
+			// no-such-function() or a wrong-arity key() must be rejected, not
+			// silently allowed.
+			nsURI := resolvePatternFunctionNamespace(fc.Prefix, c.nsBindings)
+			displayName := local
+			if fc.Prefix != "" {
+				displayName = fc.Prefix + ":" + local
 			}
-			displayName := fc.Prefix + ":" + local
 			// Resolving the prefix to a known function namespace is not enough:
 			// the function must actually exist with an acceptable arity. Confirm
 			// against xpath3's built-in registry (covers fn:, math:, map:, array:,
@@ -425,7 +440,7 @@ func validatePredicateExpr(_ xpath3.Expr) error {
 // XTSE3500: current-merge-key() must not be used within a pattern.
 // XTSE3470: current-merge-group() must not be used within a pattern.
 // XTSE1060: current-group()/current-grouping-key() must not be used within a pattern.
-func checkPatternForbiddenFunctions(ast xpath3.Expr) error {
+func checkPatternForbiddenFunctions(ast xpath3.Expr, nsBindings map[string]string) error {
 	var walkErr error
 	xpathstream.WalkExpr(ast, func(e xpath3.Expr) bool {
 		if walkErr != nil {
@@ -435,7 +450,12 @@ func checkPatternForbiddenFunctions(ast xpath3.Expr) error {
 		if !ok {
 			return true
 		}
-		if !isFnNamespacePrefix(fc.Prefix) {
+		// The forbidden list applies only to the XSLT/XPath functions
+		// namespace. Resolve the prefix the same way function existence is
+		// resolved (explicit bindings first, predeclared as fallback) so an
+		// explicit xmlns:fn override pointing at a custom namespace makes
+		// fn:current-group() a user function, not the forbidden builtin.
+		if resolvePatternFunctionNamespace(fc.Prefix, nsBindings) != lexicon.NamespaceFn {
 			return true
 		}
 		switch fc.Name {
