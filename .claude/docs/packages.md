@@ -76,7 +76,7 @@ XPath 3.1 expression parsing and evaluation.
 - `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`, `Sequence()`
 - Merge helpers: `WithAdditionalNamespaces(ctx, ns)`, `WithAdditionalVariables(ctx, vars)`
 - Direct mutators also include `WithDefaultLanguage(ctx, lang)`, `WithDefaultCollation(ctx, uri)`, `WithDefaultDecimalFormat(ctx, df)`, `WithNamedDecimalFormats(ctx, dfs)`, `WithBaseURI(ctx, uri)`, `WithURIResolver(ctx, r)`, `WithCollectionResolver(ctx, r)`, `WithHTTPClient(ctx, client)`, `WithImplicitTimezone(ctx, loc)`
-- **Evaluator.MaxResourceBytes(int64) → Evaluator** — cap bytes read from a single external resource by fn:unparsed-text(-lines/-available), fn:doc-available, fn:json-doc (0 = default cap, negative = unbounded); over-cap reads fail FOUT1170
+- **Evaluator.MaxResourceBytes(int64) → Evaluator** — cap bytes read from a single external resource by fn:unparsed-text(-lines/-available), fn:doc, fn:doc-available, fn:json-doc (0 = default cap, negative = unbounded); over-cap reads fail FOUT1170
 - XPath 3.1 features: FLWOR, quantified, if-then-else, try-catch, maps, arrays, inline functions, HOFs, arrow operator, simple map, string concat, value/general/node comparisons
 - Built-in functions: 100+ across fn:, math:, map:, array: namespaces
 - Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem

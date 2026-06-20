@@ -221,7 +221,7 @@ func (e Evaluator) HTTPClient(client *http.Client) Evaluator {
 // MaxResourceBytes sets the maximum number of bytes read from a single
 // external resource fetched through the URIResolver or HTTPClient by
 // fn:unparsed-text, fn:unparsed-text-lines, fn:unparsed-text-available,
-// fn:doc-available, and fn:json-doc. A value of 0 selects the default cap; a
+// fn:doc, fn:doc-available, and fn:json-doc. A value of 0 selects the default cap; a
 // negative value disables the bound. Reads exceeding the cap fail with a
 // retrieval error (FOUT1170) rather than buffering an unbounded body.
 func (e Evaluator) MaxResourceBytes(n int64) Evaluator {

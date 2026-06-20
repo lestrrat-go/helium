@@ -185,3 +185,122 @@ func TestFnTransformNestedCompileHonorsInvocationCap(t *testing.T) {
 	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
 		"fn:transform nested-compile resources must honor the Invocation MaxResourceBytes cap")
 }
+
+// xsl:source-document wraps an over-cap resource read in a dynamic error; the
+// ErrResourceTooLarge sentinel must survive that wrapping so callers can match
+// it via errors.Is, as the public API promises.
+func TestSourceDocumentOverCapPreservesSentinel(t *testing.T) {
+	t.Parallel()
+
+	const u = "http://example.invalid/big-src.xml"
+	body := "<root>" + strings.Repeat("a", 8192) + "</root>"
+
+	resolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
+		if uri != u {
+			return nil, os.ErrNotExist
+		}
+		return io.NopCloser(strings.NewReader(body)), nil
+	})
+
+	sheet := `<?xml version="1.0"?>` +
+		`<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">` +
+		`<xsl:template match="/"><xsl:source-document href="` + u + `"><got/></xsl:source-document></xsl:template>` +
+		`</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(sheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(source).
+		MaxResourceBytes(64).
+		URIResolver(resolver).
+		Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+		"xsl:source-document over-cap read must preserve ErrResourceTooLarge")
+}
+
+// xsl:merge wraps an over-cap resource read in a dynamic error; the
+// ErrResourceTooLarge sentinel must survive that wrapping.
+func TestMergeOverCapPreservesSentinel(t *testing.T) {
+	t.Parallel()
+
+	const u = "http://example.invalid/big-merge.xml"
+	body := `<data>` + strings.Repeat(`<row><k>1</k></row>`, 1024) + `</data>`
+
+	resolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
+		if uri != u {
+			return nil, os.ErrNotExist
+		}
+		return io.NopCloser(strings.NewReader(body)), nil
+	})
+
+	sheet := `<?xml version="1.0"?>` +
+		`<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">` +
+		`<xsl:template match="/"><out>` +
+		`<xsl:merge>` +
+		`<xsl:merge-source select="/" for-each-source="'` + u + `'">` +
+		`<xsl:merge-key select="k"/>` +
+		`</xsl:merge-source>` +
+		`<xsl:merge-action><xsl:sequence select="."/></xsl:merge-action>` +
+		`</xsl:merge>` +
+		`</out></xsl:template>` +
+		`</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(sheet))
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(source).
+		MaxResourceBytes(64).
+		URIResolver(resolver).
+		Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+		"xsl:merge over-cap read must preserve ErrResourceTooLarge")
+}
+
+// A serialization parameter-document over-cap read wraps in a static error
+// (XTSE0090) at compile time; the ErrResourceTooLarge sentinel must survive
+// that wrapping so callers can match it via errors.Is.
+func TestParameterDocumentOverCapPreservesSentinel(t *testing.T) {
+	t.Parallel()
+
+	const u = "http://example.invalid/big-params.xml"
+	body := `<serialization-parameters xmlns="http://www.w3.org/2010/xslt-xquery-serialization">` +
+		`<!-- ` + strings.Repeat("p", 8192) + ` -->` +
+		`<indent value="yes"/>` +
+		`</serialization-parameters>`
+
+	resolver := resolverFunc(func(uri string) (io.ReadCloser, error) {
+		if uri != u {
+			return nil, os.ErrNotExist
+		}
+		return io.NopCloser(strings.NewReader(body)), nil
+	})
+
+	sheet := `<?xml version="1.0"?>` +
+		`<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">` +
+		`<xsl:output method="xml" parameter-document="` + u + `"/>` +
+		`<xsl:template match="/"><out/></xsl:template>` +
+		`</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(sheet))
+	require.NoError(t, err)
+
+	_, err = xslt3.NewCompiler().
+		MaxResourceBytes(64).
+		URIResolver(resolver).
+		Compile(t.Context(), doc)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+		"serialization parameter-document over-cap read must preserve ErrResourceTooLarge")
+}

@@ -40,7 +40,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 	if !ok {
 		data, err := ec.retrieveDocumentBytes(ctx, resolvedURI)
 		if err != nil {
-			return dynamicError(errCodeFODC0002, "xsl:source-document cannot load %q: %v", uri, err)
+			return dynamicErrorCause(errCodeFODC0002, err, "xsl:source-document cannot load %q: %v", uri, err)
 		}
 
 		p := helium.NewParser().BaseURI(resolvedURI)
@@ -1285,7 +1285,7 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 
 	data, readErr := ec.retrieveDocumentBytes(ctx, resolvedURI)
 	if readErr != nil {
-		return nil, dynamicError(errCodeFODC0002, "xsl:merge cannot load %q: %v", uri, readErr)
+		return nil, dynamicErrorCause(errCodeFODC0002, readErr, "xsl:merge cannot load %q: %v", uri, readErr)
 	}
 
 	p := helium.NewParser().BaseURI(resolvedURI)
