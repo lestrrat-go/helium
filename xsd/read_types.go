@@ -32,7 +32,7 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 		return err
 	}
 	td.Name = qn
-	td.Abstract = getAttr(elem, attrAbstract) == attrValTrue
+	td.Abstract = c.readBooleanAttr(ctx, elem, attrAbstract)
 
 	// Parse final attribute with schema default.
 	if hasAttr(elem, attrFinal) {
@@ -42,7 +42,7 @@ func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Eleme
 		td.Final = c.schema.finalDefault & (FinalExtension | FinalRestriction)
 	}
 
-	c.recordTypeDefSource(td, elem.Line(), false)
+	c.recordTypeDefSource(td, elem.Line(), false, elem.LocalName())
 	c.typeKinds[td.Name] = redefineKindComplexType
 	c.schema.types[td.Name] = td
 	return nil
@@ -79,7 +79,7 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 		td.Final = c.schema.finalDefault & (FinalRestriction | FinalList | FinalUnion)
 	}
 
-	c.recordTypeDefSource(td, elem.Line(), false)
+	c.recordTypeDefSource(td, elem.Line(), false, elem.LocalName())
 	c.typeKinds[td.Name] = redefineKindSimpleType
 	c.schema.types[td.Name] = td
 	return nil
@@ -87,11 +87,32 @@ func (c *compiler) parseNamedSimpleType(ctx context.Context, elem *helium.Elemen
 
 func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (*TypeDef, error) {
 	td := &TypeDef{}
-	c.recordTypeDefSource(td, elem.Line(), true)
+	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
 
-	mixed := getAttr(elem, "mixed")
-	if mixed == attrValTrue {
+	if c.readBooleanAttr(ctx, elem, "mixed") {
 		td.ContentType = ContentTypeMixed
+	}
+
+	// XSD 3.4.2: the content of an xs:complexType is one of:
+	//   - a single simpleContent OR complexContent, OR
+	//   - an optional model-group particle (sequence|choice|all|group)
+	//     followed by attribute uses.
+	// These two forms are mutually exclusive, and at most one model-group
+	// particle / content-model wrapper may appear. Track what we have seen so
+	// a schema that supplies a second model group (silently overwriting the
+	// first) or mixes a particle with simple/complexContent is rejected rather
+	// than accepting the last-seen child.
+	var contentModelChild string   // local name of the first model-group particle seen
+	var contentWrapperChild string // "simpleContent" or "complexContent" if seen
+	var directAttrChild string     // local name of the first direct attribute/attributeGroup/anyAttribute seen
+
+	reportExtraContent := func(ce *helium.Element, what string) {
+		if c.filename == "" {
+			return
+		}
+		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+			elem.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
+		c.errorCount++
 	}
 
 	for child := range helium.Children(elem) {
@@ -102,6 +123,31 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		if !ok {
 			continue
 		}
+
+		// Guard model-group particles: at most one, before any attribute
+		// declaration, and not alongside a simple/complexContent wrapper. XSD
+		// 3.4.2 fixes the ordering: an optional leading model-group particle,
+		// then attribute/attributeGroup uses, then an optional anyAttribute. A
+		// model-group particle that appears AFTER an attribute declaration is
+		// out of order and rejected.
+		isModelGroup := isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) ||
+			isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup)
+		if isModelGroup {
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The content model particle '%s' is not allowed together with '%s'.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if directAttrChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The content model particle '%s' must appear before the attribute declaration '%s'.", ce.LocalName(), directAttrChild))
+				continue
+			}
+			if contentModelChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild))
+				continue
+			}
+			contentModelChild = ce.LocalName()
+		}
+
 		switch {
 		case isXSDElement(ce, elemSequence):
 			mg, err := c.parseModelGroup(ctx, ce, CompositorSequence)
@@ -146,6 +192,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 					local:        ce.LocalName(),
 					nested:       false,
 					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+					source:       c.diagSource(),
 				}
 				td.ContentModel = placeholder
 				if td.ContentType != ContentTypeMixed {
@@ -153,20 +200,67 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 				}
 			}
 		case isXSDElement(ce, elemComplexContent):
+			if contentModelChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the content model particle '%s'.", ce.LocalName(), contentModelChild))
+				continue
+			}
+			if directAttrChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the attribute declaration '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), directAttrChild))
+				continue
+			}
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one of 'simpleContent' or 'complexContent' (found '%s' after '%s').", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			contentWrapperChild = ce.LocalName()
 			if err := c.parseComplexContent(ctx, ce, td); err != nil {
 				return nil, err
 			}
 		case isXSDElement(ce, elemSimpleContent):
+			if contentModelChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the content model particle '%s'.", ce.LocalName(), contentModelChild))
+				continue
+			}
+			if directAttrChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The wrapper '%s' is not allowed together with the attribute declaration '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), directAttrChild))
+				continue
+			}
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("A complex type definition must not have more than one of 'simpleContent' or 'complexContent' (found '%s' after '%s').", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			contentWrapperChild = ce.LocalName()
 			c.parseSimpleContent(ctx, ce, td)
 		case isXSDElement(ce, elemAttribute):
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' is not allowed together with '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if directAttrChild == "" {
+				directAttrChild = ce.LocalName()
+			}
 			au := c.parseAttributeUse(ctx, ce)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ce, elemAttributeGroup):
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' is not allowed together with '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if directAttrChild == "" {
+				directAttrChild = ce.LocalName()
+			}
 			if ref := getAttr(ce, attrRef); ref != "" {
 				qn := c.resolveQName(ctx, ce, ref)
 				c.attrGroupRefs[td] = append(c.attrGroupRefs[td], qn)
 			}
 		case isXSDElement(ce, elemAnyAttribute):
+			if contentWrapperChild != "" {
+				reportExtraContent(ce, fmt.Sprintf("The attribute wildcard '%s' is not allowed together with '%s'; the wildcard must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
+				continue
+			}
+			if directAttrChild == "" {
+				directAttrChild = ce.LocalName()
+			}
 			td.AnyAttribute = c.parseAnyAttribute(ctx, ce)
 		}
 	}
@@ -205,6 +299,15 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		c.markChameleonEligible(td, elem, baseRef)
 	}
 
+	// XSD 3.4.2 fixes the child ordering of a derivation: an optional leading
+	// model-group particle (sequence|choice|all|group ref) — at most one — then
+	// attribute/attributeGroup uses, then an optional anyAttribute. Track the
+	// first model-group particle and the first attribute-region child so a
+	// second particle (which would silently overwrite td.ContentModel) and a
+	// particle that appears AFTER an attribute declaration are both rejected.
+	var contentModelChild string
+	var directAttrChild string
+
 	// Parse child model groups and attributes.
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -213,6 +316,32 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
+		}
+		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup) {
+			if directAttrChild != "" {
+				if c.filename != "" {
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+						elem.LocalName(), componentLocalComplexType,
+						fmt.Sprintf("The content model particle '%s' must appear before the attribute declaration '%s'.", ce.LocalName(), directAttrChild)), helium.ErrorLevelFatal))
+					c.errorCount++
+				}
+				continue
+			}
+			if contentModelChild != "" {
+				if c.filename != "" {
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+						elem.LocalName(), componentLocalComplexType,
+						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)), helium.ErrorLevelFatal))
+					c.errorCount++
+				}
+				continue
+			}
+			contentModelChild = ce.LocalName()
+		}
+		if isXSDElement(ce, elemAttribute) || isXSDElement(ce, elemAttributeGroup) || isXSDElement(ce, elemAnyAttribute) {
+			if directAttrChild == "" {
+				directAttrChild = ce.LocalName()
+			}
 		}
 		switch {
 		case isXSDElement(ce, elemSequence):
@@ -241,6 +370,29 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 			td.ContentModel = mg
 			if td.ContentType != ContentTypeMixed {
 				td.ContentType = ContentTypeElementOnly
+			}
+		case isXSDElement(ce, elemGroup):
+			ref := getAttr(ce, attrRef)
+			if ref != "" {
+				c.validateOccursAttrs(ctx, ce)
+				placeholderMin, placeholderMax := parseParticleOccurs(ce)
+				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
+				qn := c.resolveQName(ctx, ce, ref)
+				c.groupRefs[placeholder] = qn
+				// Direct reference: this group ref is the sole top-level particle
+				// of the derived type's content, so a resolved 'all' model group
+				// is permitted here (subject to maxOccurs == 1).
+				c.groupRefSources[placeholder] = groupRefSource{
+					line:         ce.Line(),
+					local:        ce.LocalName(),
+					nested:       false,
+					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+					source:       c.diagSource(),
+				}
+				td.ContentModel = placeholder
+				if td.ContentType != ContentTypeMixed {
+					td.ContentType = ContentTypeElementOnly
+				}
 			}
 		case isXSDElement(ce, elemAttribute):
 			au := c.parseAttributeUse(ctx, ce)
@@ -265,6 +417,15 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		c.typeRefs[td] = qn
 		c.markChameleonEligible(td, elem, baseRef)
 	}
+	// XSD 3.4.2 fixes the child ordering of a derivation: an optional leading
+	// model-group particle (sequence|choice|all|group ref) — at most one — then
+	// attribute/attributeGroup uses, then an optional anyAttribute. Track the
+	// first model-group particle and the first attribute-region child so a
+	// second particle (which would silently overwrite td.ContentModel) and a
+	// particle that appears AFTER an attribute declaration are both rejected.
+	var contentModelChild string
+	var directAttrChild string
+
 	// Parse child content model (if any).
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
@@ -273,6 +434,32 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
+		}
+		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup) {
+			if directAttrChild != "" {
+				if c.filename != "" {
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+						elem.LocalName(), componentLocalComplexType,
+						fmt.Sprintf("The content model particle '%s' must appear before the attribute declaration '%s'.", ce.LocalName(), directAttrChild)), helium.ErrorLevelFatal))
+					c.errorCount++
+				}
+				continue
+			}
+			if contentModelChild != "" {
+				if c.filename != "" {
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+						elem.LocalName(), componentLocalComplexType,
+						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)), helium.ErrorLevelFatal))
+					c.errorCount++
+				}
+				continue
+			}
+			contentModelChild = ce.LocalName()
+		}
+		if isXSDElement(ce, elemAttribute) || isXSDElement(ce, elemAttributeGroup) || isXSDElement(ce, elemAnyAttribute) {
+			if directAttrChild == "" {
+				directAttrChild = ce.LocalName()
+			}
 		}
 		switch {
 		case isXSDElement(ce, elemSequence):
@@ -301,6 +488,29 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 			td.ContentModel = mg
 			if td.ContentType != ContentTypeMixed {
 				td.ContentType = ContentTypeElementOnly
+			}
+		case isXSDElement(ce, elemGroup):
+			ref := getAttr(ce, attrRef)
+			if ref != "" {
+				c.validateOccursAttrs(ctx, ce)
+				placeholderMin, placeholderMax := parseParticleOccurs(ce)
+				placeholder := &ModelGroup{MinOccurs: placeholderMin, MaxOccurs: placeholderMax}
+				qn := c.resolveQName(ctx, ce, ref)
+				c.groupRefs[placeholder] = qn
+				// Direct reference: this group ref is the sole top-level particle
+				// of the derived type's content, so a resolved 'all' model group
+				// is permitted here (subject to maxOccurs == 1).
+				c.groupRefSources[placeholder] = groupRefSource{
+					line:         ce.Line(),
+					local:        ce.LocalName(),
+					nested:       false,
+					maxOccursRaw: getAttr(ce, attrMaxOccurs),
+					source:       c.diagSource(),
+				}
+				td.ContentModel = placeholder
+				if td.ContentType != ContentTypeMixed {
+					td.ContentType = ContentTypeElementOnly
+				}
 			}
 		case isXSDElement(ce, elemAttribute):
 			if getAttr(ce, attrUse) == attrValProhibited {
@@ -343,7 +553,7 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 				c.markChameleonEligible(td, ce, baseRef)
 			}
 			td.Derivation = DerivationExtension
-			c.parseSimpleContentChildren(ctx, ce, td)
+			c.parseSimpleContentChildren(ctx, ce, td, DerivationExtension)
 		case isXSDElement(ce, elemRestriction):
 			baseRef := getAttr(ce, attrBase)
 			if baseRef != "" {
@@ -352,14 +562,18 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 				c.markChameleonEligible(td, ce, baseRef)
 			}
 			td.Derivation = DerivationRestriction
-			c.parseSimpleContentChildren(ctx, ce, td)
+			c.parseSimpleContentChildren(ctx, ce, td, DerivationRestriction)
 		}
 	}
 }
 
 // parseSimpleContentChildren parses attribute/attributeGroup children within
-// a simpleContent extension or restriction element.
-func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *helium.Element, td *TypeDef) {
+// a simpleContent extension or restriction element. kind selects whether the
+// derivation is an extension or a restriction; on an EXTENSION a prohibited
+// attribute use (use="prohibited") is pointless and is warned+skipped, matching
+// complexContent xs:extension (parseExtension), so it does not propagate and
+// wrongly block an attribute the base wildcard would otherwise admit.
+func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *helium.Element, td *TypeDef, kind DerivationKind) {
 	for child := range helium.Children(derivation) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -370,6 +584,13 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 		}
 		switch {
 		case isXSDElement(ae, elemAttribute):
+			if kind == DerivationExtension && getAttr(ae, attrUse) == attrValProhibited {
+				if c.filename != "" {
+					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserWarning(c.filename, ae.Line(), ae.LocalName(), "attribute",
+						"Skipping attribute use prohibition, since it is pointless when extending a type."), helium.ErrorLevelWarning))
+				}
+				continue
+			}
 			au := c.parseAttributeUse(ctx, ae)
 			td.Attributes = append(td.Attributes, au)
 		case isXSDElement(ae, elemAttributeGroup):
@@ -393,7 +614,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 	// name is assigned. Recording it here ensures reportUnresolvedTypeRef can
 	// fire for unresolved base/itemType/memberTypes references inside inline
 	// simpleTypes, not just top-level named ones.
-	c.recordTypeDefSource(td, elem.Line(), true)
+	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
 
 	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {

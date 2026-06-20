@@ -975,10 +975,26 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		return nil
 	}
 
-	// Build set of allowed attributes.
+	// Build set of allowed attributes. A prohibited attribute use does not
+	// contribute an allowed attribute; instead its QName is recorded so an
+	// instance attribute carrying it is rejected before wildcard matching. A
+	// non-prohibited use of the same QName always wins (it removes any
+	// prohibition recorded for that QName).
 	allowed := make(map[QName]*AttrUse, len(td.Attributes))
+	var prohibited map[QName]struct{}
 	for _, au := range td.Attributes {
+		if au.Prohibited {
+			if _, ok := allowed[au.Name]; ok {
+				continue
+			}
+			if prohibited == nil {
+				prohibited = make(map[QName]struct{})
+			}
+			prohibited[au.Name] = struct{}{}
+			continue
+		}
 		allowed[au.Name] = au
+		delete(prohibited, au.Name)
 	}
 
 	// Build set of present instance attributes (excluding special attrs)
@@ -1017,6 +1033,15 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			vc.annotateAttrUse(ctx, a, au)
 			continue
 		}
+		// An explicitly prohibited attribute use is rejected outright and must
+		// not be allowed in by an attribute wildcard.
+		if _, prohib := prohibited[aqn]; prohib {
+			ad := attrDisplayName(a)
+			msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
+			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+			hasErr = true
+			continue
+		}
 		// Not in explicit declarations — check anyAttribute wildcard.
 		if td.AnyAttribute != nil && wildcardMatchesAttr(td.AnyAttribute, a.URI()) {
 			if err := vc.validateWildcardAttr(ctx, a, elem, td.AnyAttribute); err != nil {
@@ -1045,6 +1070,12 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 	// Insert default/fixed attribute values for absent optional attributes.
 	for _, au := range td.Attributes {
 		if au.Required {
+			continue
+		}
+		// A prohibited attribute use must never materialize a default/fixed
+		// value: the absent attribute is accepted as-is, and supplying one
+		// would itself be rejected.
+		if au.Prohibited {
 			continue
 		}
 		defVal := ""
