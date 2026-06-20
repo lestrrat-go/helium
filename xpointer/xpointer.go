@@ -19,6 +19,14 @@ import (
 // syntax errors from known schemes, matching libxml2 behavior.
 var errUnknownScheme = errors.New("xpointer: unknown scheme")
 
+// ErrNilExpression is returned by [Expression.Evaluate] when the receiver is a
+// nil or uncompiled *Expression.
+var ErrNilExpression = errors.New("xpointer: nil or uncompiled expression")
+
+// ErrNilDocument is returned by [Expression.Evaluate] and [Evaluate] when the
+// document to evaluate against is nil.
+var ErrNilDocument = errors.New("xpointer: nil document")
+
 // xptrPart represents a single parsed XPointer scheme(body) part.
 type xptrPart struct {
 	scheme string
@@ -62,8 +70,12 @@ func Compile(expr string) (*Expression, error) {
 			}
 			compiled[i] = c
 		case "xmlns":
-			if _, _, ok := parseXmlnsBody(p.body); !ok {
+			prefix, _, ok := parseXmlnsBody(p.body)
+			if !ok {
 				return nil, fmt.Errorf("xpointer: invalid xmlns() body %q", p.body)
+			}
+			if err := validateXmlnsPrefix(prefix); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -73,6 +85,13 @@ func Compile(expr string) (*Expression, error) {
 // Evaluate evaluates the compiled XPointer against a document, returning
 // the matching nodes. Cascading fallback semantics match [Evaluate].
 func (e *Expression) Evaluate(ctx context.Context, doc *helium.Document) ([]helium.Node, error) {
+	if e == nil {
+		return nil, ErrNilExpression
+	}
+	if doc == nil {
+		return nil, ErrNilDocument
+	}
+
 	var nsMap map[string]string
 	var lastErr error
 	for i, p := range e.parts {
@@ -170,6 +189,21 @@ func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.
 		return nil, err
 	}
 	return e.Evaluate(ctx, doc)
+}
+
+// validateXmlnsPrefix rejects xmlns() scheme prefixes that are not legal to
+// bind. The XPointer xmlns() scheme binds a NamespacePrefix (an XML NCName) to
+// a namespace URI; a prefix that is not a valid NCName is malformed. The
+// prefixes "xml" and "xmlns" are reserved by the Namespaces in XML spec and may
+// not be (re)declared, so binding either of them is an error.
+func validateXmlnsPrefix(prefix string) error {
+	if !xmlchar.IsValidNCName(prefix) {
+		return fmt.Errorf("xpointer: invalid xmlns() prefix %q (not an NCName)", prefix)
+	}
+	if prefix == "xml" || prefix == "xmlns" {
+		return fmt.Errorf("xpointer: reserved xmlns() prefix %q cannot be bound", prefix)
+	}
+	return nil
 }
 
 // parseXmlnsBody parses "prefix=uri" from an xmlns() body.

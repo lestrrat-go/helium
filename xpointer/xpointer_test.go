@@ -640,3 +640,66 @@ func TestMultiSchemeExpressionsTable(t *testing.T) {
 		})
 	}
 }
+
+// A nil compiled expression or a nil document reaching evaluation must
+// return an error, not panic. This covers the nil *Expression receiver and
+// every scheme path (shorthand, element(), xpointer()) that dereferences the
+// document during evaluation.
+func TestEvaluate_NilGuards(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil expression receiver", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r><a/></r>`))
+		require.NoError(t, err)
+
+		var e *xpointer.Expression
+		_, err = e.Evaluate(t.Context(), doc)
+		require.Error(t, err)
+	})
+
+	docExprs := []struct {
+		name string
+		expr string
+	}{
+		{name: "shorthand", expr: "shorthandID"},
+		{name: "element", expr: "element(/1)"},
+		{name: "xpointer", expr: "xpointer(/r)"},
+	}
+	for _, tt := range docExprs {
+		t.Run("nil document "+tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e, err := xpointer.Compile(tt.expr)
+			require.NoError(t, err)
+
+			_, err = e.Evaluate(t.Context(), nil)
+			require.Error(t, err)
+		})
+	}
+}
+
+// The xmlns() scheme must reject prefixes that are not valid NCNames as well
+// as the reserved prefixes "xml" and "xmlns", which may not be (re)bound.
+func TestEvaluate_XmlnsPrefixValidation(t *testing.T) {
+	t.Parallel()
+
+	bad := []struct {
+		name string
+		expr string
+	}{
+		{name: "reserved xmlns", expr: "xmlns(xmlns=http://example.com/ns)xpointer(/r)"},
+		{name: "reserved xml", expr: "xmlns(xml=http://example.com/ns)xpointer(/r)"},
+		{name: "non-NCName prefix", expr: "xmlns(1bad=http://example.com/ns)xpointer(/r)"},
+		{name: "prefix with colon", expr: "xmlns(a:b=http://example.com/ns)xpointer(/r)"},
+	}
+	for _, tt := range bad {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := xpointer.Compile(tt.expr)
+			require.Error(t, err)
+		})
+	}
+}
