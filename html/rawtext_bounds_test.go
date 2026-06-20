@@ -466,18 +466,19 @@ func TestRawTextChunkSlicesAreIndependent(t *testing.T) {
 }
 
 // TestRCDATAOverCapNamedEntityFails is the core-invariant regression for the
-// RCDATA char-ref bypass: with a tiny MaxContentSize, a NAMED entity reference
-// whose name runs far past the cap — e.g. `<title>&aaaa...(huge)...</title>` —
-// must NOT be buffered whole. A name longer than the longest known entity (31
-// chars) can never resolve to a full entity; deciding whether it resolves a
-// legacy prefix requires knowing whether a ';' eventually terminates the run,
-// and with a forward-only cursor finding that terminator while preserving SAX
-// source order would mean retaining the entire tail — exactly the unbounded
-// growth MaxContentSize exists to prevent. So the parser rejects the over-cap
-// named reference with ErrContentSizeExceeded instead, keeping peak retained
-// memory bounded by the cap. Covers both RCDATA elements (title, textarea),
-// with and without a trailing ';', and legacy-prefix runs (which only resolve
-// without ';' and so are equally unbounded to decide).
+// RCDATA char-ref bypass: with a tiny MaxContentSize, an UNRESOLVED named
+// reference whose alphanumeric run runs far past the cap — e.g.
+// `<title>&aaaa...(huge)...</title>` — must NOT be buffered whole. Entity
+// resolution itself uses a FIXED maxEntityNameLen lookahead (a constant
+// independent of MaxContentSize), so a name longer than the longest known
+// entity (31 chars) that matches no legacy prefix can never resolve; its run is
+// LITERAL text and is charged against MaxContentSize. Once the unresolved
+// literal exceeds the cap before any terminator the parser fails with
+// ErrContentSizeExceeded, keeping peak retained memory bounded.
+//
+// Legacy-prefix runs are NOT here: `&amp` + a long tail resolves the legacy
+// "amp" prefix within the fixed lookahead and emits the tail as ordinary
+// (chunked) text, never failing — see TestRCDATALegacyPrefixLongTailResolves.
 //
 // Numeric references are unaffected (see TestRCDATANumericEntityNormalized):
 // they accumulate a saturating value without retaining the digit run, so an
@@ -492,8 +493,6 @@ func TestRCDATAOverCapNamedEntityFails(t *testing.T) {
 	}{
 		{"unknown", "&" + strings.Repeat("a", runLen)},
 		{"unknown_semicolon", "&" + strings.Repeat("a", runLen) + ";"},
-		{"legacy_prefix", "&amp" + strings.Repeat("x", runLen)},
-		{"legacy_prefix_semicolon", "&amp" + strings.Repeat("x", runLen) + ";"},
 	}
 
 	for _, elem := range []string{tagTitle, tagTextarea} {
@@ -518,11 +517,131 @@ func TestRCDATAOverCapNamedEntityFails(t *testing.T) {
 				err := html.NewParser().MaxContentSize(limit).
 					ParseWithSAX(t.Context(), []byte(input), sax)
 				require.ErrorIs(t, err, html.ErrContentSizeExceeded,
-					"over-cap named %s reference in RCDATA must fail, not buffer the tail", tc.name)
+					"over-cap unresolved %s reference in RCDATA must fail, not buffer the tail", tc.name)
 				require.LessOrEqual(t, maxChunk, limit+16,
 					"no single Characters chunk may exceed the cap before the abort")
 			})
 		}
+	}
+}
+
+// TestRCDATASmallCapKnownEntityResolves pins the convergent invariant that
+// entity resolution uses a FIXED maxEntityNameLen lookahead, NOT MaxContentSize:
+// a known named reference whose resolved value is tiny (a single '&', '<', …)
+// resolves even when MaxContentSize is smaller than the entity NAME itself. With
+// MaxContentSize(2), `<title>&amp;</title>` must resolve to "&" rather than
+// being rejected because the 3-char name "amp" exceeds the cap.
+func TestRCDATASmallCapKnownEntityResolves(t *testing.T) {
+	const limit = 2 // smaller than the entity names below
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"amp_semicolon", "&amp;", "&"},
+		{"lt_semicolon", "&lt;", "<"},
+		{"gt_semicolon", "&gt;", ">"},
+		{"quot_semicolon", "&quot;", "\""},
+	}
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		for _, tc := range cases {
+			t.Run(elem+"_"+tc.name, func(t *testing.T) {
+				input := "<" + elem + ">" + tc.body + "</" + elem + ">"
+
+				var got strings.Builder
+				record := html.CharactersFunc(func(data []byte) error {
+					got.Write(data)
+					return nil
+				})
+				sax := &html.SAXCallbacks{}
+				sax.SetOnCharacters(record)
+				sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+				err := html.NewParser().MaxContentSize(limit).
+					ParseWithSAX(t.Context(), []byte(input), sax)
+				require.NoError(t, err,
+					"a known entity must resolve even when its name exceeds MaxContentSize")
+				require.Equal(t, tc.want, got.String(),
+					"resolved value must match regardless of cap")
+			})
+		}
+	}
+}
+
+// TestRCDATALegacyPrefixLongTailResolves pins that a legacy-prefix reference
+// with a long no-semicolon tail RESOLVES within the fixed maxEntityNameLen
+// lookahead and emits the tail as ordinary chunked text — it is never rejected,
+// matching the normal-text (parseCharRef) path. `&amp` + many literal chars
+// resolves the legacy "amp" entity to "&" and echoes the remaining run, even
+// under a tiny MaxContentSize.
+func TestRCDATALegacyPrefixLongTailResolves(t *testing.T) {
+	const limit = 4
+	const runLen = 4096
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			tail := strings.Repeat("x", runLen)
+			input := "<" + elem + ">&amp" + tail + "</" + elem + ">"
+
+			var got strings.Builder
+			maxChunk := 0
+			record := html.CharactersFunc(func(data []byte) error {
+				got.Write(data)
+				if len(data) > maxChunk {
+					maxChunk = len(data)
+				}
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+
+			err := html.NewParser().MaxContentSize(limit).
+				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.NoError(t, err,
+				"a long no-semicolon legacy-prefix reference must resolve, not fail")
+			require.Equal(t, "&"+tail, got.String(),
+				"legacy 'amp' prefix resolves to '&' and the tail is echoed literally")
+			require.LessOrEqual(t, maxChunk, limit+16,
+				"the long tail must be delivered in capped chunks")
+		})
+	}
+}
+
+// TestRCDATANumericRefContextCancellation verifies Finding 2: a context
+// cancelled WHILE the parser drains a long numeric character reference inside
+// RCDATA (e.g. <title>&#9999...) aborts promptly with context.Canceled instead
+// of consuming the entire digit run first. The reader cancels a few bytes into
+// the digit run; the bounded numeric scanner observes ctx.Err() between chunks
+// and unwinds without emitting a partial entity.
+func TestRCDATANumericRefContextCancellation(t *testing.T) {
+	const reps = 1 << 16 // long digit run so the scan is still in progress
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+
+			// Unterminated numeric reference: '&#' followed by a huge digit run.
+			input := []byte("<" + elem + ">&#" + strings.Repeat("9", reps))
+			r := &cancelAfterReader{data: input, after: len(elem) + 8, cancel: cancel}
+
+			done := make(chan error, 1)
+			go func() {
+				_, err := html.NewParser().MaxContentSize(8).ParseReader(ctx, r)
+				done <- err
+			}()
+
+			select {
+			case err := <-done:
+				require.ErrorIs(t, err, context.Canceled,
+					"cancelled mid-numeric-ref parse should return context.Canceled")
+			case <-time.After(10 * time.Second):
+				t.Fatal("parse did not abort promptly on numeric-ref cancellation")
+			}
+		})
 	}
 }
 

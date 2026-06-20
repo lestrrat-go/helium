@@ -1090,18 +1090,29 @@ const maxEntityNameLen = 32
 // chunks no larger than limit. It makes the SAME entity-resolution decisions as
 // parseCharRef — numeric references (including overlong/leading-zero/overflow
 // runs) normalize to their HTML5 output (U+FFFD on overflow/invalid), and named
-// references resolve identically including legacy-prefix matching. The only
-// difference is memory: an unbounded digit run is consumed in fixed-size chunks
-// while tracking value/overflow rather than buffered whole; an unresolved
-// (within-cap) reference is flushed as literal text in capped chunks rather than
-// one giant Characters event; and a named-entity alphanumeric run that EXCEEDS
-// the content cap — whose resolution would require retaining the whole tail to
-// find its terminator — fails the parse with ErrContentSizeExceeded so peak
-// retained memory stays bounded by the user's cap. The cap, not the fixed
-// maxEntityNameLen, governs failure: within-cap content is preserved identically
-// to the normal-text path whether it resolves to a known entity, a legacy
-// prefix, or stays literal.
-func (p *parser) parseCharRefBounded(limit int) {
+// references resolve identically including legacy-prefix matching.
+//
+// Memory is kept bounded by two independent budgets:
+//
+//   - Entity-name resolution uses a FIXED lookahead of maxEntityNameLen bytes,
+//     a constant independent of MaxContentSize. No known entity (longest 31
+//     chars) or legacy prefix (≤6 chars) is longer, so a resolvable reference
+//     is always decided within that constant window — and therefore NEVER
+//     rejected, regardless of how small MaxContentSize is. `&amp;` resolves
+//     even under MaxContentSize(2); `&amp` + a long alphanumeric tail resolves
+//     the legacy "amp" prefix and emits the tail as ordinary (chunked) text.
+//
+//   - The MaxContentSize cap governs only the LITERAL text emitted for an
+//     UNRESOLVED run. An unbounded digit run is consumed in fixed-size chunks
+//     while tracking value/overflow rather than buffered whole; an unresolved
+//     reference is flushed as literal text in capped chunks; and an unresolved
+//     literal run that genuinely EXCEEDS the cap before any terminator fails
+//     the parse with ErrContentSizeExceeded so peak retained memory stays
+//     bounded.
+//
+// ctx is checked between bounded numeric chunks so a cancelled parse aborts
+// promptly without first draining a long digit run.
+func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	// Entity content is non-whitespace — ensure implied elements.
 	p.htmlStartCharData()
 
@@ -1121,7 +1132,11 @@ func (p *parser) parseCharRefBounded(limit int) {
 		// overflowing) run never materializes as one string. The result matches
 		// parseNumericCharRef: a value above U+10FFFF maps to U+FFFD via
 		// emitNumericCharRef, and a leading-zero run still resolves to its value.
-		codepoint, haveDigits := p.consumeNumericCharRefBounded(pred, base, limit)
+		// A cancelled context unwinds without emitting a partial entity.
+		codepoint, haveDigits, cancelled := p.consumeNumericCharRefBounded(ctx, pred, base, limit)
+		if cancelled {
+			return
+		}
 		if p.cur.Peek() == ';' {
 			_ = p.cur.Advance(1)
 		}
@@ -1129,42 +1144,12 @@ func (p *parser) parseCharRefBounded(limit int) {
 		return
 	}
 
-	// Named entity — bound the alphanumeric run scan by the user's actual
-	// content-size limit, not the fixed maxEntityNameLen. Memory is charged
-	// against the real MaxContentSize: a run that fits inside the cap is
-	// preserved identically to the normal-text path (resolved or literal); only
-	// a run that genuinely EXCEEDS the cap — whose terminator could be an
-	// arbitrary distance away and whose ordered resolution would require
-	// retaining the whole tail with a forward-only cursor — fails the parse.
-	sizeCap := limit
-	if sizeCap <= 0 {
-		sizeCap = defaultMaxContentSize
-	}
-	name := p.parseWhileMax(isAlphanumeric, sizeCap)
-
-	// If the run filled the cap and another alphanumeric byte still follows, the
-	// run exceeds the content-size limit. Resolving it would require buffering
-	// the unbounded tail to find the terminator, which is exactly the growth
-	// MaxContentSize exists to prevent, so fail the parse.
-	if len(name) >= sizeCap && isAlphanumeric(p.cur.Peek()) {
-		p.fatalErr = fmt.Errorf("named character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
-		return
-	}
-
-	// The run is within the content cap. maxEntityNameLen governs only whether
-	// to ATTEMPT resolution: a name longer than every known entity (and legacy
-	// prefix) can never match, so emit it literally; otherwise resolve it
-	// exactly like the normal-text path.
-	if len(name) > maxEntityNameLen {
-		text := "&" + name
-		if p.cur.Peek() == ';' {
-			_ = p.cur.Advance(1)
-			text += ";"
-		}
-		p.emitLiteralChunked(text, limit)
-		return
-	}
-
+	// Named entity. Resolution uses a FIXED maxEntityNameLen-byte lookahead — a
+	// constant, NOT MaxContentSize — because every known entity and legacy
+	// prefix is shorter than that window, so this is O(1) memory regardless of
+	// the user's cap. Try to resolve first: a resolvable reference is preserved
+	// identically to the normal-text path and is never charged against the cap.
+	name := p.parseWhileMax(isAlphanumeric, maxEntityNameLen)
 	hasSemicolon := false
 	if p.cur.Peek() == ';' {
 		hasSemicolon = true
@@ -1181,8 +1166,50 @@ func (p *parser) parseCharRefBounded(limit int) {
 		return
 	}
 
-	// Unknown entity — emit "&" + name (and any ';') as literal text in capped
-	// chunks.
+	// Unresolved within the fixed lookahead: the run is LITERAL text. Only now
+	// does MaxContentSize apply. If the name filled the lookahead window and the
+	// alphanumeric run continues (no terminator in sight), the literal run is
+	// unbounded; charge "&"+name plus the continuing tail against the cap and
+	// fail if it exceeds the cap before any terminator.
+	if len(name) >= maxEntityNameLen && isAlphanumeric(p.cur.Peek()) {
+		sizeCap := limit
+		if sizeCap <= 0 {
+			sizeCap = defaultMaxContentSize
+		}
+		// Account for the leading '&' plus the already-scanned name before
+		// emitting anything: if that alone exceeds the cap, fail without
+		// emitting the over-cap literal at all.
+		emitted := 1 + len(name)
+		if emitted > sizeCap {
+			p.fatalErr = fmt.Errorf("unresolved character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
+			return
+		}
+		p.emitLiteralChunked("&"+name, limit)
+		// Keep consuming the alphanumeric tail in capped chunks, charging each
+		// byte against the cap; as soon as the cumulative unresolved literal
+		// length exceeds the cap, fail.
+		for {
+			chunk := p.parseWhileMax(isAlphanumeric, sizeCap)
+			if chunk == "" {
+				break
+			}
+			emitted += len(chunk)
+			if emitted > sizeCap {
+				p.fatalErr = fmt.Errorf("unresolved character reference exceeds %d bytes before terminator: %w", sizeCap, ErrContentSizeExceeded)
+				return
+			}
+			p.emitLiteralChunked(chunk, limit)
+		}
+		// Run ended within the cap without resolving; emit any trailing ';' too.
+		if p.cur.Peek() == ';' {
+			_ = p.cur.Advance(1)
+			p.emitLiteralChunked(";", limit)
+		}
+		return
+	}
+
+	// Unknown entity within the lookahead — emit "&" + name (and any ';') as
+	// literal text in capped chunks.
 	text := "&" + name
 	if hasSemicolon {
 		text += ";"
@@ -1194,10 +1221,16 @@ func (p *parser) parseCharRefBounded(limit int) {
 // (digits matching pred, interpreted in the given base) in chunks no larger
 // than limit, accumulating the code-point value with overflow saturation so an
 // arbitrarily long run is never buffered whole. It returns the accumulated code
-// point and whether any digits were present. A value that exceeds U+10FFFF (or
-// otherwise overflows) saturates above the valid range so emitNumericCharRef
-// maps it to U+FFFD, matching parseNumericCharRef; leading zeros are tolerated.
-func (p *parser) consumeNumericCharRefBounded(pred func(byte) bool, base, limit int) (int, bool) {
+// point, whether any digits were present, and whether ctx was cancelled
+// mid-run. A value that exceeds U+10FFFF (or otherwise overflows) saturates
+// above the valid range so emitNumericCharRef maps it to U+FFFD, matching
+// parseNumericCharRef; leading zeros are tolerated.
+//
+// ctx is checked between bounded chunks so a cancelled parse inside a long
+// digit run (e.g. <title>&#9999...) aborts promptly instead of consuming the
+// whole run. On cancellation it returns cancelled=true and the caller emits no
+// (partial) entity, letting the outer parse surface context.Canceled.
+func (p *parser) consumeNumericCharRefBounded(ctx context.Context, pred func(byte) bool, base, limit int) (int, bool, bool) {
 	chunkSize := limit
 	if chunkSize <= 0 {
 		chunkSize = maxNumericRefLen
@@ -1207,6 +1240,9 @@ func (p *parser) consumeNumericCharRefBounded(pred func(byte) bool, base, limit 
 	haveDigits := false
 	saturated := false
 	for {
+		if ctx.Err() != nil {
+			return 0, false, true
+		}
 		chunk := p.parseWhileMax(pred, chunkSize)
 		if chunk == "" {
 			break
@@ -1225,9 +1261,9 @@ func (p *parser) consumeNumericCharRefBounded(pred func(byte) bool, base, limit 
 		}
 	}
 	if !haveDigits {
-		return 0, false
+		return 0, false, false
 	}
-	return value, true
+	return value, true, false
 }
 
 // digitValue returns the numeric value of an ASCII hex/decimal digit byte for
@@ -1537,7 +1573,7 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 		}
 
 		if p.cur.Peek() == '&' {
-			p.parseCharRefBounded(limit)
+			p.parseCharRefBounded(ctx, limit)
 			// A char-ref over the content cap sets fatalErr; stop scanning
 			// immediately so the main loop surfaces it instead of running on.
 			if p.fatalErr != nil {
