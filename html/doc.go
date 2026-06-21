@@ -19,7 +19,7 @@
 //
 // Use [NewWriter] to serialize HTML documents:
 //
-//	err := html.NewWriter().Format(true).WriteDoc(os.Stdout, doc)
+//	err := html.NewWriter().Format(true).WriteTo(os.Stdout, doc)
 //
 // # Examples
 //
