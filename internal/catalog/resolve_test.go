@@ -3,6 +3,7 @@ package catalog_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -294,6 +295,77 @@ func (l *countingLoader) Load(_ context.Context, filename string) (*catalog.Cata
 	// Return a copy so each entry gets its own catalog instance.
 	cp := *l.cat
 	return &cp, nil
+}
+
+// totalLoader counts the total number of Load calls across all URLs and
+// serves an empty leaf catalog for every URL.
+type totalLoader struct {
+	calls atomic.Int32
+}
+
+func (l *totalLoader) Load(_ context.Context, _ string) (*catalog.Catalog, error) {
+	l.calls.Add(1)
+	return &catalog.Catalog{}, nil
+}
+
+// A catalog with more than MaxDelegates UNIQUE delegate entries must load at
+// most MaxDelegates of them during a single resolution, not all of them.
+func TestDelegateLoadCountBounded(t *testing.T) {
+	t.Parallel()
+
+	mkEntries := func(typ catalog.EntryType, prefer catalog.Prefer) []catalog.Entry {
+		n := catalog.MaxDelegates + 10
+		entries := make([]catalog.Entry, 0, n)
+		for i := range n {
+			// Distinct URL per entry so the seen-set dedup never applies.
+			entries = append(entries, catalog.Entry{
+				Type:   typ,
+				Name:   exampleBase,
+				URL:    "deleg-" + strconv.Itoa(i) + ".xml",
+				Prefer: prefer,
+			})
+		}
+		return entries
+	}
+
+	t.Run("delegateSystem", func(t *testing.T) {
+		t.Parallel()
+		loader := &totalLoader{}
+		root := &catalog.Catalog{
+			Entries: mkEntries(catalog.EntryDelegateSystem, 0),
+			Loader:  loader,
+		}
+		got := root.Resolve(t.Context(), "", "http://example.com/notfound.dtd")
+		require.Equal(t, "", got)
+		require.LessOrEqual(t, int(loader.calls.Load()), catalog.MaxDelegates,
+			"loaded more delegate catalogs than MaxDelegates")
+	})
+
+	t.Run("delegatePublic", func(t *testing.T) {
+		t.Parallel()
+		loader := &totalLoader{}
+		root := &catalog.Catalog{
+			Entries: mkEntries(catalog.EntryDelegatePublic, catalog.PreferPublic),
+			Loader:  loader,
+		}
+		got := root.Resolve(t.Context(), "http://example.com/notfound", "")
+		require.Equal(t, "", got)
+		require.LessOrEqual(t, int(loader.calls.Load()), catalog.MaxDelegates,
+			"loaded more delegate catalogs than MaxDelegates")
+	})
+
+	t.Run("delegateURI", func(t *testing.T) {
+		t.Parallel()
+		loader := &totalLoader{}
+		root := &catalog.Catalog{
+			Entries: mkEntries(catalog.EntryDelegateURI, 0),
+			Loader:  loader,
+		}
+		got := root.ResolveURI(t.Context(), "http://example.com/notfound")
+		require.Equal(t, "", got)
+		require.LessOrEqual(t, int(loader.calls.Load()), catalog.MaxDelegates,
+			"loaded more delegate catalogs than MaxDelegates")
+	})
 }
 
 // Per the OASIS XML Catalogs spec, matching delegate entries must be tried
