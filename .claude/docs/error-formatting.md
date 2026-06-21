@@ -171,16 +171,16 @@ All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder`
 
 XSD, RelaxNG, Schematron, and DTD all use sentinel error + ErrorHandler pattern.
 
-### XSD Validation Error Helpers (`xsd/validate_context.go`)
+### XSD Validation Error Helpers (`xsd/validate.go`)
 
 - `reportValidityError(file, line, elemName, msg)` — sends to ErrorHandler (suppressed when `suppressDepth > 0`)
 - `reportValidityErrorAttr(file, line, elemName, attrName, msg)` — sends to ErrorHandler (suppressed when `suppressDepth > 0`)
 
-### XSD Internal Types (`xsd/validate_context.go`)
+### XSD Internal Types (`xsd/validate.go`)
 
 - `validationErrors` — synchronous `ErrorHandler` that appends `err.Error()` to `[]string`; used by `ValidateElement`
 
-### TypeDef Validation Methods (`xsd/typedef_validate.go`)
+### TypeDef Validation Methods (`xsd/validate.go`)
 
 - `(*TypeDef).Validate(ctx context.Context, value string, nsMap map[string]string) error` — validates a lexical value against a simple type; uses `NilErrorHandler` (pass/fail only)
 - `(*TypeDef).ValidateElement(ctx context.Context, elem *helium.Element, schema *Schema) error` — validates an element's content against the type; uses internal `validationErrors` collector for error messages
