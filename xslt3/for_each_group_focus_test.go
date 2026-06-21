@@ -77,6 +77,77 @@ func TestForEachGroupEndingWithPositionalPattern(t *testing.T) {
 	require.Contains(t, out, "<group>4,5</group>")
 }
 
+// TestForEachGroupStartingWithNodePositionalPattern verifies that a positional
+// pattern in group-starting-with sees the per-item focus of the population when
+// the population is a sequence of element NODES (UNRES-7, #684 follow-up). The
+// node path previously delegated straight to matchPattern, which re-established
+// the node's document-order focus and ignored ec.position/ec.size, so
+// position()=3 never matched and the items collapsed into a single group. The
+// fix routes ".[pred]" alternatives through the population focus, splitting
+// before the 3rd node.
+func TestForEachGroupStartingWithNodePositionalPattern(t *testing.T) {
+	ctx := t.Context()
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each-group select="root/item" group-starting-with=".[position()=3]">
+        <group><xsl:value-of select="string-join(current-group()!string(@n), ',')"/></group>
+      </xsl:for-each-group>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(ctx, []byte(
+		`<root><item n="1"/><item n="2"/><item n="3"/><item n="4"/><item n="5"/></root>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, strings.Count(out, "<group>"),
+		"node positional pattern should split into two groups, got: %s", out)
+	require.Contains(t, out, "<group>1,2</group>")
+	require.Contains(t, out, "<group>3,4,5</group>")
+}
+
+// TestForEachGroupEndingWithNodePositionalPattern verifies the same per-item
+// focus handling for group-ending-with over element NODES (UNRES-7). A group
+// ends at the 3rd node of the population.
+func TestForEachGroupEndingWithNodePositionalPattern(t *testing.T) {
+	ctx := t.Context()
+	xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each-group select="root/item" group-ending-with=".[position()=3]">
+        <group><xsl:value-of select="string-join(current-group()!string(@n), ',')"/></group>
+      </xsl:for-each-group>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(ctx, []byte(
+		`<root><item n="1"/><item n="2"/><item n="3"/><item n="4"/><item n="5"/></root>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, strings.Count(out, "<group>"),
+		"node positional pattern should split into two groups, got: %s", out)
+	require.Contains(t, out, "<group>1,2,3</group>")
+	require.Contains(t, out, "<group>4,5</group>")
+}
+
 // TestForEachGroupStartingWithNumericLiteralPattern verifies the numeric-literal
 // positional predicate (the atomic branch of matchContextItemPredicates) does an
 // exact float compare, not a truncating int compare. position()=2.7 is never

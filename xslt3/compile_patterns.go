@@ -767,6 +767,15 @@ func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium
 // group-starting-with / group-ending-with over non-node sequences (XSLT 3.0).
 func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xpath3.Item) bool {
 	if ni, ok := item.(xpath3.NodeItem); ok {
+		// A positional predicate over the context item, e.g. ".[position()=3]",
+		// must see the focus of the population being grouped (position/size set
+		// by the caller in ec.position/ec.size), not the document-order focus
+		// that matchPattern re-establishes for the node. This mirrors the atomic
+		// branch below (ENG-005): evaluate each predicate directly with the node
+		// as context item and the population focus already in scope.
+		if p.matchNodeContextItemPositional(ctx, ec, ni.Node) {
+			return true
+		}
 		return p.matchPattern(ctx, ec, ni.Node)
 	}
 
@@ -826,6 +835,65 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 		}
 		seq := result.Sequence()
 		if seq != nil && sequence.Len(seq) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// matchNodeContextItemPositional handles ".[pred]" pattern alternatives for a
+// node item during for-each-group boundary evaluation. It evaluates each such
+// alternative's predicates with the node as the context item and the population
+// focus (ec.position/ec.size) already in scope, so that positional predicates
+// like position()=3 are tested against the node's position within the population
+// being grouped rather than its document-order position. It returns true only
+// when a ".[pred]" alternative matches; non-".[pred]" alternatives are left for
+// the caller to handle via matchPattern.
+func (p *pattern) matchNodeContextItemPositional(ctx context.Context, ec *execContext, node helium.Node) bool {
+	var ctxAlts []xpath3.FilterExpr
+	for _, alt := range p.Alternatives {
+		fe, ok := alt.expr.(xpath3.FilterExpr)
+		if !ok {
+			continue
+		}
+		if _, isCtxItem := fe.Expr.(xpath3.ContextItemExpr); !isCtxItem {
+			continue
+		}
+		ctxAlts = append(ctxAlts, fe)
+	}
+	if len(ctxAlts) == 0 {
+		return false
+	}
+
+	saved := ec.xpathDefaultNS
+	savedHas := ec.hasXPathDefaultNS
+	savedGroups := ec.regexGroups
+	savedContext := ec.contextNode
+	savedCurrent := ec.currentNode
+	savedItem := ec.contextItem
+	savedInPattern := ec.inPatternMatch
+	savedPatternNS := ec.patternNamespaces
+	ec.xpathDefaultNS = p.xpathDefaultNS
+	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
+	ec.regexGroups = nil
+	ec.contextNode = node
+	ec.currentNode = node
+	ec.contextItem = xpath3.NodeItem{Node: node}
+	ec.inPatternMatch = true
+	ec.patternNamespaces = p.nsBindings
+	defer func() {
+		ec.xpathDefaultNS = saved
+		ec.hasXPathDefaultNS = savedHas
+		ec.regexGroups = savedGroups
+		ec.contextNode = savedContext
+		ec.currentNode = savedCurrent
+		ec.contextItem = savedItem
+		ec.inPatternMatch = savedInPattern
+		ec.patternNamespaces = savedPatternNS
+	}()
+
+	for _, fe := range ctxAlts {
+		if ec.matchContextItemPredicates(ctx, fe.Predicates) {
 			return true
 		}
 	}
