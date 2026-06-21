@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -1153,18 +1154,8 @@ func uniqueNSPrefix(elem *helium.Element, prefix, nsURI string) string {
 // prefixBoundTo walks the element and its ancestors to find what URI
 // a prefix is bound to. Returns "" if not found.
 func prefixBoundTo(elem *helium.Element, prefix string) string {
-	for node := helium.Node(elem); node != nil; node = node.Parent() {
-		e, ok := node.(*helium.Element)
-		if !ok {
-			continue
-		}
-		for _, ns := range e.Namespaces() {
-			if ns.Prefix() == prefix {
-				return ns.URI()
-			}
-		}
-	}
-	return ""
+	uri, _ := domutil.LookupNSPrefixURI(elem, prefix)
+	return uri
 }
 
 // withV2TempOutput runs fn, treating its output as temporary output state

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
@@ -635,38 +636,13 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 // collectInScopeNamespaces collects all in-scope namespace bindings for an element
 // by walking up the ancestor chain.
 func (c *canonicalizer) collectInScopeNamespaces(e *helium.Element) map[string]string {
-	nsMap := make(map[string]string)
-
-	// Walk ancestors from root to current, collecting namespace bindings.
-	// Later (closer) declarations override earlier ones.
-	var ancestors []*helium.Element
-	for n := helium.Node(e); n != nil; n = n.Parent() {
-		if anc, ok := helium.AsNode[*helium.Element](n); ok {
-			ancestors = append(ancestors, anc)
-		}
+	// Remove the xml namespace (never explicitly output per C14N spec) unless
+	// it's inherited via xml:* attributes in node-set mode.
+	byPrefix := domutil.InScopeNamespaces(e, c.nodeSet == nil)
+	nsMap := make(map[string]string, len(byPrefix))
+	for prefix, ns := range byPrefix {
+		nsMap[prefix] = ns.URI()
 	}
-
-	// Process from outermost to innermost (so innermost wins)
-	for _, v := range slices.Backward(ancestors) {
-		anc := v
-		for _, ns := range anc.Namespaces() {
-			nsMap[ns.Prefix()] = ns.URI()
-		}
-		if ns := anc.Namespace(); ns != nil {
-			// The element's active namespace is also in scope
-			// but only add if not already defined by nsDefs
-			if _, exists := nsMap[ns.Prefix()]; !exists {
-				nsMap[ns.Prefix()] = ns.URI()
-			}
-		}
-	}
-
-	// Remove xml namespace (never explicitly output per C14N spec,
-	// unless it's inherited via xml:* attributes in node-set mode)
-	if c.nodeSet == nil {
-		delete(nsMap, lexicon.PrefixXML)
-	}
-
 	return nsMap
 }
 

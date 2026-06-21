@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +24,7 @@ func findTransformByAlgorithm(t *testing.T, signedInfo *helium.Element, algURI s
 		if !ok {
 			continue
 		}
-		if localName(e) != "Transform" {
+		if domutil.LocalName(e) != "Transform" {
 			continue
 		}
 		alg, _ := e.GetAttribute("Algorithm")
