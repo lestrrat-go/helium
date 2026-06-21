@@ -956,7 +956,7 @@ func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*
 	}
 
 	mk := &mergeKey{
-		Order: "ascending", // default
+		Order: sortOrderAscending, // default
 	}
 
 	// Track collation-related attributes for sort verification.
