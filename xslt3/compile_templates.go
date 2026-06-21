@@ -5,6 +5,7 @@ import (
 	"maps"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -14,6 +15,23 @@ import (
 var templateAllowedAttrs = map[string]struct{}{
 	"match": {}, xslAttrName: {}, "priority": {}, "mode": {}, "as": {},
 	xslAttrVisibility: {}, xslAttrUseWhen: {},
+}
+
+// splitOriginCounter is a process-global monotonic source for
+// template.splitOriginID. It must be global (not per-stylesheet) so that
+// union-pattern splits produced by independently compiled packages — which are
+// later merged into a single mode list via xsl:use-package — never collide on
+// the same id. Two unrelated union rules from different packages sharing an id
+// would make the on-multiple-match conflict checks treat a genuine
+// cross-package ambiguous match as a single non-conflicting rule.
+var splitOriginCounter atomic.Int64
+
+// nextSplitOriginID returns a fresh, globally-unique non-zero origin id for a
+// union-pattern split group. All branches of one union rule share the value it
+// returns; different union rules (including those from different packages)
+// always receive distinct values.
+func nextSplitOriginID() int64 {
+	return splitOriginCounter.Add(1)
 }
 
 func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) error {
@@ -304,8 +322,15 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 			// single rule even when they have an empty body (no &Body[0]
 			// identity to compare). See hasConflictingMatch /
 			// hasConflictingAtomicMatch.
-			c.stylesheet.unionSplitCounter++
-			originID := c.stylesheet.unionSplitCounter
+			//
+			// The id must be unique across the entire compilation, not just
+			// within one stylesheet/package: under xsl:use-package, split
+			// templates from different packages are merged into one mode list,
+			// and a per-stylesheet counter (which restarts at 0 per compile)
+			// would hand identical ids to unrelated union rules from different
+			// packages, wrongly suppressing a genuine cross-package XTDE0540
+			// match. A process-global monotonic counter guarantees uniqueness.
+			originID := nextSplitOriginID()
 			for _, alt := range tmpl.Match.Alternatives {
 				split := *tmpl // shallow copy shares Body, Params, etc.
 				split.Match = &pattern{
