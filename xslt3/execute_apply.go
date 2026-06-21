@@ -166,7 +166,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 			continue
 		}
 
-		if err := ec.dispatchApplyTemplatesItem(ctx, item, inst, mode); err != nil {
+		if err := ec.dispatchApplyTemplatesItem(ctx, item, inst, mode, paramValues); err != nil {
 			return err
 		}
 	}
@@ -178,13 +178,13 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 // (atomic value, array, or map) per the XSLT 3.0 rules: try template matching
 // first, then the built-in rules for arrays/maps, then fall back to built-in
 // text output unless the mode's on-no-match skips unmatched atomic items.
-func (ec *execContext) dispatchApplyTemplatesItem(ctx context.Context, item xpath3.Item, inst *applyTemplatesInst, mode string) error {
+func (ec *execContext) dispatchApplyTemplatesItem(ctx context.Context, item xpath3.Item, inst *applyTemplatesInst, mode string, paramValues map[string]xpath3.Sequence) error {
 	tmpl, err := ec.findAtomicTemplate(ctx, item, mode)
 	if err != nil {
 		return err
 	}
 	if tmpl != nil {
-		return ec.executeAtomicTemplate(ctx, tmpl, item, mode)
+		return ec.executeAtomicTemplate(ctx, tmpl, item, mode, paramValues)
 	}
 	// Built-in template rule for arrays: apply-templates to each member.
 	if arr, ok := item.(xpath3.ArrayItem); ok {
@@ -193,7 +193,7 @@ func (ec *execContext) dispatchApplyTemplatesItem(ctx context.Context, item xpat
 			if err != nil {
 				return err
 			}
-			if err := ec.applyTemplatesToSequence(ctx, member, inst, mode); err != nil {
+			if err := ec.applyTemplatesToSequence(ctx, member, inst, mode, paramValues); err != nil {
 				return err
 			}
 		}
@@ -202,7 +202,7 @@ func (ec *execContext) dispatchApplyTemplatesItem(ctx context.Context, item xpat
 	// Built-in template rule for maps: apply-templates to each value.
 	if m, ok := item.(xpath3.MapItem); ok {
 		return m.ForEach(func(_ xpath3.AtomicValue, val xpath3.Sequence) error {
-			return ec.applyTemplatesToSequence(ctx, val, inst, mode)
+			return ec.applyTemplatesToSequence(ctx, val, inst, mode, paramValues)
 		})
 	}
 	// Check mode's on-no-match: for "deep-skip" and "shallow-skip",
@@ -229,10 +229,10 @@ func (ec *execContext) dispatchApplyTemplatesItem(ctx context.Context, item xpat
 
 // applyTemplatesToSequence applies templates to each item in a sequence,
 // implementing the built-in template rules for arrays and maps (XSLT 3.0).
-func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.Sequence, inst *applyTemplatesInst, mode string) error {
+func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.Sequence, inst *applyTemplatesInst, mode string, paramValues map[string]xpath3.Sequence) error {
 	for item := range sequence.Items(seq) {
 		if ni, ok := item.(xpath3.NodeItem); ok {
-			if err := ec.applyTemplates(ctx, ni.Node, mode, nil); err != nil {
+			if err := ec.applyTemplates(ctx, ni.Node, mode, paramValues); err != nil {
 				return err
 			}
 			continue
@@ -242,7 +242,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 			return err
 		}
 		if tmpl != nil {
-			if err := ec.executeAtomicTemplate(ctx, tmpl, item, mode); err != nil {
+			if err := ec.executeAtomicTemplate(ctx, tmpl, item, mode, paramValues); err != nil {
 				return err
 			}
 			continue
@@ -253,7 +253,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 				if err != nil {
 					return err
 				}
-				if err := ec.applyTemplatesToSequence(ctx, member, inst, mode); err != nil {
+				if err := ec.applyTemplatesToSequence(ctx, member, inst, mode, paramValues); err != nil {
 					return err
 				}
 			}
@@ -261,7 +261,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 		}
 		if m, ok := item.(xpath3.MapItem); ok {
 			if err := m.ForEach(func(_ xpath3.AtomicValue, val xpath3.Sequence) error {
-				return ec.applyTemplatesToSequence(ctx, val, inst, mode)
+				return ec.applyTemplatesToSequence(ctx, val, inst, mode, paramValues)
 			}); err != nil {
 				return err
 			}
@@ -519,7 +519,11 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 			val = xpath3.EmptySequence()
 		}
 
-		if p.As != "" && val != nil && sequence.Len(val) > 0 {
+		// Type-check against the declared as type. A caller-supplied empty
+		// sequence is nil, so check whenever the value came from the caller
+		// (XTTE0590) even when nil; for defaults a nil value is left to the
+		// default-handling logic above.
+		if p.As != "" && (val != nil || fromCaller) {
 			st := parseSequenceType(p.As)
 			errCode := errCodeXTTE0570
 			if fromCaller {
@@ -595,7 +599,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 				continue
 			}
 			if foundCurrent && tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, ec.contextItem) {
-				return ec.executeAtomicTemplate(ctx, tmpl, ec.contextItem, mode)
+				return ec.executeAtomicTemplate(ctx, tmpl, ec.contextItem, mode, pv)
 			}
 		}
 		// No next match for atomic items — output string value as built-in rule
@@ -713,7 +717,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 				continue
 			}
 			if tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, ec.contextItem) {
-				return ec.executeAtomicTemplate(ctx, tmpl, ec.contextItem, mode)
+				return ec.executeAtomicTemplate(ctx, tmpl, ec.contextItem, mode, pv)
 			}
 		}
 		// Built-in rule for atomic values: output string value

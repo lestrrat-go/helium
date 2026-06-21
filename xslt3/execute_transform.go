@@ -387,7 +387,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 						return nil, tErr
 					}
 					if tmpl != nil {
-						if err := ec.executeAtomicTemplate(ctx, tmpl, v, resolvedMode); err != nil {
+						if err := ec.executeAtomicTemplate(ctx, tmpl, v, resolvedMode, initialModeParams); err != nil {
 							ec.tunnelParams = savedTunnel
 							return nil, err
 						}
