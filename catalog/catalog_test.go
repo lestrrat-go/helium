@@ -407,4 +407,49 @@ func TestNilCatalog(t *testing.T) {
 	var c *catalog.Catalog
 	require.Equal(t, "", c.Resolve(t.Context(), "foo", "bar"))
 	require.Equal(t, "", c.ResolveURI(t.Context(), "foo"))
+
+	uri, broke := c.ResolveResult(t.Context(), "foo", "bar")
+	require.Equal(t, "", uri)
+	require.False(t, broke)
+
+	uri, broke = c.ResolveURIResult(t.Context(), "foo")
+	require.Equal(t, "", uri)
+	require.False(t, broke)
+}
+
+// ResolveResult/ResolveURIResult must report a catalog break (the "cut" signal)
+// distinctly from a plain no-match, so chain callers can stop searching.
+func TestResolveResultReportsBreak(t *testing.T) {
+	dir := t.TempDir()
+
+	subEmpty := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+</catalog>`
+	subEmptyPath := filepath.Join(dir, "sub-empty.xml")
+	require.NoError(t, os.WriteFile(subEmptyPath, []byte(subEmpty), 0o600))
+
+	rootXML := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <delegateSystem systemIdStartString="http://example.com/" catalog="` + subEmptyPath + `"/>
+  <delegateURI uriStartString="http://example.com/" catalog="` + subEmptyPath + `"/>
+</catalog>`
+	rootPath := filepath.Join(dir, "root.xml")
+	require.NoError(t, os.WriteFile(rootPath, []byte(rootXML), 0o600))
+
+	cat, err := catalog.Load(context.Background(), rootPath)
+	require.NoError(t, err)
+
+	// Matching delegate, sub-catalog has no match -> break.
+	uri, broke := cat.ResolveResult(context.Background(), "", "http://example.com/test.dtd")
+	require.Equal(t, "", uri)
+	require.True(t, broke, "exhausted delegate must report a catalog break")
+
+	uri, broke = cat.ResolveURIResult(context.Background(), "http://example.com/asset")
+	require.Equal(t, "", uri)
+	require.True(t, broke, "exhausted delegateURI must report a catalog break")
+
+	// No matching delegate at all -> plain no-match, keep searching.
+	uri, broke = cat.ResolveResult(context.Background(), "", "http://other.example/x.dtd")
+	require.Equal(t, "", uri)
+	require.False(t, broke, "no matching delegate must NOT report a break")
 }

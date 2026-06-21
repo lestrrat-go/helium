@@ -442,12 +442,20 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 // catalogChain resolves through an ordered list of catalogs, returning the
 // first non-empty match. XML_CATALOG_FILES is a whitespace-separated list, so
 // every listed catalog must participate in resolution, in listed order.
+//
+// A catalog break (the OASIS/libxml2 "cut" signal) from any catalog stops the
+// chain: when a catalog reports a break it has decided "no match, do not keep
+// searching", so the chain must not fall through to later catalogs.
 type catalogChain []*catalog.Catalog
 
 func (cc catalogChain) Resolve(ctx context.Context, pubID, sysID string) string {
 	for _, cat := range cc {
-		if uri := cat.Resolve(ctx, pubID, sysID); uri != "" {
+		uri, broke := cat.ResolveResult(ctx, pubID, sysID)
+		if uri != "" {
 			return uri
+		}
+		if broke {
+			return ""
 		}
 	}
 	return ""
@@ -455,8 +463,12 @@ func (cc catalogChain) Resolve(ctx context.Context, pubID, sysID string) string 
 
 func (cc catalogChain) ResolveURI(ctx context.Context, uri string) string {
 	for _, cat := range cc {
-		if resolved := cat.ResolveURI(ctx, uri); resolved != "" {
+		resolved, broke := cat.ResolveURIResult(ctx, uri)
+		if resolved != "" {
 			return resolved
+		}
+		if broke {
+			return ""
 		}
 	}
 	return ""

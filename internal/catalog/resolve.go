@@ -79,12 +79,30 @@ func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 		return ""
 	}
 
+	uri, _ := c.ResolveResult(ctx, pubID, sysID)
+	return uri
+}
+
+// ResolveResult is like Resolve but also reports whether resolution ended in a
+// catalog break (the libxml2 "cut" signal: a matching delegate was consulted and
+// every delegate target failed, so the search must STOP rather than fall through
+// to later catalogs in a chain). An exhausted nextCatalog chain is NOT a break:
+// it is a plain no-match. When broke is true the search must not continue; when
+// it is false a "" result means "no match, keep searching".
+func (c *Catalog) ResolveResult(ctx context.Context, pubID, sysID string) (uri string, broke bool) {
+	if c == nil {
+		return "", false
+	}
+	if pubID == "" && sysID == "" {
+		return "", false
+	}
+
 	st := &resolveState{visited: make(map[visitedKey]struct{})}
 	ret := c.resolveTop(ctx, st, pubID, sysID)
 	if ret == CatalogBreak {
-		return ""
+		return "", true
 	}
-	return ret
+	return ret, false
 }
 
 // resolveTop performs URN unwrapping and public-ID normalization before
@@ -122,8 +140,16 @@ func (c *Catalog) resolveTop(ctx context.Context, st *resolveState, pubID, sysID
 //
 // ResolveURI is safe to call concurrently on a single *Catalog.
 func (c *Catalog) ResolveURI(ctx context.Context, uri string) string {
+	resolved, _ := c.ResolveURIResult(ctx, uri)
+	return resolved
+}
+
+// ResolveURIResult is like ResolveURI but also reports whether resolution ended
+// in a catalog break (see [Catalog.ResolveResult]). When broke is true a chain
+// caller must stop searching rather than fall through to later catalogs.
+func (c *Catalog) ResolveURIResult(ctx context.Context, uri string) (resolved string, broke bool) {
 	if c == nil || uri == "" {
-		return ""
+		return "", false
 	}
 
 	st := &resolveState{visited: make(map[visitedKey]struct{})}
@@ -133,16 +159,16 @@ func (c *Catalog) ResolveURI(ctx context.Context, uri string) string {
 	if pubID := UnwrapURN(uri); pubID != "" {
 		ret := c.resolveTop(ctx, st, pubID, "")
 		if ret == CatalogBreak {
-			return ""
+			return "", true
 		}
-		return ret
+		return ret, false
 	}
 
 	ret := c.resolveURI(ctx, st, uri)
 	if ret == CatalogBreak {
-		return ""
+		return "", true
 	}
-	return ret
+	return ret, false
 }
 
 // resolve implements the core resolution algorithm from libxml2's
