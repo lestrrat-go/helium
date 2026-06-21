@@ -46,6 +46,11 @@ func (h *fatalTrackingHandler) Handle(ctx context.Context, err error) {
 	}
 }
 
+// fatalErr delivers msg to eh as a fatal-level compilation error.
+func fatalErr(ctx context.Context, eh helium.ErrorHandler, msg string) {
+	eh.Handle(ctx, helium.NewLeveledError(msg, helium.ErrorLevelFatal))
+}
+
 func compileSchema(compileCtx context.Context, doc *helium.Document, cfg *compileConfig) (*Schema, error) {
 	root := findDocumentElement(doc)
 	if root == nil {
@@ -90,13 +95,13 @@ func compileSchema(compileCtx context.Context, doc *helium.Document, cfg *compil
 				schema.patterns = append(schema.patterns, p)
 			}
 		} else {
-			eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("Expecting a pattern element instead of %s\n", elem.Name()), helium.ErrorLevelFatal))
+			fatalErr(compileCtx, eh, fmt.Sprintf("Expecting a pattern element instead of %s\n", elem.Name()))
 		}
 		elem = nextSchematronElement(elem.NextSibling())
 	}
 
 	if len(schema.patterns) == 0 {
-		eh.Handle(compileCtx, helium.NewLeveledError("schema has no pattern element\n", helium.ErrorLevelFatal))
+		fatalErr(compileCtx, eh, "schema has no pattern element\n")
 	}
 
 	if eh.fatal {
@@ -120,7 +125,7 @@ func compilePattern(compileCtx context.Context, elem *helium.Element, schNS stri
 			continue
 		}
 		if !isSchematronElement(ruleElem, schNS, "rule") {
-			eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("Expecting a rule element instead of %s\n", ruleElem.Name()), helium.ErrorLevelFatal))
+			fatalErr(compileCtx, eh, fmt.Sprintf("Expecting a rule element instead of %s\n", ruleElem.Name()))
 			continue
 		}
 
@@ -130,7 +135,7 @@ func compilePattern(compileCtx context.Context, elem *helium.Element, schNS stri
 	}
 
 	if len(p.rules) == 0 {
-		eh.Handle(compileCtx, helium.NewLeveledError("Pattern has no rule element\n", helium.ErrorLevelFatal))
+		fatalErr(compileCtx, eh, "Pattern has no rule element\n")
 	}
 
 	return p
@@ -139,7 +144,7 @@ func compilePattern(compileCtx context.Context, elem *helium.Element, schNS stri
 func compileRule(compileCtx context.Context, elem *helium.Element, schNS string, eh helium.ErrorHandler) *rule {
 	ctxExpr := getStructuralAttr(elem, "context")
 	if ctxExpr == "" {
-		eh.Handle(compileCtx, helium.NewLeveledError("rule has an empty context attribute\n", helium.ErrorLevelFatal))
+		fatalErr(compileCtx, eh, "rule has an empty context attribute\n")
 		return nil
 	}
 
@@ -147,7 +152,7 @@ func compileRule(compileCtx context.Context, elem *helium.Element, schNS string,
 
 	compiled, err := xpath1.Compile(xpathExpr)
 	if err != nil {
-		eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element rule: Failed to compile context expression '%s': %s\n", ctxExpr, err), helium.ErrorLevelFatal))
+		fatalErr(compileCtx, eh, fmt.Sprintf("element rule: Failed to compile context expression '%s': %s\n", ctxExpr, err))
 		return nil
 	}
 
@@ -166,7 +171,7 @@ func compileRule(compileCtx context.Context, elem *helium.Element, schNS string,
 	}
 
 	if len(r.tests) == 0 {
-		eh.Handle(compileCtx, helium.NewLeveledError("rule has no assert nor report element\n", helium.ErrorLevelFatal))
+		fatalErr(compileCtx, eh, "rule has no assert nor report element\n")
 	}
 
 	return r
@@ -183,7 +188,7 @@ func compileRuleChild(compileCtx context.Context, r *rule, childElem *helium.Ele
 	case "let":
 		lb, err := compileLet(childElem)
 		if err != nil {
-			eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element let: Failed to compile expression: %s\n", err), helium.ErrorLevelFatal))
+			fatalErr(compileCtx, eh, fmt.Sprintf("element let: Failed to compile expression: %s\n", err))
 			return
 		}
 		if lb != nil {
@@ -229,7 +234,7 @@ func compileTest(compileCtx context.Context, elem *helium.Element, typ testType,
 
 	compiled, err := xpath1.Compile(testExpr)
 	if err != nil {
-		eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element %s: Failed to compile test expression '%s': %s\n", testTypeName(typ), testExpr, err), helium.ErrorLevelFatal))
+		fatalErr(compileCtx, eh, fmt.Sprintf("element %s: Failed to compile test expression '%s': %s\n", testTypeName(typ), testExpr, err))
 		return nil
 	}
 
@@ -279,14 +284,14 @@ func parseMessageElement(compileCtx context.Context, childElem *helium.Element, 
 		}
 		compiled, err := xpath1.Compile(path)
 		if err != nil {
-			eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element name: Failed to compile path '%s': %s\n", path, err), helium.ErrorLevelFatal))
+			fatalErr(compileCtx, eh, fmt.Sprintf("element name: Failed to compile path '%s': %s\n", path, err))
 			return append(parts, namePart{path: path})
 		}
 		return append(parts, namePart{path: path, expr: compiled})
 	case "value-of":
 		sel := getStructuralAttr(childElem, "select")
 		if sel == "" {
-			eh.Handle(compileCtx, helium.NewLeveledError("value-of has no select attribute\n", helium.ErrorLevelFatal))
+			fatalErr(compileCtx, eh, "value-of has no select attribute\n")
 			return parts
 		}
 		compiled, err := xpath1.Compile(sel)
@@ -294,7 +299,7 @@ func parseMessageElement(compileCtx context.Context, childElem *helium.Element, 
 			// Report the compile error through the handler (mirroring the
 			// <name path="..."> case and compileTest), then still add the
 			// part so the message structure is preserved.
-			eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element value-of: Failed to compile select expression '%s': %s\n", sel, err), helium.ErrorLevelFatal))
+			fatalErr(compileCtx, eh, fmt.Sprintf("element value-of: Failed to compile select expression '%s': %s\n", sel, err))
 			return append(parts, valueOfPart{sel: sel})
 		}
 		return append(parts, valueOfPart{sel: sel, expr: compiled})

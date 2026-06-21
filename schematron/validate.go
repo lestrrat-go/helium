@@ -10,6 +10,12 @@ import (
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
+// reportXPathError delivers a runtime XPath evaluation error to handler as an
+// error-level diagnostic in libxml2's "XPath error : ..." format.
+func reportXPathError(ctx context.Context, handler helium.ErrorHandler, err error) {
+	handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
+}
+
 func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig, handler helium.ErrorHandler) bool {
 	filename := cfg.label
 	if filename == "" {
@@ -37,7 +43,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				// silently skipping the rule (which would let a broken
 				// schema report a false "valid" result).
 				valid = false
-				handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
+				reportXPathError(ctx, handler, err)
 				continue
 			}
 			if result.Type != xpath1.NodeSetResult {
@@ -76,7 +82,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 						// Validate report a false "valid" result (and with a
 						// nil handler the error would be invisible).
 						valid = false
-						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
+						reportXPathError(ctx, handler, err)
 						continue
 					}
 					ruleEv = ruleEv.AdditionalVariables(map[string]any{
@@ -95,7 +101,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 					// which returns 0 (false) on evaluation failure.
 					var boolVal bool
 					if err != nil {
-						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
+						reportXPathError(ctx, handler, err)
 					} else {
 						boolVal = xpathResultToBool(testResult)
 					}
