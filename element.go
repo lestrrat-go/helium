@@ -38,14 +38,21 @@ func (n *Element) AddSibling(cur Node) error {
 	return addSibling(n, cur)
 }
 
+// Replace swaps this element out of its parent, inserting nodes in its place
+// (libxml2: xmlReplaceNode). It returns an error if any operand is nil.
 func (n *Element) Replace(nodes ...Node) error {
 	return replaceNode(n, nodes...)
 }
 
+// SetTreeDoc sets the owning document of this element and of every node in its
+// subtree (libxml2: xmlSetTreeDoc).
 func (n *Element) SetTreeDoc(doc *Document) {
 	setTreeDoc(n, doc)
 }
 
+// SetAttribute creates or replaces the attribute named name, parsing value for
+// entity references, and returns the element for chaining. The name must not
+// contain a colon; use SetAttributeNS for namespaced attributes.
 func (n *Element) SetAttribute(name, value string) (*Element, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Element.SetAttribute '%s' (%s)", name, value)
@@ -355,6 +362,10 @@ func (n *Element) spliceOutAttribute(p *Attribute) {
 	pdn.next = nil
 }
 
+// Attributes returns a newly allocated slice of the element's attributes in
+// property order. The returned slice is a snapshot: appending to or reordering
+// it does not affect the element, though the *Attribute elements still point at
+// the live attribute nodes. Use ForEachAttribute to avoid the slice allocation.
 func (n Element) Attributes() []*Attribute {
 	attrs := []*Attribute{}
 	for attr := n.properties; attr != nil; {

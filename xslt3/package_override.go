@@ -253,15 +253,20 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 	c.collectNamespaces(ctx, elem)
 
 	savedXPathDefaultNS := c.xpathDefaultNS
-	if xdn := getAttr(elem, "xpath-default-namespace"); xdn != "" {
+	savedHasXPathDefaultNS := c.hasXPathDefaultNS
+	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
 		c.xpathDefaultNS = xdn
+		c.hasXPathDefaultNS = true
 	}
 	tmpl.XPathDefaultNS = c.xpathDefaultNS
-	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+	defer func() {
+		c.xpathDefaultNS = savedXPathDefaultNS
+		c.hasXPathDefaultNS = savedHasXPathDefaultNS
+	}()
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
-		p, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)
+		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
 		if err != nil {
 			return nil, err
 		}

@@ -729,7 +729,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if ec == nil || ec.schemaDeclarations == nil {
 			return false
 		}
-		local, ns := resolveSchemaTestName(t.Name, ec)
+		local, ns := resolveSchemaTestName(t.Name, ec, false)
 		// The node must have the same name as the declared element
 		// (or a substitution group member — checked separately below).
 		nameMatch := ixpath.LocalNameOf(ni.Node) == local && ixpath.NodeNamespaceURI(ni.Node) == ns
@@ -783,7 +783,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if ec == nil || ec.schemaDeclarations == nil {
 			return false
 		}
-		local, ns := resolveSchemaTestName(t.Name, ec)
+		local, ns := resolveSchemaTestName(t.Name, ec, true)
 		// The node must have the same name as the declared attribute.
 		if ixpath.LocalNameOf(ni.Node) != local || ixpath.NodeNamespaceURI(ni.Node) != ns {
 			return false

@@ -92,6 +92,10 @@ func NewHTMLDocument() *Document {
 	return doc
 }
 
+// NewDocument allocates an empty XML Document with the given XML
+// declaration version, character encoding, and standalone status. The
+// returned document owns no children yet; use CreateElement and the other
+// Create* methods to build a tree, then attach the root via AddChild.
 func NewDocument(version, encoding string, standalone DocumentStandaloneType) *Document {
 	doc := &Document{
 		encoding:   encoding,
@@ -135,10 +139,15 @@ func (d *Document) Free() {
 	d.textContentSlab = nil
 }
 
+// AddChild appends cur as the last child of the document, detaching it from any
+// previous parent first. It returns an error if cur is nil or if the insertion
+// would create a cycle.
 func (d *Document) AddChild(cur Node) error {
 	return addChild(d, cur)
 }
 
+// AppendText appends b as a Text child of the document, merging into a trailing
+// Text node when possible.
 func (d *Document) AppendText(b []byte) error {
 	return appendText(d, b)
 }
@@ -463,6 +472,12 @@ var (
 	textContentChunkPool = pool.New(func() *[textContentSlabSize]byte { return new([textContentSlabSize]byte) }, nil)
 )
 
+// CreateElement allocates a new Element named name and owned by this
+// document, but does not attach it to the tree; the caller must insert it
+// via AddChild or a sibling/parent method. When d is non-nil the element is
+// drawn from the document's slab allocator, so the element must not outlive a
+// call to Document.Free. A nil receiver allocates a standalone element with no
+// owning document.
 func (d *Document) CreateElement(name string) *Element {
 	var e *Element
 	if d != nil {
@@ -488,6 +503,11 @@ func (d *Document) allocElement() *Element {
 	return e
 }
 
+// CreateText allocates a new Text node holding a copy of value, owned by this
+// document, without attaching it to the tree. When d is non-nil both the node
+// and its content bytes come from the document's slab allocators and must not
+// outlive a call to Document.Free. A nil receiver allocates a standalone text
+// node.
 func (d *Document) CreateText(value []byte) *Text {
 	var e *Text
 	if d != nil {
@@ -555,6 +575,8 @@ func (d *Document) allocText() *Text {
 	return t
 }
 
+// CreateComment allocates a new Comment node holding value, owned by this
+// document, without attaching it to the tree.
 func (d *Document) CreateComment(value []byte) *Comment {
 	e := newComment(value)
 	e.doc = d
@@ -568,6 +590,9 @@ func (d *Document) CreateCDATASection(value []byte) *CDATASection {
 	return e
 }
 
+// CreateElementContent builds an ElementContent node of the given type for use
+// in a DTD content model. It returns an error if name and etype are not a valid
+// combination.
 func (d *Document) CreateElementContent(name string, etype ElementContentType) (*ElementContent, error) {
 	e, err := newElementContent(name, etype)
 	if err != nil {
@@ -576,6 +601,10 @@ func (d *Document) CreateElementContent(name string, etype ElementContentType) (
 	return e, nil
 }
 
+// GetEntity looks up a general entity declaration by name, searching the
+// internal subset first and then the external subset (the latter is skipped
+// for standalone="yes" documents). found reports whether a declaration was
+// located.
 func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START document.GetEntity '%s'", name)
@@ -610,6 +639,10 @@ func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
 	return
 }
 
+// GetParameterEntity looks up a parameter entity declaration by name,
+// searching the internal subset first and then the external subset (the
+// latter is skipped for standalone="yes" documents). The boolean result
+// reports whether a declaration was located.
 func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 	if ints := d.intSubset; ints != nil {
 		if ent, ok := ints.LookupParameterEntity(name); ok {
@@ -628,6 +661,9 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 
 var errElementDeclNotFound = errors.New("element declaration not found")
 
+// IsMixedElement reports whether the element named name is declared with mixed
+// (or EMPTY/ANY) content in the document's internal subset. It returns an error
+// if no element declaration is found for name.
 func (d *Document) IsMixedElement(name string) (bool, error) {
 	if d.intSubset == nil {
 		return false, errElementDeclNotFound

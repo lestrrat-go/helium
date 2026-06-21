@@ -669,9 +669,9 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 // function (produces grounded, non-streaming output).
 func isGroundingFuncName(name string) bool {
 	switch name {
-	case funcSnapshot, "copy-of", "copy", "current-group",
+	case funcSnapshot, fnNameCopyOf, "copy", fnNameCurrentGroup,
 		"outermost", "innermost", "parse-xml", "parse-xml-fragment",
-		"doc", "document", "sort", "reverse", "head":
+		"doc", fnNameDocument, "sort", "reverse", "head":
 		return true
 	}
 	return false
@@ -1004,7 +1004,7 @@ func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr, step *xpath3.S
 			// current-group() and current-grouping-key() always return
 			// materialized (grounded) data.  Navigation into them (e.g.
 			// current-group()[1]/Date) is motionless w.r.t. the stream.
-			if isFnNamespacePrefix(v.Prefix) && (v.Name == "current-group" || v.Name == "current-grouping-key") {
+			if isFnNamespacePrefix(v.Prefix) && (v.Name == fnNameCurrentGroup || v.Name == fnNameCurrentGroupingKey) {
 				return // skip children — result is grounded
 			}
 			// Property-access functions are motionless.
