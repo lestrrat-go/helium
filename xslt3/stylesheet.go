@@ -318,7 +318,7 @@ type OutputDef struct {
 	// Name is the expanded QName of the output definition (empty for the
 	// unnamed primary definition).
 	Name string
-	// Method is the output method: "xml", "html", "text", or "xhtml".
+	// Method is the output method: "xml", "html", "text", "xhtml", "json", or "adaptive".
 	Method string
 	// MethodExplicit is true when method was explicitly specified (not defaulted).
 	MethodExplicit bool
