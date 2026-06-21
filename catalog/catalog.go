@@ -37,6 +37,22 @@ func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 	return c.cat.Resolve(ctx, pubID, sysID)
 }
 
+// ResolveResult is like Resolve but also reports whether resolution ended in a
+// catalog break. A break is the OASIS/libxml2 "cut" signal: delegate or
+// nextCatalog entries were consulted and all of them failed, so the search must
+// STOP rather than continue to later catalogs in a chain.
+//
+// When broke is true the caller must not consult any further catalog, even
+// though uri is "". When broke is false a "" uri means "no match here, keep
+// searching". A non-empty uri is a successful match. A nil receiver is safe and
+// returns ("", false).
+func (c *Catalog) ResolveResult(ctx context.Context, pubID, sysID string) (uri string, broke bool) {
+	if c == nil {
+		return "", false
+	}
+	return c.cat.ResolveResult(ctx, pubID, sysID)
+}
+
 // ResolveURI resolves a URI reference.
 // Returns the resolved URI or "" if not found.
 // A nil receiver is safe and always returns "".
@@ -45,6 +61,17 @@ func (c *Catalog) ResolveURI(ctx context.Context, uri string) string {
 		return ""
 	}
 	return c.cat.ResolveURI(ctx, uri)
+}
+
+// ResolveURIResult is like ResolveURI but also reports whether resolution ended
+// in a catalog break (see [Catalog.ResolveResult]). When broke is true a chain
+// caller must stop searching rather than fall through to later catalogs. A nil
+// receiver is safe and returns ("", false).
+func (c *Catalog) ResolveURIResult(ctx context.Context, uri string) (resolved string, broke bool) {
+	if c == nil {
+		return "", false
+	}
+	return c.cat.ResolveURIResult(ctx, uri)
 }
 
 // loaderConfig holds configuration for a Loader.

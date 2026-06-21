@@ -242,6 +242,7 @@ OASIS XML Catalog resolution for public/system IDs and URIs.
 - **Loader.MaxBytes(n) → Loader** — cap catalog file size; exceed → `ErrCatalogTooLarge` (default `MaxCatalogSize`, 10 MiB)
 - **Catalog.Resolve(ctx, pubID, sysID) → string** — resolve external identifier
 - **Catalog.ResolveURI(ctx, uri) → string** — resolve URI reference
+- **Catalog.ResolveResult(ctx, pubID, sysID) → (uri string, broke bool)** / **Catalog.ResolveURIResult(ctx, uri) → (resolved string, broke bool)** — like Resolve/ResolveURI but also report a catalog break (the OASIS/libxml2 "cut" signal: delegates/nextCatalog were consulted and all failed). `broke==true` means "no match, STOP searching"; `broke==false` with `""` means "no match, keep searching". Chain callers (CLI `catalogChain`) honor `broke` to stop falling through to later catalogs
 - Const `MaxCatalogSize`; sentinel `ErrCatalogTooLarge`
 - Catalog chaining via nextCatalog; URN urn:publicid: support
 - Files: `catalog.go`, `load.go`
