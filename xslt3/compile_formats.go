@@ -201,6 +201,22 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 	return nil
 }
 
+// outputBoolAttr reads a boolean xsl:output attribute. When the attribute is
+// absent (present=false) the value is ignored; when present but not a valid
+// xs:boolean lexical form it returns SEPM0016. The attr name is embedded in the
+// error verbatim, matching the param constants' literal values.
+func outputBoolAttr(elem *helium.Element, attr string) (bool, bool, error) {
+	v := getAttr(elem, attr)
+	if v == "" {
+		return false, false, nil
+	}
+	b, ok := parseXSDBool(v)
+	if !ok {
+		return false, false, staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@"+attr, v)
+	}
+	return b, true, nil
+}
+
 func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(ctx, elem, map[string]struct{}{
 		xslAttrName: {}, paramMethod: {}, paramVersion: {}, "encoding": {},
@@ -260,49 +276,37 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 
 	// Validate and parse boolean output attributes.
 	// SEPM0016: invalid boolean values.
-	if v := getAttr(elem, paramIndent); v != "" {
-		b, ok := parseXSDBool(v)
-		if !ok {
-			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@indent", v)
-		}
+	if b, present, err := outputBoolAttr(elem, paramIndent); err != nil {
+		return err
+	} else if present {
 		outDef.Indent = b
-		outDef.IndentRaw = v
+		outDef.IndentRaw = getAttr(elem, paramIndent)
 	}
-	if v := getAttr(elem, paramOmitXMLDeclaration); v != "" {
-		b, ok := parseXSDBool(v)
-		if !ok {
-			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@omit-xml-declaration", v)
-		}
+	if b, present, err := outputBoolAttr(elem, paramOmitXMLDeclaration); err != nil {
+		return err
+	} else if present {
 		outDef.OmitDeclaration = b
 		outDef.OmitDeclarationExplicit = true
 	}
-	if v := getAttr(elem, paramUndeclarePrefixes); v != "" {
-		b, ok := parseXSDBool(v)
-		if !ok {
-			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@undeclare-prefixes", v)
-		}
+	if b, present, err := outputBoolAttr(elem, paramUndeclarePrefixes); err != nil {
+		return err
+	} else if present {
 		outDef.UndeclarePrefixes = b
 	}
-	if v := getAttr(elem, paramByteOrderMark); v != "" {
-		b, ok := parseXSDBool(v)
-		if !ok {
-			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@byte-order-mark", v)
-		}
+	if b, present, err := outputBoolAttr(elem, paramByteOrderMark); err != nil {
+		return err
+	} else if present {
 		outDef.ByteOrderMark = b
 	}
 	// Parse escape-uri-attributes.
-	if v := getAttr(elem, paramEscapeURIAttributes); v != "" {
-		b, ok := parseXSDBool(v)
-		if !ok {
-			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@escape-uri-attributes", v)
-		}
+	if b, present, err := outputBoolAttr(elem, paramEscapeURIAttributes); err != nil {
+		return err
+	} else if present {
 		outDef.EscapeURIAttributes = &b
 	}
-	if v := getAttr(elem, paramIncludeContentType); v != "" {
-		b, ok := parseXSDBool(v)
-		if !ok {
-			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@include-content-type", v)
-		}
+	if b, present, err := outputBoolAttr(elem, paramIncludeContentType); err != nil {
+		return err
+	} else if present {
 		outDef.IncludeContentType = &b
 	}
 	// Validate standalone: must be "yes", "no", "omit", or boolean equivalents.
@@ -362,11 +366,9 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		outDef.JSONNodeOutputMethod = strings.TrimSpace(v)
 	}
 
-	if v := getAttr(elem, paramAllowDuplicateNames); v != "" {
-		b, ok := parseXSDBool(v)
-		if !ok {
-			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@allow-duplicate-names", v)
-		}
+	if b, present, err := outputBoolAttr(elem, paramAllowDuplicateNames); err != nil {
+		return err
+	} else if present {
 		outDef.AllowDuplicateNames = b
 	}
 
@@ -379,11 +381,9 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		outDef.SuppressIndentation = resolved
 	}
 
-	if v := getAttr(elem, paramBuildTree); v != "" {
-		b, ok := parseXSDBool(v)
-		if !ok {
-			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@build-tree", v)
-		}
+	if b, present, err := outputBoolAttr(elem, paramBuildTree); err != nil {
+		return err
+	} else if present {
 		outDef.BuildTree = &b
 	}
 
