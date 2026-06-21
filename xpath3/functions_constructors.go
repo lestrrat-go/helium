@@ -91,23 +91,24 @@ func init() {
 	registerNS(NSXS, "IDREFS", 1, 1, makeXSTokenList(TypeIDREFS, TypeIDREF, reNCName))
 	registerNS(NSXS, "ENTITIES", 1, 1, makeXSTokenList(TypeENTITIES, TypeENTITY, reNCName))
 
-	// Gregorian date part types
+	// Gregorian date part types. CastAtomic/CastFromString perform the
+	// per-type lexical validation, so these share the generic constructor.
 	for _, entry := range []struct {
 		name     string
 		typeName string
-		re       *regexp.Regexp
 	}{
-		{"gDay", TypeGDay, reGDay},
-		{"gMonth", TypeGMonth, reGMonth},
-		{"gMonthDay", TypeGMonthDay, reGMonthDay},
-		{"gYear", TypeGYear, reGYear},
-		{"gYearMonth", TypeGYearMonth, reGYearMonth},
+		{"gDay", TypeGDay},
+		{"gMonth", TypeGMonth},
+		{"gMonthDay", TypeGMonthDay},
+		{"gYear", TypeGYear},
+		{"gYearMonth", TypeGYearMonth},
 	} {
-		registerNS(NSXS, entry.name, 1, 1, makeXSGregorian(entry.typeName, entry.re))
+		registerNS(NSXS, entry.name, 1, 1, makeXSConstructor(entry.typeName))
 	}
 
-	// xs:dateTimeStamp — dateTime with required timezone
-	registerNS(NSXS, "dateTimeStamp", 1, 1, makeXSDateTimeStamp())
+	// xs:dateTimeStamp — dateTime with required timezone. CastAtomic enforces
+	// the mandatory-timezone rule, so the generic constructor suffices.
+	registerNS(NSXS, "dateTimeStamp", 1, 1, makeXSConstructor(TypeDateTimeStamp))
 
 	// xs:error — always raises an error (used for type checking tests)
 	registerNS(NSXS, "error", 1, 1, fnXSError)
@@ -173,11 +174,8 @@ func makeXSIntegerRangeBig(typeName string, minBig, maxBig *big.Int) func(contex
 			return nil, err
 		}
 		n := iv.BigInt()
-		if (minBig != nil && n.Cmp(minBig) < 0) || (maxBig != nil && n.Cmp(maxBig) > 0) {
-			return nil, &XPathError{
-				Code:    errCodeFORG0001,
-				Message: fmt.Sprintf("value %s out of range for %s", n.String(), typeName),
-			}
+		if err := checkBigIntRange(n, minBig, maxBig, typeName); err != nil {
+			return nil, err
 		}
 		return SingleAtomic(AtomicValue{TypeName: typeName, Value: n}), nil
 	}
@@ -266,24 +264,6 @@ var (
 	reGYear      = regexp.MustCompile(`^-?(\d{4,})(Z|[+-]\d{2}:\d{2})?$`)
 	reGYearMonth = regexp.MustCompile(`^-?(\d{4,})-(\d{2})(Z|[+-]\d{2}:\d{2})?$`)
 )
-
-// makeXSGregorian returns a constructor for xs:gDay, xs:gMonth, xs:gMonthDay, xs:gYear, xs:gYearMonth.
-func makeXSGregorian(typeName string, _ *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
-	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		a, empty, err := atomizeConstructorArg(args[0], typeName)
-		if err != nil {
-			return nil, err
-		}
-		if empty {
-			return nil, nil
-		}
-		result, err := CastAtomic(a, typeName)
-		if err != nil {
-			return nil, err
-		}
-		return SingleAtomic(result), nil
-	}
-}
 
 // validateGregorianValue performs additional validation beyond regex matching.
 func validateGregorianValue(typeName, s string) bool {
@@ -410,25 +390,6 @@ func hasValidGregorianYearDigits(y string) bool {
 		return false
 	}
 	return len(y) == 4 || y[0] != '0'
-}
-
-func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
-	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		a, empty, err := atomizeConstructorArg(args[0], TypeDateTimeStamp)
-		if err != nil {
-			return nil, err
-		}
-		if empty {
-			return nil, nil
-		}
-		// CastAtomic handles whitespace-trimmed string/date/dateTime inputs,
-		// same-type identity, and the mandatory-timezone rule for dateTimeStamp.
-		dts, err := CastAtomic(a, TypeDateTimeStamp)
-		if err != nil {
-			return nil, err
-		}
-		return SingleAtomic(dts), nil
-	}
 }
 
 func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, error) {

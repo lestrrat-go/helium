@@ -119,14 +119,9 @@ func castToInteger(v AtomicValue) (AtomicValue, error) {
 			return AtomicValue{TypeName: TypeInteger, Value: int64(1)}, nil
 		}
 		return AtomicValue{TypeName: TypeInteger, Value: int64(0)}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeInteger)
 	default:
-		if isStringDerived(v.TypeName) {
-			return CastFromString(v.StringVal(), TypeInteger)
-		}
+		return castStringLikeOrFail(v, TypeInteger)
 	}
-	return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", v.TypeName)}
 }
 
 func castToDecimal(v AtomicValue) (AtomicValue, error) {
@@ -149,14 +144,9 @@ func castToDecimal(v AtomicValue) (AtomicValue, error) {
 			return AtomicValue{TypeName: TypeDecimal, Value: big.NewRat(1, 1)}, nil
 		}
 		return AtomicValue{TypeName: TypeDecimal, Value: big.NewRat(0, 1)}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeDecimal)
 	default:
-		if isStringDerived(v.TypeName) {
-			return CastFromString(v.StringVal(), TypeDecimal)
-		}
+		return castStringLikeOrFail(v, TypeDecimal)
 	}
-	return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:decimal", v.TypeName)}
 }
 
 func castToBoolean(v AtomicValue) (AtomicValue, error) {
@@ -173,28 +163,18 @@ func castToBoolean(v AtomicValue) (AtomicValue, error) {
 		return AtomicValue{TypeName: TypeBoolean, Value: f != 0 && !math.IsNaN(f)}, nil
 	case TypeDecimal:
 		return AtomicValue{TypeName: TypeBoolean, Value: v.BigRat().Sign() != 0}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeBoolean)
 	default:
-		if isStringDerived(v.TypeName) {
-			return CastFromString(v.StringVal(), TypeBoolean)
-		}
+		return castStringLikeOrFail(v, TypeBoolean)
 	}
-	return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:boolean", v.TypeName)}
 }
 
 func castToBase64Binary(v AtomicValue) (AtomicValue, error) {
 	switch v.TypeName {
 	case TypeHexBinary:
 		return AtomicValue{TypeName: TypeBase64Binary, Value: v.BytesVal()}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeBase64Binary)
 	default:
-		if isStringDerived(v.TypeName) {
-			return CastFromString(v.StringVal(), TypeBase64Binary)
-		}
+		return castStringLikeOrFail(v, TypeBase64Binary)
 	}
-	return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:base64Binary", v.TypeName)}
 }
 
 // xsdBase64Encoding is base64.StdEncoding with Strict() to reject non-zero
@@ -219,12 +199,20 @@ func castToHexBinary(v AtomicValue) (AtomicValue, error) {
 	switch v.TypeName {
 	case TypeBase64Binary:
 		return AtomicValue{TypeName: TypeHexBinary, Value: v.BytesVal()}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeHexBinary)
 	default:
-		if isStringDerived(v.TypeName) {
-			return CastFromString(v.StringVal(), TypeHexBinary)
-		}
+		return castStringLikeOrFail(v, TypeHexBinary)
 	}
-	return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:hexBinary", v.TypeName)}
+}
+
+// castStringLikeOrFail casts a string-like source (xs:string, xs:untypedAtomic,
+// or any string-derived type) to targetType via CastFromString. Any other
+// source type yields XPTY0004. It is the shared fallthrough tail for the
+// non-string cast helpers; targetType doubles as the error message literal
+// since the Type* constants are their own lexical names (e.g. "xs:integer").
+func castStringLikeOrFail(v AtomicValue, targetType string) (AtomicValue, error) {
+	switch {
+	case v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic || isStringDerived(v.TypeName):
+		return CastFromString(v.StringVal(), targetType)
+	}
+	return AtomicValue{}, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, targetType)}
 }
