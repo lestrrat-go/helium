@@ -11,10 +11,70 @@ func (c Compiler) Compile(expr string) (*Expression, error)
 func (c Compiler) MustCompile(expr string) *Expression
 func (c Compiler) CompileExpr(ast Expr) (*Expression, error)
 
-// Evaluator
-func NewEvaluator(opts EvaluatorOptions) Evaluator
-func (e Evaluator) Evaluate(ctx, expr, node) (*Result, error)
+// Evaluator — fluent builder (clone-on-write, value type)
+type EvaluatorOption uint32
+const EvalBorrowing EvaluatorOption = 1 << iota // setters skip map/slice cloning
+const DefaultEvaluatorOptions EvaluatorOption = 0 // zero value: setters clone
+
+func NewEvaluator(flags EvaluatorOption) Evaluator
+func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error)
+```
+
+`NewEvaluator` takes an `EvaluatorOption` bitmask (NOT plural `EvaluatorOptions`).
+Pass `DefaultEvaluatorOptions` for safe clone-on-write behavior. Pass
+`EvalBorrowing` for callers that own their data and want setters to borrow
+(skip cloning) the maps/slices they receive — the caller must then not mutate
+that data for the lifetime of derived evaluators, contexts, and eval states.
+
+`Evaluate` is the terminal method; `ctx` is for cancellation/deadlines only,
+not configuration. All configuration comes from the fluent setters below.
+
+### Evaluator fluent setters
+
+Each returns an updated copy; the original `Evaluator` is never mutated. Maps and
+slices are cloned unless `EvalBorrowing` was set on `NewEvaluator`.
+
+```go
+// Bindings & resolvers
+func (e Evaluator) Namespaces(ns map[string]string) Evaluator
+func (e Evaluator) Variables(v *Variables) Evaluator
+func (e Evaluator) Functions(f *FunctionLibrary) Evaluator
+func (e Evaluator) VariableResolver(r VariableResolver) Evaluator
+func (e Evaluator) FunctionResolver(r FunctionResolver) Evaluator
+func (e Evaluator) URIResolver(r URIResolver) Evaluator
+func (e Evaluator) CollectionResolver(r CollectionResolver) Evaluator
+func (e Evaluator) HTTPClient(client *http.Client) Evaluator
+
+// Limits & resources
+func (e Evaluator) OpLimit(limit int) Evaluator
 func (e Evaluator) MaxResourceBytes(n int64) Evaluator
+
+// Time & locale / formatting
+func (e Evaluator) CurrentTime(now time.Time) Evaluator
+func (e Evaluator) ImplicitTimezone(loc *time.Location) Evaluator
+func (e Evaluator) DefaultLanguage(lang string) Evaluator
+func (e Evaluator) DefaultCollation(uri string) Evaluator
+func (e Evaluator) DefaultDecimalFormat(df DecimalFormat) Evaluator
+func (e Evaluator) NamedDecimalFormats(dfs map[QualifiedName]DecimalFormat) Evaluator
+
+// Base URI
+func (e Evaluator) BaseURI(uri string) Evaluator
+
+// Dynamic focus
+func (e Evaluator) Position(pos int) Evaluator
+func (e Evaluator) Size(size int) Evaluator
+func (e Evaluator) ContextItem(item Item) Evaluator
+
+// Schema / typing
+func (e Evaluator) TypeAnnotations(annotations map[helium.Node]string) Evaluator
+func (e Evaluator) PreservedIDAnnotations(annotations map[helium.Node]string) Evaluator
+func (e Evaluator) SchemaDeclarations(d SchemaDeclarations) Evaluator
+func (e Evaluator) StrictPrefixes() Evaluator
+func (e Evaluator) AllowXML11Chars() Evaluator
+
+// Misc
+func (e Evaluator) DocOrderCache(cache *DocOrderCache) Evaluator
+func (e Evaluator) TraceWriter(w io.Writer) Evaluator // nil → os.Stderr
 ```
 
 `MaxResourceBytes` caps the bytes read from a single external resource fetched
@@ -25,7 +85,7 @@ value disables the bound. Reads exceeding the cap fail rather than buffering an
 unbounded body: `fn:unparsed-text` / `fn:unparsed-text-lines` surface the
 over-cap error as `FOUT1170` (`fn:unparsed-text-available` returns false), while
 `fn:doc` / `fn:json-doc` surface it as a retrieval error `FODC0002` (`fn:doc-available`
-returns false). Clone-on-write like the other `Evaluator` setters.
+returns false).
 
 ## Expression
 
@@ -35,12 +95,22 @@ type Expression struct {
     ast    Expr
     program *vmProgram
 }
-func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error)
+func (e *Expression) Validate(namespaces map[string]string) error
+func (e *Expression) EvaluateReuse(ctx context.Context, state *EvalState, node helium.Node) (Result, error)
 func (e *Expression) DumpVM(w io.Writer) error
 func (e *Expression) AST() Expr
 func (e *Expression) StreamInfo() StreamInfo
 func (e *Expression) String() string
 ```
+
+There is no `Expression.Evaluate`; evaluation goes through `Evaluator.Evaluate`
+(allocating) or `Expression.EvaluateReuse` (reusing an `EvalState`, see Reuse
+below).
+
+`Validate` runs static namespace-prefix validation against the given bindings,
+catching undeclared prefixes in function calls, type names, etc. before
+evaluation. The same validation runs automatically inside `Evaluate` /
+`EvaluateReuse`.
 
 `Compile()` first tries a direct fast path for simple path-like expressions on the lexer token stream, then falls back to parse+lower through the VM backend on the same lexer if the fast path does not apply. It does not retain the parsed AST on the `Expression`; `AST()` reparses from `source` on demand. `CompileExpr()` keeps the caller-provided AST and lowers it without mutating the input tree.
 
@@ -61,30 +131,17 @@ func (r *Result) Atomics() ([]AtomicValue, error)
 func (r *Result) IsBoolean() (bool, bool)            // value, ok
 func (r *Result) IsNumber() (float64, bool)           // xs:double value, ok
 func (r *Result) IsString() (string, bool)
+func (r Result) StringValue() string                  // XPath string value of the sequence
+func (r Result) Copy() Result                          // deep copy with independent backing (see Reuse)
 ```
 
-## Context
+## Configuration types & resolvers
+
+Evaluation is configured exclusively through the `Evaluator` fluent setters
+above — there are NO `With*(ctx, ...)` context helpers in `xpath3`. The setters
+take these supporting types:
 
 ```go
-func WithNamespaces(ctx context.Context, ns map[string]string) context.Context
-func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context.Context
-func WithVariables(ctx context.Context, vars map[string]Sequence) context.Context
-func WithAdditionalVariables(ctx context.Context, vars map[string]Sequence) context.Context
-func WithOpLimit(ctx context.Context, limit int) context.Context
-func WithFunctions(ctx context.Context, fns map[string]Function) context.Context
-func WithFunction(ctx context.Context, name string, fn Function) context.Context
-func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) context.Context
-func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.Context
-func WithImplicitTimezone(ctx context.Context, loc *time.Location) context.Context
-func WithDefaultLanguage(ctx context.Context, lang string) context.Context
-func WithDefaultCollation(ctx context.Context, uri string) context.Context
-func WithDefaultDecimalFormat(ctx context.Context, df DecimalFormat) context.Context
-func WithNamedDecimalFormats(ctx context.Context, dfs map[QualifiedName]DecimalFormat) context.Context
-func WithBaseURI(ctx context.Context, uri string) context.Context
-func WithURIResolver(ctx context.Context, r URIResolver) context.Context
-func WithCollectionResolver(ctx context.Context, r CollectionResolver) context.Context
-func WithHTTPClient(ctx context.Context, client *http.Client) context.Context
-
 type QualifiedName struct { URI, Name string }
 
 type URIResolver interface {
@@ -95,14 +152,61 @@ type CollectionResolver interface {
     ResolveCollection(uri string) (Sequence, error)
     ResolveURICollection(uri string) ([]string, error)
 }
+
+type VariableResolver interface { /* lazy variable lookup */ }
+type FunctionResolver interface { /* lazy function lookup */ }
+type SchemaDeclarations interface { /* schema-aware type info */ }
+
+type Variables struct { /* variable bindings; see xpath3-types.md */ }
+type FunctionLibrary struct { /* user-defined functions */ }
+type DecimalFormat = icu.DecimalFormat
+type DocOrderCache = internal/xpath.DocOrderCache
 ```
 
-**Resource loading is opt-in.** Without an explicit `URIResolver` or `HTTPClient`, `fn:doc`, `fn:doc-available`, `fn:json-doc`, and the `fn:unparsed-text*` family error with `FODC0002` / `FOUT1170` for every URI — there is no implicit `http.DefaultClient` and no implicit `os.ReadFile`. Built-in helpers in `internal/unparsedtext`:
+Pass bindings with `Evaluator.Namespaces`, `Evaluator.Variables`, and
+`Evaluator.Functions`; supply lazy lookups with `Evaluator.VariableResolver` /
+`Evaluator.FunctionResolver`.
+
+**Resource loading is opt-in.** Without an explicit `URIResolver` or `HTTPClient` (`Evaluator.URIResolver` / `Evaluator.HTTPClient`), `fn:doc`, `fn:doc-available`, `fn:json-doc`, and the `fn:unparsed-text*` family error with `FODC0002` / `FOUT1170` for every URI — there is no implicit `http.DefaultClient` and no implicit `os.ReadFile`. Built-in helpers in `internal/unparsedtext`:
 - `FileURIResolver{BaseDir}` — file resolver confined to `BaseDir` (refuses `..` traversal and absolute paths outside it)
 - `NewFileResolver(fs.FS)` — file resolver backed by `io/fs`
 - `NewHTTPResolver(*http.Client)` — http(s) resolver; caller owns transport, timeouts, redirect policy
 
-User functions registered via `WithFunctionsNS` CANNOT override built-ins in `fn:` namespace.
+User functions supplied via `Evaluator.Functions` CANNOT override built-ins in the `fn:` namespace.
+
+## Low-allocation reuse
+
+For evaluating the same `Expression` repeatedly (e.g. per node in a loop), build
+an `EvalState` once and reuse it. This skips per-call allocation of the internal
+eval context.
+
+```go
+type EvalState struct { /* opaque; NOT safe for concurrent use */ }
+
+func (e Evaluator) NewEvalState(node helium.Node) *EvalState
+func (e *Expression) EvaluateReuse(ctx context.Context, state *EvalState, node helium.Node) (Result, error)
+
+func (s *EvalState) SetContextItem(item Item)
+func (s *EvalState) SetPosition(pos int)
+func (s *EvalState) SetSize(size int)
+
+func (r Result) StringValue() string   // XPath string value; fast path for single node
+func (r Result) Copy() Result          // deep copy with independent backing storage
+```
+
+`NewEvalState` builds the state from the `Evaluator`'s config (same
+initialization path as `Evaluate`), seeding the base focus. Each
+`EvaluateReuse(ctx, state, node)` resets per-evaluation fields and starts from
+that base focus; a non-nil `node` overrides the context node for that call only.
+When `CurrentTime` was not explicitly configured, the clock is refreshed per
+call so `fn:current-dateTime()` tracks wall-clock time.
+
+**Result lifetime warning:** the `Result` returned by `EvaluateReuse` is only
+valid until the next `EvaluateReuse` call on the same `EvalState` — its backing
+storage may be overwritten. Extract everything you need (e.g. via
+`Result.StringValue()` / `Result.Nodes()`) before the next call, or retain it
+across calls with `Result.Copy()`, which returns a deep copy backed by
+independent storage. An `EvalState` is not safe for concurrent use.
 
 `Compile()` uses a direct compile fast path where possible, otherwise lowers parsed AST to VM program using an ownership-taking lowering path that can reuse parsed slices. `CompileExpr()` uses a non-mutating lowering path, with raw AST fallback for unsupported custom Expr implementations.
 
