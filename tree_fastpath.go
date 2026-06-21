@@ -12,6 +12,16 @@ type attrNamespaceCacheEntry struct {
 	ns     *Namespace
 }
 
+// AppendChildFast links child as the last child of parent without running the
+// cycle-guard and duplicate-attribute preflight that AddChild performs. It is
+// intended for callers that are building a freshly-constructed, provably acyclic
+// and duplicate-free tree (e.g. a deep copy), where those safety checks are pure
+// overhead. Misuse on an arbitrary live tree can corrupt linkage; prefer AddChild
+// unless the no-preflight contract is known to hold.
+func AppendChildFast(parent MutableNode, child Node) error {
+	return appendFastChild(parent, child)
+}
+
 func appendFastChild(parent MutableNode, child Node) error {
 	pdn := parent.baseDocNode()
 	cdn := child.baseDocNode()

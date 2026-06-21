@@ -174,8 +174,39 @@ func (d *Document) SetEncoding(enc string) {
 	d.encoding = enc
 }
 
+// RawEncoding returns the document's encoding exactly as recorded, WITHOUT the
+// "utf8" default that Encoding() synthesizes for documents whose XML
+// declaration omitted an encoding. An empty result means the source had no
+// encoding declaration. This is the value the XML serializer consults (it emits
+// encoding="..." only when the raw encoding is non-empty), so a faithful copy
+// of a document — e.g. an xsl:strip-space copy — must propagate this rather
+// than Encoding(), which would synthesize a spurious encoding="utf8".
+func (d *Document) RawEncoding() string {
+	return d.encoding
+}
+
 func (d *Document) Standalone() DocumentStandaloneType {
 	return d.standalone
+}
+
+// SkipIDs reports whether ID attribute interning was skipped when this
+// document was produced (mirrors the parser's SkipIDs option). When true,
+// GetElementByID and fn:id always return no match without an O(n) tree walk.
+func (d *Document) SkipIDs() bool {
+	return d.idsSkip
+}
+
+// SetSkipIDs sets the document's ID-skip state. This is used when producing a
+// derived document (e.g. an xsl:strip-space copy) that must mirror the source's
+// ID semantics.
+//
+// The ID-skip state is authoritative: while it is true, GetElementByID (and
+// therefore fn:id) resolves NO ids and returns nil — even if the document
+// already has a populated ID table from a normal parse. Setting it back to
+// false restores normal resolution against the existing table (or the lazy
+// tree walk for API-built documents).
+func (d *Document) SetSkipIDs(v bool) {
+	d.idsSkip = v
 }
 
 func (d *Document) Version() string {
@@ -939,16 +970,35 @@ func (d *Document) RegisterID(id string, elem *Element) {
 	d.ids[id] = elem
 }
 
+// IDTable returns the document's ID->element table populated during parsing
+// (mirroring libxml2's xmlAddID). The returned map is the document's own, not a
+// copy, and is nil for documents built without an interned ID table (e.g. via the
+// API rather than the parser); callers must not mutate it. It lets a derived
+// document (e.g. an xsl:strip-space copy) rebuild an equivalent table by
+// translating each entry's element through the original->copy correspondence,
+// faithfully preserving id()/GetElementByID semantics — including for prefixed
+// elements whose qualified DTD ATTLIST the lazy GetElementByID fallback would
+// otherwise miss.
+func (d *Document) IDTable() map[string]*Element {
+	return d.ids
+}
+
 // GetElementByID returns the first element in the document whose ID matches
 // the given value. If the document's ID table has been populated (during
 // parsing), it performs an O(1) hash lookup. Otherwise it falls back to an
 // O(n) tree walk checking xml:id and DTD-declared ID attributes.
+//
+// The ID-skip state (see SetSkipIDs) is authoritative and is checked FIRST: a
+// document with SkipIDs() == true resolves NO ids — it returns nil without
+// consulting the ID table or performing the lazy walk. This keeps GetElementByID
+// and fn:id consistent with the SkipIDs contract even on a document that already
+// has a populated ID table (e.g. one parsed normally and then SetSkipIDs(true)).
 func (d *Document) GetElementByID(id string) *Element {
-	if d.ids != nil {
-		return d.ids[id]
-	}
 	if d.idsSkip {
 		return nil
+	}
+	if d.ids != nil {
+		return d.ids[id]
 	}
 
 	// Fallback: O(n) tree walk for documents not built via parser.

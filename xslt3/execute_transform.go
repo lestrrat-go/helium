@@ -14,6 +14,142 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
+// remapValidationNode resolves a node from the original (validated) source tree to
+// the corresponding node in the stripped copy the transform runs on. Strict source
+// validation runs on the original tree, so its type annotations and nilled flags are
+// keyed by original nodes; the transform navigates the copy, so those keys must be
+// remapped. When nodeMap is nil (no strip rules — original and copy are the same
+// tree) or the node has no copy (e.g. it was omitted from the copy), the node is
+// returned unchanged.
+func remapValidationNode(nodeMap map[helium.Node]helium.Node, node helium.Node) helium.Node {
+	if nodeMap == nil || node == nil {
+		return node
+	}
+	if mapped, ok := nodeMap[node]; ok {
+		return mapped
+	}
+	return node
+}
+
+// remapSelectionToCopy rewrites the node items of an initial match selection so
+// that any node belonging to the original source document points instead to the
+// corresponding node in the stripped copy. Items that are not nodes, or that
+// belong to a different document (e.g. fn:doc()-loaded), are passed through
+// unchanged. A node that DID belong to the original source but has no copy (a
+// whitespace-only text/CDATA node that strip-space omitted) is DROPPED from the
+// selection, so it neither points at the unstripped original nor inflates the
+// sequence length that drives position()/last() in the apply loop.
+//
+// src is the original source document the selection was computed against; it is
+// used only to distinguish an omitted source node (drop) from a node in another
+// document (pass through).
+//
+// nodeMap is the original->copy correspondence built by copyAndStrip during the
+// single-pass copy. Because whitespace-only nodes are omitted from the copy, the
+// two trees no longer share a child shape, so the map (not a parallel walk) is
+// the only correct source of correspondence. It already covers elements,
+// text/comment/PI leaves, the document node, and each element's attributes (keyed
+// by expanded name). Namespace nodes are wrappers off the child spine; a selected
+// *helium.NamespaceNodeWrapper is remapped by locating the mapped owner element
+// and rebuilding an equivalent wrapper bound to a matching namespace declaration
+// in scope on the copy. This ensures every selected node (element, text, comment,
+// PI, attribute, namespace) points into the stripped copy, so XPath navigation
+// from a matched template observes the same tree as the context node.
+func remapSelectionToCopy(sel xpath3.Sequence, src *helium.Document, nodeMap map[helium.Node]helium.Node) xpath3.Sequence {
+	items := make(xpath3.ItemSlice, 0, sequence.Len(sel))
+	for i := range sequence.Len(sel) {
+		item := sel.Get(i)
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok {
+			items = append(items, item)
+			continue
+		}
+		// Namespace nodes are wrappers off the child spine: remap by relocating
+		// the owner element onto the copy and rebuilding an equivalent wrapper.
+		if nsw, ok := ni.Node.(*helium.NamespaceNodeWrapper); ok {
+			if mapped := remapNamespaceWrapper(nodeMap, nsw); mapped != nil {
+				items = append(items, xpath3.NodeItem{Node: mapped})
+				continue
+			}
+			items = append(items, item)
+			continue
+		}
+		if mapped, found := nodeMap[ni.Node]; found {
+			items = append(items, xpath3.NodeItem{Node: mapped})
+			continue
+		}
+		// No copy exists. If the node belonged to the original source, strip-space
+		// omitted it (whitespace-only text/CDATA): drop it so it is absent from the
+		// stripped selection and does not skew position()/last(). Nodes from other
+		// documents (e.g. fn:doc()-loaded) keep their identity and pass through.
+		if ni.Node != nil && ni.Node.OwnerDocument() == src {
+			continue
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+// mapElementAttributes records the correspondence between the attributes of an
+// original element and those of its copy, keyed by expanded (URI, local) name
+// (unique within a single element).
+func mapElementAttributes(nodeMap map[helium.Node]helium.Node, ea, eb *helium.Element) {
+	copyAttrs := make(map[string]*helium.Attribute)
+	for _, attr := range eb.Attributes() {
+		copyAttrs[helium.ClarkName(attr.URI(), attr.LocalName())] = attr
+	}
+	for _, attr := range ea.Attributes() {
+		if dst, ok := copyAttrs[helium.ClarkName(attr.URI(), attr.LocalName())]; ok {
+			nodeMap[attr] = dst
+		}
+	}
+}
+
+// remapNamespaceWrapper rebuilds an initial-selection namespace node so that it
+// belongs to the copied tree. It maps the wrapper's owner element onto the copy,
+// then returns a fresh wrapper bound to a matching namespace, with the COPIED
+// owner as parent. Returns nil only if the owner element could not be mapped.
+//
+// The wrapper is re-bound by preference to an in-scope declaration on the copied
+// owner (or an ancestor) with the same prefix and URI, since namespace nodes can
+// be reported on a descendant of the element that declares them. When no such
+// declaration exists, the namespace is one the XPath axis SYNTHESIZES rather than
+// one stored in Namespaces() — most notably the implicit `xml` binding, which the
+// namespace axis fabricates and which never appears in any element's declarations
+// (see internal/xpath/axes.go CollectNamespaceNodes). For those, synthesize an
+// equivalent Namespace bound to the copied owner, mirroring the axis, so the
+// wrapper still points into the stripped copy instead of falling back to the
+// unstripped original.
+func remapNamespaceWrapper(nodeMap map[helium.Node]helium.Node, nsw *helium.NamespaceNodeWrapper) helium.Node {
+	owner := nsw.Parent()
+	if owner == nil {
+		return nil
+	}
+	mappedOwner, ok := nodeMap[owner]
+	if !ok {
+		return nil
+	}
+	prefix := nsw.Name()
+	uri := string(nsw.Content())
+	// Prefer an actual in-scope declaration on the copied owner or an ancestor
+	// that matches the original wrapper's (prefix, URI).
+	for n := mappedOwner; n != nil; n = n.Parent() {
+		nc, ok := n.(helium.NamespaceContainer)
+		if !ok {
+			continue
+		}
+		for _, ns := range nc.Namespaces() {
+			if ns.Prefix() == prefix && ns.URI() == uri {
+				return helium.NewNamespaceNodeWrapper(ns, mappedOwner)
+			}
+		}
+	}
+	// No stored declaration matches: the namespace is synthesized by the axis
+	// (e.g. the implicit `xml` binding). Re-synthesize it against the copied
+	// owner so the wrapper still belongs to the stripped copy.
+	return helium.NewNamespaceNodeWrapper(helium.NewNamespace(prefix, uri), mappedOwner)
+}
+
 // cloneOutputDef returns a deep copy of an OutputDef. All pointer, slice, and
 // map fields are freshly allocated so that mutating the clone (or the original)
 // never affects the other. Returns nil if src is nil.
@@ -63,6 +199,84 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	effectiveSource := source
 	if ss.globalContextItem != nil && ss.globalContextItem.Use == ctxItemAbsent {
 		effectiveSource = nil
+	}
+
+	// xsl:strip-space removes whitespace-only text nodes from the source tree.
+	// The source document is owned by the caller, so it must never be mutated in
+	// place: doing so destroys node identity, corrupts a tree the caller may
+	// reuse (e.g. for a later XPath query or a second transform), and is unsafe
+	// under concurrent reuse. Deep-copy the source first and run the transform
+	// against the copy so strip-space (applied below) only ever touches our
+	// private copy. The copy becomes the exec context's source, so the initial
+	// context node and all node identity stay consistent throughout the
+	// transform. Only copy when strip-space rules exist (it is otherwise pure
+	// overhead).
+	var matchSelection xpath3.Sequence
+	if cfg != nil {
+		matchSelection = cfg.initialMatchSelection
+	}
+	// selectionSupplied records whether the caller supplied an initial match
+	// selection at all, independent of how many nodes it currently holds. After
+	// strip-space remaps the selection (remapSelectionToCopy), an all-whitespace
+	// selection can shrink to length 0. In that case the apply-templates step
+	// must run against the (empty) selection — producing no output — rather than
+	// falling through to the source document.
+	selectionSupplied := matchSelection != nil
+	// validationSource is the tree that strict source-schema validation runs
+	// against. It must be the ORIGINAL, un-stripped source: xsl:strip-space must
+	// not remove whitespace-only nodes before validation, or a schema that
+	// rejects such content (e.g. an element required to be empty) would have its
+	// violation masked. validationSource therefore stays pinned to the original
+	// source even after the strip copy replaces effectiveSource below. stripNodeMap
+	// carries the original->copy correspondence so validation annotations gathered
+	// on the original tree can be remapped onto the copy the transform runs on.
+	validationSource := effectiveSource
+	var stripNodeMap map[helium.Node]helium.Node
+	if len(ss.stripSpace) > 0 && effectiveSource != nil {
+		// copyAndStrip deep-copies the source, omits the whitespace-only text
+		// nodes strip-space would remove, declares namespaces without
+		// over-declaration, and preserves the URI/DTD — all in a single
+		// traversal. This replaces the former three-pass approach
+		// (CopyDoc + pruneRedundantNamespaceDecls + stripWhitespaceFromDoc) and
+		// is byte-for-byte equivalent. At this point the effective strip/preserve
+		// rules are the stylesheet's own (no package scope is active yet).
+		// Build the original->copy node map whenever there is a selection to remap
+		// OR a schema that will validate the original tree (so its annotations can
+		// be carried over to the copy); the common case (no selection, no schema)
+		// skips that bookkeeping entirely.
+		needSelectionMap := matchSelection != nil && sequence.Len(matchSelection) > 0
+		// schemaActive is true whenever source validation could run and produce
+		// type annotations that must ride onto the strip copy the transform
+		// navigates. It is NOT enough to check the stylesheet's own schema state
+		// (schemaAware/ss.schemas) and externally-supplied source schemas: a source
+		// document can declare its own schema purely via xsi:schemaLocation /
+		// xsi:noNamespaceSchemaLocation (loadSchemasFromSchemaLocation below), which
+		// never sets schemaAware. Missing that path left stripNodeMap nil, so
+		// remapValidationNode kept the annotations on the ORIGINAL nodes while the
+		// transform ran on the COPY, silently dropping source type annotations
+		// (observable through xsl:copy-of, since input-type-annotations defaults to
+		// preserve). sourceHasSchemaLocation is a cheap root-attribute scan that
+		// keeps the common no-schema/no-strip fast path (map stays nil) untouched.
+		schemaActive := ss.schemaAware ||
+			len(ss.schemas) > 0 ||
+			(cfg != nil && len(cfg.sourceSchemas) > 0) ||
+			sourceHasSchemaLocation(effectiveSource)
+		needMap := needSelectionMap || schemaActive
+		srcCopy, nodeMap, copyErr := copyAndStrip(effectiveSource, ss.stripSpace, ss.preserveSpace, needMap)
+		if copyErr != nil {
+			return nil, copyErr
+		}
+		// The initial match selection (if any) was computed against the original
+		// source tree, so its node items still point into the original. Remap any
+		// selected node that lives in the original source into the corresponding
+		// node of the copy so template matching runs over the same (stripped)
+		// tree as the context node. Selected nodes from other documents (e.g.
+		// fn:doc()-loaded) are left untouched.
+		if needSelectionMap {
+			matchSelection = remapSelectionToCopy(matchSelection, effectiveSource, nodeMap)
+		}
+		stripNodeMap = nodeMap
+		effectiveSource = srcCopy
 	}
 
 	captureItems := cfg != nil && cfg.rawCapture
@@ -144,16 +358,29 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if ss.schemaAware || len(runtimeSchemas) > 0 {
 		ec.schemaRegistry = &schemaRegistry{schemas: runtimeSchemas}
 		ec.typeAnnotations = make(map[helium.Node]string)
-		if len(runtimeSchemas) > 0 && effectiveSource != nil {
-			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, effectiveSource)
+		if len(runtimeSchemas) > 0 && validationSource != nil {
+			// Validate the ORIGINAL, un-stripped source so xsl:strip-space cannot
+			// drop whitespace-only nodes (and thus mask schema violations) before
+			// validation. validationSource is the original tree; effectiveSource is
+			// the stripped copy the transform runs on (or the original when no
+			// strip rules apply, in which case the two are the same node).
+			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, validationSource)
 			if valErr != nil && ss.defaultValidation == validationStrict {
 				return nil, valErr
 			}
+			// Annotations and nilled flags were gathered against validationSource.
+			// When a strip copy exists, remap each annotated node onto its copy so
+			// the transform (which runs on effectiveSource) sees the type info.
+			// remapValidationNode resolves an original node to its copy via the
+			// strip node map, falling back to the node itself when no copy exists
+			// (no strip rules, or the node was omitted from the copy).
 			for node, typeName := range vr.Annotations {
-				ec.annotateNode(node, typeName)
+				ec.annotateNode(remapValidationNode(stripNodeMap, node), typeName)
 			}
 			for elem := range vr.NilledElements {
-				ec.markNilled(elem)
+				if mapped, ok := remapValidationNode(stripNodeMap, elem).(*helium.Element); ok {
+					ec.markNilled(mapped)
+				}
 			}
 			if len(vr.Annotations) > 0 {
 				if ec.validatedDocs == nil {
@@ -175,11 +402,8 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		}
 	}
 
-	// Apply xsl:strip-space to the source document so that whitespace-only
-	// text nodes are removed before template matching and XPath evaluation.
-	if len(ss.stripSpace) > 0 && effectiveSource != nil {
-		ec.stripWhitespaceFromDoc(effectiveSource)
-	}
+	// xsl:strip-space whitespace removal already happened during copyAndStrip
+	// above, so the source document seen here is the stripped copy.
 
 	// When a globalContextSelect expression is provided, evaluate it against
 	// the (possibly stripped) source document.  If the result is empty, the
@@ -336,8 +560,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 				return nil, err
 			}
 		}
-		// XTDE0040: no source document supplied and no initial template identified
-		if effectiveSource == nil && (cfg == nil || cfg.initialMatchSelection == nil || sequence.Len(cfg.initialMatchSelection) == 0) {
+		// XTDE0040: no source document supplied and no initial template identified.
+		// A supplied initial match selection counts as input even when it remaps to
+		// empty (all nodes stripped); only error when no selection was supplied.
+		if effectiveSource == nil && !selectionSupplied {
 			return nil, dynamicError(errCodeXTDE0040, "no source document and no initial template")
 		}
 		var initialModeParams map[string]xpath3.Sequence
@@ -348,7 +574,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if cfg != nil && len(cfg.initialModeTunnel) > 0 {
 			ec.tunnelParams = cloneSequenceMap(cfg.initialModeTunnel)
 		}
-		if cfg != nil && cfg.initialMatchSelection != nil && sequence.Len(cfg.initialMatchSelection) > 0 {
+		if selectionSupplied {
+			// An initial match selection was supplied. Apply templates to each of
+			// its items. If the selection is empty (e.g. every node was removed by
+			// strip-space during remapSelectionToCopy), this loop runs zero times
+			// and produces no output — we must NOT fall through to the source
+			// document.
 			// Resolve mode name for atomic template matching
 			resolvedMode := initialMode
 			switch resolvedMode {
@@ -363,10 +594,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			if resolvedMode == modeUnnamed {
 				resolvedMode = ""
 			}
-			selLen := sequence.Len(cfg.initialMatchSelection)
+			selLen := sequence.Len(matchSelection)
 			// Apply templates to the initial match selection items
 			for i := range selLen {
-				item := cfg.initialMatchSelection.Get(i)
+				item := matchSelection.Get(i)
 				switch v := item.(type) {
 				case xpath3.NodeItem:
 					ec.contextNode = v.Node
