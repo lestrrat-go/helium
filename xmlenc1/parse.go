@@ -123,7 +123,7 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 		case isMGFElem(e):
 			em.MGFAlgorithm, _ = e.GetAttribute("Algorithm")
 		case isXMLEncElem(e, "OAEPparams"):
-			decoded, err := decodeBase64(textContent(e))
+			decoded, err := xmlbase64.DecodeString(textContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
 			}
@@ -141,7 +141,7 @@ func parseCipherData(elem *helium.Element) ([]byte, error) {
 			continue
 		}
 		if isXMLEncElem(e, "CipherValue") {
-			decoded, err := decodeBase64(textContent(e))
+			decoded, err := xmlbase64.DecodeString(textContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
 			}
@@ -193,12 +193,6 @@ func isDSigElem(e *helium.Element, local string) bool {
 // namespace too for robustness against producers that misqualify it.
 func isMGFElem(e *helium.Element) bool {
 	return isElemNS(e, "MGF", NamespaceXMLEnc11, NamespaceXMLEnc)
-}
-
-// decodeBase64 decodes xs:base64Binary text, stripping interspersed XML
-// whitespace from line-wrapped base64.
-func decodeBase64(text string) ([]byte, error) {
-	return xmlbase64.DecodeString(text)
 }
 
 // textContent returns the concatenated text content of an element.
