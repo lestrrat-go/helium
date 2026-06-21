@@ -767,16 +767,13 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	// Secondary output: execute body into a temporary document.
 	tmpDoc := helium.NewDefaultDocument()
 
-	// Set the document URL so that base-uri() returns the correct value.
-	// Resolve relative href against the stylesheet base URI.
-	resolvedHref := href
-	if ec.stylesheet.baseURI != "" {
-		resolved := helium.BuildURI(href, ec.stylesheet.baseURI)
-		if resolved != "" {
-			resolvedHref = resolved
-		}
-	}
-	tmpDoc.SetURL(resolvedHref)
+	// Set the document URL so that base-uri() returns the correct value. Per XSLT
+	// 3.0 §26.2 a secondary result document's base URI is its href resolved
+	// against the BASE OUTPUT URI, NOT the stylesheet base URI. ec.currentOutputURI
+	// already holds exactly that value: it was set above (canonicalResultURIKey of
+	// href against the saved base output URI) and is the same scheme-preserving
+	// canonical URI used as the XTDE1490 duplicate-detection key.
+	tmpDoc.SetURL(ec.currentOutputURI)
 
 	// PREFLIGHT (symmetric with the primary path): evaluate the secondary
 	// effective output definition — which evaluates EVERY error-prone

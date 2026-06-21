@@ -80,8 +80,8 @@ func TestPrefixedFnStreamabilityXSLTLayer(t *testing.T) {
 	t.Run("forbidden current-group in pattern", func(t *testing.T) {
 		plain := compile(t, "current-group()")
 		pref := compile(t, "fn:current-group()")
-		plainErr := checkPatternForbiddenFunctions(plain.AST())
-		prefErr := checkPatternForbiddenFunctions(pref.AST())
+		plainErr := checkPatternForbiddenFunctions(plain.AST(), nil)
+		prefErr := checkPatternForbiddenFunctions(pref.AST(), nil)
 		require.Error(t, plainErr, "unprefixed current-group() must be forbidden in pattern")
 		require.Error(t, prefErr,
 			"fn:current-group() must be forbidden in pattern, same as unprefixed")

@@ -26,7 +26,8 @@ var elems = elements.NewRegistry()
 type compiler struct {
 	stylesheet                *Stylesheet
 	nsBindings                map[string]string
-	xpathDefaultNS            string // current xpath-default-namespace
+	xpathDefaultNS            string // current xpath-default-namespace value
+	hasXPathDefaultNS         bool   // whether an xpath-default-namespace is in effect (distinguishes explicit "" reset from absent)
 	preserveSpace             bool   // xml:space="preserve" in effect
 	expandText                bool   // expand-text="yes" — text value templates enabled
 	importPrec                int
@@ -955,7 +956,7 @@ func (c *compiler) resolveSingleShadowAttribute(ctx context.Context, elem *heliu
 // evaluation can invoke dynamic transforms (used by use-when patterns).
 func (c *compiler) staticEvaluator(_ context.Context) xpath3.Evaluator {
 	fns := map[string]xpath3.Function{
-		"transform": &xsltFunc{min: 1, max: 1, fn: c.staticFnTransform},
+		fnNameTransform: &xsltFunc{min: 1, max: 1, fn: c.staticFnTransform},
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
@@ -1028,10 +1029,10 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 // (system-property, function-available, type-available, element-available).
 func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	fns := map[string]xpath3.Function{
-		"function-available": &xsltFunc{min: 1, max: 2, fn: c.useWhenFunctionAvailable},
-		funcSystemProperty:   &xsltFunc{min: 1, max: 1, fn: c.useWhenSystemProperty},
-		"type-available":     &xsltFunc{min: 1, max: 1, fn: c.useWhenTypeAvailable},
-		"element-available":  &xsltFunc{min: 1, max: 1, fn: c.useWhenElementAvailable},
+		fnNameFunctionAvailable: &xsltFunc{min: 1, max: 2, fn: c.useWhenFunctionAvailable},
+		funcSystemProperty:      &xsltFunc{min: 1, max: 1, fn: c.useWhenSystemProperty},
+		fnNameTypeAvailable:     &xsltFunc{min: 1, max: 1, fn: c.useWhenTypeAvailable},
+		fnNameElementAvailable:  &xsltFunc{min: 1, max: 1, fn: c.useWhenElementAvailable},
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
@@ -1159,9 +1160,12 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.stylesheet.inputTypeAnnotations = ita
 	}
 
-	// Read xpath-default-namespace from stylesheet root
-	if xdn := getAttr(root, "xpath-default-namespace"); xdn != "" {
+	// Read xpath-default-namespace from stylesheet root. Presence (even an
+	// empty value) governs unprefixed pattern names; absence leaves the
+	// inherited/default behavior untouched.
+	if xdn, ok := root.GetAttribute("xpath-default-namespace"); ok {
 		c.xpathDefaultNS = xdn
+		c.hasXPathDefaultNS = true
 	}
 
 	// Read default-collation from stylesheet root
