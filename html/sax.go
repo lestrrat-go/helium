@@ -48,115 +48,165 @@ type Attribute struct {
 
 // Per-method handler interfaces. Each follows the http.Handler pattern:
 // an interface with a single method, paired with a func type adapter.
+// Unlike the XML SAX2 handlers in package sax, these HTML SAX1 callbacks
+// take no context.Context and report elements by simple name with no
+// namespace information, matching libxml2's HTML SAX.
 
+// SetDocumentLocatorHandler handles the SetDocumentLocator event, called once
+// before any other event to supply the source-position locator.
 type SetDocumentLocatorHandler interface {
 	SetDocumentLocator(loc DocumentLocator) error
 }
 
+// StartDocumentHandler handles the StartDocument event, emitted once at the
+// start of the document.
 type StartDocumentHandler interface {
 	StartDocument() error
 }
 
+// EndDocumentHandler handles the EndDocument event, emitted once at the end of
+// the document.
 type EndDocumentHandler interface {
 	EndDocument() error
 }
 
+// StartElementHandler handles a start tag. name is the element name (no
+// namespace) and attrs holds its attributes in source order.
 type StartElementHandler interface {
 	StartElement(name string, attrs []Attribute) error
 }
 
+// EndElementHandler handles an end tag for the element named name.
 type EndElementHandler interface {
 	EndElement(name string) error
 }
 
+// CharactersHandler handles a run of character data. The bytes are owned by the
+// parser and must be copied if retained beyond the call.
 type CharactersHandler interface {
 	Characters(ch []byte) error
 }
 
+// CDataBlockHandler handles a CDATA section's content.
 type CDataBlockHandler interface {
 	CDataBlock(value []byte) error
 }
 
+// CommentHandler handles a comment's content (the text between <!-- and -->).
 type CommentHandler interface {
 	Comment(value []byte) error
 }
 
+// InternalSubsetHandler handles the document type declaration (<!DOCTYPE ...>).
 type InternalSubsetHandler interface {
 	InternalSubset(name, externalID, systemID string) error
 }
 
+// ProcessingInstructionHandler handles a processing instruction with the given
+// target and data.
 type ProcessingInstructionHandler interface {
 	ProcessingInstruction(target, data string) error
 }
 
+// IgnorableWhitespaceHandler handles whitespace that is ignorable per the
+// content model.
 type IgnorableWhitespaceHandler interface {
 	IgnorableWhitespace(ch []byte) error
 }
 
+// ErrorHandler handles a parse error. Returning a non-nil error aborts parsing.
 type ErrorHandler interface {
 	Error(err error) error
 }
 
+// WarningHandler handles a non-fatal parse warning.
 type WarningHandler interface {
 	Warning(err error) error
 }
 
-// Func type adapters. Each implements its corresponding handler interface.
+// Func type adapters. Each implements its corresponding handler interface,
+// allowing a plain function to be used wherever the handler is expected.
 
+// SetDocumentLocatorFunc adapts a function to SetDocumentLocatorHandler.
 type SetDocumentLocatorFunc func(loc DocumentLocator) error
 
+// SetDocumentLocator calls f.
 func (f SetDocumentLocatorFunc) SetDocumentLocator(loc DocumentLocator) error { return f(loc) }
 
+// StartDocumentFunc adapts a function to StartDocumentHandler.
 type StartDocumentFunc func() error
 
+// StartDocument calls f.
 func (f StartDocumentFunc) StartDocument() error { return f() }
 
+// EndDocumentFunc adapts a function to EndDocumentHandler.
 type EndDocumentFunc func() error
 
+// EndDocument calls f.
 func (f EndDocumentFunc) EndDocument() error { return f() }
 
+// StartElementFunc adapts a function to StartElementHandler.
 type StartElementFunc func(name string, attrs []Attribute) error
 
+// StartElement calls f.
 func (f StartElementFunc) StartElement(name string, attrs []Attribute) error { return f(name, attrs) }
 
+// EndElementFunc adapts a function to EndElementHandler.
 type EndElementFunc func(name string) error
 
+// EndElement calls f.
 func (f EndElementFunc) EndElement(name string) error { return f(name) }
 
+// CharactersFunc adapts a function to CharactersHandler.
 type CharactersFunc func(ch []byte) error
 
+// Characters calls f.
 func (f CharactersFunc) Characters(ch []byte) error { return f(ch) }
 
+// CDataBlockFunc adapts a function to CDataBlockHandler.
 type CDataBlockFunc func(value []byte) error
 
+// CDataBlock calls f.
 func (f CDataBlockFunc) CDataBlock(value []byte) error { return f(value) }
 
+// CommentFunc adapts a function to CommentHandler.
 type CommentFunc func(value []byte) error
 
+// Comment calls f.
 func (f CommentFunc) Comment(value []byte) error { return f(value) }
 
+// InternalSubsetFunc adapts a function to InternalSubsetHandler.
 type InternalSubsetFunc func(name, externalID, systemID string) error
 
+// InternalSubset calls f.
 func (f InternalSubsetFunc) InternalSubset(name, externalID, systemID string) error {
 	return f(name, externalID, systemID)
 }
 
+// ProcessingInstructionFunc adapts a function to ProcessingInstructionHandler.
 type ProcessingInstructionFunc func(target, data string) error
 
+// ProcessingInstruction calls f.
 func (f ProcessingInstructionFunc) ProcessingInstruction(target, data string) error {
 	return f(target, data)
 }
 
+// IgnorableWhitespaceFunc adapts a function to IgnorableWhitespaceHandler.
 type IgnorableWhitespaceFunc func(ch []byte) error
 
+// IgnorableWhitespace calls f.
 func (f IgnorableWhitespaceFunc) IgnorableWhitespace(ch []byte) error { return f(ch) }
 
+// ErrorFunc adapts a function to ErrorHandler.
 type ErrorFunc func(err error) error
 
+// Error calls f.
 func (f ErrorFunc) Error(err error) error { return f(err) }
 
+// WarningFunc adapts a function to WarningHandler.
 type WarningFunc func(err error) error
 
+// Warning calls f.
 func (f WarningFunc) Warning(err error) error { return f(err) }
 
 // SAXHandler is the HTML SAX1 handler interface. Unlike the XML SAX2Handler,
@@ -262,6 +312,8 @@ func (s *SAXCallbacks) SetOnWarning(h WarningHandler) {
 	s.onWarning = h
 }
 
+// SetDocumentLocator dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) SetDocumentLocator(loc DocumentLocator) error {
 	if h := s.onSetDocumentLocator; h != nil {
 		return h.SetDocumentLocator(loc)
@@ -269,6 +321,8 @@ func (s *SAXCallbacks) SetDocumentLocator(loc DocumentLocator) error {
 	return ErrHandlerUnspecified
 }
 
+// StartDocument dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) StartDocument() error {
 	if h := s.onStartDocument; h != nil {
 		return h.StartDocument()
@@ -276,6 +330,8 @@ func (s *SAXCallbacks) StartDocument() error {
 	return ErrHandlerUnspecified
 }
 
+// EndDocument dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) EndDocument() error {
 	if h := s.onEndDocument; h != nil {
 		return h.EndDocument()
@@ -283,6 +339,8 @@ func (s *SAXCallbacks) EndDocument() error {
 	return ErrHandlerUnspecified
 }
 
+// StartElement dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) StartElement(name string, attrs []Attribute) error {
 	if h := s.onStartElement; h != nil {
 		return h.StartElement(name, attrs)
@@ -290,6 +348,8 @@ func (s *SAXCallbacks) StartElement(name string, attrs []Attribute) error {
 	return ErrHandlerUnspecified
 }
 
+// EndElement dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) EndElement(name string) error {
 	if h := s.onEndElement; h != nil {
 		return h.EndElement(name)
@@ -297,6 +357,8 @@ func (s *SAXCallbacks) EndElement(name string) error {
 	return ErrHandlerUnspecified
 }
 
+// Characters dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) Characters(ch []byte) error {
 	if h := s.onCharacters; h != nil {
 		return h.Characters(ch)
@@ -304,6 +366,8 @@ func (s *SAXCallbacks) Characters(ch []byte) error {
 	return ErrHandlerUnspecified
 }
 
+// CDataBlock dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) CDataBlock(value []byte) error {
 	if h := s.onCDataBlock; h != nil {
 		return h.CDataBlock(value)
@@ -311,6 +375,8 @@ func (s *SAXCallbacks) CDataBlock(value []byte) error {
 	return ErrHandlerUnspecified
 }
 
+// Comment dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) Comment(value []byte) error {
 	if h := s.onComment; h != nil {
 		return h.Comment(value)
@@ -318,6 +384,8 @@ func (s *SAXCallbacks) Comment(value []byte) error {
 	return ErrHandlerUnspecified
 }
 
+// InternalSubset dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) InternalSubset(name, externalID, systemID string) error {
 	if h := s.onInternalSubset; h != nil {
 		return h.InternalSubset(name, externalID, systemID)
@@ -325,6 +393,8 @@ func (s *SAXCallbacks) InternalSubset(name, externalID, systemID string) error {
 	return ErrHandlerUnspecified
 }
 
+// ProcessingInstruction dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) ProcessingInstruction(target, data string) error {
 	if h := s.onProcessingInstruction; h != nil {
 		return h.ProcessingInstruction(target, data)
@@ -332,6 +402,8 @@ func (s *SAXCallbacks) ProcessingInstruction(target, data string) error {
 	return ErrHandlerUnspecified
 }
 
+// IgnorableWhitespace dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) IgnorableWhitespace(ch []byte) error {
 	if h := s.onIgnorableWhitespace; h != nil {
 		return h.IgnorableWhitespace(ch)
@@ -339,6 +411,8 @@ func (s *SAXCallbacks) IgnorableWhitespace(ch []byte) error {
 	return ErrHandlerUnspecified
 }
 
+// Error dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) Error(err error) error {
 	if h := s.onError; h != nil {
 		return h.Error(err)
@@ -346,6 +420,8 @@ func (s *SAXCallbacks) Error(err error) error {
 	return ErrHandlerUnspecified
 }
 
+// Warning dispatches to the registered handler, or returns
+// ErrHandlerUnspecified if none is set.
 func (s *SAXCallbacks) Warning(err error) error {
 	if h := s.onWarning; h != nil {
 		return h.Warning(err)

@@ -449,8 +449,12 @@ func checkStepAgainstSchema(step xpath3.Step, reg *schemaRegistry, xpathDefaultN
 	// Determine element namespace
 	ns := nt.URI
 	if ns == "" && nt.Prefix != "" {
-		// Resolve prefix using compile-time namespace bindings
-		ns = nsBindings[nt.Prefix]
+		// Resolve the prefix the same way runtime pattern matching does
+		// (execContext.resolvePrefix during pattern matching): the pattern's
+		// lexical snapshot first, then the predeclared XPath prefixes. Using only
+		// nsBindings here would diverge from runtime — e.g. a predeclared 'math'
+		// prefix would resolve to no-namespace and spuriously trip XTSE3105.
+		ns = resolvePatternPrefix(nsBindings, nt.Prefix)
 	}
 	if ns == "" && nt.Prefix == "" {
 		ns = xpathDefaultNS

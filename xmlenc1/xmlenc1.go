@@ -415,25 +415,63 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	parser := newHardenedInnerParser()
 	isContent := ed.Type == TypeContent
 
+	// Both Element and Content replace EncryptedData at its position in the
+	// tree, so the decrypted fragment must be parsed in the in-scope-namespace
+	// context of EncryptedData's PARENT — not EncryptedData's own declarations,
+	// which could wrongly shadow the parent context (e.g. an EncryptedData
+	// carrying its own default xmlns would make unprefixed plaintext resolve in
+	// the wrong namespace). Equally important, the plaintext may use a prefix
+	// declared only on an ANCESTOR (a serialized <saml:NameID/> carries no
+	// xmlns:saml of its own); parsing it as a standalone document would fail on
+	// the unbound prefix. ParseInNodeContext resolves prefixes/default-ns
+	// exactly as the replacement position requires and avoids any manual
+	// splicing of attacker-controlled namespace strings.
+	//
+	// If EncryptedData is detached (no parent), there is no replacement
+	// position whose in-scope namespaces should apply, and EncryptedData's
+	// OWN declarations must not be used as context — a detached element
+	// carrying its own default xmlns (e.g. the XML-Encryption namespace)
+	// would otherwise wrongly shadow the decrypted fragment. Use a NEUTRAL
+	// context (the owning document, or a fresh empty document) so no
+	// spurious default-ns or prefix bindings leak into the fragment.
+	contextNode := elem.Parent()
+	if contextNode == nil {
+		if doc := elem.OwnerDocument(); doc != nil {
+			contextNode = doc
+		} else {
+			contextNode = helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+		}
+	}
+
+	first, err := parser.ParseInNodeContext(ctx, contextNode, plaintext)
+	if err != nil {
+		return nil, ErrDecryptionFailed
+	}
+
 	var nodes []helium.Node
 	if isContent {
-		// Content may be multiple children; wrap in a temporary root.
-		wrapped := "<_wrap>" + string(plaintext) + "</_wrap>"
-		tmpDoc, err := parser.Parse(ctx, []byte(wrapped))
-		if err != nil {
-			return nil, ErrDecryptionFailed
-		}
-		root := tmpDoc.DocumentElement()
-		for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+		// Content may be multiple children.
+		for child := first; child != nil; child = child.NextSibling() {
 			nodes = append(nodes, child)
 		}
-	} else {
-		tmpDoc, err := parser.Parse(ctx, plaintext)
-		if err != nil {
+		return nodes, nil
+	}
+
+	// Element must yield exactly one element node.
+	var elemNode helium.Node
+	for child := first; child != nil; child = child.NextSibling() {
+		if child.Type() != helium.ElementNode {
 			return nil, ErrDecryptionFailed
 		}
-		nodes = append(nodes, tmpDoc.DocumentElement())
+		if elemNode != nil {
+			return nil, ErrDecryptionFailed
+		}
+		elemNode = child
 	}
+	if elemNode == nil {
+		return nil, ErrDecryptionFailed
+	}
+	nodes = append(nodes, elemNode)
 
 	return nodes, nil
 }

@@ -24,6 +24,46 @@ helium lint [options] [XMLfiles ...]
 
 Parses and lints XML documents with xmllint-style options. It can also apply
 XInclude processing, schema validation, XPath checks, and canonicalization.
+Run `helium lint` with no arguments to print the authoritative usage text
+(`showUsage` in `internal/cli/heliumcmd/lint.go`).
+
+| Flag | Description |
+|------|-------------|
+| `--version` | Display the version of the XML library used |
+| `--recover` | Output what was parsable on broken XML documents |
+| `--noent` | Substitute entity references by their value |
+| `--loaddtd` | Fetch external DTD |
+| `--dtdattr` | `--loaddtd` + populate tree with inherited attributes |
+| `--valid` | Validate the document with the DTD |
+| `--nowarning` | Do not emit warnings from parser/validator |
+| `--pedantic` | Enable pedantic error reporting |
+| `--noblanks` | Drop (ignorable) blank spaces |
+| `--nsclean` | Remove redundant namespace declarations |
+| `--nocdata` | Replace CDATA sections by equivalent text nodes |
+| `--nonet` | Refuse to fetch DTDs or entities over network |
+| `--huge` | Remove any internal arbitrary parser limits |
+| `--noenc` | Ignore any encoding specified inside the document |
+| `--noxincludenode` | Do not generate XInclude START/END nodes |
+| `--nofixup-base-uris` | Do not fix up `xml:base` URIs in XInclude |
+| `--noout` | Do not print the result tree |
+| `--format` | Reformat/reindent the output |
+| `--pretty LEVEL` | Pretty-print the output (0=none; any level >=1 enables plain `--format` reindenting — there is no distinct higher-level behavior) |
+| `--encode ENCODING` | Output in the given encoding |
+| `--output FILE` | Save to a given file |
+| `--c14n` | Save in W3C canonical format v1.0 (with comments) |
+| `--c14n11` | Save in W3C canonical format v1.1 (with comments) |
+| `--exc-c14n` | Save in W3C exclusive canonical format (with comments) |
+| `--xinclude` | Do XInclude processing |
+| `--schema FILE` | Validate against the WXS (XML Schema) schema |
+| `--xpath EXPR` | Evaluate the XPath expression, implies `--noout` |
+| `--catalogs` | Use catalogs from `$XML_CATALOG_FILES` |
+| `--nocatalogs` | Do not use any catalogs |
+| `--path DIRS` | Set search path for DTD/entities (colon-separated) |
+| `--quiet` | Suppress non-error output |
+| `--timing` | Print timing information to stderr |
+| `--dropdtd` | Remove the DOCTYPE of the result |
+| `--repeat N` | Parse N times for benchmarking |
+| `--max-input-bytes N` | Cap bytes read per input (`0` = unlimited) |
 
 ## `helium xpath`
 

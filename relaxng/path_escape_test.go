@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testMainRNGPath = "schemas/main.rng"
+
 // <include href="../..."> / <externalRef href="../..."> paths that
 // "../"-escape the compiler's baseDir must be rejected with a clear
 // "escapes base directory" error. Defense-in-depth for callers wiring in
@@ -40,7 +42,7 @@ func TestCompile_RejectsParentEscapeInHref(t *testing.T) {
 </grammar>`
 
 	fsys := fstest.MapFS{
-		"schemas/main.rng":   &fstest.MapFile{Data: []byte(includer)},
+		testMainRNGPath:      &fstest.MapFile{Data: []byte(includer)},
 		"schemas/extref.rng": &fstest.MapFile{Data: []byte(externalRefer)},
 		"escape.rng":         &fstest.MapFile{Data: []byte(escapeRNG)},
 	}
@@ -62,7 +64,7 @@ func TestCompile_RejectsParentEscapeInHref(t *testing.T) {
 
 	t.Run("include", func(t *testing.T) {
 		t.Parallel()
-		got := compile(t, "schemas/main.rng")
+		got := compile(t, testMainRNGPath)
 		require.True(t, strings.Contains(got, "escapes base directory"),
 			"error should mention escape; got: %s", got)
 	})
@@ -95,11 +97,11 @@ func TestCompile_RejectsAbsoluteHrefWithRelativeBaseDir(t *testing.T) {
 </grammar>`
 
 	fsys := fstest.MapFS{
-		"schemas/main.rng": &fstest.MapFile{Data: []byte(includer)},
-		"etc/passwd":       &fstest.MapFile{Data: []byte(escapeRNG)},
+		testMainRNGPath: &fstest.MapFile{Data: []byte(includer)},
+		"etc/passwd":    &fstest.MapFile{Data: []byte(escapeRNG)},
 	}
 
-	data, err := fsys.ReadFile("schemas/main.rng")
+	data, err := fsys.ReadFile(testMainRNGPath)
 	require.NoError(t, err)
 	doc, err := helium.NewParser().Parse(t.Context(), data)
 	require.NoError(t, err)

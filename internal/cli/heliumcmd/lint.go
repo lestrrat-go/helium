@@ -234,7 +234,7 @@ func (c *command) showUsage() {
 	--nofixup-base-uris : do not fixup xml:base URIs in XInclude
 	--noout : do not print the result tree
 	--format : reformat/reindent the output
-	--pretty LEVEL : pretty-print the output (0=none, 1=format, 2=format+attrs)
+	--pretty LEVEL : pretty-print the output (0=none, any level >=1 enables --format)
 	--encode ENCODING : output in the given encoding
 	--output FILE : save to a given file
 	--c14n : save in W3C canonical format v1.0 (with comments)

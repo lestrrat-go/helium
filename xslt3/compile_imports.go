@@ -302,12 +302,19 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 	}
 	defer func() { c.defaultMode = savedDefaultMode }()
 
-	// Apply xpath-default-namespace from included module root
+	// Apply xpath-default-namespace from included module root. Presence (even an
+	// empty value, which resets to no-namespace) overrides the importing
+	// module's default; absence inherits it.
 	savedXPathDefaultNS := c.xpathDefaultNS
-	if xdn := getAttr(root, "xpath-default-namespace"); xdn != "" {
+	savedHasXPathDefaultNS := c.hasXPathDefaultNS
+	if xdn, ok := root.GetAttribute("xpath-default-namespace"); ok {
 		c.xpathDefaultNS = xdn
+		c.hasXPathDefaultNS = true
 	}
-	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+	defer func() {
+		c.xpathDefaultNS = savedXPathDefaultNS
+		c.hasXPathDefaultNS = savedHasXPathDefaultNS
+	}()
 
 	// XTSE0265: conflicting input-type-annotations across included modules.
 	if includedITA := getAttr(root, "input-type-annotations"); includedITA != "" && includedITA != validationUnspecified {
