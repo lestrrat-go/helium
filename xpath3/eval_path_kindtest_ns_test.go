@@ -17,7 +17,7 @@ type noNSFooAttrDecls struct{}
 
 func (noNSFooAttrDecls) LookupSchemaElement(local, ns string) (string, bool) { return "", false }
 func (noNSFooAttrDecls) LookupSchemaAttribute(local, ns string) (string, bool) {
-	if local == "foo" && ns == "" {
+	if local == testFoo && ns == "" {
 		return xpath3.TypeString, true
 	}
 	return "", false
@@ -32,6 +32,142 @@ func (noNSFooAttrDecls) ValidateCastWithNS(_ context.Context, value, typeName st
 }
 func (noNSFooAttrDecls) ListItemType(typeName string) (string, bool) { return "", false }
 func (noNSFooAttrDecls) UnionMemberTypes(typeName string) []string   { return nil }
+
+// predeclaredNSDecls is a minimal SchemaDeclarations that declares one element
+// {NSXS}foo and one attribute {NSXS}foo of type xs:string, where NSXS is the
+// XSD namespace bound to the predeclared XPath prefix "xs". It declares nothing
+// else, so a schema-element(xs:foo)/schema-attribute(xs:foo) test that fails to
+// fall back to the predeclared "xs" prefix (when "xs" is absent from the local
+// bindings) would resolve to no namespace and fail the lookup.
+type predeclaredNSDecls struct{}
+
+func mustXSNamespace() string {
+	ns, ok := xpath3.PredeclaredNamespace("xs")
+	if !ok {
+		panic("xs must be a predeclared XPath prefix")
+	}
+	return ns
+}
+
+func (predeclaredNSDecls) LookupSchemaElement(local, ns string) (string, bool) {
+	if local == testFoo && ns == mustXSNamespace() {
+		return xpath3.TypeString, true
+	}
+	return "", false
+}
+func (predeclaredNSDecls) LookupSchemaAttribute(local, ns string) (string, bool) {
+	if local == testFoo && ns == mustXSNamespace() {
+		return xpath3.TypeString, true
+	}
+	return "", false
+}
+func (predeclaredNSDecls) LookupSchemaType(local, ns string) (string, bool) { return "", false }
+func (predeclaredNSDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
+	return typeName == baseTypeName
+}
+func (predeclaredNSDecls) ValidateCast(_ context.Context, value, typeName string) error { return nil }
+func (predeclaredNSDecls) ValidateCastWithNS(_ context.Context, value, typeName string, nsMap map[string]string) error {
+	return nil
+}
+func (predeclaredNSDecls) ListItemType(typeName string) (string, bool) { return "", false }
+func (predeclaredNSDecls) UnionMemberTypes(typeName string) []string   { return nil }
+
+// TestSchemaTestPredeclaredPrefix verifies that schema-element()/
+// schema-attribute() step tests and the equivalent "instance of" tests resolve
+// a PREDECLARED XPath prefix (here "xs") that is NOT present in the local
+// namespace bindings, mirroring the xslt3 pattern resolver (resolvePatternPrefix:
+// lexical bindings -> predeclared XPath prefixes -> xml). Before the fix, the
+// step/instance-of path consulted only the local bindings and resolved "xs:foo"
+// to no namespace, diverging from the pattern path. (codex finding 654-14)
+func TestSchemaTestPredeclaredPrefix(t *testing.T) {
+	t.Parallel()
+
+	xsNS := mustXSNamespace()
+	// An element and attribute in the XSD namespace, declared WITHOUT an "xs"
+	// prefix in scope on the instance. The query relies on the predeclared "xs".
+	doc := `<root xmlns:a="` + xsNS + `"><a:foo a:foo="v"/></root>`
+
+	parse := func(t *testing.T) *helium.Document {
+		t.Helper()
+		parsed, err := helium.NewParser().Parse(t.Context(), []byte(doc))
+		require.NoError(t, err)
+		return parsed
+	}
+
+	// Annotate the {NSXS}foo element and attribute as xs:string.
+	annotate := func(t *testing.T, parsed *helium.Document) map[helium.Node]string {
+		t.Helper()
+		annotations := map[helium.Node]string{}
+		root := parsed.DocumentElement()
+		for c := range helium.Children(root) {
+			elem, ok := helium.AsNode[*helium.Element](c)
+			if !ok {
+				continue
+			}
+			annotations[elem] = xpath3.TypeString
+			for _, a := range elem.Attributes() {
+				annotations[a] = xpath3.TypeString
+			}
+		}
+		require.Len(t, annotations, 2, "fixture must annotate the foo element and attribute")
+		return annotations
+	}
+
+	t.Run("schema-element(xs:foo) step resolves predeclared prefix", func(t *testing.T) {
+		t.Parallel()
+
+		parsed := parse(t)
+		annotations := annotate(t, parsed)
+		compiled, err := xpath3.NewCompiler().Compile(`//*[self::schema-element(xs:foo)]`)
+		require.NoError(t, err)
+		r, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(annotations).
+			SchemaDeclarations(predeclaredNSDecls{}).
+			Evaluate(t.Context(), compiled, parsed)
+		require.NoError(t, err)
+		nodes, err := r.Nodes()
+		require.NoError(t, err)
+		require.Len(t, nodes, 1,
+			"schema-element(xs:foo) must resolve the predeclared xs prefix and match {NSXS}foo")
+	})
+
+	t.Run("schema-attribute(xs:foo) step resolves predeclared prefix", func(t *testing.T) {
+		t.Parallel()
+
+		parsed := parse(t)
+		annotations := annotate(t, parsed)
+		compiled, err := xpath3.NewCompiler().Compile(`//*/@*[self::schema-attribute(xs:foo)]`)
+		require.NoError(t, err)
+		r, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			TypeAnnotations(annotations).
+			SchemaDeclarations(predeclaredNSDecls{}).
+			Evaluate(t.Context(), compiled, parsed)
+		require.NoError(t, err)
+		nodes, err := r.Nodes()
+		require.NoError(t, err)
+		require.Len(t, nodes, 1,
+			"schema-attribute(xs:foo) must resolve the predeclared xs prefix and match {NSXS}foo")
+	})
+
+	t.Run("instance of schema-element(xs:foo) resolves predeclared prefix", func(t *testing.T) {
+		t.Parallel()
+
+		parsed := parse(t)
+		annotations := annotate(t, parsed)
+		compiled, err := xpath3.NewCompiler().Compile(`//a:foo instance of schema-element(xs:foo)`)
+		require.NoError(t, err)
+		r, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Namespaces(map[string]string{"a": xsNS}).
+			TypeAnnotations(annotations).
+			SchemaDeclarations(predeclaredNSDecls{}).
+			Evaluate(t.Context(), compiled, parsed)
+		require.NoError(t, err)
+		b, ok := r.IsBoolean()
+		require.True(t, ok, "instance of must produce a boolean result")
+		require.True(t, b,
+			"`instance of schema-element(xs:foo)` must resolve the predeclared xs prefix")
+	})
+}
 
 // TestStepKindTestAttributeDefaultNS verifies that an attribute kind-test used
 // as a self:: predicate / axis step resolves a bare (unprefixed) name to NO
@@ -68,7 +204,7 @@ func TestStepKindTestAttributeDefaultNS(t *testing.T) {
 			"self::attribute(foo) under default element namespace must match exactly the no-namespace foo")
 		attr, ok := helium.AsNode[*helium.Attribute](nodes[0])
 		require.True(t, ok)
-		require.Equal(t, "foo", attr.LocalName())
+		require.Equal(t, testFoo, attr.LocalName())
 		require.Equal(t, "", attr.URI(),
 			"matched attribute must be in NO namespace, not the default element namespace")
 	})
@@ -111,7 +247,7 @@ func TestStepKindTestAttributeDefaultNS(t *testing.T) {
 			"self::schema-attribute(foo) must resolve the bare name to NO namespace and match only the no-namespace foo")
 		attr, ok := helium.AsNode[*helium.Attribute](nodes[0])
 		require.True(t, ok)
-		require.Equal(t, "foo", attr.LocalName())
+		require.Equal(t, testFoo, attr.LocalName())
 		require.Equal(t, "", attr.URI(),
 			"schema-attribute(foo) must not match {urn:x}foo via the default element namespace")
 	})

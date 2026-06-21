@@ -816,6 +816,8 @@ func nodeTypeAnnotation(n helium.Node, ec *evalContext) string {
 
 // resolveSchemaTestName resolves a name from a SchemaElementTest or
 // SchemaAttributeTest. Handles Q{uri}local (EQName) and prefix:local forms.
+// A prefixed name resolves via resolveSchemaTestPrefix (in-scope bindings, then
+// predeclared XPath prefixes, then xml), mirroring the xslt3 pattern resolver.
 // isAttr selects the namespace rule for an unprefixed name (same rule as
 // matchElementOrAttributeName / a NameTest, XPath 3.1 §3.3.2.1): a bare
 // schema-attribute() name is always in no namespace — the default element
@@ -828,13 +830,33 @@ func resolveSchemaTestName(name string, ec *evalContext, isAttr bool) (local, ns
 		}
 	}
 	prefix, loc := splitQName(name)
-	if prefix != "" && ec != nil && ec.namespaces != nil {
-		return loc, ec.namespaces[prefix]
+	if prefix != "" {
+		return loc, resolveSchemaTestPrefix(prefix, ec)
 	}
-	if prefix == "" && !isAttr && ec != nil && ec.namespaces != nil {
+	if !isAttr && ec != nil && ec.namespaces != nil {
 		return loc, ec.namespaces[""]
 	}
 	return loc, ""
+}
+
+// resolveSchemaTestPrefix resolves a non-empty namespace prefix used inside a
+// schema-element()/schema-attribute() test. It mirrors the xslt3 pattern prefix
+// resolver: the explicit in-scope namespace bindings take precedence, then the
+// XPath 3.0 predeclared prefixes (fn, math, map, array, err, xs), then the
+// universally bound xml prefix. An unbound prefix resolves to no namespace.
+func resolveSchemaTestPrefix(prefix string, ec *evalContext) string {
+	if ec != nil && ec.namespaces != nil {
+		if uri, ok := ec.namespaces[prefix]; ok {
+			return uri
+		}
+	}
+	if uri, ok := defaultPrefixNS[prefix]; ok {
+		return uri
+	}
+	if prefix == lexicon.PrefixXML {
+		return lexicon.NamespaceXML
+	}
+	return ""
 }
 
 // resolveTestTypeName normalizes a type name from an ElementTest/AttributeTest
