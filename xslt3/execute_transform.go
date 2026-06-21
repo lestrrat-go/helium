@@ -245,7 +245,22 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		// be carried over to the copy); the common case (no selection, no schema)
 		// skips that bookkeeping entirely.
 		needSelectionMap := matchSelection != nil && sequence.Len(matchSelection) > 0
-		schemaActive := ss.schemaAware || len(ss.schemas) > 0 || (cfg != nil && len(cfg.sourceSchemas) > 0)
+		// schemaActive is true whenever source validation could run and produce
+		// type annotations that must ride onto the strip copy the transform
+		// navigates. It is NOT enough to check the stylesheet's own schema state
+		// (schemaAware/ss.schemas) and externally-supplied source schemas: a source
+		// document can declare its own schema purely via xsi:schemaLocation /
+		// xsi:noNamespaceSchemaLocation (loadSchemasFromSchemaLocation below), which
+		// never sets schemaAware. Missing that path left stripNodeMap nil, so
+		// remapValidationNode kept the annotations on the ORIGINAL nodes while the
+		// transform ran on the COPY, silently dropping source type annotations
+		// (observable through xsl:copy-of, since input-type-annotations defaults to
+		// preserve). sourceHasSchemaLocation is a cheap root-attribute scan that
+		// keeps the common no-schema/no-strip fast path (map stays nil) untouched.
+		schemaActive := ss.schemaAware ||
+			len(ss.schemas) > 0 ||
+			(cfg != nil && len(cfg.sourceSchemas) > 0) ||
+			sourceHasSchemaLocation(effectiveSource)
 		needMap := needSelectionMap || schemaActive
 		srcCopy, nodeMap, copyErr := copyAndStrip(effectiveSource, ss.stripSpace, ss.preserveSpace, needMap)
 		if copyErr != nil {
