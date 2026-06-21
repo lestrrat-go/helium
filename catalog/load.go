@@ -120,7 +120,7 @@ func readCatalogFile(ctx context.Context, absPath string, maxBytes int) ([]byte,
 	// Read one byte past the cap so a file that is exactly at the cap is
 	// accepted while anything larger is detected, but guard against overflow:
 	// limit+1 wraps to a negative value for limit==math.MaxInt on 64-bit
-	// platforms, which would make the bounded read read zero bytes and silently
+	// platforms, which would make the bounded read return zero bytes and silently
 	// reject a valid catalog.
 	readLimit := limit
 	if readLimit < math.MaxInt64 {
