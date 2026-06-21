@@ -15,6 +15,8 @@ const sharedCatalogXML = "shared.xml"
 
 const missingCatalogXML = "missing.xml"
 
+const exampleBase = "http://example.com/"
+
 func TestResolveURIUnwrapsURN(t *testing.T) {
 	t.Parallel()
 
@@ -96,7 +98,7 @@ func TestResolveURIIgnoresDelegateSystem(t *testing.T) {
 
 	cat := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntryDelegateSystem, Name: "http://example.com/", URL: sharedCatalogXML},
+			{Type: catalog.EntryDelegateSystem, Name: exampleBase, URL: sharedCatalogXML},
 		},
 		Loader: loader,
 		Prefer: catalog.PreferPublic,
@@ -146,7 +148,7 @@ func TestConcurrentResolveSharedCatalog(t *testing.T) {
 	// nextCatalog fallback (uri leaf).
 	root := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntryDelegateSystem, Name: "http://example.com/", URL: "sys.xml"},
+			{Type: catalog.EntryDelegateSystem, Name: exampleBase, URL: "sys.xml"},
 			{Type: catalog.EntryDelegatePublic, Name: "-//Example//", URL: "pub.xml", Prefer: catalog.PreferPublic},
 			{Type: catalog.EntryNextCatalog, URL: "uri.xml"},
 		},
@@ -339,7 +341,7 @@ func TestDelegateLongestPrefixFirst(t *testing.T) {
 		// prefix must still be tried first.
 		root := &catalog.Catalog{
 			Entries: []catalog.Entry{
-				{Type: catalog.EntryDelegateSystem, Name: "http://example.com/", URL: generalXML},
+				{Type: catalog.EntryDelegateSystem, Name: exampleBase, URL: generalXML},
 				{Type: catalog.EntryDelegateSystem, Name: "http://example.com/sub/", URL: specificXML},
 			},
 			Loader: loader,
@@ -370,7 +372,7 @@ func TestDelegateLongestPrefixFirst(t *testing.T) {
 		loader := newLoader()
 		root := &catalog.Catalog{
 			Entries: []catalog.Entry{
-				{Type: catalog.EntryDelegateURI, Name: "http://example.com/", URL: generalXML},
+				{Type: catalog.EntryDelegateURI, Name: exampleBase, URL: generalXML},
 				{Type: catalog.EntryDelegateURI, Name: "http://example.com/sub/", URL: specificXML},
 			},
 			Loader: loader,
@@ -523,7 +525,7 @@ func TestNoLoaderDoesNotPanic(t *testing.T) {
 		{
 			name: "delegateSystem",
 			entries: []catalog.Entry{
-				{Type: catalog.EntryDelegateSystem, Name: "http://example.com/", URL: missingCatalogXML},
+				{Type: catalog.EntryDelegateSystem, Name: exampleBase, URL: missingCatalogXML},
 			},
 			resolve: func(c *catalog.Catalog) string {
 				return c.Resolve(context.Background(), "", "http://example.com/x")
@@ -541,7 +543,7 @@ func TestNoLoaderDoesNotPanic(t *testing.T) {
 		{
 			name: "delegateURI",
 			entries: []catalog.Entry{
-				{Type: catalog.EntryDelegateURI, Name: "http://example.com/", URL: missingCatalogXML},
+				{Type: catalog.EntryDelegateURI, Name: exampleBase, URL: missingCatalogXML},
 			},
 			resolve: func(c *catalog.Catalog) string {
 				return c.ResolveURI(context.Background(), "http://example.com/x")
