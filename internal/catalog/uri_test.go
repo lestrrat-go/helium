@@ -18,10 +18,11 @@ func TestResolveURI(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		base   string
-		value  string
-		expect string
+		name    string
+		base    string
+		value   string
+		expect  string
+		wantErr bool
 	}{
 		{
 			name:   "empty value",
@@ -77,11 +78,46 @@ func TestResolveURI(t *testing.T) {
 			value:  "asset.xml",
 			expect: "asset.xml",
 		},
+		{
+			// A malformed reference (invalid percent-encoding) against a URI
+			// base must surface an error and yield no usable mapping, rather
+			// than silently returning the raw value.
+			name:    "malformed value against file base",
+			base:    fileCatalogURI,
+			value:   "%zz",
+			expect:  "",
+			wantErr: true,
+		},
+		{
+			// A malformed ABSOLUTE URI carrying a scheme must not bypass
+			// validation. url.Parse rejects the invalid percent-encoding, so an
+			// error is surfaced and no usable mapping is produced.
+			name:    "malformed absolute uri with scheme",
+			base:    fileCatalogURI,
+			value:   "http://example.com/%zz",
+			expect:  "",
+			wantErr: true,
+		},
+		{
+			// A well-formed absolute URI with a scheme still resolves, even with
+			// an empty base.
+			name:   "well-formed absolute uri empty base",
+			base:   "",
+			value:  "http://example.com/asset.xml",
+			expect: "http://example.com/asset.xml",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expect, catalog.ResolveURI(tc.base, tc.value))
+			got, err := catalog.ResolveURI(tc.base, tc.value)
+			if tc.wantErr {
+				require.Error(t, err)
+				require.Equal(t, "", got)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, got)
 		})
 	}
 }
