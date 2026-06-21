@@ -251,17 +251,23 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 	// On XSLT elements: check unprefixed attribute.
 	// On LREs: only check xsl:-prefixed (in XSLT namespace).
 	savedXPathDefaultNS := c.xpathDefaultNS
+	savedHasXPathDefaultNS := c.hasXPathDefaultNS
 	hasLocalXPNS := false
 	if elem.URI() == lexicon.NamespaceXSLT {
 		if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
 			c.xpathDefaultNS = xdn
+			c.hasXPathDefaultNS = true
 			hasLocalXPNS = true
 		}
 	} else if xdn, ok := elem.GetAttributeNS("xpath-default-namespace", lexicon.NamespaceXSLT); ok {
 		c.xpathDefaultNS = xdn
+		c.hasXPathDefaultNS = true
 		hasLocalXPNS = true
 	}
-	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+	defer func() {
+		c.xpathDefaultNS = savedXPathDefaultNS
+		c.hasXPathDefaultNS = savedHasXPathDefaultNS
+	}()
 
 	// Handle per-instruction default-collation
 	savedDefaultCollation := c.defaultCollation
@@ -488,8 +494,8 @@ func (c *compiler) useWhenFunctionAvailable(_ context.Context, args []xpath3.Seq
 	// Runtime-only functions (current, key, document, generate-id, etc.)
 	// are NOT available in the use-when static context per XSLT 3.0 spec 3.4.6.
 	switch name {
-	case "function-available", funcSystemProperty, "type-available",
-		"element-available", funcAvailableSystemProperties:
+	case fnNameFunctionAvailable, funcSystemProperty, fnNameTypeAvailable,
+		fnNameElementAvailable, funcAvailableSystemProperties:
 		return xpath3.SingleBoolean(true), nil
 	}
 

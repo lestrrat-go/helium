@@ -17,6 +17,22 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
+// XSLT/XPath function names referenced from multiple sites. Kept as constants
+// alongside xsltFunctionArities (the single source of truth for arities) so the
+// repeated literals stay consistent across the package.
+const (
+	fnNameCurrent            = "current"
+	fnNameDocument           = "document"
+	fnNameElementAvailable   = "element-available"
+	fnNameFunctionAvailable  = "function-available"
+	fnNameTypeAvailable      = "type-available"
+	fnNameCurrentGroup       = "current-group"
+	fnNameCurrentGroupingKey = "current-grouping-key"
+	fnNameCopyOf             = "copy-of"
+	fnNameTransform          = "transform"
+	fnNameCurrentOutputURI   = "current-output-uri"
+)
+
 // xsltFunctions returns the XSLT-specific functions that need to be
 // registered with the XPath evaluator by local name (no namespace prefix).
 // The map is cached on ec after the first call.
@@ -26,18 +42,18 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 	}
 	ec.cachedFns = map[string]xpath3.Function{
 		"nilled":                    &xsltFunc{min: 0, max: 1, fn: ec.fnNilled},
-		"current":                   &xsltFunc{min: 0, max: 0, fn: ec.fnCurrent, noDynRef: true, dynRefError: errCodeXTDE1360},
-		"document":                  &xsltFunc{min: 1, max: 2, fn: ec.fnDocument},
+		fnNameCurrent:               &xsltFunc{min: 0, max: 0, fn: ec.fnCurrent, noDynRef: true, dynRefError: errCodeXTDE1360},
+		fnNameDocument:              &xsltFunc{min: 1, max: 2, fn: ec.fnDocument},
 		"key":                       &xsltFunc{min: 2, max: 3, fn: ec.fnKey},
 		"generate-id":               &xsltFunc{min: 0, max: 1, fn: ec.fnGenerateID},
 		funcSystemProperty:          &xsltFunc{min: 1, max: 1, fn: ec.fnSystemProperty},
 		"unparsed-entity-uri":       &xsltFunc{min: 1, max: 2, fn: ec.fnUnparsedEntityURI},
 		"unparsed-entity-public-id": &xsltFunc{min: 1, max: 2, fn: ec.fnUnparsedEntityPublicID},
-		"element-available":         &xsltFunc{min: 1, max: 1, fn: ec.fnElementAvailable},
-		"function-available":        &xsltFunc{min: 1, max: 2, fn: ec.fnFunctionAvailable},
-		"type-available":            &xsltFunc{min: 1, max: 1, fn: ec.fnTypeAvailable},
-		"current-group":             &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup, noDynRef: true, dynRefError: errCodeXTDE1061},
-		"current-grouping-key":      &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey, noDynRef: true, dynRefError: errCodeXTDE1071},
+		fnNameElementAvailable:      &xsltFunc{min: 1, max: 1, fn: ec.fnElementAvailable},
+		fnNameFunctionAvailable:     &xsltFunc{min: 1, max: 2, fn: ec.fnFunctionAvailable},
+		fnNameTypeAvailable:         &xsltFunc{min: 1, max: 1, fn: ec.fnTypeAvailable},
+		fnNameCurrentGroup:          &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup, noDynRef: true, dynRefError: errCodeXTDE1061},
+		fnNameCurrentGroupingKey:    &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey, noDynRef: true, dynRefError: errCodeXTDE1071},
 		"accumulator-before": &xsltFunc{min: 1, max: 1, fn: func(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 			return ec.accumulatorLookup(ctx, args, "accumulator-before", func() (map[helium.Node]map[string]xpath3.Sequence, map[helium.Node]map[string]error) {
 				return ec.accumulatorBeforeByNode, ec.accumulatorBeforeErrorByNode
@@ -48,15 +64,59 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 				return ec.accumulatorAfterByNode, ec.accumulatorAfterErrorByNode
 			})
 		}},
-		"copy-of":                     &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
+		fnNameCopyOf:                  &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
 		funcSnapshot:                  &xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot},
 		"regex-group":                 &regexGroupFunc{ec: ec},
-		"transform":                   &xsltFunc{min: 1, max: 1, fn: ec.fnTransform},
+		fnNameTransform:               &xsltFunc{min: 1, max: 1, fn: ec.fnTransform},
 		funcAvailableSystemProperties: &xsltFunc{min: 0, max: 0, fn: ec.fnAvailableSystemProperties},
 		"stream-available":            &xsltFunc{min: 1, max: 1, fn: ec.fnStreamAvailable},
-		"current-output-uri":          &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentOutputURI},
+		fnNameCurrentOutputURI:        &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentOutputURI},
 	}
 	return ec.cachedFns
+}
+
+// xsltFunctionArities is the static arity table for XSLT-defined functions that
+// live in the fn: namespace. It is the single source of truth consulted by
+// compile-time checks (e.g. validatePatternFunctions) that run without an
+// execContext. The runtime registries in xsltFunctions / xsltFunctionsNS must
+// stay consistent with this table; TestXSLTFunctionAritiesMatchRegistry guards
+// against drift.
+var xsltFunctionArities = map[string][2]int{
+	"nilled":                      {0, 1},
+	fnNameCurrent:                 {0, 0},
+	fnNameDocument:                {1, 2},
+	"doc":                         {1, 1},
+	"key":                         {2, 3},
+	"generate-id":                 {0, 1},
+	funcSystemProperty:            {1, 1},
+	"unparsed-entity-uri":         {1, 2},
+	"unparsed-entity-public-id":   {1, 2},
+	fnNameElementAvailable:        {1, 1},
+	fnNameFunctionAvailable:       {1, 2},
+	fnNameTypeAvailable:           {1, 1},
+	fnNameCurrentGroup:            {0, 0},
+	fnNameCurrentGroupingKey:      {0, 0},
+	"current-merge-group":         {0, 1},
+	"current-merge-key":           {0, 0},
+	"accumulator-before":          {1, 1},
+	"accumulator-after":           {1, 1},
+	fnNameCopyOf:                  {0, 1},
+	funcSnapshot:                  {0, 1},
+	"regex-group":                 {1, 1},
+	fnNameTransform:               {1, 1},
+	funcAvailableSystemProperties: {0, 0},
+	"stream-available":            {1, 1},
+	fnNameCurrentOutputURI:        {0, 0},
+}
+
+// xsltFunctionAcceptsArity reports whether an XSLT-defined function (fn:
+// namespace) with the given local name exists and accepts the given arity.
+func xsltFunctionAcceptsArity(name string, arity int) bool {
+	bounds, ok := xsltFunctionArities[name]
+	if !ok {
+		return false
+	}
+	return arity >= bounds[0] && arity <= bounds[1]
 }
 
 type xsltFunc struct {
