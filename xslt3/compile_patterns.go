@@ -854,7 +854,10 @@ func (ec *execContext) matchContextItemPredicates(ctx context.Context, preds []x
 		// Numeric predicate: position test against the population position.
 		if sequence.Len(seq) == 1 {
 			if a, ok := seq.Get(0).(xpath3.AtomicValue); ok && a.IsNumeric() {
-				if int(a.ToFloat64()) != ec.position {
+				// A positional predicate matches only when the numeric
+				// value equals the integer position exactly: position()=2.7
+				// is never true, so ".[2.7]" must not match position 2.
+				if a.ToFloat64() != float64(ec.position) {
 					return false
 				}
 				continue
