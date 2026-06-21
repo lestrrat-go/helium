@@ -312,7 +312,7 @@ func (ec *execContext) matchAtomicPattern(ctx context.Context, p *pattern, item 
 }
 
 // executeAtomicTemplate executes a template with an atomic item as context.
-func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template, item xpath3.Item, mode string) error {
+func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template, item xpath3.Item, mode string, paramOverrides ...map[string]xpath3.Sequence) error {
 	savedContext := ec.contextNode
 	savedCurrent := ec.currentNode
 	savedMode := ec.currentMode
@@ -334,49 +334,72 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
-	// Set template parameters with defaults (similar to executeTemplate).
+	// Collect param overrides supplied by the caller (via xsl:with-param).
+	var po map[string]xpath3.Sequence
+	if len(paramOverrides) > 0 {
+		po = paramOverrides[0]
+	}
+
+	// Set param values: use with-param overrides when available, else defaults.
+	// Tunnel params receive from ec.tunnelParams, not from regular overrides.
 	for _, p := range tmpl.Params {
 		var val xpath3.Sequence
+		fromCaller := false
 
 		if p.Tunnel {
 			if ec.tunnelParams != nil {
 				if v, ok := ec.tunnelParams[p.Name]; ok {
 					val = v
-					ec.setVar(p.Name, val)
-					continue
+					fromCaller = true
 				}
 			}
-		}
-
-		if p.Required {
-			return dynamicError(errCodeXTDE0700, "required parameter $%s was not supplied", p.Name)
-		}
-
-		if p.Select != nil {
-			result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), p.Select, nil)
-			if err != nil {
-				return err
+		} else if po != nil {
+			if v, ok := po[p.Name]; ok {
+				val = v
+				fromCaller = true
 			}
-			val = result.Sequence()
-		} else if len(p.Body) > 0 {
-			ec.temporaryOutputDepth++
-			var err error
-			if p.As != "" {
-				val, err = ec.evaluateBodyAsSequence(ctx, p.Body)
+		}
+
+		if !fromCaller {
+			// XTDE0700: required parameter not supplied
+			if p.Required {
+				return dynamicError(errCodeXTDE0700, "required parameter $%s was not supplied", p.Name)
+			}
+
+			if p.Select != nil {
+				result, err := ec.xpathEvaluator(ctx).ContextItem(item).Evaluate(ec.xpathContext(ctx), p.Select, nil)
+				if err != nil {
+					return err
+				}
+				val = result.Sequence()
+			} else if len(p.Body) > 0 {
+				ec.temporaryOutputDepth++
+				var err error
+				if p.As != "" {
+					val, err = ec.evaluateBodyAsSequence(ctx, p.Body)
+				} else {
+					val, err = ec.evaluateBody(ctx, p.Body)
+				}
+				ec.temporaryOutputDepth--
+				if err != nil {
+					return err
+				}
 			} else {
-				val, err = ec.evaluateBody(ctx, p.Body)
+				val = xpath3.EmptySequence()
 			}
-			ec.temporaryOutputDepth--
-			if err != nil {
-				return err
-			}
-		} else {
-			val = xpath3.EmptySequence()
 		}
 
-		if p.As != "" && val != nil && sequence.Len(val) > 0 {
+		// Type-check against the declared as type. A caller-supplied empty
+		// sequence is nil, so check whenever the value came from the caller
+		// (XTTE0590) even when nil; for defaults a nil value is left to the
+		// default-handling logic above.
+		if p.As != "" && (val != nil || fromCaller) {
 			st := parseSequenceType(p.As)
-			checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "param $"+p.Name, ec)
+			errCode := errCodeXTTE0570
+			if fromCaller {
+				errCode = errCodeXTTE0590
+			}
+			checked, err := checkSequenceType(ctx, val, st, errCode, "param $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -554,8 +577,11 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 			}
 		}
 
-		// Type check against the declared as type
-		if p.As != "" && val != nil && sequence.Len(val) > 0 {
+		// Type check against the declared as type. A caller-supplied empty
+		// sequence is nil, so check whenever the value came from the caller
+		// (XTTE0590) even when nil; for defaults a nil value is left to the
+		// default-handling logic above.
+		if p.As != "" && (val != nil || fromCaller) {
 			st := parseSequenceType(p.As)
 			errCode := errCodeXTTE0570
 			if fromCaller {
