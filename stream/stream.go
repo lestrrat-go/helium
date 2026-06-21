@@ -681,10 +681,7 @@ func (w *Writer) StartElement(name string) error {
 	}
 
 	// Mark parent as having children
-	if len(w.elemStack) > 0 {
-		w.elemStack[len(w.elemStack)-1].empty = false
-		w.elemStack[len(w.elemStack)-1].hasChild = true
-	}
+	w.markParentChild()
 
 	w.writeIndent()
 	w.writeByte('<')
@@ -929,12 +926,7 @@ func (w *Writer) EndAttribute() error {
 	}
 	w.writeByte(w.quoteChar)
 	// Restore previous state
-	if len(w.stateStack) > 0 {
-		w.state = w.stateStack[len(w.stateStack)-1]
-		w.stateStack = w.stateStack[:len(w.stateStack)-1]
-	} else {
-		w.state = stateName
-	}
+	w.popState(stateName)
 	return w.err
 }
 
@@ -1090,10 +1082,7 @@ func (w *Writer) StartComment() error {
 	default:
 		return errors.New("stream: StartComment called in invalid state")
 	}
-	if len(w.elemStack) > 0 {
-		w.elemStack[len(w.elemStack)-1].empty = false
-		w.elemStack[len(w.elemStack)-1].hasChild = true
-	}
+	w.markParentChild()
 	w.writeStr("<!--")
 	w.commentDash = false
 	w.stateStack = append(w.stateStack, w.state)
@@ -1117,12 +1106,7 @@ func (w *Writer) EndComment() error {
 		w.writeStr("\n")
 		w.wroteNL = true
 	}
-	if len(w.stateStack) > 0 {
-		w.state = w.stateStack[len(w.stateStack)-1]
-		w.stateStack = w.stateStack[:len(w.stateStack)-1]
-	} else {
-		w.state = stateDocument
-	}
+	w.popState(stateDocument)
 	return w.err
 }
 
@@ -1178,10 +1162,7 @@ func (w *Writer) StartPI(target string) error {
 	default:
 		return errors.New("stream: StartPI called in invalid state")
 	}
-	if len(w.elemStack) > 0 {
-		w.elemStack[len(w.elemStack)-1].empty = false
-		w.elemStack[len(w.elemStack)-1].hasChild = true
-	}
+	w.markParentChild()
 	w.writeStr("<?")
 	w.writeStr(target)
 	w.piQuestion = false
@@ -1203,12 +1184,7 @@ func (w *Writer) EndPI() error {
 		w.writeStr("\n")
 		w.wroteNL = true
 	}
-	if len(w.stateStack) > 0 {
-		w.state = w.stateStack[len(w.stateStack)-1]
-		w.stateStack = w.stateStack[:len(w.stateStack)-1]
-	} else {
-		w.state = stateDocument
-	}
+	w.popState(stateDocument)
 	return w.err
 }
 
@@ -1273,12 +1249,7 @@ func (w *Writer) EndCDATA() error {
 		return errors.New("stream: EndCDATA called outside CDATA section")
 	}
 	w.writeStr("]]>")
-	if len(w.stateStack) > 0 {
-		w.state = w.stateStack[len(w.stateStack)-1]
-		w.stateStack = w.stateStack[:len(w.stateStack)-1]
-	} else {
-		w.state = stateText
-	}
+	w.popState(stateText)
 	return w.err
 }
 
@@ -1360,29 +1331,20 @@ func (w *Writer) StartDTD(name, pubid, sysid string) error {
 		} else {
 			w.writeStr(" PUBLIC ")
 		}
-		pubQ := dtdQuoteFor(pubid, w.quoteChar)
-		w.writeByte(pubQ)
-		w.writeStr(pubid)
-		w.writeByte(pubQ)
+		w.writeQuotedID(pubid)
 		if w.indent != "" {
 			w.writeStr("\n       ")
 		} else {
 			w.writeByte(' ')
 		}
-		sysQ := dtdQuoteFor(sysid, w.quoteChar)
-		w.writeByte(sysQ)
-		w.writeStr(sysid)
-		w.writeByte(sysQ)
+		w.writeQuotedID(sysid)
 	} else if sysid != "" {
 		if w.indent != "" {
 			w.writeStr("\nSYSTEM ")
 		} else {
 			w.writeStr(" SYSTEM ")
 		}
-		sysQ := dtdQuoteFor(sysid, w.quoteChar)
-		w.writeByte(sysQ)
-		w.writeStr(sysid)
-		w.writeByte(sysQ)
+		w.writeQuotedID(sysid)
 	}
 	w.state = stateDTD
 	return w.err
@@ -1398,6 +1360,47 @@ func dtdQuoteFor(value string, preferred byte) byte {
 		return '"'
 	}
 	return preferred
+}
+
+// writeQuotedID emits a DTD identifier wrapped in a quote character chosen so
+// the value itself never breaks the quoting (see dtdQuoteFor).
+func (w *Writer) writeQuotedID(s string) {
+	q := dtdQuoteFor(s, w.quoteChar)
+	w.writeByte(q)
+	w.writeStr(s)
+	w.writeByte(q)
+}
+
+// ensureDTDState returns a sticky error first, then enforces that the writer is
+// inside a DTD, producing "stream: <method> called outside DTD" otherwise.
+func (w *Writer) ensureDTDState(method string) error {
+	if w.err != nil {
+		return w.err
+	}
+	if w.state != stateDTD && w.state != stateDTDText {
+		return errors.New("stream: " + method + " called outside DTD")
+	}
+	return nil
+}
+
+// popState restores the state saved on stateStack, falling back to the given
+// state when the stack is empty.
+func (w *Writer) popState(fallback writerState) {
+	if len(w.stateStack) > 0 {
+		w.state = w.stateStack[len(w.stateStack)-1]
+		w.stateStack = w.stateStack[:len(w.stateStack)-1]
+		return
+	}
+	w.state = fallback
+}
+
+// markParentChild marks the enclosing element (if any) as non-empty and as
+// having child content.
+func (w *Writer) markParentChild() {
+	if len(w.elemStack) > 0 {
+		w.elemStack[len(w.elemStack)-1].empty = false
+		w.elemStack[len(w.elemStack)-1].hasChild = true
+	}
 }
 
 // ensureDTDInternalSubset writes the opening " [" for the DTD internal
@@ -1452,11 +1455,8 @@ func (w *Writer) WriteDTD(name, pubid, sysid, subset string) error {
 
 // WriteDTDElement writes a DTD element declaration.
 func (w *Writer) WriteDTDElement(name, content string) error {
-	if w.err != nil {
-		return w.err
-	}
-	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("stream: WriteDTDElement called outside DTD")
+	if err := w.ensureDTDState("WriteDTDElement"); err != nil {
+		return err
 	}
 	if !xmlchar.IsValidName(name) {
 		return fmt.Errorf("stream: invalid DTD element name %q", name)
@@ -1475,11 +1475,8 @@ func (w *Writer) WriteDTDElement(name, content string) error {
 
 // WriteDTDAttlist writes a DTD attribute list declaration.
 func (w *Writer) WriteDTDAttlist(name, content string) error {
-	if w.err != nil {
-		return w.err
-	}
-	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("stream: WriteDTDAttlist called outside DTD")
+	if err := w.ensureDTDState("WriteDTDAttlist"); err != nil {
+		return err
 	}
 	if !xmlchar.IsValidName(name) {
 		return fmt.Errorf("stream: invalid DTD attlist name %q", name)
@@ -1499,11 +1496,8 @@ func (w *Writer) WriteDTDAttlist(name, content string) error {
 // WriteDTDEntity writes an internal entity declaration.
 // Set pe to true for parameter entities.
 func (w *Writer) WriteDTDEntity(pe bool, name, content string) error {
-	if w.err != nil {
-		return w.err
-	}
-	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("stream: WriteDTDEntity called outside DTD")
+	if err := w.ensureDTDState("WriteDTDEntity"); err != nil {
+		return err
 	}
 	// An entity name is an XML Name, but helium's parser forbids colons in entity
 	// names, so validate as an NCName to match parser behavior (a "p:e" written
@@ -1530,11 +1524,8 @@ func (w *Writer) WriteDTDEntity(pe bool, name, content string) error {
 
 // WriteDTDExternalEntity writes an external entity declaration.
 func (w *Writer) WriteDTDExternalEntity(pe bool, name, pubid, sysid, ndata string) error {
-	if w.err != nil {
-		return w.err
-	}
-	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("stream: WriteDTDExternalEntity called outside DTD")
+	if err := w.ensureDTDState("WriteDTDExternalEntity"); err != nil {
+		return err
 	}
 	// An entity name is an XML Name, but helium's parser forbids colons in entity
 	// names, so validate as an NCName to match parser behavior (a "p:e" written
@@ -1559,21 +1550,12 @@ func (w *Writer) WriteDTDExternalEntity(pe bool, name, pubid, sysid, ndata strin
 	w.writeStr(name)
 	if pubid != "" {
 		w.writeStr(" PUBLIC ")
-		pubQ := dtdQuoteFor(pubid, w.quoteChar)
-		w.writeByte(pubQ)
-		w.writeStr(pubid)
-		w.writeByte(pubQ)
+		w.writeQuotedID(pubid)
 		w.writeByte(' ')
-		sysQ := dtdQuoteFor(sysid, w.quoteChar)
-		w.writeByte(sysQ)
-		w.writeStr(sysid)
-		w.writeByte(sysQ)
+		w.writeQuotedID(sysid)
 	} else if sysid != "" {
 		w.writeStr(" SYSTEM ")
-		sysQ := dtdQuoteFor(sysid, w.quoteChar)
-		w.writeByte(sysQ)
-		w.writeStr(sysid)
-		w.writeByte(sysQ)
+		w.writeQuotedID(sysid)
 	}
 	if ndata != "" {
 		w.writeStr(" NDATA ")
@@ -1585,11 +1567,8 @@ func (w *Writer) WriteDTDExternalEntity(pe bool, name, pubid, sysid, ndata strin
 
 // WriteDTDNotation writes a notation declaration.
 func (w *Writer) WriteDTDNotation(name, pubid, sysid string) error {
-	if w.err != nil {
-		return w.err
-	}
-	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("stream: WriteDTDNotation called outside DTD")
+	if err := w.ensureDTDState("WriteDTDNotation"); err != nil {
+		return err
 	}
 	if !xmlchar.IsValidName(name) {
 		return fmt.Errorf("stream: invalid DTD notation name %q", name)
@@ -1605,23 +1584,14 @@ func (w *Writer) WriteDTDNotation(name, pubid, sysid string) error {
 	w.writeStr(name)
 	if pubid != "" {
 		w.writeStr(" PUBLIC ")
-		pubQ := dtdQuoteFor(pubid, w.quoteChar)
-		w.writeByte(pubQ)
-		w.writeStr(pubid)
-		w.writeByte(pubQ)
+		w.writeQuotedID(pubid)
 		if sysid != "" {
 			w.writeByte(' ')
-			sysQ := dtdQuoteFor(sysid, w.quoteChar)
-			w.writeByte(sysQ)
-			w.writeStr(sysid)
-			w.writeByte(sysQ)
+			w.writeQuotedID(sysid)
 		}
 	} else if sysid != "" {
 		w.writeStr(" SYSTEM ")
-		sysQ := dtdQuoteFor(sysid, w.quoteChar)
-		w.writeByte(sysQ)
-		w.writeStr(sysid)
-		w.writeByte(sysQ)
+		w.writeQuotedID(sysid)
 	}
 	w.writeByte('>')
 	return w.err
