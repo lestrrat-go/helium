@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/catalog"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/heliumtest"
@@ -358,6 +359,43 @@ func TestNextCatalogFileURIRelativeEntry(t *testing.T) {
 	require.Equal(t, want, got)
 	require.True(t, strings.HasPrefix(got, "file:"),
 		"relative downstream uri must resolve to a file: URI, got %q", got)
+}
+
+// A nextCatalog pointing at a MALFORMED child catalog is loaded lazily at
+// Resolve time. The parse error from that lazy load must reach the caller's
+// ErrorHandler. The caller owns the handler lifecycle: Load does not close it,
+// so it is still live when the lazy load runs.
+func TestLazyLoadDiagnosticsDelivered(t *testing.T) {
+	dir := t.TempDir()
+
+	// Malformed child catalog: parses, but its <system> entry is missing the
+	// required uri attribute, which the loader reports via the ErrorHandler.
+	nextPath := filepath.Join(dir, "next.xml")
+	nextXML := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <system systemId="http://example.com/missing"/>
+</catalog>`
+	require.NoError(t, os.WriteFile(nextPath, []byte(nextXML), 0o600))
+
+	rootXML := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <nextCatalog catalog="` + filepath.ToSlash(nextPath) + `"/>
+</catalog>`
+	rootPath := filepath.Join(dir, "root.xml")
+	require.NoError(t, os.WriteFile(rootPath, []byte(rootXML), 0o600))
+
+	ec := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+
+	cat, err := catalog.NewLoader().ErrorHandler(ec).Load(t.Context(), rootPath)
+	require.NoError(t, err, "root catalog itself is well-formed")
+
+	// Triggering the lazy load of the malformed child must surface its parse
+	// error through the still-live handler.
+	cat.Resolve(t.Context(), "", "http://example.com/missing")
+
+	require.NoError(t, ec.Close())
+	require.NotEmpty(t, ec.Errors(),
+		"lazy-load parse error must be delivered to the caller's ErrorHandler")
 }
 
 func TestLoadError(t *testing.T) {

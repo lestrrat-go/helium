@@ -100,8 +100,13 @@ func (l Loader) clone() Loader {
 	return Loader{cfg: &cp}
 }
 
-// ErrorHandler returns a copy of the Loader that delivers warnings
-// to the given error handler during catalog parsing.
+// ErrorHandler returns a copy of the Loader that delivers warnings to the given
+// error handler during catalog parsing.
+//
+// The handler is retained by the returned Catalog and also receives diagnostics
+// from delegate / nextCatalog files loaded lazily at Resolve time. Load does not
+// close the handler; the caller owns its lifecycle and must close it (when it is
+// an io.Closer such as ErrorCollector) once the Catalog is no longer in use.
 func (l Loader) ErrorHandler(h helium.ErrorHandler) Loader {
 	l = l.clone()
 	l.cfg.errorHandler = h
