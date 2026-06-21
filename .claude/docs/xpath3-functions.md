@@ -67,8 +67,9 @@ Compiled regexes are cached by pattern + flags pair so repeated literal calls do
 ### `functions_constructors.go`
 Typed atomic constructors for XSD types
 
-### `functions_boolean.go`
-`boolean`, `not`, `true`, `false`
+### `functions.go`
+Boolean: `boolean`, `not`, `true`, `false`
+Error/trace: `error` (raises `FOER0000` with optional code/description/value), `trace` (logs and returns input)
 
 ### `functions_aggregate.go`
 `count`, `avg`, `max`, `min`, `sum`, `distinct-values`
@@ -86,7 +87,13 @@ Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-
 `resolve-uri`, `encode-for-uri`, `iri-to-uri`, `escape-html-uri`, `base-uri`, `document-uri`
 
 ### `functions_json.go`
-`parse-json`, `json-doc`, `json-to-xml`, `xml-to-json`, `serialize`
+`parse-json`, `json-doc`
+
+### `functions_json_xml.go`
+`json-to-xml`, `xml-to-json`
+
+### `functions_serialize.go`
+`serialize`
 
 `json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
 `WithBaseURI` → relative resolution, `WithURIResolver` → resolver for all schemes, `WithHTTPClient` → opt-in HTTP fetch.
@@ -120,9 +127,6 @@ The cap must trigger **before** materializing a lazy result, so the bound holds 
 `math:pi`, `math:exp`, `math:exp10`, `math:log`, `math:log10`, `math:pow`, `math:sqrt`, `math:sin`, `math:cos`, `math:tan`, `math:asin`, `math:acos`, `math:atan`, `math:atan2`
 
 All delegate to Go `math` package.
-
-### `functions_error.go`
-`error` (raises `FOER0000` with optional code/description/value), `trace` (logs and returns input)
 
 ### `functions_misc.go`
 `static-base-uri`, `default-collation`, `available-environment-variables`, `environment-variable`, `current-dateTime`, `current-date`, `current-time`, `implicit-timezone`, `generate-id`
