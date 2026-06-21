@@ -483,6 +483,14 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 		sk.Collation = avt
 	}
 
+	if stable := getAttr(elem, "stable"); stable != "" {
+		avt, err := compileAVT(stable, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		sk.Stable = avt
+	}
+
 	return sk, nil
 }
 
