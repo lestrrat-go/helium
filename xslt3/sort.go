@@ -112,21 +112,31 @@ func (ks keyedSlice[T]) convertAutoNumeric(level int) {
 
 // --- Sort level resolution ---
 
+// resolveSortOrder evaluates the order AVT (defaulting to ascending) and
+// validates it, raising XTDE0030 for any value other than ascending/descending.
+func resolveSortOrder(ctx context.Context, ec *execContext, sk *sortKey) (string, error) {
+	order := sortOrderAscending
+	if sk.Order != nil {
+		var err error
+		order, err = sk.Order.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return "", err
+		}
+		if order != sortOrderAscending && order != sortOrderDescending {
+			return "", dynamicError(errCodeXTDE0030,
+				"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
+		}
+	}
+	return order, nil
+}
+
 // buildResolvedSort evaluates AVTs for order once and builds a resolvedLevel per sort level.
 func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*sortKey) (resolvedSort, error) {
 	levels := make([]resolvedLevel, len(sortKeys))
 	for i, sk := range sortKeys {
-		order := sortOrderAscending
-		if sk.Order != nil {
-			var err error
-			order, err = sk.Order.evaluate(ctx, ec.contextNode)
-			if err != nil {
-				return resolvedSort{}, err
-			}
-			if order != sortOrderAscending && order != sortOrderDescending {
-				return resolvedSort{}, dynamicError(errCodeXTDE0030,
-					"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
-			}
+		order, err := resolveSortOrder(ctx, ec, sk)
+		if err != nil {
+			return resolvedSort{}, err
 		}
 		levels[i] = resolvedLevel{
 			desc: order == sortOrderDescending,
@@ -159,17 +169,9 @@ func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*sortKey
 }
 
 func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedLevel, error) {
-	order := sortOrderAscending
-	if sk.Order != nil {
-		var err error
-		order, err = sk.Order.evaluate(ctx, ec.contextNode)
-		if err != nil {
-			return resolvedLevel{}, err
-		}
-		if order != sortOrderAscending && order != sortOrderDescending {
-			return resolvedLevel{}, dynamicError(errCodeXTDE0030,
-				"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
-		}
+	order, err := resolveSortOrder(ctx, ec, sk)
+	if err != nil {
+		return resolvedLevel{}, err
 	}
 	// XTDE0030: validate lang attribute value
 	if sk.Lang != nil {
@@ -248,15 +250,8 @@ func buildImplicitCollationURI(ctx context.Context, ec *execContext, sk *sortKey
 // validateSortKeyAttrs validates sort key attribute values (order, case-order,
 // lang, collation, stable) regardless of whether there are nodes to sort.
 func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) error {
-	if sk.Order != nil {
-		order, err := sk.Order.evaluate(ctx, ec.contextNode)
-		if err != nil {
-			return err
-		}
-		if order != sortOrderAscending && order != sortOrderDescending {
-			return dynamicError(errCodeXTDE0030,
-				"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
-		}
+	if _, err := resolveSortOrder(ctx, ec, sk); err != nil {
+		return err
 	}
 	if sk.CaseOrder != nil {
 		co, err := sk.CaseOrder.evaluate(ctx, ec.contextNode)
@@ -465,11 +460,11 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 		if *dtMode == dataTypeNumber {
 			// Explicit data-type=lexicon.TypeNumber: use number() semantics.
 			// Dates/times are not numeric → convert via string → NaN.
-			return extractNumericValueExplicit(seq, result, implicitTZ), nil
+			return extractNumericSortValue(seq, result.StringValue(), true, implicitTZ), nil
 		}
 		if *dtMode == dataTypeNumberAuto {
 			// Auto-detected numeric: preserve date/time ordering.
-			sv := extractNumericValueFromResult(seq, result, implicitTZ)
+			sv := extractNumericSortValue(seq, result.StringValue(), false, implicitTZ)
 			// Preserve original type name for XTDE1030 checking
 			if seqLen == 1 {
 				if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
@@ -556,10 +551,10 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 
 	implicitTZBody := ec.currentTime.Location()
 	if *dtMode == dataTypeNumber {
-		return extractNumericValueExplicitSeq(val, implicitTZBody), nil
+		return extractNumericSortValue(val, stringifySequence(val), true, implicitTZBody), nil
 	}
 	if *dtMode == dataTypeNumberAuto {
-		return extractNumericValueFromSeq(val, implicitTZBody), nil
+		return extractNumericSortValue(val, stringifySequence(val), false, implicitTZBody), nil
 	}
 
 	sv := sortValue{kind: sortValueText, str: stringifySequence(val)}
@@ -601,52 +596,20 @@ func extractSortValues(ctx context.Context, ec *execContext, sortKeys []*sortKey
 
 // --- Numeric extraction helpers ---
 
-// extractNumericValueExplicit handles explicit data-type=lexicon.TypeNumber.
-// Per XSLT spec, sort key values are converted using number() semantics.
-// Only actual numeric types use direct conversion; others (date, duration)
-// fall through to string → double (producing NaN for dates).
-func extractNumericValueExplicit(seq xpath3.Sequence, result xpath3.Result, implicitTZ *time.Location) sortValue {
+// extractNumericSortValue converts a sort key sequence to a numeric sort value.
+// A single atomic item is converted directly when orderable; when numericOnly
+// is true (explicit data-type=lexicon.TypeNumber), only actual numeric types
+// use direct conversion per number() semantics, so dates/durations fall through
+// to the fallback string → double (producing NaN). Otherwise fallback is parsed.
+func extractNumericSortValue(seq xpath3.Sequence, fallback string, numericOnly bool, implicitTZ *time.Location) sortValue {
 	if seq != nil && sequence.Len(seq) == 1 {
-		if av, ok := seq.Get(0).(xpath3.AtomicValue); ok && av.IsNumeric() {
+		if av, ok := seq.Get(0).(xpath3.AtomicValue); ok && (!numericOnly || av.IsNumeric()) {
 			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
 				return sv
 			}
 		}
 	}
-	return parseToNumericSortValue(result.StringValue())
-}
-
-func extractNumericValueExplicitSeq(seq xpath3.Sequence, implicitTZ *time.Location) sortValue {
-	if seq != nil && sequence.Len(seq) == 1 {
-		if av, ok := seq.Get(0).(xpath3.AtomicValue); ok && av.IsNumeric() {
-			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
-				return sv
-			}
-		}
-	}
-	return parseToNumericSortValue(stringifySequence(seq))
-}
-
-func extractNumericValueFromResult(seq xpath3.Sequence, result xpath3.Result, implicitTZ *time.Location) sortValue {
-	if seq != nil && sequence.Len(seq) == 1 {
-		if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
-			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
-				return sv
-			}
-		}
-	}
-	return parseToNumericSortValue(result.StringValue())
-}
-
-func extractNumericValueFromSeq(seq xpath3.Sequence, implicitTZ *time.Location) sortValue {
-	if seq != nil && sequence.Len(seq) == 1 {
-		if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
-			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
-				return sv
-			}
-		}
-	}
-	return parseToNumericSortValue(stringifySequence(seq))
+	return parseToNumericSortValue(fallback)
 }
 
 func parseToNumericSortValue(s string) sortValue {
