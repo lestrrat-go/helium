@@ -24,6 +24,11 @@ var errNoLoader = errors.New("catalog: no loader configured")
 type resolveState struct {
 	depth   int
 	visited map[visitedKey]struct{}
+	// delegates counts how many delegate catalogs have actually been loaded
+	// and followed during this resolution. It bounds I/O at MaxDelegates so a
+	// catalog with many UNIQUE delegate entries cannot trigger an unbounded
+	// load fan-out (CAT-005).
+	delegates int
 }
 
 // checkVisited returns true if the (url, id1, id2) combination has already
@@ -277,9 +282,13 @@ func (c *Catalog) resolveDelegateSystem(ctx context.Context, st *resolveState, s
 		if _, dup := seen[e.URL]; dup {
 			continue
 		}
-		if len(seen) < MaxDelegates {
-			seen[e.URL] = struct{}{}
+		seen[e.URL] = struct{}{}
+		// Bound the number of delegate catalogs actually loaded across the whole
+		// resolution, not just the size of the dedup set (CAT-005).
+		if st.delegates >= MaxDelegates {
+			break
 		}
+		st.delegates++
 
 		sub, err := c.lazyLoad(ctx, e)
 		if err != nil {
@@ -315,9 +324,13 @@ func (c *Catalog) resolveDelegatePublic(ctx context.Context, st *resolveState, p
 		if _, dup := seen[e.URL]; dup {
 			continue
 		}
-		if len(seen) < MaxDelegates {
-			seen[e.URL] = struct{}{}
+		seen[e.URL] = struct{}{}
+		// Bound the number of delegate catalogs actually loaded across the whole
+		// resolution, not just the size of the dedup set (CAT-005).
+		if st.delegates >= MaxDelegates {
+			break
 		}
+		st.delegates++
 
 		sub, err := c.lazyLoad(ctx, e)
 		if err != nil {
@@ -350,9 +363,13 @@ func (c *Catalog) resolveDelegateURI(ctx context.Context, st *resolveState, uri 
 		if _, dup := seen[e.URL]; dup {
 			continue
 		}
-		if len(seen) < MaxDelegates {
-			seen[e.URL] = struct{}{}
+		seen[e.URL] = struct{}{}
+		// Bound the number of delegate catalogs actually loaded across the whole
+		// resolution, not just the size of the dedup set (CAT-005).
+		if st.delegates >= MaxDelegates {
+			break
 		}
+		st.delegates++
 
 		sub, err := c.lazyLoad(ctx, e)
 		if err != nil {
