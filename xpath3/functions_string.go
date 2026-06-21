@@ -541,16 +541,28 @@ func fnTranslate(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(b.String()), nil
 }
 
-func fnContains(ctx context.Context, args []Sequence) (Sequence, error) {
+// collationStringPair resolves the collation (arg index 2) and coerces the
+// first two arguments to strings, in that order. Shared by the collation-aware
+// two-string string functions (contains, starts-with, ends-with,
+// substring-before, substring-after).
+func collationStringPair(ctx context.Context, args []Sequence) (*collationImpl, string, string, error) {
 	coll, err := getCollation(ctx, args, 2)
 	if err != nil {
-		return nil, err
+		return nil, "", "", err
 	}
-	s, err := coerceArgToString(args[0])
+	s1, err := coerceArgToString(args[0])
 	if err != nil {
-		return nil, err
+		return nil, "", "", err
 	}
-	sub, err := coerceArgToString(args[1])
+	s2, err := coerceArgToString(args[1])
+	if err != nil {
+		return nil, "", "", err
+	}
+	return coll, s1, s2, nil
+}
+
+func fnContains(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, s, sub, err := collationStringPair(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -562,15 +574,7 @@ func fnContains(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnStartsWith(ctx context.Context, args []Sequence) (Sequence, error) {
-	coll, err := getCollation(ctx, args, 2)
-	if err != nil {
-		return nil, err
-	}
-	s, err := coerceArgToString(args[0])
-	if err != nil {
-		return nil, err
-	}
-	prefix, err := coerceArgToString(args[1])
+	coll, s, prefix, err := collationStringPair(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -582,15 +586,7 @@ func fnStartsWith(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnEndsWith(ctx context.Context, args []Sequence) (Sequence, error) {
-	coll, err := getCollation(ctx, args, 2)
-	if err != nil {
-		return nil, err
-	}
-	s, err := coerceArgToString(args[0])
-	if err != nil {
-		return nil, err
-	}
-	suffix, err := coerceArgToString(args[1])
+	coll, s, suffix, err := collationStringPair(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -602,15 +598,7 @@ func fnEndsWith(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnSubstringBefore(ctx context.Context, args []Sequence) (Sequence, error) {
-	coll, err := getCollation(ctx, args, 2)
-	if err != nil {
-		return nil, err
-	}
-	s, err := coerceArgToString(args[0])
-	if err != nil {
-		return nil, err
-	}
-	sep, err := coerceArgToString(args[1])
+	coll, s, sep, err := collationStringPair(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -625,15 +613,7 @@ func fnSubstringBefore(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnSubstringAfter(ctx context.Context, args []Sequence) (Sequence, error) {
-	coll, err := getCollation(ctx, args, 2)
-	if err != nil {
-		return nil, err
-	}
-	s, err := coerceArgToString(args[0])
-	if err != nil {
-		return nil, err
-	}
-	sep, err := coerceArgToString(args[1])
+	coll, s, sep, err := collationStringPair(ctx, args)
 	if err != nil {
 		return nil, err
 	}
