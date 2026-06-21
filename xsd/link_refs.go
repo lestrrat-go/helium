@@ -423,6 +423,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	})
 	for _, td := range restrictionTypes {
 		c.checkRestrictionAttrs(ctx, td)
+		c.checkRestrictionParticles(ctx, td)
 	}
 
 	// Check UPA (Unique Particle Attribution) for all complex types with content models.

@@ -111,6 +111,39 @@ func TestTypeDefDiagnosticSource(t *testing.T) {
 		})
 	})
 
+	// derivation-ok-restriction: a complexContent restriction whose content model
+	// is not a valid restriction of the base (here it adds a particle the base
+	// does not allow). The diagnostic must cite the declaring file.
+	const badRestrictionBody = `  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ct">
+    <xs:complexContent>
+      <xs:restriction base="base">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+          <xs:element name="b" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>`
+
+	t.Run("invalid content-model restriction", func(t *testing.T) {
+		t.Parallel()
+		const want = "not a valid restriction of the content model of the base complex type definition"
+		t.Run("included file", func(t *testing.T) {
+			t.Parallel()
+			assert(t, includeMain(badRestrictionBody), incXSD, want)
+		})
+		t.Run("imported file", func(t *testing.T) {
+			t.Parallel()
+			body := strings.ReplaceAll(badRestrictionBody, `base="base"`, `base="t:base"`)
+			assert(t, importMain(body), impXSD, want)
+		})
+	})
+
 	t.Run("all-group extension over non-empty base", func(t *testing.T) {
 		t.Parallel()
 		const want = "The 'all' model group needs to be the only child of the model group."
