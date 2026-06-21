@@ -349,6 +349,83 @@ func TestUPADeterminism(t *testing.T) {
   </xs:element>
 </xs:schema>`,
 			},
+			{
+				// A top-level prohibited (`maxOccurs="0"`) model group is the
+				// COMPLETE content model. It emits nothing and is unreachable, so the
+				// content model is empty and trivially deterministic. The synthetic
+				// root particle wrapping the content model has maxOccurs=1, so the
+				// group's own maxOccurs=0 must be honoured when walking the group, or
+				// its (duplicate `a`) positions leak in and falsely flag the model.
+				// xmllint accepts it.
+				name: "top-level prohibited model group is empty content",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence minOccurs="0" maxOccurs="0">
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A top-level prohibited (`maxOccurs="0"`) CHOICE is the COMPLETE
+				// content model and emits nothing. Its members' firstpos must NOT leak
+				// into the start state: here both branches are the same name `a`, so a
+				// leak puts two overlapping positions in the start state and falsely
+				// flags the (empty) model. The synthetic root particle has
+				// maxOccurs=1, so the group's own maxOccurs=0 must be honoured.
+				name: "top-level prohibited choice with duplicate member",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:choice minOccurs="0" maxOccurs="0">
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A prohibited (`maxOccurs="0"`) nested group emits nothing and is
+				// unreachable: it must contribute NO firstpos/followpos positions to
+				// the automaton. Here the prohibited inner sequence repeats the same
+				// element name `a` it shares with the following required `a`; if its
+				// positions leaked in they would overlap and falsely flag the model.
+				// xmllint accepts it.
+				name: "prohibited nested group contributes nothing",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:sequence minOccurs="0" maxOccurs="0">
+          <xs:element name="a" type="xs:int"/>
+          <xs:element name="a" type="xs:int"/>
+        </xs:sequence>
+        <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// A prohibited member (`maxOccurs="0"` element) inside a sequence is
+				// skipped. The prohibited `a` repeats the name of the following
+				// required `a`; leaking its position in would falsely flag the model.
+				name: "prohibited member inside a sequence is skipped",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:int" minOccurs="0" maxOccurs="0"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()

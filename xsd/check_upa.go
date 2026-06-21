@@ -295,6 +295,18 @@ func (a *positionAutomaton) walkTerm(term ParticleTerm) posInfo {
 // recording the followpos edges its compositor introduces and folding in the
 // group's own minOccurs/maxOccurs occurrence range.
 func (a *positionAutomaton) walkModelGroup(mg *ModelGroup) posInfo {
+	// A prohibited (maxOccurs="0") model group emits nothing and is unreachable,
+	// so it contributes NO positions or followpos edges to the automaton. This
+	// mirrors walkParticle's maxOccurs==0 guard, which it bypasses when the group
+	// is reached through walkParticle's model-group short-circuit: there the
+	// occurrence range lives on the group, and the wrapping synthetic/parent
+	// particle keeps maxOccurs>=1. Without this guard, a top-level prohibited
+	// group's members leak their firstpos into the start state and can falsely
+	// flag the (empty) content model — e.g. a `maxOccurs="0"` choice with two
+	// same-name branches.
+	if mg.MaxOccurs == 0 {
+		return posInfo{nullable: true}
+	}
 	switch mg.Compositor {
 	case CompositorChoice, CompositorSequence, CompositorAll:
 		return a.applyOccurs(mg.MinOccurs, mg.MaxOccurs, func() posInfo {
