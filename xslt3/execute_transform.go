@@ -14,6 +14,23 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
+// remapValidationNode resolves a node from the original (validated) source tree to
+// the corresponding node in the stripped copy the transform runs on. Strict source
+// validation runs on the original tree, so its type annotations and nilled flags are
+// keyed by original nodes; the transform navigates the copy, so those keys must be
+// remapped. When nodeMap is nil (no strip rules — original and copy are the same
+// tree) or the node has no copy (e.g. it was omitted from the copy), the node is
+// returned unchanged.
+func remapValidationNode(nodeMap map[helium.Node]helium.Node, node helium.Node) helium.Node {
+	if nodeMap == nil || node == nil {
+		return node
+	}
+	if mapped, ok := nodeMap[node]; ok {
+		return mapped
+	}
+	return node
+}
+
 // remapSelectionToCopy rewrites the node items of an initial match selection so
 // that any node belonging to the original source document points instead to the
 // corresponding node in the stripped copy. Items that are not nodes, or that
@@ -205,6 +222,16 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// must run against the (empty) selection — producing no output — rather than
 	// falling through to the source document.
 	selectionSupplied := matchSelection != nil
+	// validationSource is the tree that strict source-schema validation runs
+	// against. It must be the ORIGINAL, un-stripped source: xsl:strip-space must
+	// not remove whitespace-only nodes before validation, or a schema that
+	// rejects such content (e.g. an element required to be empty) would have its
+	// violation masked. validationSource therefore stays pinned to the original
+	// source even after the strip copy replaces effectiveSource below. stripNodeMap
+	// carries the original->copy correspondence so validation annotations gathered
+	// on the original tree can be remapped onto the copy the transform runs on.
+	validationSource := effectiveSource
+	var stripNodeMap map[helium.Node]helium.Node
 	if len(ss.stripSpace) > 0 && effectiveSource != nil {
 		// copyAndStrip deep-copies the source, omits the whitespace-only text
 		// nodes strip-space would remove, declares namespaces without
@@ -213,9 +240,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		// (CopyDoc + pruneRedundantNamespaceDecls + stripWhitespaceFromDoc) and
 		// is byte-for-byte equivalent. At this point the effective strip/preserve
 		// rules are the stylesheet's own (no package scope is active yet).
-		// Only build the original->copy node map when there is a selection to
-		// remap; the common case (no selection) skips that bookkeeping entirely.
-		needMap := matchSelection != nil && sequence.Len(matchSelection) > 0
+		// Build the original->copy node map whenever there is a selection to remap
+		// OR a schema that will validate the original tree (so its annotations can
+		// be carried over to the copy); the common case (no selection, no schema)
+		// skips that bookkeeping entirely.
+		needSelectionMap := matchSelection != nil && sequence.Len(matchSelection) > 0
+		schemaActive := ss.schemaAware || len(ss.schemas) > 0 || (cfg != nil && len(cfg.sourceSchemas) > 0)
+		needMap := needSelectionMap || schemaActive
 		srcCopy, nodeMap, copyErr := copyAndStrip(effectiveSource, ss.stripSpace, ss.preserveSpace, needMap)
 		if copyErr != nil {
 			return nil, copyErr
@@ -226,9 +257,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		// node of the copy so template matching runs over the same (stripped)
 		// tree as the context node. Selected nodes from other documents (e.g.
 		// fn:doc()-loaded) are left untouched.
-		if needMap {
+		if needSelectionMap {
 			matchSelection = remapSelectionToCopy(matchSelection, effectiveSource, nodeMap)
 		}
+		stripNodeMap = nodeMap
 		effectiveSource = srcCopy
 	}
 
@@ -311,16 +343,29 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if ss.schemaAware || len(runtimeSchemas) > 0 {
 		ec.schemaRegistry = &schemaRegistry{schemas: runtimeSchemas}
 		ec.typeAnnotations = make(map[helium.Node]string)
-		if len(runtimeSchemas) > 0 && effectiveSource != nil {
-			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, effectiveSource)
+		if len(runtimeSchemas) > 0 && validationSource != nil {
+			// Validate the ORIGINAL, un-stripped source so xsl:strip-space cannot
+			// drop whitespace-only nodes (and thus mask schema violations) before
+			// validation. validationSource is the original tree; effectiveSource is
+			// the stripped copy the transform runs on (or the original when no
+			// strip rules apply, in which case the two are the same node).
+			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, validationSource)
 			if valErr != nil && ss.defaultValidation == validationStrict {
 				return nil, valErr
 			}
+			// Annotations and nilled flags were gathered against validationSource.
+			// When a strip copy exists, remap each annotated node onto its copy so
+			// the transform (which runs on effectiveSource) sees the type info.
+			// remapValidationNode resolves an original node to its copy via the
+			// strip node map, falling back to the node itself when no copy exists
+			// (no strip rules, or the node was omitted from the copy).
 			for node, typeName := range vr.Annotations {
-				ec.annotateNode(node, typeName)
+				ec.annotateNode(remapValidationNode(stripNodeMap, node), typeName)
 			}
 			for elem := range vr.NilledElements {
-				ec.markNilled(elem)
+				if mapped, ok := remapValidationNode(stripNodeMap, elem).(*helium.Element); ok {
+					ec.markNilled(mapped)
+				}
 			}
 			if len(vr.Annotations) > 0 {
 				if ec.validatedDocs == nil {
