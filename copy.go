@@ -41,64 +41,18 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 }
 
 func copyElement(src *Element, doc *Document) (*Element, error) {
-	elem := doc.CreateElement(src.LocalName())
-
-	// Track which namespace prefixes have been declared on this element
-	declaredPrefixes := make(map[string]bool)
-
-	// Copy namespace declarations (nsDefs)
-	if nc, ok := Node(src).(NamespaceContainer); ok {
-		for _, ns := range nc.Namespaces() {
-			if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
-				return nil, err
-			}
-			declaredPrefixes[ns.Prefix()] = true
-		}
+	// The general copy path over-declares namespaces (load-bearing for
+	// streaming's fixNamespacesAfterCopy) and links with the preflighted
+	// AddChild, copying every node. See deepCopyOptions for the knobs.
+	dc := &deepCopier{dst: doc, opts: deepCopyOptions{overDeclareNS: true}}
+	node, err := dc.copyElement(src, nil, nil)
+	if err != nil {
+		return nil, err
 	}
-
-	// Copy the active namespace, adding a declaration if not already present.
-	if nsr, ok := Node(src).(Namespacer); ok {
-		if ns := nsr.Namespace(); ns != nil {
-			if ns.URI() != "" && !declaredPrefixes[ns.Prefix()] {
-				if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
-					return nil, err
-				}
-				declaredPrefixes[ns.Prefix()] = true
-			}
-			if err := elem.SetActiveNamespace(ns.Prefix(), ns.URI()); err != nil {
-				return nil, err
-			}
-		}
+	elem, ok := AsNode[*Element](node)
+	if !ok {
+		return nil, fmt.Errorf("helium: copyElement produced unexpected type %T", node)
 	}
-
-	// Copy attributes, preserving namespace information
-	for _, a := range src.Attributes() {
-		if a.URI() != "" {
-			ns, nsErr := doc.CreateNamespace(a.Prefix(), a.URI())
-			if nsErr != nil {
-				return nil, nsErr
-			}
-			if _, err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
-				return nil, err
-			}
-		} else {
-			if _, err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// Recursively copy children
-	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
-		child, err := CopyNode(c, doc)
-		if err != nil {
-			return nil, err
-		}
-		if err := elem.AddChild(child); err != nil {
-			return nil, err
-		}
-	}
-
 	return elem, nil
 }
 
@@ -117,18 +71,11 @@ func CopyDoc(src *Document) (*Document, error) {
 		}
 	}
 
-	// Copy all children (except the DTD which was already handled).
-	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
-		if c.Type() == DTDNode {
-			continue
-		}
-		child, err := CopyNode(c, dst)
-		if err != nil {
-			return nil, err
-		}
-		if err := dst.AddChild(child); err != nil {
-			return nil, err
-		}
+	// Copy all document children (the DTD was already handled) through the shared
+	// core in over-declare / AddChild mode, reproducing the historical behavior.
+	dc := &deepCopier{dst: dst, opts: deepCopyOptions{overDeclareNS: true}}
+	if err := dc.copyChildren(src, dst, nil, nil); err != nil {
+		return nil, err
 	}
 
 	return dst, nil
