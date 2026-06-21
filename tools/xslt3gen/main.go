@@ -19,18 +19,16 @@ import (
 	"encoding/xml"
 	"fmt"
 	"go/format"
-	"io"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/tools/internal/gen"
 	"golang.org/x/net/html/charset"
 )
 
@@ -595,7 +593,7 @@ func main() {
 					if srcOK {
 						gt.SourceDocPath = srcRel
 					} else if src.Content != nil {
-						gt.SourceContent = decodeXMLText(string(src.Content.Inner))
+						gt.SourceContent = gen.DecodeXMLText(string(src.Content.Inner))
 					} else if xmlContent := extractParseXMLContent(src.Select); xmlContent != "" {
 						gt.SourceContent = xmlContent
 					}
@@ -710,7 +708,7 @@ func main() {
 			log.Printf("warning: skipping unsafe asset path %q: %v", relPath, err)
 			continue
 		}
-		if err := copyFile(srcFull, dstFull); err != nil {
+		if err := gen.CopyFile(srcFull, dstFull); err != nil {
 			log.Printf("warning: copying %s: %v", relPath, err)
 			continue
 		}
@@ -1284,12 +1282,12 @@ func convertAssertion(xa xmlAssertion, sourceDir, tsDir string) assertion {
 				a.Value = string(data)
 			}
 		} else {
-			a.Value = decodeXMLText(string(xa.Inner))
+			a.Value = gen.DecodeXMLText(string(xa.Inner))
 		}
 	case "error":
 		a.Value = xa.Code
 	case "assert-string-value":
-		a.Value = decodeXMLText(string(xa.Inner))
+		a.Value = gen.DecodeXMLText(string(xa.Inner))
 	case "all-of", "any-of":
 		for _, child := range xa.Children {
 			a.Children = append(a.Children, convertAssertion(child, sourceDir, tsDir))
@@ -1317,16 +1315,16 @@ func convertAssertion(xa xmlAssertion, sourceDir, tsDir string) assertion {
 				a.Value = string(data)
 			}
 		} else {
-			a.Value = decodeXMLText(string(xa.Inner))
+			a.Value = gen.DecodeXMLText(string(xa.Inner))
 		}
 	case "assert-serialization-error":
 		a.Type = "error"
 		a.Value = xa.Code
 	case "serialization-matches":
-		a.Value = decodeXMLText(string(xa.Inner))
+		a.Value = gen.DecodeXMLText(string(xa.Inner))
 		a.Flags = xa.Flags
 	case "assert-type", "assert-count", "assert-deep-eq", "assert-empty", "assert-eq":
-		a.Value = decodeXMLText(string(xa.Inner))
+		a.Value = gen.DecodeXMLText(string(xa.Inner))
 	case "not":
 		for _, child := range xa.Children {
 			a.Children = append(a.Children, convertAssertion(child, sourceDir, tsDir))
@@ -1334,7 +1332,7 @@ func convertAssertion(xa xmlAssertion, sourceDir, tsDir string) assertion {
 	case "assert-posture-and-sweep":
 		a.Value = "skip: streaming not supported"
 	default:
-		a.Value = decodeXMLText(string(xa.Inner))
+		a.Value = gen.DecodeXMLText(string(xa.Inner))
 	}
 
 	return a
@@ -1492,7 +1490,7 @@ func generateTestFile(tests []generatedTest) string {
 
 	for _, setName := range groupOrder {
 		g := groups[setName]
-		funcName := "TestW3C_" + goIdentifier(setName)
+		funcName := "TestW3C_" + gen.GoIdentifier(setName)
 		heavy := isHeavyTestSet(setName)
 
 		fmt.Fprintf(&b, "func %s(t *testing.T) {\n", funcName)
@@ -1962,75 +1960,6 @@ func categoryFromCatalogPath(path string) string {
 // Utilities
 // ──────────────────────────────────────────────────────────────────────
 
-func decodeXMLText(s string) string {
-	var b strings.Builder
-	for len(s) > 0 {
-		// Handle CDATA sections
-		if strings.HasPrefix(s, "<![CDATA[") {
-			end := strings.Index(s, "]]>")
-			if end < 0 {
-				b.WriteString(s[len("<![CDATA["):])
-				break
-			}
-			b.WriteString(s[len("<![CDATA["):end])
-			s = s[end+len("]]>"):]
-			continue
-		}
-		// Handle entity/character references
-		amp := strings.IndexByte(s, '&')
-		cdata := strings.Index(s, "<![CDATA[")
-		next := len(s)
-		if amp >= 0 {
-			next = amp
-		}
-		if cdata >= 0 && cdata < next {
-			b.WriteString(s[:cdata])
-			s = s[cdata:]
-			continue
-		}
-		if amp < 0 {
-			b.WriteString(s)
-			break
-		}
-		b.WriteString(s[:amp])
-		s = s[amp:]
-		semi := strings.IndexByte(s, ';')
-		if semi < 0 {
-			b.WriteString(s)
-			break
-		}
-		ref := s[1:semi]
-		s = s[semi+1:]
-		if strings.HasPrefix(ref, "#x") || strings.HasPrefix(ref, "#X") {
-			if n, err := strconv.ParseInt(ref[2:], 16, 32); err == nil {
-				b.WriteRune(rune(n))
-			}
-		} else if strings.HasPrefix(ref, "#") {
-			if n, err := strconv.ParseInt(ref[1:], 10, 32); err == nil {
-				b.WriteRune(rune(n))
-			}
-		} else {
-			switch ref {
-			case "lt":
-				b.WriteByte('<')
-			case "gt":
-				b.WriteByte('>')
-			case "amp":
-				b.WriteByte('&')
-			case "apos":
-				b.WriteByte('\'')
-			case "quot":
-				b.WriteByte('"')
-			default:
-				b.WriteByte('&')
-				b.WriteString(ref)
-				b.WriteByte(';')
-			}
-		}
-	}
-	return b.String()
-}
-
 // extractParseXMLContent extracts the XML string from a select expression
 // of the form parse-xml('...') used in W3C test catalog environments.
 func extractParseXMLContent(sel string) string {
@@ -2045,14 +1974,6 @@ func extractParseXMLContent(sel string) string {
 		return ""
 	}
 	return strings.ReplaceAll(rest[:end], "''", "'")
-}
-
-var nonIdentRE = regexp.MustCompile(`[^a-zA-Z0-9_]`)
-
-func goIdentifier(s string) string {
-	s = strings.ReplaceAll(s, "-", "_")
-	s = strings.ReplaceAll(s, ".", "_")
-	return nonIdentRE.ReplaceAllString(s, "_")
 }
 
 func goStringLiteral(s string) string {
@@ -2107,24 +2028,6 @@ func removeOldGeneratedFiles(dir string) {
 	for _, m := range matches {
 		_ = os.Remove(m)
 	}
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = out.Close() }()
-	_, err = io.Copy(out, in)
-	return err
 }
 
 func resolvedAssetSourcePath(relPath string) string {

@@ -19,16 +19,15 @@ import (
 	"encoding/xml"
 	"fmt"
 	"go/format"
-	"io"
 	"log"
 	"maps"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/lestrrat-go/helium/tools/internal/gen"
 	"golang.org/x/net/html/charset"
 )
 
@@ -326,7 +325,7 @@ func main() {
 	for docPath := range docFiles {
 		srcFull := filepath.Join(sourceDir, docPath)
 		dstFull := filepath.Join(docsDir, docPath)
-		if err := copyFile(srcFull, dstFull); err != nil {
+		if err := gen.CopyFile(srcFull, dstFull); err != nil {
 			log.Printf("warning: copying %s: %v", docPath, err)
 			continue
 		}
@@ -337,7 +336,7 @@ func main() {
 	for resPath := range resourceFiles {
 		srcFull := filepath.Join(sourceDir, resPath)
 		dstFull := filepath.Join(docsDir, resPath)
-		if err := copyFile(srcFull, dstFull); err != nil {
+		if err := gen.CopyFile(srcFull, dstFull); err != nil {
 			log.Printf("warning: copying resource %s: %v", resPath, err)
 			continue
 		}
@@ -820,7 +819,7 @@ func parseAssertionXML(s string) []assertion {
 func convertAssertion(xa xmlAssertion) assertion {
 	// Decode the raw inner XML to preserve character references like &#xD;
 	// that Go's xml:",chardata" would normalize away.
-	value := decodeXMLText(string(xa.Inner))
+	value := gen.DecodeXMLText(string(xa.Inner))
 	if xa.XMLName.Local != "assert-string-value" {
 		value = strings.TrimSpace(value)
 	}
@@ -889,7 +888,7 @@ func generateTestFile(tests []generatedTest) string {
 
 	for _, setName := range groupOrder {
 		g := groups[setName]
-		funcName := "TestQT3_" + goIdentifier(setName)
+		funcName := "TestQT3_" + gen.GoIdentifier(setName)
 
 		fmt.Fprintf(&b, "func %s(t *testing.T) {\n", funcName)
 		fmt.Fprintf(&b, "\tt.Parallel()\n")
@@ -1199,87 +1198,6 @@ func emitDecimalFormat(df decimalFormat) string {
 // Utilities
 // ──────────────────────────────────────────────────────────────────────
 
-// decodeXMLText decodes XML entity references, character references, and CDATA
-// sections in raw inner XML content. Unlike Go's xml:",chardata", this preserves
-// &#xD; as a literal CR character without applying XML line-end normalization.
-func decodeXMLText(s string) string {
-	var b strings.Builder
-	for len(s) > 0 {
-		// Handle CDATA sections
-		if strings.HasPrefix(s, "<![CDATA[") {
-			end := strings.Index(s, "]]>")
-			if end < 0 {
-				b.WriteString(s[len("<![CDATA["):])
-				break
-			}
-			b.WriteString(s[len("<![CDATA["):end])
-			s = s[end+len("]]>"):]
-			continue
-		}
-		// Handle entity/character references
-		amp := strings.IndexByte(s, '&')
-		cdata := strings.Index(s, "<![CDATA[")
-		// Find the nearest special construct
-		next := len(s)
-		if amp >= 0 {
-			next = amp
-		}
-		if cdata >= 0 && cdata < next {
-			b.WriteString(s[:cdata])
-			s = s[cdata:]
-			continue
-		}
-		if amp < 0 {
-			b.WriteString(s)
-			break
-		}
-		b.WriteString(s[:amp])
-		s = s[amp:]
-		semi := strings.IndexByte(s, ';')
-		if semi < 0 {
-			b.WriteString(s)
-			break
-		}
-		ref := s[1:semi]
-		s = s[semi+1:]
-		if strings.HasPrefix(ref, "#x") || strings.HasPrefix(ref, "#X") {
-			if n, err := strconv.ParseInt(ref[2:], 16, 32); err == nil {
-				b.WriteRune(rune(n))
-			}
-		} else if strings.HasPrefix(ref, "#") {
-			if n, err := strconv.ParseInt(ref[1:], 10, 32); err == nil {
-				b.WriteRune(rune(n))
-			}
-		} else {
-			switch ref {
-			case "lt":
-				b.WriteByte('<')
-			case "gt":
-				b.WriteByte('>')
-			case "amp":
-				b.WriteByte('&')
-			case "apos":
-				b.WriteByte('\'')
-			case "quot":
-				b.WriteByte('"')
-			default:
-				b.WriteByte('&')
-				b.WriteString(ref)
-				b.WriteByte(';')
-			}
-		}
-	}
-	return b.String()
-}
-
-var nonIdentRE = regexp.MustCompile(`[^a-zA-Z0-9_]`)
-
-func goIdentifier(s string) string {
-	s = strings.ReplaceAll(s, "-", "_")
-	s = strings.ReplaceAll(s, ".", "_")
-	return nonIdentRE.ReplaceAllString(s, "_")
-}
-
 func goStringLiteral(s string) string {
 	// Raw string literals (backtick) silently discard \r, so always use
 	// interpreted string literals when the value contains CR.
@@ -1351,22 +1269,4 @@ func removeOldGeneratedFiles(dir string) {
 	for _, m := range matches {
 		_ = os.Remove(m)
 	}
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = out.Close() }()
-	_, err = io.Copy(out, in)
-	return err
 }
