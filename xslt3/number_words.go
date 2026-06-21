@@ -436,7 +436,7 @@ func frenchCardinal(n int) string {
 		return ones[n]
 	}
 	if n < 100 {
-		tens := []string{"", "", "vingt", "trente", "quarantine", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"}
+		tens := []string{"", "", "vingt", "trente", "quarante", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"}
 		t := n / 10
 		o := n % 10
 		if t == 7 || t == 9 {
