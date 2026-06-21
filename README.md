@@ -151,6 +151,18 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 * A `helium` CLI provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron validate` subcommands.
 * Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
 
+# For coding agents
+
+If you are an AI coding agent (Claude Code, Codex, Gemini, etc.) working in this
+repository, start with [`AGENTS.md`](AGENTS.md) (also available as `CLAUDE.md`).
+It points to the cached navigation and architecture docs under
+[`.claude/docs/`](.claude/docs/) and lists the pre-read rules, scope boundaries,
+and generated-file policy you must follow before making changes.
+
+Runnable usage examples live in the [`examples/`](examples/) directory as
+`*_example_test.go` files — read those first to see how the public APIs are meant
+to be used.
+
 # Contributing
 
 ## Issues
