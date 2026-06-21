@@ -24,7 +24,13 @@ type sortKey struct {
 	CaseOrder *avt          // "upper-first" or "lower-first"
 	Lang      *avt
 	Collation *avt // collation URI
+	Stable    *avt // "yes"/"no"/"true"/"false"/"1"/"0"
 }
+
+const (
+	sortOrderAscending  = "ascending"
+	sortOrderDescending = "descending"
+)
 
 // sortMode determines how a sort level compares keys.
 type sortMode uint8
@@ -110,16 +116,20 @@ func (ks keyedSlice[T]) convertAutoNumeric(level int) {
 func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*sortKey) (resolvedSort, error) {
 	levels := make([]resolvedLevel, len(sortKeys))
 	for i, sk := range sortKeys {
-		order := "ascending"
+		order := sortOrderAscending
 		if sk.Order != nil {
 			var err error
 			order, err = sk.Order.evaluate(ctx, ec.contextNode)
 			if err != nil {
 				return resolvedSort{}, err
 			}
+			if order != sortOrderAscending && order != sortOrderDescending {
+				return resolvedSort{}, dynamicError(errCodeXTDE0030,
+					"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
+			}
 		}
 		levels[i] = resolvedLevel{
-			desc: order == "descending",
+			desc: order == sortOrderDescending,
 		}
 		if sk.Collation != nil {
 			uri, err := sk.Collation.evaluate(ctx, ec.contextNode)
@@ -133,7 +143,10 @@ func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*sortKey
 			}
 			levels[i].compare = cmpFn
 		} else if sk.Lang != nil || sk.CaseOrder != nil {
-			uri := buildImplicitCollationURI(ctx, ec, sk)
+			uri, err := buildImplicitCollationURI(ctx, ec, sk)
+			if err != nil {
+				return resolvedSort{}, err
+			}
 			if uri != "" {
 				cmpFn, err := xpath3.ResolveCollationCompareFunc(uri)
 				if err == nil {
@@ -146,12 +159,16 @@ func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*sortKey
 }
 
 func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedLevel, error) {
-	order := "ascending"
+	order := sortOrderAscending
 	if sk.Order != nil {
 		var err error
 		order, err = sk.Order.evaluate(ctx, ec.contextNode)
 		if err != nil {
 			return resolvedLevel{}, err
+		}
+		if order != sortOrderAscending && order != sortOrderDescending {
+			return resolvedLevel{}, dynamicError(errCodeXTDE0030,
+				"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
 		}
 	}
 	// XTDE0030: validate lang attribute value
@@ -165,7 +182,7 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedL
 				"invalid language tag %q in xsl:sort", lang)
 		}
 	}
-	rl := resolvedLevel{desc: order == "descending"}
+	rl := resolvedLevel{desc: order == sortOrderDescending}
 	if sk.Collation != nil {
 		uri, err := sk.Collation.evaluate(ctx, ec.contextNode)
 		if err != nil {
@@ -179,7 +196,10 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedL
 		rl.compare = cmpFn
 	} else if sk.Lang != nil || sk.CaseOrder != nil {
 		// Build a UCA collation from lang/case-order when no explicit collation.
-		uri := buildImplicitCollationURI(ctx, ec, sk)
+		uri, err := buildImplicitCollationURI(ctx, ec, sk)
+		if err != nil {
+			return resolvedLevel{}, err
+		}
 		if uri != "" {
 			cmpFn, err := xpath3.ResolveCollationCompareFunc(uri)
 			if err == nil {
@@ -191,35 +211,63 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedL
 }
 
 // buildImplicitCollationURI constructs a UCA collation URI from lang and
-// case-order attributes when no explicit collation is specified.
-func buildImplicitCollationURI(ctx context.Context, ec *execContext, sk *sortKey) string {
+// case-order attributes when no explicit collation is specified. An evaluated
+// case-order that is neither "upper-first" nor "lower-first" raises XTDE0030.
+func buildImplicitCollationURI(ctx context.Context, ec *execContext, sk *sortKey) (string, error) {
 	var params []string
 	if sk.Lang != nil {
 		lang, err := sk.Lang.evaluate(ctx, ec.contextNode)
-		if err == nil && lang != "" {
+		if err != nil {
+			return "", err
+		}
+		if lang != "" {
 			params = append(params, "lang="+lang)
 		}
 	}
 	if sk.CaseOrder != nil {
 		co, err := sk.CaseOrder.evaluate(ctx, ec.contextNode)
-		if err == nil && co != "" {
-			switch co {
-			case "upper-first":
-				params = append(params, "caseFirst=upper")
-			case "lower-first":
-				params = append(params, "caseFirst=lower")
-			}
+		if err != nil {
+			return "", err
+		}
+		switch co {
+		case "upper-first":
+			params = append(params, "caseFirst=upper")
+		case "lower-first":
+			params = append(params, "caseFirst=lower")
+		default:
+			return "", dynamicError(errCodeXTDE0030,
+				"invalid case-order %q in xsl:sort; must be \"upper-first\" or \"lower-first\"", co)
 		}
 	}
 	if len(params) == 0 {
-		return ""
+		return "", nil
 	}
-	return "http://www.w3.org/2013/collation/UCA?" + strings.Join(params, ";")
+	return "http://www.w3.org/2013/collation/UCA?" + strings.Join(params, ";"), nil
 }
 
-// validateSortKeyAttrs validates sort key attribute values (lang, collation, etc.)
-// regardless of whether there are nodes to sort.
+// validateSortKeyAttrs validates sort key attribute values (order, case-order,
+// lang, collation, stable) regardless of whether there are nodes to sort.
 func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) error {
+	if sk.Order != nil {
+		order, err := sk.Order.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		if order != sortOrderAscending && order != sortOrderDescending {
+			return dynamicError(errCodeXTDE0030,
+				"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
+		}
+	}
+	if sk.CaseOrder != nil {
+		co, err := sk.CaseOrder.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		if co != "upper-first" && co != "lower-first" {
+			return dynamicError(errCodeXTDE0030,
+				"invalid case-order %q in xsl:sort; must be \"upper-first\" or \"lower-first\"", co)
+		}
+	}
 	if sk.Lang != nil {
 		lang, err := sk.Lang.evaluate(ctx, ec.contextNode)
 		if err != nil {
@@ -228,6 +276,19 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) err
 		if !isValidLanguageTag(lang) {
 			return dynamicError(errCodeXTDE0030,
 				"invalid language tag %q in xsl:sort", lang)
+		}
+	}
+	if sk.Stable != nil {
+		stable, err := sk.Stable.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		// helium always performs a stable sort; the evaluated value is
+		// validated for conformance but does not change sort behavior
+		// (honoring stable="no" via an unstable sort is out of scope).
+		if _, ok := parseXSDBool(stable); !ok {
+			return dynamicError(errCodeXTDE0030,
+				"invalid stable %q in xsl:sort; must be a valid xs:boolean", stable)
 		}
 	}
 	if sk.Collation != nil {
@@ -1064,6 +1125,15 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *performSortIns
 			return err
 		}
 	}
+	// Validate sort key attributes even when the selected sequence is empty
+	// (e.g. a bad collation must still raise XTDE1035). sortNodes/sortGroups
+	// validate regardless of input; mirror that for the empty-input case here.
+	for _, sk := range inst.Sort {
+		if err := validateSortKeyAttrs(ctx, ec, sk); err != nil {
+			return err
+		}
+	}
+
 	if seq == nil || sequence.Len(seq) == 0 {
 		return nil
 	}
