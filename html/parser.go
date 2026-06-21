@@ -1056,6 +1056,27 @@ func resolveNamedEntity(name string, hasSemicolon bool) (val, remainder string, 
 	return "", "", false
 }
 
+// scanNumericCharRef consumes a numeric character reference body, with the
+// cursor positioned just past the leading '#'. It skips the '#', branches on an
+// 'x'/'X' hex prefix versus a decimal run, parses the digits, and consumes an
+// optional trailing ';'. It returns the resolved codepoint and whether any
+// digits were present. Callers handle post-scan emission/normalization.
+func (p *parser) scanNumericCharRef() (codepoint int, haveDigits bool) {
+	_ = p.cur.Advance(1) // skip '#'
+	if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
+		_ = p.cur.Advance(1) // skip 'x'
+		hexStr := p.parseWhile(isHexDigit)
+		codepoint, haveDigits = parseNumericCharRef(hexStr, 16)
+	} else {
+		numStr := p.parseWhile(isDigit)
+		codepoint, haveDigits = parseNumericCharRef(numStr, 10)
+	}
+	if p.cur.Peek() == ';' {
+		_ = p.cur.Advance(1)
+	}
+	return codepoint, haveDigits
+}
+
 // parseCharRef handles entity references (&name; or &#num; or &#xhex;).
 // Emits the resolved value as a Characters SAX event (entity splitting behavior).
 func (p *parser) parseCharRef() {
@@ -1065,20 +1086,7 @@ func (p *parser) parseCharRef() {
 	_ = p.cur.Advance(1) // skip '&'
 
 	if p.cur.Peek() == '#' {
-		_ = p.cur.Advance(1) // skip '#'
-		var codepoint int
-		var haveDigits bool
-		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
-			_ = p.cur.Advance(1) // skip 'x'
-			hexStr := p.parseWhile(isHexDigit)
-			codepoint, haveDigits = parseNumericCharRef(hexStr, 16)
-		} else {
-			numStr := p.parseWhile(isDigit)
-			codepoint, haveDigits = parseNumericCharRef(numStr, 10)
-		}
-		if p.cur.Peek() == ';' {
-			_ = p.cur.Advance(1)
-		}
+		codepoint, haveDigits := p.scanNumericCharRef()
 		p.emitNumericCharRef(codepoint, haveDigits)
 		return
 	}
@@ -1252,10 +1260,7 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 		// MaxContentSize(2) — the 5-byte run "&ampZ" exceeds 2, so it must fail
 		// rather than emit "&" + "Z".)
 		if !hasSemicolon {
-			sizeCap := limit
-			if sizeCap <= 0 {
-				sizeCap = defaultMaxContentSize
-			}
+			sizeCap := effectiveContentCap(limit)
 			if 1+len(name) > sizeCap {
 				p.fatalErr = fmt.Errorf("legacy character reference run exceeds %d bytes: %w", sizeCap, ErrContentSizeExceeded)
 				return
@@ -1276,10 +1281,7 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	// MaxContentSize: "&" plus the name length (plus any ';'). If that exceeds
 	// the cap, fail with ErrContentSizeExceeded rather than emitting an over-cap
 	// literal.
-	sizeCap := limit
-	if sizeCap <= 0 {
-		sizeCap = defaultMaxContentSize
-	}
+	sizeCap := effectiveContentCap(limit)
 	// Charge the full literal that will be emitted: '&' + name plus the trailing
 	// ';' when one was consumed as part of the unresolved run. Omitting the ';'
 	// would undercount the literal and let an over-cap run slip past.
@@ -1332,10 +1334,7 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 // ctx is checked between bounded chunks so a cancelled parse aborts promptly
 // without consuming the whole run.
 func (p *parser) parseSaturatedCharRefLiteral(ctx context.Context, head string, limit int) {
-	sizeCap := limit
-	if sizeCap <= 0 {
-		sizeCap = defaultMaxContentSize
-	}
+	sizeCap := effectiveContentCap(limit)
 
 	// Does head begin with a resolvable legacy prefix? This is the ONLY way a
 	// saturated run can resolve, and it depends solely on head (a legacy entity
@@ -1501,14 +1500,21 @@ func digitValue(b byte, base int) int {
 // bounded.
 const maxNumericRefLen = 32
 
+// effectiveContentCap resolves a content-size limit to the value actually used
+// for capping: the caller's limit when positive, otherwise defaultMaxContentSize.
+func effectiveContentCap(limit int) int {
+	if limit <= 0 {
+		return defaultMaxContentSize
+	}
+	return limit
+}
+
 // emitLiteralChunked emits s as literal text in Characters events no larger
 // than limit bytes. s contains only ASCII (the '&', '#', 'x', and alphanumeric
 // or digit bytes of a character reference), so splitting on byte boundaries
 // never breaks a multi-byte rune.
 func (p *parser) emitLiteralChunked(s string, limit int) {
-	if limit <= 0 {
-		limit = defaultMaxContentSize
-	}
+	limit = effectiveContentCap(limit)
 	for len(s) > limit {
 		_ = p.emitCharacters([]byte(s[:limit]))
 		s = s[limit:]
@@ -1580,6 +1586,20 @@ const (
 	scriptEscaped       scriptState = 1 // after <!--
 	scriptDoubleEscaped scriptState = 2 // after <script inside <!--
 )
+
+// isValidEndTagTerminator reports whether the byte following a matched end-tag
+// prefix terminates the element. afterTag is the result of PeekAt(len(endTag)).
+// A NUL sentinel here is ambiguous (it stands for both a real U+0000 byte and
+// true EOF), so callers MUST handle true-EOF termination via HasByteAt BEFORE
+// calling this: a real NUL is never a valid terminator, only the explicit
+// '>'/space/'\t'/'\n'/'\r' characters are.
+func isValidEndTagTerminator(afterTag byte) bool {
+	switch afterTag {
+	case '>', ' ', '\t', '\n', '\r':
+		return true
+	}
+	return false
+}
 
 // parseRawContent parses raw text content for script/style/iframe/xmp etc.
 // Content is delivered as a CDataBlock SAX event.
@@ -1674,18 +1694,9 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 		if p.cur.Peek() == '<' && p.cur.PeekAt(1) == '/' {
 			if p.hasPrefixFold(endTag) {
 				afterTag := len(endTag)
-				validEnd := false
-				switch {
-				case !p.cur.HasByteAt(afterTag):
-					// True EOF after the matched tag terminates the element.
-					// A real NUL byte (HasByteAt true, PeekAt 0) does not.
-					validEnd = true
-				default:
-					switch p.cur.PeekAt(afterTag) {
-					case '>', ' ', '\t', '\n', '\r':
-						validEnd = true
-					}
-				}
+				// True EOF after the matched tag terminates the element. A real
+				// NUL byte (HasByteAt true, PeekAt 0) does not.
+				validEnd := !p.cur.HasByteAt(afterTag) || isValidEndTagTerminator(p.cur.PeekAt(afterTag))
 				if validEnd {
 					if state == scriptDoubleEscaped {
 						// In double-escaped, </script> returns to escaped
@@ -1828,11 +1839,7 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 				afterTag := len(endTag)
 				// True EOF after the matched tag terminates the element; a real
 				// NUL byte (HasByteAt true, PeekAt 0) does not.
-				if !p.cur.HasByteAt(afterTag) {
-					return
-				}
-				switch p.cur.PeekAt(afterTag) {
-				case '>', ' ', '\t', '\n', '\r':
+				if !p.cur.HasByteAt(afterTag) || isValidEndTagTerminator(p.cur.PeekAt(afterTag)) {
 					return
 				}
 			}
@@ -1904,17 +1911,9 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 				// tag so the cursor is guaranteed to progress.
 				validEnd := false
 				if p.cur.PeekAt(1) == '/' && p.hasPrefixFold(endTag) {
-					switch {
-					case !p.cur.HasByteAt(len(endTag)):
-						// True EOF after the matched tag; a real NUL does not
-						// count as a valid end-tag terminator.
-						validEnd = true
-					default:
-						switch p.cur.PeekAt(len(endTag)) {
-						case '>', ' ', '\t', '\n', '\r':
-							validEnd = true
-						}
-					}
+					// True EOF after the matched tag; a real NUL does not count
+					// as a valid end-tag terminator.
+					validEnd = !p.cur.HasByteAt(len(endTag)) || isValidEndTagTerminator(p.cur.PeekAt(len(endTag)))
 				}
 				if !validEnd {
 					_ = p.emitCharacters([]byte("<"))
@@ -2127,20 +2126,7 @@ func (p *parser) resolveEntityInAttr() string {
 	_ = p.cur.Advance(1) // skip '&'
 
 	if p.cur.Peek() == '#' {
-		_ = p.cur.Advance(1)
-		var codepoint int
-		var haveDigits bool
-		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
-			_ = p.cur.Advance(1)
-			hexStr := p.parseWhile(isHexDigit)
-			codepoint, haveDigits = parseNumericCharRef(hexStr, 16)
-		} else {
-			numStr := p.parseWhile(isDigit)
-			codepoint, haveDigits = parseNumericCharRef(numStr, 10)
-		}
-		if p.cur.Peek() == ';' {
-			_ = p.cur.Advance(1)
-		}
+		codepoint, haveDigits := p.scanNumericCharRef()
 		// Per HTML5, &#0; / &#x0; in an attribute value maps to U+FFFD rather
 		// than being dropped. Emit nothing only for a bare "&#" with no digits.
 		if haveDigits {
