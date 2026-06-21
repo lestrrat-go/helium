@@ -50,10 +50,10 @@ func Example_xinclude_with_resolver() {
 
 	// Process the XInclude directives with our custom resolver.
 	//
-	// WithResolver supplies the custom Resolver implementation.
+	// Resolver supplies the custom Resolver implementation.
 	// NoXIncludeMarkers removes the xi:include marker nodes
 	//   from the output after processing.
-	// WithNoBaseFixup prevents adding xml:base attributes to included content.
+	// NoBaseFixup prevents adding xml:base attributes to included content.
 	n, err := xinclude.NewProcessor().
 		Resolver(resolver).
 		NoXIncludeMarkers().
