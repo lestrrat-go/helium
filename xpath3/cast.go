@@ -98,17 +98,8 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 		n := iv.BigInt()
 		minVal, maxVal := integerTypeRange(targetType)
-		if minVal != nil && n.Cmp(minVal) < 0 {
-			return AtomicValue{}, &XPathError{
-				Code:    errCodeFORG0001,
-				Message: fmt.Sprintf("value %s out of range for %s", n.String(), targetType),
-			}
-		}
-		if maxVal != nil && n.Cmp(maxVal) > 0 {
-			return AtomicValue{}, &XPathError{
-				Code:    errCodeFORG0001,
-				Message: fmt.Sprintf("value %s out of range for %s", n.String(), targetType),
-			}
+		if err := checkBigIntRange(n, minVal, maxVal, targetType); err != nil {
+			return AtomicValue{}, err
 		}
 		return AtomicValue{TypeName: targetType, Value: n}, nil
 	}
@@ -672,4 +663,23 @@ func castError(value string, targetType string) *XPathError {
 		Code:    errCodeFORG0001,
 		Message: fmt.Sprintf("cannot cast %q to %s", value, targetType),
 	}
+}
+
+// checkBigIntRange reports a FORG0001 "out of range" error when n falls below
+// minVal or above maxVal (either bound may be nil to mean unbounded). The
+// min-then-max check order is significant for which bound a value violates.
+func checkBigIntRange(n, minVal, maxVal *big.Int, typeName string) error {
+	if minVal != nil && n.Cmp(minVal) < 0 {
+		return &XPathError{
+			Code:    errCodeFORG0001,
+			Message: fmt.Sprintf("value %s out of range for %s", n.String(), typeName),
+		}
+	}
+	if maxVal != nil && n.Cmp(maxVal) > 0 {
+		return &XPathError{
+			Code:    errCodeFORG0001,
+			Message: fmt.Sprintf("value %s out of range for %s", n.String(), typeName),
+		}
+	}
+	return nil
 }
