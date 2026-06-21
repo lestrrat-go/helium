@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 
-	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
@@ -96,8 +95,7 @@ func (c *compiler) reportInvalidRestriction(ctx context.Context, td, base *TypeD
 	}
 	baseQualified := "'{" + base.Name.NS + "}" + base.Name.Local + "'"
 	msg := "The content model is not a valid restriction of the content model of the base complex type definition " + baseQualified + "."
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg), helium.ErrorLevelFatal))
-	c.errorCount++
+	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg))
 }
 
 // particleValidRestriction reports whether the restriction particle r is a valid

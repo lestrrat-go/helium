@@ -327,6 +327,15 @@ func (c *compiler) diagSourceOrRecorded(recorded string) string {
 	return c.diagSource()
 }
 
+// schemaError emits a fatal schema-compilation diagnostic and increments the
+// compiler's error count. It collapses the repeated
+// errorHandler.Handle(NewLeveledError(msg, ErrorLevelFatal)) + errorCount++
+// pair used throughout the compiler.
+func (c *compiler) schemaError(ctx context.Context, msg string) {
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(msg, helium.ErrorLevelFatal))
+	c.errorCount++
+}
+
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {
 	root := findDocumentElement(doc)
 	if root == nil {
@@ -394,9 +403,8 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {
 		if !isValidBlock(v) && c.filename != "" {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(), root.LocalName(), elemSchema, attrBlockDefault,
-				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaParserErrorAttr(c.filename, root.Line(), root.LocalName(), elemSchema, attrBlockDefault,
+				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."))
 		} else {
 			c.schema.blockDefault = parseBlockFlags(v)
 		}
@@ -405,9 +413,8 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// Parse finalDefault attribute.
 	if v := getAttr(root, attrFinalDefault); v != "" {
 		if !isValidFinalDefault(v) && c.filename != "" {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(), root.LocalName(), elemSchema, attrFinalDefault,
-				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaParserErrorAttr(c.filename, root.Line(), root.LocalName(), elemSchema, attrFinalDefault,
+				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'."))
 		} else {
 			c.schema.finalDefault = parseFinalFlags(v)
 		}
@@ -544,20 +551,16 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 		}
 		if idc.Refer == "" {
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' has no 'refer' attribute naming a key or unique.", idc.Name)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(
-				schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
-				helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx,
+				schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 			continue
 		}
 		if _, ok := keyNames[idc.ReferQName]; ok {
 			continue
 		}
 		msg := fmt.Sprintf("The keyref identity-constraint '%s' references the unknown key or unique '%s'.", idc.Name, idc.Refer)
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(
-			schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
-			helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx,
+			schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 	}
 }
 

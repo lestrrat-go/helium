@@ -3,8 +3,6 @@ package xsd
 import (
 	"context"
 	"slices"
-
-	helium "github.com/lestrrat-go/helium"
 )
 
 const componentLocalComplexType = "local complex type"
@@ -21,9 +19,8 @@ func (c *compiler) checkUPA(ctx context.Context, td *TypeDef, src typeDefSource)
 		if !src.isLocal {
 			component = td.Name.Local
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
-			"The content model is not determinist."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component,
+			"The content model is not determinist."))
 	}
 }
 

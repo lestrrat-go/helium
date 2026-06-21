@@ -244,8 +244,7 @@ func (c *compiler) checkListUnionFacetApplicability(ctx context.Context, td *Typ
 			continue
 		}
 		msg := fmt.Sprintf("The facet '%s' is not allowed.", fp.name)
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component, msg))
 	}
 
 	return false
@@ -278,8 +277,7 @@ func (c *compiler) checkAtomicFacetApplicability(ctx context.Context, td *TypeDe
 
 	report := func(facet string) {
 		msg := fmt.Sprintf("The facet '%s' is not allowed on types derived from the type %s.", facet, primitive)
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component, msg))
 	}
 
 	rangeRejected := false
@@ -375,8 +373,7 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 		}
 		msg := fmt.Sprintf("The value '%s' of the facet '%s' is not a valid value of the base type '%s'.",
 			*rf.value, rf.name, typeDisplayName(base))
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component, msg))
 	}
 }
 
@@ -437,8 +434,7 @@ func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, f
 		}
 		msg := fmt.Sprintf("The value '%s' of the facet 'enumeration' is not a valid value of the base type '%s'.",
 			ev, typeDisplayName(base))
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component, msg), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component, msg))
 	}
 }
 
@@ -497,9 +493,8 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 		// direct atomic xs:NOTATION restriction base. A NOTATION carrier is allowed
 		// only when it is itself enumeration-derived.
 		if notationUsedWithoutEnumeration(td) {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, e.src.line, "simpleType", component,
-				"It is an error if the base type is the built-in 'NOTATION' and there is no 'enumeration' facet."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component,
+				"It is an error if the base type is the built-in 'NOTATION' and there is no 'enumeration' facet."))
 		}
 
 		// Validate each enumeration literal's QName/NOTATION prefix binding,
@@ -516,8 +511,7 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 			}
 			if c.enumLiteralHasUnboundQName(ctx, ev, enumNS, td, variety) {
 				msg := fmt.Sprintf("The value '%s' is not a valid value of the atomic type '%s'.", ev, typeDisplayName(td))
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, e.src.line, "simpleType", component, msg), helium.ErrorLevelFatal))
-				c.errorCount++
+				c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component, msg))
 			}
 		}
 	}
@@ -728,9 +722,8 @@ func (c *compiler) checkNotationOnDeclarations(ctx context.Context) {
 		if hasEffectiveEnumeration(td) {
 			continue
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, e.src.line, e.src.elemName, elemElement,
-			"It is an error if the type definition is the built-in 'NOTATION' and there is no 'enumeration' facet."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaParserError(c.filename, e.src.line, e.src.elemName, elemElement,
+			"It is an error if the type definition is the built-in 'NOTATION' and there is no 'enumeration' facet."))
 	}
 
 	// Attributes: every attribute use is tracked in attrUseSources.
@@ -763,9 +756,8 @@ func (c *compiler) checkNotationOnDeclarations(ctx context.Context) {
 		if hasEffectiveEnumeration(td) {
 			continue
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, a.src.line, a.src.local, elemAttribute,
-			"It is an error if the type definition is the built-in 'NOTATION' and there is no 'enumeration' facet."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaParserError(c.filename, a.src.line, a.src.local, elemAttribute,
+			"It is an error if the type definition is the built-in 'NOTATION' and there is no 'enumeration' facet."))
 	}
 }
 
@@ -773,19 +765,16 @@ func (c *compiler) checkNotationOnDeclarations(ctx context.Context) {
 // both specified on the same type definition.
 func (c *compiler) checkFacetMutualExclusion(ctx context.Context, fs *FacetSet, line int, component string) {
 	if fs.Length != nil && (fs.MinLength != nil || fs.MaxLength != nil) {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			"It is an error for both 'length' and either of 'minLength' or 'maxLength' to be specified on the same type definition."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			"It is an error for both 'length' and either of 'minLength' or 'maxLength' to be specified on the same type definition."))
 	}
 	if fs.MaxInclusive != nil && fs.MaxExclusive != nil {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			"It is an error for both 'maxInclusive' and 'maxExclusive' to be specified."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			"It is an error for both 'maxInclusive' and 'maxExclusive' to be specified."))
 	}
 	if fs.MinInclusive != nil && fs.MinExclusive != nil {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			"It is an error for both 'minInclusive' and 'minExclusive' to be specified."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			"It is an error for both 'minInclusive' and 'minExclusive' to be specified."))
 	}
 }
 
@@ -811,9 +800,8 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	// rejected as "not allowed", so this check must not run there.
 	lengthFacetsApplicable := variety == TypeVarietyList || (variety == TypeVarietyAtomic && lengthApplicable)
 	if lengthFacetsApplicable && fs.MinLength != nil && fs.MaxLength != nil && *fs.MinLength > *fs.MaxLength {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			"It is an error for the value of 'minLength' to be greater than the value of 'maxLength'."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			"It is an error for the value of 'minLength' to be greater than the value of 'maxLength'."))
 	}
 
 	// Digit consistency (fractionDigits > totalDigits). The digit facets are
@@ -823,9 +811,8 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 	// totalDigits and fractionDigits must report ONLY the two applicability errors).
 	digitFacetsApplicable := variety == TypeVarietyAtomic && decimalFamily
 	if digitFacetsApplicable && fs.FractionDigits != nil && fs.TotalDigits != nil && *fs.FractionDigits > *fs.TotalDigits {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			"It is an error for the value of 'fractionDigits' to be greater than the value of 'totalDigits'."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			"It is an error for the value of 'fractionDigits' to be greater than the value of 'totalDigits'."))
 	}
 
 	// Range-bound ORDERING consistency (min/max{Inclusive,Exclusive}) is only
@@ -876,30 +863,26 @@ func (c *compiler) checkFacetSameTypeConsistency(ctx context.Context, td *TypeDe
 
 	if fs.MinInclusive != nil && fs.MaxInclusive != nil {
 		if v, ok := cmp(*fs.MinInclusive, *fs.MaxInclusive); ok && v > 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'."))
 		}
 	}
 	if fs.MinExclusive != nil && fs.MaxExclusive != nil {
 		if v, ok := cmp(*fs.MinExclusive, *fs.MaxExclusive); ok && v >= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'."))
 		}
 	}
 	if fs.MinExclusive != nil && fs.MaxInclusive != nil {
 		if v, ok := cmp(*fs.MinExclusive, *fs.MaxInclusive); ok && v >= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxInclusive'."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxInclusive'."))
 		}
 	}
 	if fs.MinInclusive != nil && fs.MaxExclusive != nil {
 		if v, ok := cmp(*fs.MinInclusive, *fs.MaxExclusive); ok && v >= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				"It is an error for the value of 'minInclusive' to be greater than or equal to the value of 'maxExclusive'."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				"It is an error for the value of 'minInclusive' to be greater than or equal to the value of 'maxExclusive'."))
 		}
 	}
 }
@@ -914,31 +897,26 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 
 	// Length facets.
 	if fs.MinLength != nil && base.MinLength != nil && *fs.MinLength < *base.MinLength {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			fmt.Sprintf("The 'minLength' value '%d' is less than the 'minLength' value of the base type '%d'.", *fs.MinLength, *base.MinLength)), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'minLength' value '%d' is less than the 'minLength' value of the base type '%d'.", *fs.MinLength, *base.MinLength)))
 	}
 	if fs.MaxLength != nil && base.MaxLength != nil && *fs.MaxLength > *base.MaxLength {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			fmt.Sprintf("The 'maxLength' value '%d' is greater than the 'maxLength' value of the base type '%d'.", *fs.MaxLength, *base.MaxLength)), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'maxLength' value '%d' is greater than the 'maxLength' value of the base type '%d'.", *fs.MaxLength, *base.MaxLength)))
 	}
 	if fs.Length != nil && base.Length != nil && *fs.Length != *base.Length {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			fmt.Sprintf("The 'length' value '%d' does not match the 'length' value of the base type '%d'.", *fs.Length, *base.Length)), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'length' value '%d' does not match the 'length' value of the base type '%d'.", *fs.Length, *base.Length)))
 	}
 
 	// Digit facets.
 	if fs.TotalDigits != nil && base.TotalDigits != nil && *fs.TotalDigits > *base.TotalDigits {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			fmt.Sprintf("The 'totalDigits' value '%d' is greater than the 'totalDigits' value of the base type '%d'.", *fs.TotalDigits, *base.TotalDigits)), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'totalDigits' value '%d' is greater than the 'totalDigits' value of the base type '%d'.", *fs.TotalDigits, *base.TotalDigits)))
 	}
 	if fs.FractionDigits != nil && base.FractionDigits != nil && *fs.FractionDigits > *base.FractionDigits {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-			fmt.Sprintf("The 'fractionDigits' value '%d' is greater than the 'fractionDigits' value of the base type '%d'.", *fs.FractionDigits, *base.FractionDigits)), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+			fmt.Sprintf("The 'fractionDigits' value '%d' is greater than the 'fractionDigits' value of the base type '%d'.", *fs.FractionDigits, *base.FractionDigits)))
 	}
 
 	// Inclusive/exclusive boundary facets vs base. These compare a derived bound
@@ -978,114 +956,98 @@ func (c *compiler) checkFacetBaseRestriction(ctx context.Context, td *TypeDef, f
 
 	if fs.MaxInclusive != nil && base.MaxInclusive != nil {
 		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MaxInclusive); ok && v > 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'maxInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxInclusive)))
 		}
 	}
 	if fs.MaxInclusive != nil && base.MaxExclusive != nil {
 		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MaxExclusive); ok && v >= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'maxInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxExclusive)))
 		}
 	}
 	if fs.MaxInclusive != nil && base.MinInclusive != nil {
 		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MinInclusive); ok && v < 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'maxInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinInclusive)))
 		}
 	}
 	if fs.MaxInclusive != nil && base.MinExclusive != nil {
 		if v, ok := rangeCmp(*fs.MaxInclusive, *base.MinExclusive); ok && v <= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'maxInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinExclusive)))
 		}
 	}
 	if fs.MaxExclusive != nil && base.MaxExclusive != nil {
 		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MaxExclusive); ok && v > 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxExclusive)))
 		}
 	}
 	if fs.MaxExclusive != nil && base.MaxInclusive != nil {
 		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MaxInclusive); ok && v > 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxInclusive)))
 		}
 	}
 	if fs.MaxExclusive != nil && base.MinInclusive != nil {
 		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MinInclusive); ok && v <= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinInclusive)))
 		}
 	}
 	if fs.MaxExclusive != nil && base.MinExclusive != nil {
 		if v, ok := rangeCmp(*fs.MaxExclusive, *base.MinExclusive); ok && v <= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinExclusive)))
 		}
 	}
 	if fs.MinInclusive != nil && base.MinInclusive != nil {
 		if v, ok := rangeCmp(*fs.MinInclusive, *base.MinInclusive); ok && v < 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'minInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinInclusive)))
 		}
 	}
 	if fs.MinInclusive != nil && base.MinExclusive != nil {
 		if v, ok := rangeCmp(*fs.MinInclusive, *base.MinExclusive); ok && v <= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'minInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinExclusive)))
 		}
 	}
 	if fs.MinInclusive != nil && base.MaxInclusive != nil {
 		if v, ok := rangeCmp(*fs.MinInclusive, *base.MaxInclusive); ok && v > 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'minInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxInclusive)))
 		}
 	}
 	if fs.MinInclusive != nil && base.MaxExclusive != nil {
 		if v, ok := rangeCmp(*fs.MinInclusive, *base.MaxExclusive); ok && v >= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'minInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxExclusive)))
 		}
 	}
 	if fs.MinExclusive != nil && base.MinExclusive != nil {
 		if v, ok := rangeCmp(*fs.MinExclusive, *base.MinExclusive); ok && v < 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinExclusive)))
 		}
 	}
 	if fs.MinExclusive != nil && base.MinInclusive != nil {
 		if v, ok := rangeCmp(*fs.MinExclusive, *base.MinInclusive); ok && v < 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinInclusive)))
 		}
 	}
 	if fs.MinExclusive != nil && base.MaxInclusive != nil {
 		if v, ok := rangeCmp(*fs.MinExclusive, *base.MaxInclusive); ok && v > 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'minExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxInclusive)))
 		}
 	}
 	if fs.MinExclusive != nil && base.MaxExclusive != nil {
 		if v, ok := rangeCmp(*fs.MinExclusive, *base.MaxExclusive); ok && v >= 0 {
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
-				fmt.Sprintf("The 'minExclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(c.filename, line, "simpleType", component,
+				fmt.Sprintf("The 'minExclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxExclusive)))
 		}
 	}
 }
