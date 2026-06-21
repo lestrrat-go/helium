@@ -434,24 +434,36 @@ func (p *processor) includeXML(ctx context.Context, inc *helium.Element, uri str
 	// Recursively process included content for nested xi:include.
 	// Temporarily set the base URI to the included document's URI
 	// so that relative hrefs in the included content resolve correctly.
+	return p.recurseIncluded(ctx, nodes, uri, uri)
+}
+
+// recurseIncluded processes included nodes for nested xi:include while a
+// temporary expansion state is in effect: it records key in p.expanding for
+// circular detection, increments depth, and (when base != "") sets the base
+// URI so relative hrefs in the included content resolve correctly. A base of
+// "" leaves p.baseURI unchanged. All three pieces of state are restored on
+// return via defer; the fields are independent so the reverse-order restore
+// is observably equivalent to restoring them in any order.
+func (p *processor) recurseIncluded(ctx context.Context, nodes []helium.Node, key, base string) error {
 	savedBase := p.baseURI
-	p.baseURI = uri
-	p.expanding[uri] = true
+	if base != "" {
+		p.baseURI = base
+	}
+	p.expanding[key] = true
 	p.depth++
+	defer func() {
+		p.depth--
+		delete(p.expanding, key)
+		p.baseURI = savedBase
+	}()
+
 	for _, n := range nodes {
 		if n.Type() == helium.ElementNode {
 			if err := p.processNode(ctx, n); err != nil {
-				p.depth--
-				delete(p.expanding, uri)
-				p.baseURI = savedBase
 				return err
 			}
 		}
 	}
-	p.depth--
-	delete(p.expanding, uri)
-	p.baseURI = savedBase
-
 	return nil
 }
 
@@ -537,28 +549,10 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 		circularKey = uri + "#" + xptrExpr
 	}
 
-	// Recursively process included content for nested xi:include
-	savedBase := p.baseURI
-	if uri != "" {
-		p.baseURI = uri
-	}
-	p.expanding[circularKey] = true
-	p.depth++
-	for _, n := range copies {
-		if n.Type() == helium.ElementNode {
-			if err := p.processNode(ctx, n); err != nil {
-				p.depth--
-				delete(p.expanding, circularKey)
-				p.baseURI = savedBase
-				return err
-			}
-		}
-	}
-	p.depth--
-	delete(p.expanding, circularKey)
-	p.baseURI = savedBase
-
-	return nil
+	// Recursively process included content for nested xi:include.
+	// A same-document reference (uri == "") must leave the base URI
+	// unchanged, so pass an empty base in that case.
+	return p.recurseIncluded(ctx, copies, circularKey, uri)
 }
 
 // mergeEntities merges general entities from the included document's DTD
@@ -626,6 +620,26 @@ func (p *processor) mergeEntities(ctx context.Context, src, dst *helium.Document
 	merge(srcExt)
 }
 
+// fetch resolves uri (against base) through the configured Resolver and reads
+// its bytes, capped at the include-size limit. Errors are wrapped with the URI
+// for context ("failed to resolve %q" / "error reading %q"); the caller is
+// responsible for negative-caching the returned (already wrapped) error.
+// readCapped fully drains the reader before returning, so closing it on return
+// is safe.
+func (p *processor) fetch(uri, base string) ([]byte, error) {
+	rc, err := p.resolve(uri, base)
+	if err != nil {
+		return nil, fmt.Errorf("xi:include: failed to resolve %q: %w", uri, err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	data, err := p.readCapped(rc)
+	if err != nil {
+		return nil, fmt.Errorf("xi:include: error reading %q: %w", uri, err)
+	}
+	return data, nil
+}
+
 func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, substituteEntities bool) (*helium.Document, error) {
 	cacheKey := uri
 	if substituteEntities {
@@ -641,19 +655,10 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, sub
 		return p.parseXMLData(ctx, entry.data, uri, substituteEntities)
 	}
 
-	rc, err := p.resolve(uri, base)
+	data, err := p.fetch(uri, base)
 	if err != nil {
-		wrapErr := fmt.Errorf("xi:include: failed to resolve %q: %w", uri, err)
-		p.docCache[cacheKey] = docCacheEntry{err: wrapErr}
-		return nil, wrapErr
-	}
-	defer func() { _ = rc.Close() }()
-
-	data, err := p.readCapped(rc)
-	if err != nil {
-		wrapErr := fmt.Errorf("xi:include: error reading %q: %w", uri, err)
-		p.docCache[cacheKey] = docCacheEntry{err: wrapErr}
-		return nil, wrapErr
+		p.docCache[cacheKey] = docCacheEntry{err: err}
+		return nil, err
 	}
 
 	doc, err := p.parseXMLData(ctx, data, uri, substituteEntities)
@@ -787,19 +792,10 @@ func (p *processor) loadText(uri string, base string) ([]byte, error) {
 		return entry.data, entry.err
 	}
 
-	rc, err := p.resolve(uri, base)
+	data, err := p.fetch(uri, base)
 	if err != nil {
-		wrapErr := fmt.Errorf("xi:include: failed to resolve %q: %w", uri, err)
-		p.txtCache[uri] = txtCacheEntry{err: wrapErr}
-		return nil, wrapErr
-	}
-	defer func() { _ = rc.Close() }()
-
-	data, err := p.readCapped(rc)
-	if err != nil {
-		wrapErr := fmt.Errorf("xi:include: error reading %q: %w", uri, err)
-		p.txtCache[uri] = txtCacheEntry{err: wrapErr}
-		return nil, wrapErr
+		p.txtCache[uri] = txtCacheEntry{err: err}
+		return nil, err
 	}
 
 	p.txtCache[uri] = txtCacheEntry{data: data}
@@ -1039,25 +1035,39 @@ func resolveURI(href, base string) (string, error) {
 	return baseURL.ResolveReference(hrefURL).String(), nil
 }
 
+// existingXMLBase returns the value of elem's xml:base attribute and whether
+// it is present.
+func existingXMLBase(elem *helium.Element) (string, bool) {
+	for _, a := range elem.Attributes() {
+		if a.Name() == lexicon.QNameXMLBase {
+			return a.Value(), true
+		}
+	}
+	return "", false
+}
+
+// setXMLBase sets elem's xml:base attribute to base, but only when base is
+// non-empty; an empty base is a no-op so callers can pass the result of
+// relativeURI directly.
+func setXMLBase(elem *helium.Element, base string) {
+	if base == "" {
+		return
+	}
+	xmlBaseNS := helium.NewNamespace(lexicon.PrefixXML, lexicon.NamespaceXML)
+	_ = elem.SetLiteralAttributeNS("base", base, xmlBaseNS)
+}
+
 // computeAndSetBaseURI computes the relative URI of the included resource
 // against the target document's base, and sets xml:base only when needed.
 // Used for whole-document XML inclusion (includeXML).
 func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) {
 	// If the included element already has xml:base set, leave it alone
-	for _, a := range elem.Attributes() {
-		if a.Name() == lexicon.QNameXMLBase {
-			return
-		}
-	}
-
-	// Compute relative URI if possible
-	base := relativeURI(includedURI, targetBase)
-	if base == "" {
+	if _, ok := existingXMLBase(elem); ok {
 		return
 	}
 
-	xmlBaseNS := helium.NewNamespace(lexicon.PrefixXML, lexicon.NamespaceXML)
-	_ = elem.SetLiteralAttributeNS("base", base, xmlBaseNS)
+	// Compute relative URI if possible
+	setXMLBase(elem, relativeURI(includedURI, targetBase))
 }
 
 // computeBaseForIncludedNode sets xml:base on a node that was included via
@@ -1066,16 +1076,7 @@ func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) 
 // the effective base at the xi:include point in the target document.
 func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEffectiveBase string) {
 	// Check if this element has an existing xml:base attribute
-	var existingBase string
-	for _, a := range elem.Attributes() {
-		if a.Name() == lexicon.QNameXMLBase {
-			existingBase = a.Value()
-			break
-		}
-	}
-
-	xmlBaseNS := helium.NewNamespace(lexicon.PrefixXML, lexicon.NamespaceXML)
-	if existingBase != "" {
+	if existingBase, ok := existingXMLBase(elem); ok && existingBase != "" {
 		// Element has xml:base in the source. If absolute, keep it.
 		if u, err := url.Parse(existingBase); err == nil && u.IsAbs() {
 			return
@@ -1083,19 +1084,12 @@ func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEf
 		// The element's xml:base was relative to the source context.
 		// srcEffectiveBase already incorporates this element's xml:base,
 		// so relativize it against the target's effective base.
-		newBase := relativeURI(srcEffectiveBase, targetEffectiveBase)
-		if newBase == "" {
-			return
-		}
-		_ = elem.SetLiteralAttributeNS("base", newBase, xmlBaseNS)
-	} else {
-		// No xml:base — set one relative to the target's effective base.
-		newBase := relativeURI(srcEffectiveBase, targetEffectiveBase)
-		if newBase == "" {
-			return
-		}
-		_ = elem.SetLiteralAttributeNS("base", newBase, xmlBaseNS)
+		setXMLBase(elem, relativeURI(srcEffectiveBase, targetEffectiveBase))
+		return
 	}
+
+	// No xml:base — set one relative to the target's effective base.
+	setXMLBase(elem, relativeURI(srcEffectiveBase, targetEffectiveBase))
 }
 
 // relativeURI attempts to compute a relative URI of target against base.
