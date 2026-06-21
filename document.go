@@ -326,7 +326,11 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START document.CreateAttribute '%s' (%s)", name, value)
 		defer func() {
-			g.IRelease("END document.CreateAttribute (attr.Value = '%s')", attr.Value())
+			val := "<nil>"
+			if attr != nil {
+				val = attr.Value()
+			}
+			g.IRelease("END document.CreateAttribute (attr.Value = '%s')", val)
 		}()
 	}
 	if strings.ContainsRune(name, ':') {
