@@ -1,8 +1,6 @@
 package xslt3
 
 import (
-	"slices"
-
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -530,18 +528,5 @@ func exprPathBaseIsGrounding(expr xpath3.Expr) bool {
 // bodyHasDownwardNavigation returns true if any instruction in the body
 // has an expression that navigates downward (child/descendant axis).
 func bodyHasDownwardNavigation(body []instruction) bool {
-	for _, inst := range body {
-		for _, expr := range getInstructionExprs(inst) {
-			if expr == nil {
-				continue
-			}
-			if xpathstream.ExprHasDownwardStep(expr) {
-				return true
-			}
-		}
-		if slices.ContainsFunc(getChildInstructions(inst), bodyHasDownwardNavigation) {
-			return true
-		}
-	}
-	return false
+	return bodyMatchesExpr(body, xpathstream.ExprHasDownwardStep)
 }
