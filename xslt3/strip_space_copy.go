@@ -39,7 +39,13 @@ import (
 // exactly the stylesheet's own — matching what stripWhitespaceFromDoc would have
 // applied later.
 func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap bool) (*helium.Document, map[helium.Node]helium.Node, error) {
-	dst := helium.NewDocument(src.Version(), src.Encoding(), src.Standalone())
+	// Use RawEncoding(), not Encoding(): the latter synthesizes "utf8" when the
+	// source XML declaration omitted an encoding, which would make the copy
+	// serialize a spurious encoding="utf8" the source never had. The copy must
+	// reproduce the source's encoding state EXACTLY (empty stays empty), matching
+	// what helium.CopyDoc does (it reads the raw encoding field directly).
+	// Version() and Standalone() already return the raw, unsynthesized values.
+	dst := helium.NewDocument(src.Version(), src.RawEncoding(), src.Standalone())
 
 	// Carry over the remaining document-level state that the copy stands in for
 	// the source on. Properties record how the source was produced (e.g.

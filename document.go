@@ -165,6 +165,17 @@ func (d *Document) SetEncoding(enc string) {
 	d.encoding = enc
 }
 
+// RawEncoding returns the document's encoding exactly as recorded, WITHOUT the
+// "utf8" default that Encoding() synthesizes for documents whose XML
+// declaration omitted an encoding. An empty result means the source had no
+// encoding declaration. This is the value the XML serializer consults (it emits
+// encoding="..." only when the raw encoding is non-empty), so a faithful copy
+// of a document — e.g. an xsl:strip-space copy — must propagate this rather
+// than Encoding(), which would synthesize a spurious encoding="utf8".
+func (d *Document) RawEncoding() string {
+	return d.encoding
+}
+
 func (d *Document) Standalone() DocumentStandaloneType {
 	return d.standalone
 }
