@@ -141,6 +141,7 @@ These affect multiple packages (especially C14N test skips):
 | IgnoreEncoding(bool) | XML_PARSE_IGNORE_ENC | ✅ | Ignore encoding hint |
 | BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks |
 | SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |
+| ReuseDict(bool) | XML_PARSE_NODICT | ✅ | Inverted: default true reuses the context dictionary for interned strings; `ReuseDict(false)` sets `XML_PARSE_NODICT` to use a fresh dictionary |
 | LenientXMLDecl(bool) | *(helium extension)* | ✅ | Relaxed XML decl attribute order |
 | MaxExternalDTDBytes(int) | *(helium extension)* | ✅ | Byte cap for external DTD subset reads; ≤0 → `MaxExternalDTDSize` (10 MiB). Enforced against actual bytes read; over-cap → `ErrExternalDTDTooLarge` |
 | CompactTextNodes(bool) | XML_PARSE_COMPACT | no-op | Go memory model |
