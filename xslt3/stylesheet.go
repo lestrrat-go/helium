@@ -141,6 +141,7 @@ type Stylesheet struct {
 	compilerImportSchemas []*xsd.Schema               // pre-compiled schemas from compiler (for fn:transform nested compiles)
 	maxResourceBytes      int64                       // per-resource read cap from compiler; 0 = MaxResourceBytes default, <0 = unbounded
 	allowExternalEntities bool                        // compile-time opt-in: legacy permissive external-entity parsing (for fn:transform nested compiles)
+	unionSplitCounter     int                         // monotonic id source for union-pattern split groups (template.splitOriginID)
 }
 
 // globalContextItemDef represents a compiled xsl:global-context-item declaration.
@@ -264,6 +265,12 @@ type template struct {
 	Version          string      // effective version (from template or stylesheet)
 	OwnerPackage     *Stylesheet // package that defined this template (nil = main stylesheet)
 	OriginalTemplate *template   // original template being overridden (for xsl:original calls)
+	// splitOriginID identifies the originating template rule when a union match
+	// pattern (P1 | P2) is split into separate template entries. All split
+	// branches of one rule share the same non-zero id so the on-multiple-match
+	// conflict checks can treat them as a single rule (spec bug 30402). 0 means
+	// the template was not produced by a union split.
+	splitOriginID int
 }
 
 // variable is a compiled xsl:variable.
