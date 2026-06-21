@@ -628,6 +628,11 @@ func CompareFloatFacetBound(a, b, builtinLocal string) (int, bool) {
 	return compareFloat(a, b, builtinLocal == lexicon.TypeFloat)
 }
 
+// xsdDateTime is a deliberately separate date/time model from xpath3's
+// time.Time-based date path (xpath3/cast_datetime.go). time.Time cannot hold the
+// arbitrary expanded years or exact fractional seconds that XSD 1.1 date/time
+// value-space comparison requires (see the year and sec fields below), so the
+// two parsers are not consolidated despite accepting the same lexical forms.
 type xsdDateTime struct {
 	// year is held with arbitrary precision so that valid expanded years
 	// (e.g. 999999999999999999999999) compare correctly rather than

@@ -393,6 +393,12 @@ func countFractionDigits(value string) int {
 
 // facetLength returns the effective length of a value for facet checking.
 // The interpretation depends on the builtin base type.
+//
+// Deliberately NOT shared with relaxng's same-named facetLength
+// (relaxng/validate.go): this approximates hexBinary length as len/2 and
+// base64Binary as len*3/4, whereas relaxng strict-decodes the binary value (and
+// also handles list types). They are kept separate because adopting the strict
+// variant here would change xsd's golden-validated facet error output.
 func facetLength(value, builtinLocal string) int {
 	switch builtinLocal {
 	case "hexBinary":
