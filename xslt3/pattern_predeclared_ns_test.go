@@ -585,6 +585,87 @@ func TestPatternAttributeKindTestEQName(t *testing.T) {
 		"attribute(Q{http://x}a) must NOT match a no-namespace attribute a")
 }
 
+// TestPatternAttributeKindTestNotGovernedByDefaultNS verifies that an
+// unprefixed attribute() kind-test name in a match pattern is NOT governed by
+// xpath-default-namespace. Attributes never take the default element namespace:
+// a bare attribute(foo) under xpath-default-namespace="urn:x" must resolve foo
+// to NO namespace and therefore match a no-namespace attribute foo, not {urn:x}foo.
+// A prefixed attribute(p:foo) resolves via the prefix p as usual.
+func TestPatternAttributeKindTestNotGovernedByDefaultNS(t *testing.T) {
+	t.Parallel()
+
+	t.Run("bare-name-resolves-no-namespace", func(t *testing.T) {
+		t.Parallel()
+
+		// xpath-default-namespace="urn:x" is active. attribute(foo) must match a
+		// no-namespace attribute foo (NOT {urn:x}foo). The select uses a
+		// namespace-agnostic descendant-or-self wildcard so xpath-default-namespace
+		// does not pre-filter the element steps; the attribute() kind-test in the
+		// pattern is what must resolve foo to no-namespace.
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xpath-default-namespace="urn:x">
+  <xsl:template match="/"><out xmlns=""><xsl:apply-templates select="//*/@*"/></out></xsl:template>
+  <xsl:template match="attribute(foo)"><xsl:text>[matched]</xsl:text></xsl:template>
+  <xsl:template match="@*"/>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+		require.NoError(t, err)
+
+		// No-namespace attribute foo must match.
+		noNS, err := helium.NewParser().Parse(t.Context(), []byte(`<root><e foo="v"/></root>`))
+		require.NoError(t, err)
+		outNoNS, err := ss.Transform(noNS).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, outNoNS, "[matched]",
+			"attribute(foo) under xpath-default-namespace must resolve foo to NO namespace and match a no-namespace attribute")
+
+		// {urn:x}foo must NOT match: the bare name resolves to no-namespace, not urn:x.
+		withNS, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<root><e xmlns:p="urn:x" p:foo="v"/></root>`))
+		require.NoError(t, err)
+		outNS, err := ss.Transform(withNS).Serialize(t.Context())
+		require.NoError(t, err)
+		require.NotContains(t, outNS, "[matched]",
+			"attribute(foo) must NOT match {urn:x}foo: xpath-default-namespace does not govern attribute names")
+	})
+
+	t.Run("prefixed-name-resolves-prefix", func(t *testing.T) {
+		t.Parallel()
+
+		// attribute(p:foo) where p binds urn:x must match {urn:x}foo, regardless of
+		// xpath-default-namespace.
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:p="urn:x" xpath-default-namespace="urn:y">
+  <xsl:template match="/"><out><xsl:apply-templates select="//*/@*"/></out></xsl:template>
+  <xsl:template match="attribute(p:foo)"><xsl:text>[matched]</xsl:text></xsl:template>
+  <xsl:template match="@*"/>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+		require.NoError(t, err)
+
+		withNS, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<root><e xmlns:q="urn:x" q:foo="v"/></root>`))
+		require.NoError(t, err)
+		outNS, err := ss.Transform(withNS).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, outNS, "[matched]",
+			"attribute(p:foo) must resolve prefix p and match {urn:x}foo")
+
+		noNS, err := helium.NewParser().Parse(t.Context(), []byte(`<root><e foo="v"/></root>`))
+		require.NoError(t, err)
+		outNoNS, err := ss.Transform(noNS).Serialize(t.Context())
+		require.NoError(t, err)
+		require.NotContains(t, outNoNS, "[matched]",
+			"attribute(p:foo) must NOT match a no-namespace attribute foo")
+	})
+}
+
 // TestPatternSchemaElementTestUsesPatternSnapshot verifies that
 // schema-element()/schema-attribute() resolve the test name through the
 // pattern's lexical namespace snapshot, not the stylesheet-global map. A locally
