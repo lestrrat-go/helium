@@ -7,6 +7,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -183,7 +184,7 @@ func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Seque
 	}
 
 	// XTDE1390: validate that the argument is a valid QName or EQName.
-	if !strings.HasPrefix(name, "Q{") && !isValidQName(name) {
+	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
 		return nil, dynamicError(errCodeXTDE1390,
 			"system-property argument %q is not a valid QName", name)
 	}

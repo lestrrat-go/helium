@@ -9,6 +9,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -23,7 +24,7 @@ func (ec *execContext) fnElementAvailable(_ context.Context, args []xpath3.Seque
 	name, _ := xpath3.AtomicToString(av)
 
 	// XTDE1440: element name must be a valid QName or EQName
-	if !strings.HasPrefix(name, "Q{") && !isValidQName(name) {
+	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
 		return nil, dynamicError(errCodeXTDE1440,
 			"element-available: %q is not a valid EQName", name)
 	}
@@ -75,7 +76,7 @@ func (ec *execContext) fnFunctionAvailable(_ context.Context, args []xpath3.Sequ
 	name, _ := xpath3.AtomicToString(av)
 
 	// XTDE1400: function name must be a valid QName or EQName
-	if !strings.HasPrefix(name, "Q{") && !isValidQName(name) {
+	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
 		return nil, dynamicError(errCodeXTDE1400,
 			"function-available: %q is not a valid QName", name)
 	}
@@ -174,7 +175,7 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 	name, _ := xpath3.AtomicToString(av)
 
 	// XTDE1428: type name must be a valid QName or EQName
-	if !strings.HasPrefix(name, "Q{") && !isValidQName(name) {
+	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
 		return nil, dynamicError(errCodeXTDE1428,
 			"type-available: %q is not a valid EQName", name)
 	}
@@ -315,7 +316,7 @@ func (ec *execContext) accumulatorLookup(
 		return xpath3.EmptySequence(), nil //nolint:nilerr // accumulator lookup returns empty on string conversion failure
 	}
 	// XTDE3340: validate the name is a valid EQName
-	if !isValidQName(name) && !isValidEQName(name) {
+	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
 		return nil, dynamicError(errCodeXTDE3340, "%q is not a valid EQName for %s", name, fnName)
 	}
 	name = resolveQName(name, ec.stylesheet.namespaces)

@@ -524,10 +524,6 @@ func resolveQName(qname string, nsBindings map[string]string) string {
 	return qname
 }
 
-// isValidQName checks whether s is a valid xs:QName (NCName or NCName:NCName).
-// A minimal check: must be non-empty, no whitespace, no leading/trailing dots,
-// and if there is a colon there must be valid NCName parts on both sides.
-
 // isValidEQName checks whether s is a valid EQName (Q{uri}local).
 func isValidEQName(s string) bool {
 	if !strings.HasPrefix(s, "Q{") {
@@ -874,19 +870,6 @@ func (c *compiler) checkQNamePrefix(_ context.Context, name, context string) err
 		}
 	}
 	return nil
-}
-
-func isValidQName(s string) bool {
-	if s == "" {
-		return false
-	}
-	parts := strings.SplitN(s, ":", 2)
-	for _, p := range parts {
-		if !xmlchar.IsValidNCName(p) {
-			return false
-		}
-	}
-	return true
 }
 
 // resolveShadowAttributes processes shadow attributes on an XSLT element.
