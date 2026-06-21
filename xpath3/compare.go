@@ -996,9 +996,9 @@ func compareDuration(op TokenType, a, b Duration) (bool, error) {
 		}
 		// Compare months-only or seconds-only
 		if aMonthsRat.Sign() != 0 || bMonthsRat.Sign() != 0 {
-			return applyCompareInt(op, aMonthsRat.Cmp(bMonthsRat)), nil
+			return applyCompare(op, aMonthsRat.Cmp(bMonthsRat)), nil
 		}
-		return applyCompareInt(op, aSecsRat.Cmp(bSecsRat)), nil
+		return applyCompare(op, aSecsRat.Cmp(bSecsRat)), nil
 	}
 	return false, nil
 }
@@ -1017,20 +1017,6 @@ func compareQName(op TokenType, a, b QNameValue) (bool, error) {
 	default:
 		return false, &XPathError{Code: lexicon.ErrXPTY0004, Message: "QName values only support eq/ne"}
 	}
-}
-
-func applyCompareInt(op TokenType, cmp int) bool {
-	switch op {
-	case TokenLt:
-		return cmp < 0
-	case TokenLe:
-		return cmp <= 0
-	case TokenGt:
-		return cmp > 0
-	case TokenGe:
-		return cmp >= 0
-	}
-	return false
 }
 
 // normalizeCompareOp maps general comparison operators to value comparison operators.
