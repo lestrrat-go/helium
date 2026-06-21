@@ -628,9 +628,22 @@ func compositeKeyString(seq xpath3.Sequence) string {
 // groupStartingWith implements group-starting-with: a new group starts
 // whenever an item matches the pattern.
 func (ec *execContext) groupStartingWith(ctx context.Context, seq xpath3.Sequence, pat *pattern) []fegGroup {
+	// Materialize the population so positional predicates in the pattern
+	// (e.g. .[position()=3]) see the per-item focus of the population
+	// sequence rather than the stale outer focus (ENG-005).
+	pop := sequence.Materialize(seq)
+	savedPos := ec.position
+	savedSize := ec.size
+	ec.size = len(pop)
+	defer func() {
+		ec.position = savedPos
+		ec.size = savedSize
+	}()
+
 	var groups []fegGroup
 	var currentItems xpath3.ItemSlice
-	for item := range sequence.Items(seq) {
+	for i, item := range pop {
+		ec.position = i + 1
 		if pat.matchPatternItem(ctx, ec, item) && len(currentItems) > 0 {
 			groups = append(groups, fegGroup{items: currentItems})
 			currentItems = nil
@@ -646,9 +659,22 @@ func (ec *execContext) groupStartingWith(ctx context.Context, seq xpath3.Sequenc
 // groupEndingWith implements group-ending-with: a group ends whenever
 // an item matches the pattern.
 func (ec *execContext) groupEndingWith(ctx context.Context, seq xpath3.Sequence, pat *pattern) []fegGroup {
+	// Materialize the population so positional predicates in the pattern
+	// (e.g. .[position()=3]) see the per-item focus of the population
+	// sequence rather than the stale outer focus (ENG-005).
+	pop := sequence.Materialize(seq)
+	savedPos := ec.position
+	savedSize := ec.size
+	ec.size = len(pop)
+	defer func() {
+		ec.position = savedPos
+		ec.size = savedSize
+	}()
+
 	var groups []fegGroup
 	var currentItems xpath3.ItemSlice
-	for item := range sequence.Items(seq) {
+	for i, item := range pop {
+		ec.position = i + 1
 		currentItems = append(currentItems, item)
 		if pat.matchPatternItem(ctx, ec, item) {
 			groups = append(groups, fegGroup{items: currentItems})

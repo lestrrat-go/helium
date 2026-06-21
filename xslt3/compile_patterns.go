@@ -800,6 +800,22 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 		if _, isVar := alt.expr.(xpath3.VariableExpr); isVar {
 			continue
 		}
+
+		// A positional predicate over the context item, e.g. ".[position()=3]",
+		// must see the focus of the population sequence (position/size set by
+		// the caller in ec.position/ec.size), not a re-based filter focus.
+		// Evaluating the whole FilterExpr would re-bind position() to 1 because
+		// "." is a singleton; instead evaluate each predicate directly with the
+		// item as context item and the population focus already in scope.
+		if fe, ok := alt.expr.(xpath3.FilterExpr); ok {
+			if _, isCtxItem := fe.Expr.(xpath3.ContextItemExpr); isCtxItem {
+				if ec.matchContextItemPredicates(ctx, fe.Predicates) {
+					return true
+				}
+				continue
+			}
+		}
+
 		compiled, compErr := xpath3.NewCompiler().CompileExpr(alt.expr)
 		if compErr != nil {
 			continue
@@ -814,6 +830,45 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 		}
 	}
 	return false
+}
+
+// matchContextItemPredicates evaluates each predicate of a ".[pred]" pattern
+// with the current context item (ec.contextItem) and the population focus
+// (ec.position/ec.size) already in scope. A numeric predicate is treated as a
+// position test against ec.position; any other predicate uses its effective
+// boolean value. All predicates must hold for a match.
+func (ec *execContext) matchContextItemPredicates(ctx context.Context, preds []xpath3.Expr) bool {
+	for _, pred := range preds {
+		compiled, compErr := xpath3.NewCompiler().CompileExpr(pred)
+		if compErr != nil {
+			return false
+		}
+		result, err := ec.evalXPath(ctx, compiled, nil)
+		if err != nil {
+			return false
+		}
+		seq := result.Sequence()
+		if seq == nil {
+			return false
+		}
+		// Numeric predicate: position test against the population position.
+		if sequence.Len(seq) == 1 {
+			if a, ok := seq.Get(0).(xpath3.AtomicValue); ok && a.IsNumeric() {
+				// A positional predicate matches only when the numeric
+				// value equals the integer position exactly: position()=2.7
+				// is never true, so ".[2.7]" must not match position 2.
+				if a.ToFloat64() != float64(ec.position) {
+					return false
+				}
+				continue
+			}
+		}
+		ebv, err := xpath3.EBV(seq)
+		if err != nil || !ebv {
+			return false
+		}
+	}
+	return true
 }
 
 // matchesAttributes returns true if the pattern source could potentially match
