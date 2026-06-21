@@ -420,43 +420,96 @@ func (c *Catalog) resolveNextCatalogsURI(ctx context.Context, st *resolveState, 
 }
 
 // lazyLoad loads the catalog file for a delegate or nextCatalog entry on first
-// access via the Loader and returns the (possibly cached) sub-catalog. The load
-// is guarded by a per-entry mutex so that concurrent resolutions sharing one
-// *Catalog load the referenced catalog at most once and never observe a
-// partially-populated entry. Only SUCCESSFUL loads are cached: an error (a
-// missing loader, a transient/Loader failure, or a load that yields no
-// catalog) is returned without marking the entry loaded, so a later healthy
-// Resolve can retry. The returned sub-catalog carries no run state — depth and
-// the visited cache live in the caller's resolveState.
+// access via the Loader and returns the (possibly cached) sub-catalog.
+//
+// The load uses a single-flight pattern so that concurrent resolutions sharing
+// one *Catalog load the referenced catalog at most once and never observe a
+// partially-populated entry. Crucially, the per-entry mutex is held only to
+// claim or observe the load — NEVER across the I/O + parse. A goroutine that
+// finds a load already in flight waits on the in-flight channel via a select
+// that also watches ctx.Done(), so a cancelled or timed-out resolve returns
+// promptly with ctx.Err() instead of blocking until the in-flight load
+// finishes.
+//
+// Only SUCCESSFUL loads are cached: an error (a missing loader, a
+// transient/Loader failure, or a load that yields no catalog) is returned
+// without marking the entry loaded, so a later healthy Resolve can retry. The
+// returned sub-catalog carries no run state — depth and the visited cache live
+// in the caller's resolveState.
 func (c *Catalog) lazyLoad(ctx context.Context, e *Entry) (*Catalog, error) {
-	e.loadMu.Lock()
-	defer e.loadMu.Unlock()
-
-	if e.loaded {
-		return e.Catalog, nil
-	}
-	if e.Catalog != nil {
-		// Pre-populated (e.g. tests, or an inlined sub-catalog).
-		e.loaded = true
-		return e.Catalog, nil
-	}
-	if c.Loader == nil {
-		// The referenced catalog needs loading but no loader is configured.
-		return nil, errNoLoader
-	}
-
-	cat, err := c.Loader.Load(ctx, e.URL)
-	if err != nil {
-		// Do not cache the failure: a later call may succeed.
+	// An already-cancelled context aborts before any work or wait.
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if cat == nil {
-		// A load that neither errored nor produced a catalog: treat as a miss
-		// and allow a retry.
-		return nil, errNoLoader
-	}
 
-	e.Catalog = cat
-	e.loaded = true
-	return e.Catalog, nil
+	for {
+		e.loadMu.Lock()
+
+		if e.loaded {
+			cat := e.Catalog
+			e.loadMu.Unlock()
+			return cat, nil
+		}
+		if e.Catalog != nil {
+			// Pre-populated (e.g. tests, or an inlined sub-catalog).
+			e.loaded = true
+			cat := e.Catalog
+			e.loadMu.Unlock()
+			return cat, nil
+		}
+		if c.Loader == nil {
+			// The referenced catalog needs loading but no loader is configured.
+			e.loadMu.Unlock()
+			return nil, errNoLoader
+		}
+
+		if e.loading != nil {
+			// A load is in flight on another goroutine. Wait for it without
+			// holding the lock so this goroutine can still observe ctx.Done().
+			loading := e.loading
+			e.loadMu.Unlock()
+			select {
+			case <-loading:
+				// Load finished; loop to read the (possibly cached) result. If
+				// it failed, e.loaded stays false and we will start a fresh
+				// load below (subject to the ctx check at the top of the loop).
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		// We own the load: publish the in-flight channel, release the lock, and
+		// perform the (uncancellable-by-the-mutex) I/O outside the critical
+		// section. ctx is threaded into the loader so a ctx-aware loader aborts
+		// a slow read on cancellation.
+		loading := make(chan struct{})
+		e.loading = loading
+		e.loadMu.Unlock()
+
+		cat, err := c.Loader.Load(ctx, e.URL)
+
+		e.loadMu.Lock()
+		e.loading = nil
+		if err == nil && cat != nil {
+			e.Catalog = cat
+			e.loaded = true
+		}
+		e.loadMu.Unlock()
+		close(loading)
+
+		if err != nil {
+			// Do not cache the failure: a later call may succeed.
+			return nil, err
+		}
+		if cat == nil {
+			// A load that neither errored nor produced a catalog: treat as a
+			// miss and allow a retry.
+			return nil, errNoLoader
+		}
+		return cat, nil
+	}
 }
