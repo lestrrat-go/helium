@@ -198,6 +198,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if cfg != nil {
 		matchSelection = cfg.initialMatchSelection
 	}
+	// selectionSupplied records whether the caller supplied an initial match
+	// selection at all, independent of how many nodes it currently holds. After
+	// strip-space remaps the selection (remapSelectionToCopy), an all-whitespace
+	// selection can shrink to length 0. In that case the apply-templates step
+	// must run against the (empty) selection — producing no output — rather than
+	// falling through to the source document.
+	selectionSupplied := matchSelection != nil
 	if len(ss.stripSpace) > 0 && effectiveSource != nil {
 		// copyAndStrip deep-copies the source, omits the whitespace-only text
 		// nodes strip-space would remove, declares namespaces without
@@ -493,8 +500,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 				return nil, err
 			}
 		}
-		// XTDE0040: no source document supplied and no initial template identified
-		if effectiveSource == nil && (matchSelection == nil || sequence.Len(matchSelection) == 0) {
+		// XTDE0040: no source document supplied and no initial template identified.
+		// A supplied initial match selection counts as input even when it remaps to
+		// empty (all nodes stripped); only error when no selection was supplied.
+		if effectiveSource == nil && !selectionSupplied {
 			return nil, dynamicError(errCodeXTDE0040, "no source document and no initial template")
 		}
 		var initialModeParams map[string]xpath3.Sequence
@@ -505,7 +514,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if cfg != nil && len(cfg.initialModeTunnel) > 0 {
 			ec.tunnelParams = cloneSequenceMap(cfg.initialModeTunnel)
 		}
-		if matchSelection != nil && sequence.Len(matchSelection) > 0 {
+		if selectionSupplied {
+			// An initial match selection was supplied. Apply templates to each of
+			// its items. If the selection is empty (e.g. every node was removed by
+			// strip-space during remapSelectionToCopy), this loop runs zero times
+			// and produces no output — we must NOT fall through to the source
+			// document.
 			// Resolve mode name for atomic template matching
 			resolvedMode := initialMode
 			switch resolvedMode {
