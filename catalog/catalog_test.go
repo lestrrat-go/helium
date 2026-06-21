@@ -370,3 +370,57 @@ func TestNilCatalog(t *testing.T) {
 	require.Equal(t, "", c.Resolve(t.Context(), "foo", "bar"))
 	require.Equal(t, "", c.ResolveURI(t.Context(), "foo"))
 }
+
+// captureHandler records every error delivered to it.
+type captureHandler struct {
+	errs []error
+}
+
+func (h *captureHandler) Handle(_ context.Context, err error) {
+	h.errs = append(h.errs, err)
+}
+
+// A catalog entry whose uri is a syntactically malformed URI must be reported
+// through the error handler and skipped, while well-formed entries in the same
+// catalog still load. Regression for CAT-008: ResolveURI used to silently
+// accept the raw malformed value, storing it as a usable mapping.
+func TestMalformedEntryURIReportedAndSkipped(t *testing.T) {
+	dir := t.TempDir()
+	catPath, err := filepath.Abs(filepath.Join(dir, "catalog.xml"))
+	require.NoError(t, err)
+
+	// "%zz" is invalid percent-encoding and is rejected by url.Parse when
+	// resolved against the catalog's file: base URI.
+	xml := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <uri name="http://example.com/bad" uri="%zz"/>
+  <uri name="http://example.com/good" uri="good.xml"/>
+</catalog>`
+	require.NoError(t, os.WriteFile(catPath, []byte(xml), 0o600))
+
+	// Reference the catalog via a file:// URI so its base URI carries a scheme;
+	// relative entry URIs are then resolved in URI space, where "%zz" is
+	// rejected by url.Parse. (A bare OS-path base resolves relative entries as
+	// OS paths and never invokes url.Parse.)
+	slashPath := filepath.ToSlash(catPath)
+	if !strings.HasPrefix(slashPath, "/") {
+		slashPath = "/" + slashPath
+	}
+	catURI := (&url.URL{Scheme: "file", Path: slashPath}).String()
+
+	h := &captureHandler{}
+	cat, err := catalog.NewLoader().ErrorHandler(h).Load(context.Background(), catURI)
+	require.NoError(t, err)
+
+	// The malformed entry was reported.
+	require.NotEmpty(t, h.errs, "malformed entry URI must be reported")
+
+	// The malformed entry is not stored as a usable mapping.
+	require.Equal(t, "", cat.ResolveURI(context.Background(), "http://example.com/bad"),
+		"malformed entry must not resolve")
+
+	// The well-formed entry still loaded and resolves.
+	got := cat.ResolveURI(context.Background(), "http://example.com/good")
+	require.NotEqual(t, "", got, "well-formed entry must still load")
+	require.True(t, strings.HasSuffix(got, "good.xml"), "got %q", got)
+}

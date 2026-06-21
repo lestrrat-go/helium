@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"fmt"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -13,17 +14,22 @@ import (
 // relative ("x"), and absolute-URI references correctly. When base is a
 // non-URI local path, OS-path semantics apply: an absolute value is returned
 // unchanged and a relative value is joined against the base directory.
-func ResolveURI(base, value string) string {
+//
+// A non-nil error is returned when base or value is a syntactically malformed
+// URI that url.Parse rejects. In that case the returned string is empty so a
+// malformed catalog entry is never silently stored as a usable mapping; the
+// caller is expected to report the error and skip the entry.
+func ResolveURI(base, value string) (string, error) {
 	if value == "" {
-		return ""
+		return "", nil
 	}
 
 	if HasScheme(value) {
-		return value
+		return value, nil
 	}
 
 	if base == "" {
-		return value
+		return value, nil
 	}
 
 	// When base has a URI scheme, resolve in URI space. A path-absolute
@@ -32,22 +38,22 @@ func ResolveURI(base, value string) string {
 	if HasScheme(base) {
 		baseURL, err := url.Parse(base)
 		if err != nil {
-			return value
+			return "", fmt.Errorf("malformed base URI %q: %w", base, err)
 		}
 		ref, err := url.Parse(value)
 		if err != nil {
-			return value
+			return "", fmt.Errorf("malformed URI %q: %w", value, err)
 		}
-		return baseURL.ResolveReference(ref).String()
+		return baseURL.ResolveReference(ref).String(), nil
 	}
 
 	// Non-URI local-path base: apply OS-path semantics. An absolute value is
 	// returned unchanged; a relative one is joined against the base directory.
 	if filepath.IsAbs(value) {
-		return value
+		return value, nil
 	}
 
-	return filepath.Join(filepath.Dir(base), value)
+	return filepath.Join(filepath.Dir(base), value), nil
 }
 
 // HasScheme checks if s looks like a URI with a scheme (e.g., "http://...").
