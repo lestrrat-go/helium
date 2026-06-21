@@ -21,7 +21,10 @@ const urnPrefix = "urn:publicid:"
 //     %23 → #
 //     %25 → %
 func UnwrapURN(urn string) string {
-	if !strings.HasPrefix(urn, urnPrefix) {
+	// The URN scheme and namespace identifier are case-insensitive per
+	// RFC 8141 / the OASIS catalog spec, so match the "urn:publicid:" prefix
+	// case-insensitively while preserving the case of the payload that follows.
+	if len(urn) < len(urnPrefix) || !strings.EqualFold(urn[:len(urnPrefix)], urnPrefix) {
 		return ""
 	}
 	rest := urn[len(urnPrefix):]
