@@ -563,26 +563,11 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 func (p *parser) parseNodeTypeTest(name string) (NodeTest, bool, error) {
 	switch name {
 	case "node":
-		p.lexer.Next() // (
-		if p.lexer.Peek().Type != TokenRParen {
-			return nil, true, errExpectedRParenAfterNode
-		}
-		p.lexer.Next() // )
-		return TypeTest{Type: NodeTestNode}, true, nil
+		return p.parseEmptyTypeTest(NodeTestNode, errExpectedRParenAfterNode)
 	case "text":
-		p.lexer.Next()
-		if p.lexer.Peek().Type != TokenRParen {
-			return nil, true, errExpectedRParenAfterText
-		}
-		p.lexer.Next()
-		return TypeTest{Type: NodeTestText}, true, nil
+		return p.parseEmptyTypeTest(NodeTestText, errExpectedRParenAfterText)
 	case "comment":
-		p.lexer.Next()
-		if p.lexer.Peek().Type != TokenRParen {
-			return nil, true, errExpectedRParenAfterComment
-		}
-		p.lexer.Next()
-		return TypeTest{Type: NodeTestComment}, true, nil
+		return p.parseEmptyTypeTest(NodeTestComment, errExpectedRParenAfterComment)
 	case "processing-instruction":
 		p.lexer.Next()
 		target := ""
@@ -596,6 +581,19 @@ func (p *parser) parseNodeTypeTest(name string) (NodeTest, bool, error) {
 		return PITest{Target: target}, true, nil
 	}
 	return nil, false, nil
+}
+
+// parseEmptyTypeTest consumes the empty "()" of a node-type test such as
+// node(), text(), or comment(), returning a TypeTest of the given type. The
+// distinct errSentinel preserves errors.Is identity for each keyword's
+// missing-RParen diagnostic.
+func (p *parser) parseEmptyTypeTest(nt NodeTestType, errSentinel error) (NodeTest, bool, error) {
+	p.lexer.Next() // (
+	if p.lexer.Peek().Type != TokenRParen {
+		return nil, true, errSentinel
+	}
+	p.lexer.Next() // )
+	return TypeTest{Type: nt}, true, nil
 }
 
 // parseQNameTest parses a prefix:local or prefix:* name test, given that the

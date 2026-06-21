@@ -118,9 +118,16 @@ func evalFunctionCall(ctx context.Context, ec *evalContext, fc FunctionCall) (*R
 		return nil, fmt.Errorf("%w: %s", ErrUnknownFunction, fc.Name)
 	}
 
+	return callResolvedFn(ctx, ec, fn, fc.Args)
+}
+
+// callResolvedFn pre-evaluates the argument expressions left-to-right (returning
+// early on the first error), stashes the evalContext as the FunctionContext, and
+// invokes the already-resolved (non-nil) function.
+func callResolvedFn(ctx context.Context, ec *evalContext, fn Function, exprs []Expr) (*Result, error) {
 	// Pre-evaluate all arguments.
-	args := make([]*Result, len(fc.Args))
-	for i, expr := range fc.Args {
+	args := make([]*Result, len(exprs))
+	for i, expr := range exprs {
 		r, err := eval(ctx, ec, expr)
 		if err != nil {
 			return nil, err
@@ -150,20 +157,7 @@ func evalNamespacedFunctionCall(ctx context.Context, ec *evalContext, fc Functio
 		return nil, fmt.Errorf("%w: {%s}%s", ErrUnknownFunction, uri, fc.Name)
 	}
 
-	// Pre-evaluate all arguments.
-	args := make([]*Result, len(fc.Args))
-	for i, expr := range fc.Args {
-		r, err := eval(ctx, ec, expr)
-		if err != nil {
-			return nil, err
-		}
-		args[i] = r
-	}
-
-	// Stash the evalContext as FunctionContext in the context.Context
-	// so functions can retrieve it via GetFunctionContext.
-	fctx := withFunctionContext(ctx, ec)
-	return fn.Eval(fctx, args) //nolint:wrapcheck
+	return callResolvedFn(ctx, ec, fn, fc.Args)
 }
 
 // --- Node-set functions ---
@@ -240,7 +234,10 @@ func collectIDValues(r *Result) []string {
 	return strings.Fields(resultToString(r))
 }
 
-func fnLocalName(ec *evalContext, args []*Result) (*Result, error) {
+// nodeStringFn implements the common shape of local-name(), namespace-uri(),
+// and name(): take an optional node-set argument (defaulting to the context
+// node), then map the selected node through f to a string result.
+func nodeStringFn(ec *evalContext, args []*Result, f func(helium.Node) string) (*Result, error) {
 	n, ok, err := nodeArgOrContext(ec, args)
 	if err != nil {
 		return nil, err
@@ -248,29 +245,19 @@ func fnLocalName(ec *evalContext, args []*Result) (*Result, error) {
 	if !ok {
 		return &Result{Type: StringResult}, nil
 	}
-	return &Result{Type: StringResult, String: localNameOf(n)}, nil
+	return &Result{Type: StringResult, String: f(n)}, nil
+}
+
+func fnLocalName(ec *evalContext, args []*Result) (*Result, error) {
+	return nodeStringFn(ec, args, localNameOf)
 }
 
 func fnNamespaceURI(ec *evalContext, args []*Result) (*Result, error) {
-	n, ok, err := nodeArgOrContext(ec, args)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return &Result{Type: StringResult}, nil
-	}
-	return &Result{Type: StringResult, String: nodeNamespaceURI(n)}, nil
+	return nodeStringFn(ec, args, nodeNamespaceURI)
 }
 
 func fnName(ec *evalContext, args []*Result) (*Result, error) {
-	n, ok, err := nodeArgOrContext(ec, args)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return &Result{Type: StringResult}, nil
-	}
-	return &Result{Type: StringResult, String: nameOf(n)}, nil
+	return nodeStringFn(ec, args, nameOf)
 }
 
 // nameOf returns the XPath name() of a node. Per the XPath spec, name()

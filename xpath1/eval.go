@@ -402,27 +402,25 @@ func evalBinaryExpr(ctx context.Context, ec *evalContext, e BinaryExpr) (*Result
 }
 
 func evalOr(ctx context.Context, ec *evalContext, e BinaryExpr) (*Result, error) {
-	left, err := eval(ctx, ec, e.Left)
-	if err != nil {
-		return nil, err
-	}
-	if resultToBoolean(left) {
-		return &Result{Type: BooleanResult, Bool: true}, nil
-	}
-	right, err := eval(ctx, ec, e.Right)
-	if err != nil {
-		return nil, err
-	}
-	return &Result{Type: BooleanResult, Bool: resultToBoolean(right)}, nil
+	return evalShortCircuit(ctx, ec, e, true)
 }
 
 func evalAnd(ctx context.Context, ec *evalContext, e BinaryExpr) (*Result, error) {
+	return evalShortCircuit(ctx, ec, e, false)
+}
+
+// evalShortCircuit evaluates a boolean "or" (shortOn==true) or "and"
+// (shortOn==false) expression. The left operand is always evaluated; when its
+// boolean value equals shortOn, that value is returned without evaluating the
+// right operand. Otherwise the right operand (and its error) is evaluated and
+// its boolean value returned.
+func evalShortCircuit(ctx context.Context, ec *evalContext, e BinaryExpr, shortOn bool) (*Result, error) {
 	left, err := eval(ctx, ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	if !resultToBoolean(left) {
-		return &Result{Type: BooleanResult, Bool: false}, nil
+	if resultToBoolean(left) == shortOn {
+		return &Result{Type: BooleanResult, Bool: shortOn}, nil
 	}
 	right, err := eval(ctx, ec, e.Right)
 	if err != nil {
