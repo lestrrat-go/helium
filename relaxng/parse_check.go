@@ -20,19 +20,32 @@ const (
 	inOOMInterleave           // inside oneOrMore//interleave
 )
 
+// visitKey identifies a define visit by both the define pattern and the
+// ancestor flag context it was reached under. Forbidden-nesting checks depend on
+// ruleFlags, so the same define reached under a different context (e.g. once in
+// a normal position and once under <list>) must be checked again rather than
+// being suppressed by a pattern-only cache.
+type visitKey struct {
+	pat   *pattern
+	flags ruleFlags
+}
+
 // checkRules walks the compiled pattern tree and reports forbidden nesting
 // errors (e.g. list//element, attribute//attribute) and warnings.
 func (c *compiler) checkRules(ctx context.Context) {
 	if c.grammar.start == nil {
 		return
 	}
-	visited := make(map[string]int8) // 0=unseen, 1=in-progress, 2=done
+	visited := make(map[visitKey]int8) // 0=unseen, 1=in-progress, 2=done
 	c.checkPattern(ctx, c.grammar.start, inStart, visited)
 }
 
 // checkPattern recursively checks a pattern node for forbidden nestings,
-// then recurses into children with updated flags.
-func (c *compiler) checkPattern(ctx context.Context, pat *pattern, flags ruleFlags, visited map[string]int8) {
+// then recurses into children with updated flags. Refs are followed via their
+// compile-time-resolved scoped target; the visited set is keyed by {define
+// pattern, flag context} so distinct same-named scopes are tracked
+// independently and a define reached under a new flag context is re-checked.
+func (c *compiler) checkPattern(ctx context.Context, pat *pattern, flags ruleFlags, visited map[visitKey]int8) {
 	if pat == nil {
 		return
 	}
@@ -159,17 +172,18 @@ func (c *compiler) checkPattern(ctx context.Context, pat *pattern, flags ruleFla
 		if flags&inDataExcept != 0 {
 			c.addPatternError(ctx, pat, "Found forbidden pattern data/except//ref")
 		}
-		def, ok := c.grammar.defines[pat.name]
-		if !ok {
+		def := pat.resolved
+		if def == nil {
 			return
 		}
-		state := visited[pat.name]
+		key := visitKey{pat: def, flags: flags}
+		state := visited[key]
 		if state != 0 {
-			return // in-progress or done
+			return // in-progress or done in this flag context
 		}
-		visited[pat.name] = 1 // in-progress
+		visited[key] = 1 // in-progress
 		c.checkPattern(ctx, def, flags, visited)
-		visited[pat.name] = 2 // done
+		visited[key] = 2 // done
 		return
 	}
 
