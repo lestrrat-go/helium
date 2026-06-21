@@ -16,6 +16,8 @@ const sharedCatalogXML = "shared.xml"
 
 const missingCatalogXML = "missing.xml"
 
+const fooDTDSystemID = "http://example.com/foo.dtd"
+
 const exampleBase = "http://example.com/"
 
 func TestResolveURIUnwrapsURN(t *testing.T) {
@@ -214,7 +216,7 @@ func TestTransientLoadFailureRetries(t *testing.T) {
 
 	leaf := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///foo.dtd"},
+			{Type: catalog.EntrySystem, Name: fooDTDSystemID, URL: "file:///foo.dtd"},
 		},
 	}
 	loader := &flakyLoader{cat: leaf, failuresLeft: 1}
@@ -227,12 +229,12 @@ func TestTransientLoadFailureRetries(t *testing.T) {
 	}
 
 	// First resolution: the load fails, so the entry must not resolve.
-	got := root.Resolve(t.Context(), "", "http://example.com/foo.dtd")
+	got := root.Resolve(t.Context(), "", fooDTDSystemID)
 	require.Equal(t, "", got, "first resolve should fail while the loader is failing")
 
 	// Second resolution: the loader now succeeds; the entry must NOT be stuck
 	// on the cached failure and should resolve.
-	got = root.Resolve(t.Context(), "", "http://example.com/foo.dtd")
+	got = root.Resolve(t.Context(), "", fooDTDSystemID)
 	require.Equal(t, "file:///foo.dtd", got, "second resolve should retry the load and succeed")
 
 	require.Equal(t, int32(2), loader.calls.Load(), "loader should be retried after a transient failure")
@@ -484,7 +486,7 @@ func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 
 	target := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
+			{Type: catalog.EntrySystem, Name: fooDTDSystemID, URL: "file:///local/foo.dtd"},
 		},
 	}
 
@@ -513,7 +515,7 @@ func TestVisitedCacheStillResolves(t *testing.T) {
 
 	target := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
+			{Type: catalog.EntrySystem, Name: fooDTDSystemID, URL: "file:///local/foo.dtd"},
 		},
 	}
 
@@ -530,7 +532,7 @@ func TestVisitedCacheStillResolves(t *testing.T) {
 		Loader: loader,
 	}
 
-	got := root.Resolve(t.Context(), "", "http://example.com/foo.dtd")
+	got := root.Resolve(t.Context(), "", fooDTDSystemID)
 	require.Equal(t, "file:///local/foo.dtd", got)
 }
 

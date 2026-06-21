@@ -3,10 +3,8 @@ package catalog
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"net/url"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -78,7 +76,7 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler, 
 		return nil, fmt.Errorf("catalog: failed to resolve path %q: %w", filename, err)
 	}
 
-	data, err := readCatalogFile(absPath, maxBytes)
+	data, err := readCatalogFile(ctx, absPath, maxBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -100,40 +98,43 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler, 
 // readCatalogFile reads a catalog file at absPath through a bounded reader so an
 // unbounded or pathological source (e.g. /dev/zero) cannot exhaust memory. The
 // cap is maxBytes, or [MaxCatalogSize] when maxBytes is less than or equal to
-// zero. LimitReader allows one extra byte so a file exactly at the cap is
+// zero. The bounded read allows one extra byte so a file exactly at the cap is
 // accepted while anything larger is detected and rejected with
 // [ErrCatalogTooLarge]. The extra byte is suppressed when the cap is already
 // math.MaxInt64 so it cannot overflow into a zero-byte read.
-func readCatalogFile(absPath string, maxBytes int) ([]byte, error) {
+//
+// The read honors ctx: a slow or never-completing source (a FIFO with no
+// writer, a character device, a stalled network filesystem) is aborted on
+// cancellation. The actual open+read is delegated to readCatalogBytes, whose
+// implementation is platform-specific (see load_unix.go / load_other.go).
+func readCatalogFile(ctx context.Context, absPath string, maxBytes int) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	limit := int64(maxBytes)
 	if limit <= 0 {
 		limit = MaxCatalogSize
 	}
 
-	f, err := os.Open(absPath)
-	if err != nil {
-		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
-	}
-	defer f.Close()
-
 	// Read one byte past the cap so a file that is exactly at the cap is
 	// accepted while anything larger is detected, but guard against overflow:
 	// limit+1 wraps to a negative value for limit==math.MaxInt on 64-bit
-	// platforms, which would make io.LimitReader read zero bytes and silently
+	// platforms, which would make the bounded read return zero bytes and silently
 	// reject a valid catalog.
 	readLimit := limit
 	if readLimit < math.MaxInt64 {
 		readLimit++
 	}
 
-	data, err := io.ReadAll(io.LimitReader(f, readLimit))
+	data, err := readCatalogBytes(ctx, absPath, readLimit)
 	if err != nil {
-		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
+		return nil, err
 	}
+
 	if int64(len(data)) > limit {
 		return nil, fmt.Errorf("catalog: %q exceeds maximum size of %d bytes: %w", absPath, limit, ErrCatalogTooLarge)
 	}
-
 	return data, nil
 }
 

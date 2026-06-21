@@ -50,8 +50,14 @@ type Entry struct {
 	Prefer  Prefer   // inherited or overridden prefer attribute
 	Catalog *Catalog // for nextCatalog/delegate entries (lazy-loaded)
 
-	loadMu sync.Mutex // guards the lazy load of Catalog (concurrency-safe)
-	loaded bool       // true once Catalog has been successfully loaded
+	// loadMu guards the single-flight bookkeeping below (loaded, loading). It
+	// is held only briefly to claim or observe the load; it is NEVER held
+	// across the actual I/O + parse, so a concurrent resolve can observe a
+	// cancelled context and abandon its wait instead of blocking on a slow
+	// load (see lazyLoad).
+	loadMu  sync.Mutex
+	loaded  bool          // true once Catalog has been successfully loaded
+	loading chan struct{} // non-nil while a load is in flight; closed on completion
 }
 
 // Loader loads a catalog from a file path. This interface decouples
