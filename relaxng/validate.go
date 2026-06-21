@@ -1931,6 +1931,10 @@ func validateWithParams(value, typeName string, params []*param) int {
 // and falling back to it would silently compare lengths in the wrong unit. A
 // value that has passed lexical validation for typeName decodes successfully, so
 // this only guards against an undecodable value reaching the facet check.
+//
+// xsd has a same-named facetLength (xsd/simplevalue_facets.go) that deliberately
+// approximates binary lengths instead of strict-decoding; the two are kept
+// separate on purpose — see that function's comment.
 func facetLength(value, typeName string) (int, bool) {
 	switch typeName {
 	case "NMTOKENS", "IDREFS", "ENTITIES":
