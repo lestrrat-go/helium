@@ -47,6 +47,76 @@ func newDTD() *DTD {
 	return dtd
 }
 
+// CopyExtSubset deep-copies src's external DTD subset into dst, installing it as
+// dst's external subset. The copy is fully independent: it owns its own *DTD and
+// its own entity/element/attribute/notation declarations, so mutating dst's
+// external subset (e.g. via AddNotation/AddEntity/AddElementDecl) never affects
+// src's external subset, and vice versa.
+//
+// Unlike CopyDTDInfo (which copies the internal subset and links it into the
+// document tree before the root element), the external subset is not a child of
+// the document — it is referenced only via ExtSubset — so the copy is not added
+// to dst's child list. If src has no external subset this is a no-op.
+func CopyExtSubset(src, dst *Document) {
+	if src == nil || dst == nil {
+		return
+	}
+	srcDTD := src.extSubset
+	if srcDTD == nil {
+		return
+	}
+
+	dstDTD := newDTD()
+	dstDTD.name = srcDTD.name
+	dstDTD.externalID = srcDTD.externalID
+	dstDTD.systemID = srcDTD.systemID
+	dstDTD.doc = dst
+	dstDTD.parent = dst
+
+	// Walk children in document order so the copy round-trips identically and
+	// every declaration is reproduced as an independent node owned by dst. This
+	// mirrors copyDTD's body but targets the external subset slot.
+	for c := srcDTD.FirstChild(); c != nil; c = c.NextSibling() {
+		switch c.Type() {
+		case EntityNode:
+			if ent, ok := AsNode[*Entity](c); ok {
+				cp := copyEntity(ent, dst)
+				switch ent.entityType {
+				case enum.InternalParameterEntity, enum.ExternalParameterEntity:
+					dstDTD.pentities[ent.name] = cp
+				default:
+					dstDTD.entities[ent.name] = cp
+				}
+				_ = dstDTD.AddChild(cp)
+			}
+		case ElementDeclNode:
+			if edecl, ok := AsNode[*ElementDecl](c); ok {
+				cp := copyElementDecl(edecl, dst)
+				dstDTD.elements[edecl.name+":"+edecl.prefix] = cp
+				_ = dstDTD.AddChild(cp)
+			}
+		case AttributeDeclNode:
+			if adecl, ok := AsNode[*AttributeDecl](c); ok {
+				cp := copyAttributeDecl(adecl, dst)
+				dstDTD.attributes[adecl.name+":"+adecl.prefix+":"+adecl.elem] = cp
+				_ = dstDTD.AddChild(cp)
+			}
+		case NotationNode:
+			if nota, ok := AsNode[*Notation](c); ok {
+				cp := copyNotation(nota, dst)
+				dstDTD.notations[nota.name] = cp
+				_ = dstDTD.AddChild(cp)
+			}
+		case CommentNode:
+			_ = dstDTD.AddChild(dst.CreateComment(append([]byte(nil), c.Content()...)))
+		case ProcessingInstructionNode:
+			_ = dstDTD.AddChild(dst.CreatePI(c.Name(), string(c.Content())))
+		}
+	}
+
+	dst.extSubset = dstDTD
+}
+
 func (dtd *DTD) AddEntity(name string, typ enum.EntityType, publicID, systemID, content string) (*Entity, error) {
 	var table map[string]*Entity
 

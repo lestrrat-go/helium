@@ -114,6 +114,31 @@ func TestGetElementByID(t *testing.T) {
 		require.Nil(t, doc.GetElementByID("root-id"))
 		require.Nil(t, doc.GetElementByID("child-id"))
 	})
+
+	t.Run("SetSkipIDs is authoritative over a populated ID table", func(t *testing.T) {
+		t.Parallel()
+		// A document parsed normally has a populated ID table, so it resolves
+		// xml:id values up front.
+		const input = `<root xml:id="root-id"><child xml:id="child-id"/></root>`
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.NotNil(t, doc.GetElementByID("root-id"))
+		require.NotNil(t, doc.GetElementByID("child-id"))
+
+		// Once SkipIDs is set, the document must resolve NO ids — even though the
+		// ID table is still populated. idsSkip is authoritative and checked first.
+		doc.SetSkipIDs(true)
+		require.True(t, doc.SkipIDs())
+		require.Nil(t, doc.GetElementByID("root-id"),
+			"SetSkipIDs(true) must make GetElementByID return nothing even with a populated ID table")
+		require.Nil(t, doc.GetElementByID("child-id"))
+
+		// Clearing it restores resolution against the existing table.
+		doc.SetSkipIDs(false)
+		require.NotNil(t, doc.GetElementByID("root-id"),
+			"SetSkipIDs(false) must restore resolution against the existing ID table")
+		require.NotNil(t, doc.GetElementByID("child-id"))
+	})
 }
 
 func TestDocProperties(t *testing.T) {

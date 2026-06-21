@@ -62,11 +62,13 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	// on the copy falls back to that walk; without the external subset, IDs
 	// declared in an external DTD would resolve under no-strip (which transforms
 	// the source directly) but not under strip-space (which transforms this copy).
-	// The external subset is only read by ID resolution, so sharing the pointer is
-	// safe and keeps the two paths in agreement.
-	if ext := src.ExtSubset(); ext != nil {
-		dst.SetExtSubset(ext)
-	}
+	//
+	// Deep-copy the external subset (rather than sharing the pointer): the copy
+	// document can be exposed to user code via raw-result capture, and *DTD has
+	// mutators, so an aliased external subset would let a handler mutating the
+	// copy's ExtSubset corrupt the source. CopyExtSubset gives the copy its own
+	// independent external subset while keeping ID resolution identical.
+	helium.CopyExtSubset(src, dst)
 
 	sc := &stripCopier{dst: dst, strip: strip, preserve: preserve}
 	// When the initial match selection must be remapped onto the copy, record the

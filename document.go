@@ -179,6 +179,12 @@ func (d *Document) SkipIDs() bool {
 // SetSkipIDs sets the document's ID-skip state. This is used when producing a
 // derived document (e.g. an xsl:strip-space copy) that must mirror the source's
 // ID semantics.
+//
+// The ID-skip state is authoritative: while it is true, GetElementByID (and
+// therefore fn:id) resolves NO ids and returns nil — even if the document
+// already has a populated ID table from a normal parse. Setting it back to
+// false restores normal resolution against the existing table (or the lazy
+// tree walk for API-built documents).
 func (d *Document) SetSkipIDs(v bool) {
 	d.idsSkip = v
 }
@@ -219,17 +225,6 @@ func (d *Document) IntSubset() *DTD {
 
 func (d *Document) ExtSubset() *DTD {
 	return d.extSubset
-}
-
-// SetExtSubset sets the document's external DTD subset. The DTD is referenced
-// directly, not deep-copied. This is used when a derived document (e.g. an
-// xsl:strip-space copy) must stand in for a source document for ID resolution:
-// GetElementByID consults the external subset's ID-typed attribute declarations
-// during its lazy tree walk, so a copy that omits the external subset would lose
-// IDs declared there. The external subset is only read (never mutated) by ID
-// resolution, so sharing the pointer is safe.
-func (d *Document) SetExtSubset(dtd *DTD) {
-	d.extSubset = dtd
 }
 
 func (d *Document) Replace(_ ...Node) error {
@@ -932,12 +927,18 @@ func (d *Document) RegisterID(id string, elem *Element) {
 // the given value. If the document's ID table has been populated (during
 // parsing), it performs an O(1) hash lookup. Otherwise it falls back to an
 // O(n) tree walk checking xml:id and DTD-declared ID attributes.
+//
+// The ID-skip state (see SetSkipIDs) is authoritative and is checked FIRST: a
+// document with SkipIDs() == true resolves NO ids — it returns nil without
+// consulting the ID table or performing the lazy walk. This keeps GetElementByID
+// and fn:id consistent with the SkipIDs contract even on a document that already
+// has a populated ID table (e.g. one parsed normally and then SetSkipIDs(true)).
 func (d *Document) GetElementByID(id string) *Element {
-	if d.ids != nil {
-		return d.ids[id]
-	}
 	if d.idsSkip {
 		return nil
+	}
+	if d.ids != nil {
+		return d.ids[id]
 	}
 
 	// Fallback: O(n) tree walk for documents not built via parser.
