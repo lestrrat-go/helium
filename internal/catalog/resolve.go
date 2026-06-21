@@ -56,9 +56,10 @@ func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 }
 
 // ResolveResult is like Resolve but also reports whether resolution ended in a
-// catalog break (the libxml2 "cut" signal: delegates/nextCatalog were consulted
-// and all failed, so the search must STOP rather than fall through to later
-// catalogs in a chain). When broke is true the search must not continue; when
+// catalog break (the libxml2 "cut" signal: a matching delegate was consulted and
+// every delegate target failed, so the search must STOP rather than fall through
+// to later catalogs in a chain). An exhausted nextCatalog chain is NOT a break:
+// it is a plain no-match. When broke is true the search must not continue; when
 // it is false a "" result means "no match, keep searching".
 func (c *Catalog) ResolveResult(ctx context.Context, pubID, sysID string) (uri string, broke bool) {
 	if c == nil {

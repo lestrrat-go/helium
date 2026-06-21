@@ -38,9 +38,10 @@ func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 }
 
 // ResolveResult is like Resolve but also reports whether resolution ended in a
-// catalog break. A break is the OASIS/libxml2 "cut" signal: delegate or
-// nextCatalog entries were consulted and all of them failed, so the search must
-// STOP rather than continue to later catalogs in a chain.
+// catalog break. A break is the OASIS/libxml2 "cut" signal: a matching delegate
+// entry was consulted and every delegate target failed, so the search must STOP
+// rather than continue to later catalogs in a chain. An exhausted nextCatalog
+// chain is NOT a break: it is a plain no-match that returns broke=false.
 //
 // When broke is true the caller must not consult any further catalog, even
 // though uri is "". When broke is false a "" uri means "no match here, keep
