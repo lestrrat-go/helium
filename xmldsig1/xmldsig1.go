@@ -250,8 +250,8 @@ func isExcC14NNS(e *helium.Element) bool {
 func elementNamespaceURI(e *helium.Element) string {
 	name := e.Name()
 	prefix := ""
-	if i := strings.IndexByte(name, ':'); i >= 0 {
-		prefix = name[:i]
+	if p, _, ok := strings.Cut(name, ":"); ok {
+		prefix = p
 	}
 	// First-match-wins ancestor walk for the prefix (or the default namespace
 	// when the name is unprefixed), with no implicit xml predeclaration.
