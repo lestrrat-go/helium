@@ -399,6 +399,26 @@ func isPatternFunctionArg(expr xpath3.Expr) bool {
 // resolves through the EXPLICIT in-scope xmlns bindings first, falling back to
 // the XPath 3.0 predeclared bindings (fn:, math:, map:, array:, err:, xs:) only
 // when the prefix is otherwise undeclared. An unresolved prefix returns "".
+// resolvePatternPrefix resolves a non-empty namespace prefix used inside a
+// match pattern against the pattern's lexical namespace snapshot, then the
+// predeclared XPath prefixes (fn:, math:, map:, ...), then the universally
+// predeclared xml prefix. It returns "" when the prefix is unbound. This is the
+// single shared resolution path for pattern prefixes so that compile-time checks
+// (e.g. the typed="strict" XTSE3105 NameTest check) and runtime pattern matching
+// (execContext.resolvePrefix during pattern matching) cannot drift.
+func resolvePatternPrefix(nsBindings map[string]string, prefix string) string {
+	if uri, ok := nsBindings[prefix]; ok {
+		return uri
+	}
+	if uri, ok := xpath3.PredeclaredNamespace(prefix); ok {
+		return uri
+	}
+	if prefix == lexicon.PrefixXML {
+		return lexicon.NamespaceXML
+	}
+	return ""
+}
+
 func resolvePatternFunctionNamespace(prefix string, nsBindings map[string]string) string {
 	if prefix == "" {
 		return lexicon.NamespaceFn

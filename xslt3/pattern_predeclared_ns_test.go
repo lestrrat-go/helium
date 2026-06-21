@@ -613,6 +613,75 @@ func TestPatternSchemaElementTestUsesPatternSnapshot(t *testing.T) {
 		"schema-element/schema-attribute with a locally overridden prefix must compile")
 }
 
+// TestTypedStrictPatternPredeclaredPrefix verifies that the typed="strict"
+// schema check (XTSE3105) resolves a NameTest prefix the SAME way runtime
+// pattern matching does — falling back to the predeclared XPath namespaces.
+// A pattern match="math:a" with an imported schema declaring {math-uri}a must
+// COMPILE (the predeclared math prefix resolves to the math namespace), instead
+// of failing XTSE3105 because the prefix was resolved to no-namespace.
+// Compile/runtime resolution must be symmetric.
+func TestTypedStrictPatternPredeclaredPrefix(t *testing.T) {
+	t.Parallel()
+
+	const mathNS = "http://www.w3.org/2005/xpath-functions/math"
+
+	// A schema declaring element {math-ns}a, imported via xsl:import-schema so the
+	// typed="strict" check can find it. The 'math' prefix is NOT declared in the
+	// stylesheet; it must resolve through the predeclared XPath bindings.
+	schemaXSD := `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="` + mathNS + `"
+           elementFormDefault="qualified">
+  <xs:element name="a" type="xs:string"/>
+</xs:schema>`
+
+	const baseURI = "mem://stylesheets/main.xsl"
+	const schemaURI = "mem:/stylesheets/math.xsd"
+
+	t.Run("declared-name-compiles", func(t *testing.T) {
+		t.Parallel()
+
+		// match="math:a" — math is predeclared, {math-ns}a is in the schema, so
+		// XTSE3105 must NOT fire.
+		styleSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:import-schema namespace="` + mathNS + `" schema-location="math.xsd"/>
+  <xsl:mode name="m" typed="strict"/>
+  <xsl:template match="math:a" mode="m"><out/></xsl:template>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(styleSrc))
+		require.NoError(t, err)
+		resolver := fileMapResolver{files: map[string]string{schemaURI: schemaXSD}}
+		_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(t.Context(), doc)
+		require.NoError(t, err,
+			"match=\"math:a\" must compile: predeclared math: prefix resolves to the math namespace where {math-ns}a is declared")
+	})
+
+	t.Run("undeclared-name-still-fails", func(t *testing.T) {
+		t.Parallel()
+
+		// match="math:nope" — math resolves to the math namespace, but {math-ns}nope
+		// is not in the schema, so XTSE3105 must still fire. This confirms the prefix
+		// resolved to the math namespace (not no-namespace), and the schema lookup ran.
+		styleSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:import-schema namespace="` + mathNS + `" schema-location="math.xsd"/>
+  <xsl:mode name="m" typed="strict"/>
+  <xsl:template match="math:nope" mode="m"><out/></xsl:template>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(styleSrc))
+		require.NoError(t, err)
+		resolver := fileMapResolver{files: map[string]string{schemaURI: schemaXSD}}
+		_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(t.Context(), doc)
+		require.Error(t, err,
+			"match=\"math:nope\" must fail XTSE3105: math: resolves to the math namespace, but {math-ns}nope is not declared")
+	})
+}
+
 // TestPatternFnCurrentCompiles verifies fn:current() is accepted (not rejected
 // as XPST0017) inside a pattern predicate.
 func TestPatternFnCurrentCompiles(t *testing.T) {

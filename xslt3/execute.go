@@ -543,16 +543,7 @@ func (ec *execContext) resolvePrefix(prefix string) string {
 	// pattern resolution and prevents an earlier top-level declaration from
 	// leaking into a later pattern.
 	if ec.inPatternMatch {
-		if uri, ok := ec.patternNamespaces[prefix]; ok {
-			return uri
-		}
-		if uri, ok := xpath3.PredeclaredNamespace(prefix); ok {
-			return uri
-		}
-		if prefix == lexicon.PrefixXML {
-			return lexicon.NamespaceXML
-		}
-		return ""
+		return resolvePatternPrefix(ec.patternNamespaces, prefix)
 	}
 	ss := ec.effectiveStylesheet()
 	if uri, ok := ss.namespaces[prefix]; ok {
