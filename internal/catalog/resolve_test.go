@@ -16,7 +16,7 @@ const sharedCatalogXML = "shared.xml"
 
 const missingCatalogXML = "missing.xml"
 
-const examplePrefix = "http://example.com/"
+const exampleBase = "http://example.com/"
 
 func TestResolveURIUnwrapsURN(t *testing.T) {
 	t.Parallel()
@@ -99,7 +99,7 @@ func TestResolveURIIgnoresDelegateSystem(t *testing.T) {
 
 	cat := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntryDelegateSystem, Name: examplePrefix, URL: sharedCatalogXML},
+			{Type: catalog.EntryDelegateSystem, Name: exampleBase, URL: sharedCatalogXML},
 		},
 		Loader: loader,
 		Prefer: catalog.PreferPublic,
@@ -149,7 +149,7 @@ func TestConcurrentResolveSharedCatalog(t *testing.T) {
 	// nextCatalog fallback (uri leaf).
 	root := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntryDelegateSystem, Name: examplePrefix, URL: "sys.xml"},
+			{Type: catalog.EntryDelegateSystem, Name: exampleBase, URL: "sys.xml"},
 			{Type: catalog.EntryDelegatePublic, Name: "-//Example//", URL: "pub.xml", Prefer: catalog.PreferPublic},
 			{Type: catalog.EntryNextCatalog, URL: "uri.xml"},
 		},
@@ -320,7 +320,7 @@ func TestDelegateLoadCountBounded(t *testing.T) {
 			// Distinct URL per entry so the seen-set dedup never applies.
 			entries = append(entries, catalog.Entry{
 				Type:   typ,
-				Name:   examplePrefix,
+				Name:   exampleBase,
 				URL:    "deleg-" + strconv.Itoa(i) + ".xml",
 				Prefer: prefer,
 			})
@@ -366,6 +366,117 @@ func TestDelegateLoadCountBounded(t *testing.T) {
 		require.LessOrEqual(t, int(loader.calls.Load()), catalog.MaxDelegates,
 			"loaded more delegate catalogs than MaxDelegates")
 	})
+}
+
+// Per the OASIS XML Catalogs spec, matching delegate entries must be tried
+// most-specific-first: the entry with the longest matching start-string is
+// followed before shorter ones. Here the longer prefix points at a catalog
+// that resolves the identifier; if document order were used the shorter
+// (earlier) delegate would be tried first and a recordingLoader would observe
+// the wrong load order.
+func TestDelegateLongestPrefixFirst(t *testing.T) {
+	t.Parallel()
+
+	specific := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntrySystem, Name: "http://example.com/sub/foo.dtd", URL: "file:///specific.dtd"},
+			{Type: catalog.EntryURI, Name: "http://example.com/sub/foo.xsd", URL: "file:///specific.xsd"},
+			{Type: catalog.EntryPublic, Name: "-//Example//Sub Pub//EN", URL: "file:///specific-pub.dtd"},
+		},
+		Prefer: catalog.PreferPublic,
+	}
+	general := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntrySystem, Name: "http://example.com/sub/foo.dtd", URL: "file:///general.dtd"},
+			{Type: catalog.EntryURI, Name: "http://example.com/sub/foo.xsd", URL: "file:///general.xsd"},
+			{Type: catalog.EntryPublic, Name: "-//Example//Sub Pub//EN", URL: "file:///general-pub.dtd"},
+		},
+		Prefer: catalog.PreferPublic,
+	}
+
+	const generalXML = "general.xml"
+	const specificXML = "specific.xml"
+
+	newLoader := func() *recordingLoader {
+		return &recordingLoader{
+			cats: map[string]*catalog.Catalog{
+				generalXML:  general,
+				specificXML: specific,
+			},
+		}
+	}
+
+	t.Run("delegateSystem", func(t *testing.T) {
+		t.Parallel()
+		loader := newLoader()
+		// Entries listed shorter-prefix-first in document order; the longer
+		// prefix must still be tried first.
+		root := &catalog.Catalog{
+			Entries: []catalog.Entry{
+				{Type: catalog.EntryDelegateSystem, Name: exampleBase, URL: generalXML},
+				{Type: catalog.EntryDelegateSystem, Name: "http://example.com/sub/", URL: specificXML},
+			},
+			Loader: loader,
+		}
+		got := root.Resolve(t.Context(), "", "http://example.com/sub/foo.dtd")
+		require.Equal(t, "file:///specific.dtd", got)
+		require.Equal(t, specificXML, loader.first(), "longest matching delegateSystem prefix must be tried first")
+	})
+
+	t.Run("delegatePublic", func(t *testing.T) {
+		t.Parallel()
+		loader := newLoader()
+		root := &catalog.Catalog{
+			Entries: []catalog.Entry{
+				{Type: catalog.EntryDelegatePublic, Name: "-//Example//", URL: generalXML, Prefer: catalog.PreferPublic},
+				{Type: catalog.EntryDelegatePublic, Name: "-//Example//Sub", URL: specificXML, Prefer: catalog.PreferPublic},
+			},
+			Loader: loader,
+			Prefer: catalog.PreferPublic,
+		}
+		got := root.Resolve(t.Context(), "-//Example//Sub Pub//EN", "")
+		require.Equal(t, "file:///specific-pub.dtd", got)
+		require.Equal(t, specificXML, loader.first(), "longest matching delegatePublic prefix must be tried first")
+	})
+
+	t.Run("delegateURI", func(t *testing.T) {
+		t.Parallel()
+		loader := newLoader()
+		root := &catalog.Catalog{
+			Entries: []catalog.Entry{
+				{Type: catalog.EntryDelegateURI, Name: exampleBase, URL: generalXML},
+				{Type: catalog.EntryDelegateURI, Name: "http://example.com/sub/", URL: specificXML},
+			},
+			Loader: loader,
+		}
+		got := root.ResolveURI(t.Context(), "http://example.com/sub/foo.xsd")
+		require.Equal(t, "file:///specific.xsd", got)
+		require.Equal(t, specificXML, loader.first(), "longest matching delegateURI prefix must be tried first")
+	})
+}
+
+// recordingLoader records the order in which catalog URLs are loaded.
+type recordingLoader struct {
+	mu    sync.Mutex
+	order []string
+	cats  map[string]*catalog.Catalog
+}
+
+func (l *recordingLoader) Load(_ context.Context, filename string) (*catalog.Catalog, error) {
+	l.mu.Lock()
+	l.order = append(l.order, filename)
+	cat := l.cats[filename]
+	l.mu.Unlock()
+	return cat, nil
+}
+
+func (l *recordingLoader) first() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.order) == 0 {
+		return ""
+	}
+	return l.order[0]
 }
 
 func TestVisitedCacheSkipsDuplicate(t *testing.T) {
@@ -486,7 +597,7 @@ func TestNoLoaderDoesNotPanic(t *testing.T) {
 		{
 			name: "delegateSystem",
 			entries: []catalog.Entry{
-				{Type: catalog.EntryDelegateSystem, Name: examplePrefix, URL: missingCatalogXML},
+				{Type: catalog.EntryDelegateSystem, Name: exampleBase, URL: missingCatalogXML},
 			},
 			resolve: func(c *catalog.Catalog) string {
 				return c.Resolve(context.Background(), "", "http://example.com/x")
@@ -504,7 +615,7 @@ func TestNoLoaderDoesNotPanic(t *testing.T) {
 		{
 			name: "delegateURI",
 			entries: []catalog.Entry{
-				{Type: catalog.EntryDelegateURI, Name: examplePrefix, URL: missingCatalogXML},
+				{Type: catalog.EntryDelegateURI, Name: exampleBase, URL: missingCatalogXML},
 			},
 			resolve: func(c *catalog.Catalog) string {
 				return c.ResolveURI(context.Background(), "http://example.com/x")

@@ -6,10 +6,12 @@ import (
 	"errors"
 	"io"
 	"math"
+	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
@@ -375,6 +377,26 @@ func (t *TreeBuilder) InternalSubset(ctxif context.Context, name, eid, uri strin
 	return nil
 }
 
+// catalogOpenName converts a catalog-resolved system id / URI into the name
+// handed to [fs.FS.Open]. A catalog may map an identifier to a "file:" URI
+// (e.g. "file:///tmp/x.dtd"); that URI is not a filesystem path and must be
+// converted before opening, mirroring how the XInclude processor handles
+// "file:" hrefs (see internal/iofs.FileURIToPath). Non-file URIs and plain
+// paths are returned unchanged so existing handling is preserved. A "file:"
+// URI that cannot be converted to a local path (opaque or non-local host) is
+// also returned unchanged, letting the subsequent Open fail as before.
+func catalogOpenName(ref string) string {
+	u, err := url.Parse(ref)
+	if err != nil || u.Scheme != lexicon.SchemeFile {
+		return ref
+	}
+	p, err := iofs.FileURIToPath(ref)
+	if err != nil {
+		return ref
+	}
+	return p
+}
+
 func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.ExternalSubset %s,%s,%s", name, eid, uri)
@@ -391,10 +413,12 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		return nil
 	}
 
-	// Try catalog resolution first.
+	// Try catalog resolution first. A catalog may resolve the identifier to a
+	// "file:" URI, which is not a filesystem path; convert it before it reaches
+	// the base-URI joining and fsys.Open below (CAT-001).
 	if ctx.catalog != nil {
 		if catalogURI := ctx.catalog.Resolve(ctxif, eid, uri); catalogURI != "" {
-			uri = catalogURI
+			uri = catalogOpenName(catalogURI)
 		}
 	}
 
@@ -754,7 +778,10 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 	ctx := t.pctx(ctxif)
 	if ctx.catalog != nil {
 		if resolved := ctx.catalog.Resolve(ctxif, publicID, systemID); resolved != "" {
-			f, err := ctx.fsys.Open(resolved)
+			// A catalog may resolve to a "file:" URI; convert it to a local
+			// path before opening (CAT-001).
+			openName := catalogOpenName(resolved)
+			f, err := ctx.fsys.Open(openName)
 			if err == nil {
 				return &fileParseInput{ReadCloser: f, uri: resolved}, nil
 			}

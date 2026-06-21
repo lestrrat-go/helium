@@ -297,7 +297,7 @@ func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 		if fc, ok := e.(xpath3.FunctionCall); ok {
 			if isFnNamespacePrefix(fc.Prefix) {
 				switch fc.Name {
-				case "head", "tail", "copy-of", funcSnapshot, "string-join",
+				case "head", "tail", fnNameCopyOf, funcSnapshot, "string-join",
 					"serialize", "deep-equal", "sort", "reverse",
 					"empty", "exists", "count", "sum", "avg", "min", "max",
 					"string", "data", lexicon.TypeBoolean:
@@ -667,7 +667,7 @@ func exprUsesCurrent(expr xpath3.Expr) bool {
 			return false
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && fc.Name == "current" {
+			if isFnNamespacePrefix(fc.Prefix) && fc.Name == fnNameCurrent {
 				found = true
 				return false
 			}

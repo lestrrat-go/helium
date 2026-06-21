@@ -3,8 +3,31 @@ package catalog
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 )
+
+// matchingDelegates collects the delegate entries (of the given type whose
+// start-string prefixes the identifier) and returns them ordered
+// most-specific-first: longest matching start-string first, as required by the
+// OASIS XML Catalogs spec. Ties preserve document order (stable sort).
+func (c *Catalog) matchingDelegates(typ EntryType, id string) []*Entry {
+	var matches []*Entry
+	for i := range c.Entries {
+		e := &c.Entries[i]
+		if e.Type != typ {
+			continue
+		}
+		if !strings.HasPrefix(id, e.Name) {
+			continue
+		}
+		matches = append(matches, e)
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		return len(matches[i].Name) > len(matches[j].Name)
+	})
+	return matches
+}
 
 // CatalogBreak is a sentinel returned internally to signal "delegates were
 // tried but all failed" — stops nextCatalog fallback (the libxml2 "cut"
@@ -271,14 +294,7 @@ func (c *Catalog) resolveURI(ctx context.Context, st *resolveState, uri string) 
 func (c *Catalog) resolveDelegateSystem(ctx context.Context, st *resolveState, sysID string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
-	for i := range c.Entries {
-		e := &c.Entries[i]
-		if e.Type != EntryDelegateSystem {
-			continue
-		}
-		if !strings.HasPrefix(sysID, e.Name) {
-			continue
-		}
+	for _, e := range c.matchingDelegates(EntryDelegateSystem, sysID) {
 		if _, dup := seen[e.URL]; dup {
 			continue
 		}
@@ -310,15 +326,8 @@ func (c *Catalog) resolveDelegateSystem(ctx context.Context, st *resolveState, s
 func (c *Catalog) resolveDelegatePublic(ctx context.Context, st *resolveState, pubID string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
-	for i := range c.Entries {
-		e := &c.Entries[i]
-		if e.Type != EntryDelegatePublic {
-			continue
-		}
+	for _, e := range c.matchingDelegates(EntryDelegatePublic, pubID) {
 		if e.Prefer != PreferPublic {
-			continue
-		}
-		if !strings.HasPrefix(pubID, e.Name) {
 			continue
 		}
 		if _, dup := seen[e.URL]; dup {
@@ -352,14 +361,7 @@ func (c *Catalog) resolveDelegatePublic(ctx context.Context, st *resolveState, p
 func (c *Catalog) resolveDelegateURI(ctx context.Context, st *resolveState, uri string) string {
 	seen := make(map[string]struct{}, MaxDelegates)
 
-	for i := range c.Entries {
-		e := &c.Entries[i]
-		if e.Type != EntryDelegateURI {
-			continue
-		}
-		if !strings.HasPrefix(uri, e.Name) {
-			continue
-		}
+	for _, e := range c.matchingDelegates(EntryDelegateURI, uri) {
 		if _, dup := seen[e.URL]; dup {
 			continue
 		}
