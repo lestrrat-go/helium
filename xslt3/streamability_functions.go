@@ -456,31 +456,10 @@ func isContextItemArg(expr xpath3.Expr) bool {
 // where each entry independently strides into child elements.
 // Grounding functions are skipped — their arguments produce grounded data.
 func countCrawlingSelectionsInner(ss *Stylesheet, expr xpath3.Expr, _ bool) int {
-	expr = derefXPathExpr(expr)
-	count := 0
-	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
-		e = derefXPathExpr(e)
-		if fc, ok := e.(xpath3.FunctionCall); ok && isGroundingExprSS(ss, fc) {
-			return false // grounding function — result is grounded
-		}
-		if lp, ok := e.(xpath3.LocationPath); ok {
-			for _, step := range lp.Steps {
-				switch step.Axis {
-				case xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
-					count++
-					return false
-				}
-			}
-		}
-		if ps, ok := e.(xpath3.PathStepExpr); ok {
-			if ps.DescOrSelf {
-				count++
-				return false
-			}
-		}
-		return true
+	return countCrawlingSelections(expr, func(e xpath3.Expr) bool {
+		fc, ok := e.(xpath3.FunctionCall)
+		return ok && isGroundingExprSS(ss, fc) // grounding function — result is grounded
 	})
-	return count
 }
 
 // countDeepCrawlingSelections counts crawling (descendant/descendant-or-self)
@@ -488,10 +467,21 @@ func countCrawlingSelectionsInner(ss *Stylesheet, expr xpath3.Expr, _ bool) int 
 // multiple independent crawling paths in map constructor entries even when
 // each is wrapped in a grounding function like head().
 func countDeepCrawlingSelections(expr xpath3.Expr) int {
+	return countCrawlingSelections(expr, nil)
+}
+
+// countCrawlingSelections counts crawling (descendant/descendant-or-self)
+// selections in expr. If skip is non-nil, any subtree whose root matches skip
+// is not descended into (used to stop at grounding functions). Traversal and
+// short-circuiting match WalkExpr's pre-order visit.
+func countCrawlingSelections(expr xpath3.Expr, skip func(xpath3.Expr) bool) int {
 	expr = derefXPathExpr(expr)
 	count := 0
 	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		e = derefXPathExpr(e)
+		if skip != nil && skip(e) {
+			return false
+		}
 		if lp, ok := e.(xpath3.LocationPath); ok {
 			for _, step := range lp.Steps {
 				switch step.Axis {

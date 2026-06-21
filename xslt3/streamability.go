@@ -676,3 +676,23 @@ func exprUsesCurrent(expr xpath3.Expr) bool {
 	})
 	return found
 }
+
+// bodyMatchesExpr reports whether any expression in the instruction body (or
+// any nested child body) satisfies pred. Traversal visits an instruction's own
+// expressions first, then recurses into child instructions, short-circuiting on
+// the first match. nil expressions are skipped before pred is called.
+func bodyMatchesExpr(body []instruction, pred func(*xpath3.Expression) bool) bool {
+	for _, inst := range body {
+		for _, expr := range getInstructionExprs(inst) {
+			if expr != nil && pred(expr) {
+				return true
+			}
+		}
+		for _, children := range getChildInstructions(inst) {
+			if bodyMatchesExpr(children, pred) {
+				return true
+			}
+		}
+	}
+	return false
+}

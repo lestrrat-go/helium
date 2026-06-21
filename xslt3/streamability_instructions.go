@@ -638,15 +638,7 @@ func checkSourceDocCurrentGroup(body []instruction) error {
 // sourceDocBodyUsesCurrentGroup checks if any expression in the source-document
 // body uses current-group().
 func sourceDocBodyUsesCurrentGroup(body []instruction) bool {
-	for _, inst := range body {
-		if slices.ContainsFunc(getInstructionExprs(inst), exprUsesCurrentGroup) {
-			return true
-		}
-		if slices.ContainsFunc(getChildInstructions(inst), sourceDocBodyUsesCurrentGroup) {
-			return true
-		}
-	}
-	return false
+	return bodyMatchesExpr(body, exprUsesCurrentGroup)
 }
 
 // patternHasNonMotionlessPredicate returns true if any alternative in the
@@ -740,20 +732,7 @@ func exprIsContextItem(expr *xpath3.Expression) bool {
 // bodyUsesCurrentGroup returns true if any instruction in the body
 // uses current-group() in any expression.
 func bodyUsesCurrentGroup(body []instruction) bool {
-	for _, bi := range body {
-		for _, expr := range getInstructionExprs(bi) {
-			if expr == nil {
-				continue
-			}
-			if xpathstream.ExprUsesFunction(expr, lexicon.FnCurrentGroup) {
-				return true
-			}
-		}
-		if slices.ContainsFunc(getChildInstructions(bi), bodyUsesCurrentGroup) {
-			return true
-		}
-	}
-	return false
+	return bodyMatchesExpr(body, exprUsesCurrentGroup)
 }
 
 // exprUsesCurrentGroupConsumingly checks if an expression uses current-group()
