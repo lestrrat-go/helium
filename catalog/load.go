@@ -3,10 +3,8 @@ package catalog
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"net/url"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -100,18 +98,15 @@ func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler, 
 // readCatalogFile reads a catalog file at absPath through a bounded reader so an
 // unbounded or pathological source (e.g. /dev/zero) cannot exhaust memory. The
 // cap is maxBytes, or [MaxCatalogSize] when maxBytes is less than or equal to
-// zero. LimitReader allows one extra byte so a file exactly at the cap is
+// zero. The bounded read allows one extra byte so a file exactly at the cap is
 // accepted while anything larger is detected and rejected with
 // [ErrCatalogTooLarge]. The extra byte is suppressed when the cap is already
 // math.MaxInt64 so it cannot overflow into a zero-byte read.
 //
 // The read honors ctx: a slow or never-completing source (a FIFO with no
 // writer, a character device, a stalled network filesystem) is aborted on
-// cancellation. Both the open and the read can block uninterruptibly, so the
-// open+read runs on a helper goroutine and readCatalogFile returns ctx.Err() as
-// soon as ctx is done. A read already in progress is additionally unblocked by
-// closing the file, so the helper goroutine does not leak once a writer appears
-// or the source drains.
+// cancellation. The actual open+read is delegated to readCatalogBytes, whose
+// implementation is platform-specific (see load_unix.go / load_other.go).
 func readCatalogFile(ctx context.Context, absPath string, maxBytes int) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -125,59 +120,22 @@ func readCatalogFile(ctx context.Context, absPath string, maxBytes int) ([]byte,
 	// Read one byte past the cap so a file that is exactly at the cap is
 	// accepted while anything larger is detected, but guard against overflow:
 	// limit+1 wraps to a negative value for limit==math.MaxInt on 64-bit
-	// platforms, which would make io.LimitReader read zero bytes and silently
+	// platforms, which would make the bounded read read zero bytes and silently
 	// reject a valid catalog.
 	readLimit := limit
 	if readLimit < math.MaxInt64 {
 		readLimit++
 	}
 
-	type result struct {
-		data []byte
-		err  error
+	data, err := readCatalogBytes(ctx, absPath, readLimit)
+	if err != nil {
+		return nil, err
 	}
-	// Buffered so the helper goroutine never blocks sending even if this
-	// function has already returned on ctx cancellation.
-	resCh := make(chan result, 1)
-	// fileCh hands the opened file to the cancellation watcher so it can close
-	// an in-flight read; buffered for the same non-blocking reason.
-	fileCh := make(chan *os.File, 1)
 
-	go func() {
-		f, err := os.Open(absPath)
-		if err != nil {
-			resCh <- result{err: fmt.Errorf("catalog: failed to read %q: %w", absPath, err)}
-			return
-		}
-		fileCh <- f
-		defer f.Close()
-
-		data, err := io.ReadAll(io.LimitReader(f, readLimit))
-		if err != nil {
-			resCh <- result{err: fmt.Errorf("catalog: failed to read %q: %w", absPath, err)}
-			return
-		}
-		resCh <- result{data: data}
-	}()
-
-	select {
-	case <-ctx.Done():
-		// Unblock an in-flight read by closing the file if it was opened.
-		select {
-		case f := <-fileCh:
-			_ = f.Close()
-		default:
-		}
-		return nil, ctx.Err()
-	case res := <-resCh:
-		if res.err != nil {
-			return nil, res.err
-		}
-		if int64(len(res.data)) > limit {
-			return nil, fmt.Errorf("catalog: %q exceeds maximum size of %d bytes: %w", absPath, limit, ErrCatalogTooLarge)
-		}
-		return res.data, nil
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("catalog: %q exceeds maximum size of %d bytes: %w", absPath, limit, ErrCatalogTooLarge)
 	}
+	return data, nil
 }
 
 // catalogFilePath converts a catalog reference into a local filesystem path.
