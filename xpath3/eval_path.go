@@ -577,7 +577,7 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			_, local := splitQName(test.Name)
 			return ixpath.LocalNameOf(n) == local
 		}
-		local, ns := resolveSchemaTestName(test.Name, ec)
+		local, ns := resolveSchemaTestName(test.Name, ec, false)
 		nameMatch := ixpath.LocalNameOf(n) == local && ixpath.NodeNamespaceURI(n) == ns
 		if !nameMatch {
 			// Check substitution group membership: the node's element
@@ -620,7 +620,7 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			_, local := splitQName(test.Name)
 			return attr.LocalName() == local
 		}
-		local, ns := resolveSchemaTestName(test.Name, ec)
+		local, ns := resolveSchemaTestName(test.Name, ec, true)
 		if attr.LocalName() != local || attr.URI() != ns {
 			return false
 		}
@@ -816,7 +816,12 @@ func nodeTypeAnnotation(n helium.Node, ec *evalContext) string {
 
 // resolveSchemaTestName resolves a name from a SchemaElementTest or
 // SchemaAttributeTest. Handles Q{uri}local (EQName) and prefix:local forms.
-func resolveSchemaTestName(name string, ec *evalContext) (local, ns string) {
+// isAttr selects the namespace rule for an unprefixed name (same rule as
+// matchElementOrAttributeName / a NameTest, XPath 3.1 §3.3.2.1): a bare
+// schema-attribute() name is always in no namespace — the default element
+// namespace governs element names, not attribute names — while a bare
+// schema-element() name takes the default element namespace.
+func resolveSchemaTestName(name string, ec *evalContext, isAttr bool) (local, ns string) {
 	if strings.HasPrefix(name, "Q{") {
 		if idx := strings.Index(name, "}"); idx >= 0 {
 			return name[idx+1:], name[2:idx]
@@ -826,7 +831,7 @@ func resolveSchemaTestName(name string, ec *evalContext) (local, ns string) {
 	if prefix != "" && ec != nil && ec.namespaces != nil {
 		return loc, ec.namespaces[prefix]
 	}
-	if prefix == "" && ec != nil && ec.namespaces != nil {
+	if prefix == "" && !isAttr && ec != nil && ec.namespaces != nil {
 		return loc, ec.namespaces[""]
 	}
 	return loc, ""
