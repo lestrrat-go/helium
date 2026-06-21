@@ -54,13 +54,16 @@ func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) { /
 		eh = helium.NilErrorHandler{}
 	}
 
+	// The caller owns the ErrorHandler lifecycle: the returned Catalog retains
+	// this handler (via internalLoader) to deliver diagnostics from delegate /
+	// nextCatalog files that are loaded lazily at Resolve time. Closing it here
+	// would silently drop every later lazy-load diagnostic, so Load never closes
+	// a caller-supplied handler.
 	ic, err := loadInternal(ctx, filename, eh, cfg.maxBytes)
 	if err != nil {
-		closeHandler(eh)
 		return nil, err
 	}
 
-	closeHandler(eh)
 	return &Catalog{cat: ic}, nil
 }
 
@@ -429,13 +432,6 @@ func catalogMissingAttr(ctx context.Context, eh helium.ErrorHandler, elemName, v
 	}
 	if val2 == "" {
 		eh.Handle(ctx, fmt.Errorf("%s entry missing %s attribute", elemName, attr2))
-	}
-}
-
-// closeHandler closes the error handler if it implements io.Closer.
-func closeHandler(eh helium.ErrorHandler) {
-	if c, ok := eh.(io.Closer); ok {
-		_ = c.Close()
 	}
 }
 
