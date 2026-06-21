@@ -1,12 +1,11 @@
 package xmlenc1
 
 import (
-	"encoding/base64"
 	"fmt"
 	"slices"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xmlbase64"
 )
 
 // parseEncryptedData parses an EncryptedData element.
@@ -196,20 +195,10 @@ func isMGFElem(e *helium.Element) bool {
 	return isElemNS(e, "MGF", NamespaceXMLEnc11, NamespaceXMLEnc)
 }
 
-// decodeBase64 decodes base64 text after stripping all XML whitespace
-// (space, tab, CR, LF). XSD base64Binary permits interspersed
-// whitespace, and real-world XML Encryption/Signature producers
-// routinely line-wrap base64 at fixed columns. Go's encoding/base64
-// tolerates CR/LF but rejects space/tab, so strip them all first.
+// decodeBase64 decodes xs:base64Binary text, stripping interspersed XML
+// whitespace from line-wrapped base64.
 func decodeBase64(text string) ([]byte, error) {
-	clean := strings.Map(func(r rune) rune {
-		switch r {
-		case ' ', '\t', '\r', '\n':
-			return -1
-		}
-		return r
-	}, text)
-	return base64.StdEncoding.DecodeString(clean)
+	return xmlbase64.DecodeString(text)
 }
 
 // textContent returns the concatenated text content of an element.
