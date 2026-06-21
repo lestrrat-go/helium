@@ -88,6 +88,24 @@ func TestResolveURI(t *testing.T) {
 			expect:  "",
 			wantErr: true,
 		},
+		{
+			// A malformed ABSOLUTE URI carrying a scheme must not bypass
+			// validation. url.Parse rejects the invalid percent-encoding, so an
+			// error is surfaced and no usable mapping is produced.
+			name:    "malformed absolute uri with scheme",
+			base:    fileCatalogURI,
+			value:   "http://example.com/%zz",
+			expect:  "",
+			wantErr: true,
+		},
+		{
+			// A well-formed absolute URI with a scheme still resolves, even with
+			// an empty base.
+			name:   "well-formed absolute uri empty base",
+			base:   "",
+			value:  "http://example.com/asset.xml",
+			expect: "http://example.com/asset.xml",
+		},
 	}
 
 	for _, tc := range tests {

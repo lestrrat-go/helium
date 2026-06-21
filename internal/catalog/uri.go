@@ -8,23 +8,30 @@ import (
 )
 
 // ResolveURI resolves value against base. If value already has a scheme, or
-// base is empty, value is returned as-is. When base carries a URI scheme (e.g.
-// "file:///..."), the reference is resolved in URI space via
-// (*url.URL).ResolveReference, which handles path-absolute ("/abs/x"),
-// relative ("x"), and absolute-URI references correctly. When base is a
-// non-URI local path, OS-path semantics apply: an absolute value is returned
-// unchanged and a relative value is joined against the base directory.
+// base is empty, value is returned as-is once it parses as a valid URI. When
+// base carries a URI scheme (e.g. "file:///..."), the reference is resolved in
+// URI space via (*url.URL).ResolveReference, which handles path-absolute
+// ("/abs/x"), relative ("x"), and absolute-URI references correctly. When base
+// is a non-URI local path, OS-path semantics apply: an absolute value is
+// returned unchanged and a relative value is joined against the base directory.
 //
 // A non-nil error is returned when base or value is a syntactically malformed
-// URI that url.Parse rejects. In that case the returned string is empty so a
-// malformed catalog entry is never silently stored as a usable mapping; the
-// caller is expected to report the error and skip the entry.
+// URI that url.Parse rejects -- including an absolute value that already
+// carries a scheme. In that case the returned string is empty so a malformed
+// catalog entry is never silently stored as a usable mapping; the caller is
+// expected to report the error and skip the entry.
 func ResolveURI(base, value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
 
+	// An absolute value carrying a scheme must still be validated; a malformed
+	// absolute URI (e.g. bad percent-encoding) must not bypass url.Parse and be
+	// stored raw. Once validated, it stands on its own regardless of base.
 	if HasScheme(value) {
+		if _, err := url.Parse(value); err != nil {
+			return "", fmt.Errorf("malformed URI %q: %w", value, err)
+		}
 		return value, nil
 	}
 
