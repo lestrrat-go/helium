@@ -311,6 +311,44 @@ func TestUPADeterminism(t *testing.T) {
   </xs:element>
 </xs:schema>`,
 			},
+			{
+				// `namespace="" ?, ##local`: a present-but-empty namespace="" is a
+				// degenerate namespace list that matches NOTHING. A wildcard that
+				// matches nothing is disjoint from everything, so it can never
+				// overlap with the following ##local wildcard. The empty-string
+				// namespace constraint must NOT be mistaken for "this position is an
+				// element" — the position is a wildcard whose set is empty.
+				// Deterministic.
+				name: "empty-namespace wildcard then ##local",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="" processContents="skip" minOccurs="0"/>
+        <xs:any namespace="##local" processContents="skip"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
+			{
+				// `namespace="" ?, a`: the empty-namespace wildcard matches nothing,
+				// so it cannot overlap with the following local element `a`. If the
+				// empty-string namespace were mistaken for an element position, this
+				// wildcard would be compared as element-vs-element and could falsely
+				// flag. Deterministic.
+				name: "empty-namespace wildcard then local element",
+				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="" processContents="skip" minOccurs="0"/>
+        <xs:element name="a" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()

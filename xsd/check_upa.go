@@ -283,7 +283,7 @@ func (a *positionAutomaton) walkTerm(term ParticleTerm) posInfo {
 		info.last = slices.Clone(ids)
 		return info
 	case *Wildcard:
-		id := a.newPos(firstSetEntry{wildcard: t.Namespace, targetNS: t.TargetNS})
+		id := a.newPos(firstSetEntry{isWildcard: true, wildcard: t.Namespace, targetNS: t.TargetNS})
 		return posInfo{first: []int{id}, last: []int{id}}
 	case *ModelGroup:
 		return a.walkModelGroup(t)
@@ -427,24 +427,31 @@ func (a *positionAutomaton) stateUnambiguous(reachable []int) bool {
 	return true
 }
 
-// firstSetEntry represents an element or wildcard in a first/last set.
+// firstSetEntry represents an element or wildcard in a first/last set. The
+// isWildcard discriminator distinguishes the two cases EXPLICITLY: an empty
+// wildcard string is NOT a reliable sentinel, because a wildcard with a
+// present-but-empty namespace="" constraint (a degenerate list matching nothing,
+// preserved by readWildcard) legitimately carries wildcard == "". Overloading
+// the empty string to also mean "this is an element" would mis-treat such a
+// wildcard as an element and false-reject deterministic models.
 type firstSetEntry struct {
-	qname    QName  // for elements
-	wildcard string // for wildcards (namespace constraint)
-	targetNS string // for wildcards
+	qname      QName  // for elements
+	isWildcard bool   // true iff this entry is a wildcard position
+	wildcard   string // for wildcards (namespace constraint)
+	targetNS   string // for wildcards
 }
 
 // entriesOverlap checks if two first-set entries can match the same element.
 func entriesOverlap(a, b firstSetEntry) bool {
 	// Two elements overlap if they have the same QName.
-	if a.wildcard == "" && b.wildcard == "" {
+	if !a.isWildcard && !b.isWildcard {
 		return a.qname == b.qname
 	}
 	// Element vs wildcard: check if the wildcard's namespace matches the element's namespace.
-	if a.wildcard == "" && b.wildcard != "" {
+	if !a.isWildcard && b.isWildcard {
 		return wildcardMatchesNS(b.wildcard, b.targetNS, a.qname.NS)
 	}
-	if a.wildcard != "" && b.wildcard == "" {
+	if a.isWildcard && !b.isWildcard {
 		return wildcardMatchesNS(a.wildcard, a.targetNS, b.qname.NS)
 	}
 	// Two wildcards: check if their namespace constraints can both match the same namespace.
