@@ -266,7 +266,7 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 			hasChildError := false
 			for _, n := range remaining {
 				if e, ok := n.(*helium.Element); ok {
-					v.addErrorOnNode(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+					v.addError(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
 					hasChildError = true
 				}
 			}
@@ -601,7 +601,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		}
 		if extraElemNode != nil {
 			v.addBareError(fmt.Sprintf("Extra element %s in interleave", extraElemNode.LocalName()))
-			v.addErrorOnNode(extraElemNode, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			v.addError(extraElemNode, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
 			return -1
 		}
 		// Check for required children that were never consumed.
@@ -739,10 +739,10 @@ func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 					if expectedName != "" && expectedName != e.LocalName() && child.kind == patternChoice {
 						v.pendingErrors = v.pendingErrors[:errLenBefore]
 						v.valid = savedValid
-						v.addErrorOnNode(e, fmt.Sprintf("Expecting element %s, got %s", expectedName, e.LocalName()))
-						v.addErrorOnNode(e, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+						v.addError(e, fmt.Sprintf("Expecting element %s, got %s", expectedName, e.LocalName()))
+						v.addError(e, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
 					} else if len(v.pendingErrors) == errLenBefore {
-						v.addErrorOnNode(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+						v.addError(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
 					}
 				}
 			} else if len(v.pendingErrors) == errLenBefore && v.patternElementName(child) != "" {
@@ -2016,17 +2016,6 @@ func isXMLSpaceOnly(s string) bool {
 
 // addError adds a validation error (suppressed when inside choice branches).
 func (v *validator) addError(elem *helium.Element, msg string) {
-	if v.suppressDepth > 0 {
-		return
-	}
-	line := elem.Line()
-	errStr := validityError(v.filename, line, elem.LocalName(), msg)
-	v.pendingErrors = append(v.pendingErrors, helium.NewLeveledError(errStr, helium.ErrorLevelError))
-	v.valid = false
-}
-
-// addErrorOnNode adds an error attributed to a specific element node.
-func (v *validator) addErrorOnNode(elem *helium.Element, msg string) {
 	if v.suppressDepth > 0 {
 		return
 	}
