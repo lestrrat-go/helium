@@ -172,7 +172,7 @@ Pass bindings with `Evaluator.Namespaces`, `Evaluator.Variables`, and
 - `NewFileResolver(fs.FS)` — file resolver backed by `io/fs`
 - `NewHTTPResolver(*http.Client)` — http(s) resolver; caller owns transport, timeouts, redirect policy
 
-User functions supplied via `Evaluator.Functions` CANNOT override built-ins in the `fn:` namespace.
+User functions supplied via `Evaluator.Functions` take precedence over built-ins: the resolver checks user-registered functions before the built-in registry, so a user function CAN override a built-in in the `fn:` namespace.
 
 ## Low-allocation reuse
 
