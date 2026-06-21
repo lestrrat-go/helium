@@ -111,9 +111,8 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		if c.filename == "" {
 			return
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
-			elem.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
+			elem.LocalName(), componentLocalComplexType, what))
 	}
 
 	for child := range helium.Children(elem) {
@@ -329,9 +328,8 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		if c.filename == "" {
 			return
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
-			elem.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
+			elem.LocalName(), componentLocalComplexType, what))
 	}
 
 	// Parse child model groups and attributes.
@@ -346,19 +344,17 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup) {
 			if directAttrChild != "" {
 				if c.filename != "" {
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+					c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
 						elem.LocalName(), componentLocalComplexType,
-						fmt.Sprintf("The content model particle '%s' must appear before the attribute declaration '%s'.", ce.LocalName(), directAttrChild)), helium.ErrorLevelFatal))
-					c.errorCount++
+						fmt.Sprintf("The content model particle '%s' must appear before the attribute declaration '%s'.", ce.LocalName(), directAttrChild)))
 				}
 				continue
 			}
 			if contentModelChild != "" {
 				if c.filename != "" {
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+					c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
 						elem.LocalName(), componentLocalComplexType,
-						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)), helium.ErrorLevelFatal))
-					c.errorCount++
+						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)))
 				}
 				continue
 			}
@@ -472,9 +468,8 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		if c.filename == "" {
 			return
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
-			elem.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
+			elem.LocalName(), componentLocalComplexType, what))
 	}
 
 	// Parse child content model (if any).
@@ -489,19 +484,17 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		if isXSDElement(ce, elemSequence) || isXSDElement(ce, elemChoice) || isXSDElement(ce, elemAll) || isXSDElement(ce, elemGroup) {
 			if directAttrChild != "" {
 				if c.filename != "" {
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+					c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
 						elem.LocalName(), componentLocalComplexType,
-						fmt.Sprintf("The content model particle '%s' must appear before the attribute declaration '%s'.", ce.LocalName(), directAttrChild)), helium.ErrorLevelFatal))
-					c.errorCount++
+						fmt.Sprintf("The content model particle '%s' must appear before the attribute declaration '%s'.", ce.LocalName(), directAttrChild)))
 				}
 				continue
 			}
 			if contentModelChild != "" {
 				if c.filename != "" {
-					c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ce.Line(),
+					c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
 						elem.LocalName(), componentLocalComplexType,
-						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)), helium.ErrorLevelFatal))
-					c.errorCount++
+						fmt.Sprintf("A complex type definition must not have more than one content model particle (found '%s' after '%s').", ce.LocalName(), contentModelChild)))
 				}
 				continue
 			}
@@ -648,9 +641,8 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 		if c.filename == "" {
 			return
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(c.diagSource(), ae.Line(),
-			derivation.LocalName(), componentLocalComplexType, what), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaComponentError(c.diagSource(), ae.Line(),
+			derivation.LocalName(), componentLocalComplexType, what))
 	}
 
 	for child := range helium.Children(derivation) {
@@ -908,10 +900,9 @@ func (c *compiler) parseFacets(ctx context.Context, restriction *helium.Element)
 			fs.Patterns = append(fs.Patterns, val)
 			re, rerr := xsdregex.Compile(val)
 			if rerr != nil {
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, ce.Line(),
+				c.schemaError(ctx, schemaParserError(c.filename, ce.Line(),
 					ce.LocalName(), "pattern",
-					fmt.Sprintf("The value '%s' is not a valid regular expression: %s.", val, rerr)), helium.ErrorLevelFatal))
-				c.errorCount++
+					fmt.Sprintf("The value '%s' is not a valid regular expression: %s.", val, rerr)))
 			}
 			fs.compiledPatterns = append(fs.compiledPatterns, re)
 		}

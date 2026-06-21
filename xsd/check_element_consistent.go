@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
@@ -136,8 +135,7 @@ func (c *compiler) checkContentModelConsistent(ctx context.Context, mg *ModelGro
 		}
 		if !c.declsConsistent(decls) {
 			msg := fmt.Sprintf("Two elements with the same name '%s' and namespace '%s', but different type definitions, appear in the content model.", qn.Local, qn.NS)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(source, line, "complexType", component, msg), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(source, line, "complexType", component, msg))
 		}
 	}
 }
@@ -154,8 +152,7 @@ func (c *compiler) checkNamedGroupConsistent(ctx context.Context, mg *ModelGroup
 		}
 		if !c.declsConsistent(decls) {
 			msg := fmt.Sprintf("Two elements with the same name '%s' and namespace '%s', but different type definitions, appear in the content model.", qn.Local, qn.NS)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaComponentError(src.source, src.line, "group", component, msg), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaComponentError(src.source, src.line, "group", component, msg))
 		}
 	}
 }

@@ -113,9 +113,8 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		n, ok := parseNonNegativeOccurs(v, false)
 		if !ok {
 			minOK = false
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
-				"The value '"+v+"' is not valid. Expected is 'xs:nonNegativeInteger'."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
+				"The value '"+v+"' is not valid. Expected is 'xs:nonNegativeInteger'."))
 		} else {
 			minVal = n
 		}
@@ -127,9 +126,8 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		n, ok := parseNonNegativeOccurs(v, true)
 		if !ok {
 			maxOK = false
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMaxOccurs,
-				"The value '"+v+"' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaParserErrorAttr(src, line, local, xsdElem, attrMaxOccurs,
+				"The value '"+v+"' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'."))
 		} else {
 			maxVal = n
 		}
@@ -147,9 +145,8 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 		}
 		if effMin >= 1 {
 			maxBelowOne = true
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMaxOccurs,
-				"The value must be greater than or equal to 1."), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaParserErrorAttr(src, line, local, xsdElem, attrMaxOccurs,
+				"The value must be greater than or equal to 1."))
 		}
 	}
 
@@ -157,9 +154,8 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 	// can never be exceeded). Suppress this when the ">= 1" rule already fired on
 	// maxOccurs; libxml2 reports only the maxOccurs error there.
 	if minPresent && maxPresent && minOK && maxOK && maxVal != Unbounded && !maxBelowOne && minVal > maxVal {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
-			"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaParserErrorAttr(src, line, local, xsdElem, attrMinOccurs,
+			"The value must not be greater than the value of 'maxOccurs'."))
 	}
 }
 
@@ -196,9 +192,8 @@ func (c *compiler) readProcessContents(ctx context.Context, elem *helium.Element
 	default:
 		if c.filename != "" {
 			msg := fmt.Sprintf("'%s' is not a valid value of the union type '#processContents'.", v)
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSource(), elem.Line(),
-				elem.LocalName(), elem.LocalName(), attrProcessContents, msg), helium.ErrorLevelFatal))
-			c.errorCount++
+			c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+				elem.LocalName(), elem.LocalName(), attrProcessContents, msg))
 		}
 		return ProcessStrict
 	}
@@ -214,9 +209,8 @@ func (c *compiler) validateWildcardNamespace(ctx context.Context, elem *helium.E
 		return
 	}
 	reject := func(msg string) {
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSource(), elem.Line(),
-			elem.LocalName(), elem.LocalName(), attrNamespace, msg), helium.ErrorLevelFatal))
-		c.errorCount++
+		c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+			elem.LocalName(), elem.LocalName(), attrNamespace, msg))
 	}
 
 	// The "##any" / "##other" keywords are EXACT singleton lexical forms: the
@@ -332,9 +326,8 @@ func (c *compiler) readBooleanAttr(ctx context.Context, elem *helium.Element, at
 		return v
 	}
 	msg := fmt.Sprintf("'%s' is not a valid value of the atomic type 'xs:boolean'.", normalizeWhiteSpace(getAttr(elem, attr), "collapse"))
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserErrorAttr(c.diagSource(), elem.Line(),
-		elem.LocalName(), elem.LocalName(), attr, msg), helium.ErrorLevelFatal))
-	c.errorCount++
+	c.schemaError(ctx, schemaParserErrorAttr(c.diagSource(), elem.Line(),
+		elem.LocalName(), elem.LocalName(), attr, msg))
 	return false
 }
 
@@ -423,9 +416,8 @@ func (c *compiler) readAttributeUseDecl(ctx context.Context, elem *helium.Elemen
 			}
 			td, err := c.parseSimpleType(ctx, ce)
 			if err != nil {
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, ce.Line(),
-					ce.LocalName(), "attribute", err.Error()), helium.ErrorLevelFatal))
-				c.errorCount++
+				c.schemaError(ctx, schemaParserError(c.filename, ce.Line(),
+					ce.LocalName(), "attribute", err.Error()))
 				break
 			}
 			au.Type = td
@@ -516,10 +508,9 @@ func (c *compiler) reportDuplicateComponent(ctx context.Context, elem *helium.El
 	if source == "" {
 		source = c.filename
 	}
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(source, elem.Line(),
+	c.schemaError(ctx, schemaParserError(source, elem.Line(),
 		elem.LocalName(), component,
-		kind+" "+qnDisplay+" does already exist."), helium.ErrorLevelFatal))
-	c.errorCount++
+		kind+" "+qnDisplay+" does already exist."))
 }
 
 func (c *compiler) parseLocalElement(ctx context.Context, elem *helium.Element) (*Particle, error) {
@@ -816,10 +807,8 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 		if ns == "" && prefix != "" {
 			msg := fmt.Sprintf("The keyref identity-constraint '%s' has a 'refer' attribute '%s' whose namespace prefix '%s' is not bound.", idc.Name, refer, prefix)
 			if c.filename != "" {
-				c.errorHandler.Handle(ctx, helium.NewLeveledError(
-					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg),
-					helium.ErrorLevelFatal))
-				c.errorCount++
+				c.schemaError(ctx,
+					schemaParserErrorAttr(c.filename, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 			}
 			return QName{}, true
 		}
@@ -844,8 +833,6 @@ func (c *compiler) reportIDCXPathError(ctx context.Context, kind string, line in
 		noun = "field"
 	}
 	msg := fmt.Sprintf("The %s XPath '%s' is not a valid %s expression: %s.", noun, xpath, noun, cause)
-	c.errorHandler.Handle(ctx, helium.NewLeveledError(
-		schemaParserErrorAttr(c.filename, line, kind, kind, attrXPath, msg),
-		helium.ErrorLevelFatal))
-	c.errorCount++
+	c.schemaError(ctx,
+		schemaParserErrorAttr(c.filename, line, kind, kind, attrXPath, msg))
 }

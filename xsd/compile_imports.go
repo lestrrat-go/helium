@@ -200,10 +200,9 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		if c.filename != "" {
 			displayLoc = schemaDisplayLoc(c.filename, location)
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, includeElem.Line(),
+		c.schemaError(ctx, schemaParserError(c.filename, includeElem.Line(),
 			includeElem.LocalName(), elemInclude,
-			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."), helium.ErrorLevelFatal))
-		c.errorCount++
+			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."))
 		return nil
 	}
 
@@ -304,10 +303,9 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		if c.filename != "" {
 			displayLoc = schemaDisplayLoc(c.filename, location)
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, redefineElem.Line(),
+		c.schemaError(ctx, schemaParserError(c.filename, redefineElem.Line(),
 			redefineElem.LocalName(), elemRedefine,
-			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."), helium.ErrorLevelFatal))
-		c.errorCount++
+			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."))
 		return nil
 	}
 
@@ -656,10 +654,9 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		if c.filename != "" {
 			displayLoc = schemaDisplayLoc(c.filename, location)
 		}
-		c.errorHandler.Handle(ctx, helium.NewLeveledError(schemaParserError(c.filename, importElem.Line(),
+		c.schemaError(ctx, schemaParserError(c.filename, importElem.Line(),
 			importElem.LocalName(), elemImport,
-			"The namespace '"+impTargetNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."), helium.ErrorLevelFatal))
-		c.errorCount++
+			"The namespace '"+impTargetNS+"' of the imported schema '"+displayLoc+"' differs from the requested namespace '"+ns+"'."))
 		return nil
 	}
 
