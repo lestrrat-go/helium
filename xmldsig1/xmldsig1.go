@@ -2,8 +2,10 @@ package xmldsig1
 
 import (
 	"context"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 )
 
 // ReferenceConfig describes a single Reference element in a signature.
@@ -200,7 +202,7 @@ func findSignatureElements(n helium.Node) []*helium.Element {
 		if !ok {
 			return
 		}
-		if localName(elem) == "Signature" && isDSigCoreNS(elem) {
+		if domutil.LocalName(elem) == "Signature" && isDSigCoreNS(elem) {
 			out = append(out, elem)
 			// Do not descend into a Signature — a Signature inside
 			// another Signature (e.g. inside KeyInfo) is not itself a
@@ -247,41 +249,12 @@ func isExcC14NNS(e *helium.Element) bool {
 
 func elementNamespaceURI(e *helium.Element) string {
 	name := e.Name()
-	for i := range len(name) {
-		if name[i] == ':' {
-			prefix := name[:i]
-			for _, ns := range e.Namespaces() {
-				if ns.Prefix() == prefix {
-					return ns.URI()
-				}
-			}
-			// Walk ancestors for the namespace declaration.
-			for p := e.Parent(); p != nil; p = p.Parent() {
-				if pe, ok := helium.AsNode[*helium.Element](p); ok {
-					for _, ns := range pe.Namespaces() {
-						if ns.Prefix() == prefix {
-							return ns.URI()
-						}
-					}
-				}
-			}
-			return ""
-		}
+	prefix := ""
+	if i := strings.IndexByte(name, ':'); i >= 0 {
+		prefix = name[:i]
 	}
-	// No prefix — look for default namespace.
-	for _, ns := range e.Namespaces() {
-		if ns.Prefix() == "" {
-			return ns.URI()
-		}
-	}
-	for p := e.Parent(); p != nil; p = p.Parent() {
-		if pe, ok := helium.AsNode[*helium.Element](p); ok {
-			for _, ns := range pe.Namespaces() {
-				if ns.Prefix() == "" {
-					return ns.URI()
-				}
-			}
-		}
-	}
-	return ""
+	// First-match-wins ancestor walk for the prefix (or the default namespace
+	// when the name is unprefixed), with no implicit xml predeclaration.
+	uri, _ := domutil.LookupNSPrefixURI(e, prefix)
+	return uri
 }

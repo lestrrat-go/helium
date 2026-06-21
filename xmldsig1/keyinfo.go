@@ -10,6 +10,7 @@ import (
 	"math/big"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 )
 
 // KeySource provides keys for signature verification.
@@ -202,7 +203,7 @@ func parseKeyInfo(keyInfoElem *helium.Element) (*KeyInfoData, error) {
 		if !isDSigCoreNS(elem) {
 			continue
 		}
-		switch localName(elem) {
+		switch domutil.LocalName(elem) {
 		case "X509Data":
 			if err := parseX509Data(elem, data); err != nil {
 				return nil, err
@@ -227,10 +228,10 @@ func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
 		if !isDSigCoreNS(certElem) {
 			continue
 		}
-		if localName(certElem) != "X509Certificate" {
+		if domutil.LocalName(certElem) != "X509Certificate" {
 			continue
 		}
-		derBytes, err := decodeBase64(textContent(certElem))
+		derBytes, err := decodeBase64(domutil.TextContent(certElem))
 		if err != nil {
 			return fmt.Errorf("%w: invalid X509Certificate base64: %v", ErrInvalidKeyInfo, err)
 		}
@@ -249,7 +250,7 @@ func parseKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		if !ok {
 			continue
 		}
-		switch localName(kvElem) {
+		switch domutil.LocalName(kvElem) {
 		case "RSAKeyValue":
 			// RSAKeyValue is a core XML-Signature element; reject
 			// foreign-namespace look-alikes.
@@ -282,11 +283,11 @@ func parseRSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		if !isDSigCoreNS(e) {
 			continue
 		}
-		decoded, err := decodeBase64(textContent(e))
+		decoded, err := decodeBase64(domutil.TextContent(e))
 		if err != nil {
 			return fmt.Errorf("%w: invalid RSAKeyValue base64: %v", ErrInvalidKeyInfo, err)
 		}
-		switch localName(e) {
+		switch domutil.LocalName(e) {
 		case "Modulus":
 			kv.Modulus = new(big.Int).SetBytes(decoded)
 		case "Exponent":
@@ -314,7 +315,7 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		if !isDSig11NS(e) {
 			continue
 		}
-		switch localName(e) {
+		switch domutil.LocalName(e) {
 		case "NamedCurve":
 			uri, _ := e.GetAttribute("URI")
 			switch uri {
@@ -326,7 +327,7 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 				return fmt.Errorf("%w: unsupported EC curve: %s", ErrInvalidKeyInfo, uri)
 			}
 		case "PublicKey":
-			decoded, err := decodeBase64(textContent(e))
+			decoded, err := decodeBase64(domutil.TextContent(e))
 			if err != nil {
 				return fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrInvalidKeyInfo, err)
 			}
@@ -344,23 +345,3 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 }
 
 // localName returns the local name of an element, stripping any prefix.
-func localName(e *helium.Element) string {
-	name := e.Name()
-	if i := len(name) - 1; i >= 0 {
-		for j := 0; j <= i; j++ {
-			if name[j] == ':' {
-				return name[j+1:]
-			}
-		}
-	}
-	return name
-}
-
-// textContent returns the concatenated text content of an element.
-func textContent(e *helium.Element) string {
-	var sb []byte
-	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
-		sb = append(sb, child.Content()...)
-	}
-	return string(sb)
-}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 )
 
 // isNilKeySource reports whether a KeySource is effectively nil. A plain
@@ -222,7 +223,7 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 		if !isDSigCoreNS(elem) {
 			continue
 		}
-		switch localName(elem) {
+		switch domutil.LocalName(elem) {
 		case "SignedInfo":
 			if parsed.signedInfoElem != nil {
 				return nil, fmt.Errorf("%w: multiple SignedInfo elements", ErrInvalidSignature)
@@ -236,7 +237,7 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 				return nil, fmt.Errorf("%w: multiple SignatureValue elements", ErrInvalidSignature)
 			}
 			signatureValueSeen = true
-			decoded, err := decodeBase64(textContent(elem))
+			decoded, err := decodeBase64(domutil.TextContent(elem))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid SignatureValue base64: %v", ErrInvalidSignature, err)
 			}
@@ -273,7 +274,7 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 		if !isDSigCoreNS(e) {
 			continue
 		}
-		switch localName(e) {
+		switch domutil.LocalName(e) {
 		case "CanonicalizationMethod":
 			alg, ok := e.GetAttribute("Algorithm")
 			if !ok {
@@ -320,7 +321,7 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 		if !isDSigCoreNS(e) {
 			continue
 		}
-		switch localName(e) {
+		switch domutil.LocalName(e) {
 		case "Transforms":
 			for tc := e.FirstChild(); tc != nil; tc = tc.NextSibling() {
 				te, ok := helium.AsNode[*helium.Element](tc)
@@ -336,7 +337,7 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 				if !isDSigCoreNS(te) {
 					continue
 				}
-				if localName(te) != "Transform" {
+				if domutil.LocalName(te) != "Transform" {
 					continue
 				}
 				alg, _ := te.GetAttribute("Algorithm")
@@ -357,7 +358,7 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 					if !isExcC14NNS(incElem) {
 						continue
 					}
-					if localName(incElem) == "InclusiveNamespaces" {
+					if domutil.LocalName(incElem) == "InclusiveNamespaces" {
 						pl, _ := incElem.GetAttribute("PrefixList")
 						if pl != "" {
 							t.prefixes = strings.Fields(pl)
@@ -373,7 +374,7 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 			}
 			ref.digestAlgorithm = alg
 		case "DigestValue":
-			decoded, err := decodeBase64(textContent(e))
+			decoded, err := decodeBase64(domutil.TextContent(e))
 			if err != nil {
 				return ref, fmt.Errorf("%w: invalid DigestValue base64: %v", ErrInvalidSignature, err)
 			}
