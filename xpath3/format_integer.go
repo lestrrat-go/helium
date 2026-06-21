@@ -919,6 +919,9 @@ func int64ToGermanWords(n int64) string {
 	if n == 0 {
 		return "null"
 	}
+	if n < 0 {
+		return "minus " + int64ToGermanWords(-n)
+	}
 	ones := []string{"", "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun", "zehn",
 		"elf", "zwölf", "dreizehn", "vierzehn", "fünfzehn", "sechzehn", "siebzehn", "achtzehn", "neunzehn"}
 	tens := []string{"", "", "zwanzig", "dreißig", "vierzig", "fünfzig", "sechzig", "siebzig", "achtzig", "neunzig"}
@@ -935,6 +938,44 @@ func int64ToGermanWords(n int64) string {
 			unit = "ein"
 		}
 		return unit + "und" + tens[n/10]
+	}
+	if n < 1000 {
+		w := ones[n/100]
+		if w == "eins" {
+			w = "ein"
+		}
+		w += "hundert"
+		if n%100 != 0 {
+			w += int64ToGermanWords(n % 100)
+		}
+		return w
+	}
+	if n < 1000000 {
+		q := n / 1000
+		w := ""
+		if q == 1 {
+			w = "ein"
+		} else {
+			w = int64ToGermanWords(q)
+		}
+		w += "tausend"
+		if n%1000 != 0 {
+			w += int64ToGermanWords(n % 1000)
+		}
+		return w
+	}
+	if n < 1000000000 {
+		q := n / 1000000
+		w := ""
+		if q == 1 {
+			w = "eine Million "
+		} else {
+			w = int64ToGermanWords(q) + " Millionen "
+		}
+		if n%1000000 != 0 {
+			w += int64ToGermanWords(n % 1000000)
+		}
+		return w
 	}
 	return fmt.Sprintf("%d", n)
 }
@@ -1033,9 +1074,12 @@ func int64ToFrenchWords(n int64) string {
 	if n == 0 {
 		return "zéro"
 	}
+	if n < 0 {
+		return "moins " + int64ToFrenchWords(-n)
+	}
 	ones := []string{"", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix",
 		"onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf"}
-	tens := []string{"", "", "vingt", "trente", "quarantine", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"}
+	tens := []string{"", "", "vingt", "trente", "quarante", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"}
 
 	if n < 20 {
 		return ones[n]
@@ -1044,7 +1088,7 @@ func int64ToFrenchWords(n int64) string {
 		t := n / 10
 		u := n % 10
 		if t == 7 || t == 9 {
-			return tens[t] + "-" + ones[u+10]
+			u += 10
 		}
 		if u == 0 {
 			if t == 8 {
@@ -1052,10 +1096,45 @@ func int64ToFrenchWords(n int64) string {
 			}
 			return tens[t]
 		}
-		if u == 1 && t != 8 {
-			return tens[t] + " et un"
+		sep := "-"
+		if u == 1 && t != 8 && t != 9 {
+			sep = " et "
 		}
-		return tens[t] + "-" + ones[u]
+		if u == 11 && t == 7 {
+			sep = " et "
+		}
+		return tens[t] + sep + ones[u]
+	}
+	if n < 1000 {
+		q := n / 100
+		w := ""
+		if q == 1 {
+			w = "cent"
+		} else {
+			w = ones[q] + " cent"
+		}
+		r := n % 100
+		if r == 0 && q > 1 {
+			w += "s"
+		}
+		if r != 0 {
+			w += " " + int64ToFrenchWords(r)
+		}
+		return w
+	}
+	if n < 1000000 {
+		q := n / 1000
+		w := ""
+		if q == 1 {
+			w = "mille"
+		} else {
+			w = int64ToFrenchWords(q) + " mille"
+		}
+		r := n % 1000
+		if r != 0 {
+			w += " " + int64ToFrenchWords(r)
+		}
+		return w
 	}
 	return fmt.Sprintf("%d", n)
 }
@@ -1083,6 +1162,9 @@ func int64ToItalianWords(n int64) string {
 	if n == 0 {
 		return "zero"
 	}
+	if n < 0 {
+		return "meno " + int64ToItalianWords(-n)
+	}
 	ones := []string{"", "uno", "due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove", "dieci",
 		"undici", "dodici", "tredici", "quattordici", "quindici", "sedici", "diciassette", "diciotto", "diciannove"}
 	tens := []string{"", "", "venti", "trenta", "quaranta", "cinquanta", "sessanta", "settanta", "ottanta", "novanta"}
@@ -1101,6 +1183,34 @@ func int64ToItalianWords(n int64) string {
 			base = base[:len(base)-1]
 		}
 		return base + ones[u]
+	}
+	if n < 1000 {
+		q := n / 100
+		w := ""
+		if q == 1 {
+			w = "cento"
+		} else {
+			w = ones[q] + "cento"
+		}
+		r := n % 100
+		if r != 0 {
+			w += int64ToItalianWords(r)
+		}
+		return w
+	}
+	if n < 1000000 {
+		q := n / 1000
+		w := ""
+		if q == 1 {
+			w = "mille"
+		} else {
+			w = int64ToItalianWords(q) + "mila"
+		}
+		r := n % 1000
+		if r != 0 {
+			w += int64ToItalianWords(r)
+		}
+		return w
 	}
 	return fmt.Sprintf("%d", n)
 }
