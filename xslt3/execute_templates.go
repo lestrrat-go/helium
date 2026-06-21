@@ -195,10 +195,10 @@ func (ec *execContext) hasConflictingMatch(ctx context.Context, node helium.Node
 			if tmpl.ImportPrec == best.ImportPrec && tmpl.Priority < best.Priority {
 				return false
 			}
-			// Split union pattern branches share the same Body slice; they
-			// originate from the same template rule and should not be
-			// treated as conflicting (spec bug 30402).
-			if len(tmpl.Body) > 0 && len(best.Body) > 0 && &tmpl.Body[0] == &best.Body[0] {
+			// Split union pattern branches originate from the same template
+			// rule and should not be treated as conflicting with each other
+			// (spec bug 30402). They carry a shared non-zero splitOriginID.
+			if tmpl.splitOriginID != 0 && tmpl.splitOriginID == best.splitOriginID {
 				continue
 			}
 			if tmpl.Match != nil && tmpl.Match.matchPattern(ctx, ec, node) {
@@ -263,7 +263,9 @@ func (ec *execContext) hasConflictingAtomicMatch(ctx context.Context, item xpath
 			if tmpl.ImportPrec == best.ImportPrec && tmpl.Priority < best.Priority {
 				return false
 			}
-			if len(tmpl.Body) > 0 && len(best.Body) > 0 && &tmpl.Body[0] == &best.Body[0] {
+			// Split union pattern branches share a non-zero splitOriginID; they
+			// originate from the same rule and must not self-conflict.
+			if tmpl.splitOriginID != 0 && tmpl.splitOriginID == best.splitOriginID {
 				continue
 			}
 			if tmpl.Match != nil && ec.matchAtomicPattern(ctx, tmpl.Match, item) {

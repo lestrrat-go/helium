@@ -299,6 +299,13 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		templates := []*template{tmpl}
 		if !hasExplicitPriority && len(tmpl.Match.Alternatives) > 1 {
 			templates = nil
+			// All split branches of one union rule share a stable origin id so
+			// the on-multiple-match conflict checks can recognize them as a
+			// single rule even when they have an empty body (no &Body[0]
+			// identity to compare). See hasConflictingMatch /
+			// hasConflictingAtomicMatch.
+			c.stylesheet.unionSplitCounter++
+			originID := c.stylesheet.unionSplitCounter
 			for _, alt := range tmpl.Match.Alternatives {
 				split := *tmpl // shallow copy shares Body, Params, etc.
 				split.Match = &pattern{
@@ -309,6 +316,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 					nsBindings:        tmpl.Match.nsBindings,
 				}
 				split.Priority = alt.priority
+				split.splitOriginID = originID
 				splitCopy := split // allocate separate heap object
 				templates = append(templates, &splitCopy)
 			}
