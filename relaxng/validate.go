@@ -639,8 +639,8 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		return 0
 
 	case patternRef, patternParentRef:
-		def, ok := v.grammar.defines[pat.name]
-		if !ok {
+		def := pat.resolved
+		if def == nil {
 			return -1
 		}
 		return v.validateContentPat(def, elem, attrs, attrUsed, state)
@@ -865,7 +865,7 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 // isKnownChildElement checks if an element name/ns appears as a child element
 // defined anywhere in the content patterns of the given element pattern.
 func (v *validator) isKnownChildElement(elemPat *pattern, name, ns string) bool {
-	visited := make(map[string]bool)
+	visited := make(map[*pattern]bool)
 	for _, child := range elemPat.children {
 		if v.isKnownElementInPatternImpl(child, name, ns, visited) {
 			return true
@@ -874,7 +874,7 @@ func (v *validator) isKnownChildElement(elemPat *pattern, name, ns string) bool 
 	return false
 }
 
-func (v *validator) isKnownElementInPatternImpl(pat *pattern, name, ns string, visited map[string]bool) bool {
+func (v *validator) isKnownElementInPatternImpl(pat *pattern, name, ns string, visited map[*pattern]bool) bool {
 	if pat == nil {
 		return false
 	}
@@ -891,14 +891,14 @@ func (v *validator) isKnownElementInPatternImpl(pat *pattern, name, ns string, v
 		// Don't recurse into element children (those define nested content)
 		return false
 	case patternRef, patternParentRef:
-		if visited[pat.name] {
+		def := pat.resolved
+		if def == nil {
 			return false
 		}
-		visited[pat.name] = true
-		def, ok := v.grammar.defines[pat.name]
-		if !ok {
+		if visited[def] {
 			return false
 		}
+		visited[def] = true
 		return v.isKnownElementInPatternImpl(def, name, ns, visited)
 	default:
 		for _, child := range pat.children {
@@ -1076,8 +1076,8 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		content := wrapChildren(pat.children)
 		return v.matchAttrContent(content, text, elem)
 	case patternRef, patternParentRef:
-		def, ok := v.grammar.defines[pat.name]
-		if !ok {
+		def := pat.resolved
+		if def == nil {
 			return -1
 		}
 		return v.matchAttrContent(def, text, elem)
@@ -1229,8 +1229,8 @@ func (v *validator) matchAttrTokensCounts(pat *pattern, tokens []string) []int {
 	case patternEmpty:
 		return []int{0}
 	case patternRef, patternParentRef:
-		def, ok := v.grammar.defines[pat.name]
-		if !ok {
+		def := pat.resolved
+		if def == nil {
 			return nil
 		}
 		return v.matchAttrTokensCounts(def, tokens)
@@ -1598,8 +1598,8 @@ func (v *validator) validateOneOrMore(pat *pattern, state *validState) int {
 }
 
 func (v *validator) validateRef(pat *pattern, state *validState) int {
-	def, ok := v.grammar.defines[pat.name]
-	if !ok {
+	def := pat.resolved
+	if def == nil {
 		return -1
 	}
 	return v.validatePattern(def, state)
@@ -2055,9 +2055,9 @@ func (v *validator) patternElementName(pat *pattern) string {
 	switch pat.kind {
 	case patternElement:
 		return pat.name
-	case patternRef:
-		def, ok := v.grammar.defines[pat.name]
-		if !ok {
+	case patternRef, patternParentRef:
+		def := pat.resolved
+		if def == nil {
 			return ""
 		}
 		return v.patternElementName(def)
@@ -2111,9 +2111,9 @@ func (v *validator) isNullable(pat *pattern) bool {
 			}
 		}
 		return true
-	case patternRef:
-		def, ok := v.grammar.defines[pat.name]
-		if !ok {
+	case patternRef, patternParentRef:
+		def := pat.resolved
+		if def == nil {
 			return false
 		}
 		return v.isNullable(def)
@@ -2195,8 +2195,8 @@ func (v *validator) resolveToGroup(pat *pattern) *pattern {
 	for pat != nil {
 		switch pat.kind {
 		case patternRef, patternParentRef:
-			def, ok := v.grammar.defines[pat.name]
-			if !ok {
+			def := pat.resolved
+			if def == nil {
 				return nil
 			}
 			pat = def

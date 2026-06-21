@@ -30,13 +30,33 @@ type compiler struct {
 	errorCount   int
 	includeStack map[string]struct{} // recursion guard for include/externalRef (lookup in O(1))
 	includeLimit int
-	// grammarStack tracks nested grammars for parentRef resolution.
+	// grammarStack tracks nested grammars for parentRef resolution. It holds
+	// the currently-open lexical grammar scopes during parsing; the top is the
+	// nearest enclosing <grammar>.
 	grammarStack []*grammarScope
+	// pendingRefs records every patternRef/patternParentRef node together with
+	// the lexical grammar scope it was parsed in, so refs can be resolved to
+	// scoped define pointers after the whole tree is parsed (refs may point at
+	// defines that appear later in the same grammar).
+	pendingRefs []pendingRef
+	// scopes holds every grammar scope ever created (kept alive after pop) so
+	// the post-parse passes can enumerate all defines across nested grammars.
+	scopes []*grammarScope
 }
 
-// grammarScope represents a grammar level during compilation.
+// pendingRef is a ref/parentRef node awaiting compile-time resolution against
+// its lexical grammar scope.
+type pendingRef struct {
+	pat   *pattern
+	scope *grammarScope
+}
+
+// grammarScope represents a grammar level during compilation. parent links to
+// the enclosing grammar scope (nil for the outermost) so <parentRef> can
+// resolve one grammar scope up.
 type grammarScope struct {
 	defines map[string]*defineEntry
+	parent  *grammarScope
 }
 
 // defineEntry tracks a define and its combine mode.
@@ -95,8 +115,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 
 	c.resolveRefs(ctx)
-	c.checkRefCycles(ctx)
 	c.popGrammar(ctx)
+
+	// Resolve every recorded ref/parentRef to a scoped define pointer now that
+	// the entire grammar tree (including nested grammars and forward-declared
+	// defines) has been parsed.
+	c.resolveScopedRefs(ctx)
+	c.checkRefCycles(ctx)
 
 	c.grammar.start = startPat
 	c.checkRules(ctx)
@@ -114,9 +139,16 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 }
 
 func (c *compiler) pushGrammar(_ context.Context) {
-	c.grammarStack = append(c.grammarStack, &grammarScope{
+	var parent *grammarScope
+	if len(c.grammarStack) > 0 {
+		parent = c.grammarStack[len(c.grammarStack)-1]
+	}
+	scope := &grammarScope{
 		defines: make(map[string]*defineEntry),
-	})
+		parent:  parent,
+	}
+	c.grammarStack = append(c.grammarStack, scope)
+	c.scopes = append(c.scopes, scope)
 }
 
 func (c *compiler) popGrammar(_ context.Context) {
@@ -149,7 +181,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	if g == nil {
 		return
 	}
-	// Copy defines to grammar for validation-time lookup.
+	// Copy defines to grammar for validation-time lookup. Retained for the flat
+	// Grammar.defines map; per-ref scoped resolution (resolveScopedRefs) is the
+	// authority for which define a ref actually points at.
 	for name, entry := range g.defines {
 		if name != "##start" {
 			c.grammar.defines[name] = entry.pattern
@@ -157,25 +191,86 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	}
 }
 
+// recordRef registers a ref/parentRef node together with the lexical grammar
+// scope it was parsed in, for later scoped resolution. A ref parsed outside any
+// <grammar> (a bare top-level pattern) has no scope and stays unresolved.
+func (c *compiler) recordRef(ctx context.Context, pat *pattern) {
+	c.pendingRefs = append(c.pendingRefs, pendingRef{pat: pat, scope: c.currentGrammar(ctx)})
+}
+
+// resolveScopedRefs fixes each recorded ref/parentRef to the define it names in
+// its lexical grammar scope: <ref> resolves in the scope it appears in,
+// <parentRef> in that scope's parent. RELAX NG §4.18 requires every
+// ref/parentRef to refer to a define, so any node that cannot be resolved — a
+// name absent from its target scope, or a <parentRef> with no parent grammar
+// scope — is reported as a fatal compile error so compilation fails cleanly
+// instead of deferring to validation.
+func (c *compiler) resolveScopedRefs(ctx context.Context) {
+	for _, pr := range c.pendingRefs {
+		scope := pr.scope
+		// A ref parsed outside any <grammar> has no scope; such bare top-level
+		// patterns carry no defines to resolve against, so leave them alone.
+		if scope == nil {
+			continue
+		}
+		if pr.pat.kind == patternParentRef {
+			scope = scope.parent
+			if scope == nil {
+				c.reportUnresolvedRef(ctx, pr.pat, "parentRef",
+					fmt.Sprintf("Reference %s has no parent grammar scope", pr.pat.name))
+				continue
+			}
+		}
+		entry, ok := scope.defines[pr.pat.name]
+		if !ok {
+			elemName := "ref"
+			if pr.pat.kind == patternParentRef {
+				elemName = "parentRef"
+			}
+			c.reportUnresolvedRef(ctx, pr.pat, elemName,
+				fmt.Sprintf("Reference %s has no matching definition", pr.pat.name))
+			continue
+		}
+		pr.pat.resolved = entry.pattern
+	}
+}
+
+// reportUnresolvedRef emits a fatal parser error for a ref/parentRef that names
+// no in-scope define and bumps errorCount so compilation fails closed.
+func (c *compiler) reportUnresolvedRef(ctx context.Context, pat *pattern, elemName, msg string) {
+	formatted := rngParserErrorAt(c.filename, pat.line, elemName, msg)
+	c.errorHandler.Handle(ctx, helium.NewLeveledError(formatted, helium.ErrorLevelFatal))
+	c.errorCount++
+}
+
 // checkRefCycles detects cycles in inline references (refs that lead back to
-// the same define without passing through an element pattern).
+// the same define without passing through an element pattern). It walks each
+// define body across every grammar scope, following refs by their resolved
+// scoped pointer so two same-named defines in different grammars are distinct.
 func (c *compiler) checkRefCycles(ctx context.Context) {
-	for name := range c.grammar.defines {
-		visiting := map[string]bool{name: true}
-		if ref := c.findCycleInPattern(c.grammar.defines[name], visiting); ref != nil {
-			msg := rngParserErrorAt(c.filename, ref.line, "ref",
-				fmt.Sprintf("Detected a cycle in %s references", ref.name))
-			c.errorHandler.Handle(ctx, helium.NewLeveledError(msg, helium.ErrorLevelFatal))
-			c.errorCount++
-			return
+	for _, scope := range c.scopes {
+		for name, entry := range scope.defines {
+			if name == "##start" {
+				continue
+			}
+			visiting := map[*pattern]bool{entry.pattern: true}
+			if ref := c.findCycleInPattern(entry.pattern, visiting); ref != nil {
+				msg := rngParserErrorAt(c.filename, ref.line, "ref",
+					fmt.Sprintf("Detected a cycle in %s references", ref.name))
+				c.errorHandler.Handle(ctx, helium.NewLeveledError(msg, helium.ErrorLevelFatal))
+				c.errorCount++
+				return
+			}
 		}
 	}
 }
 
 // findCycleInPattern walks a pattern tree looking for ref cycles.
 // Element patterns break the chain (refs inside elements don't create content cycles).
-// Returns the offending ref pattern if a cycle is found.
-func (c *compiler) findCycleInPattern(pat *pattern, visiting map[string]bool) *pattern {
+// Returns the offending ref pattern if a cycle is found. Refs are followed via
+// their compile-time-resolved scoped target (pat.resolved), and the visiting set
+// is keyed by define-pattern pointer so distinct same-named scopes don't collide.
+func (c *compiler) findCycleInPattern(pat *pattern, visiting map[*pattern]bool) *pattern {
 	if pat == nil {
 		return nil
 	}
@@ -184,16 +279,16 @@ func (c *compiler) findCycleInPattern(pat *pattern, visiting map[string]bool) *p
 		// Elements break the cycle chain — don't recurse into content
 		return nil
 	case patternRef, patternParentRef:
-		if visiting[pat.name] {
-			return pat
-		}
-		def, ok := c.grammar.defines[pat.name]
-		if !ok {
+		def := pat.resolved
+		if def == nil {
 			return nil
 		}
-		visiting[pat.name] = true
+		if visiting[def] {
+			return pat
+		}
+		visiting[def] = true
 		result := c.findCycleInPattern(def, visiting)
-		delete(visiting, pat.name)
+		delete(visiting, def)
 		return result
 	default:
 		for _, child := range pat.children {
@@ -213,6 +308,16 @@ func (c *compiler) findCycleInPattern(pat *pattern, visiting map[string]bool) *p
 
 // parseGrammarContent parses children of a <grammar> element.
 func (c *compiler) parseGrammarContent(ctx context.Context, grammarElem *helium.Element) {
+	c.parseGrammarContentSkipping(ctx, grammarElem, nil)
+}
+
+// parseGrammarContentSkipping parses children of a <grammar> element, skipping
+// any top-level <start>/<define> whose override name is in skip. Used by the
+// <include> path so a start/define overridden by the include body is removed
+// (never parsed) per RELAX NG include semantics. <div> is transparent, so the
+// skip set applies through nested <div> wrappers as well — matching how
+// collectOverrideNames descends into <div>.
+func (c *compiler) parseGrammarContentSkipping(ctx context.Context, grammarElem *helium.Element, skip map[string]struct{}) {
 	for child := range helium.Children(grammarElem) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
@@ -224,13 +329,20 @@ func (c *compiler) parseGrammarContent(ctx context.Context, grammarElem *helium.
 
 		switch elem.LocalName() {
 		case "start":
+			if _, overridden := skip["##start"]; overridden {
+				continue
+			}
 			c.parseStart(ctx, elem)
 		case "define":
+			name := getUnqualifiedAttr(elem, "name")
+			if _, overridden := skip[name]; overridden {
+				continue
+			}
 			c.parseDefine(ctx, elem)
 		case "include":
 			c.parseInclude(ctx, elem)
 		case "div": // <div> is transparent — recurse into its children
-			c.parseGrammarContent(ctx, elem)
+			c.parseGrammarContentSkipping(ctx, elem, skip)
 		}
 	}
 }
@@ -539,19 +651,34 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 		return
 	}
 
-	// Parse the included grammar content
+	// Collect the override names BEFORE parsing the included grammar. Per RELAX
+	// NG include semantics, a start/define overridden by the <include> body is
+	// REMOVED from the included grammar; its content (including any ref it
+	// holds) must never be parsed, recorded, or resolved. Skipping the
+	// overridden components here avoids recording pendingRefs for refs that live
+	// only inside a removed component — which would otherwise be reported as
+	// fatal unresolved refs by resolveScopedRefs even though the schema is valid.
+	overrideNames := c.collectOverrideNames(ctx, elem)
+	skip := make(map[string]struct{}, len(overrideNames))
+	for _, name := range overrideNames {
+		skip[name] = struct{}{}
+	}
+
+	// Parse the included grammar content, skipping overridden components.
 	oldBaseDir := c.baseDir
 	c.baseDir = filepath.Dir(path)
-	c.parseGrammarContent(ctx, root)
+	c.parseGrammarContentSkipping(ctx, root, skip)
 	c.baseDir = oldBaseDir
 
-	// Collect override names from <include> children, then delete them from
-	// the current grammar scope so the overrides replace (not combine with)
-	// the included definitions.
-	overrideNames := c.collectOverrideNames(ctx, elem)
+	// Clear the overridden names from the current grammar scope before applying
+	// the overrides. Skipping above already prevents the included grammar's own
+	// overridden start/define from being parsed, but a nested <include> inside
+	// the included grammar may have left an overridden-named entry in this scope;
+	// deleting here ensures each override starts from a clean slate (replace, not
+	// combine).
 	g := c.currentGrammar(ctx)
 	if g != nil {
-		for _, name := range overrideNames {
+		for name := range skip {
 			delete(g.defines, name)
 		}
 	}
@@ -669,7 +796,9 @@ func (c *compiler) parsePattern(ctx context.Context, node *helium.Element) *patt
 			c.errorCount++
 			return nil
 		}
-		return &pattern{kind: patternRef, name: name, line: node.Line()}
+		p := &pattern{kind: patternRef, name: name, line: node.Line()}
+		c.recordRef(ctx, p)
+		return p
 	case "parentRef":
 		name := getUnqualifiedAttr(node, "name")
 		if name == "" {
@@ -677,7 +806,9 @@ func (c *compiler) parsePattern(ctx context.Context, node *helium.Element) *patt
 			c.errorCount++
 			return nil
 		}
-		return &pattern{kind: patternParentRef, name: name, line: node.Line()}
+		p := &pattern{kind: patternParentRef, name: name, line: node.Line()}
+		c.recordRef(ctx, p)
+		return p
 	case "externalRef":
 		return c.parseExternalRef(ctx, node)
 	case "data":
@@ -955,16 +1086,29 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 
 	oldBaseDir := c.baseDir
 	c.baseDir = filepath.Dir(path)
+
+	// An <externalRef> target is an INDEPENDENT schema (unlike <include>, which
+	// merges into the includer). It must NOT see the includer's grammar scope:
+	// a <parentRef> inside it must not resolve to the including grammar, and a
+	// bare external <ref> must not bind to the includer's defines. Parse the
+	// target in a fresh, standalone grammar-stack so the new scope's parent is
+	// nil (a <parentRef> with no parent is a fatal compile error) and a bare
+	// external ref resolves only within the external grammar.
+	oldStack := c.grammarStack
+	c.grammarStack = nil
+
 	var result *pattern
+	c.pushGrammar(ctx)
 	if isRNG(root, "grammar") {
-		c.pushGrammar(ctx)
 		c.parseGrammarContent(ctx, root)
 		result = c.resolveStart(ctx)
-		c.resolveRefs(ctx)
-		c.popGrammar(ctx)
 	} else {
 		result = c.parsePattern(ctx, root)
 	}
+	c.resolveRefs(ctx)
+	c.popGrammar(ctx)
+
+	c.grammarStack = oldStack
 	c.baseDir = oldBaseDir
 
 	return result

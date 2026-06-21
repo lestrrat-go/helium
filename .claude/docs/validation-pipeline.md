@@ -355,9 +355,9 @@ Files: `relaxng/relaxng.go` (API), `parse.go` (compiler), `validate.go` (engine)
 1. **Find root** — `<grammar>` or bare pattern (e.g., `<element>`)
 2. **Parse grammar content** — process `<start>`, `<define>` elements; handle `combine="choice"/"interleave"`; support `<div>` containers
 3. **Parse patterns** (recursive) — element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, parentRef, data, value, list, mixed, text, empty, notAllowed
-4. **Resolve references** — copy defines into grammar
-5. **Check reference cycles** — detect cycles in `<ref>` bypassing element patterns
-6. **Rule checks** — compile-time semantic validation
+4. **Resolve references (scoped)** — each `<grammar>` (including nested ones) gets its own lexical `grammarScope` with a `defines` table and a `parent` link. Every `<ref>`/`<parentRef>` node is recorded with the scope it was parsed in (`compiler.pendingRefs`); after the whole tree is parsed, `resolveScopedRefs` fixes each node's `pattern.resolved` pointer: `<ref>` resolves the name in its OWN grammar scope, `<parentRef>` in that scope's PARENT scope. A name not found in the target scope, or a `<parentRef>` with no parent grammar scope, is a FATAL compile error (`reportUnresolvedRef`, bumps `errorCount`) per RELAX NG §4.18 — not a silently-unresolved node. This replaced the former flat global name→pattern map, which collided same-named defines across nested grammars (D-RNG-001). The flat `Grammar.defines` map is still populated by `resolveRefs` but is no longer the resolution authority. **`<include>` override interaction:** a start/define that the `<include>` body OVERRIDES is REMOVED from the included grammar per RELAX NG include semantics, so `parseInclude` collects the override names FIRST and `parseGrammarContentSkipping` skips parsing those top-level start/defines (through transparent `<div>`) when reading the included grammar — refs that live only inside a removed component are never recorded in `pendingRefs` and so never trigger a spurious fatal unresolved-ref. The override names are also `delete`d from the scope after parsing (to clear any entry leaked by a nested `<include>`) before the overrides are applied.
+5. **Check reference cycles** — `checkRefCycles` walks each define body across every scope, following `pattern.resolved` (cycle set keyed by define-pattern POINTER, not name); element patterns break the chain
+6. **Rule checks** — compile-time semantic validation (`checkPattern` also follows `pattern.resolved`; visited set keyed by `{define pattern, ruleFlags}` so a define reached under a new ancestor context — e.g. once normally and once under `<list>` — is re-checked rather than suppressed)
 
 ### Validate: Document + Grammar → Errors
 
@@ -371,7 +371,7 @@ Pattern-matching engine with backtracking:
    - **Choice**: try alternatives, prefer branches making progress
    - **Interleave**: unordered member-by-member matching
    - **ZeroOrMore/OneOrMore/Optional**: repetition with suppressed errors
-   - **Ref/ParentRef**: resolve and recurse
+   - **Ref/ParentRef**: follow the compile-time-resolved `pattern.resolved` scoped pointer and recurse (no by-name lookup)
    - **Data/Value**: type checking
    - **List**: split text, validate items
 3. Element validation: match name, validate attrs, build child list (skip non-content: EntityRef/PI/Comment), validate content, check all attrs+content consumed

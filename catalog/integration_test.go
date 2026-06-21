@@ -57,6 +57,95 @@ func TestCatalogExternalSubset(t *testing.T) {
 	require.Equal(t, "active", attrs[0].Value())
 }
 
+func TestCatalogExternalSubsetFileURI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// DTD that declares a default attribute.
+	dtdContent := `<!ATTLIST doc status CDATA "active">`
+	dtdPath := filepath.Join(dir, "test.dtd")
+	require.NoError(t, os.WriteFile(dtdPath, []byte(dtdContent), 0644))
+
+	// Catalog mapping the system ID to a "file:" URI rather than a bare path.
+	// The resolved value reaches the parser as "file:///...", which must be
+	// converted to a local path before being opened (CAT-001).
+	fileURI := "file://" + filepath.ToSlash(dtdPath)
+	catContent := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <system systemId="http://example.com/test.dtd" uri="` + fileURI + `"/>
+</catalog>`
+	catPath := filepath.Join(dir, "catalog.xml")
+	require.NoError(t, os.WriteFile(catPath, []byte(catContent), 0644))
+
+	xmlContent := `<?xml version="1.0"?>
+<!DOCTYPE doc SYSTEM "http://example.com/test.dtd">
+<doc/>`
+
+	cat, err := catalog.Load(context.Background(), catPath)
+	require.NoError(t, err)
+
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).Catalog(cat)
+
+	doc, err := p.Parse(t.Context(), []byte(xmlContent))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	root := doc.FirstChild()
+	for root != nil && root.Type() != helium.ElementNode {
+		root = root.NextSibling()
+	}
+	require.NotNil(t, root, "should have root element")
+
+	elem := root.(*helium.Element)
+	attrs := elem.Attributes()
+	require.Len(t, attrs, 1, "default attribute from catalog file: URI DTD should be applied")
+	require.Equal(t, "status", attrs[0].LocalName())
+	require.Equal(t, "active", attrs[0].Value())
+}
+
+func TestCatalogResolveEntityFileURI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// External parsed entity content, mapped via a "file:" URI in the catalog.
+	entContent := `replaced-text`
+	entPath := filepath.Join(dir, "ext.ent")
+	require.NoError(t, os.WriteFile(entPath, []byte(entContent), 0644))
+
+	fileURI := "file://" + filepath.ToSlash(entPath)
+	catContent := `<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <system systemId="http://example.com/ext.ent" uri="` + fileURI + `"/>
+</catalog>`
+	catPath := filepath.Join(dir, "catalog.xml")
+	require.NoError(t, os.WriteFile(catPath, []byte(catContent), 0644))
+
+	xmlContent := `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY ext SYSTEM "http://example.com/ext.ent">
+]>
+<doc>&ext;</doc>`
+
+	cat, err := catalog.Load(context.Background(), catPath)
+	require.NoError(t, err)
+
+	p := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).Catalog(cat)
+
+	doc, err := p.Parse(t.Context(), []byte(xmlContent))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	root := doc.FirstChild()
+	for root != nil && root.Type() != helium.ElementNode {
+		root = root.NextSibling()
+	}
+	require.NotNil(t, root, "should have root element")
+	require.Contains(t, string(root.Content()), "replaced-text",
+		"external entity resolved via catalog file: URI should be substituted")
+}
+
 func TestCatalogPublicIDResolution(t *testing.T) {
 	t.Parallel()
 

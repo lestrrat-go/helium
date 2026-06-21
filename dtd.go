@@ -28,12 +28,23 @@ type Notation struct {
 	systemID string
 }
 
-func (n *Notation) AddChild(cur Node) error     { return addChild(n, cur) }
-func (n *Notation) AppendText(b []byte) error   { return appendText(n, b) }
-func (n *Notation) AddSibling(cur Node) error   { return addSibling(n, cur) }
+// AddChild appends cur as the last child of the notation node.
+func (n *Notation) AddChild(cur Node) error { return addChild(n, cur) }
+
+// AppendText appends b as a Text child of the notation node.
+func (n *Notation) AppendText(b []byte) error { return appendText(n, b) }
+
+// AddSibling appends cur as the last sibling of the notation node.
+func (n *Notation) AddSibling(cur Node) error { return addSibling(n, cur) }
+
+// Replace swaps the notation node out of its parent, inserting nodes in its place.
 func (n *Notation) Replace(nodes ...Node) error { return replaceNode(n, nodes...) }
-func (n *Notation) SetTreeDoc(doc *Document)    { setTreeDoc(n, doc) }
-func (n *Notation) Free()                       {}
+
+// SetTreeDoc sets the owning document of the notation node and its subtree.
+func (n *Notation) SetTreeDoc(doc *Document) { setTreeDoc(n, doc) }
+
+// Free is a no-op; it exists to satisfy the Node interface.
+func (n *Notation) Free() {}
 
 func newDTD() *DTD {
 	dtd := &DTD{
@@ -117,6 +128,13 @@ func CopyExtSubset(src, dst *Document) {
 	dst.extSubset = dstDTD
 }
 
+// AddEntity declares an entity in the DTD and registers it as a child node,
+// routing general entities and parameter entities into their respective tables
+// based on typ. Predefined entities cannot be registered, and an unknown typ is
+// rejected. Redeclaring an existing general/parameter entity is a no-op that
+// returns the existing declaration (first definition wins, per XML §4.2);
+// redeclaring a predefined entity (lt, gt, amp, apos, quot) with content that
+// does not resolve to the same character is an error.
 func (dtd *DTD) AddEntity(name string, typ enum.EntityType, publicID, systemID, content string) (*Entity, error) {
 	var table map[string]*Entity
 
@@ -161,6 +179,8 @@ func (dtd *DTD) AddEntity(name string, typ enum.EntityType, publicID, systemID, 
 	return ent, nil
 }
 
+// AddNotation declares a notation in the DTD and registers it as a child node.
+// It returns an error if a notation with the same name is already declared.
 func (dtd *DTD) AddNotation(name, publicID, systemID string) (*Notation, error) {
 	if _, ok := dtd.notations[name]; ok {
 		return nil, fmt.Errorf("redefinition of notation %s", name)
@@ -178,6 +198,12 @@ func (dtd *DTD) AddNotation(name, publicID, systemID string) (*Notation, error) 
 	return nota, nil
 }
 
+// AddElementDecl declares an element content model in the DTD and registers it
+// as a child node. The name may be a QName; its prefix is split off for keying.
+// content must be nil for EMPTY/ANY element types and non-nil for MIXED/ELEMENT
+// types. A previously undefined declaration (created when one of the element's
+// attributes was declared first) is completed in place; a second concrete
+// declaration of the same element is an error.
 func (dtd *DTD) AddElementDecl(name string, typ enum.ElementType, content *ElementContent) (*ElementDecl, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START dtd.AddElementDecl '%s'", name)
@@ -257,6 +283,8 @@ func (dtd *DTD) AddElementDecl(name string, typ enum.ElementType, content *Eleme
 	return decl, nil
 }
 
+// LookupElement returns the element declaration registered under the given
+// local name and prefix, and reports whether it was found.
 func (dtd *DTD) LookupElement(name, prefix string) (*ElementDecl, bool) {
 	key := name + ":" + prefix
 	decl, ok := dtd.elements[key]
@@ -266,11 +294,16 @@ func (dtd *DTD) LookupElement(name, prefix string) (*ElementDecl, bool) {
 	return decl, true
 }
 
+// RemoveElement deletes the element declaration registered under the given
+// local name and prefix, if present.
 func (dtd *DTD) RemoveElement(name, prefix string) {
 	key := name + ":" + prefix
 	delete(dtd.elements, key)
 }
 
+// LookupAttribute returns the attribute declaration registered for the given
+// attribute local name, prefix, and owning element name, and reports whether it
+// was found.
 func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool) {
 	key := name + ":" + prefix + ":" + elem
 	decl, ok := dtd.attributes[key]
@@ -280,6 +313,9 @@ func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool
 	return decl, ok
 }
 
+// RegisterAttribute records an attribute declaration in the DTD, keyed by its
+// name, prefix, and owning element. It returns an error if an attribute with
+// the same key is already declared.
 func (dtd *DTD) RegisterAttribute(attr *AttributeDecl) error {
 	// TODO maybe this shouldn't be normalized, check later
 	key := attr.name + ":" + attr.prefix + ":" + attr.elem
@@ -291,27 +327,37 @@ func (dtd *DTD) RegisterAttribute(attr *AttributeDecl) error {
 	return nil
 }
 
+// ForEachEntity calls fn for every general entity declared in the DTD. The
+// iteration order is unspecified.
 func (dtd *DTD) ForEachEntity(fn func(name string, ent *Entity)) {
 	for name, ent := range dtd.entities {
 		fn(name, ent)
 	}
 }
 
+// LookupEntity returns the general entity declared under name, and reports
+// whether it was found.
 func (dtd *DTD) LookupEntity(name string) (*Entity, bool) {
 	ret, ok := dtd.entities[name]
 	return ret, ok
 }
 
+// LookupParameterEntity returns the parameter entity declared under name, and
+// reports whether it was found.
 func (dtd *DTD) LookupParameterEntity(name string) (*Entity, bool) {
 	ret, ok := dtd.pentities[name]
 	return ret, ok
 }
 
+// LookupNotation returns the notation declared under name, and reports whether
+// it was found.
 func (dtd *DTD) LookupNotation(name string) (*Notation, bool) {
 	ret, ok := dtd.notations[name]
 	return ret, ok
 }
 
+// GetElementDesc returns the element declaration for the given QName, splitting
+// off any prefix to compose the lookup key, and reports whether it was found.
 func (dtd *DTD) GetElementDesc(name string) (*ElementDecl, bool) {
 	// Element decls are registered under a "name:prefix" key with the QName
 	// split into local name and prefix (see AddElementDecl). Split the same
@@ -335,26 +381,34 @@ func (dtd *DTD) AttributesForElement(elem string) []*AttributeDecl {
 	return result
 }
 
+// AddChild appends cur as the last child of the DTD, detaching it from any
+// previous parent first. It returns an error if cur is nil or if the insertion
+// would create a cycle.
 func (dtd *DTD) AddChild(cur Node) error {
 	return addChild(dtd, cur)
 }
 
+// AppendText appends b as a Text child of the DTD.
 func (dtd *DTD) AppendText(b []byte) error {
 	return appendText(dtd, b)
 }
 
+// AddSibling appends cur as the last sibling of the DTD.
 func (dtd *DTD) AddSibling(cur Node) error {
 	return addSibling(dtd, cur)
 }
 
+// Replace swaps the DTD out of its parent, inserting nodes in its place.
 func (dtd *DTD) Replace(nodes ...Node) error {
 	return replaceNode(dtd, nodes...)
 }
 
+// SetTreeDoc sets the owning document of the DTD and its subtree.
 func (dtd *DTD) SetTreeDoc(doc *Document) {
 	setTreeDoc(dtd, doc)
 }
 
+// Free is a no-op; it exists to satisfy the Node interface.
 func (dtd *DTD) Free() {}
 
 // ExternalID returns the DTD external ID (PUBLIC identifier).
