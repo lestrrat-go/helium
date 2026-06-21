@@ -30,6 +30,11 @@ func TestLocalFilePath(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "/tmp/mod.xsl", got)
 	})
+	t.Run("file URI uppercase localhost host", func(t *testing.T) {
+		got, err := localFilePath("file://LOCALHOST/tmp/mod.xsl")
+		require.NoError(t, err)
+		require.Equal(t, "/tmp/mod.xsl", got)
+	})
 	t.Run("file URI percent-decoded", func(t *testing.T) {
 		got, err := localFilePath("file:///tmp/a%20b/mod.xsl")
 		require.NoError(t, err)

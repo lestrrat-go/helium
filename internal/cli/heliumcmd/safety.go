@@ -354,7 +354,7 @@ func localFilePath(uri string) (string, error) {
 	if u.Scheme != "file" {
 		return "", fmt.Errorf("unsupported URI scheme %q: only file: and local paths are allowed", u.Scheme)
 	}
-	if u.Host != "" && u.Host != "localhost" {
+	if u.Host != "" && !strings.EqualFold(u.Host, "localhost") {
 		return "", fmt.Errorf("unsupported file URI host %q: only local files are allowed", u.Host)
 	}
 
