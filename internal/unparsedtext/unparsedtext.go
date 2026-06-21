@@ -32,6 +32,7 @@ import (
 
 	iencoding "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // URIResolver resolves a URI to a readable stream.
@@ -716,17 +717,13 @@ func ValidatePercentEncoding(uri string) error {
 			if i+2 >= len(uri) {
 				return fmt.Errorf("incomplete percent-encoding at position %d", i)
 			}
-			if !isHexDigit(uri[i+1]) || !isHexDigit(uri[i+2]) {
+			if !xmlchar.IsHexDigit(uri[i+1]) || !xmlchar.IsHexDigit(uri[i+2]) {
 				return fmt.Errorf("invalid percent-encoding %%%c%c", uri[i+1], uri[i+2])
 			}
 			i += 2
 		}
 	}
 	return nil
-}
-
-func isHexDigit(b byte) bool {
-	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 }
 
 func isWindowsDriveScheme(parsed *url.URL) bool {

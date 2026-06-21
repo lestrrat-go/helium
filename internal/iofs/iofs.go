@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // goosWindows is the runtime.GOOS value for Windows. Drive-letter handling in
@@ -79,12 +81,8 @@ func FileURIToPath(ref string) (string, error) {
 // untouched. goos is threaded explicitly so the conversion is deterministically
 // testable on a non-Windows CI host.
 func fileURIPathFor(goos, p string) string {
-	if goos == goosWindows && len(p) >= 3 && p[0] == '/' && isASCIILetter(p[1]) && p[2] == ':' {
+	if goos == goosWindows && len(p) >= 3 && p[0] == '/' && xmlchar.IsASCIILetter(p[1]) && p[2] == ':' {
 		p = p[1:]
 	}
 	return filepath.FromSlash(p)
-}
-
-func isASCIILetter(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }

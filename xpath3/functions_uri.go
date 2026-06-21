@@ -7,6 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 func init() {
@@ -70,7 +71,7 @@ func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
 	var b strings.Builder
 	for i := range len(s) {
 		c := s[i]
-		if c == '%' && i+2 < len(s) && isHexDigit(s[i+1]) && isHexDigit(s[i+2]) {
+		if c == '%' && i+2 < len(s) && xmlchar.IsHexDigit(s[i+1]) && xmlchar.IsHexDigit(s[i+2]) {
 			// Already percent-encoded: pass through
 			b.WriteByte(c)
 			continue

@@ -60,10 +60,6 @@ func resolveURIReference(base, ref string) (string, error) {
 	return result, nil
 }
 
-func isHexDigit(b byte) bool {
-	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
-}
-
 func indexScheme(raw string) int {
 	for i := range len(raw) {
 		switch raw[i] {

@@ -10,7 +10,7 @@ xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/
                   → xpath1 (via xpointer)
                   → internal/xmlchar (via xpointer)
 xpath1         → helium, internal/lexicon, internal/domutil
-xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/domutil
+xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil
 xslt3          → helium, xpath3, xsd, html, internal/lexicon, internal/sequence, internal/xpathstream, internal/domutil, xslt3/internal/elements
 xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, internal/xsdregex
 relaxng        → helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar
@@ -19,8 +19,8 @@ xpointer       → helium, xpath1, internal/xmlchar
 c14n           → helium, internal/lexicon, internal/domutil
 xmldsig1       → helium, c14n, internal/lexicon, internal/domutil
 xmlenc1        → helium, internal/domutil
-html           → helium, sax, push
-catalog        → helium, internal/catalog, internal/lexicon
+html           → helium, sax, push, internal/xmlchar
+catalog        → helium, internal/catalog, internal/lexicon, internal/xmlchar
 stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
 helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack
@@ -32,7 +32,7 @@ push → (none)
 internal/heliumtest → (none)
 internal/sequence → (none)
 internal/strcursor → (none)
-internal/unparsedtext → (none)
+internal/unparsedtext → internal/xmlchar
 internal/xsdregex → (none)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, internal/lexicon, internal/xmlchar

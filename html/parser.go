@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/strcursor"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // insertMode tracks the parser's insertion context.
@@ -1065,10 +1066,10 @@ func (p *parser) scanNumericCharRef() (codepoint int, haveDigits bool) {
 	_ = p.cur.Advance(1) // skip '#'
 	if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 		_ = p.cur.Advance(1) // skip 'x'
-		hexStr := p.parseWhile(isHexDigit)
+		hexStr := p.parseWhile(xmlchar.IsHexDigit)
 		codepoint, haveDigits = parseNumericCharRef(hexStr, 16)
 	} else {
-		numStr := p.parseWhile(isDigit)
+		numStr := p.parseWhile(xmlchar.IsASCIIDigit)
 		codepoint, haveDigits = parseNumericCharRef(numStr, 10)
 	}
 	if p.cur.Peek() == ';' {
@@ -1173,10 +1174,10 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	if p.cur.Peek() == '#' {
 		_ = p.cur.Advance(1) // skip '#'
 		base := 10
-		pred := isDigit
+		pred := xmlchar.IsASCIIDigit
 		if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 			base = 16
-			pred = isHexDigit
+			pred = xmlchar.IsHexDigit
 			_ = p.cur.Advance(1) // skip 'x'
 		}
 		// Consume the digit run in bounded chunks, accumulating the code point
@@ -2276,19 +2277,11 @@ func isASCIIAlpha(b byte) bool {
 }
 
 func isNameChar(b byte) bool {
-	return isASCIIAlpha(b) || isDigit(b) || b == ':' || b == '-' || b == '_' || b == '.'
-}
-
-func isDigit(b byte) bool {
-	return b >= '0' && b <= '9'
-}
-
-func isHexDigit(b byte) bool {
-	return isDigit(b) || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+	return isASCIIAlpha(b) || xmlchar.IsASCIIDigit(b) || b == ':' || b == '-' || b == '_' || b == '.'
 }
 
 func isAlphanumeric(b byte) bool {
-	return isASCIIAlpha(b) || isDigit(b)
+	return isASCIIAlpha(b) || xmlchar.IsASCIIDigit(b)
 }
 
 func isWhitespaceByte(b byte) bool {
