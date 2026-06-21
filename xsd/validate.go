@@ -7,6 +7,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
@@ -696,7 +697,7 @@ func (vc *validationContext) validateElementContent(ctx context.Context, elem *h
 					// like NBSP (U+00A0) are NOT ignorable in element-only content,
 					// so strings.TrimSpace (which strips all Unicode space) must not
 					// be used here.
-					if !isBlank(child.Content()) {
+					if !xmlchar.IsAllSpace(child.Content()) {
 						msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
 						vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 						return fmt.Errorf("text content in element-only type")
@@ -889,7 +890,7 @@ func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *hel
 			vc.reportValidityError(ctx, vc.filename, ce.Line(), ce.LocalName(), "This element is not expected.")
 			return fmt.Errorf("not expected")
 		case helium.TextNode, helium.CDATASectionNode:
-			if !isBlank(child.Content()) {
+			if !xmlchar.IsAllSpace(child.Content()) {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple.")
 				return fmt.Errorf("not expected")
 			}
@@ -1198,15 +1199,6 @@ func elemTextContent(elem *helium.Element) string {
 	return string(buf)
 }
 
-func isBlank(b []byte) bool {
-	for _, c := range b {
-		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
-			return false
-		}
-	}
-	return true
-}
-
 // checkXsiNil parses the element's xsi:nil attribute as an xs:boolean (after
 // whitespace collapse). It returns whether the element is nilled ("true"/"1").
 // "false"/"0" and an absent attribute mean not-nilled. Any other lexical form
@@ -1269,7 +1261,7 @@ func (vc *validationContext) validateNilledElement(ctx context.Context, elem *he
 				"This element is not expected, because the element '"+dn+"' is nilled.")
 			return fmt.Errorf("content in nilled element")
 		case helium.TextNode, helium.CDATASectionNode:
-			if !isBlank(child.Content()) {
+			if !xmlchar.IsAllSpace(child.Content()) {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
 					"Character content is not allowed, because the element is nilled.")
 				return fmt.Errorf("content in nilled element")

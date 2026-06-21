@@ -412,7 +412,7 @@ func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Elemen
 		return
 	}
 	for child := range Children(elem) {
-		if child.Type() == TextNode && isBlankContent(child.Content()) {
+		if child.Type() == TextNode && xmlchar.IsAllSpace(child.Content()) {
 			vctx.addf(ctx, "standalone: element %s declared in the external subset contains white spaces nodes", name)
 			return
 		}
@@ -506,23 +506,13 @@ func collectChildElements(elem *Element) []string {
 			// whitespace) but non-whitespace text is an error. We skip
 			// whitespace-only text and treat non-whitespace as a mismatch
 			// that will be caught by the content model check.
-			if !isBlankContent(child.Content()) {
+			if !xmlchar.IsAllSpace(child.Content()) {
 				// Use a sentinel to cause content model mismatch
 				children = append(children, "#text")
 			}
 		}
 	}
 	return children
-}
-
-// isBlankContent returns true if the byte slice contains only whitespace.
-func isBlankContent(b []byte) bool {
-	for _, c := range b {
-		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
-			return false
-		}
-	}
-	return true
 }
 
 // matchContentModel validates a sequence of child element names against

@@ -877,16 +877,7 @@ func (c *compiler) checkQNamePrefix(_ context.Context, name, context string) err
 }
 
 func isValidQName(s string) bool {
-	if s == "" {
-		return false
-	}
-	parts := strings.SplitN(s, ":", 2)
-	for _, p := range parts {
-		if !xmlchar.IsValidNCName(p) {
-			return false
-		}
-	}
-	return true
+	return xmlchar.IsValidQName(s)
 }
 
 // resolveShadowAttributes processes shadow attributes on an XSLT element.
