@@ -27,6 +27,11 @@ type sortKey struct {
 	Stable    *avt // "yes"/"no"/"true"/"false"/"1"/"0"
 }
 
+const (
+	sortOrderAscending  = "ascending"
+	sortOrderDescending = "descending"
+)
+
 // sortMode determines how a sort level compares keys.
 type sortMode uint8
 
@@ -111,20 +116,20 @@ func (ks keyedSlice[T]) convertAutoNumeric(level int) {
 func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*sortKey) (resolvedSort, error) {
 	levels := make([]resolvedLevel, len(sortKeys))
 	for i, sk := range sortKeys {
-		order := "ascending"
+		order := sortOrderAscending
 		if sk.Order != nil {
 			var err error
 			order, err = sk.Order.evaluate(ctx, ec.contextNode)
 			if err != nil {
 				return resolvedSort{}, err
 			}
-			if order != "ascending" && order != "descending" {
+			if order != sortOrderAscending && order != sortOrderDescending {
 				return resolvedSort{}, dynamicError(errCodeXTDE0030,
 					"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
 			}
 		}
 		levels[i] = resolvedLevel{
-			desc: order == "descending",
+			desc: order == sortOrderDescending,
 		}
 		if sk.Collation != nil {
 			uri, err := sk.Collation.evaluate(ctx, ec.contextNode)
@@ -154,14 +159,14 @@ func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*sortKey
 }
 
 func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedLevel, error) {
-	order := "ascending"
+	order := sortOrderAscending
 	if sk.Order != nil {
 		var err error
 		order, err = sk.Order.evaluate(ctx, ec.contextNode)
 		if err != nil {
 			return resolvedLevel{}, err
 		}
-		if order != "ascending" && order != "descending" {
+		if order != sortOrderAscending && order != sortOrderDescending {
 			return resolvedLevel{}, dynamicError(errCodeXTDE0030,
 				"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
 		}
@@ -177,7 +182,7 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedL
 				"invalid language tag %q in xsl:sort", lang)
 		}
 	}
-	rl := resolvedLevel{desc: order == "descending"}
+	rl := resolvedLevel{desc: order == sortOrderDescending}
 	if sk.Collation != nil {
 		uri, err := sk.Collation.evaluate(ctx, ec.contextNode)
 		if err != nil {
@@ -248,7 +253,7 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) err
 		if err != nil {
 			return err
 		}
-		if order != "ascending" && order != "descending" {
+		if order != sortOrderAscending && order != sortOrderDescending {
 			return dynamicError(errCodeXTDE0030,
 				"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
 		}
