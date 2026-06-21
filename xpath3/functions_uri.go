@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/unparsedtext"
 )
 
 func init() {
@@ -167,7 +168,7 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 // validateIRI checks that a string is a valid IRI reference.
 // Rejects characters that are not allowed in IRIs (like raw spaces).
 func validateIRI(s string) error {
-	if err := validatePercentEncoding(s); err != nil {
+	if err := unparsedtext.ValidatePercentEncoding(s); err != nil {
 		return err
 	}
 	// A URI reference may contain at most one '#' (fragment separator).
