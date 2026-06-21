@@ -56,6 +56,20 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	dst.SetProperties(src.Properties())
 	dst.SetSkipIDs(src.SkipIDs())
 
+	// Decide whether to rebuild the copy's ID table from the source's. The source
+	// ID table (populated during parse) is authoritative for id()/GetElementByID on
+	// the source; the copy must reproduce it so both the no-strip and strip-space
+	// paths resolve ids identically. Translating the table is FAITHFUL where the
+	// lazy GetElementByID fallback is not: the fallback looks up DTD ATTLIST decls
+	// by LocalName only and would miss the qualified ATTLIST for a prefixed element
+	// (e.g. <!ATTLIST a:item eid ID>), so a strip-space copy that relied on it would
+	// resolve fewer ids than the source. Skip the rebuild when the source skips ids
+	// (no resolution either way) or has no interned table (API-built source — its
+	// own id() already relies on the lazy fallback, which the copy reproduces via
+	// the carried-over DTD subsets).
+	srcIDs := src.IDTable()
+	rebuildIDs := !src.SkipIDs() && len(srcIDs) > 0
+
 	// Deep-copy the internal DTD subset first (metadata + entities/elements/
 	// attributes/notations), matching helium.CopyDoc's ordering so the copy
 	// round-trips identically.
@@ -77,6 +91,11 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	helium.CopyExtSubset(src, dst)
 
 	sc := &stripCopier{dst: dst, strip: strip, preserve: preserve}
+	// When rebuilding the ID table, record source-element->copy-element so the
+	// source's ID entries can be translated onto the copy after the walk.
+	if rebuildIDs {
+		sc.elemMap = make(map[*helium.Element]*helium.Element)
+	}
 	// When the initial match selection must be remapped onto the copy, record the
 	// original->copy correspondence here. Whitespace omission changes the child
 	// shape, so a parallel post-hoc walk would misalign; building the map during
@@ -106,6 +125,20 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 		}
 	}
 
+	// Rebuild the copy's ID table by translating each source entry's element
+	// through the source->copy element correspondence. Any source element that has
+	// no copy (it cannot occur for an ID-bearing element, which is never a
+	// whitespace-only omitted node) is skipped defensively.
+	if rebuildIDs {
+		for id, srcElem := range srcIDs {
+			cp := sc.elemMap[srcElem]
+			if cp == nil {
+				continue
+			}
+			dst.RegisterID(id, cp)
+		}
+	}
+
 	dst.SetURL(src.URL())
 	return dst, sc.nodeMap, nil
 }
@@ -119,6 +152,9 @@ type stripCopier struct {
 	// text/comment/PI leaves, and element attributes) for initial-match-selection
 	// remapping. Omitted whitespace nodes have no entry.
 	nodeMap map[helium.Node]helium.Node
+	// elemMap, when non-nil, records source-element->copy-element correspondence so
+	// the copy's ID table can be rebuilt by translating the source's ID entries.
+	elemMap map[*helium.Element]*helium.Element
 }
 
 // record stores the original->copy mapping when a node map is being built and
@@ -180,6 +216,9 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*helium.Namespace, xmlSpacePreserve bool) (helium.Node, error) {
 	elem := sc.dst.CreateElement(src.LocalName())
 	sc.record(src, elem)
+	if sc.elemMap != nil {
+		sc.elemMap[src] = elem
+	}
 
 	// childScope = inScope plus this element's own declarations. Build it lazily:
 	// only allocate a fresh map when this element declares namespaces, otherwise

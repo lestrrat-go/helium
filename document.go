@@ -934,6 +934,19 @@ func (d *Document) RegisterID(id string, elem *Element) {
 	d.ids[id] = elem
 }
 
+// IDTable returns the document's ID->element table populated during parsing
+// (mirroring libxml2's xmlAddID). The returned map is the document's own, not a
+// copy, and is nil for documents built without an interned ID table (e.g. via the
+// API rather than the parser); callers must not mutate it. It lets a derived
+// document (e.g. an xsl:strip-space copy) rebuild an equivalent table by
+// translating each entry's element through the original->copy correspondence,
+// faithfully preserving id()/GetElementByID semantics — including for prefixed
+// elements whose qualified DTD ATTLIST the lazy GetElementByID fallback would
+// otherwise miss.
+func (d *Document) IDTable() map[string]*Element {
+	return d.ids
+}
+
 // GetElementByID returns the first element in the document whose ID matches
 // the given value. If the document's ID table has been populated (during
 // parsing), it performs an O(1) hash lookup. Otherwise it falls back to an

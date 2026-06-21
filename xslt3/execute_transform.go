@@ -18,7 +18,14 @@ import (
 // that any node belonging to the original source document points instead to the
 // corresponding node in the stripped copy. Items that are not nodes, or that
 // belong to a different document (e.g. fn:doc()-loaded), are passed through
-// unchanged.
+// unchanged. A node that DID belong to the original source but has no copy (a
+// whitespace-only text/CDATA node that strip-space omitted) is DROPPED from the
+// selection, so it neither points at the unstripped original nor inflates the
+// sequence length that drives position()/last() in the apply loop.
+//
+// src is the original source document the selection was computed against; it is
+// used only to distinguish an omitted source node (drop) from a node in another
+// document (pass through).
 //
 // nodeMap is the original->copy correspondence built by copyAndStrip during the
 // single-pass copy. Because whitespace-only nodes are omitted from the copy, the
@@ -31,7 +38,7 @@ import (
 // in scope on the copy. This ensures every selected node (element, text, comment,
 // PI, attribute, namespace) points into the stripped copy, so XPath navigation
 // from a matched template observes the same tree as the context node.
-func remapSelectionToCopy(sel xpath3.Sequence, nodeMap map[helium.Node]helium.Node) xpath3.Sequence {
+func remapSelectionToCopy(sel xpath3.Sequence, src *helium.Document, nodeMap map[helium.Node]helium.Node) xpath3.Sequence {
 	items := make(xpath3.ItemSlice, 0, sequence.Len(sel))
 	for i := range sequence.Len(sel) {
 		item := sel.Get(i)
@@ -52,6 +59,13 @@ func remapSelectionToCopy(sel xpath3.Sequence, nodeMap map[helium.Node]helium.No
 		}
 		if mapped, found := nodeMap[ni.Node]; found {
 			items = append(items, xpath3.NodeItem{Node: mapped})
+			continue
+		}
+		// No copy exists. If the node belonged to the original source, strip-space
+		// omitted it (whitespace-only text/CDATA): drop it so it is absent from the
+		// stripped selection and does not skew position()/last(). Nodes from other
+		// documents (e.g. fn:doc()-loaded) keep their identity and pass through.
+		if ni.Node != nil && ni.Node.OwnerDocument() == src {
 			continue
 		}
 		items = append(items, item)
@@ -206,7 +220,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		// tree as the context node. Selected nodes from other documents (e.g.
 		// fn:doc()-loaded) are left untouched.
 		if needMap {
-			matchSelection = remapSelectionToCopy(matchSelection, nodeMap)
+			matchSelection = remapSelectionToCopy(matchSelection, effectiveSource, nodeMap)
 		}
 		effectiveSource = srcCopy
 	}
