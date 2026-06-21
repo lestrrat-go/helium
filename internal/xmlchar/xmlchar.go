@@ -15,6 +15,17 @@ func IsChar(r rune) bool {
 	return (r >= 0x100 && r <= 0xD7FF) || (r >= 0xE000 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0x10FFFF)
 }
 
+// IsAllSpace reports whether every byte of b is XML 1.0 §2.3 whitespace (the S
+// production: #x20 | #x9 | #xD | #xA). An empty slice is all-space.
+func IsAllSpace(b []byte) bool {
+	for _, c := range b {
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			return false
+		}
+	}
+	return true
+}
+
 // IsNCNameStartChar checks the XML 1.0 NCName start character production.
 // NCNameStartChar ::= [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6]
 //

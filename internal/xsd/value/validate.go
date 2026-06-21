@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // ValidateBuiltin validates a value against a builtin XSD type's lexical space.
@@ -575,89 +576,15 @@ func validateGMonthDay(value string) error {
 	return nil
 }
 
-// isNameStartChar reports whether r is a valid XML 1.0 NameStartChar.
-// (https://www.w3.org/TR/xml/#NT-NameStartChar) The colon is handled by the
-// caller, since NCName forbids it while Name allows it.
-func isNameStartChar(r rune) bool {
-	switch {
-	case r == '_':
-		return true
-	case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z':
-		return true
-	case r >= 0xC0 && r <= 0xD6, r >= 0xD8 && r <= 0xF6, r >= 0xF8 && r <= 0x2FF:
-		return true
-	case r >= 0x370 && r <= 0x37D, r >= 0x37F && r <= 0x1FFF:
-		return true
-	case r >= 0x200C && r <= 0x200D, r >= 0x2070 && r <= 0x218F:
-		return true
-	case r >= 0x2C00 && r <= 0x2FEF, r >= 0x3001 && r <= 0xD7FF:
-		return true
-	case r >= 0xF900 && r <= 0xFDCF, r >= 0xFDF0 && r <= 0xFFFD:
-		return true
-	case r >= 0x10000 && r <= 0xEFFFF:
-		return true
-	}
-	return false
-}
-
-// isNameChar reports whether r is a valid XML 1.0 NameChar (excluding the
-// colon, which the caller decides on per type).
-// (https://www.w3.org/TR/xml/#NT-NameChar)
-func isNameChar(r rune) bool {
-	switch {
-	case isNameStartChar(r):
-		return true
-	case r == '-', r == '.':
-		return true
-	case r >= '0' && r <= '9':
-		return true
-	case r == 0xB7:
-		return true
-	case r >= 0x0300 && r <= 0x036F:
-		return true
-	case r >= 0x203F && r <= 0x2040:
-		return true
-	}
-	return false
-}
-
-// isXMLName reports whether value is a valid XML Name (or NCName when
-// allowColon is false), per the XML 1.0 NameStartChar/NameChar productions.
-func isXMLName(value string, allowColon bool) bool {
-	if value == "" {
-		return false
-	}
-	// Ranging a Go string decodes invalid UTF-8 bytes as U+FFFD, which the XML
-	// Name char ranges happen to admit; reject malformed encodings outright so a
-	// raw 0xFF byte does not masquerade as a valid Name character.
-	if !utf8.ValidString(value) {
-		return false
-	}
-	for i, r := range value {
-		colon := r == ':'
-		if i == 0 {
-			if (colon && allowColon) || isNameStartChar(r) {
-				continue
-			}
-			return false
-		}
-		if (colon && allowColon) || isNameChar(r) {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
 func validateNCName(value string) error {
-	if !isXMLName(value, false) {
+	if !xmlchar.IsValidNCName(value) {
 		return fmt.Errorf("invalid NCName")
 	}
 	return nil
 }
 
 func validateName(value string) error {
-	if !isXMLName(value, true) {
+	if !xmlchar.IsValidName(value) {
 		return fmt.Errorf("invalid Name")
 	}
 	return nil
@@ -673,7 +600,7 @@ func isNMTOKEN(value string) bool {
 		return false
 	}
 	for _, r := range value {
-		if r == ':' || isNameChar(r) {
+		if r == ':' || xmlchar.IsNCNameChar(r) {
 			continue
 		}
 		return false

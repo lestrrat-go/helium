@@ -7,6 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Element) (*applyTemplatesInst, error) {
@@ -18,7 +19,7 @@ func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Eleme
 	mode := strings.TrimSpace(getAttr(elem, "mode"))
 	// Validate mode name is a valid QName.
 	if mode != "" && mode[0] != '#' {
-		if !isValidQName(mode) && !isValidEQName(mode) {
+		if !xmlchar.IsValidQName(mode) && !isValidEQName(mode) {
 			return nil, staticError(errCodeXTSE0550, "invalid mode name %q on xsl:apply-templates", mode)
 		}
 		// XTSE0280: check for undeclared prefix.

@@ -9,6 +9,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -477,7 +478,7 @@ func (c *compiler) useWhenFunctionAvailable(_ context.Context, args []xpath3.Seq
 	name, _ := xpath3.AtomicToString(av)
 
 	// XTDE1400: function name must be a valid QName
-	if !strings.HasPrefix(name, "Q{") && !isValidQName(name) {
+	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
 		return nil, dynamicError(errCodeXTDE1400,
 			"function-available: %q is not a valid QName", name)
 	}

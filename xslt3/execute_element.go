@@ -23,7 +23,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 
 	// XTDE0820: validate computed name is a valid QName
 	name = strings.TrimSpace(name)
-	if name == "" || !isValidQName(name) {
+	if name == "" || !xmlchar.IsValidQName(name) {
 		return dynamicError(errCodeXTDE0820,
 			"invalid element name %q: not a valid QName", name)
 	}
@@ -627,7 +627,7 @@ func validateComputedAttributeName(name string, inst *attributeInst) error {
 	}
 
 	// XTDE0850: name must be a valid QName
-	if !isValidQName(name) && !isValidEQName(name) {
+	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
 		return dynamicError(errCodeXTDE0850,
 			"xsl:attribute name %q is not a valid QName", name)
 	}

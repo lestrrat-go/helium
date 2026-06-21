@@ -3,7 +3,8 @@ package xslt3
 import (
 	"errors"
 	"io"
-	"math"
+
+	"github.com/lestrrat-go/helium/internal/iolimit"
 )
 
 // MaxResourceBytes is the default maximum number of bytes read from a single
@@ -50,16 +51,8 @@ func readResourceBounded(r io.Reader, limit int64) ([]byte, error) {
 		return data, nil
 	}
 
-	// Read one byte past the cap so a resource exactly at the limit succeeds
-	// while anything larger is detected. Guard against overflow even though the
-	// fixed limit is well below math.MaxInt64.
-	readLimit := limit
-	if readLimit < math.MaxInt64 {
-		readLimit++
-	}
-
-	data, err := io.ReadAll(io.LimitReader(r, readLimit))
-	if int64(len(data)) > limit {
+	data, exceeded, err := iolimit.ReadAll(r, limit)
+	if exceeded {
 		return nil, ErrResourceTooLarge
 	}
 	if err != nil {

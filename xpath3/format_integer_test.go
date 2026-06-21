@@ -116,6 +116,56 @@ func TestFormatIntegerCJK(t *testing.T) {
 	}
 }
 
+// German/French/Italian cardinal spell-out (picture "w") must be complete
+// beyond 100 (hundreds, thousands, millions) and free of the historical
+// "quarantine" typo for French 40. Previously these degraded to decimal digits
+// above 100 and emitted "quarantine" for 40-49. Reference algorithm is shared
+// with xslt3/number_words.go.
+func TestFormatIntegerWordsCardinal(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		value  string
+		lang   string
+		expect string
+	}{
+		// French: typo fix + completeness
+		{"40", "fr", "quarante"},
+		{"41", "fr", "quarante et un"},
+		{"42", "fr", "quarante-deux"},
+		{"71", "fr", "soixante et onze"},
+		{"80", "fr", "quatre-vingts"},
+		{"81", "fr", "quatre-vingt-un"},
+		{"91", "fr", "quatre-vingt-onze"},
+		{"100", "fr", "cent"},
+		{"123", "fr", "cent vingt-trois"},
+		{"200", "fr", "deux cents"},
+		{"201", "fr", "deux cent un"},
+		{"1000", "fr", "mille"},
+		{"2345", "fr", "deux mille trois cent quarante-cinq"},
+		// German: completeness
+		{"40", "de", "vierzig"},
+		{"100", "de", "einhundert"},
+		{"123", "de", "einhundertdreiundzwanzig"},
+		{"1000", "de", "eintausend"},
+		{"2345", "de", "zweitausenddreihundertfünfundvierzig"},
+		{"1000000", "de", "eine million "},
+		{"2000000", "de", "zwei millionen "},
+		// Italian: completeness
+		{"40", "it", "quaranta"},
+		{"100", "it", "cento"},
+		{"123", "it", "centoventitre"},
+		{"1000", "it", "mille"},
+		{"2345", "it", "duemilatrecentoquarantacinque"},
+	}
+	for _, tc := range cases {
+		expr := `format-integer(` + tc.value + `, "w", "` + tc.lang + `")`
+		result, err := evaluate(t.Context(), nil, expr)
+		require.NoError(t, err, expr)
+		require.Equal(t, tc.expect, result.StringValue(), expr)
+	}
+}
+
 // The atomize-first rewrite must not materialize a large sequence just to reject
 // it on cardinality — it stops at the second atomized item.
 func TestStringArgRejectsLongSequencePromptly(t *testing.T) {

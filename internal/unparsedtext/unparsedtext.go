@@ -702,13 +702,15 @@ func normalizeEncodingName(s string) string {
 }
 
 func parseURIReference(raw string) (*url.URL, error) {
-	if err := validatePercentEncoding(raw); err != nil {
+	if err := ValidatePercentEncoding(raw); err != nil {
 		return nil, err
 	}
 	return url.Parse(raw)
 }
 
-func validatePercentEncoding(uri string) error {
+// ValidatePercentEncoding verifies that every '%' in uri is followed by two
+// hexadecimal digits, returning a descriptive error otherwise.
+func ValidatePercentEncoding(uri string) error {
 	for i := 0; i < len(uri); i++ {
 		if uri[i] == '%' {
 			if i+2 >= len(uri) {

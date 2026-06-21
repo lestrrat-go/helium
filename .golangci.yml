@@ -99,6 +99,10 @@ linters:
           - misspell
         path: html/entities.go
       - linters:
+          - misspell
+          - goconst
+        path: (xpath3/format_integer|xslt3/number_words)
+      - linters:
           - godoclint
         path: (^|/)internal/
     paths:

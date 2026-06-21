@@ -11,6 +11,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
+	"github.com/lestrrat-go/helium/internal/xmlbase64"
 )
 
 // KeySource provides keys for signature verification.
@@ -231,7 +232,7 @@ func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
 		if domutil.LocalName(certElem) != "X509Certificate" {
 			continue
 		}
-		derBytes, err := decodeBase64(domutil.TextContent(certElem))
+		derBytes, err := xmlbase64.DecodeString(domutil.TextContent(certElem))
 		if err != nil {
 			return fmt.Errorf("%w: invalid X509Certificate base64: %v", ErrInvalidKeyInfo, err)
 		}
@@ -283,7 +284,7 @@ func parseRSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		if !isDSigCoreNS(e) {
 			continue
 		}
-		decoded, err := decodeBase64(domutil.TextContent(e))
+		decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 		if err != nil {
 			return fmt.Errorf("%w: invalid RSAKeyValue base64: %v", ErrInvalidKeyInfo, err)
 		}
@@ -327,7 +328,7 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 				return fmt.Errorf("%w: unsupported EC curve: %s", ErrInvalidKeyInfo, uri)
 			}
 		case "PublicKey":
-			decoded, err := decodeBase64(domutil.TextContent(e))
+			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrInvalidKeyInfo, err)
 			}

@@ -8,6 +8,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
+	"github.com/lestrrat-go/helium/internal/xmlbase64"
 )
 
 // isNilKeySource reports whether a KeySource is effectively nil. A plain
@@ -237,7 +238,7 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 				return nil, fmt.Errorf("%w: multiple SignatureValue elements", ErrInvalidSignature)
 			}
 			signatureValueSeen = true
-			decoded, err := decodeBase64(domutil.TextContent(elem))
+			decoded, err := xmlbase64.DecodeString(domutil.TextContent(elem))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid SignatureValue base64: %v", ErrInvalidSignature, err)
 			}
@@ -374,7 +375,7 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 			}
 			ref.digestAlgorithm = alg
 		case "DigestValue":
-			decoded, err := decodeBase64(domutil.TextContent(e))
+			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return ref, fmt.Errorf("%w: invalid DigestValue base64: %v", ErrInvalidSignature, err)
 			}
