@@ -23,7 +23,7 @@
 //
 // Use [NewWriter] to serialize documents or nodes back to XML:
 //
-//	err := helium.NewWriter().Format(true).WriteDoc(os.Stdout, doc)
+//	err := helium.NewWriter().Format(true).WriteTo(os.Stdout, doc)
 //
 // # DOM
 //
