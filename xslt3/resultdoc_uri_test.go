@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -251,6 +252,43 @@ func TestResultDocumentPrimaryValidationStrictAppliesOverrides(t *testing.T) {
 	require.NotNil(t, od, "resolved output def must be populated after Do")
 	require.Equal(t, "yes", od.Standalone,
 		"the validation=strict primary result-document's standalone override must reach the effective output def")
+}
+
+// ENG-006: per XSLT 3.0 §26.2 a secondary result document's base URI is its href
+// resolved against the BASE OUTPUT URI, NOT against the stylesheet's base URI. So
+// base-uri()/Document.URL() on the delivered secondary tree must reflect the base
+// output URI. (Regression: the secondary path set the document URL by resolving
+// href against ec.stylesheet.baseURI, yielding the stylesheet dir
+// "file:///style/dir/secondary.xml" instead of the output dir
+// "file:///out/secondary.xml".)
+func TestResultDocumentSecondaryBaseURIFromOutputURI(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="secondary.xml"><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`))
+	require.NoError(t, err)
+
+	// Compile with a stylesheet base URI that DIFFERS from the base output URI so
+	// a wrong (stylesheet-relative) resolution is distinguishable from the correct
+	// (output-relative) one.
+	ss, err := xslt3.NewCompiler().
+		BaseURI("file:///style/dir/main.xsl").
+		Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	collector := &resultDocCollect{docs: map[string]*helium.Document{}}
+	_, err = ss.Transform(parseTransformSource(t)).
+		BaseOutputURI("file:///out/main.xml").
+		ResultDocumentHandler(collector).
+		Do(t.Context())
+	require.NoError(t, err)
+
+	got, ok := collector.docs["secondary.xml"]
+	require.True(t, ok, "the secondary result document must be delivered")
+	require.Equal(t, "file:///out/secondary.xml", got.URL(),
+		"a secondary result document's base URI must be its href resolved against the base output URI, not the stylesheet base URI")
 }
 
 // XTDE1490 duplicate detection must collapse dot-segments in ABSOLUTE hrefs.
