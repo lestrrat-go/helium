@@ -13,17 +13,12 @@ import (
 	"math/big"
 )
 
-type signatureAlgorithm struct {
+type algorithm struct {
 	hash crypto.Hash // 0 for Ed25519 (no pre-hash)
 	weak bool        // true for SHA-1-based algorithms (rejected by default)
 }
 
-type digestAlgorithm struct {
-	hash crypto.Hash
-	weak bool // true for SHA-1 (rejected by default)
-}
-
-var signatureAlgorithms = map[string]signatureAlgorithm{
+var signatureAlgorithms = map[string]algorithm{
 	AlgRSASHA1:     {hash: crypto.SHA1, weak: true},
 	AlgRSASHA256:   {hash: crypto.SHA256},
 	AlgECDSASHA256: {hash: crypto.SHA256},
@@ -33,49 +28,62 @@ var signatureAlgorithms = map[string]signatureAlgorithm{
 	AlgEd25519:     {hash: 0},
 }
 
-var digestAlgorithms = map[string]digestAlgorithm{
+var digestAlgorithms = map[string]algorithm{
 	DigestSHA1:   {hash: crypto.SHA1, weak: true},
 	DigestSHA256: {hash: crypto.SHA256},
 	DigestSHA384: {hash: crypto.SHA384},
 	DigestSHA512: {hash: crypto.SHA512},
 }
 
+// lookupAlg resolves algURI in m, rejecting unknown algorithms with
+// ErrUnsupportedAlgorithm and SHA-1-based ones with ErrWeakAlgorithm (unless
+// allowSHA1). The unsupported check precedes the weak check.
+func lookupAlg(m map[string]algorithm, algURI string, allowSHA1 bool) (crypto.Hash, error) {
+	a, ok := m[algURI]
+	if !ok {
+		return 0, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, algURI)
+	}
+	if a.weak && !allowSHA1 {
+		return 0, fmt.Errorf("%w: %s", ErrWeakAlgorithm, algURI)
+	}
+	return a.hash, nil
+}
+
+// hashData returns hash(data).
+func hashData(hash crypto.Hash, data []byte) []byte {
+	h := hash.New()
+	h.Write(data)
+	return h.Sum(nil)
+}
+
 // computeDigest hashes data with the algorithm identified by algURI. SHA-1 is
 // rejected with ErrWeakAlgorithm unless allowSHA1 is true.
 func computeDigest(algURI string, data []byte, allowSHA1 bool) ([]byte, error) {
-	da, ok := digestAlgorithms[algURI]
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, algURI)
+	hash, err := lookupAlg(digestAlgorithms, algURI, allowSHA1)
+	if err != nil {
+		return nil, err
 	}
-	if da.weak && !allowSHA1 {
-		return nil, fmt.Errorf("%w: %s", ErrWeakAlgorithm, algURI)
-	}
-	h := da.hash.New()
-	h.Write(data)
-	return h.Sum(nil), nil
+	return hashData(hash, data), nil
 }
 
 // signBytes signs data with the algorithm identified by algURI. SHA-1-based
 // signature algorithms are rejected with ErrWeakAlgorithm unless allowSHA1 is
 // true.
 func signBytes(algURI string, key any, data []byte, allowSHA1 bool) ([]byte, error) {
-	sa, ok := signatureAlgorithms[algURI]
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, algURI)
-	}
-	if sa.weak && !allowSHA1 {
-		return nil, fmt.Errorf("%w: %s", ErrWeakAlgorithm, algURI)
+	hash, err := lookupAlg(signatureAlgorithms, algURI, allowSHA1)
+	if err != nil {
+		return nil, err
 	}
 
 	switch algURI {
 	case AlgEd25519:
 		return signEd25519(key, data)
 	case AlgHMACSHA1, AlgHMACSHA256:
-		return signHMAC(sa.hash, key, data)
+		return signHMAC(hash, key, data)
 	case AlgECDSASHA256, AlgECDSASHA384:
-		return signECDSA(sa.hash, key, data)
+		return signECDSA(hash, key, data)
 	default:
-		return signRSA(sa.hash, key, data)
+		return signRSA(hash, key, data)
 	}
 }
 
@@ -83,23 +91,20 @@ func signBytes(algURI string, key any, data []byte, allowSHA1 bool) ([]byte, err
 // SHA-1-based signature algorithms are rejected with ErrWeakAlgorithm unless
 // allowSHA1 is true.
 func verifyBytes(algURI string, key any, data, sig []byte, allowSHA1 bool) error {
-	sa, ok := signatureAlgorithms[algURI]
-	if !ok {
-		return fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, algURI)
-	}
-	if sa.weak && !allowSHA1 {
-		return fmt.Errorf("%w: %s", ErrWeakAlgorithm, algURI)
+	hash, err := lookupAlg(signatureAlgorithms, algURI, allowSHA1)
+	if err != nil {
+		return err
 	}
 
 	switch algURI {
 	case AlgEd25519:
 		return verifyEd25519(key, data, sig)
 	case AlgHMACSHA1, AlgHMACSHA256:
-		return verifyHMAC(sa.hash, key, data, sig)
+		return verifyHMAC(hash, key, data, sig)
 	case AlgECDSASHA256, AlgECDSASHA384:
-		return verifyECDSA(sa.hash, key, data, sig)
+		return verifyECDSA(hash, key, data, sig)
 	default:
-		return verifyRSA(sa.hash, key, data, sig)
+		return verifyRSA(hash, key, data, sig)
 	}
 }
 
@@ -110,9 +115,7 @@ func signRSA(hash crypto.Hash, key any, data []byte) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: expected *rsa.PrivateKey, got %T", ErrKeyMismatch, key)
 	}
-	h := hash.New()
-	h.Write(data)
-	return rsa.SignPKCS1v15(nil, priv, hash, h.Sum(nil))
+	return rsa.SignPKCS1v15(nil, priv, hash, hashData(hash, data))
 }
 
 func verifyRSA(hash crypto.Hash, key any, data, sig []byte) error {
@@ -120,9 +123,7 @@ func verifyRSA(hash crypto.Hash, key any, data, sig []byte) error {
 	if !ok {
 		return fmt.Errorf("%w: expected *rsa.PublicKey, got %T", ErrKeyMismatch, key)
 	}
-	h := hash.New()
-	h.Write(data)
-	return rsa.VerifyPKCS1v15(pub, hash, h.Sum(nil), sig)
+	return rsa.VerifyPKCS1v15(pub, hash, hashData(hash, data), sig)
 }
 
 // ECDSA
@@ -132,9 +133,7 @@ func signECDSA(hash crypto.Hash, key any, data []byte) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: expected *ecdsa.PrivateKey, got %T", ErrKeyMismatch, key)
 	}
-	h := hash.New()
-	h.Write(data)
-	derSig, err := ecdsa.SignASN1(nil, priv, h.Sum(nil))
+	derSig, err := ecdsa.SignASN1(nil, priv, hashData(hash, data))
 	if err != nil {
 		return nil, err
 	}
@@ -150,9 +149,7 @@ func verifyECDSA(hash crypto.Hash, key any, data, sig []byte) error {
 	if err != nil {
 		return err
 	}
-	h := hash.New()
-	h.Write(data)
-	if !ecdsa.VerifyASN1(pub, h.Sum(nil), derSig) {
+	if !ecdsa.VerifyASN1(pub, hashData(hash, data), derSig) {
 		return ErrVerificationFailed
 	}
 	return nil
