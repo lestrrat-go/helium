@@ -9,6 +9,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -106,7 +107,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	}
 
 	nameAttr := strings.TrimSpace(getAttr(elem, "name"))
-	if nameAttr != "" && !isValidQName(nameAttr) && !isValidEQName(nameAttr) {
+	if nameAttr != "" && !xmlchar.IsValidQName(nameAttr) && !isValidEQName(nameAttr) {
 		return staticError(errCodeXTSE0020, "invalid name %q on xsl:template", nameAttr)
 	}
 	if nameAttr != "" {
@@ -164,7 +165,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		seenModes := make(map[string]struct{}, len(modeFields))
 		hasAll := false
 		for _, m := range modeFields {
-			if m[0] != '#' && !isValidQName(m) && !isValidEQName(m) {
+			if m[0] != '#' && !xmlchar.IsValidQName(m) && !isValidEQName(m) {
 				return staticError(errCodeXTSE0550, "invalid mode name %q on xsl:template", m)
 			}
 			// XTSE0280: check for undeclared prefix in mode name.
@@ -599,7 +600,7 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
 	}
-	if !isValidQName(name) && !isValidEQName(name) {
+	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
 		return nil, staticError(errCodeXTSE0020, "invalid name %q on xsl:param", name)
 	}
 
@@ -728,7 +729,7 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
 	}
-	if !isValidQName(name) && !isValidEQName(name) {
+	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
 		return staticError(errCodeXTSE0020, "invalid name %q on xsl:variable", name)
 	}
 

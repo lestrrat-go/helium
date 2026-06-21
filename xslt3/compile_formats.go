@@ -11,6 +11,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -109,7 +110,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:key requires name attribute")
 	}
-	if !isValidQName(name) && !isValidEQName(name) {
+	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
 		return staticError(errCodeXTSE0020, "invalid name %q on xsl:key", name)
 	}
 
@@ -251,7 +252,7 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 			default:
 				return staticError(errCodeXTSE1570, "invalid output method %q", methodStr)
 			}
-		} else if !isValidQName(methodStr) && !isValidEQName(methodStr) {
+		} else if !xmlchar.IsValidQName(methodStr) && !isValidEQName(methodStr) {
 			return staticError(errCodeXTSE1570, "invalid output method %q", methodStr)
 		}
 	}
@@ -727,7 +728,7 @@ func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:attribute-set requires name attribute")
 	}
-	if !isValidQName(name) && !isValidEQName(name) {
+	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
 		return staticError(errCodeXTSE0020, "invalid name %q on xsl:attribute-set", name)
 	}
 	if err := c.checkQNamePrefix(ctx, name, "xsl:attribute-set"); err != nil {
@@ -895,7 +896,7 @@ func (c *compiler) compileDecimalFormat(ctx context.Context, elem *helium.Elemen
 	name := getAttr(elem, xslAttrName)
 	qn := xpath3.QualifiedName{}
 	if name != "" {
-		if !isValidQName(name) && !isValidEQName(name) {
+		if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
 			return staticError(errCodeXTSE0020, "invalid name %q on xsl:decimal-format", name)
 		}
 		qn = xpath3.QualifiedName{Name: name}

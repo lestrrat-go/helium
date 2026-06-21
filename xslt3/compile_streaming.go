@@ -802,7 +802,7 @@ func (c *compiler) compileMerge(ctx context.Context, elem *helium.Element) (inst
 
 	// XTSE0020: merge-source name must be a valid xs:QName.
 	for _, src := range inst.Sources {
-		if src.Name != "" && !isValidQName(src.Name) {
+		if src.Name != "" && !xmlchar.IsValidQName(src.Name) {
 			return nil, staticError(errCodeXTSE0020, "xsl:merge-source @name %q is not a valid xs:QName", src.Name)
 		}
 	}
