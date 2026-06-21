@@ -74,13 +74,21 @@ func (d *writeSession) dumpEnumeration(out io.Writer, n Enumeration) error {
 	return d.err
 }
 
-func (d *writeSession) dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
-	d.writeString(out, "<!ELEMENT ")
-	if n.prefix != "" {
-		d.writeString(out, n.prefix)
+// writePrefixedName emits an optionally namespace-prefixed name as
+// "prefix:name" (or just "name" when prefix is empty), preserving the
+// writeString order so the sticky-error handling is identical to the
+// inline sequences it replaces.
+func (d *writeSession) writePrefixedName(out io.Writer, prefix, name string) {
+	if prefix != "" {
+		d.writeString(out, prefix)
 		d.writeString(out, ":")
 	}
-	d.writeString(out, n.name)
+	d.writeString(out, name)
+}
+
+func (d *writeSession) dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
+	d.writeString(out, "<!ELEMENT ")
+	d.writePrefixedName(out, n.prefix, n.name)
 }
 
 func (d *writeSession) dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
@@ -100,11 +108,7 @@ func (d *writeSession) dumpElementContent(out io.Writer, n *ElementContent, glob
 	case ElementContentPCDATA:
 		d.writeString(out, "#PCDATA")
 	case ElementContentElement:
-		if n.prefix != "" {
-			d.writeString(out, n.prefix)
-			d.writeString(out, ":")
-		}
-		d.writeString(out, n.name)
+		d.writePrefixedName(out, n.prefix, n.name)
 	case ElementContentSeq:
 		switch n.c1.ctype {
 		case ElementContentOr, ElementContentSeq:
@@ -334,11 +338,7 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 	d.writeString(out, "<!ATTLIST ")
 	d.writeString(out, n.elem)
 	d.writeString(out, " ")
-	if n.prefix != "" {
-		d.writeString(out, n.prefix)
-		d.writeString(out, ":")
-	}
-	d.writeString(out, n.name)
+	d.writePrefixedName(out, n.prefix, n.name)
 	switch n.atype {
 	case enum.AttrCDATA:
 		d.writeString(out, " CDATA")

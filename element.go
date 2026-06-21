@@ -368,13 +368,8 @@ func (n *Element) spliceOutAttribute(p *Attribute) {
 // the live attribute nodes. Use ForEachAttribute to avoid the slice allocation.
 func (n Element) Attributes() []*Attribute {
 	attrs := []*Attribute{}
-	for attr := n.properties; attr != nil; {
+	for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
 		attrs = append(attrs, attr)
-		next, ok := AsNode[*Attribute](attr.NextSibling())
-		if !ok {
-			break
-		}
-		attr = next
 	}
 
 	return attrs
@@ -393,14 +388,9 @@ func (n Element) Attributes() []*Attribute {
 // chain is attribute-only by construction (field typed *Attribute,
 // only *Attribute nodes are ever linked in).
 func (n Element) ForEachAttribute(fn func(*Attribute) bool) {
-	for attr := n.properties; attr != nil; {
+	for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
 		if !fn(attr) {
 			return
 		}
-		next, ok := AsNode[*Attribute](attr.NextSibling())
-		if !ok {
-			return
-		}
-		attr = next
 	}
 }

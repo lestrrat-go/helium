@@ -192,7 +192,7 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 	var langAttr, xmlLangAttr, nameAttr, idAttr *Attribute
 	localName := e.LocalName()
 
-	for attr := e.properties; attr != nil; {
+	for attr := e.properties; attr != nil; attr = attr.NextAttribute() {
 		attrName := attr.Name()
 
 		// The attribute name is emitted verbatim below. Validate it just like
@@ -232,12 +232,6 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 			}
 		}
 		d.writeString(out, `"`)
-
-		next, ok := AsNode[*Attribute](attr.NextSibling())
-		if !ok {
-			break
-		}
-		attr = next
 	}
 
 	if nameAttr != nil && idAttr == nil && xhtmlNameIDElements[localName] {
@@ -267,17 +261,12 @@ func (d *writeSession) headHasContentTypeMeta(head *Element) bool {
 		if !ok || ce.LocalName() != "meta" {
 			continue
 		}
-		for attr := ce.properties; attr != nil; {
+		for attr := ce.properties; attr != nil; attr = attr.NextAttribute() {
 			if attr.ns == nil && strings.EqualFold(attr.Name(), "http-equiv") {
 				if strings.EqualFold(attr.Value(), "Content-Type") {
 					return true
 				}
 			}
-			next, ok := AsNode[*Attribute](attr.NextSibling())
-			if !ok {
-				break
-			}
-			attr = next
 		}
 	}
 	return false
