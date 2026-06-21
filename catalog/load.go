@@ -12,6 +12,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // goosWindows is the runtime.GOOS value for Windows. Drive-letter handling in
@@ -221,21 +222,17 @@ func fileURIPath(p string) string {
 func fileURIPathFor(goos, p string) string {
 	// On Windows, detect a drive-letter path of the form "/C:/...": a leading
 	// slash followed by a single ASCII letter and a colon, and strip the slash.
-	if goos == goosWindows && len(p) >= 3 && p[0] == '/' && isASCIILetter(p[1]) && p[2] == ':' {
+	if goos == goosWindows && len(p) >= 3 && p[0] == '/' && xmlchar.IsASCIILetter(p[1]) && p[2] == ':' {
 		p = p[1:]
 	}
 	return filepath.FromSlash(p)
-}
-
-func isASCIILetter(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 // hasDriveLetterPrefix reports whether s begins with a Windows drive-letter
 // prefix such as "C:\" or "C:/". This is checked independently of the host OS
 // so a drive-letter reference is never mistaken for a URI scheme.
 func hasDriveLetterPrefix(s string) bool {
-	return len(s) >= 3 && isASCIILetter(s[0]) && s[1] == ':' &&
+	return len(s) >= 3 && xmlchar.IsASCIILetter(s[0]) && s[1] == ':' &&
 		(s[2] == '\\' || s[2] == '/')
 }
 

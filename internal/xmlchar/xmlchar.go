@@ -121,6 +121,21 @@ func isEncNameStart(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
+// IsHexDigit reports whether b is an ASCII hexadecimal digit ([0-9a-fA-F]).
+func IsHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
+// IsASCIILetter reports whether b is an ASCII letter ([a-zA-Z]).
+func IsASCIILetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+// IsASCIIDigit reports whether b is an ASCII decimal digit ([0-9]).
+func IsASCIIDigit(b byte) bool {
+	return b >= '0' && b <= '9'
+}
+
 func isEncNameChar(c byte) bool {
 	return isEncNameStart(c) || (c >= '0' && c <= '9') ||
 		c == '.' || c == '_' || c == '-'
