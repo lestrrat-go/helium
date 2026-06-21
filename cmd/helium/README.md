@@ -47,7 +47,7 @@ Run `helium lint` with no arguments to print the authoritative usage text
 | `--nofixup-base-uris` | Do not fix up `xml:base` URIs in XInclude |
 | `--noout` | Do not print the result tree |
 | `--format` | Reformat/reindent the output |
-| `--pretty LEVEL` | Pretty-print the output (0=none, 1=format, 2=format+attrs) |
+| `--pretty LEVEL` | Pretty-print the output (0=none; any level >=1 enables plain `--format` reindenting — there is no distinct higher-level behavior) |
 | `--encode ENCODING` | Output in the given encoding |
 | `--output FILE` | Save to a given file |
 | `--c14n` | Save in W3C canonical format v1.0 (with comments) |
