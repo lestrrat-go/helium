@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"math"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/iofs"
+	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpointer"
 )
@@ -692,18 +692,9 @@ func (p *processor) readCapped(r io.Reader) ([]byte, error) {
 	if limit <= 0 {
 		limit = MaxIncludeSize
 	}
-	limit64 := int64(limit)
 
-	// Read one byte past the cap so a resource exactly at the limit succeeds
-	// while anything larger is detected, guarding against overflow when
-	// limit==math.MaxInt on 64-bit platforms (int64(limit)+1 would wrap).
-	readLimit := limit64
-	if readLimit < math.MaxInt64 {
-		readLimit++
-	}
-
-	data, err := io.ReadAll(io.LimitReader(r, readLimit))
-	if int64(len(data)) > limit64 {
+	data, exceeded, err := iolimit.ReadAll(r, int64(limit))
+	if exceeded {
 		return nil, ErrIncludeTooLarge
 	}
 	if err != nil {

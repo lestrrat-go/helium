@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
@@ -602,12 +603,12 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	// "/dev/zero") cannot exhaust memory. LimitReader allows one extra byte so a
 	// content length exactly at the cap is accepted while anything larger is
 	// detected.
-	content, err := io.ReadAll(io.LimitReader(input, externalEntityMaxBytes+1))
+	content, exceeded, err := iolimit.ReadAll(input, externalEntityMaxBytes)
 	closeInput()
 	if err != nil {
 		return nil, pctx.error(ctx, fmt.Errorf("reading external entity: %w", err))
 	}
-	if int64(len(content)) > externalEntityMaxBytes {
+	if exceeded {
 		return nil, pctx.error(ctx, fmt.Errorf("external entity (URI=%s) exceeds maximum size of %d bytes", uri, externalEntityMaxBytes))
 	}
 
