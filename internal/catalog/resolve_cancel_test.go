@@ -54,7 +54,7 @@ func TestResolveAlreadyCancelledReturnsPromptly(t *testing.T) {
 
 	leaf := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///foo.dtd"},
+			{Type: catalog.EntrySystem, Name: fooDTDSystemID, URL: "file:///foo.dtd"},
 		},
 	}
 	loader := newBlockingLoader(leaf)
@@ -71,7 +71,7 @@ func TestResolveAlreadyCancelledReturnsPromptly(t *testing.T) {
 
 	done := make(chan string, 1)
 	go func() {
-		done <- root.Resolve(ctx, "", "http://example.com/foo.dtd")
+		done <- root.Resolve(ctx, "", fooDTDSystemID)
 	}()
 
 	select {
@@ -89,7 +89,7 @@ func TestResolveWaiterReturnsOnCancellation(t *testing.T) {
 
 	leaf := &catalog.Catalog{
 		Entries: []catalog.Entry{
-			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///foo.dtd"},
+			{Type: catalog.EntrySystem, Name: fooDTDSystemID, URL: "file:///foo.dtd"},
 		},
 	}
 	loader := newBlockingLoader(leaf)
@@ -102,12 +102,11 @@ func TestResolveWaiterReturnsOnCancellation(t *testing.T) {
 	}
 
 	// Goroutine 1: starts the load and holds it in flight (never cancelled).
-	holderCtx, holderCancel := context.WithCancel(context.Background())
-	defer holderCancel()
+	holderCtx := t.Context()
 	holderDone := make(chan struct{})
 	go func() {
 		defer close(holderDone)
-		root.Resolve(holderCtx, "", "http://example.com/foo.dtd")
+		root.Resolve(holderCtx, "", fooDTDSystemID)
 	}()
 
 	// Wait until the load is actually in flight.
@@ -118,10 +117,10 @@ func TestResolveWaiterReturnsOnCancellation(t *testing.T) {
 	}
 
 	// Goroutine 2: waits on the same entry's load, but its context is cancelled.
-	waiterCtx, waiterCancel := context.WithCancel(context.Background())
+	waiterCtx, waiterCancel := context.WithCancel(t.Context())
 	waiterDone := make(chan string, 1)
 	go func() {
-		waiterDone <- root.Resolve(waiterCtx, "", "http://example.com/foo.dtd")
+		waiterDone <- root.Resolve(waiterCtx, "", fooDTDSystemID)
 	}()
 
 	// Give the waiter a moment to actually start blocking on the load, then
