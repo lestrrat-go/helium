@@ -243,6 +243,16 @@ func (ec *execContext) invokeInitialFunction(ctx context.Context, cfg *transform
 	return ec.resultDoc, nil
 }
 
+// globalSourceNode returns the source document context node used when
+// evaluating global variables and params, or nil when the global context
+// item is absent (XPDY0002).
+func (ec *execContext) globalSourceNode() helium.Node {
+	if ec.globalContextAbsent {
+		return nil
+	}
+	return normalizeNode(ec.sourceDoc)
+}
+
 // evaluateGlobalVar evaluates a global variable on first access.
 func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpath3.Sequence, error) {
 	if ec.globalEvaluating[v.Name] {
@@ -347,11 +357,7 @@ func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpat
 	}
 
 	if v.Select != nil {
-		var sourceNode helium.Node
-		if !ec.globalContextAbsent {
-			sourceNode = normalizeNode(ec.sourceDoc)
-		}
-		result, err := ec.evalXPath(ctx, v.Select, sourceNode)
+		result, err := ec.evalXPath(ctx, v.Select, ec.globalSourceNode())
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global variable %q: %w", v.Name, err)
 		}
@@ -361,10 +367,7 @@ func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpat
 		// context node, not whatever the current template context is. Save
 		// and restore ec.contextNode so that XPath expressions inside the
 		// body (e.g. value-of select="doc/a") resolve relative to "/".
-		var sourceNode helium.Node
-		if !ec.globalContextAbsent {
-			sourceNode = normalizeNode(ec.sourceDoc)
-		}
+		sourceNode := ec.globalSourceNode()
 		savedCtx := ec.contextNode
 		ec.contextNode = sourceNode
 		ec.temporaryOutputDepth++
@@ -447,11 +450,7 @@ func (ec *execContext) evaluateGlobalParam(ctx context.Context, p *param) (xpath
 	}
 
 	if p.Select != nil {
-		var sourceNode helium.Node
-		if !ec.globalContextAbsent {
-			sourceNode = normalizeNode(ec.sourceDoc)
-		}
-		result, err := ec.evalXPath(ctx, p.Select, sourceNode)
+		result, err := ec.evalXPath(ctx, p.Select, ec.globalSourceNode())
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global param %q: %w", p.Name, err)
 		}
@@ -459,10 +458,7 @@ func (ec *execContext) evaluateGlobalParam(ctx context.Context, p *param) (xpath
 	} else if len(p.Body) > 0 {
 		// Global param body must evaluate with the source document as
 		// context node (same as the Select path above).
-		var sourceNode helium.Node
-		if !ec.globalContextAbsent {
-			sourceNode = normalizeNode(ec.sourceDoc)
-		}
+		sourceNode := ec.globalSourceNode()
 		savedCtx := ec.contextNode
 		ec.contextNode = sourceNode
 		ec.temporaryOutputDepth++

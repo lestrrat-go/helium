@@ -105,6 +105,17 @@ func moveChildren(src *helium.Document, dst *helium.Document) error {
 	return nil
 }
 
+// applyValidationResult records the schema type annotations and nilled
+// elements produced by a ValidateDoc call onto the execution context.
+func (ec *execContext) applyValidationResult(vr validateDocResult) {
+	for node, typeName := range vr.Annotations {
+		ec.annotateNode(node, typeName)
+	}
+	for elem := range vr.NilledElements {
+		ec.markNilled(elem)
+	}
+}
+
 // execDocument implements xsl:document: creates a document node wrapping
 // the result of executing the body.
 func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) error {
@@ -169,12 +180,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 					return err
 				}
 			}
-			for node, typeName := range vr.Annotations {
-				ec.annotateNode(node, typeName)
-			}
-			for elem := range vr.NilledElements {
-				ec.markNilled(elem)
-			}
+			ec.applyValidationResult(vr)
 		}
 	}
 
@@ -611,12 +617,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 						return err
 					}
 				}
-				for node, typeName := range vr.Annotations {
-					ec.annotateNode(node, typeName)
-				}
-				for elem := range vr.NilledElements {
-					ec.markNilled(elem)
-				}
+				ec.applyValidationResult(vr)
 			}
 			// Move validated children into the primary output.
 			primaryFrame := ec.outputStack[0]
@@ -878,12 +879,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 					return err
 				}
 			}
-			for node, typeName := range vr.Annotations {
-				ec.annotateNode(node, typeName)
-			}
-			for elem := range vr.NilledElements {
-				ec.markNilled(elem)
-			}
+			ec.applyValidationResult(vr)
 		}
 	} else if inst.Validation == validationStrip {
 		root := findDocumentElement(tmpDoc)

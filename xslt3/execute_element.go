@@ -1167,6 +1167,18 @@ func prefixBoundTo(elem *helium.Element, prefix string) string {
 	return ""
 }
 
+// withV2TempOutput runs fn, treating its output as temporary output state
+// (XTDE1480) when the stylesheet declares an XSLT version below 3.0. XSLT 3.0
+// relaxes this restriction, so the depth is left untouched there.
+func (ec *execContext) withV2TempOutput(fn func() error) error {
+	isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+	if isV2TempOutput {
+		ec.temporaryOutputDepth++
+		defer func() { ec.temporaryOutputDepth-- }()
+	}
+	return fn()
+}
+
 func (ec *execContext) execComment(ctx context.Context, inst *commentInst) error {
 	var value string
 	if inst.Select != nil {
@@ -1178,14 +1190,12 @@ func (ec *execContext) execComment(ctx context.Context, inst *commentInst) error
 	} else if len(inst.Body) > 0 {
 		// XSLT 2.0: comment body is temporary output state (XTDE1480).
 		// XSLT 3.0 relaxes this restriction.
-		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
-		if isV2TempOutput {
-			ec.temporaryOutputDepth++
-		}
-		val, err := ec.evaluateBodyAsSequence(ctx, inst.Body)
-		if isV2TempOutput {
-			ec.temporaryOutputDepth--
-		}
+		var val xpath3.Sequence
+		err := ec.withV2TempOutput(func() error {
+			var err error
+			val, err = ec.evaluateBodyAsSequence(ctx, inst.Body)
+			return err
+		})
 		if err != nil {
 			return err
 		}
@@ -1242,14 +1252,12 @@ func (ec *execContext) execPI(ctx context.Context, inst *piInst) error {
 	} else if len(inst.Body) > 0 {
 		// XSLT 2.0: PI body is temporary output state (XTDE1480).
 		// XSLT 3.0 relaxes this restriction.
-		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
-		if isV2TempOutput {
-			ec.temporaryOutputDepth++
-		}
-		val, err := ec.evaluateBodyAsSequence(ctx, inst.Body)
-		if isV2TempOutput {
-			ec.temporaryOutputDepth--
-		}
+		var val xpath3.Sequence
+		err := ec.withV2TempOutput(func() error {
+			var err error
+			val, err = ec.evaluateBodyAsSequence(ctx, inst.Body)
+			return err
+		})
 		if err != nil {
 			return err
 		}
@@ -1290,14 +1298,12 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) e
 	} else if len(inst.Body) > 0 {
 		// XSLT 2.0: namespace body is temporary output state (XTDE1480).
 		// XSLT 3.0 relaxes this restriction.
-		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
-		if isV2TempOutput {
-			ec.temporaryOutputDepth++
-		}
-		val, bodyErr := ec.evaluateBody(ctx, inst.Body)
-		if isV2TempOutput {
-			ec.temporaryOutputDepth--
-		}
+		var val xpath3.Sequence
+		bodyErr := ec.withV2TempOutput(func() error {
+			var err error
+			val, err = ec.evaluateBody(ctx, inst.Body)
+			return err
+		})
 		if bodyErr != nil {
 			return bodyErr
 		}
