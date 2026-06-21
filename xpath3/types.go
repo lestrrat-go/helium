@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
@@ -1343,37 +1344,25 @@ func schemaAnnotationParts(name string) (local, ns string, ok bool) {
 // resolveQNameFromNode resolves a QName string (e.g., "my:brown-bear") using
 // the in-scope namespaces of the given node.
 func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
-	s = strings.TrimSpace(s)
-	prefix, local := "", s
-	if p, l, ok2 := strings.Cut(s, ":"); ok2 {
-		prefix = p
-		local = l
-	}
+	// The split kernel trims and splits at the first colon; this site does not
+	// NCName-validate, so the validNC result is ignored.
+	prefix, local, _, _ := domutil.SplitLexicalQName(s)
 	var uri string
 	scope := node
 	if _, ok := scope.(*helium.Element); !ok {
 		scope = node.Parent()
 	}
 	if prefix != "" {
-		for p := scope; p != nil; p = p.Parent() {
-			pe, ok := p.(*helium.Element)
-			if !ok {
-				continue
-			}
-			for _, ns := range pe.Namespaces() {
-				if ns.Prefix() == prefix {
-					uri = ns.URI()
-					break
-				}
-			}
-			if uri != "" {
-				break
-			}
-		}
-		if uri == "" {
+		// prefix is non-empty here so an empty-URI binding cannot occur and the
+		// first-match-wins helper matches the original skip-empty walk exactly.
+		var found bool
+		uri, found = domutil.LookupNSPrefixURI(scope, prefix)
+		if !found {
 			return QNameValue{}, fmt.Errorf("undeclared namespace prefix: %s", prefix)
 		}
 	} else {
+		// Default-namespace resolution keeps the skip-empty walk inline: an
+		// ancestor xmlns="" must not stop the search for an outer default.
 		for p := scope; p != nil; p = p.Parent() {
 			pe, ok := p.(*helium.Element)
 			if !ok {

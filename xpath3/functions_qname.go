@@ -196,6 +196,10 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 	}), nil
 }
 
+// parseLexicalQName splits a lexical QName WITHOUT trimming surrounding
+// whitespace (fn:QName/fn:resolve-QName treat whitespace as significant here),
+// so it deliberately does not route through domutil.SplitLexicalQName (which
+// trims). It maps split/validate failures to FOCA0002.
 func parseLexicalQName(qname string) (string, string, error) {
 	prefix := ""
 	local := qname

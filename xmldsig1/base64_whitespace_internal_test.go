@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +16,7 @@ func findFirstElement(t *testing.T, n helium.Node, name string) *helium.Element 
 	t.Helper()
 	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
 		if e, ok := helium.AsNode[*helium.Element](child); ok {
-			if localName(e) == name {
+			if domutil.LocalName(e) == name {
 				return e
 			}
 			if found := findFirstElement(t, e, name); found != nil {
@@ -86,7 +87,7 @@ func TestVerifyLineWrappedDigestValue(t *testing.T) {
 
 	// Line-wrap the DigestValue text in place, then re-sign SignedInfo so the
 	// SignatureValue covers the wrapped DigestValue.
-	wrapped := wrapText(textContent(digestValue), 16)
+	wrapped := wrapText(domutil.TextContent(digestValue), 16)
 	require.Contains(t, wrapped, " ")
 	setText(t, digestValue, wrapped)
 

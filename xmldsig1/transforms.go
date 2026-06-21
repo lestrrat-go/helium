@@ -7,7 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/enum"
-	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/domutil"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -272,32 +272,9 @@ func collectSubtreeNodes(n helium.Node) []helium.Node {
 // document root down so that closer (inner) declarations override outer ones.
 // The implicit xml namespace is excluded — C14N never declares it explicitly.
 func inScopeNamespaces(elem *helium.Element) []*helium.Namespace {
-	byPrefix := make(map[string]*helium.Namespace)
-
-	var chain []*helium.Element
-	for n := helium.Node(elem); n != nil; n = n.Parent() {
-		if anc, ok := helium.AsNode[*helium.Element](n); ok {
-			chain = append(chain, anc)
-		}
-	}
-
-	// Outermost to innermost so the innermost binding wins.
-	for _, anc := range slices.Backward(chain) {
-		for _, ns := range anc.Namespaces() {
-			byPrefix[ns.Prefix()] = ns
-		}
-		if ns := anc.Namespace(); ns != nil {
-			if _, ok := byPrefix[ns.Prefix()]; !ok {
-				byPrefix[ns.Prefix()] = ns
-			}
-		}
-	}
-
-	var result []*helium.Namespace
-	for prefix, ns := range byPrefix {
-		if prefix == lexicon.PrefixXML {
-			continue
-		}
+	byPrefix := domutil.InScopeNamespaces(elem, true)
+	result := make([]*helium.Namespace, 0, len(byPrefix))
+	for _, ns := range byPrefix {
 		result = append(result, ns)
 	}
 	return result

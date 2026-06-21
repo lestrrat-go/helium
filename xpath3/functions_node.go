@@ -9,6 +9,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -395,22 +396,8 @@ func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		n = fc.node
 	}
-	for cur := n; cur != nil; cur = cur.Parent() {
-		elem, ok := cur.(*helium.Element)
-		if !ok {
-			continue
-		}
-		for _, attr := range elem.Attributes() {
-			if attr.LocalName() == "lang" && attr.URI() == lexicon.NamespaceXML {
-				val := strings.ToLower(attr.Value())
-				if val == langArg || strings.HasPrefix(val, langArg+"-") {
-					return SingleBoolean(true), nil
-				}
-				return SingleBoolean(false), nil
-			}
-		}
-	}
-	return SingleBoolean(false), nil
+	matched, _ := domutil.XMLLangMatches(n, langArg)
+	return SingleBoolean(matched), nil
 }
 
 func fnLocalName(ctx context.Context, args []Sequence) (Sequence, error) {

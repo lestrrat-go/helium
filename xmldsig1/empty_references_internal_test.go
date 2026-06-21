@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,7 +83,7 @@ func findChild(t *testing.T, parent *helium.Element, name string) *helium.Elemen
 		if !ok {
 			continue
 		}
-		if localName(e) == name {
+		if domutil.LocalName(e) == name {
 			return e
 		}
 	}
@@ -97,7 +98,7 @@ func countChildren(parent *helium.Element, name string) int {
 		if !ok {
 			continue
 		}
-		if localName(e) == name {
+		if domutil.LocalName(e) == name {
 			n++
 		}
 	}

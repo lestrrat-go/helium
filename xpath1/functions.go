@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/domutil"
 )
 
 // sentinel errors for XPath built-in function argument validation.
@@ -516,23 +516,8 @@ func fnLang(ec *evalContext, args []*Result) (*Result, error) {
 	}
 	langArg := strings.ToLower(resultToString(args[0]))
 
-	// Walk up the tree looking for xml:lang
-	for n := ec.node; n != nil; n = n.Parent() {
-		elem, ok := n.(*helium.Element)
-		if !ok {
-			continue
-		}
-		for _, attr := range elem.Attributes() {
-			if attr.LocalName() == "lang" && attr.URI() == lexicon.NamespaceXML {
-				val := strings.ToLower(attr.Value())
-				if val == langArg || strings.HasPrefix(val, langArg+"-") {
-					return &Result{Type: BooleanResult, Bool: true}, nil
-				}
-				return &Result{Type: BooleanResult, Bool: false}, nil
-			}
-		}
-	}
-	return &Result{Type: BooleanResult, Bool: false}, nil
+	matched, _ := domutil.XMLLangMatches(ec.node, langArg)
+	return &Result{Type: BooleanResult, Bool: matched}, nil
 }
 
 // --- Number functions ---

@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/internal/xmlchar"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -1162,18 +1162,11 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 		}
 	}
 
-	s := strings.TrimSpace(v.StringVal())
-	prefix := ""
-	local := s
-	if p, l, ok := strings.Cut(s, ":"); ok {
-		prefix = p
-		local = l
-	}
-
-	if !xmlchar.IsValidNCName(local) || (prefix != "" && !xmlchar.IsValidNCName(prefix)) {
+	prefix, local, _, validNC := domutil.SplitLexicalQName(v.StringVal())
+	if !validNC {
 		return AtomicValue{}, &XPathError{
 			Code:    errCodeFORG0001,
-			Message: fmt.Sprintf("invalid QName: %q", s),
+			Message: fmt.Sprintf("invalid QName: %q", strings.TrimSpace(v.StringVal())),
 		}
 	}
 

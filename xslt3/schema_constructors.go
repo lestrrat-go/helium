@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
-	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -114,17 +114,11 @@ func schemaConstructorQNameValue(av xpath3.AtomicValue, ec *execContext) (xpath3
 }
 
 func resolveQNameFromMap(s string, ns map[string]string) (xpath3.QNameValue, error) {
-	s = strings.TrimSpace(s)
-	prefix := ""
-	local := s
-	if p, l, ok := strings.Cut(s, ":"); ok {
-		prefix = p
-		local = l
-	}
-	if !xmlchar.IsValidNCName(local) || (prefix != "" && !xmlchar.IsValidNCName(prefix)) {
+	prefix, local, _, validNC := domutil.SplitLexicalQName(s)
+	if !validNC {
 		return xpath3.QNameValue{}, &xpath3.XPathError{
 			Code:    "FORG0001",
-			Message: fmt.Sprintf("invalid QName: %q", s),
+			Message: fmt.Sprintf("invalid QName: %q", strings.TrimSpace(s)),
 		}
 	}
 

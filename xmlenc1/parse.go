@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/xmlbase64"
 )
 
@@ -97,7 +98,7 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 			}
 			ek.CipherValue = cv
 		case isXMLEncElem(e, "CarriedKeyName"):
-			ek.CarriedKeyName = textContent(e)
+			ek.CarriedKeyName = domutil.TextContent(e)
 		}
 	}
 
@@ -123,7 +124,7 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 		case isMGFElem(e):
 			em.MGFAlgorithm, _ = e.GetAttribute("Algorithm")
 		case isXMLEncElem(e, "OAEPparams"):
-			decoded, err := xmlbase64.DecodeString(textContent(e))
+			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
 			}
@@ -141,7 +142,7 @@ func parseCipherData(elem *helium.Element) ([]byte, error) {
 			continue
 		}
 		if isXMLEncElem(e, "CipherValue") {
-			decoded, err := xmlbase64.DecodeString(textContent(e))
+			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
 			}
@@ -151,17 +152,6 @@ func parseCipherData(elem *helium.Element) ([]byte, error) {
 	return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
 }
 
-// localName returns the local name of an element, stripping any prefix.
-func localName(e *helium.Element) string {
-	name := e.Name()
-	for i := range len(name) {
-		if name[i] == ':' {
-			return name[i+1:]
-		}
-	}
-	return name
-}
-
 // isElemNS reports whether e has the given local name and one of the
 // supplied namespace URIs. XML Encryption/Signature elements are
 // namespace-qualified, so matching by local name alone would wrongly
@@ -169,7 +159,7 @@ func localName(e *helium.Element) string {
 // "CipherValue") as an XMLEnc element. Every element match in this
 // package must therefore require the correct namespace URI.
 func isElemNS(e *helium.Element, local string, nsURIs ...string) bool {
-	if localName(e) != local {
+	if domutil.LocalName(e) != local {
 		return false
 	}
 	return slices.Contains(nsURIs, e.URI())
@@ -193,13 +183,4 @@ func isDSigElem(e *helium.Element, local string) bool {
 // namespace too for robustness against producers that misqualify it.
 func isMGFElem(e *helium.Element) bool {
 	return isElemNS(e, "MGF", NamespaceXMLEnc11, NamespaceXMLEnc)
-}
-
-// textContent returns the concatenated text content of an element.
-func textContent(e *helium.Element) string {
-	var sb []byte
-	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
-		sb = append(sb, child.Content()...)
-	}
-	return string(sb)
 }
