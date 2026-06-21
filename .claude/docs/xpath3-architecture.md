@@ -70,12 +70,11 @@ func NodePrefix(n helium.Node) string
 | `sequence.go` | `Sequence`, helpers: `SingleNode`, `SingleString`, `EBV`, `AtomizeSequence` |
 | `expr.go` | All AST node types, `NodeTest` variants, `SequenceType` |
 | `token.go` | `TokenType` constants (60+) |
+| `consts.go` | Shared string constants (keywords, JSON kind labels, option values) |
 | `lexer.go` | One-pass tokenizer |
 | `parser.go` | Recursive descent parser |
 | `compile_direct.go` | `Compile()` fast path for simple path-like expressions and simple predicate comparisons, with shared parser fallback |
-| `compiler.go` | AST lowering to VM instructions |
 | `eval.go` | `evalContext`, raw AST eval trampoline |
-| `eval_dispatch.go` | Shared dispatch used by raw eval + VM |
 | `eval_path.go` | Location paths, node tests, predicates, literal/variable/sequence eval |
 | `eval_operators.go` | Binary/unary logic ops, concat, simple map, range, union, intersect/except, filter, path steps |
 | `eval_arithmetic.go` | Integer/decimal/float arithmetic, unary negation, type promotion helpers |
@@ -83,7 +82,6 @@ func NodePrefix(n helium.Node) string
 | `eval_types.go` | instanceof, cast, castable, treat-as, sequence type matching |
 | `eval_funcall.go` | Function calls, dynamic calls, inline functions, partial application, map/array constructors |
 | `eval_reuse.go` | Shared eval helpers reused by VM |
-| `eval_state.go` | Eval context state management |
 | `evaluator.go` | Expression evaluator interface |
 | `vm.go` | AST lowering to indexed instruction graph + VM executor |
 | `vm_dump.go` | Text disassembly for compiled VM instructions |
@@ -96,10 +94,8 @@ func NodePrefix(n helium.Node) string
 | `variables.go` | Variable binding management |
 | `collation.go` | Collation support |
 | `regex.go` | Adapter to `internal/xsdregex` (XPath regex→Go regex translation); wraps errors as FORX0002. Shared with `xsd` so pattern facets use the same translator |
-| `regex_public.go` | Public regex API |
 | `static_check.go` | Static expression checks |
-| `streamability.go` | Internal streamability precomputation (unexported); query helpers moved to `internal/xpathstream` |
-| `stream_info.go` | Exported `StreamInfo` struct + accessor method |
+| `streamability.go` | Internal streamability precomputation (unexported) plus exported `StreamInfo` struct + accessor; query helpers moved to `internal/xpathstream` |
 | `node_identity.go` | Node identity comparison |
 | `uri_resolution.go` | URI resolution for fn:doc, fn:unparsed-text |
 | `arithmetic_datetime.go` | Date/time arithmetic |
@@ -109,11 +105,10 @@ func NodePrefix(n helium.Node) string
 | `format_number.go` | format-number |
 | `function_library.go` | Function library management |
 | `function_signatures.go` | Function signature declarations |
-| `functions.go` | `Function` interface, `FunctionContext`, registry, `builtinFunc`, `registerFn`/`registerNS` helpers |
+| `functions.go` | `Function` interface, `FunctionContext`, registry, `builtinFunc`, `registerFn`/`registerNS` helpers; boolean, not, true, false |
 | `functions_node.go` | node-name, local-name, namespace-uri, name, root, path, id, lang, etc. |
 | `functions_string.go` | string ops, regex (matches, replace, tokenize), upper/lower-case |
 | `functions_numeric.go` | abs, ceiling, floor, round, round-half-to-even |
-| `functions_boolean.go` | boolean, not, true, false |
 | `functions_aggregate.go` | count, sum, avg, min, max, distinct-values |
 | `functions_sequence.go` | empty, exists, head, tail, subsequence, insert-before, remove, reverse, etc. |
 | `functions_datetime.go` | date/time constructors, accessors, arithmetic |
@@ -123,10 +118,11 @@ func NodePrefix(n helium.Node) string
 | `functions_map.go` | map:merge, map:size, map:keys, map:contains, map:get, map:put, etc. |
 | `functions_array.go` | array:size, array:get, array:put, array:append, array:subarray, etc. |
 | `functions_math.go` | math:pi, math:exp, math:log, math:sqrt, math:sin, math:cos, etc. |
-| `functions_json.go` | parse-json, json-doc, json-to-xml, xml-to-json, serialize |
-| `functions_error.go` | error, trace |
+| `functions_json.go` | parse-json, json-doc |
+| `functions_json_xml.go` | json-to-xml, xml-to-json |
+| `functions_serialize.go` | serialize |
 | `functions_misc.go` | static-base-uri, default-collation, environment-variable, current-dateTime, generate-id |
-| `functions_constructors.go` | XSD typed atomic constructors |
+| `functions_constructors.go` | XSD typed atomic constructors; error, trace |
 | `functions_unparsed_text.go` | unparsed-text, unparsed-text-lines, unparsed-text-available |
 | `errors.go` | `XPathError` (structured error with code), standard error constructors |
 | `doc.go` | Package documentation |
