@@ -284,16 +284,34 @@ func (enc *Encoder) writeCharData(cd CharData) error {
 	return nil
 }
 
-func (enc *Encoder) writeComment(c Comment) error {
-	if bytes.Contains([]byte(c), endComment) {
-		return fmt.Errorf("xml: EncodeToken of Comment containing --> marker")
-	}
+// indentBeforeToken writes indentation before a standalone token (comment or
+// processing instruction) when indenting is enabled, skipping it right after a
+// start tag so empty-element formatting is preserved.
+func (enc *Encoder) indentBeforeToken() error {
 	if enc.indent != "" || enc.prefix != "" {
 		if enc.depth > 0 && !enc.lastWasStart {
 			if err := enc.writeIndent(enc.depth); err != nil {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+// afterToken records that a non-text token was written, resetting the
+// start/text adjacency flags used for indentation.
+func (enc *Encoder) afterToken() {
+	enc.hasTokens = true
+	enc.lastWasStart = false
+	enc.lastWasText = false
+}
+
+func (enc *Encoder) writeComment(c Comment) error {
+	if bytes.Contains([]byte(c), endComment) {
+		return fmt.Errorf("xml: EncodeToken of Comment containing --> marker")
+	}
+	if err := enc.indentBeforeToken(); err != nil {
+		return err
 	}
 	if _, err := enc.w.WriteString("<!--"); err != nil {
 		return err
@@ -304,9 +322,7 @@ func (enc *Encoder) writeComment(c Comment) error {
 	if _, err := enc.w.WriteString("-->"); err != nil {
 		return err
 	}
-	enc.hasTokens = true
-	enc.lastWasStart = false
-	enc.lastWasText = false
+	enc.afterToken()
 	return nil
 }
 
@@ -320,12 +336,8 @@ func (enc *Encoder) writeProcInst(pi ProcInst) error {
 	if bytes.Contains(pi.Inst, endProcInst) {
 		return fmt.Errorf("xml: EncodeToken of ProcInst containing ?> marker")
 	}
-	if enc.indent != "" || enc.prefix != "" {
-		if enc.depth > 0 && !enc.lastWasStart {
-			if err := enc.writeIndent(enc.depth); err != nil {
-				return err
-			}
-		}
+	if err := enc.indentBeforeToken(); err != nil {
+		return err
 	}
 	if _, err := enc.w.WriteString("<?"); err != nil {
 		return err
@@ -344,9 +356,7 @@ func (enc *Encoder) writeProcInst(pi ProcInst) error {
 	if _, err := enc.w.WriteString("?>"); err != nil {
 		return err
 	}
-	enc.hasTokens = true
-	enc.lastWasStart = false
-	enc.lastWasText = false
+	enc.afterToken()
 	return nil
 }
 
@@ -363,9 +373,7 @@ func (enc *Encoder) writeDirective(d Directive) error {
 	if err := enc.w.WriteByte('>'); err != nil {
 		return err
 	}
-	enc.hasTokens = true
-	enc.lastWasStart = false
-	enc.lastWasText = false
+	enc.afterToken()
 	return nil
 }
 
