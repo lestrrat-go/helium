@@ -738,12 +738,8 @@ func (enc *Encoder) marshalComment(structVal, field reflect.Value) error {
 	if bytes.Contains(b, ddBytes) {
 		return fmt.Errorf(`xml: comments must not contain "--"`)
 	}
-	if enc.indent != "" || enc.prefix != "" {
-		if enc.depth > 0 && !enc.lastWasStart {
-			if err := enc.writeIndent(enc.depth); err != nil {
-				return err
-			}
-		}
+	if err := enc.indentBeforeToken(); err != nil {
+		return err
 	}
 	if _, err := enc.w.WriteString("<!--"); err != nil {
 		return err
@@ -759,9 +755,7 @@ func (enc *Encoder) marshalComment(structVal, field reflect.Value) error {
 	if _, err := enc.w.WriteString("-->"); err != nil {
 		return err
 	}
-	enc.hasTokens = true
-	enc.lastWasStart = false
-	enc.lastWasText = false
+	enc.afterToken()
 	return nil
 }
 

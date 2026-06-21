@@ -142,12 +142,15 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 		locator = loc2
 		return nil
 	}))
-	h.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, localname, prefix string, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
-		line, col := 0, 0
+	pos := func() (line, col int) {
 		if locator != nil {
 			line = locator.LineNumber()
 			col = locator.ColumnNumber()
 		}
+		return
+	}
+	h.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, localname, prefix string, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+		line, col := pos()
 
 		// Push newly declared namespaces into the in-scope map
 		var prevs []nsPrev
@@ -200,11 +203,7 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 		return push(se, rawSE, line, col)
 	}))
 	h.SetOnEndElementNS(sax.EndElementNSFunc(func(_ context.Context, localname, prefix string, uri string) error {
-		line, col := 0, 0
-		if locator != nil {
-			line = locator.LineNumber()
-			col = locator.ColumnNumber()
-		}
+		line, col := pos()
 
 		// Pop namespace declarations for this element
 		if len(nsScopePrevStack) > 0 {
@@ -226,29 +225,17 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 		return push(ee, rawEE, line, col)
 	}))
 	h.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, ch []byte) error {
-		line, col := 0, 0
-		if locator != nil {
-			line = locator.LineNumber()
-			col = locator.ColumnNumber()
-		}
+		line, col := pos()
 		cd := CharData(append([]byte(nil), ch...))
 		return push(cd, cd, line, col)
 	}))
 	h.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(_ context.Context, ch []byte) error {
-		line, col := 0, 0
-		if locator != nil {
-			line = locator.LineNumber()
-			col = locator.ColumnNumber()
-		}
+		line, col := pos()
 		cd := CharData(append([]byte(nil), ch...))
 		return push(cd, cd, line, col)
 	}))
 	h.SetOnCDataBlock(sax.CDataBlockFunc(func(_ context.Context, value []byte) error {
-		line, col := 0, 0
-		if locator != nil {
-			line = locator.LineNumber()
-			col = locator.ColumnNumber()
-		}
+		line, col := pos()
 		cd := CharData(append([]byte(nil), value...))
 		select {
 		case d.events <- tokenEvent{tok: cd, rawTok: cd, line: line, col: col, cdata: true}:
@@ -258,11 +245,7 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 		}
 	}))
 	h.SetOnComment(sax.CommentFunc(func(_ context.Context, value []byte) error {
-		line, col := 0, 0
-		if locator != nil {
-			line = locator.LineNumber()
-			col = locator.ColumnNumber()
-		}
+		line, col := pos()
 		c := Comment(append([]byte(nil), value...))
 		return push(c, c, line, col)
 	}))
@@ -270,11 +253,7 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 		if target == lexicon.PrefixXML {
 			return nil // skip XML declaration
 		}
-		line, col := 0, 0
-		if locator != nil {
-			line = locator.LineNumber()
-			col = locator.ColumnNumber()
-		}
+		line, col := pos()
 		pi := ProcInst{Target: target, Inst: []byte(data)}
 		return push(pi, pi, line, col)
 	}))
