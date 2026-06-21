@@ -171,11 +171,16 @@ func (c *canonicalizer) processElement(e *helium.Element) error {
 		// Non-visible element: output namespace nodes in the node set as text.
 		// In exclusive mode, only output ns nodes whose prefix is in the inclusive list.
 		if c.mode == ExclusiveC14N10 {
-			if err := c.renderNSNodesAsTextExclusive(e); err != nil {
-				return err
+			if len(c.inclusivePrefixes) > 0 {
+				if err := c.renderNSNodesAsText(e, func(prefix string) bool {
+					_, ok := c.inclusivePrefixes[prefix]
+					return ok
+				}); err != nil {
+					return err
+				}
 			}
 		} else {
-			if err := c.renderNSNodesAsText(e); err != nil {
+			if err := c.renderNSNodesAsText(e, nil); err != nil {
 				return err
 			}
 		}
@@ -407,7 +412,9 @@ func (c *canonicalizer) renderNamespacesNodeSet(e *helium.Element) error {
 // renderNSNodesAsText outputs namespace nodes on non-visible elements as text.
 // When a namespace node is in the node set but its parent element is not visible,
 // the namespace declaration is rendered as text content (e.g. " xmlns:foo=\"uri\"").
-func (c *canonicalizer) renderNSNodesAsText(e *helium.Element) error {
+// Only namespace nodes whose prefix satisfies include are output; pass nil to
+// output all (non-xml) prefixes.
+func (c *canonicalizer) renderNSNodesAsText(e *helium.Element, include func(string) bool) error {
 	nsNodes := c.nsNodesByElement[e]
 	if len(nsNodes) == 0 {
 		return nil
@@ -418,36 +425,7 @@ func (c *canonicalizer) renderNSNodesAsText(e *helium.Element) error {
 		if nsn.prefix == lexicon.PrefixXML {
 			continue
 		}
-		toOutput = append(toOutput, nsn)
-	}
-	sortNamespaces(toOutput)
-
-	for _, ns := range toOutput {
-		if err := c.writeNSDecl(ns.prefix, ns.uri); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// renderNSNodesAsTextExclusive outputs namespace nodes on non-visible elements
-// as text in exclusive C14N mode. Only namespace nodes whose prefix is in the
-// inclusive namespace prefix list are output.
-func (c *canonicalizer) renderNSNodesAsTextExclusive(e *helium.Element) error {
-	if len(c.inclusivePrefixes) == 0 {
-		return nil
-	}
-	nsNodes := c.nsNodesByElement[e]
-	if len(nsNodes) == 0 {
-		return nil
-	}
-
-	var toOutput []nsSortEntry
-	for _, nsn := range nsNodes {
-		if nsn.prefix == lexicon.PrefixXML {
-			continue
-		}
-		if _, ok := c.inclusivePrefixes[nsn.prefix]; !ok {
+		if include != nil && !include(nsn.prefix) {
 			continue
 		}
 		toOutput = append(toOutput, nsn)
@@ -735,9 +713,12 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 
 	// Handle xml:* attribute inheritance from hidden ancestors in node-set mode
 	if c.nodeSet != nil && c.mode == C14N10 {
-		c.inheritXMLAttrs(e, &entries)
+		c.inheritXMLAttrsFiltered(e, &entries, nil)
 	} else if c.nodeSet != nil && c.mode == C14N11 {
-		c.inheritXMLAttrsC14N11(e, &entries)
+		// C14N 1.1: only inherit xml:lang and xml:space (not xml:id or xml:base).
+		c.inheritXMLAttrsFiltered(e, &entries, func(ln string) bool {
+			return ln == "lang" || ln == "space"
+		})
 		c.fixupXMLBase(e, &entries)
 	}
 
@@ -751,8 +732,9 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 	return nil
 }
 
-// inheritXMLAttrs adds xml:* attributes inherited from ancestors
-// (C14N 1.0 requirement for node-set mode).
+// inheritXMLAttrsFiltered adds xml:* attributes inherited from ancestors in
+// node-set mode. The accept predicate selects which xml:* local names to
+// inherit; pass nil to inherit all of them (C14N 1.0).
 //
 // The rule: an element E needs to re-render inherited xml:* attributes only
 // when there is a "non-visible gap" — i.e., E's immediate parent element is
@@ -761,7 +743,7 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 //
 // When there IS a gap, walk ALL ancestors to find the nearest one with each
 // xml:* attribute and inherit from it.
-func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEntry) {
+func (c *canonicalizer) inheritXMLAttrsFiltered(e *helium.Element, entries *[]attrSortEntry, accept func(string) bool) {
 	// Only inherit if there's a non-visible gap
 	if parentNode := e.Parent(); parentNode != nil {
 		if parentElem, ok := helium.AsNode[*helium.Element](parentNode); ok {
@@ -791,49 +773,7 @@ func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEn
 				continue
 			}
 			ln := attr.LocalName()
-			if present[ln] {
-				continue
-			}
-			*entries = append(*entries, attrSortEntry{
-				attr:      attr,
-				nsURI:     lexicon.NamespaceXML,
-				localName: ln,
-			})
-			present[ln] = true
-		}
-	}
-}
-
-// inheritXMLAttrsC14N11 inherits xml:lang and xml:space (but NOT xml:id or xml:base)
-// from non-visible ancestors in C14N 1.1 mode.
-func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attrSortEntry) {
-	if parentNode := e.Parent(); parentNode != nil {
-		if parentElem, ok := helium.AsNode[*helium.Element](parentNode); ok {
-			if c.isVisible(parentElem) {
-				return
-			}
-		}
-	}
-
-	present := make(map[string]bool)
-	for _, entry := range *entries {
-		if entry.nsURI == lexicon.NamespaceXML {
-			present[entry.localName] = true
-		}
-	}
-
-	for n := e.Parent(); n != nil; n = n.Parent() {
-		anc, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			continue
-		}
-		for _, attr := range anc.Attributes() {
-			if attr.URI() != lexicon.NamespaceXML {
-				continue
-			}
-			ln := attr.LocalName()
-			// C14N 1.1: only inherit xml:lang and xml:space
-			if ln != "lang" && ln != "space" {
+			if accept != nil && !accept(ln) {
 				continue
 			}
 			if present[ln] {
