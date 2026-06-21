@@ -183,16 +183,11 @@ func (c *compiler) collectIncludeImports(ctx context.Context, elem *helium.Eleme
 	return nil
 }
 
-// loadAndCacheInclude loads a stylesheet document and caches its root element.
-func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey string) (*helium.Element, error) {
-	if root, ok := c.includeRoots[importKey]; ok {
-		return root, nil
-	}
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
+// loadModuleDoc resolves, reads, and parses a stylesheet module document at uri.
+// It enforces the opt-in URIResolver requirement (XTSE0165) and returns the
+// parsed document; callers handle module-doc registration and base-URI/fragment
+// bookkeeping. The resolved resource is closed before returning.
+func (c *compiler) loadModuleDoc(ctx context.Context, uri string) (*helium.Document, error) {
 	if c.resolver == nil {
 		return nil, staticError(errCodeXTSE0165, "cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
 	}
@@ -210,6 +205,23 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities, c.loadResourceBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %q: %w", uri, err)
+	}
+	return doc, nil
+}
+
+// loadAndCacheInclude loads a stylesheet document and caches its root element.
+func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey string) (*helium.Element, error) {
+	if root, ok := c.includeRoots[importKey]; ok {
+		return root, nil
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	doc, err := c.loadModuleDoc(ctx, uri)
+	if err != nil {
+		return nil, err
 	}
 
 	if c.stylesheet.moduleDocs == nil {
@@ -511,23 +523,9 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 	defer delete(c.importStack, importKey)
 
 	// Load the document
-	if c.resolver == nil {
-		return staticError(errCodeXTSE0165, "cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
-	}
-
-	rc, resolveErr := c.resolver.Resolve(uri)
-	if resolveErr != nil {
-		return fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
-	}
-	defer func() { _ = rc.Close() }()
-	data, err := readResourceBounded(rc, c.maxResourceBytes)
+	doc, err := c.loadModuleDoc(ctx, uri)
 	if err != nil {
-		return fmt.Errorf("cannot read %q: %w", uri, err)
-	}
-
-	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities, c.loadResourceBytes)
-	if err != nil {
-		return fmt.Errorf("cannot parse %q: %w", uri, err)
+		return err
 	}
 
 	savedBase := c.baseURI
