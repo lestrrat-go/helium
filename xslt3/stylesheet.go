@@ -304,37 +304,61 @@ type keyDef struct {
 	Collation string        // collation URI (explicit or default; empty = codepoint)
 }
 
-// OutputDef is a compiled xsl:output.
+// OutputDef is a compiled xsl:output. It carries the serialization parameters
+// for one output definition; the fields mirror the xsl:output attributes (and
+// the XSLT/XQuery serialization parameters). A nil *OutputDef means no
+// definition is in effect; the Get* accessors are nil-safe. Fields suffixed
+// Explicit record whether a value was set in the source versus defaulted, and
+// fields suffixed Raw hold the unparsed attribute string for XTSE1560 conflict
+// detection. Pointer fields (e.g. IncludeContentType) are nil when unset,
+// distinguishing "not specified" from a false value. ResolvedCharMap is
+// populated at runtime by a terminal method; treat snapshots returned from
+// Invocation.ResolvedOutputDef as read-only.
 type OutputDef struct {
-	Name                    string
-	Method                  string // "xml", "html", "text", "xhtml"
-	MethodExplicit          bool   // true when method was explicitly specified (not defaulted)
-	Encoding                string
-	Indent                  bool
-	OmitDeclaration         bool
-	OmitDeclarationExplicit bool   // true when omit-xml-declaration was explicitly set
-	Standalone              string // "yes", "no", "omit"
-	CDATASections           []string
-	DoctypePublic           string
-	DoctypeSystem           string
-	MediaType               string
-	Version                 string
-	UndeclarePrefixes       bool
-	IncludeContentType      *bool           // include-content-type: nil=default(yes), true/false
-	ItemSeparator           *string         // item-separator serialization parameter; nil = not set
-	ItemSeparatorAbsent     bool            // true when item-separator="#absent" was explicitly set
-	HTMLVersion             string          // html-version: "5", "4.0", etc.
-	NormalizationForm       string          // "NFC", "NFD", "NFKC", "NFKD", "fully-normalized", "none"
-	ByteOrderMark           bool            // byte-order-mark: emit BOM at start of output
-	EscapeURIAttributes     *bool           // escape-uri-attributes: nil=default(true), true/false
-	UseCharacterMaps        []string        // names of character maps to use
-	ResolvedCharMap         map[rune]string // resolved character map (populated at runtime)
-	AllowDuplicateNames     bool            // allow-duplicate-names for JSON output
-	JSONNodeOutputMethod    string          // json-node-output-method: "xml", "html", "xhtml", "text"
-	SuppressIndentation     []string        // suppress-indentation element names
-	ParameterDocument       string          // parameter-document URI
-	BuildTree               *bool           // build-tree: nil=default(true), true/false
-	ImportPrec              int             // import precedence for XTSE1560 conflict detection
+	// Name is the expanded QName of the output definition (empty for the
+	// unnamed primary definition).
+	Name string
+	// Method is the output method: "xml", "html", "text", or "xhtml".
+	Method string
+	// MethodExplicit is true when method was explicitly specified (not defaulted).
+	MethodExplicit bool
+	// Encoding is the character encoding for the output.
+	Encoding string
+	// Indent enables pretty-printing of the output.
+	Indent bool
+	// OmitDeclaration suppresses the XML declaration.
+	OmitDeclaration bool
+	// OmitDeclarationExplicit is true when omit-xml-declaration was explicitly set.
+	OmitDeclarationExplicit bool
+	// Standalone is the standalone document declaration: "yes", "no", or "omit".
+	Standalone string
+	// CDATASections lists element names whose text content is emitted as CDATA.
+	CDATASections []string
+	// DoctypePublic is the PUBLIC identifier for the emitted DOCTYPE.
+	DoctypePublic string
+	// DoctypeSystem is the SYSTEM identifier for the emitted DOCTYPE.
+	DoctypeSystem string
+	// MediaType is the MIME media type of the output.
+	MediaType string
+	// Version is the version emitted in the XML or HTML declaration.
+	Version string
+	// UndeclarePrefixes enables namespace-undeclaration in XML 1.1 output.
+	UndeclarePrefixes    bool
+	IncludeContentType   *bool           // include-content-type: nil=default(yes), true/false
+	ItemSeparator        *string         // item-separator serialization parameter; nil = not set
+	ItemSeparatorAbsent  bool            // true when item-separator="#absent" was explicitly set
+	HTMLVersion          string          // html-version: "5", "4.0", etc.
+	NormalizationForm    string          // "NFC", "NFD", "NFKC", "NFKD", "fully-normalized", "none"
+	ByteOrderMark        bool            // byte-order-mark: emit BOM at start of output
+	EscapeURIAttributes  *bool           // escape-uri-attributes: nil=default(true), true/false
+	UseCharacterMaps     []string        // names of character maps to use
+	ResolvedCharMap      map[rune]string // resolved character map (populated at runtime)
+	AllowDuplicateNames  bool            // allow-duplicate-names for JSON output
+	JSONNodeOutputMethod string          // json-node-output-method: "xml", "html", "xhtml", "text"
+	SuppressIndentation  []string        // suppress-indentation element names
+	ParameterDocument    string          // parameter-document URI
+	BuildTree            *bool           // build-tree: nil=default(true), true/false
+	ImportPrec           int             // import precedence for XTSE1560 conflict detection
 	// Raw attribute values for XTSE1560 conflict detection
 	MethodRaw     string
 	IndentRaw     string
