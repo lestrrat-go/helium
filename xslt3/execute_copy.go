@@ -12,6 +12,29 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
+// emitAtomicText appends an atomic value to the current output as a text node.
+// Adjacent atomic values are separated by a single space per XSLT 3.0 §5.7.2;
+// prevWasAtomic tracks whether the previously emitted item was atomic and is
+// updated to true on success.
+func (ec *execContext) emitAtomicText(v xpath3.AtomicValue, prevWasAtomic *bool) error {
+	s, err := xpath3.AtomicToString(v)
+	if err != nil {
+		return err
+	}
+	if *prevWasAtomic {
+		sep := ec.resultDoc.CreateText([]byte(" "))
+		if err := ec.addNode(sep); err != nil {
+			return err
+		}
+	}
+	text := ec.resultDoc.CreateText([]byte(s))
+	if err := ec.addNode(text); err != nil {
+		return err
+	}
+	*prevWasAtomic = true
+	return nil
+}
+
 func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 	contextNode := normalizeNode(ec.contextNode)
 
@@ -87,22 +110,10 @@ func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 			case xpath3.AtomicValue:
 				// Atomic values: output as text, body is not evaluated.
 				// Adjacent atomic values are space-separated per XSLT 3.0 §5.7.2.
-				s, err := xpath3.AtomicToString(v)
-				if err != nil {
-					return err
-				}
 				out := ec.currentOutput()
-				if out.prevWasAtomic {
-					sep := ec.resultDoc.CreateText([]byte(" "))
-					if err := ec.addNode(sep); err != nil {
-						return err
-					}
-				}
-				text := ec.resultDoc.CreateText([]byte(s))
-				if err := ec.addNode(text); err != nil {
+				if err := ec.emitAtomicText(v, &out.prevWasAtomic); err != nil {
 					return err
 				}
-				out.prevWasAtomic = true
 			}
 		}
 		return nil
@@ -112,22 +123,10 @@ func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 		// XSLT 3.0: context item may be an atomic value (e.g. inside
 		// xsl:for-each over a sequence of atomics). Copy it as text.
 		if av, ok := ec.contextItem.(xpath3.AtomicValue); ok {
-			s, err := xpath3.AtomicToString(av)
-			if err != nil {
-				return err
-			}
 			out := ec.currentOutput()
-			if out.prevWasAtomic {
-				sep := ec.resultDoc.CreateText([]byte(" "))
-				if err := ec.addNode(sep); err != nil {
-					return err
-				}
-			}
-			text := ec.resultDoc.CreateText([]byte(s))
-			if err := ec.addNode(text); err != nil {
+			if err := ec.emitAtomicText(av, &out.prevWasAtomic); err != nil {
 				return err
 			}
-			out.prevWasAtomic = true
 			return nil
 		}
 		return dynamicError(errCodeXTTE0945, "xsl:copy: no context item")
@@ -623,21 +622,9 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 				}
 			}
 		case xpath3.AtomicValue:
-			s, err := xpath3.AtomicToString(v)
-			if err != nil {
+			if err := ec.emitAtomicText(v, &prevWasAtomic); err != nil {
 				return err
 			}
-			if prevWasAtomic {
-				sep := ec.resultDoc.CreateText([]byte(" "))
-				if err := ec.addNode(sep); err != nil {
-					return err
-				}
-			}
-			text := ec.resultDoc.CreateText([]byte(s))
-			if err := ec.addNode(text); err != nil {
-				return err
-			}
-			prevWasAtomic = true
 		}
 	}
 	out.prevWasAtomic = prevWasAtomic
