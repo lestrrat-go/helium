@@ -3,8 +3,6 @@ package helium
 import (
 	"fmt"
 	"strings"
-
-	"github.com/lestrrat-go/pdebug"
 )
 
 // Element represents an XML element node (libxml2: xmlNode with type XML_ELEMENT_NODE).
@@ -26,10 +24,6 @@ func (n *Element) AddChild(cur Node) error {
 
 // AppendText appends text content to this node (libxml2: xmlNodeAddContent).
 func (n *Element) AppendText(b []byte) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Element.AppendText '%s'", b)
-		defer g.IRelease("END Element.AppendText")
-	}
 	return appendText(n, b)
 }
 
@@ -54,11 +48,6 @@ func (n *Element) SetTreeDoc(doc *Document) {
 // entity references, and returns the element for chaining. The name must not
 // contain a colon; use SetAttributeNS for namespaced attributes.
 func (n *Element) SetAttribute(name, value string) (*Element, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Element.SetAttribute '%s' (%s)", name, value)
-		defer g.IRelease("END Element.SetAttribute")
-	}
-
 	attr, err := n.doc.CreateAttribute(name, value, nil)
 	if err != nil {
 		return nil, err

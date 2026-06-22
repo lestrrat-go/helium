@@ -12,15 +12,9 @@ import (
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 func (pctx *parserCtx) parseReference(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseReference")
-		defer g.IRelease("END parseReference")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -277,13 +271,6 @@ func accumulateHexCharRef(val int32, c rune) (int32, error) {
 }
 
 func parseStringCharRef(s []byte) (r rune, width int, err error) {
-	if pdebug.Enabled {
-		g := pdebug.Marker("parseStringCharRef")
-		defer func() {
-			pdebug.Printf("r = '%c' (%x), consumed %d bytes", &r, &r, &width)
-			g.End()
-		}()
-	}
 	var val int32
 	r = utf8.RuneError
 	width = 0
@@ -425,10 +412,6 @@ func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
 }
 
 func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.Entity, int, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseStringEntityRef ('%s')", s)
-		defer g.IRelease("END parseStringEntityRef")
-	}
 	if len(s) == 0 || s[0] != '&' {
 		return nil, 0, errors.New("invalid entity ref")
 	}
@@ -540,12 +523,6 @@ func (pctx *parserCtx) parseStringPEReference(ctx context.Context, s []byte) (sa
 }
 
 func (ctx *parserCtx) parseCharRef() (r rune, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseCharRef")
-		defer g.IRelease("END parseCharRef")
-		defer func() { pdebug.Printf("r = '%c' (%x)", r, r) }()
-	}
-
 	r = utf8.RuneError
 
 	var val int32
@@ -636,13 +613,6 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 }
 
 func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseEntityRef")
-		defer func() {
-			g.IRelease("END parseEntityRef ent = %#v", ent)
-		}()
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		err = pctx.error(ctx, errNoCursor)
@@ -800,11 +770,6 @@ func (ctx *parserCtx) entityCheckLimits() error {
 }
 
 func (pctx *parserCtx) handlePEReference(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.Marker("handlePEReference")
-		defer g.End()
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -813,11 +778,8 @@ func (pctx *parserCtx) handlePEReference(ctx context.Context) error {
 		return nil
 	}
 
-	switch st := pctx.instate; st {
+	switch pctx.instate {
 	case psCDATA, psComment, psStartTag, psEndTag, psEntityDecl, psContent, psAttributeValue, psPI, psSystemLiteral, psPublicLiteral, psEntityValue, psIgnore:
-		if pdebug.Enabled {
-			pdebug.Printf("instate == %s, ignoring", st)
-		}
 		return nil
 	case psEOF:
 		return errors.New("handlePEReference: parameter entity at EOF")

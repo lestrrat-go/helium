@@ -14,7 +14,6 @@ import (
 	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 /* parse a CharData section.
@@ -36,11 +35,6 @@ func (pctx *parserCtx) parseCharData(ctx context.Context, cdata bool) error {
 }
 
 func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseCharDataContent")
-		defer g.IRelease("END parseCharDataContent")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -54,7 +48,6 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 			if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 				return pctx.error(ctx, ErrMisplacedCDATAEnd)
 			}
-			pdebug.Dump(cur)
 			return errors.New("invalid char data")
 		}
 
@@ -98,7 +91,6 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 			return pctx.error(ctx, ErrMisplacedCDATAEnd)
 		}
-		pdebug.Dump(cur)
 		return errors.New("invalid char data")
 	}
 
@@ -133,13 +125,6 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseElement(ctx context.Context) error {
-	if pdebug.Enabled {
-		pctx.elemidx++
-		i := pctx.elemidx
-		g := pdebug.IPrintf("START parseElement (%d)", i)
-		defer g.IRelease("END parseElement (%d)", i)
-	}
-
 	pctx.elemDepth++
 	defer func() { pctx.elemDepth-- }()
 
@@ -173,11 +158,6 @@ func (pctx *parserCtx) parseElement(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseStartTag")
-		defer g.IRelease("END parseStartTag")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -360,9 +340,6 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			elemName = local
 		}
 
-		if pdebug.Enabled {
-			pdebug.Printf("-------> %s", elemName)
-		}
 		defaults, ok := pctx.lookupAttributeDefault(elemName)
 		if ok {
 			// First pass: apply default xmlns="..." (must come before prefixed)
@@ -494,11 +471,6 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
  * [NS 9] ETag ::= '</' QName S? '>'
  */
 func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseEndTag")
-		defer g.IRelease("END parseEndTag")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -558,11 +530,6 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseAttributeValue(ctx context.Context, normalize bool) (value string, entities int, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseAttributeValue (normalize=%t)", normalize)
-		defer g.IRelease("END parseAttributeValue")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		err = pctx.error(ctx, errNoCursor)
@@ -594,14 +561,6 @@ func (pctx *parserCtx) parseAttributeValue(ctx context.Context, normalize bool) 
 
 // This is based on xmlParseAttValueComplex
 func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte, normalize bool) (value string, entities int, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseAttributeValueInternal (qch='%c',normalize=%t)", qch, normalize)
-		defer g.IRelease("END parseAttributeValueInternal")
-		defer func() {
-			pdebug.Printf("value = '%s'", value)
-		}()
-	}
-
 	prevState := pctx.instate
 	pctx.instate = psAttributeValue
 	defer func() { pctx.instate = prevState }()
@@ -746,13 +705,6 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 }
 
 func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (local string, prefix string, value string, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseAttribute")
-		defer g.IRelease("END parseAttribute")
-		defer func() {
-			pdebug.Printf("local = '%s', prefix = '%s', value = '%s'", local, prefix, value)
-		}()
-	}
 	l, p, err := pctx.parseQName(ctx)
 	if err != nil {
 		err = pctx.error(ctx, err)
@@ -761,9 +713,6 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 
 	normalize := false
 	attType, ok := pctx.lookupSpecialAttribute(elemName, l)
-	if pdebug.Enabled {
-		pdebug.Printf("looked up attribute %s:%s -> %d (%t)", elemName, l, attType, ok)
-	}
 	if ok && attType != enum.AttrInvalid {
 		normalize = true
 	}
@@ -799,13 +748,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 	}
 
 	if normalize {
-		if pdebug.Enabled {
-			pdebug.Printf("normalize is true, checking if entities have been expanded...")
-		}
 		if entities > 0 {
-			if pdebug.Enabled {
-				pdebug.Printf("entities seems to have been expanded (%d): doint second normalization", entities)
-			}
 			v = pctx.attrNormalizeSpace(v)
 		}
 	}

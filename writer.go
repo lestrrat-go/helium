@@ -11,7 +11,6 @@ import (
 	henc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
-	"github.com/lestrrat-go/pdebug"
 )
 
 // Write serializes a node (document or element) to the given writer using
@@ -289,11 +288,6 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 }
 
 func (d Writer) writeDoc(out io.Writer, doc *Document) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Writer.writeDoc")
-		defer g.IRelease("END Writer.writeDoc")
-	}
-
 	s := writeSession{Writer: d}
 
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
@@ -344,11 +338,6 @@ func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 }
 
 func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Writer.dumpDocContent")
-		defer g.IRelease("END Writer.dumpDocContent")
-	}
-
 	doc, ok := AsNode[*Document](n)
 	if !ok {
 		return nil
@@ -376,11 +365,6 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 
 // writeNode is the internal implementation for node serialization.
 func (d *writeSession) writeNode(out io.Writer, n Node) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Writer.WriteNode '%s'", n.Name())
-		defer g.IRelease("END Writer.WriteNode")
-	}
-
 	var err error
 	switch n.Type() {
 	case DocumentNode:
@@ -520,11 +504,6 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		return nil
 	}
 
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START WriteNode(fallthrough)")
-		defer g.IRelease("END DUmpNode(fallthrough)")
-	}
-
 	// if it got here it's some sort of an element
 	var name string
 	var nslist []*Namespace
@@ -561,7 +540,6 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
-			g := pdebug.IPrintf("START WriteNode(fallthrough->attribute(%s))", attr.Name())
 			// The attribute name is emitted verbatim. checkAttributeName
 			// rejects names that would inject raw markup into the start tag.
 			if !d.checkAttributeName(attr.Name()) {
@@ -585,7 +563,6 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				}
 			}
 			d.writeString(out, `"`)
-			g.IRelease("END DUmpNode(fallthrough->attribute(%s))", attr.Name())
 			a := attr.NextSibling()
 			if a == nil {
 				break

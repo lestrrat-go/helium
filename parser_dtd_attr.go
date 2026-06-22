@@ -8,15 +8,9 @@ import (
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseNotationType")
-		defer g.IRelease("END parseNotationType")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return nil, pctx.error(ctx, errNoCursor)
@@ -64,11 +58,6 @@ func (pctx *parserCtx) parseNotationType(ctx context.Context) (Enumeration, erro
 }
 
 func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseEnumerationType")
-		defer g.IRelease("END parseEnumerationType")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return nil, pctx.error(ctx, errNoCursor)
@@ -116,11 +105,6 @@ func (pctx *parserCtx) parseEnumerationType(ctx context.Context) (Enumeration, e
 }
 
 func (pctx *parserCtx) parseEnumeratedType(ctx context.Context) (enum.AttributeType, Enumeration, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseEnumeratedType")
-		defer g.IRelease("END parseEnumeratedType")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return enum.AttrInvalid, nil, pctx.error(ctx, errNoCursor)
@@ -146,11 +130,6 @@ func (pctx *parserCtx) parseEnumeratedType(ctx context.Context) (enum.AttributeT
 }
 
 func (pctx *parserCtx) parseAttributeType(ctx context.Context) (enum.AttributeType, Enumeration, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseAttributeType")
-		defer g.IRelease("END parseAttributeType")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return enum.AttrInvalid, nil, pctx.error(ctx, errNoCursor)
@@ -184,13 +163,6 @@ func (pctx *parserCtx) parseAttributeType(ctx context.Context) (enum.AttributeTy
 }
 
 func (pctx *parserCtx) parseDefaultDecl(ctx context.Context) (deftype enum.AttributeDefault, defvalue string, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseDefaultDecl")
-		defer func() {
-			g.IRelease("END parseDefaultDecl (deftype = %d, defvalue = '%s')", deftype, defvalue)
-		}()
-	}
-
 	deftype = enum.AttrDefaultNone
 	cur := pctx.getCursor()
 	if cur == nil {
@@ -231,18 +203,6 @@ func (pctx *parserCtx) parseDefaultDecl(ctx context.Context) (deftype enum.Attri
 }
 
 func (ctx *parserCtx) attrNormalizeSpace(s string) (value string) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START attrNormalizeSpace")
-		defer g.IRelease("END attrNormalizeSpace")
-		defer func() {
-			if s == value {
-				pdebug.Printf("no change")
-			} else {
-				pdebug.Printf("normalized '%s' => '%s'", s, value)
-			}
-		}()
-	}
-
 	if len(s) == 0 {
 		value = s
 		return
@@ -279,15 +239,8 @@ func (ctx *parserCtx) attrNormalizeSpace(s string) (value string) {
 }
 
 func (ctx *parserCtx) cleanSpecialAttributes() {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START cleanSpecialAttribute")
-		defer g.IRelease("END cleanSpecialAttribute")
-	}
 	for k, v := range ctx.attsSpecial {
 		if v == enum.AttrCDATA {
-			if pdebug.Enabled {
-				pdebug.Printf("removing %s from special attribute set", k)
-			}
 			delete(ctx.attsSpecial, k)
 		}
 	}
@@ -298,10 +251,6 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.At
 		return
 	}
 	key := elemName + ":" + attrName
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START addSpecialAttribute(%s, %d)", key, typ)
-		defer g.IRelease("END addSpecialAttribute")
-	}
 	ctx.attsSpecial[key] = typ
 }
 
@@ -310,10 +259,6 @@ func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (enum.At
 		return 0, false
 	}
 	key := elemName + ":" + attrName
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START lookupSpecialAttribute(%s)", key)
-		defer g.IRelease("END lookupSpecialAttribute")
-	}
 	v, ok := ctx.attsSpecial[key]
 	return v, ok
 }
@@ -414,11 +359,6 @@ func (ctx *parserCtx) lookupAttributeDefault(elemName string) ([]*Attribute, boo
 }
 
 func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseAttributeListDecl")
-		defer g.IRelease("END parseAttributeListDecl")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -503,11 +443,6 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseNotationDecl(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseNotationDecl")
-		defer g.IRelease("END parseNotationDecl")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -643,11 +578,6 @@ func isPubidChar(r rune) bool {
 }
 
 func (pctx *parserCtx) parseExternalID(ctx context.Context) (string, string, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseExternalID")
-		defer g.IRelease("END parseExternalID")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return "", "", pctx.error(ctx, errNoCursor)

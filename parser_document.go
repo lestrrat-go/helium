@@ -8,15 +8,9 @@ import (
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 func (pctx *parserCtx) parseDocument(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseDocument")
-		defer g.IRelease("END parseDocument")
-	}
-
 	// Store pctx in the context so SAX callbacks (e.g. TreeBuilder) can
 	// retrieve it via getParserCtx. Also store the document locator and
 	// stop function so helium.StopParser works.
@@ -257,10 +251,6 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseContent(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseContent")
-		defer g.IRelease("END parseContent")
-	}
 	pctx.instate = psContent
 
 	cur := pctx.getCursor()

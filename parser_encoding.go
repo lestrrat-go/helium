@@ -6,7 +6,6 @@ import (
 
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/strcursor"
-	"github.com/lestrrat-go/pdebug"
 )
 
 const (
@@ -36,13 +35,6 @@ var (
 )
 
 func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START detectEncoding")
-		defer func() {
-			g.IRelease("END detecteEncoding '%s'", encoding)
-		}()
-	}
-
 	cur := ctx.getByteCursor()
 	if cur == nil {
 		return encNone, ErrByteCursorRequired
@@ -163,21 +155,12 @@ func decodeRuneAt(cur strcursor.Cursor, offset int) (rune, int, bool) {
 }
 
 func (ctx *parserCtx) switchEncoding() error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START switchEncoding()")
-		defer g.IRelease("END switchEncoding")
-	}
-
 	encName := ctx.encoding
 	if encName == "" {
 		encName = ctx.detectedEncoding
 		if encName == "" {
 			encName = "utf8"
 		}
-	}
-
-	if pdebug.Enabled {
-		pdebug.Printf("Loading encoding '%s'", encName)
 	}
 
 	if encoding.IsUTF8(encName) {

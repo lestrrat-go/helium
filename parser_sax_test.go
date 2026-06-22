@@ -14,7 +14,6 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,10 +62,6 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	}))
 
 	s.SetOnEntityDecl(sax.EntityDeclFunc(func(ctxif context.Context, name string, typ enum.EntityType, publicID string, systemID string, notation string) error {
-		if pdebug.Enabled {
-			g := pdebug.Marker("EntityDecl handler for sax_test.go")
-			defer g.End()
-		}
 		_, _ = fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, publicID, systemID, notation)
 
@@ -85,9 +80,6 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 			return err
 		}
 		entities[name] = ent
-		if pdebug.Enabled {
-			pdebug.Printf("registered entity '%s' (entity type = '%s', publicID = '%s', systemID = '%s', notation = '%s')", name, typ, publicID, systemID, notation)
-		}
 		return nil
 	}))
 	s.SetOnExternalSubset(sax.ExternalSubsetFunc(func(_ context.Context, name, externalID, systemID string) error {

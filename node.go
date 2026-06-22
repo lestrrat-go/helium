@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-
-	"github.com/lestrrat-go/pdebug"
 )
 
 // AsNode performs a safe type assertion on a [Node], returning the
@@ -368,9 +366,6 @@ func addChild(n MutableNode, cur Node) error {
 
 	l := pdn.lastChild
 	if l == nil {
-		if pdebug.Enabled {
-			pdebug.Printf("LastChild is nil, setting firstChild and lastChild")
-		}
 		pdn.firstChild = cur
 		pdn.lastChild = cur
 		cdn.parent = n

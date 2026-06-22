@@ -9,7 +9,6 @@ import (
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/strcursor"
-	"github.com/lestrrat-go/pdebug"
 )
 
 func (pctx *parserCtx) parseVersionInfoFromCursor(ctx context.Context) (string, error) {
@@ -156,11 +155,6 @@ func (e AttrNotFoundError) Error() string {
 var versionBytes = []byte{'v', 'e', 'r', 's', 'i', 'o', 'n'}
 
 func (pctx *parserCtx) parseVersionInfo(ctx context.Context) (string, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseVersionInfo")
-		defer g.IRelease("END parseVersionInfo")
-	}
-
 	return pctx.parseNamedAttributeBytes(ctx, versionBytes, pctx.parseVersionNum)
 }
 
@@ -225,12 +219,6 @@ func (ctx *parserCtx) parseVersionNum(_ byte) (string, error) {
 }
 
 func (ctx *parserCtx) parseQuotedTextBytes(cb qtextHandler) (value string, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseQuotedTextBytes")
-		defer g.IRelease("END parseQuotedTextBytes")
-		defer func() { pdebug.Printf("value = '%s'", value) }()
-	}
-
 	cur := ctx.getByteCursor()
 	if cur == nil {
 		return "", ErrByteCursorRequired
@@ -263,12 +251,6 @@ func (ctx *parserCtx) parseQuotedTextBytes(cb qtextHandler) (value string, err e
 }
 
 func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (value string, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseQuotedText")
-		defer g.IRelease("END parseQuotedText")
-		defer func() { pdebug.Printf("value = '%s'", value) }()
-	}
-
 	cur := ctx.getCursor()
 	if cur == nil {
 		return "", errNoCursor
@@ -303,20 +285,12 @@ func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (value string, err error)
 var encodingBytes = []byte{'e', 'n', 'c', 'o', 'd', 'i', 'n', 'g'}
 
 func (pctx *parserCtx) parseEncodingDecl(ctx context.Context) (string, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseEncodingDecl")
-		defer g.IRelease("END parseEncodingDecl")
-	}
 	return pctx.parseNamedAttributeBytes(ctx, encodingBytes, func(qch byte) (string, error) {
 		return pctx.parseEncodingName(ctx, qch)
 	})
 }
 
 func (pctx *parserCtx) parseEncodingName(ctx context.Context, _ byte) (string, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseEncodingName")
-		defer g.IRelease("END parseEncodingName")
-	}
 	cur := pctx.getByteCursor()
 	if cur == nil {
 		return "", ErrByteCursorRequired
@@ -350,11 +324,6 @@ func (pctx *parserCtx) parseEncodingName(ctx context.Context, _ byte) (string, e
 var standaloneBytes = []byte{'s', 't', 'a', 'n', 'd', 'a', 'l', 'o', 'n', 'e'}
 
 func (pctx *parserCtx) parseStandaloneDecl(ctx context.Context) (DocumentStandaloneType, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseStandaloneDecl")
-		defer g.IRelease("END parseStandaloneDecl")
-	}
-
 	v, err := pctx.parseNamedAttributeBytes(ctx, standaloneBytes, pctx.parseStandaloneDeclValue)
 	if err != nil {
 		return StandaloneInvalidValue, err
@@ -382,11 +351,6 @@ func (ctx *parserCtx) parseStandaloneDeclValue(_ byte) (string, error) {
 }
 
 func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseName")
-		defer g.IRelease("END parseName")
-		defer func() { pdebug.Printf("name = '%s'", name) }()
-	}
 	if pctx.instate == psEOF {
 		err = pctx.error(ctx, ErrPrematureEOF)
 		return
@@ -467,12 +431,6 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 }
 
 func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix string, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseQName")
-		defer g.IRelease("END parseQName")
-		defer func() { pdebug.Printf("local='%s' prefix='%s'", local, prefix) }()
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		err = pctx.error(ctx, errNoCursor)
@@ -551,11 +509,6 @@ func isNameCharW(r rune, w int) bool {
 }
 
 func (ctx *parserCtx) parseNmtoken() (string, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseNmtoken")
-		defer g.IRelease("END parseNmtoken")
-	}
-
 	cur := ctx.getCursor()
 	if cur == nil {
 		return "", errNoCursor
@@ -592,13 +545,6 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
 }
 
 func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseNCName")
-		defer g.IRelease("END parseNCName")
-		defer func() {
-			pdebug.Printf("ncname = '%s'", ncname)
-		}()
-	}
 	if pctx.instate == psEOF {
 		err = pctx.error(ctx, ErrPrematureEOF)
 		return
