@@ -24,7 +24,7 @@ func TestValidate_WalksAllExprShapes(t *testing.T) {
 		`-1 + 2 * 3`,
 		`"a" || "b"`,
 		`(1, 2) ! (. + 1)`,
-		`1 to 10`,
+		expr1To10,
 		`a union b`,
 		`a intersect b`,
 		`a except b`,

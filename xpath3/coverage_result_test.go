@@ -36,7 +36,7 @@ func TestResult_StringValue(t *testing.T) {
 
 func TestResult_TypePredicates(t *testing.T) {
 	// IsNumber across the numeric type hierarchy.
-	for _, expr := range []string{`1`, `1.5`, `xs:double("2.0")`, `xs:float("3.0")`} {
+	for _, expr := range []string{`1`, want1Dot5, `xs:double("2.0")`, `xs:float("3.0")`} {
 		r, err := evaluate(t.Context(), nil, expr)
 		require.NoError(t, err)
 		_, ok := r.IsNumber()

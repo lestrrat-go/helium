@@ -8,7 +8,7 @@ import (
 
 func TestDigestEqual(t *testing.T) {
 	require.True(t, digestEqual([]byte{1, 2, 3}, []byte{1, 2, 3}))
-	require.False(t, digestEqual([]byte{1, 2, 3}, []byte{1, 2}))   // length mismatch
+	require.False(t, digestEqual([]byte{1, 2, 3}, []byte{1, 2}))    // length mismatch
 	require.False(t, digestEqual([]byte{1, 2, 3}, []byte{1, 2, 4})) // content mismatch
 }
 

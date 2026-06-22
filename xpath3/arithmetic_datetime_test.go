@@ -23,7 +23,7 @@ func TestDurationFractionalSeconds(t *testing.T) {
 		{
 			name: "div fractional by whole",
 			expr: `xs:dayTimeDuration("PT1.5S") div xs:dayTimeDuration("PT1S")`,
-			want: "1.5",
+			want: want1Dot5,
 		},
 		{
 			name: "div fractional by fractional",
@@ -60,7 +60,7 @@ func TestDurationFractionalSeconds(t *testing.T) {
 		{
 			name: "compare fractional durations equal",
 			expr: `xs:dayTimeDuration("PT1.5S") eq xs:dayTimeDuration("PT1.5S")`,
-			want: "true",
+			want: wantTrue,
 		},
 	}
 

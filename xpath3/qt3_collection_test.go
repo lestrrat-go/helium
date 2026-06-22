@@ -24,7 +24,7 @@ func TestQT3Collections(t *testing.T) {
 			Name:  "query-backed collection",
 			XPath: `sum(collection("urn:qt3:ints"))`,
 			Collections: []qt3Collection{
-				{URI: "urn:qt3:ints", Query: "1 to 10"},
+				{URI: "urn:qt3:ints", Query: expr1To10},
 			},
 			Assertions: []qt3Assertion{qt3AssertEq("55")},
 		},

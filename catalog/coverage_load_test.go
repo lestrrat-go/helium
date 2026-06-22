@@ -210,7 +210,6 @@ func TestNilContextLoad(t *testing.T) {
 </catalog>`
 	require.NoError(t, os.WriteFile(p, []byte(xml), 0o600))
 
-	//nolint:staticcheck // intentionally passing nil ctx to exercise the guard
 	var nilCtx context.Context
 	cat, err := catalog.NewLoader().Load(nilCtx, p)
 	require.NoError(t, err)

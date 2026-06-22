@@ -44,14 +44,14 @@ func TestEvalNamespaceURIFunction(t *testing.T) {
 
 	t.Run("on prefixed element", func(t *testing.T) {
 		nodes, err := xpath1.NewEvaluator().
-			Namespaces(map[string]string{"p": "urn:x"}).
+			Namespaces(map[string]string{"p": nsURIX}).
 			Find(t.Context(), xpath1.MustCompile("//p:child"), doc)
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		r, err := xpath1.Evaluate(t.Context(), nodes[0], "namespace-uri(.)")
 		require.NoError(t, err)
 		require.Equal(t, xpath1.StringResult, r.Type)
-		require.Equal(t, "urn:x", r.String)
+		require.Equal(t, nsURIX, r.String)
 	})
 
 	t.Run("no-namespace element", func(t *testing.T) {
@@ -123,8 +123,8 @@ func TestEvalPathExprNotNodeSet(t *testing.T) {
 	compiled, err := xpath1.Compile("ext:scalar()/a")
 	require.NoError(t, err)
 	ev := xpath1.NewEvaluator().
-		Namespaces(map[string]string{nsPrefixExt: "urn:test:ext"}).
-		FunctionNS("urn:test:ext", "scalar", xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
+		Namespaces(map[string]string{nsPrefixExt: nsURIExt}).
+		FunctionNS(nsURIExt, "scalar", xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
 			return &xpath1.Result{Type: xpath1.StringResult, String: "x"}, nil
 		}))
 	_, err = ev.Evaluate(t.Context(), compiled, doc)
@@ -139,8 +139,8 @@ func TestEvalUnionNotNodeSet(t *testing.T) {
 	compiled, err := xpath1.Compile("ext:scalar() | /root")
 	require.NoError(t, err)
 	ev := xpath1.NewEvaluator().
-		Namespaces(map[string]string{nsPrefixExt: "urn:test:ext"}).
-		FunctionNS("urn:test:ext", "scalar", xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
+		Namespaces(map[string]string{nsPrefixExt: nsURIExt}).
+		FunctionNS(nsURIExt, "scalar", xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
 			return &xpath1.Result{Type: xpath1.StringResult, String: "x"}, nil
 		}))
 	_, err = ev.Evaluate(t.Context(), compiled, doc)
@@ -273,7 +273,7 @@ func TestEvalCDATAAsText(t *testing.T) {
 func TestEvalPrefixedWildcard(t *testing.T) {
 	doc := parseXML(t, `<root xmlns:p="urn:x"><p:a/><p:b/><c/></root>`)
 	nodes, err := xpath1.NewEvaluator().
-		Namespaces(map[string]string{"p": "urn:x"}).
+		Namespaces(map[string]string{"p": nsURIX}).
 		Find(t.Context(), xpath1.MustCompile("/root/p:*"), doc)
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)

@@ -45,7 +45,7 @@ func TestDefaultNSUndeclare(t *testing.T) {
 
 // dtdQuoteFor: a value containing the preferred quote should be wrapped in the
 // other quote. Default quoteChar is '"', so a sysid containing '"' must be
-// emitted with single quotes. Also exercise QuoteChar('\'') path.
+// emitted with single quotes. Also exercise QuoteChar('\”) path.
 func TestDTDQuoteForAlternateQuote(t *testing.T) {
 	t.Parallel()
 

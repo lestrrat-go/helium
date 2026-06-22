@@ -102,7 +102,7 @@ func TestEvalUndeclaredPrefixDoesNotMatchLexically(t *testing.T) {
 	expr, err := xpath1.Compile("//p:foo")
 	require.NoError(t, err)
 	r2, err := xpath1.NewEvaluator().
-		Namespaces(map[string]string{"p": "urn:x"}).
+		Namespaces(map[string]string{"p": nsURIX}).
 		Evaluate(t.Context(), expr, doc)
 	require.NoError(t, err)
 	require.Len(t, r2.NodeSet, 1, "bound prefix must match")
@@ -795,9 +795,9 @@ func TestCustomFunctionNamespaced(t *testing.T) {
 
 	ev := xpath1.NewEvaluator().
 		Namespaces(map[string]string{
-			nsPrefixExt: "urn:test:ext",
+			nsPrefixExt: nsURIExt,
 		}).
-		FunctionNS("urn:test:ext", "hello", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
+		FunctionNS(nsURIExt, "hello", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
 			if len(args) != 1 {
 				return nil, errHelloOneArg
 			}
@@ -838,7 +838,7 @@ func TestCustomFunctionNamespacedNotFound(t *testing.T) {
 
 	// Namespace is bound but no function registered
 	_, err = xpath1.NewEvaluator().Namespaces(map[string]string{
-		"ext": "urn:test:ext",
+		"ext": nsURIExt,
 	}).Evaluate(t.Context(), compiled, doc)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath1.ErrUnknownFunction))
@@ -915,9 +915,9 @@ func TestCustomFunctionWithPathExpr(t *testing.T) {
 
 	ev := xpath1.NewEvaluator().
 		Namespaces(map[string]string{
-			nsPrefixExt: "urn:test:ext",
+			nsPrefixExt: nsURIExt,
 		}).
-		FunctionNS("urn:test:ext", "identity", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
+		FunctionNS(nsURIExt, "identity", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
 			return args[0], nil
 		}))
 

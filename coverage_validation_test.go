@@ -20,10 +20,10 @@ func (h *collectingErrorHandler) Handle(_ context.Context, err error) {
 
 // parseValidating parses src with DTD validation enabled, routing validation
 // errors into a collector.
-func parseValidating(t *testing.T, src string) (*helium.Document, []error) {
+func parseValidating(t *testing.T, src string) []error {
 	t.Helper()
 	h := &collectingErrorHandler{}
-	doc, err := helium.NewParser().
+	_, err := helium.NewParser().
 		ValidateDTD(true).
 		ErrorHandler(h).
 		Parse(t.Context(), []byte(src))
@@ -33,7 +33,7 @@ func parseValidating(t *testing.T, src string) (*helium.Document, []error) {
 	if err != nil {
 		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 	}
-	return doc, h.errs
+	return h.errs
 }
 
 // TestValidateSequenceContentModel exercises matchSeq for a valid and an invalid
@@ -49,12 +49,12 @@ func TestValidateSequenceContentModel(t *testing.T) {
 ]>`
 
 	valid := dtd + `<doc><a/><b/><c/></doc>`
-	_, errs := parseValidating(t, valid)
+	errs := parseValidating(t, valid)
 	require.Empty(t, errs, "a valid (a,b,c) sequence has no validation errors")
 
 	// Out-of-order children violate the sequence.
 	invalid := dtd + `<doc><b/><a/><c/></doc>`
-	_, errs = parseValidating(t, invalid)
+	errs = parseValidating(t, invalid)
 	require.NotEmpty(t, errs, "an out-of-order sequence is a validation error")
 }
 
@@ -69,12 +69,12 @@ func TestValidateChoiceContentModel(t *testing.T) {
 ]>`
 
 	valid := dtd + `<doc><a/><b/><a/></doc>`
-	_, errs := parseValidating(t, valid)
+	errs := parseValidating(t, valid)
 	require.Empty(t, errs, "a valid (a|b)+ choice has no validation errors")
 
 	// An undeclared child element c is not part of the choice.
 	invalid := dtd + `<doc><a/><c/></doc>`
-	_, errs = parseValidating(t, invalid)
+	errs = parseValidating(t, invalid)
 	require.NotEmpty(t, errs, "a child outside the choice is a validation error")
 }
 
@@ -88,12 +88,12 @@ func TestValidateMixedContent(t *testing.T) {
 ]>`
 
 	valid := dtd + `<doc>text <em>strong</em> more text</doc>`
-	_, errs := parseValidating(t, valid)
+	errs := parseValidating(t, valid)
 	require.Empty(t, errs, "valid mixed content has no validation errors")
 
 	// A child not allowed by the mixed model.
 	invalid := dtd + `<doc>text <strong>bad</strong></doc>`
-	_, errs = parseValidating(t, invalid)
+	errs = parseValidating(t, invalid)
 	require.NotEmpty(t, errs, "an undeclared child in mixed content is a validation error")
 }
 
@@ -109,15 +109,15 @@ func TestValidateRequiredAndFixedAttributes(t *testing.T) {
 ]>`
 
 	valid := dtd + `<doc req="x" fix="yes"/>`
-	_, errs := parseValidating(t, valid)
+	errs := parseValidating(t, valid)
 	require.Empty(t, errs, "all required/fixed attributes satisfied")
 
 	// Missing required attribute.
-	_, errs = parseValidating(t, dtd+`<doc fix="yes"/>`)
+	errs = parseValidating(t, dtd+`<doc fix="yes"/>`)
 	require.NotEmpty(t, errs, "missing #REQUIRED attribute is a validation error")
 
 	// Wrong value for a #FIXED attribute.
-	_, errs = parseValidating(t, dtd+`<doc req="x" fix="no"/>`)
+	errs = parseValidating(t, dtd+`<doc req="x" fix="no"/>`)
 	require.NotEmpty(t, errs, "wrong #FIXED value is a validation error")
 }
 
@@ -130,10 +130,10 @@ func TestValidateEnumerationAttribute(t *testing.T) {
 <!ATTLIST doc kind (red|green|blue) "red">
 ]>`
 
-	_, errs := parseValidating(t, dtd+`<doc kind="green"/>`)
+	errs := parseValidating(t, dtd+`<doc kind="green"/>`)
 	require.Empty(t, errs, "an enumerated value within the set is valid")
 
-	_, errs = parseValidating(t, dtd+`<doc kind="purple"/>`)
+	errs = parseValidating(t, dtd+`<doc kind="purple"/>`)
 	require.NotEmpty(t, errs, "a value outside the enumeration is a validation error")
 }
 
@@ -147,7 +147,7 @@ func TestValidateUndeclaredElement(t *testing.T) {
 ]>
 <doc><a/><undeclared/></doc>`
 
-	_, errs := parseValidating(t, src)
+	errs := parseValidating(t, src)
 	require.NotEmpty(t, errs, "an undeclared element is a validation error")
 }
 
@@ -160,7 +160,7 @@ func TestValidateRootMismatch(t *testing.T) {
 ]>
 <root/>`
 
-	_, errs := parseValidating(t, src)
+	errs := parseValidating(t, src)
 	require.NotEmpty(t, errs, "root element not matching the DTD name is a validation error")
 }
 
@@ -175,10 +175,10 @@ func TestValidateOptionalElementContent(t *testing.T) {
 ]>`
 
 	// Optional a omitted is valid.
-	_, errs := parseValidating(t, dtd+`<doc><b/></doc>`)
+	errs := parseValidating(t, dtd+`<doc><b/></doc>`)
 	require.Empty(t, errs, "omitting an optional element is valid")
 
 	// Optional a present is also valid.
-	_, errs = parseValidating(t, dtd+`<doc><a/><b/></doc>`)
+	errs = parseValidating(t, dtd+`<doc><a/><b/></doc>`)
 	require.Empty(t, errs, "including an optional element is valid")
 }

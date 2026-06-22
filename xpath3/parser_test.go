@@ -107,7 +107,7 @@ func TestParseXPath3Extensions(t *testing.T) {
 		{"concat chain", `"a" || "b" || "c"`},
 
 		// Range
-		{"range", "1 to 10"},
+		{"range", expr1To10},
 
 		// Simple map
 		{"simple map", "//item ! name()"},
@@ -244,7 +244,7 @@ func TestParseAST(t *testing.T) {
 	})
 
 	t.Run("range expr structure", func(t *testing.T) {
-		expr, err := xpath3.Parse("1 to 10")
+		expr, err := xpath3.Parse(expr1To10)
 		require.NoError(t, err)
 		re, ok := expr.(xpath3.RangeExpr)
 		require.True(t, ok, "expected RangeExpr, got %T", expr)

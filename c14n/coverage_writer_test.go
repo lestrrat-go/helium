@@ -54,7 +54,7 @@ func TestWriterErrorsPropagate(t *testing.T) {
 			`<root>body</root>` + "\n" +
 			`<?pi-after more?>` + "\n" +
 			`<!-- comment after -->`,
-		"cdata": `<r><![CDATA[a<b & c]]></r>`,
+		"cdata":             `<r><![CDATA[a<b & c]]></r>`,
 		"pi-comment-inline": `<r><?inline pidata?><!-- inline comment -->text</r>`,
 		"pi-no-data":        `<r><?bare?></r>`,
 	}
@@ -67,7 +67,7 @@ func TestWriterErrorsPropagate(t *testing.T) {
 			require.NoError(t, err, "baseline canonicalize")
 			require.NotEmpty(t, full)
 
-			for limit := 0; limit < len(full); limit++ {
+			for limit := range full {
 				w := &failWriter{limit: limit}
 				err := c14n.NewCanonicalizer(c14n.C14N11).Comments().Canonicalize(doc, w)
 				require.Error(t, err, "limit=%d should error", limit)
@@ -91,7 +91,7 @@ func TestWriterErrorsExclusive(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, full)
 
-	for limit := 0; limit < len(full); limit++ {
+	for limit := range full {
 		w := &failWriter{limit: limit}
 		err := c14n.NewCanonicalizer(c14n.ExclusiveC14N10).
 			InclusiveNamespaces([]string{"b"}).

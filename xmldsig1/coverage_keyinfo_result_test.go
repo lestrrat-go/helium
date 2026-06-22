@@ -87,7 +87,7 @@ func TestParseECKeyValue(t *testing.T) {
 
 			// Inject a dsig11 ECKeyValue KeyInfo into the Signature so the
 			// verifier parses it.
-			pubBytes := elliptic.Marshal(tc.curve, key.PublicKey.X, key.PublicKey.Y)
+			pubBytes := elliptic.Marshal(tc.curve, key.X, key.Y)
 			injectECKeyInfo(t, doc, tc.curveURI, pubBytes)
 
 			ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {

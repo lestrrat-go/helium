@@ -63,7 +63,7 @@ func TestParserCharBufferSizeAffectsParse(t *testing.T) {
 
 	var b []byte
 	b = append(b, []byte(`<root>`)...)
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		b = append(b, []byte(`<item>x</item>`)...)
 	}
 	b = append(b, []byte(`</root>`)...)

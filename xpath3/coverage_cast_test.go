@@ -40,7 +40,7 @@ func TestCast_IntegerSubtypeRange(t *testing.T) {
 		`"1" cast as xs:negativeInteger`,
 		`"1" cast as xs:nonPositiveInteger`,
 		`"-1" cast as xs:nonNegativeInteger`,
-		`"100000" cast as xs:short`, // > 32767
+		`"100000" cast as xs:short`,  // > 32767
 		`"notanint" cast as xs:byte`, // unparseable
 	}
 	for _, e := range outOfRange {
@@ -114,12 +114,12 @@ func TestCast_UnionAndQName(t *testing.T) {
 // formatting branches through the public string conversion surface.
 func TestStringValueConversions(t *testing.T) {
 	cases := map[string]string{
-		`string(1)`:           "1",
-		`string(1.5)`:         "1.5",
-		`string(true())`:      "true",
-		`string(xs:double("INF"))`:  "INF",
+		`string(1)`:                 "1",
+		`string(1.5)`:               want1Dot5,
+		`string(true())`:            wantTrue,
+		`string(xs:double("INF"))`:  wantINF,
 		`string(xs:double("-INF"))`: "-INF",
-		`string(xs:double("NaN"))`:  "NaN",
+		`string(xs:double("NaN"))`:  wantNaN,
 	}
 	for expr, want := range cases {
 		r, err := evaluate(t.Context(), nil, expr)

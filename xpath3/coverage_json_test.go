@@ -13,12 +13,12 @@ func TestParseJSON_TopLevelScalars(t *testing.T) {
 		json string
 		want string
 	}{
-		{`42`, "42"},        // integer
-		{`1.5`, "1.5"},      // float (has '.')
-		{`1e3`, "1000"},     // float (has 'e')
-		{`true`, "true"},    // boolean
-		{`false`, "false"},  // boolean
-		{`"str"`, "str"},    // string
+		{`42`, "42"},         // integer
+		{`1.5`, want1Dot5},   // float (has '.')
+		{`1e3`, "1000"},      // float (has 'e')
+		{`true`, wantTrue},   // boolean
+		{`false`, wantFalse}, // boolean
+		{`"str"`, "str"},     // string
 	}
 	for _, tc := range cases {
 		expr := `parse-json("` + escapeForXPathString(tc.json) + `")`

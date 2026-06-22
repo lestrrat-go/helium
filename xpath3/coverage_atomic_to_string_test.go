@@ -39,7 +39,7 @@ func TestAtomicToString_AllTypes(t *testing.T) {
 		{`string(xs:decimal("1.250"))`, "1.25"},
 		{`string(xs:double("2.5"))`, "2.5"},
 		{`string(xs:float("3.5"))`, "3.5"},
-		{`string(true())`, "true"},
+		{`string(true())`, wantTrue},
 		{`string(xs:anyURI("http://x"))`, "http://x"},
 		{`string(xs:NCName("abc"))`, "abc"},
 		{`string(xs:token("  a  b  "))`, "a b"},

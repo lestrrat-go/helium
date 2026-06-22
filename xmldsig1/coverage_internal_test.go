@@ -40,7 +40,7 @@ func mustParse(t *testing.T, xml string) *helium.Document {
 	return doc
 }
 
-func ecElem(t *testing.T, doc *helium.Document, inner string) *helium.Element {
+func ecElem(t *testing.T, inner string) *helium.Element {
 	t.Helper()
 	full := `<dsig11:ECKeyValue xmlns:dsig11="` + NamespaceDSig11 + `">` + inner + `</dsig11:ECKeyValue>`
 	d := mustParse(t, full)
@@ -49,8 +49,7 @@ func ecElem(t *testing.T, doc *helium.Document, inner string) *helium.Element {
 
 // TestParseECKeyValueUnsupportedCurve covers the unsupported-curve branch.
 func TestParseECKeyValueUnsupportedCurve(t *testing.T) {
-	doc := mustParse(t, "<root/>")
-	elem := ecElem(t, doc, `<dsig11:NamedCurve xmlns:dsig11="`+NamespaceDSig11+`" URI="urn:oid:bogus"/>`)
+	elem := ecElem(t, `<dsig11:NamedCurve xmlns:dsig11="`+NamespaceDSig11+`" URI="urn:oid:bogus"/>`)
 	var data KeyInfoData
 	err := parseECKeyValue(elem, &data)
 	require.ErrorIs(t, err, ErrInvalidKeyInfo)
@@ -59,7 +58,7 @@ func TestParseECKeyValueUnsupportedCurve(t *testing.T) {
 
 // TestParseECKeyValueMissingCurve covers the PublicKey-before-NamedCurve branch.
 func TestParseECKeyValueMissingCurve(t *testing.T) {
-	elem := ecElem(t, nil, `<dsig11:PublicKey xmlns:dsig11="`+NamespaceDSig11+`">BBBB</dsig11:PublicKey>`)
+	elem := ecElem(t, `<dsig11:PublicKey xmlns:dsig11="`+NamespaceDSig11+`">BBBB</dsig11:PublicKey>`)
 	var data KeyInfoData
 	err := parseECKeyValue(elem, &data)
 	require.ErrorIs(t, err, ErrInvalidKeyInfo)
@@ -71,7 +70,7 @@ func TestParseECKeyValueMissingCurve(t *testing.T) {
 func TestParseECKeyValueInvalidPoint(t *testing.T) {
 	inner := `<dsig11:NamedCurve xmlns:dsig11="` + NamespaceDSig11 + `" URI="urn:oid:1.2.840.10045.3.1.7"/>` +
 		`<dsig11:PublicKey xmlns:dsig11="` + NamespaceDSig11 + `">AAAA</dsig11:PublicKey>`
-	elem := ecElem(t, nil, inner)
+	elem := ecElem(t, inner)
 	var data KeyInfoData
 	err := parseECKeyValue(elem, &data)
 	require.ErrorIs(t, err, ErrInvalidKeyInfo)
@@ -82,7 +81,7 @@ func TestParseECKeyValueInvalidPoint(t *testing.T) {
 func TestParseECKeyValueBadBase64(t *testing.T) {
 	inner := `<dsig11:NamedCurve xmlns:dsig11="` + NamespaceDSig11 + `" URI="urn:oid:1.2.840.10045.3.1.7"/>` +
 		`<dsig11:PublicKey xmlns:dsig11="` + NamespaceDSig11 + `">!!!!notbase64</dsig11:PublicKey>`
-	elem := ecElem(t, nil, inner)
+	elem := ecElem(t, inner)
 	var data KeyInfoData
 	err := parseECKeyValue(elem, &data)
 	require.ErrorIs(t, err, ErrInvalidKeyInfo)

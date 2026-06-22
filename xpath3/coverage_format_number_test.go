@@ -11,7 +11,7 @@ func TestFormatNumber_Variants(t *testing.T) {
 	// Empty-sequence first argument -> NaN per F&O.
 	r, err := evaluate(t.Context(), nil, `format-number((), "0")`)
 	require.NoError(t, err)
-	require.Equal(t, "NaN", r.StringValue())
+	require.Equal(t, wantNaN, r.StringValue())
 
 	// untypedAtomic first arg is cast to double.
 	r, err = evaluate(t.Context(), nil, `format-number(xs:untypedAtomic("12.5"), "0.0")`)

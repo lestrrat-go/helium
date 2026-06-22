@@ -52,7 +52,7 @@ func TestAdditionalNamespacesAndVariables(t *testing.T) {
 
 	t.Run("AdditionalNamespaces from empty", func(t *testing.T) {
 		nodes, err := xpath1.NewEvaluator().
-			AdditionalNamespaces(map[string]string{"p": "urn:x"}).
+			AdditionalNamespaces(map[string]string{"p": nsURIX}).
 			Find(t.Context(), xpath1.MustCompile("//p:foo"), doc)
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
@@ -61,7 +61,7 @@ func TestAdditionalNamespacesAndVariables(t *testing.T) {
 	t.Run("AdditionalNamespaces merges", func(t *testing.T) {
 		nodes, err := xpath1.NewEvaluator().
 			Namespaces(map[string]string{"q": "urn:q"}).
-			AdditionalNamespaces(map[string]string{"p": "urn:x"}).
+			AdditionalNamespaces(map[string]string{"p": nsURIX}).
 			Find(t.Context(), xpath1.MustCompile("//p:foo"), doc)
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)

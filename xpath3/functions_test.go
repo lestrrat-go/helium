@@ -1255,9 +1255,9 @@ func TestFnRoundPrecisionArgValidation(t *testing.T) {
 
 	t.Run("empty arg with valid precision is empty", func(t *testing.T) {
 		// A valid precision plus an empty $arg returns () (not an error).
-		evalOK(t, `empty(round((), 3))`, "true")
-		evalOK(t, `empty(round((), 1))`, "true")
-		evalOK(t, `empty(round-half-to-even((), 3))`, "true")
+		evalOK(t, `empty(round((), 3))`, wantTrue)
+		evalOK(t, `empty(round((), 1))`, wantTrue)
+		evalOK(t, `empty(round-half-to-even((), 3))`, wantTrue)
 	})
 }
 

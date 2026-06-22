@@ -8,6 +8,8 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
+const wantExpectedElementName = "expected element name after <"
+
 func TestConvertParseErrorNil(t *testing.T) {
 	if got := convertParseError(nil); got != nil {
 		t.Fatalf("expected nil, got %v", got)
@@ -47,8 +49,8 @@ func TestMapErrorMessage(t *testing.T) {
 		raw  string
 		want string
 	}{
-		{"name-start-no-end", "<1bad>", "invalid name start char", "expected element name after <"},
-		{"name-start-prefix", "<1bad>", "invalid name start char: x", "expected element name after <"},
+		{"name-start-no-end", "<1bad>", "invalid name start char", wantExpectedElementName},
+		{"name-start-prefix", "<1bad>", "invalid name start char: x", wantExpectedElementName},
 		{"qname", "", "failed to parse QName: bad", "expected attribute name in element"},
 		{"start-tag", "", "start tag expected, '<' not found", "start tag expected, '<' not found"},
 		{"char-data", "", "invalid char data", "invalid char data"},
@@ -56,7 +58,7 @@ func TestMapErrorMessage(t *testing.T) {
 		{"semicolon-no-entity", "no amp here", "';' is required", "';' is required"},
 		{"name-required-bad-entity", "x &￾; y", "name is required", "invalid character entity &￾;"},
 		{"name-required-default", "no amp", "name is required", "invalid character entity & (no semicolon)"},
-		{"local-empty-qname", "", "local name empty! failed to parse QName", "expected element name after <"},
+		{"local-empty-qname", "", "local name empty! failed to parse QName", wantExpectedElementName},
 		{"local-empty-plain", "", "local name empty! something", "local name empty! something"},
 		{"unknown-passthrough", "", "totally unknown error", "totally unknown error"},
 	}
@@ -182,8 +184,8 @@ func TestExtractBadEntity(t *testing.T) {
 		{"x &￾; y", "￾"},
 		{"no ampersand", ""},
 		{"trailing &", ""},
-		{"&abc;", ""},  // first char is a name char
-		{"&￾", ""}, // no following semicolon
+		{"&abc;", ""}, // first char is a name char
+		{"&￾", ""},    // no following semicolon
 	}
 	for _, tt := range tests {
 		if got := extractBadEntity(tt.line); got != tt.want {

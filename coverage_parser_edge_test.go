@@ -94,17 +94,17 @@ func TestMalformedDocuments(t *testing.T) {
 	t.Parallel()
 
 	bad := []string{
-		`<root>`,                        // unclosed root
-		`<root></notroot>`,              // mismatched end tag
-		`<root attr></root>`,            // attribute without value
-		`<root attr=value></root>`,      // unquoted attribute value
+		`<root>`,                         // unclosed root
+		`<root></notroot>`,               // mismatched end tag
+		`<root attr></root>`,             // attribute without value
+		`<root attr=value></root>`,       // unquoted attribute value
 		`<root>&undefinedentity;</root>`, // reference to undeclared entity
-		`<root><![CDATA[ unterminated`,  // unterminated CDATA
-		`<!-- unterminated comment`,     // unterminated comment
-		`<root>&#xZZ;</root>`,           // invalid hex char ref
-		`<root>&;</root>`,               // empty reference
-		`<>`,                            // empty tag name
-		`<root></root><second/>`,        // two root elements
+		`<root><![CDATA[ unterminated`,   // unterminated CDATA
+		`<!-- unterminated comment`,      // unterminated comment
+		`<root>&#xZZ;</root>`,            // invalid hex char ref
+		`<root>&;</root>`,                // empty reference
+		`<>`,                             // empty tag name
+		`<root></root><second/>`,         // two root elements
 	}
 	for _, in := range bad {
 		_, err := helium.NewParser().Parse(t.Context(), []byte(in))
