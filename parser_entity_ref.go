@@ -641,7 +641,7 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 	}
 
 	if ent, err = resolvePredefinedEntity(name); err == nil {
-		return
+		return ent, nil
 	}
 
 	err = nil
@@ -701,9 +701,6 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 		}
 	}
 
-	if ent == nil {
-		return nil, pctx.error(ctx, errors.New("entity resolution produced nil entity"))
-	}
 	return ent, nil
 }
 
