@@ -662,41 +662,6 @@ func (t *TreeBuilder) ElementDecl(ctxif context.Context, name string, typ enum.E
 	return nil
 }
 
-func (t *TreeBuilder) EndDTD(ctxif context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.EndDTD")
-		defer g.IRelease("END tree.EndDTD")
-	}
-
-	return nil
-}
-
-func (t *TreeBuilder) EndEntity(ctxif context.Context, name string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.EndEntity")
-		defer g.IRelease("END tree.EndEntity")
-	}
-
-	return nil
-}
-func (t *TreeBuilder) ExternalEntityDecl(ctxif context.Context, name string, publicID string, systemID string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.ExternalEntityDecl")
-		defer g.IRelease("END tree.ExternalEntityDecl")
-	}
-
-	return nil
-}
-
-func (t *TreeBuilder) GetExternalSubset(ctxif context.Context, name string, baseURI string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.GetExternalSubset")
-		defer g.IRelease("END tree.GetExternalSubset")
-	}
-
-	return nil
-}
-
 func (t *TreeBuilder) IgnorableWhitespace(ctxif context.Context, content []byte) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.IgnorableWhitespace (%v)", content)
@@ -706,15 +671,6 @@ func (t *TreeBuilder) IgnorableWhitespace(ctxif context.Context, content []byte)
 	ctx := t.pctx(ctxif)
 	if ctx.keepBlanks {
 		return t.Characters(ctxif, content)
-	}
-
-	return nil
-}
-
-func (t *TreeBuilder) InternalEntityDecl(ctxif context.Context, name string, value string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.InternalEntityDecl")
-		defer g.IRelease("END tree.InternalEntityDecl")
 	}
 
 	return nil
@@ -789,33 +745,6 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 	}
 
 	return nil, sax.ErrHandlerUnspecified
-}
-
-func (t *TreeBuilder) SkippedEntity(ctxif context.Context, name string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.SkippedEntity '%s'", name)
-		defer g.IRelease("END tree.SkippedEntity")
-	}
-
-	return nil
-}
-
-func (t *TreeBuilder) StartDTD(ctxif context.Context, name string, publicID string, systemID string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.StartDTD")
-		defer g.IRelease("END tree.StartDTD")
-	}
-
-	return nil
-}
-
-func (t *TreeBuilder) StartEntity(ctxif context.Context, name string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.StartEntity")
-		defer g.IRelease("END tree.StartEntity")
-	}
-
-	return nil
 }
 
 func (t *TreeBuilder) EntityDecl(ctxif context.Context, name string, typ enum.EntityType, publicID string, systemID string, notation string) error {
