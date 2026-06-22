@@ -296,7 +296,10 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		case "--nonet":
 			cfg.parser = cfg.parser.AllowNetwork(false)
 		case "--huge":
-			cfg.parser = cfg.parser.RelaxLimits(true)
+			cfg.parser = cfg.parser.
+				MaxNameLength(-1).
+				MaxEntityAmplification(-1).
+				MaxContentModelDepth(-1)
 		case "--noenc":
 			cfg.parser = cfg.parser.IgnoreEncoding(true)
 		case "--noxincludenode":

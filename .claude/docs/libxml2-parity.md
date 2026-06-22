@@ -137,7 +137,7 @@ These affect multiple packages (especially C14N test skips):
 | MergeCDATA(bool) | XML_PARSE_NOCDATA | ✅ | Merge CDATA as text |
 | XIncludeNodes(bool) | XML_PARSE_NOXINCNODE | ✅ | Inverted: false → skip markers |
 | FixBaseURIs(bool) | XML_PARSE_NOBASEFIX | ✅ | Inverted: false → skip fixup |
-| RelaxLimits(bool) | XML_PARSE_HUGE | ✅ | Relax limits |
+| MaxNameLength(int) / MaxEntityAmplification(int) / MaxContentModelDepth(int) | XML_PARSE_HUGE | ✱ | **Intentional break with libxml2.** The all-or-nothing `XML_PARSE_HUGE` / `RelaxLimits(bool)` umbrella was removed; the three limits it covered (name length, entity-expansion amplification, DTD content-model depth) are now independent value knobs (`0`=default, `<0`=no limit). `MaxEntityAmplification` aligns with libxml2's newer `xmlCtxtSetMaxAmplification`. The 1 GiB `entityHardCeiling` is always enforced |
 | IgnoreEncoding(bool) | XML_PARSE_IGNORE_ENC | ✅ | Ignore encoding hint |
 | BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks |
 | SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |

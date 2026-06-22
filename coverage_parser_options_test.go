@@ -38,7 +38,7 @@ func TestParserOptionSetters(t *testing.T) {
 		XIncludeNodes(true).XIncludeNodes(false).
 		CompactTextNodes(true).CompactTextNodes(false).
 		FixBaseURIs(true).FixBaseURIs(false).
-		RelaxLimits(true).RelaxLimits(false).
+		MaxNameLength(100000).MaxEntityAmplification(10).MaxContentModelDepth(256).
 		IgnoreEncoding(true).IgnoreEncoding(false).
 		BigLineNumbers(true).BigLineNumbers(false).
 		BlockXXE(true).BlockXXE(false).

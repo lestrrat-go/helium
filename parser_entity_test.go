@@ -629,10 +629,10 @@ func TestEntityAmplification(t *testing.T) {
 		require.NotNil(t, doc)
 	})
 
-	t.Run("RelaxLimits disables guard", func(t *testing.T) {
+	t.Run("MaxEntityAmplification(-1) disables guard", func(t *testing.T) {
 		t.Parallel()
-		// With RelaxLimits, billion laughs should be allowed (guard disabled).
-		// Use a smaller version to avoid actual memory exhaustion.
+		// With the amplification ratio check disabled, billion laughs should
+		// be allowed. Use a smaller version to avoid actual memory exhaustion.
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE lolz [
   <!ENTITY lol "lol">
@@ -643,13 +643,13 @@ func TestEntityAmplification(t *testing.T) {
 ]>
 <root>&lol5;</root>`
 
-		p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true)
+		p := helium.NewParser().SubstituteEntities(true).MaxEntityAmplification(-1)
 		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 		require.NotNil(t, doc)
 	})
 
-	t.Run("RelaxLimits still capped by absolute ceiling", func(t *testing.T) {
+	t.Run("MaxEntityAmplification(-1) still capped by absolute ceiling", func(t *testing.T) {
 		// Intentionally NOT t.Parallel: this subtest drives expansion up
 		// to entityHardCeiling (1 GiB). Running it alongside the parallel
 		// subtests above amplified peak memory under loaded CI runners.
@@ -672,9 +672,9 @@ func TestEntityAmplification(t *testing.T) {
 ]>
 <root>&lol9;</root>`
 
-		p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true)
+		p := helium.NewParser().SubstituteEntities(true).MaxEntityAmplification(-1)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		require.Error(t, err, "absolute ceiling must trip even with RelaxLimits")
+		require.Error(t, err, "absolute ceiling must trip even with the ratio check disabled")
 		require.Contains(t, err.Error(), "maximum entity expansion size",
 			"error must explain the ceiling, got: %v", err)
 		require.Regexp(t, `\(\d+ > \d+\)`, err.Error(),
@@ -822,7 +822,7 @@ func TestEntityDepthLimit(t *testing.T) {
 	dtd.WriteString("]>\n")
 	dtd.WriteString("<root>&e45;</root>")
 
-	p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true) // disable amplification guard to test depth only
+	p := helium.NewParser().SubstituteEntities(true).MaxEntityAmplification(-1) // disable amplification guard to test depth only
 	_, err := p.Parse(t.Context(), []byte(dtd.String()))
 	require.Error(t, err, "depth > 40 should still error")
 	require.Contains(t, err.Error(), "entity loop")
