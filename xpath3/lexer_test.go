@@ -207,7 +207,7 @@ func TestLexerXPath3Tokens(t *testing.T) {
 		},
 		{
 			name:  "to range",
-			input: "1 to 10",
+			input: expr1To10,
 			expect: []xpath3.TokenType{
 				xpath3.TokenNumber, xpath3.TokenTo, xpath3.TokenNumber,
 			},

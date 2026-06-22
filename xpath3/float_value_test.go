@@ -21,7 +21,7 @@ func TestNewFloat_SpecialValues(t *testing.T) {
 		isZero  bool
 		signbit bool
 	}{
-		{"NaN", math.NaN(), true, false, false, false, false, false},
+		{wantNaN, math.NaN(), true, false, false, false, false, false},
 		{"+Inf", math.Inf(1), false, true, false, false, false, false},
 		{"-Inf", math.Inf(-1), false, false, true, false, false, true},
 		{"-0", math.Copysign(0, -1), false, false, false, true, true, true},

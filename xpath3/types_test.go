@@ -715,7 +715,7 @@ func TestEBV(t *testing.T) {
 	}{
 		{"empty", xpath3.EmptySequence(), false, false},
 		{lexicon.ValueTrue, xpath3.SingleBoolean(true), true, false},
-		{"false", xpath3.SingleBoolean(false), false, false},
+		{lexicon.ValueFalse, xpath3.SingleBoolean(false), false, false},
 		{"nonempty string", xpath3.SingleString("x"), true, false},
 		{"empty string", xpath3.SingleString(""), false, false},
 		{"nonzero integer", xpath3.SingleInteger(42), true, false},

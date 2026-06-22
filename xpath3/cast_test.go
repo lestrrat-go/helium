@@ -52,7 +52,7 @@ func TestCastFromString(t *testing.T) {
 		},
 		{
 			name:  "string to double NaN",
-			input: "NaN", targetType: xpath3.TypeDouble,
+			input: lexicon.FloatNaN, targetType: xpath3.TypeDouble,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				t.Helper()
 				require.True(t, math.IsNaN(v.DoubleVal()))
@@ -68,7 +68,7 @@ func TestCastFromString(t *testing.T) {
 		},
 		{
 			name:  "string to boolean false",
-			input: "false", targetType: xpath3.TypeBoolean,
+			input: lexicon.ValueFalse, targetType: xpath3.TypeBoolean,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				t.Helper()
 				require.False(t, v.BooleanVal())
@@ -375,9 +375,9 @@ func TestAtomicToString(t *testing.T) {
 		{"double", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(3.14)}, "3.14"},
 		{"double zero", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(0.0)}, "0"},
 		{"double INF", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.Inf(1))}, lexicon.FloatINF},
-		{"double NaN", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.NaN())}, "NaN"},
+		{"double NaN", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.NaN())}, lexicon.FloatNaN},
 		{lexicon.ValueTrue, xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: true}, lexicon.ValueTrue},
-		{"false", xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: false}, "false"},
+		{lexicon.ValueFalse, xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: false}, lexicon.ValueFalse},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

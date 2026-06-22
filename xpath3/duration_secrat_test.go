@@ -407,12 +407,12 @@ func TestDurationMulDoubleFloatExact(t *testing.T) {
 		{
 			name: "dayTime times xs:double(1) eq parsed original",
 			expr: `(xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")) eq xs:dayTimeDuration("PT9007199254740993S")`,
-			want: "true",
+			want: wantTrue,
 		},
 		{
 			name: "dayTime times xs:double(1) not one second short",
 			expr: `(xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")) ne xs:dayTimeDuration("PT9007199254740992S")`,
-			want: "true",
+			want: wantTrue,
 		},
 		{
 			name: "yearMonth times xs:double(1) keeps exact months",
@@ -432,7 +432,7 @@ func TestDurationMulDoubleFloatExact(t *testing.T) {
 		{
 			name: "dayTime times xs:double(1) equals times 1",
 			expr: `(xs:dayTimeDuration("PT9007199254740993S") * xs:double("1")) eq (xs:dayTimeDuration("PT9007199254740993S") * 1)`,
-			want: "true",
+			want: wantTrue,
 		},
 	}
 

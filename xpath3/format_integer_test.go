@@ -68,7 +68,7 @@ func TestStringArgAtomizesBeforeCardinality(t *testing.T) {
 		{`format-integer(123, ([], "0"))`, "123"},
 		{`format-integer((), ([], "0"))`, ""},
 		{`format-number(123, ([], "0"))`, "123"},
-		{`format-number((), ([], "0.0"))`, "NaN"},
+		{`format-number((), ([], "0.0"))`, lexicon.FloatNaN},
 		{`upper-case(([], "ab"))`, "AB"},
 		{`concat(([], "x"), "y")`, "xy"},
 	}
