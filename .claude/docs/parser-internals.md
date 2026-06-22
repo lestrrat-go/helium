@@ -364,7 +364,7 @@ The legacy-prefix-resolves-vs-literal decision mirrors `parseCharRef`, but the b
 | LoadExternalDTD(true) | loadsubset.Set(DetectIDs) (load external DTD; external subset system IDs resolve relative to the DTD base URI) |
 | DefaultDTDAttributes(true) | loadsubset.Set(CompleteAttrs) (apply default attrs) |
 | ValidateDTD(true) | validate content models after parse |
-| MaxEntityAmplification(-1) | maxAmpl=0 (disable amplification ratio check; 1 GiB ceiling still applies) |
+| MaxEntityAmplification(-1) | maxAmpl=0 — public "-1 = no limit" resolves (via `resolveLimit`) to the internal "0 = ratio-check-disabled" sentinel; 1 GiB ceiling still applies |
 | MergeCDATA(true) | deliver CDATA as Characters (not CDataBlock) |
 | RecoverOnError(true) | error recovery (continue on errors) |
 | IgnoreEncoding(true) | don't use XML decl encoding |
