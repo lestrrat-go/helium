@@ -9,15 +9,9 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 func (pctx *parserCtx) parseDocTypeDecl(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseDocTypeDecl")
-		defer g.IRelease("END parseDocTypeDecl")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -72,11 +66,6 @@ func (pctx *parserCtx) parseDocTypeDecl(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseInternalSubset(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseInternalSubset")
-		defer g.IRelease("END parseInternalSubset")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -143,11 +132,6 @@ FinishDTD:
 }
 
 func (pctx *parserCtx) parseMarkupDecl(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseMarkupDecl")
-		defer g.IRelease("END parseMarkupDecl")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -208,11 +192,6 @@ func (pctx *parserCtx) parseMarkupDecl(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseConditionalSections")
-		defer g.IRelease("END parseConditionalSections")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return ErrPrematureEOF
@@ -408,11 +387,6 @@ func (pctx *parserCtx) popSpentExternalSubsetInputs(baseLen int) {
 // swallows the reference before parsePEReference can push the PE content onto
 // the input stack, so the PE's declarations are never parsed.
 func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen int, tolerateCondError bool) (bool, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseExternalSubsetDeclStep")
-		defer g.IRelease("END parseExternalSubsetDeclStep")
-	}
-
 	// Snapshot the cursor position BEFORE consuming blanks so the progress guard
 	// below counts everything this step does — whitespace, a markup declaration,
 	// AND a parameter-entity reference — as forward progress. The guard must
@@ -519,19 +493,11 @@ func (pctx *parserCtx) parseExternalSubsetDeclStep(ctx context.Context, baseLen 
 }
 
 func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.Marker("parsePEReference")
-		defer g.End()
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
 	}
 	if cur.Peek() != '%' {
-		if pdebug.Enabled {
-			pdebug.Printf("no parameter entities here, returning...")
-		}
 		return nil
 	}
 	if err := cur.Advance(1); err != nil {
@@ -576,10 +542,6 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 				return err
 			}
 		} else {
-			if pdebug.Enabled {
-				pdebug.Printf("Expanding parameter entity '%s' with content: %s", name, string(entity.Content()))
-			}
-
 			// Capture the PE's replacement text once: Entity.Content()
 			// allocates a fresh []byte copy on every call, so we reuse this
 			// local for both decoding and the amplification accounting below.
@@ -588,10 +550,6 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context) error {
 			decodedContent, err := pctx.decodeEntities(ctx, content, SubstituteBoth)
 			if err != nil {
 				return fmt.Errorf("failed to decode parameter entity content: %v", err)
-			}
-
-			if pdebug.Enabled {
-				pdebug.Printf("Decoded parameter entity content: %s", decodedContent)
 			}
 
 			// Charge this PE's OWN replacement bytes before pushing it as new

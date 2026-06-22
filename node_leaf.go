@@ -3,8 +3,6 @@ package helium
 import (
 	"bytes"
 	"fmt"
-
-	"github.com/lestrrat-go/pdebug"
 )
 
 // CDATASection represents a CDATA section node in the DOM tree
@@ -255,12 +253,6 @@ func (n *Text) AddChild(cur Node) error {
 }
 
 func (n *Text) AppendText(b []byte) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Text.AppendText '%s' (%p)", b, n)
-		defer func() {
-			g.IRelease("END Text.AppendText '%s'", n.content)
-		}()
-	}
 	if doc := n.doc; doc != nil {
 		n.content = doc.growOwnedTextContent(n.content, len(b))
 	}
@@ -274,10 +266,6 @@ func (n *Text) AddSibling(cur Node) error {
 	// panicking and leaves the tree untouched.
 	if isNilNode(cur) {
 		return ErrNilNode
-	}
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Text.AddSibling '%s'", cur.Content())
-		defer g.IRelease("END Text.AddSibling")
 	}
 	// Run the shared self/cycle guard and auto-unlink BEFORE the text-merge
 	// fast path. Otherwise t.AddSibling(t) would double its own content, and

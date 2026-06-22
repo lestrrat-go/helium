@@ -13,7 +13,6 @@ import (
 	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (string, error) {
@@ -55,12 +54,6 @@ func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (
 }
 
 func (pctx *parserCtx) decodeEntities(ctx context.Context, s []byte, what SubstitutionType) (ret string, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START decodeEntitites (%s)", s)
-		defer func() {
-			g.IRelease("END decodeEntities ('%s' -> '%s')", s, ret)
-		}()
-	}
 	ret, err = pctx.decodeEntitiesInternal(ctx, s, what, 0)
 	return
 }
@@ -74,7 +67,6 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 	defer releaseBuffer(out)
 
 	for len(s) > 0 {
-		pdebug.Printf("s[0] -> %c", s[0])
 		if bytes.HasPrefix(s, []byte{'&', '#'}) {
 			val, width, err := parseStringCharRef(s)
 			if err != nil {
@@ -141,11 +133,6 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 }
 
 func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, error) {
-	if pdebug.Enabled {
-		g := pdebug.Marker("parseEntityValue")
-		defer g.End()
-	}
-
 	pctx.instate = psEntityValue
 
 	literal, err := pctx.parseQuotedText(func(qch byte) (string, error) {
@@ -175,10 +162,6 @@ func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, er
 	val, err := pctx.decodeEntities(ctx, []byte(literal), SubstitutePERef)
 	if err != nil {
 		return "", "", pctx.error(ctx, err)
-	}
-
-	if pdebug.Enabled {
-		pdebug.Printf("parsed entity value '%s'", val)
 	}
 
 	return literal, val, nil
@@ -335,11 +318,6 @@ func scanEntityValueGeneralRefs(s []byte) error {
 }
 
 func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.Marker("parseEntityDecl")
-		defer g.End()
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -559,11 +537,6 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 		return nil, nil //nolint:nilnil
 	}
 
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseExternalEntityPrivate(uri=%s, externalID=%s)", uri, externalID)
-		defer g.IRelease("END parseExternalEntityPrivate")
-	}
-
 	pctx.depth++
 	defer func() { pctx.depth-- }()
 
@@ -630,9 +603,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 		return nil, err
 	}
 	defer func() {
-		if err := newctx.release(); err != nil && pdebug.Enabled {
-			pdebug.Printf("newctx.release() failed: %s", err)
-		}
+		_ = newctx.release()
 	}()
 
 	if pctx.doc == nil {
@@ -732,11 +703,6 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 var ErrParseSucceeded = errors.New("parse succeeded")
 
 func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []byte) (Node, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseBalancedChunkInternal")
-		defer g.IRelease("END parseBalancedChunkInternal")
-	}
-
 	pctx.depth++
 	defer func() { pctx.depth-- }()
 
@@ -749,9 +715,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 		return nil, err
 	}
 	defer func() {
-		if err := newctx.release(); err != nil && pdebug.Enabled {
-			pdebug.Printf("newctx.release() failed: %s", err)
-		}
+		_ = newctx.release()
 	}()
 
 	if pctx.doc == nil {

@@ -6,15 +6,9 @@ import (
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 func (pctx *parserCtx) parseElementDecl(ctx context.Context) (enum.ElementType, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseElementDecl")
-		defer g.IRelease("END parseElementDecl")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return 0, pctx.error(ctx, errNoCursor)
@@ -78,11 +72,6 @@ func (pctx *parserCtx) parseElementDecl(ctx context.Context) (enum.ElementType, 
 }
 
 func (pctx *parserCtx) parseElementContentDecl(ctx context.Context) (*ElementContent, enum.ElementType, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseElementContentDecl")
-		defer g.IRelease("END parseElementContentDecl")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return nil, 0, pctx.error(ctx, errNoCursor)
@@ -122,11 +111,6 @@ func (pctx *parserCtx) parseElementContentDecl(ctx context.Context) (*ElementCon
 }
 
 func (pctx *parserCtx) parseElementMixedContentDecl(ctx context.Context) (*ElementContent, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseElementMixedContentDecl")
-		defer g.IRelease("END parseElementMixedContentDecl")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return nil, pctx.error(ctx, errNoCursor)
@@ -233,11 +217,6 @@ func (pctx *parserCtx) parseElementMixedContentDecl(ctx context.Context) (*Eleme
 }
 
 func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, depth int) (*ElementContent, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseElementChildrenContentDeclPriv(%d)", depth)
-		defer g.IRelease("END parseElementChildrenContentDeclPriv(%d)", depth)
-	}
-
 	maxDepth := 128
 	if pctx.options.IsSet(parseHuge) {
 		maxDepth = 2048

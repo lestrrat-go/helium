@@ -15,7 +15,6 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 // MaxExternalDTDSize is the maximum number of bytes read from an external
@@ -48,20 +47,10 @@ func NewTreeBuilder() *TreeBuilder {
 }
 
 func (t *TreeBuilder) SetDocumentLocator(ctxif context.Context, loc sax.DocumentLocator) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.SetDocumentLocator")
-		defer g.IRelease("END tree.SetDocumentLocator")
-	}
-
 	return nil
 }
 
 func (t *TreeBuilder) StartDocument(ctxif context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.StartDocument")
-		defer g.IRelease("END tree.StartDocument")
-	}
-
 	ctx := t.pctx(ctxif)
 	ctx.doc = NewDocument(ctx.version, ctx.encoding, ctx.standalone)
 	ctx.doc.idsSkip = ctx.loadsubset.IsSet(SkipIDs)
@@ -70,11 +59,6 @@ func (t *TreeBuilder) StartDocument(ctxif context.Context) error {
 }
 
 func (t *TreeBuilder) EndDocument(ctxif context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.EndDocument")
-		defer g.IRelease("END tree.EndDocument")
-	}
-
 	ctx := t.pctx(ctxif)
 	if ctx.doc != nil && ctx.wellFormed {
 		ctx.doc.properties |= DocWellFormed
@@ -86,10 +70,6 @@ func (t *TreeBuilder) EndDocument(ctxif context.Context) error {
 }
 
 func (t *TreeBuilder) ProcessingInstruction(ctxif context.Context, target, data string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.ProcessingInstruction")
-		defer g.IRelease("END tree.ProcessingInstruction")
-	}
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	pi := doc.CreatePI(target, data)
@@ -129,17 +109,6 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif context.Context, target, data 
 
 func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 	//	ctx := t.pctx(ctxif)
-	if pdebug.Enabled {
-		var name string
-		if prefix != "" {
-			name = prefix + ":" + localname
-		} else {
-			name = localname
-		}
-		g := pdebug.IPrintf("START tree.StartElement: %s", name)
-		defer g.IRelease("END tree.StartElement")
-	}
-
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 
@@ -166,12 +135,8 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 		}
 	}
 
-	pdebug.Printf("We got %d attributes", len(attrs))
 	for _, attr := range attrs {
 		if attr.IsDefault() && !ctx.loadsubset.IsSet(CompleteAttrs) {
-			if pdebug.Enabled {
-				pdebug.Printf("Skipping default attribute %s", attr.Name())
-			}
 			continue
 		}
 		if p := attr.Prefix(); p != "" {
@@ -248,14 +213,6 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 }
 
 func (t *TreeBuilder) EndElementNS(ctxif context.Context, localname, prefix, uri string) error {
-	if pdebug.Enabled {
-		if prefix != "" {
-			pdebug.Printf("tree.EndElement: %s:%s", prefix, localname)
-		} else {
-			pdebug.Printf("tree.EndElement: %s", localname)
-		}
-	}
-
 	ctx := t.pctx(ctxif)
 	cur := ctx.elem
 	if cur == nil {
@@ -272,19 +229,10 @@ func (t *TreeBuilder) EndElementNS(ctxif context.Context, localname, prefix, uri
 }
 
 func (t *TreeBuilder) Characters(ctxif context.Context, data []byte) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.Characters: '%s' (%v)", data, data)
-		defer g.IRelease("END tree.Characters")
-	}
-
 	ctx := t.pctx(ctxif)
 	n := ctx.elem
 	if n == nil {
 		return errors.New("text content placed in wrong location")
-	}
-
-	if pdebug.Enabled {
-		pdebug.Printf("Calling AppendText() on '%s' node", n.Name())
 	}
 
 	return n.AppendText(data)
@@ -294,11 +242,6 @@ func (t *TreeBuilder) Characters(ctxif context.Context, data []byte) error {
 // in libxml2's SAX2.c. Unlike text nodes, adjacent CDATA sections are NOT
 // merged — each callback creates a new CDATASection node.
 func (t *TreeBuilder) CDataBlock(ctxif context.Context, data []byte) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.CDATABlock")
-		defer g.IRelease("END tree.CDATABlock")
-	}
-
 	ctx := t.pctx(ctxif)
 	parent := ctx.elem
 	if parent == nil {
@@ -315,11 +258,6 @@ func (t *TreeBuilder) CDataBlock(ctxif context.Context, data []byte) error {
 // parent selection to xmlSAX2AppendChild. When inside a DTD subset the
 // comment is added to the DTD, not the document.
 func (t *TreeBuilder) Comment(ctxif context.Context, data []byte) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.Comment: %s", data)
-		defer g.IRelease("END tree.Comment")
-	}
-
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	if doc == nil {
@@ -354,11 +292,6 @@ func (t *TreeBuilder) Comment(ctxif context.Context, data []byte) error {
 }
 
 func (t *TreeBuilder) InternalSubset(ctxif context.Context, name, eid, uri string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.InternalSubset %s,%s,%s", name, eid, uri)
-		defer g.IRelease("END tree.InternalSubset")
-	}
-
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 
@@ -398,11 +331,6 @@ func catalogOpenName(ref string) string {
 }
 
 func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.ExternalSubset %s,%s,%s", name, eid, uri)
-		defer g.IRelease("END tree.ExternalSubset")
-	}
-
 	ctx := t.pctx(ctxif)
 
 	if ctx.options.IsSet(parseNoXXE) {
@@ -543,13 +471,6 @@ func (t *TreeBuilder) IsStandalone(ctxif context.Context) (bool, error) {
 }
 
 func (t *TreeBuilder) GetEntity(ctxif context.Context, name string) (ent sax.Entity, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.GetEntity '%s'", name)
-		defer func() {
-			g.IRelease("END tree.GetEntity = '%v'", ent)
-		}()
-	}
-
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	x, ok := doc.GetEntity(name)
@@ -562,11 +483,6 @@ func (t *TreeBuilder) GetEntity(ctxif context.Context, name string) (ent sax.Ent
 }
 
 func (t *TreeBuilder) GetParameterEntity(ctxif context.Context, name string) (sax.Entity, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.GetParameterEntity '%s'", name)
-		defer g.IRelease("END tree.GetParameterEntity")
-	}
-
 	if ctxif == nil {
 		return nil, ErrInvalidParserCtx
 	}
@@ -585,11 +501,6 @@ func (t *TreeBuilder) GetParameterEntity(ctxif context.Context, name string) (sa
 }
 
 func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName string, typ enum.AttributeType, deftype enum.AttributeDefault, value string, enumif sax.Enumeration) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.AttributeDecl name = '%s', elem = '%s'", aName, eName)
-		defer g.IRelease("END tree.AttributeDecl")
-	}
-
 	ctx := t.pctx(ctxif)
 
 	if aName == lexicon.QNameXMLID && typ != enum.AttrID {
@@ -611,23 +522,14 @@ func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName s
 	doc := ctx.doc
 	switch ctx.inSubset {
 	case 1:
-		if pdebug.Enabled {
-			pdebug.Printf("Processing intSubset...")
-		}
 		if _, err := ctx.addAttributeDecl(doc.intSubset, eName, local, prefix, typ, deftype, value, enum); err != nil {
 			return err
 		}
 	case 2:
-		if pdebug.Enabled {
-			pdebug.Printf("Processing extSubset...")
-		}
 		if _, err := ctx.addAttributeDecl(doc.extSubset, eName, local, prefix, typ, deftype, value, enum); err != nil {
 			return err
 		}
 	default:
-		if pdebug.Enabled {
-			pdebug.Printf("uh-oh we have a problem inSubset = %d", ctx.inSubset)
-		}
 		return errors.New("TreeBuilder.AttributeDecl called while not in subset")
 	}
 	// NOTE: Attribute declaration validation (xmlValidateAttributeDecl in
@@ -637,11 +539,6 @@ func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName s
 }
 
 func (t *TreeBuilder) ElementDecl(ctxif context.Context, name string, typ enum.ElementType, content sax.ElementContent) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.ElementDecl")
-		defer g.IRelease("END tree.ElementDecl")
-	}
-
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	var dtd *DTD
@@ -663,11 +560,6 @@ func (t *TreeBuilder) ElementDecl(ctxif context.Context, name string, typ enum.E
 }
 
 func (t *TreeBuilder) IgnorableWhitespace(ctxif context.Context, content []byte) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.IgnorableWhitespace (%v)", content)
-		defer g.IRelease("END tree.IgnorableWhitespace")
-	}
-
 	ctx := t.pctx(ctxif)
 	if ctx.keepBlanks {
 		return t.Characters(ctxif, content)
@@ -677,11 +569,6 @@ func (t *TreeBuilder) IgnorableWhitespace(ctxif context.Context, content []byte)
 }
 
 func (t *TreeBuilder) NotationDecl(ctxif context.Context, name string, publicID string, systemID string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.NotationDecl")
-		defer g.IRelease("END tree.NotationDecl")
-	}
-
 	ctx := t.pctx(ctxif)
 	dtd := ctx.doc.intSubset
 	if dtd == nil {
@@ -692,11 +579,6 @@ func (t *TreeBuilder) NotationDecl(ctxif context.Context, name string, publicID 
 }
 
 func (t *TreeBuilder) Reference(ctxif context.Context, name string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.Reference '%s'", name)
-		defer g.IRelease("END tree.Reference")
-	}
-
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	var n Node
@@ -716,11 +598,6 @@ func (t *TreeBuilder) Reference(ctxif context.Context, name string) error {
 }
 
 func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, systemID string) (sax.ParseInput, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.ResolveEntity '%s' '%s'", publicID, systemID)
-		defer g.IRelease("END tree.ResolveEntity")
-	}
-
 	ctx := t.pctx(ctxif)
 	if ctx.catalog != nil {
 		if resolved := ctx.catalog.Resolve(ctxif, publicID, systemID); resolved != "" {
@@ -748,11 +625,6 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 }
 
 func (t *TreeBuilder) EntityDecl(ctxif context.Context, name string, typ enum.EntityType, publicID string, systemID string, notation string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.EntityDecl '%s' -> '%s'", name, notation)
-		defer g.IRelease("END tree.EntityDecl")
-	}
-
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	var dtd *DTD
@@ -789,11 +661,6 @@ func (t *TreeBuilder) EntityDecl(ctxif context.Context, name string, typ enum.En
 }
 
 func (t *TreeBuilder) UnparsedEntityDecl(ctxif context.Context, name string, publicID string, systemID string, notation string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.UnparsedEntityDecl '%s'", name)
-		defer g.IRelease("END tree.UnparsedEntityDecl")
-	}
-
 	// Mirror xmlSAX2UnparsedEntityDecl: register the NDATA entity in the DTD.
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc

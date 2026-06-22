@@ -15,7 +15,6 @@ import (
 	"github.com/lestrrat-go/helium/internal/pool"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 //go:generate stringer -type=parserState -output parser_state_gen.go
@@ -117,7 +116,6 @@ type parserCtx struct {
 	nsNrTab     []int // number of ns bindings pushed per element (parallel to nodeTab)
 	doc         *Document
 	nodeTab     nodeStack
-	elemidx     int
 	sizeentcopy int64 // cumulative entity expansion bytes (non-entity-specific)
 	inputSize   int64 // total input document size
 	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via parseHuge)
@@ -201,24 +199,12 @@ func (pctx *parserCtx) fireSAXCallback(ctx context.Context, typ int, args ...any
 
 	switch typ {
 	case cbEntityDecl:
-		if pdebug.Enabled {
-			g := pdebug.Marker("EntityDecl callback")
-			defer g.End()
-		}
 		return s.EntityDecl(ctx, args[0].(string), enum.InternalParameterEntity, "", "", args[1].(string)) //nolint:forcetypeassert
 	case cbGetParameterEntity:
-		if pdebug.Enabled {
-			g := pdebug.Marker("GetParameterEntity callback")
-			defer g.End()
-		}
-
 		entity, err := s.GetParameterEntity(ctx, args[1].(string)) //nolint:forcetypeassert
 		if err == nil {
 			ret := args[0].(*sax.Entity) //nolint:forcetypeassert
 			*ret = entity
-			if pdebug.Enabled {
-				pdebug.Printf("got entity %s", entity)
-			}
 		}
 		return err
 	}
@@ -226,18 +212,6 @@ func (pctx *parserCtx) fireSAXCallback(ctx context.Context, typ int, args ...any
 }
 
 func (ctx *parserCtx) pushNodeEntry(e nodeEntry) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START pushNode (%s)", e.Name())
-		defer g.IRelease("END pushNode")
-
-		if l := ctx.nodeTab.Len(); l <= 0 {
-			pdebug.Printf("  (EMPTY node stack)")
-		} else {
-			for i := range ctx.nodeTab.Stack {
-				pdebug.Printf("  %003d: %s", i, ctx.nodeTab.Stack[i].Name())
-			}
-		}
-	}
 	ctx.nodeTab.Push(e)
 }
 
@@ -246,28 +220,6 @@ func (ctx *parserCtx) peekNode() *nodeEntry {
 }
 
 func (ctx *parserCtx) popNode() (elem *nodeEntry) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START popNode")
-		defer func() {
-			var name string
-			if elem == nil {
-				name = "nil"
-			} else {
-				name = elem.Name()
-			}
-			g.IRelease("END popNode (%s)", name)
-		}()
-
-		defer func() {
-			if l := ctx.nodeTab.Len(); l <= 0 {
-				pdebug.Printf("  (EMPTY node stack)")
-			} else {
-				for i := range ctx.nodeTab.Stack {
-					pdebug.Printf("  %003d: %s", i, ctx.nodeTab.Stack[i].Name())
-				}
-			}
-		}()
-	}
 	return ctx.nodeTab.Pop()
 }
 
@@ -327,9 +279,6 @@ func releaseBuffer(b *bytes.Buffer) {
 }
 
 func (ctx *parserCtx) pushInput(in any) {
-	if pdebug.Enabled {
-		pdebug.Printf("pushInput (n = %d -> %d)", ctx.inputTab.Len(), ctx.inputTab.Len()+1)
-	}
 	ctx.inputTab.Push(in)
 	ctx.cachedCursor = nil // invalidate cache
 }
@@ -369,9 +318,6 @@ func (ctx *parserCtx) getCursor() strcursor.Cursor {
 		}
 		if cur.Done() && ctx.inputTab.Len() > 1 {
 			// Current input is exhausted, pop it and try the next
-			if pdebug.Enabled {
-				pdebug.Printf("Popping exhausted input stream, stack depth: %d -> %d", ctx.inputTab.Len(), ctx.inputTab.Len()-1)
-			}
 			ctx.popInput()
 			continue
 		}

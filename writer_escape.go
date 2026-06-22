@@ -1,12 +1,9 @@
 package helium
 
 import (
-	"bytes"
 	"io"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/lestrrat-go/pdebug"
 )
 
 var (
@@ -108,15 +105,6 @@ func isInCharacterRange(r rune) bool {
 }
 
 func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
-	if pdebug.Enabled {
-		debugbuf := bytes.Buffer{}
-		w = io.MultiWriter(w, &debugbuf)
-		g := pdebug.Marker("escapeAttrValue '%s'", s)
-		defer func() {
-			pdebug.Printf("escaped value '%s'", debugbuf.Bytes())
-			g.End()
-		}()
-	}
 	var esc []byte
 	var hbuf [8]byte
 	last := 0
@@ -172,14 +160,6 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 }
 
 func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) error {
-	if pdebug.Enabled {
-		debugbuf := bytes.Buffer{}
-		w = io.MultiWriter(w, &debugbuf)
-		g := pdebug.IPrintf("START escapeText = '%s'", s)
-		defer func() {
-			g.IRelease("END escapeText = '%s'", debugbuf.Bytes())
-		}()
-	}
 	var esc []byte
 	var hbuf [8]byte
 	last := 0

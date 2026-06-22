@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
-	"github.com/lestrrat-go/pdebug"
 )
 
 func dtdQuoteChar(value string) byte {
@@ -92,10 +91,6 @@ func (d *writeSession) dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
 }
 
 func (d *writeSession) dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Writer.dumpElementContent n = '%s'", n.name)
-		defer g.IRelease("END Writer.dumpElementContent")
-	}
 	if n == nil {
 		return nil
 	}

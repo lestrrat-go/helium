@@ -4,7 +4,6 @@ go 1.26.1
 
 require (
 	github.com/dlclark/regexp2 v1.12.0
-	github.com/lestrrat-go/pdebug v0.0.0-20210111095411-35b07dbf089b
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.56.0
 	golang.org/x/text v0.38.0

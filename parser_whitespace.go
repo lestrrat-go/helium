@@ -4,17 +4,10 @@ import (
 	"context"
 
 	"github.com/lestrrat-go/helium/internal/strcursor"
-	"github.com/lestrrat-go/pdebug"
 )
 
 func (pctx *parserCtx) skipBlanks(ctx context.Context) bool {
 	i := 0
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START skipBlanks")
-		defer func() {
-			g.IRelease("END skipBlanks (skipped %d)", i)
-		}()
-	}
 	cur := pctx.getCursor()
 	if cur == nil {
 		return false
@@ -28,7 +21,6 @@ func (pctx *parserCtx) skipBlanks(ctx context.Context) bool {
 		}
 
 		if cur.Peek() == '%' {
-			pdebug.Printf("Found possible parameter entity reference")
 			if err := pctx.handlePEReference(ctx); err != nil {
 				return false
 			}
@@ -40,12 +32,6 @@ func (pctx *parserCtx) skipBlanks(ctx context.Context) bool {
 
 func (pctx *parserCtx) skipBlankBytes(ctx context.Context, cur *strcursor.ByteCursor) bool {
 	i := 0
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START skipBlankBytes")
-		defer func() {
-			g.IRelease("END skipBlankBytes (skipped %d)", i)
-		}()
-	}
 	for c := cur.PeekAt(i); c != 0 && isBlankByte(c); c = cur.PeekAt(i) {
 		i++
 	}
@@ -55,7 +41,6 @@ func (pctx *parserCtx) skipBlankBytes(ctx context.Context, cur *strcursor.ByteCu
 		}
 
 		if cur.Peek() == '%' {
-			pdebug.Printf("Found possible parameter entity reference")
 			if err := pctx.handlePEReference(ctx); err != nil {
 				return false
 			}

@@ -20,7 +20,6 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
 )
@@ -250,10 +249,6 @@ func TestParseNamespace(t *testing.T) {
 	p := helium.NewParser()
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed for '%s'", input)
-
-	if pdebug.Enabled {
-		pdebug.Dump(doc)
-	}
 
 	root := doc.DocumentElement()
 	require.NotNil(t, root)

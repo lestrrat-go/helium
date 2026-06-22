@@ -13,7 +13,6 @@ import (
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/push"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 // pseudoRootName is the internal element name used for the synthetic root
@@ -534,22 +533,15 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("=== START Parser.Parse ===")
-		defer g.IRelease("=== END Parser.Parse ===")
-	}
 
 	pctx := &parserCtx{rawInput: b, baseURI: p.cfg.baseURI}
 	if err := pctx.init(p.cfg, bytes.NewReader(b)); err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := pctx.release(); err != nil {
-			// Log error but don't override the main return error
-			if pdebug.Enabled {
-				pdebug.Printf("ctx.release() failed: %s", err)
-			}
-		}
+		// Release the parser context; any error is intentionally ignored so it
+		// does not override the main return error.
+		_ = pctx.release()
 	}()
 
 	if err := pctx.parseDocument(ctx); err != nil {
@@ -622,10 +614,6 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*Document, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
-	}
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("=== START Parser.ParseReader ===")
-		defer g.IRelease("=== END Parser.ParseReader ===")
 	}
 
 	// Honor an already-cancelled context BEFORE touching r: the EBCDIC sniff
@@ -752,11 +740,9 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 		pctx.inputSize = srcSize
 	}
 	defer func() {
-		if err := pctx.release(); err != nil {
-			if pdebug.Enabled {
-				pdebug.Printf("ctx.release() failed: %s", err)
-			}
-		}
+		// Release the parser context; any error is intentionally ignored so it
+		// does not override the main return error.
+		_ = pctx.release()
 	}()
 
 	if err := pctx.parseDocument(ctx); err != nil {
@@ -827,10 +813,6 @@ func (p Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("=== START Parser.ParseInNodeContext ===")
-		defer g.IRelease("=== END Parser.ParseInNodeContext ===")
-	}
 
 	if node == nil {
 		return nil, errors.New("node must not be nil")
@@ -864,11 +846,9 @@ found:
 		return nil, err
 	}
 	defer func() {
-		if err := newctx.release(); err != nil {
-			if pdebug.Enabled {
-				pdebug.Printf("newctx.release() failed: %s", err)
-			}
-		}
+		// Release the parser context; any error is intentionally ignored so it
+		// does not override the main return error.
+		_ = newctx.release()
 	}()
 
 	// Save the document's children and restore them afterward.

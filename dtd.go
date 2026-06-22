@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
-	"github.com/lestrrat-go/pdebug"
 )
 
 // DTD represents an XML Document Type Definition (libxml2: xmlDtd).
@@ -205,11 +204,6 @@ func (dtd *DTD) AddNotation(name, publicID, systemID string) (*Notation, error) 
 // attributes was declared first) is completed in place; a second concrete
 // declaration of the same element is an error.
 func (dtd *DTD) AddElementDecl(name string, typ enum.ElementType, content *ElementContent) (*ElementDecl, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START dtd.AddElementDecl '%s'", name)
-		defer g.IRelease("END dtd.AddElementDecl")
-	}
-
 	switch typ {
 	case enum.EmptyElementType, enum.AnyElementType:
 		if content != nil {

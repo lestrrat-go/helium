@@ -10,7 +10,6 @@ import (
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 )
 
 // parseCDataContent reads the text inside a CDATA section (up to but not
@@ -18,11 +17,6 @@ import (
 // consuming ]]> and firing the SAX callback afterward, matching libxml2's
 // behavior of reporting the position after the closing delimiter.
 func (ctx *parserCtx) parseCDataContent() (string, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseCDataContent")
-		defer g.IRelease("END parseCDataContent")
-	}
-
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
@@ -74,11 +68,6 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 }
 
 func (pctx *parserCtx) parseMisc(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseMisc")
-		defer g.IRelease("END parseMisc")
-	}
-
 	cur := pctx.getCursor()
 	for {
 		// Check the context BEFORE cur.Done(), which may refill the cursor
@@ -101,9 +90,6 @@ func (pctx *parserCtx) parseMisc(ctx context.Context) error {
 		} else if isBlankByte(cur.Peek()) {
 			pctx.skipBlanks(ctx)
 		} else {
-			if pdebug.Enabled {
-				pdebug.Printf("Nothing more in misc section...")
-			}
 			break
 		}
 	}
@@ -117,11 +103,6 @@ var knownPIs = []string{
 }
 
 func (pctx *parserCtx) parsePI(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parsePI")
-		defer g.IRelease("END parsePI")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -211,11 +192,6 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parsePITarget(ctx context.Context) (string, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parsePITarget")
-		defer g.IRelease("END parsePITarget")
-	}
-
 	name, err := pctx.parseName(ctx)
 	if err != nil {
 		return "", pctx.error(ctx, err)
@@ -270,11 +246,6 @@ var (
 )
 
 func (pctx *parserCtx) parseCDSect(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseCDSect")
-		defer g.IRelease("END parseCDSect")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
@@ -322,11 +293,6 @@ func (pctx *parserCtx) parseCDSect(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseComment(ctx context.Context) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseComment")
-		defer g.IRelease("END parseComment")
-	}
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
