@@ -2,6 +2,8 @@ module github.com/lestrrat-go/helium
 
 go 1.26.1
 
+toolchain go1.26.4
+
 require (
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/stretchr/testify v1.11.1
