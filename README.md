@@ -114,8 +114,8 @@ By default:
 
 - Entity substitution is **off** (`SubstituteEntities(false)`).
 - External DTD loading is **off** (`LoadExternalDTD(false)`).
-- Entity-expansion and size limits are **on** (`RelaxLimits(false)`), including
-  a 10 MiB cap on any external DTD subset.
+- Entity-expansion amplification limits are **on** (`RelaxLimits(false)`), and
+  any external DTD subset is capped at 10 MiB regardless of that setting.
 - Network access is **allowed** (`AllowNetwork(true)`), the filesystem resolver
   is **permissive** (any path handed to the parser can be opened), and element
   nesting depth is **unbounded** (`MaxDepth(0)`).
@@ -137,7 +137,8 @@ The parser cannot know your resource budget, so the caller should also:
 
 - Enforce a maximum raw document size before calling `Parse`.
 - Pass a `context.Context` with a deadline to `Parse` / `ParseReader`.
-- Keep `RelaxLimits` disabled — it removes the entity-expansion and size guards.
+- Keep `RelaxLimits` disabled — enabling it lifts the entity-amplification and
+  name-length guards.
 - Avoid enabling XInclude, catalogs, DTD validation, or default-DTD-attribute
   processing for untrusted input unless every external resource is explicitly
   allowlisted and size-bounded.
