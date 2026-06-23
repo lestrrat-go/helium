@@ -106,6 +106,69 @@ Use `helium lint` in place of the old `heliumlint` command.
 See [`cmd/helium/README.md`](cmd/helium/README.md) for command-specific
 documentation.
 
+# Security
+
+Helium exposes the controls needed to process untrusted XML safely, but a
+zero-value `NewParser()` is tuned for compatibility, not for hostile input.
+By default:
+
+- Entity substitution is **off** (`SubstituteEntities(false)`).
+- External DTD loading is **off** (`LoadExternalDTD(false)`).
+- Entity-expansion and size limits are **on** (`RelaxLimits(false)`), including
+  a 10 MiB cap on any external DTD subset.
+- Network access is **allowed** (`AllowNetwork(true)`), the filesystem resolver
+  is **permissive** (any path handed to the parser can be opened), and element
+  nesting depth is **unbounded** (`MaxDepth(0)`).
+
+When parsing documents from an untrusted source, build one hardened parser and
+reuse it — the builder is clone-on-write, so a shared value is safe to reuse
+across goroutines:
+
+```go
+p := helium.NewParser().
+    BlockXXE(true).            // reject external entities and DTDs (XXE)
+    AllowNetwork(false).       // no outbound fetches during parsing
+    SubstituteEntities(false). // do not expand entities
+    LoadExternalDTD(false).    // do not read the external DTD subset
+    MaxDepth(256)              // bound nesting depth (0 = unbounded)
+```
+
+The parser cannot know your resource budget, so the caller should also:
+
+- Enforce a maximum raw document size before calling `Parse`.
+- Pass a `context.Context` with a deadline to `Parse` / `ParseReader`.
+- Keep `RelaxLimits` disabled — it removes the entity-expansion and size guards.
+- Avoid enabling XInclude, catalogs, DTD validation, or default-DTD-attribute
+  processing for untrusted input unless every external resource is explicitly
+  allowlisted and size-bounded.
+
+**Caveat:** the `FS` option is not yet a complete sandbox. External-resource
+paths are joined against the document base URI and may be absolute or use
+OS-specific separators, so `os.DirFS`-style roots (which enforce `fs.ValidPath`)
+reject them. Until path normalization lands, restrict filesystem access by
+disabling external loading (as above) rather than relying on a chroot-style
+`fs.FS`.
+
+The `xmldsig1` (signatures) and `xmlenc1` (encryption) packages are
+**experimental** and should not be relied on inside a security or compliance
+boundary yet.
+
+# `encoding/xml` compatibility
+
+The [`shim`](shim/README.md) package is an import-path-compatible replacement
+for `encoding/xml` backed by helium's parser (`Marshal`, `Unmarshal`,
+`Encoder`, `Decoder`, and the usual struct tags). It is a migration aid, not a
+byte-for-byte behavioral clone. Known differences:
+
+- `Decoder.Strict = false` is not supported; `Decoder.AutoClose` and
+  `HTMLAutoClose` are no-ops.
+- Undeclared namespace prefixes are rejected rather than passed through.
+- Namespace declarations are emitted before regular attributes.
+- `Decoder.InputOffset` is approximate rather than exact.
+- Empty elements captured via `,innerxml` may re-serialize as self-closed tags.
+
+Migrate behind your own tests rather than assuming a transparent swap.
+
 # Performance
 
 Helium parses XML into a full DOM tree. The benchmark below compares that DOM
