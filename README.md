@@ -161,8 +161,8 @@ for `encoding/xml` backed by helium's parser (`Marshal`, `Unmarshal`,
 `Encoder`, `Decoder`, and the usual struct tags). It is a migration aid, not a
 byte-for-byte behavioral clone. Known differences:
 
-- `Decoder.Strict = false` is not supported; `Decoder.AutoClose` and
-  `HTMLAutoClose` are no-ops.
+- `Decoder.Strict = false` is not supported; `Decoder.AutoClose` is a no-op and
+  `HTMLAutoClose` is omitted.
 - Undeclared namespace prefixes are rejected rather than passed through.
 - Namespace declarations are emitted before regular attributes.
 - `Decoder.InputOffset` is approximate rather than exact.
