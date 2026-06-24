@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -830,4 +831,220 @@ func TestReplaceWithExistingSibling(t *testing.T) {
 		require.Nil(t, c.NextSibling(), "c.NextSibling() must be nil")
 		require.Equal(t, c, root.LastChild())
 	})
+}
+
+// TestAppendChildFast covers the public AppendChildFast helper across the
+// empty-parent and non-empty-parent fast paths.
+func TestAppendChildFast(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	parent := doc.CreateElement("parent")
+
+	first := doc.CreateElement("first")
+	require.NoError(t, helium.AppendChildFast(parent, first), "fast-link first child")
+	require.Equal(t, helium.Node(first), parent.FirstChild())
+	require.Equal(t, helium.Node(first), parent.LastChild())
+	require.Equal(t, helium.Node(parent), first.Parent())
+
+	second := doc.CreateElement("second")
+	require.NoError(t, helium.AppendChildFast(parent, second), "fast-link second child")
+	require.Equal(t, helium.Node(second), parent.LastChild())
+	require.Equal(t, helium.Node(second), first.NextSibling())
+	require.Equal(t, helium.Node(first), second.PrevSibling())
+}
+
+// TestNodeLine covers docnode.Line via a parsed node that carries line info.
+func TestNodeLine(t *testing.T) {
+	t.Parallel()
+	const src = "<root>\n  <child/>\n</root>"
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	// Line() returns the recorded line number; it must be a non-negative int and
+	// not panic. We assert it is callable and consistent.
+	require.GreaterOrEqual(t, root.Line(), 0)
+	for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+		if c.Type() == helium.ElementNode {
+			require.GreaterOrEqual(t, c.Line(), 0)
+		}
+	}
+}
+
+// TestDocumentAppendText covers Document.AppendText, which appends a Text child
+// to the document, merging into a trailing Text node when possible.
+func TestDocumentAppendText(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	require.NoError(t, doc.AppendText([]byte("hello")))
+	require.NoError(t, doc.AppendText([]byte(" world")))
+
+	var found bool
+	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
+		if c.Type() == helium.TextNode {
+			found = true
+			require.Contains(t, string(c.Content()), "hello")
+		}
+	}
+	require.True(t, found, "document gained a text child")
+}
+
+// TestClarkName covers the ClarkName helper.
+func TestClarkName(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "{urn:example}local", helium.ClarkName("urn:example", "local"))
+	require.Equal(t, "{}local", helium.ClarkName("", "local"))
+}
+
+// TestNamespaceNodeWrapperContent covers NamespaceNodeWrapper.Content.
+func TestNamespaceNodeWrapperContent(t *testing.T) {
+	t.Parallel()
+	ns := helium.NewNamespace("p", "urn:example")
+	nsw := helium.NewNamespaceNodeWrapper(ns, nil)
+	require.Equal(t, "urn:example", string(nsw.Content()))
+	require.Equal(t, "p", nsw.Name())
+}
+
+// TestNodeNamespaceMethods covers DeclareNamespace, SetActiveNamespace, SetNs,
+// AddNamespaceDecl and the qname caching in Name().
+func TestNodeNamespaceMethods(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+
+	require.NoError(t, root.DeclareNamespace("p", "http://example.com/p"))
+	require.NoError(t, root.SetActiveNamespace("p", "http://example.com/p"))
+
+	// Name() now reflects the prefix and caches the qname.
+	require.Equal(t, "p:root", root.Name())
+	require.Equal(t, "p:root", root.Name()) // cached path
+	require.Equal(t, "p", root.Prefix())
+	require.Equal(t, "http://example.com/p", root.URI())
+
+	// AddNamespaceDecl with an existing namespace object.
+	ns := helium.NewNamespace("q", "http://example.com/q")
+	root.AddNamespaceDecl(ns)
+	root.SetNs(ns)
+	require.Equal(t, "q:root", root.Name())
+}
+
+// TestBuildURI exercises BuildURI across local-path, http, and absolute cases.
+func TestBuildURI(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		systemID string
+		base     string
+		want     string
+	}{
+		{"absolute system id is returned verbatim", "http://x/a.dtd", "http://y/", "http://x/a.dtd"},
+		{"relative against http base", "a.dtd", "http://host/dir/doc.xml", "http://host/dir/a.dtd"},
+		{"relative against file path", "a.dtd", "/dir/doc.xml", "/dir/a.dtd"},
+		{"absolute local path", "/abs/a.dtd", "/dir/doc.xml", "/abs/a.dtd"},
+		// Windows shapes are plain strings, so the Windows behavior below is
+		// exercised on any GOOS. A native Windows base must NOT route the drive
+		// letter through url.Parse (which would emit "c:///a.dtd"); it resolves
+		// with local-path (forward-slash) semantics.
+		{"relative against windows backslash base", "child.xml", `C:\dir\main.xml`, "C:/dir/child.xml"},
+		{"relative against windows forward-slash base", "a.dtd", "D:/dir/doc.xml", "D:/dir/a.dtd"},
+		{"windows-absolute system id returned verbatim", `C:\abs\a.dtd`, `D:\dir\doc.xml`, `C:\abs\a.dtd`},
+		{"interior dot-dot against windows base", "../sib/child.xml", `C:\a\b\main.xml`, "C:/a/sib/child.xml"},
+		{"unc base resolves relative ref", "child.xml", `\\host\share\main.xml`, "//host/share/child.xml"},
+		// An absolute-URI systemID stands on its own even when the base is a
+		// native Windows path. Without the scheme check this collapsed "http://"
+		// to "http:/" and joined it onto the drive-letter base (Windows-only
+		// regression that broke the W3C resolve-uri/base-uri cluster).
+		{"absolute http system id against windows drive base", "http://example.com/a/b", `D:\dir\doc.xsl`, "http://example.com/a/b"},
+		{"absolute http system id against windows slash base", "http://example.com/a/b", "D:/dir/doc.xsl", "http://example.com/a/b"},
+		{"absolute file system id against windows base", "file:///x/y", `C:\dir\doc.xsl`, "file:///x/y"},
+		// A RELATIVE Windows base (backslashes, no drive — what filepath.Join
+		// yields on Windows for a relative test path) must keep its directory so a
+		// sibling entity resolves inside it. Without backslash-aware handling this
+		// dropped to a bare "world.txt" and the external entity could not be found.
+		{"sibling against relative windows base", "world.txt", `..\d\e\example.xml`, "../d/e/world.txt"},
+		// A file: base with a Windows drive letter must yield a proper file: URI
+		// (not the drive-rooted "/D:/..." path url.Parse exposes), so file-URI-aware
+		// loaders convert it back to a native path. The POSIX file: base below
+		// keeps returning a plain path, proving POSIX is unaffected.
+		{"sibling against windows drive file uri", "nested.dtd", "file:///D:/tmp/t/inc.xml", "file:///D:/tmp/t/nested.dtd"},
+		{"sibling against posix file uri", "nested.dtd", "file:///tmp/t/inc.xml", "/tmp/t/nested.dtd"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, helium.BuildURI(tt.systemID, tt.base))
+		})
+	}
+}
+
+// TestNodeGetBaseAndSet exercises NodeGetBase with xml:base attributes and the
+// SetNodeBaseURI override.
+func TestNodeGetBaseAndSet(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	doc.SetURL("http://example.com/dir/doc.xml")
+
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+
+	child := doc.CreateElement("child")
+	xmlNS := helium.NewNamespace("xml", "http://www.w3.org/XML/1998/namespace")
+	require.NoError(t, child.SetLiteralAttributeNS("base", "sub/", xmlNS))
+	require.NoError(t, root.AddChild(child))
+
+	// The child's effective base resolves its xml:base against the doc URL.
+	base := helium.NodeGetBase(doc, child)
+	require.Contains(t, base, "sub")
+
+	// A nil node yields an empty base.
+	require.Equal(t, "", helium.NodeGetBase(doc, nil))
+
+	// SetNodeBaseURI installs an explicit entity base URI that takes precedence.
+	helium.SetNodeBaseURI(child, "http://other.example/")
+	base = helium.NodeGetBase(doc, child)
+	require.Contains(t, base, "other.example")
+}
+
+// TestGetElementByIDFallback covers the O(n) tree-walk fallback path of
+// GetElementByID for an API-built document (no parser ID table).
+func TestGetElementByIDFallback(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("root")
+	require.NoError(t, doc.AddChild(root))
+
+	child := doc.CreateElement("child")
+	xmlNS := helium.NewNamespace("xml", "http://www.w3.org/XML/1998/namespace")
+	_, err := child.SetAttributeNS("id", "target", xmlNS)
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(child))
+
+	require.Nil(t, doc.IDTable()) // not populated for API-built docs
+
+	found := doc.GetElementByID("target")
+	require.Same(t, child, found)
+
+	require.Nil(t, doc.GetElementByID("missing"))
+
+	// SkipIDs short-circuits resolution.
+	doc.SetSkipIDs(true)
+	require.Nil(t, doc.GetElementByID("target"))
+}
+
+// TestXIncludeMarker exercises the XIncludeMarker node type and its methods.
+func TestXIncludeMarker(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	m := helium.NewXIncludeMarker(doc, helium.XIncludeStartNode, "include")
+	require.Equal(t, helium.XIncludeStartNode, m.Type())
+	require.Equal(t, "include", m.Name())
+
+	child := doc.CreateText([]byte("hello"))
+	require.NoError(t, m.AddChild(child))
+	require.NoError(t, m.AppendText([]byte(" world")))
+	m.SetTreeDoc(doc)
 }

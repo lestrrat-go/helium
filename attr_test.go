@@ -889,3 +889,69 @@ func TestAttributeAddSibling(t *testing.T) {
 		require.Len(t, elem.Attributes(), 1, "only the anchor attribute remains")
 	})
 }
+
+// TestSetBooleanAttribute covers Element.SetBooleanAttribute for both the
+// success path (a value-less attribute) and the colon-rejection error path.
+func TestSetBooleanAttribute(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root := doc.CreateElement("input")
+	require.NoError(t, doc.AddChild(root))
+
+	require.NoError(t, root.SetBooleanAttribute("checked"), "boolean attribute added")
+
+	require.True(t, root.HasAttribute("checked"), "boolean attribute is present")
+	val, ok := root.GetAttribute("checked")
+	require.True(t, ok, "boolean attribute is readable")
+	require.Empty(t, val, "boolean attribute has no value")
+
+	// A colon in the name is rejected.
+	require.Error(t, root.SetBooleanAttribute("ns:bad"))
+}
+
+// TestAttributeNodeMethods exercises the Attribute node-interface methods.
+func TestAttributeNodeMethods(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	attr, err := doc.CreateAttribute("a", "v", nil)
+	require.NoError(t, err)
+
+	require.Equal(t, "v", attr.Value())
+	require.Equal(t, "a", attr.Name())
+
+	attr.SetAType(enum.AttrCDATA)
+	require.Equal(t, enum.AttrCDATA, attr.AType())
+
+	attr.SetDefault(true)
+	require.True(t, attr.IsDefault())
+
+	// AppendText extends the attribute value (text child).
+	require.NoError(t, attr.AppendText([]byte("-more")))
+
+	attr.SetTreeDoc(doc)
+}
+
+// TestCreateAttributeWithEntityValue drives the stringToNodeList path inside
+// CreateAttribute by passing a value containing character and entity references.
+func TestCreateAttributeWithEntityValue(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+
+	// Value with a decimal char ref, a hex char ref, and a named entity ref.
+	attr, err := doc.CreateAttribute("a", "x&#65;y&#x42;z&amp;w", nil)
+	require.NoError(t, err)
+	require.Equal(t, "a", attr.Name())
+	// The attribute has a child node list (text + entity refs).
+	require.NotNil(t, attr.FirstChild())
+
+	// Plain value (no '&') takes the fast single-text-node path.
+	attr2, err := doc.CreateAttribute("b", "plain", nil)
+	require.NoError(t, err)
+	require.Equal(t, "plain", attr2.Value())
+
+	// Colon in name is rejected.
+	_, err = doc.CreateAttribute("ns:x", "v", nil)
+	require.Error(t, err)
+}

@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -182,4 +183,63 @@ func TestCreateCharRefRejectsEmptyName(t *testing.T) {
 	ref, err = doc.CreateCharRef("&;")
 	require.Error(t, err)
 	require.Nil(t, ref)
+}
+
+// TestDocumentAccessors exercises the small Document getter/setter methods that
+// are otherwise only touched indirectly.
+func TestDocumentAccessors(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitYes)
+	require.Equal(t, "UTF-8", doc.Encoding())
+	require.Equal(t, "UTF-8", doc.RawEncoding())
+	require.Equal(t, "1.0", doc.Version())
+
+	doc.SetEncoding("ISO-8859-1")
+	require.Equal(t, "ISO-8859-1", doc.Encoding())
+	require.Equal(t, "ISO-8859-1", doc.RawEncoding())
+
+	// Document with no encoding synthesizes "utf8" for Encoding but empty for raw.
+	d2 := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	require.Equal(t, "utf8", d2.Encoding())
+	require.Equal(t, "", d2.RawEncoding())
+
+	doc.SetURL("http://example.com/doc.xml")
+	require.Equal(t, "http://example.com/doc.xml", doc.URL())
+
+	doc.SetProperties(helium.DocHTML)
+	require.True(t, doc.HasProperty(helium.DocHTML))
+	require.Equal(t, helium.DocHTML, doc.Properties())
+
+	doc.SetSkipIDs(true)
+	require.True(t, doc.SkipIDs())
+	doc.SetSkipIDs(false)
+	require.False(t, doc.SkipIDs())
+
+	require.Equal(t, helium.DocumentStandaloneType(helium.StandaloneExplicitYes), doc.Standalone())
+
+	// AddSibling/Replace on a document are rejected.
+	require.Error(t, doc.AddSibling(doc.CreateElement("x")))
+	require.Error(t, doc.Replace())
+
+	// SetTreeDoc on a document is a no-op-ish but must not panic.
+	doc.SetTreeDoc(doc)
+}
+func TestNewHTMLDocument(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewHTMLDocument()
+	require.Equal(t, helium.HTMLDocumentNode, doc.Type())
+	require.True(t, doc.HasProperty(helium.DocHTML))
+}
+
+// TestDocumentFree builds a parsed document and then frees its slabs. This must
+// be safe and idempotent.
+func TestDocumentFree(t *testing.T) {
+	t.Parallel()
+	in, err := os.ReadFile("test/att12.xml")
+	require.NoError(t, err)
+	doc, err := helium.NewParser().Parse(t.Context(), in)
+	require.NoError(t, err)
+	doc.Free()
+	doc.Free() // idempotent
 }
