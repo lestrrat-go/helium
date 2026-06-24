@@ -9,6 +9,7 @@ import (
 	"testing/fstest"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -119,7 +120,11 @@ func TestExternalDTDMissingFile(t *testing.T) {
 type trimSlashFS struct{ inner fs.FS }
 
 func (f trimSlashFS) Open(name string) (fs.File, error) {
-	return f.inner.Open(strings.TrimPrefix(name, "/")) //nolint:wrapcheck // test helper
+	// Normalize to forward slashes (the native open name is backslash-separated
+	// on Windows: "C:\\win\\dir\\ext.dtd") and drop the leading slash the POSIX
+	// "/C:/..." form carries, so fstest.MapFS (keyed "C:/win/dir/ext.dtd")
+	// serves it on every OS.
+	return f.inner.Open(strings.TrimPrefix(filepath.ToSlash(name), "/")) //nolint:wrapcheck // test helper
 }
 
 // TestExternalSubsetResolvesAgainstWindowsDriveFileURIBase is the string-shaped
@@ -130,18 +135,18 @@ func (f trimSlashFS) Open(name string) (fs.File, error) {
 // BuildURI) and convert it to a local path before Open, NOT mangle it with
 // filepath.Dir/Join — on Windows that cleared the directory and dropped the DTD.
 // The base is a plain string, so this exercises the Windows branch on every OS.
-// FileURIToPath of "file:///C:/win/dir/ext.dtd" keeps the leading slash on a
-// POSIX host ("/C:/win/dir/ext.dtd"), so the FS is keyed on that.
+// The resolved open name is whatever FileURIToPath yields for the combined
+// "file:///C:/win/dir/ext.dtd": "/C:/win/dir/ext.dtd" on a POSIX host,
+// "C:\\win\\dir\\ext.dtd" on Windows. Derive it the same way so the assertion
+// is correct on both, and let trimSlashFS normalize either form to the MapFS key.
 func TestExternalSubsetResolvesAgainstWindowsDriveFileURIBase(t *testing.T) {
 	t.Parallel()
 
 	const dtd = `<!ELEMENT chapter (#PCDATA)>
 <!ENTITY greet "hello from nested dtd">`
 
-	const openName = "/C:/win/dir/ext.dtd"
-	// The resolved open name is an absolute "/C:/..." path (FileURIToPath of the
-	// drive-rooted file URI on a POSIX host), which is not an fs.ValidPath; trim
-	// the leading slash so fstest.MapFS can serve it.
+	openName, err := iofs.FileURIToPath("file:///C:/win/dir/ext.dtd")
+	require.NoError(t, err)
 	fsys := &recordingFS{inner: trimSlashFS{fstest.MapFS{"C:/win/dir/ext.dtd": {Data: []byte(dtd)}}}}
 
 	xml := `<?xml version="1.0"?>` +
