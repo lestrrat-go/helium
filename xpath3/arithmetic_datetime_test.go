@@ -180,10 +180,9 @@ func TestSchemaDerivedDurationArithmetic(t *testing.T) {
 		Value:    parsed.Value,
 	}
 
-	vars := xpath3.NewVariables()
-	vars.Set("d", xpath3.SingleAtomic(derived))
-
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(vars)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
+		"d": xpath3.SingleAtomic(derived),
+	})
 
 	// PT11S * 0.1 must succeed (no XPTY0004) and yield PT1.1S exactly.
 	seq := evalExprWithEval(t, eval, doc, `$d * 0.1`)
@@ -377,9 +376,9 @@ func TestDurationParseHugeWholeSeconds(t *testing.T) {
 
 	// The exact magnitude round-trips: dividing by PT1S recovers all 400 nines.
 	doc := mustParseXML(t, "<root/>")
-	vars := xpath3.NewVariables()
-	vars.Set("d", xpath3.SingleAtomic(av))
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(vars)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
+		"d": xpath3.SingleAtomic(av),
+	})
 	seq := evalExprWithEval(t, eval, doc, `$d div xs:dayTimeDuration("PT1S")`)
 	require.Equal(t, 1, seq.Len())
 	got, err := xpath3.AtomicToString(seq.Get(0).(xpath3.AtomicValue))
@@ -401,10 +400,9 @@ func TestSchemaDerivedDurationAggregate(t *testing.T) {
 		Value:    parsed.Value,
 	}
 
-	vars := xpath3.NewVariables()
-	vars.Set("d", xpath3.SingleAtomic(derived))
-
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(vars)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
+		"d": xpath3.SingleAtomic(derived),
+	})
 
 	sumSeq := evalExprWithEval(t, eval, doc, `sum(($d, $d))`)
 	require.Equal(t, 1, sumSeq.Len())

@@ -32,11 +32,8 @@ func TestEvaluator(t *testing.T) {
 		expr, err := compiler.Compile("$x")
 		require.NoError(t, err)
 
-		vars := xpath3.NewVariables()
-		vars.Set("x", xpath3.SingleString("test-value"))
-
 		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-			Variables(vars).
+			Variables(map[string]xpath3.Sequence{"x": xpath3.SingleString("test-value")}).
 			Evaluate(t.Context(), expr, doc)
 		require.NoError(t, err)
 
@@ -69,14 +66,8 @@ func TestEvaluator(t *testing.T) {
 
 		base := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
-		vars1 := xpath3.NewVariables()
-		vars1.Set("x", xpath3.SingleString("one"))
-
-		vars2 := xpath3.NewVariables()
-		vars2.Set("x", xpath3.SingleString("two"))
-
-		e1 := base.Variables(vars1)
-		e2 := base.Variables(vars2)
+		e1 := base.Variables(map[string]xpath3.Sequence{"x": xpath3.SingleString("one")})
+		e2 := base.Variables(map[string]xpath3.Sequence{"x": xpath3.SingleString("two")})
 
 		r1, err := e1.Evaluate(t.Context(), expr, doc)
 		require.NoError(t, err)
@@ -110,12 +101,9 @@ func TestEvaluator(t *testing.T) {
 		expr, err := compiler.Compile("$x")
 		require.NoError(t, err)
 
-		vars := xpath3.NewVariables()
-		vars.Set("x", xpath3.SingleString("from-zero"))
-
 		// Fluent methods on a zero-value Evaluator must not panic.
 		var ev xpath3.Evaluator
-		result, err := ev.Variables(vars).Evaluate(t.Context(), expr, doc)
+		result, err := ev.Variables(map[string]xpath3.Sequence{"x": xpath3.SingleString("from-zero")}).Evaluate(t.Context(), expr, doc)
 		require.NoError(t, err)
 
 		s, ok := result.IsString()

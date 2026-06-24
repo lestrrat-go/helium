@@ -29,76 +29,6 @@ func strAtomic(s string) xpath3.AtomicValue {
 	return xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: s}
 }
 
-func TestFunctionLibrary_CRUD(t *testing.T) {
-	lib := xpath3.NewFunctionLibrary()
-
-	var fn xpath3.Function = identityFn{}
-
-	// Get/GetNS on empty library.
-	_, ok := lib.Get("missing")
-	require.False(t, ok)
-	_, ok = lib.GetNS("urn:x", "missing")
-	require.False(t, ok)
-
-	lib.Set("local", fn)
-	got, ok := lib.Get("local")
-	require.True(t, ok)
-	require.NotNil(t, got)
-
-	lib.SetNS("urn:x", "ns", fn)
-	got, ok = lib.GetNS("urn:x", "ns")
-	require.True(t, ok)
-	require.NotNil(t, got)
-	_, ok = lib.GetNS("urn:other", "ns")
-	require.False(t, ok)
-
-	lib.Delete("local")
-	_, ok = lib.Get("local")
-	require.False(t, ok)
-
-	lib.DeleteNS("urn:x", "ns")
-	_, ok = lib.GetNS("urn:x", "ns")
-	require.False(t, ok)
-
-	lib.Set("a", fn)
-	lib.SetNS("urn:x", "b", fn)
-	lib.Clear()
-	_, ok = lib.Get("a")
-	require.False(t, ok)
-	_, ok = lib.GetNS("urn:x", "b")
-	require.False(t, ok)
-}
-
-type identityFn struct{}
-
-func (identityFn) MinArity() int { return 1 }
-func (identityFn) MaxArity() int { return 1 }
-func (identityFn) Call(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-	return args[0], nil
-}
-
-func TestVariables_GetDeleteClear(t *testing.T) {
-	v := xpath3.NewVariables()
-
-	_, ok := v.Get("x")
-	require.False(t, ok)
-
-	v.Set("x", atomicSeq(intAtomic(5)))
-	got, ok := v.Get("x")
-	require.True(t, ok)
-	require.Equal(t, 1, got.Len())
-
-	v.Delete("x")
-	_, ok = v.Get("x")
-	require.False(t, ok)
-
-	v.Set("a", atomicSeq(intAtomic(1)))
-	v.Set("b", atomicSeq(intAtomic(2)))
-	require.Equal(t, 2, v.Len())
-	v.Clear()
-	require.Equal(t, 0, v.Len())
-}
-
 func TestRegex_PublicAPI(t *testing.T) {
 	re, err := xpath3.CompileRegex(`a(b+)c`, "")
 	require.NoError(t, err)
@@ -300,10 +230,7 @@ func TestFnContextNode(t *testing.T) {
 	root := doc.DocumentElement()
 
 	captured := &capturingFn{}
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("capture", captured)
-
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(lib)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(map[string]xpath3.Function{"capture": captured}, nil)
 	compiled, err := xpath3.NewCompiler().Compile(`capture()`)
 	require.NoError(t, err)
 	_, err = eval.Evaluate(t.Context(), compiled, root)

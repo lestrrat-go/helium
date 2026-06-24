@@ -54,14 +54,12 @@ func (s panicOnMaterializeSeq) Materialize() []xpath3.Item {
 	panic("Materialize called: sequence was fully materialized")
 }
 
-// varsSet returns a *xpath3.Variables binding a single name to val. Used to hand
+// varsSet returns a variable map binding a single name to val. Used to hand
 // an oversized input to a built-in via a variable (under EvalBorrowing) so the
 // input itself bypasses construction/range guards and only the function under
 // test's own bound can fire.
-func varsSet(name string, val xpath3.Sequence) *xpath3.Variables {
-	v := xpath3.NewVariables()
-	v.Set(name, val)
-	return v
+func varsSet(name string, val xpath3.Sequence) map[string]xpath3.Sequence {
+	return map[string]xpath3.Sequence{name: val}
 }
 
 // TestHOFMaterializationLimit verifies that higher-order / map / array built-ins
@@ -111,7 +109,7 @@ func TestHOFMaterializationLimit(t *testing.T) {
 	overLimit := []struct {
 		name string
 		expr string
-		vars *xpath3.Variables
+		vars map[string]xpath3.Sequence
 	}{
 		// for-each: 600 inputs, each callback yields 2 items -> 1200 > 1000.
 		{name: "for-each", expr: `for-each(1 to 600, function($x) { ($x, $x) })`},
@@ -227,8 +225,7 @@ func TestHOFLazySequenceLimit(t *testing.T) {
 	// A lazy range far larger than anything that could be materialized in memory.
 	const huge = int64(1) << 40
 
-	vars := xpath3.NewVariables()
-	vars.Set("lazy", xpath3.NewRangeSequence(1, huge))
+	vars := map[string]xpath3.Sequence{"lazy": xpath3.NewRangeSequence(1, huge)}
 
 	// These cases drive a lazy Sequence directly into the per-item callback-result
 	// / accumulator accumulation sites. (Lazy MAP values are covered separately by
@@ -287,8 +284,7 @@ func TestAppendBoundedSeqHonorsOpLimit(t *testing.T) {
 
 	const huge = int64(1) << 40
 
-	vars := xpath3.NewVariables()
-	vars.Set("lazy", xpath3.NewRangeSequence(1, huge))
+	vars := map[string]xpath3.Sequence{"lazy": xpath3.NewRangeSequence(1, huge)}
 
 	cases := []struct {
 		name string
@@ -351,7 +347,7 @@ func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
 	cases := []struct {
 		name string
 		expr string
-		vars *xpath3.Variables
+		vars map[string]xpath3.Sequence
 	}{
 		// array:for-each callback returns one oversized sequence; NewArray would
 		// clone it. The op-charge on the result length must fire first.
@@ -479,7 +475,7 @@ func TestArrayMemberCountBound(t *testing.T) {
 	cases := []struct {
 		name string
 		expr string
-		vars *xpath3.Variables
+		vars map[string]xpath3.Sequence
 	}{
 		// 1100 members, each callback returns () -> 1100 members, 0 items > 1000.
 		{name: tcArrayForEach, expr: `array:for-each($arr, function($x) { () })`, vars: varsSet("arr", wideArray(1100))},
@@ -598,7 +594,7 @@ func TestArrayMemberSeqLenNodeLimit(t *testing.T) {
 	cases := []struct {
 		name string
 		expr string
-		vars *xpath3.Variables
+		vars map[string]xpath3.Sequence
 	}{
 		// array:join over a single 1-member array whose member holds 1100 items.
 		// The member-count check (1 <= 1000) passes; only the item-count bound fires.
@@ -679,7 +675,7 @@ func TestArrayJoinFlatMapEmptyMemberCountBound(t *testing.T) {
 	cases := []struct {
 		name string
 		expr string
-		vars *xpath3.Variables
+		vars map[string]xpath3.Sequence
 	}{
 		// array:join over a single array with 1100 empty members -> 1100 members,
 		// 0 items > 1000. Only the member-count bound can fire.
@@ -726,7 +722,7 @@ func TestArrayJoinFlatMapEmptyMemberOpLimit(t *testing.T) {
 	cases := []struct {
 		name string
 		expr string
-		vars *xpath3.Variables
+		vars map[string]xpath3.Sequence
 	}{
 		{name: tcArrayJoin, expr: `array:join($arr)`, vars: varsSet("arr", emptyMemberArray(wide))},
 		{name: tcArrayFlatMap, expr: `array:flat-map(array { 1 }, function($x) { $arr })`, vars: varsSet("arr", emptyMemberArray(wide))},
@@ -784,7 +780,7 @@ func TestSeqCursorEmptyMemberOpLimit(t *testing.T) {
 	cases := []struct {
 		name string
 		expr string
-		vars *xpath3.Variables
+		vars map[string]xpath3.Sequence
 	}{
 		// array:flatten over an array of `wide` empty members: each member adds zero
 		// items, so only the per-empty cursor op-charge can trip OpLimit.
@@ -952,8 +948,7 @@ func TestMapFindNeverMaterializesValue(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			vars := xpath3.NewVariables()
-			vars.Set("lazy", tc.value)
+			vars := map[string]xpath3.Sequence{"lazy": tc.value}
 
 			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
 			require.NoError(t, err)
@@ -997,8 +992,7 @@ func TestFoldNeverMaterializesInput(t *testing.T) {
 	for _, tc := range cases {
 		t.Run("node-limit/"+tc.name, func(t *testing.T) {
 			t.Parallel()
-			vars := xpath3.NewVariables()
-			vars.Set("huge", panicOnMaterializeSeq{n: inputLen})
+			vars := map[string]xpath3.Sequence{"huge": panicOnMaterializeSeq{n: inputLen}}
 
 			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
 			require.NoError(t, err)
@@ -1017,8 +1011,7 @@ func TestFoldNeverMaterializesInput(t *testing.T) {
 
 		t.Run("op-limit/"+tc.name, func(t *testing.T) {
 			t.Parallel()
-			vars := xpath3.NewVariables()
-			vars.Set("huge", panicOnMaterializeSeq{n: inputLen})
+			vars := map[string]xpath3.Sequence{"huge": panicOnMaterializeSeq{n: inputLen}}
 
 			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
 			require.NoError(t, err)

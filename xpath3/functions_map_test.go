@@ -122,9 +122,9 @@ func TestMapMergeRejectsNonStringBasedDuplicates(t *testing.T) {
 		BaseType: xpath3.TypeInteger,
 	}
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"dup": xpath3.ItemSlice{dup},
-		})).
+		}).
 		Evaluate(t.Context(), compiled, doc)
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError

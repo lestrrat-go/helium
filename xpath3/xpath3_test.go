@@ -152,9 +152,9 @@ func TestPrefixedVariableRequiresDeclaredNamespace(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"p:v": xpath3.SingleInteger(1),
-		})).
+		}).
 		Evaluate(t.Context(), compiled, nil)
 	require.Error(t, err)
 
@@ -1362,9 +1362,9 @@ func TestContextVariables(t *testing.T) {
 	compiled, err := xpath3.NewCompiler().Compile(`count(/library/book[price > $threshold])`)
 	require.NoError(t, err)
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"threshold": xpath3.SingleDouble(30.0),
-		})).
+		}).
 		Evaluate(t.Context(), compiled, doc)
 	require.NoError(t, err)
 	n, ok := result.IsNumber()
@@ -1376,9 +1376,9 @@ func TestWithVariablesCopiesSequences(t *testing.T) {
 	t.Parallel()
 	seq := xpath3.SingleInteger(1)
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"x": seq,
-		}))
+		})
 
 	seq.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)}
 

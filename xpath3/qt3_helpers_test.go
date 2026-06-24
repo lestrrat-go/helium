@@ -263,7 +263,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				for _, param := range tc.Params {
 					paramEval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
 					if len(vars) > 0 {
-						paramEval = paramEval.Variables(xpath3.VariablesFromMap(vars))
+						paramEval = paramEval.Variables(vars)
 					}
 					compiledParam, err := xpath3.NewCompiler().Compile(param.Select)
 					require.NoError(t, err, "compile param $%s: %s", param.Name, param.Select)
@@ -274,7 +274,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			}
 			if len(vars) > 0 {
 				v := vars
-				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.Variables(xpath3.VariablesFromMap(v)) })
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.Variables(v) })
 			}
 			eval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
 			compiled, err := xpath3.NewCompiler().Compile(tc.XPath)
@@ -465,7 +465,7 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 
 	queryEval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
 	if len(vars) > 0 {
-		queryEval = queryEval.Variables(xpath3.VariablesFromMap(vars))
+		queryEval = queryEval.Variables(vars)
 	}
 
 	for _, col := range tc.Collections {

@@ -474,9 +474,9 @@ func evalRawResultXPath(t *testing.T, expr string, rawResult xpath3.Sequence) bo
 	}
 
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: rawResult,
-	}))
+	})
 
 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
 	if err != nil {
@@ -505,9 +505,9 @@ func evalRawXPathBool(expr string, rawResult xpath3.Sequence) bool {
 		return false
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: rawResult,
-	}))
+	})
 	res, err := eval.Evaluate(context.TODO(), compiled, nil)
 	if err != nil {
 		return false
@@ -2047,9 +2047,9 @@ func evalXPathAssertWithDoc(t *testing.T, expr string, doc *helium.Document) boo
 		eval = eval.Namespaces(ns)
 	}
 
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-	}))
+	})
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
 	if err != nil {
@@ -2149,9 +2149,9 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 
 	// Bind $result to the document node so W3C assertions like
 	// deep-equal($result, ...) can reference the transformation output.
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-	}))
+	})
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
 	if err != nil {
@@ -2207,9 +2207,9 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 		eval = eval.Namespaces(ns)
 	}
 
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-	}))
+	})
 
 	if annotations != nil {
 		eval = eval.TypeAnnotations(annotations)
@@ -2230,9 +2230,9 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 			if len(ns) > 0 {
 				evalPlain = evalPlain.Namespaces(ns)
 			}
-			evalPlain = evalPlain.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+			evalPlain = evalPlain.Variables(map[string]xpath3.Sequence{
 				xpathVarResult: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-			}))
+			})
 			res2, err2 := evalPlain.Evaluate(context.TODO(), compiled, doc)
 			if err2 == nil {
 				res = res2
@@ -2324,9 +2324,9 @@ func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, r
 	}
 
 	// Bind $result to the raw XDM sequence (preserves atomic types).
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		xpathVarResult: rawResult,
-	}))
+	})
 
 	res, err := eval.Evaluate(context.TODO(), compiled, doc)
 	if err != nil {

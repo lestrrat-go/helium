@@ -52,9 +52,9 @@ func Example_xpath3_resolver_options() {
 	})
 
 	// Bind the $file variable so the XPath expression can reference it.
-	eval = eval.Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+	eval = eval.Variables(map[string]xpath3.Sequence{
 		"file": xpath3.SingleString("greeting.txt"),
-	}))
+	})
 
 	r, err := eval.Evaluate(context.Background(), compiled, doc)
 	if err != nil {

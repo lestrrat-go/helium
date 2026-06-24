@@ -827,8 +827,8 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 	// and functions in the XSLT namespace.
 	evalFns := ec.xsltEvaluateFunctions()
 	eval := xpath3.NewEvaluator(xpath3.EvalBorrowing).
-		Variables(xpath3.VariablesFromMap(vars)).
-		Functions(xpath3.FunctionLibraryFromMaps(evalFns, ec.xsltEvaluateFunctionsNS()))
+		Variables(vars).
+		Functions(evalFns, ec.xsltEvaluateFunctionsNS())
 
 	if len(nsBindings) > 0 {
 		eval = eval.Namespaces(nsBindings)
