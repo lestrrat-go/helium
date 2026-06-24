@@ -85,6 +85,58 @@ func TestIsAbsolutePath(t *testing.T) {
 	}
 }
 
+// JoinLocalBaseDir must always emit forward slashes, normalizing a Windows
+// (backslash) base or ref so the result is identical on every OS. This is what
+// keeps helium's URI-style resolvers from leaking '\' into their documented
+// forward-slash output on Windows.
+func TestJoinLocalBaseDir(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		baseDir string
+		ref     string
+		want    string
+	}{
+		{"/dir", "a.dtd", "/dir/a.dtd"},
+		{"/dir/", "a.dtd", "/dir/a.dtd"},
+		{`C:\dir`, "child.xml", "C:/dir/child.xml"},
+		{`C:/dir`, `sub\child.xml`, "C:/dir/sub/child.xml"},
+		{"/a/b", "../c/x", "/a/c/x"},
+	}
+	for _, tc := range cases {
+		require.Equalf(t, tc.want, uripath.JoinLocalBaseDir(tc.baseDir, tc.ref),
+			"baseDir=%q ref=%q", tc.baseDir, tc.ref)
+	}
+}
+
+// LocalBaseDir distinguishes a file base (drop the last segment) from a
+// directory base (keep it), always in forward-slash form.
+func TestLocalBaseDir(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"/work/main.xsl", "/work"},
+		{"/work/schemas", "/work/schemas"}, // extensionless last segment = directory
+		{"/work/schemas/", "/work/schemas"},
+		{`C:\work\main.xsl`, "C:/work"},
+		{`C:\work\schemas`, "C:/work/schemas"},
+		{`C:\work\schemas\`, "C:/work/schemas"},
+	}
+	for _, tc := range cases {
+		require.Equalf(t, tc.want, uripath.LocalBaseDir(tc.in), "in=%q", tc.in)
+	}
+}
+
+// SlashDir is path.Dir over a backslash-normalized input, so a Windows path
+// yields a forward-slash parent on any OS.
+func TestSlashDir(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "/a/b", uripath.SlashDir("/a/b/c.xml"))
+	require.Equal(t, "schemas", uripath.SlashDir(`schemas\x.rng`))
+	require.Equal(t, "C:/a", uripath.SlashDir(`C:\a\b.xsl`))
+}
+
 func TestWindowsToFileURI(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

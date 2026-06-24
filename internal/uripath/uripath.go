@@ -10,6 +10,8 @@
 // that the Windows-specific behavior is exercised by the Linux test suite.
 package uripath
 
+import "path"
+
 // IsWindowsDriveLetter reports whether b is an ASCII letter usable as a Windows
 // drive letter ([A-Za-z]).
 func IsWindowsDriveLetter(b byte) bool {
@@ -85,4 +87,60 @@ func ToSlash(s string) string {
 		}
 	}
 	return string(b)
+}
+
+// JoinLocalBaseDir resolves a relative local-filesystem ref against the
+// directory of a local-filesystem base path, returning a FORWARD-SLASH result
+// on every OS. Both inputs are normalized with [ToSlash] first, then joined
+// with path.Join (slash semantics), so the resolution never depends on
+// runtime.GOOS or filepath.Separator. This keeps the documented forward-slash
+// contract of helium's URI-style resolvers on Windows, where filepath.Join
+// would otherwise emit backslashes and corrupt a POSIX-shaped base.
+//
+// The base may be a full file path ("/a/b/style.xsl") or a directory-like path
+// ("/a/b"); the caller is responsible for choosing baseDir accordingly (see the
+// resolvers that pass a directory derived from the base). ref must already be
+// known not to be absolute under either OS convention; an absolute ref should
+// be returned verbatim by the caller before reaching here.
+func JoinLocalBaseDir(baseDir, ref string) string {
+	return path.Join(ToSlash(baseDir), ToSlash(ref))
+}
+
+// LocalBaseDir derives the containing directory of a local-filesystem base
+// path, in FORWARD-SLASH form. If the base already names a directory (it ends
+// in a separator) the trailing separator is trimmed; if the base's last segment
+// carries no '.', the whole base is treated as a directory; otherwise the last
+// segment is dropped (path.Dir). The result is always slash-separated so it is
+// stable across OSes.
+func LocalBaseDir(base string) string {
+	slashed := ToSlash(base)
+	if len(slashed) > 0 && slashed[len(slashed)-1] == '/' {
+		trimmed := slashed
+		for len(trimmed) > 1 && trimmed[len(trimmed)-1] == '/' {
+			trimmed = trimmed[:len(trimmed)-1]
+		}
+		return trimmed
+	}
+	last := path.Base(slashed)
+	if !containsDot(last) {
+		return slashed
+	}
+	return path.Dir(slashed)
+}
+
+// SlashDir returns the directory portion of a forward-slash path, equivalent to
+// path.Dir but provided here so callers that already work in slash space (e.g.
+// keys into an fs.FS) can derive a parent directory without reaching for the
+// OS-dependent filepath.Dir, which would reintroduce backslashes on Windows.
+func SlashDir(p string) string {
+	return path.Dir(ToSlash(p))
+}
+
+func containsDot(s string) bool {
+	for i := range len(s) {
+		if s[i] == '.' {
+			return true
+		}
+	}
+	return false
 }
