@@ -79,6 +79,17 @@ func BuildURI(systemID, base string) string {
 		return systemID
 	}
 
+	// An absolute-URI systemID (one carrying a scheme, e.g. "http://host/p" or
+	// "file:///x") stands on its own too, REGARDLESS of the base's shape. This
+	// must be checked before the Windows-base branch below: when the base is a
+	// native Windows path, that branch would otherwise treat the absolute URI as
+	// a relative path segment and join it onto the base — collapsing "http://"
+	// to "http:/" via path.Join. POSIX behavior is unchanged because the same
+	// absoluteness is detected by url.Parse/IsAbs further down.
+	if uripath.HasURIScheme(systemID) {
+		return systemID
+	}
+
 	// When the base is a native Windows path, resolve the (relative) systemID
 	// against it with local-path semantics, bypassing the URI machinery so the
 	// drive letter is never mistaken for a scheme.

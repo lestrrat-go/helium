@@ -30,6 +30,32 @@ func TestHasWindowsDrivePrefix(t *testing.T) {
 	}
 }
 
+func TestHasURIScheme(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"http://host/p", true},
+		{"https://host/p", true},
+		{"file:///x", true},
+		{"urn:isbn:0", true},
+		{"a+b-c.d:rest", true},
+		{`C:\x`, false},   // single-letter scheme is a Windows drive letter
+		{`C:/x`, false},   // same, with forward slash
+		{`D:`, false},     // bare drive
+		{"a.dtd", false},  // relative reference
+		{"/abs/x", false}, // POSIX absolute path, no scheme
+		{`\\srv\s`, false},
+		{"", false},
+		{"http", false}, // no colon
+		{":nohead", false},
+	}
+	for _, tc := range cases {
+		require.Equalf(t, tc.want, uripath.HasURIScheme(tc.in), "in=%q", tc.in)
+	}
+}
+
 func TestIsWindowsAbsolute(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

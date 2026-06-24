@@ -36,6 +36,36 @@ func HasWindowsDrivePrefix(s string) bool {
 	return s[2] == '/' || s[2] == '\\'
 }
 
+// HasURIScheme reports whether s begins with an absolute-URI scheme followed by
+// a colon, e.g. "http://host/p", "file:///x", "urn:isbn:0". The scheme syntax
+// is RFC 3986's ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ), but a SINGLE-letter
+// scheme is deliberately NOT recognized so that a Windows drive-letter prefix
+// ("C:\\x", "D:/x") is never mistaken for a URI scheme. Callers that need to
+// treat a drive letter as a path must gate on HasWindowsDrivePrefix first; this
+// helper exists so an absolute URI can be distinguished from a relative
+// reference independent of runtime.GOOS.
+func HasURIScheme(s string) bool {
+	if len(s) < 2 || !IsWindowsDriveLetter(s[0]) {
+		return false
+	}
+	i := 1
+	for i < len(s) {
+		c := s[i]
+		switch {
+		case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.':
+			i++
+		case c == ':':
+			// A single-character scheme ("C:") is a Windows drive letter, not a
+			// URI scheme. Require at least two scheme characters.
+			return i >= 2
+		default:
+			return false
+		}
+	}
+	return false
+}
+
 // IsWindowsAbsolute reports whether s is a Windows-style absolute path: a
 // drive-letter path ("C:\\x", "C:/x", "C:") or a UNC / rooted path beginning
 // with a backslash ("\\\\server\\share", "\\x").

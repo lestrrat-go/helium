@@ -31,6 +31,13 @@ func TestBuildURI(t *testing.T) {
 		{"windows-absolute system id returned verbatim", `C:\abs\a.dtd`, `D:\dir\doc.xml`, `C:\abs\a.dtd`},
 		{"interior dot-dot against windows base", "../sib/child.xml", `C:\a\b\main.xml`, "C:/a/sib/child.xml"},
 		{"unc base resolves relative ref", "child.xml", `\\host\share\main.xml`, "//host/share/child.xml"},
+		// An absolute-URI systemID stands on its own even when the base is a
+		// native Windows path. Without the scheme check this collapsed "http://"
+		// to "http:/" and joined it onto the drive-letter base (Windows-only
+		// regression that broke the W3C resolve-uri/base-uri cluster).
+		{"absolute http system id against windows drive base", "http://example.com/a/b", `D:\dir\doc.xsl`, "http://example.com/a/b"},
+		{"absolute http system id against windows slash base", "http://example.com/a/b", "D:/dir/doc.xsl", "http://example.com/a/b"},
+		{"absolute file system id against windows base", "file:///x/y", `C:\dir\doc.xsl`, "file:///x/y"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
