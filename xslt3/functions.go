@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -715,8 +716,15 @@ func (ec *execContext) resolveDocumentURI(uri string, baseDir string) string {
 	if idx := strings.IndexByte(cleanURI, '#'); idx >= 0 {
 		cleanURI = cleanURI[:idx]
 	}
-	// Convert file:// URIs to local paths.
+	// Convert file:// URIs to local paths. Use iofs.FileURIToPath so a Windows
+	// drive-letter URI ("file:///D:/a/b") yields a native path ("D:\\a\\b" on
+	// Windows) rather than a spurious leading-slash path ("/D:/a/b"). The helper
+	// is GOOS-parameterized, so POSIX behavior ("file:///a/b" -> "/a/b") is
+	// unchanged. On any parse failure, fall back to the original strip.
 	if strings.HasPrefix(cleanURI, "file:///") {
+		if p, err := iofs.FileURIToPath(cleanURI); err == nil {
+			return p
+		}
 		return cleanURI[len("file://"):]
 	}
 	// Decide absoluteness with xsd.URIScheme (RFC 3986), not a "://" substring

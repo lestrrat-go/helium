@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -625,13 +626,20 @@ func (ec *execContext) evaluateBodySeparateText(ctx context.Context, body []inst
 
 // ensureFileURI converts an absolute file system path to a file:// URI.
 // Paths that already contain a scheme (e.g. "http://", "file://") are
-// returned unchanged.
+// returned unchanged. Both POSIX-absolute ("/a/b" -> "file:///a/b") and
+// Windows-absolute ("D:\\a\\b" -> "file:///D:/a/b", "\\\\host\\share" ->
+// "file://host/share") paths are normalized so a later url.Parse does not read
+// a Windows drive letter as a URI scheme. The Windows shapes are detected by
+// string pattern (uripath), so this conversion is exercised on Linux CI too.
 func ensureFileURI(path string) string {
 	if path == "" {
 		return path
 	}
 	if strings.Contains(path, "://") {
 		return path
+	}
+	if uripath.IsWindowsAbsolute(path) {
+		return uripath.WindowsToFileURI(path)
 	}
 	if strings.HasPrefix(path, "/") {
 		return "file://" + path

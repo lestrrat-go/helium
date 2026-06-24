@@ -40,6 +40,32 @@ func TestResolveAgainstBaseURIAbsolute(t *testing.T) {
 	}
 }
 
+// TestEnsureFileURI verifies that ensureFileURI normalizes both POSIX- and
+// Windows-absolute filesystem paths into "file:" URIs (so a later url.Parse
+// never reads a Windows drive letter as a URI scheme), and leaves paths that
+// already carry a scheme untouched. The Windows shapes are plain strings, so
+// the Windows behavior is exercised on Linux CI.
+func TestEnsureFileURI(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"posix absolute", "/a/b/main.xsl", "file:///a/b/main.xsl"},
+		{"windows drive backslash", `D:\a\helium\main.xsl`, "file:///D:/a/helium/main.xsl"},
+		{"windows drive forward slash", `C:/styles/main.xsl`, "file:///C:/styles/main.xsl"},
+		{"windows unc", `\\host\share\main.xsl`, "file://host/share/main.xsl"},
+		{"already file uri", "file:///a/b.xsl", "file:///a/b.xsl"},
+		{"already http uri", "http://example.com/a.xsl", "http://example.com/a.xsl"},
+		{"relative left alone", "child.xsl", "child.xsl"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, ensureFileURI(tc.in))
+		})
+	}
+}
+
 // TestLoadParameterDocumentURIAbsolute verifies that the serialization
 // parameter-document loader hands an absolute-URI href (scheme, no "://")
 // to its loader unchanged rather than filepath.Join'ing it onto the base.
