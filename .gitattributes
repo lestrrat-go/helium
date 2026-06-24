@@ -1,2 +1,24 @@
-# Preserve exact bytes in QT3 fixtures (BOM, CR/LF/NEL/LS, encodings).
+# Golden / expected-output fixtures are compared byte-for-byte against
+# library output. Some legitimately contain embedded CR (\r) bytes as part of
+# the captured data (e.g. SAX entity-content events), so we must preserve the
+# committed bytes EXACTLY rather than normalize line endings. "-text" disables
+# all EOL conversion, so a Windows checkout (autocrlf=true) cannot rewrite a
+# golden's LF terminators to CRLF and break the comparison, and cannot mangle
+# the intentional embedded CRs either.
+*.expected -text
+*.golden   -text
+*.sax2     -text
+*.sax      -text
+*.dump     -text
+*.lint     -text
+
+# Result-directory goldens for the validation suites (relaxng / xsd /
+# schematron use "*.err" under result/; c14n uses extension-less files under
+# result/). Pin the whole result/ subtree byte-for-byte.
+testdata/libxml2-compat/**/result/** -text
+
+# Preserve exact bytes in the W3C conformance fixture trees (BOM, CR/LF/NEL/LS,
+# encodings, and .out goldens with embedded CR). The harnesses normalize line
+# endings themselves, so these must be checked out verbatim on every platform.
 testdata/qt3ts/testdata/** -text
+testdata/xslt30/testdata/** -text
