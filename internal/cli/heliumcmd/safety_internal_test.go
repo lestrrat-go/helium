@@ -2,6 +2,7 @@ package heliumcmd
 
 import (
 	"math"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -20,25 +21,29 @@ func TestLocalFilePath(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "sub/mod.xsl", got)
 	})
+	// A "file:" URI is decoded into a NATIVE local path, so the expected value
+	// is wrapped in filepath.FromSlash (POSIX "/tmp/mod.xsl", Windows
+	// "\\tmp\\mod.xsl"). The plain-path subtests above pass the string through
+	// unchanged, so they are not wrapped.
 	t.Run("file URI empty host", func(t *testing.T) {
 		got, err := localFilePath("file:///tmp/mod.xsl")
 		require.NoError(t, err)
-		require.Equal(t, "/tmp/mod.xsl", got)
+		require.Equal(t, filepath.FromSlash("/tmp/mod.xsl"), got)
 	})
 	t.Run("file URI localhost host", func(t *testing.T) {
 		got, err := localFilePath("file://localhost/tmp/mod.xsl")
 		require.NoError(t, err)
-		require.Equal(t, "/tmp/mod.xsl", got)
+		require.Equal(t, filepath.FromSlash("/tmp/mod.xsl"), got)
 	})
 	t.Run("file URI uppercase localhost host", func(t *testing.T) {
 		got, err := localFilePath("file://LOCALHOST/tmp/mod.xsl")
 		require.NoError(t, err)
-		require.Equal(t, "/tmp/mod.xsl", got)
+		require.Equal(t, filepath.FromSlash("/tmp/mod.xsl"), got)
 	})
 	t.Run("file URI percent-decoded", func(t *testing.T) {
 		got, err := localFilePath("file:///tmp/a%20b/mod.xsl")
 		require.NoError(t, err)
-		require.Equal(t, "/tmp/a b/mod.xsl", got)
+		require.Equal(t, filepath.FromSlash("/tmp/a b/mod.xsl"), got)
 	})
 	t.Run("remote host rejected", func(t *testing.T) {
 		_, err := localFilePath("file://example.com/mod.xsl")
