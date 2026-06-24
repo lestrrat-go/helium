@@ -39,6 +39,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        # The race detector is OS-agnostic for the data races it finds, but it
+        # multiplies test runtime; on the slower Windows/macOS runners the heavy
+        # W3C suites (xslt3/xpath3) intermittently blow the 20m timeout under
+        # -race. Run -race on Linux only; the other OSes run the same tests
+        # without it (kept purely for cross-platform behavior coverage).
+        include:
+          - os: ubuntu-latest
+            race: "-race"
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
@@ -53,7 +61,7 @@ jobs:
         run: go mod download
 
       - name: Run tests
-        run: go test -race -timeout 20m ./...
+        run: go test ${{ matrix.race }} -timeout 20m ./...
 
   verify:
     needs: lint
