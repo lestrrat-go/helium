@@ -32,7 +32,9 @@ push → (none)
 internal/heliumtest → (none)
 internal/sequence → (none)
 internal/strcursor → (none)
-internal/unparsedtext → internal/xmlchar
+internal/unparsedtext → internal/xmlchar, internal/uripath
+internal/catalog → internal/uripath
+internal/uripath → (none)
 internal/xsdregex → (none)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, internal/lexicon, internal/xmlchar
@@ -41,7 +43,7 @@ test           → helium
 ```
 
 ## Leaf packages (no helium deps)
-sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/catalog, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/unparsedtext, internal/xsdregex
+sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/xsdregex, internal/uripath
 
 ## Core layer
 helium (root) → sax, enum, internal/*

@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/uripath"
 )
 
 // ResolveURI resolves value against base. If value already has a scheme, or
@@ -56,7 +58,10 @@ func ResolveURI(base, value string) (string, error) {
 
 	// Non-URI local-path base: apply OS-path semantics. An absolute value is
 	// returned unchanged; a relative one is joined against the base directory.
-	if filepath.IsAbs(value) {
+	// uripath.IsAbsolutePath recognizes both POSIX- and Windows-absolute shapes
+	// regardless of the host OS, so a "/abs/x" reference is not mis-joined
+	// against the base dir on Windows (where filepath.IsAbs("/abs/x") is false).
+	if uripath.IsAbsolutePath(value) || filepath.IsAbs(value) {
 		return value, nil
 	}
 
@@ -64,7 +69,14 @@ func ResolveURI(base, value string) (string, error) {
 }
 
 // HasScheme checks if s looks like a URI with a scheme (e.g., "http://...").
+// A single-letter "scheme" that is actually a Windows drive-letter prefix
+// (e.g. "C:\\path" or "D:/path") is NOT treated as a URI scheme, so a native
+// catalog base path is resolved with OS-path semantics rather than leaking the
+// drive letter into URI space.
 func HasScheme(s string) bool {
+	if uripath.HasWindowsDrivePrefix(s) {
+		return false
+	}
 	colon := strings.IndexByte(s, ':')
 	if colon < 1 {
 		return false
