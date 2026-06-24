@@ -716,13 +716,17 @@ func (ec *execContext) resolveDocumentURI(uri string, baseDir string) string {
 		cleanURI = cleanURI[:idx]
 	}
 	// Convert file:// URIs to local paths. Use iofs.FileURIToPath so a Windows
-	// drive-letter URI ("file:///D:/a/b") yields a native path ("D:\\a\\b" on
-	// Windows) rather than a spurious leading-slash path ("/D:/a/b"). The helper
-	// is GOOS-parameterized, so POSIX behavior ("file:///a/b" -> "/a/b") is
-	// unchanged. On any parse failure, fall back to the original strip.
+	// drive-letter URI ("file:///D:/a/b") yields a drive path ("D:\\a\\b" on
+	// Windows) rather than a spurious leading-slash path ("/D:/a/b"). The result
+	// is then normalized with uripath.ToSlash so a non-drive POSIX-shaped URI
+	// ("file:///abs/x.xml") resolves to a forward-slash path ("/abs/x.xml") on
+	// EVERY OS — FileURIToPath would otherwise emit "\\abs\\x.xml" on Windows.
+	// The forward-slash form is what every other helium resolver consumes (Win32
+	// accepts '/'); POSIX behavior is unchanged. On parse failure, fall back to
+	// the original strip.
 	if strings.HasPrefix(cleanURI, "file:///") {
 		if p, err := iofs.FileURIToPath(cleanURI); err == nil {
-			return p
+			return uripath.ToSlash(p)
 		}
 		return cleanURI[len("file://"):]
 	}

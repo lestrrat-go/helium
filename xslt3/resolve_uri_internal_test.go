@@ -150,6 +150,11 @@ func TestResolveDocumentURIAbsolute(t *testing.T) {
 		// Both local: historical filepath behavior preserved.
 		{"local relative", testChildXML, testDocsDir, "/docs/child.xml"},
 		{"local absolute", "/abs.xml", testDocsDir, "/abs.xml"},
+		// A POSIX-shaped file: URI resolves to a forward-slash path on every OS;
+		// the ToSlash normalization on the FileURIToPath result is what stops
+		// Windows from emitting "\abs\x.xml" here. (A drive-letter file: URI is
+		// GOOS-dependent via FileURIToPath, so it is not asserted in this
+		// cross-OS table.)
 		{"file triple slash", "file:///abs/x.xml", testDocsDir, "/abs/x.xml"},
 		// Windows-shaped local base resolves with forward-slash output on any OS
 		// (a plain string here, so the Windows behavior is exercised on Linux).
