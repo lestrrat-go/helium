@@ -64,7 +64,7 @@ func IsAbsolutePath(s string) bool {
 // path ("\\\\server\\share" -> "file://server/share"). s MUST be a Windows
 // absolute path (see IsWindowsAbsolute); callers gate on that first.
 func WindowsToFileURI(s string) string {
-	slashed := toSlash(s)
+	slashed := ToSlash(s)
 	if HasWindowsDrivePrefix(s) {
 		return "file:///" + slashed
 	}
@@ -73,10 +73,11 @@ func WindowsToFileURI(s string) string {
 	return "file:" + slashed
 }
 
-// toSlash replaces every backslash with a forward slash. It is the
-// OS-independent equivalent of filepath.ToSlash on Windows, applied
-// unconditionally so the conversion is testable on POSIX.
-func toSlash(s string) string {
+// ToSlash replaces every backslash with a forward slash. Unlike
+// filepath.ToSlash, the replacement is unconditional (not gated on
+// runtime.GOOS), so a Windows path is normalized — and the normalization is
+// testable — on POSIX as well.
+func ToSlash(s string) string {
 	b := []byte(s)
 	for i := range b {
 		if b[i] == '\\' {

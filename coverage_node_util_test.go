@@ -22,6 +22,15 @@ func TestBuildURI(t *testing.T) {
 		{"relative against http base", "a.dtd", "http://host/dir/doc.xml", "http://host/dir/a.dtd"},
 		{"relative against file path", "a.dtd", "/dir/doc.xml", "/dir/a.dtd"},
 		{"absolute local path", "/abs/a.dtd", "/dir/doc.xml", "/abs/a.dtd"},
+		// Windows shapes are plain strings, so the Windows behavior below is
+		// exercised on any GOOS. A native Windows base must NOT route the drive
+		// letter through url.Parse (which would emit "c:///a.dtd"); it resolves
+		// with local-path (forward-slash) semantics.
+		{"relative against windows backslash base", "child.xml", `C:\dir\main.xml`, "C:/dir/child.xml"},
+		{"relative against windows forward-slash base", "a.dtd", "D:/dir/doc.xml", "D:/dir/a.dtd"},
+		{"windows-absolute system id returned verbatim", `C:\abs\a.dtd`, `D:\dir\doc.xml`, `C:\abs\a.dtd`},
+		{"interior dot-dot against windows base", "../sib/child.xml", `C:\a\b\main.xml`, "C:/a/sib/child.xml"},
+		{"unc base resolves relative ref", "child.xml", `\\host\share\main.xml`, "//host/share/child.xml"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

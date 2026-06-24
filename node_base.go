@@ -2,11 +2,13 @@ package helium
 
 import (
 	"net/url"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 )
 
 // NodeGetBase returns the effective base URI for a node by walking ancestors
@@ -64,7 +66,26 @@ func SetNodeBaseURI(n Node, uri string) {
 // BuildURI resolves a relative system ID against a base URI.
 // For local file paths (no scheme or file: scheme), it uses filepath.Join.
 // For other schemes, it uses url.ResolveReference.
+//
+// Native Windows paths (a drive-letter prefix such as "C:\\dir\\doc.xml" or a
+// backslash/UNC path) are recognized and resolved with local-path semantics
+// rather than being handed to url.Parse, which would otherwise read the drive
+// letter "C" as a URI scheme and emit garbage like "c:///child.xml". POSIX
+// behavior is unchanged: only inputs whose string shape is Windows-native take
+// the native branch, so the shape is recognized — and tested — on any GOOS.
 func BuildURI(systemID, base string) string {
+	// An absolute systemID under either OS convention stands on its own.
+	if uripath.IsWindowsAbsolute(systemID) {
+		return systemID
+	}
+
+	// When the base is a native Windows path, resolve the (relative) systemID
+	// against it with local-path semantics, bypassing the URI machinery so the
+	// drive letter is never mistaken for a scheme.
+	if uripath.IsWindowsAbsolute(base) {
+		return buildLocalPathURI(systemID, base)
+	}
+
 	u, err := url.Parse(systemID)
 	if err != nil {
 		return ""
@@ -82,7 +103,7 @@ func BuildURI(systemID, base string) string {
 		return baseURL.ResolveReference(u).String()
 	}
 
-	if filepath.IsAbs(systemID) {
+	if filepath.IsAbs(systemID) || uripath.IsPOSIXAbsolute(systemID) {
 		return systemID
 	}
 	basePath := baseURL.Path
@@ -95,6 +116,38 @@ func BuildURI(systemID, base string) string {
 	}
 	result := filepath.Join(dir, systemID)
 	if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
+		result += "/"
+	}
+	return result
+}
+
+// buildLocalPathURI resolves a relative systemID against a native Windows base
+// path. It works entirely in forward-slash space (so it is deterministic and
+// testable on any GOOS): it normalizes both inputs with uripath.ToSlash (an
+// unconditional backslash→slash conversion, unlike filepath.ToSlash which is a
+// no-op on POSIX), strips the base's last path segment, and joins with path.Join
+// (slash semantics). The forward-slash result is a valid path on Windows (the
+// Win32 file APIs accept "/") and avoids the drive-letter-as-scheme corruption
+// that url.Parse would produce. systemID is already known not to be
+// Windows-absolute.
+func buildLocalPathURI(systemID, base string) string {
+	slashBase := uripath.ToSlash(base)
+	slashRef := uripath.ToSlash(systemID)
+
+	dir := slashBase
+	if idx := strings.LastIndexByte(slashBase, '/'); idx >= 0 {
+		// Keep everything up to (not including) the last slash. For a
+		// drive-only base like "C:" with no slash, dir stays the whole base.
+		dir = slashBase[:idx]
+	}
+
+	result := path.Join(dir, slashRef)
+	// path.Join cleans the result, which collapses a leading "//" (UNC) to a
+	// single "/". Restore the UNC double-slash when the base was a UNC path.
+	if strings.HasPrefix(slashBase, "//") && !strings.HasPrefix(result, "//") {
+		result = "/" + result
+	}
+	if strings.HasSuffix(slashRef, "/") && !strings.HasSuffix(result, "/") {
 		result += "/"
 	}
 	return result
