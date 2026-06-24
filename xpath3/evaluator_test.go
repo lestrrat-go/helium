@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -147,4 +148,91 @@ func TestDocEmptyArgFragmentBaseURI(t *testing.T) {
 	var xerr *xpath3.XPathError
 	require.ErrorAs(t, err, &xerr)
 	require.Equal(t, "FODC0005", xerr.Code)
+}
+
+func TestEvaluatorBuilders(t *testing.T) {
+	doc := mustParseXML(t, "<root><a/><b/></root>")
+	root := doc.DocumentElement()
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Position(2).
+		Size(5).
+		PreservedIDAnnotations(map[helium.Node]string{}).
+		AllowXML11Chars()
+
+	compiled, err := xpath3.NewCompiler().Compile(`position()`)
+	require.NoError(t, err)
+	res, err := eval.Evaluate(t.Context(), compiled, root)
+	require.NoError(t, err)
+	n, ok := res.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(2), n)
+
+	compiledLast, err := xpath3.NewCompiler().Compile(`last()`)
+	require.NoError(t, err)
+	res, err = eval.Evaluate(t.Context(), compiledLast, root)
+	require.NoError(t, err)
+	n, ok = res.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(5), n)
+}
+
+func TestVariableAndFunctionResolver(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		VariableResolver(varResolver{}).
+		FunctionResolver(funcResolver{})
+
+	compiled, err := xpath3.NewCompiler().Compile(`$dynamic`)
+	require.NoError(t, err)
+	res, err := eval.Evaluate(t.Context(), compiled, doc)
+	require.NoError(t, err)
+	n, ok := res.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(99), n)
+}
+
+type varResolver struct{}
+
+func (varResolver) ResolveVariable(_ context.Context, name string) (xpath3.Sequence, bool, error) {
+	if name == "dynamic" {
+		return atomicSeq(intAtomic(99)), true, nil
+	}
+	return nil, false, nil
+}
+
+type funcResolver struct{}
+
+func (funcResolver) ResolveFunction(_ context.Context, _, _ string, _ int) (xpath3.Function, bool, error) {
+	return nil, false, nil
+}
+
+func TestFnContextNode(t *testing.T) {
+	doc := mustParseXML(t, "<root><child/></root>")
+	root := doc.DocumentElement()
+
+	captured := &capturingFn{}
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(map[string]xpath3.Function{"capture": captured}, nil)
+	compiled, err := xpath3.NewCompiler().Compile(`capture()`)
+	require.NoError(t, err)
+	_, err = eval.Evaluate(t.Context(), compiled, root)
+	require.NoError(t, err)
+	require.NotNil(t, captured.node)
+	require.Equal(t, root, captured.node)
+	// Direct (non-dynamic) call: IsDynamicCall is false.
+	require.False(t, captured.dynamic)
+}
+
+type capturingFn struct {
+	node    helium.Node
+	dynamic bool
+}
+
+func (*capturingFn) MinArity() int { return 0 }
+func (*capturingFn) MaxArity() int { return 0 }
+func (c *capturingFn) Call(ctx context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+	c.node = xpath3.FnContextNode(ctx)
+	c.dynamic = xpath3.IsDynamicCall(ctx)
+	return atomicSeq(intAtomic(1)), nil
 }

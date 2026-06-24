@@ -637,3 +637,82 @@ func TestDeclaredPrefixResolvesOnEvaluate(t *testing.T) {
 		require.NotContains(t, err.Error(), "undeclared namespace prefix")
 	}
 }
+
+// General comparisons against a range expression (1 to N) take an optimized
+// path through compareSingletonAgainstRange / compareRangeBounds /
+// compareRangeBoundsInt64 across all six comparison operators and both operand
+// orders.
+func TestGeneralComparison_AgainstRange(t *testing.T) {
+	cases := []struct {
+		expr   string
+		expect bool
+	}{
+		// singleton (op) range
+		{`5 = (1 to 10)`, true},
+		{`50 = (1 to 10)`, false},
+		{`5 != (1 to 10)`, true},
+		{`0 < (1 to 10)`, true},
+		{`11 < (1 to 10)`, false},
+		{`1 <= (1 to 10)`, true},
+		{`11 > (1 to 10)`, true},
+		{`0 > (1 to 10)`, false},
+		{`10 >= (1 to 10)`, true},
+		// range (op) singleton (rangeOnLeft)
+		{`(1 to 10) = 5`, true},
+		{`(1 to 10) < 11`, true},
+		{`(1 to 10) <= 10`, true},
+		{`(1 to 10) > 0`, true},
+		{`(1 to 10) >= 1`, true},
+		{`(1 to 10) != 5`, true},
+		// large bounds exceeding int64 fast path force the big.Int comparator.
+		{`5 = (1 to 100000000000000000000)`, true},
+		{`0 = (1 to 100000000000000000000)`, false},
+	}
+	for _, tc := range cases {
+		r, err := evaluate(t.Context(), nil, tc.expr)
+		require.NoError(t, err, tc.expr)
+		b, ok := r.IsBoolean()
+		require.True(t, ok, tc.expr)
+		require.Equal(t, tc.expect, b, tc.expr)
+	}
+}
+
+// try/catch exercises parseCatchCode (parse-time) and catchCodeMatches
+// (eval-time) across the catch-code forms: "*", "err:LOCAL", "Q{uri}local",
+// "Q{uri}*", "*:LOCAL", and "err:*".
+func TestTryCatch_CodeForms(t *testing.T) {
+	const errNS = "http://www.w3.org/2005/xqt-errors"
+
+	cases := []struct {
+		expr   string
+		expect string
+	}{
+		// wildcard catch.
+		{`try { 1 div 0 } catch * { "caught" }`, "caught"},
+		// specific error code via err: prefix.
+		{`try { xs:integer("x") } catch err:FORG0001 { "forg" }`, "forg"},
+		// err:* wildcard.
+		{`try { xs:integer("x") } catch err:* { "anyerr" }`, "anyerr"},
+		// Q{uri}local form.
+		{`try { xs:integer("x") } catch Q{` + errNS + `}FORG0001 { "q" }`, "q"},
+		// Q{uri}* form.
+		{`try { xs:integer("x") } catch Q{` + errNS + `}* { "qstar" }`, "qstar"},
+		// *:LOCAL form.
+		{`try { xs:integer("x") } catch *:FORG0001 { "star" }`, "star"},
+		// successful body returns its value (no catch).
+		{`try { 1 + 1 } catch * { "x" }`, "2"},
+		// error variable access inside catch.
+		{`try { xs:integer("x") } catch * { $err:code }`, "err:FORG0001"},
+	}
+	for _, tc := range cases {
+		r, err := evaluate(t.Context(), nil, tc.expr)
+		require.NoError(t, err, tc.expr)
+		require.Equal(t, tc.expect, r.StringValue(), tc.expr)
+	}
+
+	// Non-matching catch code re-raises the original error.
+	_, err := evaluate(t.Context(), nil, `try { xs:integer("x") } catch err:XPDY0002 { "nope" }`)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+}

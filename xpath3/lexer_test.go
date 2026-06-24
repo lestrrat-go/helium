@@ -370,3 +370,9 @@ func TestLexerErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestPrettyTokens(t *testing.T) {
+	l, err := xpath3.NewLexerForTesting(`1 + 2`)
+	require.NoError(t, err)
+	require.NotEmpty(t, l.PrettyTokens())
+}
