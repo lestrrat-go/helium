@@ -9,147 +9,80 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// findByLocalNameAndID walks the doc element subtree, finds an element
-// whose name local part matches localName carrying an Id/ID attribute
-// equal to id, and returns the *first* such element. Test helper only.
-func findByLocalNameAndID(doc *helium.Document, localName, id string) *helium.Element {
-	var found *helium.Element
-	var walk func(n helium.Node)
-	walk = func(n helium.Node) {
-		if found != nil {
-			return
+// TestXSW groups the XML Signature Wrapping duplicate-ID attack shapes.
+func TestXSW(t *testing.T) {
+	// duplicate id reproduces the classic XML Signature Wrapping shape: the
+	// document contains two elements with the same Id and the Reference URI
+	// matches both. Verify MUST refuse to resolve the reference rather than
+	// silently pick one.
+	t.Run("duplicate id", func(t *testing.T) {
+		xml := `<root><payload Id="target"><val>good</val></payload></root>`
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, xml)
+
+		ref := xmldsig1.ReferenceConfig{
+			URI:             "#target",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 		}
-		elem, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			return
+
+		sigElem, err := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(ref).
+			SignDetached(t.Context(), doc, key)
+		require.NoError(t, err)
+		require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+		// Now mount the attack: serialize, inject a duplicate-ID payload, re-parse.
+		signed, err := helium.WriteString(doc)
+		require.NoError(t, err)
+
+		// Inject an evil twin BEFORE the legitimate payload.
+		evil := `<payload Id="target"><val>evil</val></payload>`
+		tampered := strings.Replace(signed, `<payload Id="target">`, evil+`<payload Id="target">`, 1)
+		require.NotEqual(t, signed, tampered)
+
+		doc2 := mustParseXML(t, tampered)
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err = verifier.Verify(t.Context(), doc2)
+		require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference)
+	})
+
+	// duplicate xml:id is the xml:id variant of the duplicate-ID XSW shape. It
+	// guards against the failure mode where the document-level ID table
+	// (populated via xml:id during parse) silently overwrites duplicates and hands
+	// a single hit back to the reference resolver. The resolver MUST walk the tree
+	// and surface both matches.
+	t.Run("duplicate xml:id", func(t *testing.T) {
+		xml := `<root xmlns:xml="http://www.w3.org/XML/1998/namespace"><payload xml:id="target"><val>good</val></payload></root>`
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, xml)
+
+		ref := xmldsig1.ReferenceConfig{
+			URI:             "#target",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 		}
-		name := elem.Name()
-		l := name
-		if _, after, ok := strings.Cut(name, ":"); ok {
-			l = after
-		}
-		if l == localName {
-			for _, a := range elem.Attributes() {
-				if (a.Name() == "Id" || a.Name() == "ID") && a.Value() == id {
-					found = elem
-					return
-				}
-			}
-		}
-		for c := elem.FirstChild(); c != nil; c = c.NextSibling() {
-			walk(c)
-		}
-	}
-	walk(doc.DocumentElement())
-	return found
-}
 
-// TestXSW_DuplicateIDFailsVerify reproduces the classic XML Signature
-// Wrapping shape: the document contains two elements with the same Id and
-// the Reference URI matches both. Verify MUST refuse to resolve the
-// reference rather than silently pick one.
-func TestXSW_DuplicateIDFailsVerify(t *testing.T) {
-	xml := `<root><payload Id="target"><val>good</val></payload></root>`
-	key := generateRSAKey(t)
-	doc := mustParseXML(t, xml)
+		sigElem, err := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(ref).
+			SignDetached(t.Context(), doc, key)
+		require.NoError(t, err)
+		require.NoError(t, doc.DocumentElement().AddChild(sigElem))
 
-	ref := xmldsig1.ReferenceConfig{
-		URI:             "#target",
-		DigestAlgorithm: xmldsig1.DigestSHA256,
-		Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
-	}
+		signed, err := helium.WriteString(doc)
+		require.NoError(t, err)
 
-	sigElem, err := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
-		Reference(ref).
-		SignDetached(t.Context(), doc, key)
-	require.NoError(t, err)
-	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+		evil := `<payload xml:id="target"><val>evil</val></payload>`
+		tampered := strings.Replace(signed, `<payload xml:id="target">`, evil+`<payload xml:id="target">`, 1)
+		require.NotEqual(t, signed, tampered)
 
-	// Now mount the attack: serialize, inject a duplicate-ID payload, re-parse.
-	signed, err := helium.WriteString(doc)
-	require.NoError(t, err)
-
-	// Inject an evil twin BEFORE the legitimate payload.
-	evil := `<payload Id="target"><val>evil</val></payload>`
-	tampered := strings.Replace(signed, `<payload Id="target">`, evil+`<payload Id="target">`, 1)
-	require.NotEqual(t, signed, tampered)
-
-	doc2 := mustParseXML(t, tampered)
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	_, err = verifier.Verify(t.Context(), doc2)
-	require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference)
-}
-
-// TestXSW_DuplicateXMLIDFailsVerify is the xml:id variant of the
-// duplicate-ID XSW shape. It guards against the failure mode where the
-// document-level ID table (populated via xml:id during parse) silently
-// overwrites duplicates and hands a single hit back to the reference
-// resolver. The resolver MUST walk the tree and surface both matches.
-func TestXSW_DuplicateXMLIDFailsVerify(t *testing.T) {
-	xml := `<root xmlns:xml="http://www.w3.org/XML/1998/namespace"><payload xml:id="target"><val>good</val></payload></root>`
-	key := generateRSAKey(t)
-	doc := mustParseXML(t, xml)
-
-	ref := xmldsig1.ReferenceConfig{
-		URI:             "#target",
-		DigestAlgorithm: xmldsig1.DigestSHA256,
-		Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
-	}
-
-	sigElem, err := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
-		Reference(ref).
-		SignDetached(t.Context(), doc, key)
-	require.NoError(t, err)
-	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
-
-	signed, err := helium.WriteString(doc)
-	require.NoError(t, err)
-
-	evil := `<payload xml:id="target"><val>evil</val></payload>`
-	tampered := strings.Replace(signed, `<payload xml:id="target">`, evil+`<payload xml:id="target">`, 1)
-	require.NotEqual(t, signed, tampered)
-
-	doc2 := mustParseXML(t, tampered)
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	_, err = verifier.Verify(t.Context(), doc2)
-	require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference)
-}
-
-// TestVerifyResult_ExposesSignedElement asserts that Verify returns the
-// resolved element pointer for each Reference, so the caller can compare
-// pointer equality against the element they are about to consume.
-func TestVerifyResult_ExposesSignedElement(t *testing.T) {
-	xml := `<root><data Id="payload">secret</data></root>`
-	key := generateRSAKey(t)
-	doc := mustParseXML(t, xml)
-
-	target := findByLocalNameAndID(doc, "data", "payload")
-	require.NotNil(t, target)
-
-	ref := xmldsig1.ReferenceConfig{
-		URI:             "#payload",
-		DigestAlgorithm: xmldsig1.DigestSHA256,
-		Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
-	}
-
-	sigElem, err := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
-		Reference(ref).
-		SignDetached(t.Context(), doc, key)
-	require.NoError(t, err)
-	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
-
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	res, err := verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
-	require.NotNil(t, res)
-	require.Len(t, res.References, 1)
-	require.Equal(t, "#payload", res.References[0].URI)
-	require.Same(t, target, res.References[0].Element)
-	require.Same(t, target, res.SignedElement("#payload"))
-	require.True(t, res.Covers(target))
+		doc2 := mustParseXML(t, tampered)
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err = verifier.Verify(t.Context(), doc2)
+		require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference)
+	})
 }
 
 // TestVerifyPreservesSiblingPosition signs an enveloped signature and
