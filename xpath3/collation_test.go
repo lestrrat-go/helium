@@ -71,3 +71,36 @@ func TestQT3CaseblindCollation(t *testing.T) {
 		require.Equal(t, int64(0), seq.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
 }
+
+const (
+	collationCodepoint = "http://www.w3.org/2005/xpath-functions/collation/codepoint"
+	collationHTMLASCII = "http://www.w3.org/2005/xpath-functions/collation/html-ascii-case-insensitive"
+	collationUCA       = "http://www.w3.org/2013/collation/UCA"
+)
+
+func TestCollationHelpers(t *testing.T) {
+	require.True(t, xpath3.IsCollationSupported(collationCodepoint))
+	require.True(t, xpath3.IsCollationSupported(collationHTMLASCII))
+	require.False(t, xpath3.IsCollationSupported("urn:bogus-collation"))
+
+	keyFn, err := xpath3.ResolveCollationKeyFunc(collationCodepoint)
+	require.NoError(t, err)
+	require.Equal(t, keyFn("abc"), keyFn("abc"))
+	require.NotEqual(t, keyFn("abc"), keyFn("abd"))
+
+	_, err = xpath3.ResolveCollationKeyFunc("urn:bogus")
+	require.Error(t, err)
+
+	cmpFn, err := xpath3.ResolveCollationCompareFunc(collationCodepoint)
+	require.NoError(t, err)
+	require.Equal(t, 0, cmpFn("a", "a"))
+	require.Negative(t, cmpFn("a", "b"))
+	require.Positive(t, cmpFn("b", "a"))
+
+	_, err = xpath3.ResolveCollationCompareFunc("urn:bogus")
+	require.Error(t, err)
+
+	require.False(t, xpath3.CollationHasUnsupportedOptions(collationCodepoint))
+	require.False(t, xpath3.CollationHasUnsupportedOptions(collationUCA))
+	require.True(t, xpath3.CollationHasUnsupportedOptions(collationUCA+"?alternate=shifted"))
+}

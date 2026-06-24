@@ -124,3 +124,11 @@ func TestFloatValue_WithPrecision(t *testing.T) {
 	fv = xpath3.NewFloat(math.NaN())
 	require.True(t, fv.WithPrecision(xpath3.PrecisionDouble).IsNaN())
 }
+
+func TestFloatValue_IsSpecial(t *testing.T) {
+	require.False(t, xpath3.NewDouble(1.0).IsSpecial())
+	require.True(t, xpath3.NewDouble(math.NaN()).IsSpecial())
+	require.True(t, xpath3.NewDouble(math.Inf(1)).IsSpecial())
+	require.True(t, xpath3.NewDouble(math.Inf(-1)).IsSpecial())
+	require.True(t, xpath3.NewDouble(math.Copysign(0, -1)).IsSpecial())
+}

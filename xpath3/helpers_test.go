@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -44,4 +45,27 @@ func find(ctx context.Context, node helium.Node, expr string) ([]helium.Node, er
 		return nil, err
 	}
 	return r.Nodes()
+}
+
+// Shared test-only string constants that recur across the package's test files.
+// Centralizing them keeps goconst happy and avoids drift between expectations.
+const (
+	wantTrue  = "true"
+	wantFalse = "false"
+	wantNaN   = "NaN"
+	wantINF   = "INF"
+	want1Dot5 = "1.5"
+	expr1To10 = "1 to 10"
+)
+
+func atomicSeq(av xpath3.AtomicValue) xpath3.Sequence {
+	return xpath3.ItemSlice{av}
+}
+
+func intAtomic(n int64) xpath3.AtomicValue {
+	return xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(n)}
+}
+
+func strAtomic(s string) xpath3.AtomicValue {
+	return xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: s}
 }

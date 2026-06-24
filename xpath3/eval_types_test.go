@@ -190,3 +190,143 @@ func evalSeq(t *testing.T, expr string) (xpath3.Sequence, error) {
 	}
 	return r.Sequence(), nil
 }
+
+// instanceOf compiles and evaluates an `instance of` expression against a
+// context node, returning its boolean result. It exercises matchesItemType /
+// isItemTypeSubtype / matchNodeTest across many item-type shapes.
+func instanceOf(t *testing.T, ctxXML, expr string) bool {
+	t.Helper()
+	doc := mustParseXML(t, ctxXML)
+	root := doc.DocumentElement()
+	r, err := evaluate(t.Context(), root, expr)
+	require.NoError(t, err, expr)
+	b, ok := r.IsBoolean()
+	require.True(t, ok, "expected boolean for %q", expr)
+	return b
+}
+
+func TestInstanceOf_ItemTypes(t *testing.T) {
+	const xml = `<root att="v"><child/><!--c--><?pi data?></root>`
+
+	cases := []struct {
+		expr   string
+		expect bool
+	}{
+		// atomic types & numeric hierarchy.
+		{`1 instance of xs:integer`, true},
+		{`1 instance of xs:decimal`, true},
+		{`1 instance of xs:double`, false},
+		{`1.5 instance of xs:decimal`, true},
+		{`"x" instance of xs:string`, true},
+		{`"x" instance of xs:integer`, false},
+		{`true() instance of xs:boolean`, true},
+		// cardinality.
+		{`() instance of item()*`, true},
+		{`() instance of item()`, false},
+		{`() instance of item()?`, true},
+		{`(1, 2) instance of xs:integer+`, true},
+		{`(1, 2) instance of xs:integer`, false},
+		{`1 instance of item()`, true},
+		// node kind tests on the context tree.
+		{`. instance of element()`, true},
+		{`. instance of node()`, true},
+		{`. instance of attribute()`, false},
+		{`child::child[1] instance of element()`, true},
+		{`@att instance of attribute()`, true},
+		{`@att instance of node()`, true},
+		{`comment() instance of comment()`, true},
+		{`processing-instruction() instance of processing-instruction()`, true},
+		{`. instance of element(root)`, true},
+		{`. instance of element(other)`, false},
+		// function / map / array item types.
+		{`fn:abs#1 instance of function(*)`, true},
+		{`map { "a": 1 } instance of map(*)`, true},
+		{`[1, 2] instance of array(*)`, true},
+		{`map { "a": 1 } instance of array(*)`, false},
+		{`function($x) { $x } instance of function(*)`, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.expr, func(t *testing.T) {
+			require.Equal(t, tc.expect, instanceOf(t, xml, tc.expr))
+		})
+	}
+}
+
+func TestTreatAs(t *testing.T) {
+	// treat as success returns the value; failure raises XPDY0050/XPTY0004.
+	r, err := evaluate(t.Context(), nil, `1 treat as xs:integer`)
+	require.NoError(t, err)
+	n, ok := r.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, float64(1), n)
+
+	_, err = evaluate(t.Context(), nil, `"x" treat as xs:integer`)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+}
+
+// instance of against typed map / array / function / document-node tests
+// exercises matchesItemType and isItemTypeSubtype's typed branches (key/value,
+// member, param/return, inner node tests).
+func TestInstanceOf_TypedItemTests(t *testing.T) {
+	const xml = `<root><child/></root>`
+	doc := mustParseXML(t, xml)
+	root := doc.DocumentElement()
+
+	cases := []struct {
+		expr   string
+		expect bool
+	}{
+		{`map { "a": 1 } instance of map(xs:string, xs:integer)`, true},
+		{`map { "a": "v" } instance of map(xs:string, xs:integer)`, false},
+		{`[1, 2] instance of array(xs:integer)`, true},
+		{`["x"] instance of array(xs:integer)`, false},
+		{`fn:abs#1 instance of function(*)`, true},
+		{`function($x as xs:integer) as xs:integer { $x } instance of function(xs:integer) as xs:integer`, true},
+		{`. instance of document-node()`, false},
+		{`child::child instance of element(child)`, true},
+		{`child::child instance of element(other)`, false},
+		{`child::child instance of element(*)`, true},
+		// typed function: arity mismatch -> false.
+		{`fn:abs#1 instance of function(xs:double, xs:double) as xs:double`, false},
+		// inline function with matching param/return.
+		{`function($x as xs:integer) as xs:integer { $x } instance of function(xs:integer) as xs:integer`, true},
+		// map as function(K) as V.
+		{`map { "a": 1 } instance of function(xs:string) as xs:integer?`, true},
+		{`map { "a": 1 } instance of function(xs:anyAtomicType) as item()*`, true},
+		// array as function(xs:integer) as V.
+		{`[1, 2] instance of function(xs:integer) as item()*`, true},
+		// map with value type mismatch.
+		{`map { "a": "s" } instance of map(xs:string, xs:integer)`, false},
+		// empty map matches any typed map.
+		{`map { } instance of map(xs:string, xs:integer)`, true},
+		// array member type.
+		{`[1, 2] instance of array(xs:integer)`, true},
+		{`["s"] instance of array(xs:integer)`, false},
+		{`[1, 2] instance of array(*)`, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.expr, func(t *testing.T) {
+			r, err := evaluate(t.Context(), root, tc.expr)
+			require.NoError(t, err, tc.expr)
+			b, ok := r.IsBoolean()
+			require.True(t, ok, tc.expr)
+			require.Equal(t, tc.expect, b, tc.expr)
+		})
+	}
+
+	// document-node test against the actual document node.
+	r, err := evaluate(t.Context(), doc, `. instance of document-node()`)
+	require.NoError(t, err)
+	b, ok := r.IsBoolean()
+	require.True(t, ok)
+	require.True(t, b)
+
+	r, err = evaluate(t.Context(), doc, `. instance of document-node(element(root))`)
+	require.NoError(t, err)
+	b, ok = r.IsBoolean()
+	require.True(t, ok)
+	require.True(t, b)
+}

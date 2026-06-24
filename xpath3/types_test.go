@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"math"
 	"math/big"
 	"testing"
 	"time"
@@ -752,4 +753,82 @@ func TestAtomizeFunction(t *testing.T) {
 	seq := xpath3.ItemSlice{xpath3.FunctionItem{Arity: 0, Name: testValue}}
 	_, err := xpath3.AtomizeSequence(seq)
 	require.Error(t, err)
+}
+
+// string() over the full XSD atomic type space drives atomicToString's
+// per-type branches (gYear/gMonth/.., duration variants, base64/hex binary,
+// QName, integer subtypes, date/time).
+func TestAtomicToString_AllTypes(t *testing.T) {
+	cases := []struct {
+		expr string
+		want string
+	}{
+		// gregorian types.
+		{`string(xs:gYear("2020"))`, "2020"},
+		{`string(xs:gMonth("--06"))`, "--06"},
+		{`string(xs:gDay("---22"))`, "---22"},
+		{`string(xs:gYearMonth("2020-06"))`, "2020-06"},
+		{`string(xs:gMonthDay("--06-22"))`, "--06-22"},
+		// date / time / dateTime.
+		{`string(xs:date("2020-06-22"))`, "2020-06-22"},
+		{`string(xs:time("12:34:56"))`, "12:34:56"},
+		{`string(xs:dateTime("2020-06-22T12:34:56"))`, "2020-06-22T12:34:56"},
+		// durations.
+		{`string(xs:duration("P1Y2M3DT4H5M6S"))`, "P1Y2M3DT4H5M6S"},
+		{`string(xs:dayTimeDuration("P1DT2H"))`, "P1DT2H"},
+		{`string(xs:yearMonthDuration("P1Y2M"))`, "P1Y2M"},
+		// binary.
+		{`string(xs:base64Binary("aGk="))`, "aGk="},
+		{`string(xs:hexBinary("48656C6C6F"))`, "48656C6C6F"},
+		// integer subtypes.
+		{`string(xs:byte("12"))`, "12"},
+		{`string(xs:unsignedShort("300"))`, "300"},
+		{`string(xs:positiveInteger("5"))`, "5"},
+		// decimal / double / float / boolean / string-ish.
+		{`string(xs:decimal("1.250"))`, "1.25"},
+		{`string(xs:double("2.5"))`, "2.5"},
+		{`string(xs:float("3.5"))`, "3.5"},
+		{`string(true())`, wantTrue},
+		{`string(xs:anyURI("http://x"))`, "http://x"},
+		{`string(xs:NCName("abc"))`, "abc"},
+		{`string(xs:token("  a  b  "))`, "a b"},
+	}
+	for _, tc := range cases {
+		r, err := evaluate(t.Context(), nil, tc.expr)
+		require.NoError(t, err, tc.expr)
+		require.Equal(t, tc.want, r.StringValue(), tc.expr)
+	}
+
+	// QName via fn:QName, then string().
+	r, err := evaluate(t.Context(), nil, `string(fn:QName("http://x", "p:local"))`)
+	require.NoError(t, err)
+	require.Equal(t, "p:local", r.StringValue())
+}
+
+func TestAtomicEquals(t *testing.T) {
+	require.True(t, xpath3.AtomicEquals(intAtomic(3), intAtomic(3)))
+	require.False(t, xpath3.AtomicEquals(intAtomic(3), intAtomic(4)))
+	require.True(t, xpath3.AtomicEquals(strAtomic("x"), strAtomic("x")))
+	// Incomparable types return false rather than erroring.
+	require.False(t, xpath3.AtomicEquals(strAtomic("x"), intAtomic(1)))
+}
+
+func TestAtomicValue_StringIsNaN(t *testing.T) {
+	s := intAtomic(7).String()
+	require.Contains(t, s, "7")
+
+	nan := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.NaN())}
+	require.True(t, nan.IsNaN())
+
+	notNaN := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(1.5)}
+	require.False(t, notNaN.IsNaN())
+
+	// Non-float types are never NaN.
+	require.False(t, intAtomic(1).IsNaN())
+}
+
+func TestBuiltinIsSubtypeOf(t *testing.T) {
+	require.True(t, xpath3.BuiltinIsSubtypeOf(xpath3.TypeInteger, xpath3.TypeDecimal))
+	require.True(t, xpath3.BuiltinIsSubtypeOf(xpath3.TypeInteger, xpath3.TypeInteger))
+	require.False(t, xpath3.BuiltinIsSubtypeOf(xpath3.TypeString, xpath3.TypeInteger))
 }

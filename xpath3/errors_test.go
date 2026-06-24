@@ -51,3 +51,13 @@ func TestXPathErrorIs(t *testing.T) {
 		assert.Equal(t, "FORG0001", xpErr.Code)
 	})
 }
+
+func TestCodeQName(t *testing.T) {
+	// Trigger a real XPathError (division by zero -> FOAR0001).
+	_, err := evaluate(t.Context(), nil, `1 idiv 0`)
+	require.Error(t, err)
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	qn := xpErr.CodeQName()
+	require.NotEmpty(t, qn.Local)
+}
