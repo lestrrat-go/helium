@@ -73,6 +73,10 @@ type AttrNotFoundError struct {
 	Token string
 }
 
+func (e AttrNotFoundError) Error() string {
+	return "attribute token '" + e.Token + "' not found"
+}
+
 // ErrParseError is a structured parse error carrying the source location,
 // context line, severity, and the underlying error. Use [ErrParseError.FormatError]
 // to produce a libxml2-compatible multi-line diagnostic string. The error

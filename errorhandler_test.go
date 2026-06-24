@@ -151,3 +151,10 @@ func TestErrorCollector(t *testing.T) {
 		require.Len(t, errs, 1)
 	})
 }
+
+// TestNilErrorHandlerDiscards verifies NilErrorHandler discards without panicking.
+func TestNilErrorHandlerDiscards(t *testing.T) {
+	t.Parallel()
+	var h helium.NilErrorHandler
+	h.Handle(t.Context(), helium.NewLeveledError("ignored", helium.ErrorLevelWarning))
+}

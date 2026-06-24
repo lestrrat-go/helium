@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -826,4 +827,334 @@ func TestEntityDepthLimit(t *testing.T) {
 	_, err := p.Parse(t.Context(), []byte(dtd.String()))
 	require.Error(t, err, "depth > 40 should still error")
 	require.Contains(t, err.Error(), "entity loop")
+}
+
+// TestParameterEntities exercises parameter-entity declaration and reference in
+// the internal subset.
+func TestParameterEntities(t *testing.T) {
+	t.Parallel()
+
+	// A parameter entity expanded inside another entity's value.
+	const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ENTITY % name "World">
+<!ENTITY greeting "Hello %name;">
+<!ELEMENT doc (#PCDATA)>
+]>
+<doc>&greeting;</doc>`
+
+	doc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	require.NotNil(t, doc.DocumentElement())
+}
+
+// TestEntitySubstitution exercises entity expansion in content and attributes.
+func TestEntitySubstitution(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ENTITY greeting "hello world">
+]>
+<doc attr="&greeting;">&greeting;</doc>`
+
+	doc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	require.Contains(t, string(doc.DocumentElement().Content()), "hello world")
+}
+
+// TestExternalDTDConditionalSections exercises INCLUDE/IGNORE conditional
+// sections, which only appear in the external subset.
+func TestExternalDTDConditionalSections(t *testing.T) {
+	t.Parallel()
+
+	const dtd = `<!ELEMENT root (#PCDATA)>
+<![INCLUDE[
+<!ENTITY included "in">
+]]>
+<![IGNORE[
+<!ENTITY ignored "out">
+]]>`
+	path := writeDTD(t, dtd)
+
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + path + `">
+<root/>`
+
+	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	_, found := doc.GetEntity("included")
+	require.True(t, found, "entity inside INCLUDE section must be declared")
+
+	_, found = doc.GetEntity("ignored")
+	require.False(t, found, "entity inside IGNORE section must be skipped")
+}
+
+// TestExternalDTDNotationsAndEntities exercises notation and external entity
+// declarations resolved from the external subset.
+func TestExternalDTDNotationsAndEntities(t *testing.T) {
+	t.Parallel()
+
+	const dtd = `<!ELEMENT root (#PCDATA)>
+<!NOTATION gif SYSTEM "viewer.exe">
+<!NOTATION png PUBLIC "-//N//EN" "png.exe">
+<!ENTITY img SYSTEM "img.gif" NDATA gif>
+<!ENTITY ext SYSTEM "data.xml">
+<!ENTITY pub PUBLIC "-//P//EN" "pub.xml">`
+	path := writeDTD(t, dtd)
+
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + path + `">
+<root/>`
+
+	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	require.NotNil(t, doc.ExtSubset(), "external subset must be present")
+	// The external general entities are resolvable from the document.
+	_, ok := doc.GetEntity("ext")
+	require.True(t, ok, "external SYSTEM entity declared in ext subset")
+	_, ok = doc.GetEntity("pub")
+	require.True(t, ok, "external PUBLIC entity declared in ext subset")
+}
+
+// TestExternalDTDPublicIdentifier exercises a DOCTYPE that declares a PUBLIC
+// external identifier (with both public and system IDs).
+func TestExternalDTDPublicIdentifier(t *testing.T) {
+	t.Parallel()
+
+	const dtd = `<!ELEMENT root (#PCDATA)>
+<!ENTITY who "world">`
+	path := writeDTD(t, dtd)
+
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE root PUBLIC "-//Example//DTD root//EN" "` + path + `">
+<root/>`
+
+	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	_, found := doc.GetEntity("who")
+	require.True(t, found)
+}
+
+// TestExternalDTDMissingFile exercises the not-found branch of external DTD
+// resolution: a SYSTEM id pointing at a non-existent file must not crash.
+func TestExternalDTDMissingFile(t *testing.T) {
+	t.Parallel()
+
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "/nonexistent/path/to.dtd">
+<root>content</root>`
+
+	// The document body is still well-formed; the external DTD simply cannot be
+	// loaded. Parsing should not panic.
+	doc, _ := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	if doc != nil {
+		require.NotNil(t, doc.DocumentElement())
+	}
+}
+
+// TestInternalSubsetParameterEntityInclusion exercises a parameter entity used
+// inside the internal subset to pull in further declarations.
+func TestInternalSubsetParameterEntityInclusion(t *testing.T) {
+	t.Parallel()
+
+	const xml = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ENTITY % decls "<!ELEMENT root (#PCDATA)><!ENTITY inner 'inner-value'>">
+%decls;
+]>
+<root/>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	_, found := doc.GetEntity("inner")
+	require.True(t, found, "entity declared via internal-subset PE inclusion must be present")
+}
+
+// writeDTD writes a DTD file into a fresh temp dir and returns its path.
+func writeDTD(t *testing.T, body string) string {
+	t.Helper()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "ext.dtd")
+	require.NoError(t, os.WriteFile(p, []byte(body), 0600))
+	return p
+}
+
+// TestParseDTDEntityValuesAndParamRefs parses internal-subset DTDs that exercise
+// the entity-value and parameter-entity-reference parser paths: entity values
+// containing character and general-entity references, a parameter entity declared
+// and then referenced inside the subset, and a mixed-content (#PCDATA|x|y)*
+// declaration with several alternatives.
+func TestParseDTDEntityValuesAndParamRefs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("entity value with char and general refs", func(t *testing.T) {
+		t.Parallel()
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA)>
+<!ENTITY base "base">
+<!ENTITY composed "prefix-&base;-&#65;-suffix">
+]>
+<doc>&composed;</doc>`
+		doc, err := helium.NewParser().SubstituteEntities(true).Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		require.NotNil(t, doc.DocumentElement())
+	})
+
+	t.Run("parameter entity expands to a markup declaration", func(t *testing.T) {
+		t.Parallel()
+		// A parameter entity whose replacement text is an entire markup
+		// declaration, referenced via %e; inside the internal subset, drives
+		// the PE-reference expansion path in the subset parser.
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ENTITY % e "<!ELEMENT doc (#PCDATA)>">
+%e;
+]>
+<doc>text</doc>`
+		doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		dtd := doc.IntSubset()
+		require.NotNil(t, dtd)
+		_, ok := dtd.LookupElement("doc", "")
+		require.True(t, ok, "the PE-supplied element declaration was registered")
+	})
+
+	t.Run("mixed content with several alternatives", func(t *testing.T) {
+		t.Parallel()
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA | a | b | c)*>
+<!ELEMENT a (#PCDATA)>
+<!ELEMENT b (#PCDATA)>
+<!ELEMENT c (#PCDATA)>
+]>
+<doc>t <a/> u <b/> v <c/> w</doc>`
+		doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		dtd := doc.IntSubset()
+		require.NotNil(t, dtd)
+		edecl, ok := dtd.LookupElement("doc", "")
+		require.True(t, ok)
+		require.Equal(t, enum.MixedElementType, edecl.DeclType())
+	})
+
+	t.Run("element children content with nested groups and occurrences", func(t *testing.T) {
+		t.Parallel()
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (head, (para | list)*, foot?)>
+<!ELEMENT head (#PCDATA)>
+<!ELEMENT para (#PCDATA)>
+<!ELEMENT list (#PCDATA)>
+<!ELEMENT foot (#PCDATA)>
+]>
+<doc><head/><para/><list/><para/><foot/></doc>`
+		doc, err := helium.NewParser().ValidateDTD(true).Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		require.NotNil(t, doc.DocumentElement())
+	})
+}
+
+// TestCreateReferenceWithDeclaredEntity exercises CreateReference both for a
+// predefined entity (resolvable) and an undeclared name (no entity attached).
+func TestCreateReferenceWithDeclaredEntity(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+
+	_, err = dtd.AddEntity("greet", enum.InternalGeneralEntity, "", "", "Hello")
+	require.NoError(t, err)
+
+	// Reference to a declared general entity: the entity content is attached.
+	ref, err := doc.CreateReference("greet")
+	require.NoError(t, err)
+	require.Equal(t, helium.EntityRefNode, ref.Type())
+	require.Equal(t, []byte("Hello"), ref.Content())
+
+	// Reference to an undeclared name: still produces an EntityRef, but with no
+	// resolved content.
+	ref2, err := doc.CreateReference("undeclared")
+	require.NoError(t, err)
+	require.Equal(t, "undeclared", ref2.Name())
+
+	// "&name;" form is accepted and stripped.
+	ref3, err := doc.CreateReference("&greet;")
+	require.NoError(t, err)
+	require.Equal(t, "greet", ref3.Name())
+
+	// Empty name is rejected.
+	_, err = doc.CreateReference("")
+	require.Error(t, err)
+}
+
+// TestGetEntityExternalSubset exercises GetEntity's external-subset lookup and
+// the standalone short-circuit, plus GetParameterEntity.
+func TestGetEntityFromInternalSubset(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+
+	_, err = dtd.AddEntity("ge", enum.InternalGeneralEntity, "", "", "general")
+	require.NoError(t, err)
+	_, err = dtd.AddEntity("pe", enum.InternalParameterEntity, "", "", "param")
+	require.NoError(t, err)
+
+	ent, ok := doc.GetEntity("ge")
+	require.True(t, ok)
+	require.Equal(t, []byte("general"), ent.Content())
+
+	_, ok = doc.GetEntity("missing")
+	require.False(t, ok)
+
+	pe, ok := doc.GetParameterEntity("pe")
+	require.True(t, ok)
+	require.Equal(t, []byte("param"), pe.Content())
+
+	_, ok = doc.GetParameterEntity("missing")
+	require.False(t, ok)
+
+	// A document with no internal subset finds nothing.
+	bare := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	_, ok = bare.GetEntity("ge")
+	require.False(t, ok)
+	_, ok = bare.GetParameterEntity("pe")
+	require.False(t, ok)
+}
+
+// TestEntityURIFallback covers Entity.URI's fallback to SystemID.
+func TestEntityURIFallback(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+
+	ext, err := dtd.AddEntity("e", enum.ExternalGeneralParsedEntity, "pub", "sys.ent", "")
+	require.NoError(t, err)
+	// No resolved URI set => falls back to SystemID.
+	require.Equal(t, "sys.ent", ext.URI())
+	require.Equal(t, "sys.ent", ext.SystemID())
+	require.Equal(t, "pub", ext.ExternalID())
+}
+
+// TestEntityRefToUnparsedEntity drives the "entity reference to unparsed entity"
+// error branch of parseEntityRef.
+func TestEntityRefToUnparsedEntity(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!NOTATION gif SYSTEM "viewer">
+  <!ENTITY img SYSTEM "img.gif" NDATA gif>
+]>
+<doc>&img;</doc>`
+
+	_, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.Error(t, err)
 }

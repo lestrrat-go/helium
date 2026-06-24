@@ -658,3 +658,61 @@ func TestReplaceNilOperand(t *testing.T) {
 		require.Nil(t, repl.Parent(), "replacement must not have been spliced in")
 	})
 }
+
+// TestElementNamespaceMutators exercises the namespace-declaration mutators on
+// an element: DeclareNamespace, AddNamespaceDecl, RemoveNamespaceByPrefix,
+// SetActiveNamespace and SetNs.
+func TestElementNamespaceMutators(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	e := doc.CreateElement("e")
+
+	require.NoError(t, e.DeclareNamespace("p", "urn:p"))
+	require.Len(t, e.Namespaces(), 1)
+
+	shared := helium.NewNamespace("q", "urn:q")
+	e.AddNamespaceDecl(shared)
+	require.Len(t, e.Namespaces(), 2)
+
+	require.True(t, e.RemoveNamespaceByPrefix("p"), "existing prefix removed")
+	require.False(t, e.RemoveNamespaceByPrefix("absent"), "missing prefix is a no-op")
+	require.Len(t, e.Namespaces(), 1)
+
+	require.NoError(t, e.SetActiveNamespace("a", "urn:a"))
+	require.Equal(t, "a", e.Prefix())
+	require.Equal(t, "urn:a", e.URI())
+	require.Equal(t, "a:e", e.Name())
+
+	e.SetNs(shared)
+	require.Equal(t, "q", e.Prefix())
+	require.Equal(t, "urn:q", e.URI())
+}
+
+// TestElementGetAttribute exercises GetAttribute and GetAttributeNS.
+func TestElementGetAttribute(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	elem := doc.CreateElement("e")
+	_, err := elem.SetAttribute("plain", "p")
+	require.NoError(t, err)
+
+	ns := helium.NewNamespace("x", "urn:x")
+	_, err = elem.SetAttributeNS("nsed", "n", ns)
+	require.NoError(t, err)
+
+	v, ok := elem.GetAttribute("plain")
+	require.True(t, ok)
+	require.Equal(t, "p", v)
+
+	_, ok = elem.GetAttribute("absent")
+	require.False(t, ok)
+
+	v, ok = elem.GetAttributeNS("nsed", "urn:x")
+	require.True(t, ok)
+	require.Equal(t, "n", v)
+
+	_, ok = elem.GetAttributeNS("nsed", "urn:wrong")
+	require.False(t, ok)
+}

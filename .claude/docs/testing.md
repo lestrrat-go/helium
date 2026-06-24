@@ -59,9 +59,14 @@ testdata/libxml2-compat/
 | `libxml2_compat_test.go` | root, html, catalog | Golden file comparison suite |
 | `parser_test.go` | root | Core parser coverage: XML decl, names/QNames, depth limits, general parse regressions |
 | `parser_sax_test.go` | root | SAX/dispatch/stop-parser regression coverage |
-| `parser_entity_test.go` | root | Entity expansion, XXE, amplification, and boundary regressions |
+| `parser_entity_test.go` | root | Entity expansion, XXE, amplification, external-DTD/param-entity parsing, and boundary regressions |
 | `parser_push_test.go` | root | Push parser coverage |
-| `writer_test.go` | root | XML writer/escaping coverage and related benchmarks |
+| `writer_test.go` | root | General XML writer/escaping coverage and related benchmarks |
+| `writer_dtd_test.go` | root | DTD serialization (subset/escaping/formatting/self-close) |
+| `writer_xhtml_test.go` | root | XHTML serialization output |
+| `copy_test.go` | root | `CopyNode`/`CopyDoc`/`CopyDTDInfo`/`CopyExtSubset` deep-copy coverage |
+| `dtd_test.go` | root | DTD data-model: internal-subset accessors, element/attr/notation decls, node wrappers |
+| `tree_builder_test.go` | root | SAX-path tree construction (`TreeBuilder`) |
 | `c14n_test.go` | c14n | C14N golden file tests |
 | `xsd_test.go` | xsd | Schema validation golden tests |
 | `relaxng_test.go` | relaxng | RELAX NG golden tests |

@@ -7,17 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// saxTreeBuilder embeds *helium.TreeBuilder without being a *TreeBuilder
-// itself. Because the parser only takes its fast (TreeBuilder-direct) path when
-// the supplied SAX handler is *exactly* a *TreeBuilder, wrapping it like this
-// forces the parser through the generic SAX2 callback path, exercising the
-// TreeBuilder's SAX2Handler methods (Comment, CDataBlock, Characters,
-// ProcessingInstruction, Reference, entity/DTD declaration callbacks, ...) that
-// the fast path bypasses.
-type saxTreeBuilder struct {
-	*helium.TreeBuilder
-}
-
 // TestTreeBuilderSAXPath drives a content-rich document through the generic SAX
 // callback path so the TreeBuilder's SAX2Handler methods build the tree.
 func TestTreeBuilderSAXPath(t *testing.T) {
@@ -112,4 +101,15 @@ func TestTreeBuilderSAXPathNamespaces(t *testing.T) {
 	require.Contains(t, out, `xmlns:a="urn:a"`)
 	require.Contains(t, out, `xmlns="urn:default"`)
 	require.Contains(t, out, "<a:child")
+}
+
+// saxTreeBuilder embeds *helium.TreeBuilder without being a *TreeBuilder
+// itself. Because the parser only takes its fast (TreeBuilder-direct) path when
+// the supplied SAX handler is *exactly* a *TreeBuilder, wrapping it like this
+// forces the parser through the generic SAX2 callback path, exercising the
+// TreeBuilder's SAX2Handler methods (Comment, CDataBlock, Characters,
+// ProcessingInstruction, Reference, entity/DTD declaration callbacks, ...) that
+// the fast path bypasses.
+type saxTreeBuilder struct {
+	*helium.TreeBuilder
 }

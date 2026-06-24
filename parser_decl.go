@@ -148,10 +148,6 @@ func (pctx *parserCtx) parseStandaloneDeclFromCursor(ctx context.Context) (Docum
 	}
 }
 
-func (e AttrNotFoundError) Error() string {
-	return "attribute token '" + e.Token + "' not found"
-}
-
 var versionBytes = []byte{'v', 'e', 'r', 's', 'i', 'o', 'n'}
 
 func (pctx *parserCtx) parseVersionInfo(ctx context.Context) (string, error) {

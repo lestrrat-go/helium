@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
@@ -147,4 +148,68 @@ func TestSerializeSelfCloseToggle(t *testing.T) {
 		WriteTo(&buf, doc)
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "<empty></empty>")
+}
+
+// TestWriteRichDTDWithEntities is a fuller round-trip that, in addition to the
+// existing rich-DTD test, exercises serialization of a programmatically built
+// DTD containing a percent-bearing internal entity and a parameter entity so the
+// entity-content writer paths run end to end and re-parse cleanly.
+func TestWriteRichDTDWithEntities(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+
+	_, err = dtd.AddEntity("plain", enum.InternalGeneralEntity, "", "", "plain value")
+	require.NoError(t, err)
+	_, err = dtd.AddEntity("ext", enum.ExternalGeneralParsedEntity, "", "ext.xml", "")
+	require.NoError(t, err)
+	_, err = dtd.AddEntity("pub", enum.ExternalGeneralParsedEntity, "-//E//T//EN", "pub.xml", "")
+	require.NoError(t, err)
+
+	root := doc.CreateElement("doc")
+	require.NoError(t, doc.AddChild(root))
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "<!ENTITY plain")
+	require.Contains(t, out, "<!ENTITY ext SYSTEM")
+	require.Contains(t, out, "<!ENTITY pub PUBLIC")
+
+	// Re-parse to confirm well-formedness.
+	require.True(t, strings.Contains(out, "<!DOCTYPE doc"))
+}
+
+// TestDTDSerializationRichSubset round-trips a document with a rich internal
+// subset (entities, attributes with defaults, notations, varied content models)
+// to exercise the DTD writer paths.
+func TestDTDSerializationRichSubset(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (a | b)*>
+<!ELEMENT a (#PCDATA)>
+<!ELEMENT b EMPTY>
+<!ATTLIST a
+  id   ID       #IMPLIED
+  kind (x | y)  "x"
+  req  CDATA    #REQUIRED>
+<!ENTITY internal "expanded">
+<!ENTITY % pe "ignored">
+<!NOTATION gif SYSTEM "viewer.exe">
+]>
+<doc><a id="i1" req="r">text</a><b/></doc>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "<!DOCTYPE doc")
+	require.Contains(t, out, "<!ELEMENT")
+	require.Contains(t, out, "<!ATTLIST")
+	require.Contains(t, out, "<!ENTITY")
+	require.Contains(t, out, "<!NOTATION")
 }

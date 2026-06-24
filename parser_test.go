@@ -2888,3 +2888,297 @@ func TestParseFileResolvesRelativeExternalEntity(t *testing.T) {
 	require.Contains(t, buf.String(), "WORLD",
 		"relative external entity must resolve against the file's base URI")
 }
+
+// TestLenientXMLDecl exercises the LenientXMLDecl parse path, including
+// pseudo-attributes presented out of the canonical order.
+func TestLenientXMLDecl(t *testing.T) {
+	t.Parallel()
+
+	inputs := []string{
+		`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><root/>`,
+		`<?xml encoding="UTF-8" version="1.0"?><root/>`,
+		`<?xml standalone="no" version="1.0"?><root/>`,
+		`<?xml version="1.0"?><root/>`,
+	}
+	for _, in := range inputs {
+		doc, err := helium.NewParser().LenientXMLDecl(true).Parse(t.Context(), []byte(in))
+		require.NoError(t, err, "lenient parse of %q", in)
+		require.NotNil(t, doc.DocumentElement())
+	}
+}
+
+// TestMalformedXMLDecl exercises XML-declaration error branches.
+func TestMalformedXMLDecl(t *testing.T) {
+	t.Parallel()
+
+	bad := []string{
+		`<?xml?><root/>`,                         // missing version
+		`<?xml version="1.0" foo="bar"?><root/>`, // unknown pseudo-attr / unclosed
+		`<?xml version=1.0?><root/>`,             // unquoted version value
+	}
+	for _, in := range bad {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		require.Error(t, err, "malformed decl %q should error", in)
+	}
+}
+
+// TestProcessingInstructionsAndComments parses PIs and comments in the prolog,
+// content, and epilog positions.
+func TestProcessingInstructionsAndComments(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0"?>
+<?pi-prolog data?>
+<!-- prolog comment -->
+<root>
+  <?pi-content more?>
+  <!-- content comment -->
+  text
+</root>
+<!-- epilog comment -->
+<?pi-epilog x?>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "<?pi-prolog")
+	require.Contains(t, out, "<!-- prolog comment -->")
+}
+
+// TestCDATASection parses CDATA sections including the tricky ]]> boundary.
+func TestCDATASection(t *testing.T) {
+	t.Parallel()
+
+	const src = `<root><![CDATA[ raw <tag> & ]]> normal text <child/></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "<![CDATA[")
+}
+
+// TestCharacterReferences exercises numeric and hex character references.
+func TestCharacterReferences(t *testing.T) {
+	t.Parallel()
+
+	const src = `<root>dec=&#65; hex=&#x42; high=&#x1F600;</root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	require.Equal(t, "dec=A hex=B high=\U0001F600", string(doc.DocumentElement().Content()))
+}
+
+// TestMalformedDocuments exercises well-formedness error branches across the
+// parser. Each input is malformed and must surface an error.
+func TestMalformedDocuments(t *testing.T) {
+	t.Parallel()
+
+	bad := []string{
+		`<root>`,                         // unclosed root
+		`<root></notroot>`,               // mismatched end tag
+		`<root attr></root>`,             // attribute without value
+		`<root attr=value></root>`,       // unquoted attribute value
+		`<root>&undefinedentity;</root>`, // reference to undeclared entity
+		`<root><![CDATA[ unterminated`,   // unterminated CDATA
+		`<!-- unterminated comment`,      // unterminated comment
+		`<root>&#xZZ;</root>`,            // invalid hex char ref
+		`<root>&;</root>`,                // empty reference
+		`<>`,                             // empty tag name
+		`<root></root><second/>`,         // two root elements
+	}
+	for _, in := range bad {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		require.Error(t, err, "malformed input %q should error", in)
+	}
+}
+
+// TestRecoverOnError exercises the recover path: a malformed document returns
+// both a (partial) document and an error.
+func TestRecoverOnErrorPartialDoc(t *testing.T) {
+	t.Parallel()
+
+	const src = `<root><a>text</a><b></root>`
+	doc, err := helium.NewParser().RecoverOnError(true).Parse(t.Context(), []byte(src))
+	// With recovery the parser returns a partial document; an error may or may
+	// not be reported depending on how far recovery proceeds.
+	_ = err
+	require.NotNil(t, doc)
+}
+
+// TestNamespacedAttributes parses namespaced elements and attributes.
+func TestNamespacedAttributes(t *testing.T) {
+	t.Parallel()
+
+	const src = `<root xmlns="urn:default" xmlns:p="urn:p" p:attr="v" plain="w">` +
+		`<p:child/><plain/></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, `p:attr="v"`)
+	require.Contains(t, out, `xmlns:p="urn:p"`)
+}
+
+// TestParserOptionSetters exercises every boolean parser option setter with both
+// true and false (so both the Set and Clear branches run) plus the scalar/object
+// setters, then performs a parse to confirm the configured parser still works.
+func TestParserOptionSetters(t *testing.T) {
+	t.Parallel()
+
+	p := helium.NewParser().
+		RecoverOnError(true).RecoverOnError(false).
+		SubstituteEntities(true).SubstituteEntities(false).
+		LoadExternalDTD(true).LoadExternalDTD(false).
+		DefaultDTDAttributes(true).DefaultDTDAttributes(false).
+		ValidateDTD(true).ValidateDTD(false).
+		SuppressErrors(true).SuppressErrors(false).
+		SuppressWarnings(true).SuppressWarnings(false).
+		PedanticErrors(true).PedanticErrors(false).
+		StripBlanks(true).StripBlanks(false).
+		ProcessXInclude(true).ProcessXInclude(false).
+		AllowNetwork(true).AllowNetwork(false).
+		CleanNamespaces(true).CleanNamespaces(false).
+		MergeCDATA(true).MergeCDATA(false).
+		XIncludeNodes(true).XIncludeNodes(false).
+		CompactTextNodes(true).CompactTextNodes(false).
+		FixBaseURIs(true).FixBaseURIs(false).
+		RelaxLimits(true).RelaxLimits(false).
+		IgnoreEncoding(true).IgnoreEncoding(false).
+		BigLineNumbers(true).BigLineNumbers(false).
+		BlockXXE(true).BlockXXE(false).
+		ReuseDict(true).ReuseDict(false).
+		SkipIDs(true).SkipIDs(false).
+		LenientXMLDecl(true).LenientXMLDecl(false).
+		CharBufferSize(8192).
+		MaxDepth(256).
+		MaxExternalDTDBytes(1 << 20).
+		Catalog(nopCatalog{}).
+		BaseURI("http://example.com/base.xml")
+
+	doc, err := p.Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child>text</child></root>`))
+	require.NoError(t, err, "a fully-configured parser parses a simple document")
+	require.NotNil(t, doc.DocumentElement())
+}
+
+// TestParserCharBufferSizeAffectsParse confirms a tiny char buffer (which forces
+// repeated cursor refills) still parses a larger document correctly.
+func TestParserCharBufferSizeAffectsParse(t *testing.T) {
+	t.Parallel()
+
+	var b []byte
+	b = append(b, []byte(`<root>`)...)
+	for range 200 {
+		b = append(b, []byte(`<item>x</item>`)...)
+	}
+	b = append(b, []byte(`</root>`)...)
+
+	doc, err := helium.NewParser().CharBufferSize(16).Parse(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "root", doc.DocumentElement().Name())
+}
+
+// nopCatalog is a CatalogResolver that never resolves anything. It exists only
+// to drive the Parser.Catalog configuration path.
+type nopCatalog struct{}
+
+func (nopCatalog) Resolve(_ context.Context, _, _ string) string { return "" }
+func (nopCatalog) ResolveURI(_ context.Context, _ string) string { return "" }
+
+// TestParserMalformedBranches feeds a battery of distinct malformed inputs, each
+// designed to drive a specific parser error branch (XML declaration version /
+// encoding / standalone parsing, PI target and delimiter rules, comment and
+// CDATA termination, QName / Name lexical errors). Every input must be rejected;
+// the value is in exercising the otherwise-unreached error returns.
+func TestParserMalformedBranches(t *testing.T) {
+	t.Parallel()
+
+	bad := []struct {
+		name string
+		src  string
+	}{
+		{"xml decl version unquoted", `<?xml version=1.0?><root/>`},
+		{"xml decl bad standalone", `<?xml version="1.0" standalone="maybe"?><root/>`},
+		{"xml decl encoding unquoted", `<?xml version="1.0" encoding=UTF-8?><root/>`},
+		{"xml decl encoding bad first char", `<?xml version="1.0" encoding="1bad"?><root/>`},
+		{"xml decl missing version", `<?xml encoding="UTF-8"?><root/>`},
+		{"pi target named xml mid-document", `<root><?xml data?></root>`},
+		{"pi missing space after target", `<root><?targetdata</root>`},
+		{"pi unterminated", `<root><?target data </root>`},
+		{"comment with double hyphen", `<root><!-- a -- b --></root>`},
+		{"cdata unterminated", `<root><![CDATA[unterminated</root>`},
+		{"bad qname trailing colon", `<root:></root:>`},
+		{"name starts with digit", `<1root/>`},
+		{"attribute missing equals", `<root attr "v"/>`},
+		{"unterminated start tag", `<root attr="v"`},
+		{"text with raw less-than via entity ok but bad amp", `<root>a & b</root>`},
+	}
+
+	for _, tc := range bad {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(context.Background(), []byte(tc.src))
+			require.Error(t, err, "malformed input %q must be rejected", tc.src)
+		})
+	}
+}
+
+// TestParserWellFormedVariety parses a variety of well-formed constructs that
+// exercise the success branches of the same parser functions the malformed tests
+// hit on the error side: a leading PI, a comment, a CDATA section, namespaced
+// elements/attributes, character references, and an explicit encoding/standalone
+// declaration.
+func TestParserWellFormedVariety(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?pi-target some data?>
+<!-- a leading comment -->
+<p:root xmlns:p="urn:p" xmlns="urn:default" p:attr="v" plain="w">
+  <![CDATA[ raw <markup> & stuff ]]>
+  text &#65; &#x42; &amp; more
+  <p:child/>
+  <plain-child attr="x"/>
+</p:root>`
+
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	require.Equal(t, "root", root.LocalName())
+
+	out, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, out, "urn:p")
+	require.Contains(t, out, "CDATA")
+}
+
+// TestEncodingDeclarations parses documents with various encoding declarations
+// to exercise the encoding-switch paths.
+func TestEncodingDeclarations(t *testing.T) {
+	t.Parallel()
+
+	inputs := []string{
+		`<?xml version="1.0" encoding="UTF-8"?><root>ascii</root>`,
+		`<?xml version="1.0" encoding="utf-8"?><root>ascii</root>`,
+		`<?xml version="1.0" encoding="US-ASCII"?><root>ascii</root>`,
+	}
+	for _, in := range inputs {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(in))
+		require.NoError(t, err, "parse %q", in)
+		require.NotNil(t, doc.DocumentElement())
+	}
+}
+
+// TestEncodingIgnored verifies the IgnoreEncoding option does not break a parse
+// that declares an encoding.
+func TestEncodingIgnored(t *testing.T) {
+	t.Parallel()
+
+	const in = `<?xml version="1.0" encoding="ISO-8859-1"?><root>x</root>`
+	doc, err := helium.NewParser().IgnoreEncoding(true).Parse(t.Context(), []byte(in))
+	require.NoError(t, err)
+	require.NotNil(t, doc.DocumentElement())
+}
