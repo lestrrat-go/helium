@@ -28,6 +28,13 @@ func TestDocumentBaseURIWindowsDrive(t *testing.T) {
 		// An already-absolute URI is preserved untouched.
 		{"absolute http uri", "http://example.com/dir/doc.xml", "http://example.com/dir/doc.xml"},
 		{"empty base", "", ""},
+		// POSIX-absolute bases must be dot-segment-cleaned (matching the old
+		// unconditional filepath.Abs), since a non-canonical base would change
+		// canonical (signature) output. SlashClean, not a raw separator swap.
+		{"posix clean", "/work/dir/doc.xml", "file:///work/dir/doc.xml"},
+		{"posix dotdot", "/work/dir/../doc.xml", "file:///work/doc.xml"},
+		{"posix double slash", "/work//dir/doc.xml", "file:///work/dir/doc.xml"},
+		{"posix dot", "/work/./dir/doc.xml", "file:///work/dir/doc.xml"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

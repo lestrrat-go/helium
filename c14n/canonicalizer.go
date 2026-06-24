@@ -876,9 +876,14 @@ func (c *canonicalizer) documentBaseURI() string {
 		return uripath.WindowsToFileURI(c.baseURI)
 	}
 
-	// A POSIX-absolute base is already anchored; just normalize separators and
-	// attach the file scheme. A relative base is anchored against the working
-	// directory with filepath.Abs first (POSIX result is a "/..."-rooted path).
+	// A POSIX-absolute base is already anchored; normalize separators, remove
+	// dot-segments, and attach the file scheme. A relative base is anchored
+	// against the working directory with filepath.Abs first (POSIX result is a
+	// "/..."-rooted path). SlashClean (not ToSlash) preserves the historical
+	// behavior of the old unconditional filepath.Abs, which collapsed "." / ".."
+	// / "//" in the base; this matters because the base feeds relativizeURI and
+	// the C14N 1.1 xml:base fixup, so a non-canonical base would change canonical
+	// output bytes (which are XML-signature input).
 	abs := c.baseURI
 	if !uripath.IsPOSIXAbsolute(abs) {
 		anchored, err := filepath.Abs(c.baseURI)
@@ -892,7 +897,7 @@ func (c *canonicalizer) documentBaseURI() string {
 		}
 		abs = anchored
 	}
-	return "file://" + uripath.ToSlash(abs)
+	return "file://" + uripath.SlashClean(abs)
 }
 
 // xmlBaseLocalName is the local name of the xml:base attribute.
