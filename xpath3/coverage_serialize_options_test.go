@@ -24,8 +24,9 @@ func TestSerialize_OptionsNode(t *testing.T) {
 		Evaluate(t.Context(), mustCompile(t, `.`), paramsElem)
 	require.NoError(t, err)
 
+	const paramsVar = "params"
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
-		"params": nodes.Sequence(),
+		paramsVar: nodes.Sequence(),
 	})
 	compiled := mustCompile(t, `serialize("hello", $params)`)
 	res, err := eval.Evaluate(t.Context(), compiled, doc)
