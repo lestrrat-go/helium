@@ -37,8 +37,8 @@ slices are cloned unless `EvalBorrowing` was set on `NewEvaluator`.
 ```go
 // Bindings & resolvers
 func (e Evaluator) Namespaces(ns map[string]string) Evaluator
-func (e Evaluator) Variables(v *Variables) Evaluator
-func (e Evaluator) Functions(f *FunctionLibrary) Evaluator
+func (e Evaluator) Variables(vars map[string]Sequence) Evaluator
+func (e Evaluator) Functions(byLocal map[string]Function, byQName map[QualifiedName]Function) Evaluator
 func (e Evaluator) VariableResolver(r VariableResolver) Evaluator
 func (e Evaluator) FunctionResolver(r FunctionResolver) Evaluator
 func (e Evaluator) URIResolver(r URIResolver) Evaluator
@@ -157,14 +157,15 @@ type VariableResolver interface { /* lazy variable lookup */ }
 type FunctionResolver interface { /* lazy function lookup */ }
 type SchemaDeclarations interface { /* schema-aware type info */ }
 
-type Variables struct { /* variable bindings; see xpath3-types.md */ }
-type FunctionLibrary struct { /* user-defined functions */ }
 type DecimalFormat = icu.DecimalFormat
 type DocOrderCache = internal/xpath.DocOrderCache
 ```
 
-Pass bindings with `Evaluator.Namespaces`, `Evaluator.Variables`, and
-`Evaluator.Functions`; supply lazy lookups with `Evaluator.VariableResolver` /
+Pass bindings as plain maps: variables via `Evaluator.Variables(map[string]Sequence)`
+(keyed by expanded-QName string) and user functions via
+`Evaluator.Functions(byLocal, byQName)` (`byLocal` for unqualified calls,
+`byQName map[QualifiedName]Function` for namespaced ones). Maps are cloned unless
+`EvalBorrowing` is set. Supply lazy lookups with `Evaluator.VariableResolver` /
 `Evaluator.FunctionResolver`.
 
 **Resource loading is opt-in.** Without an explicit `URIResolver` or `HTTPClient` (`Evaluator.URIResolver` / `Evaluator.HTTPClient`), `fn:doc`, `fn:doc-available`, `fn:json-doc`, and the `fn:unparsed-text*` family error with `FODC0002` / `FOUT1170` for every URI — there is no implicit `http.DefaultClient` and no implicit `os.ReadFile`. Built-in helpers in `internal/unparsedtext`:

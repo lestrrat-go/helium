@@ -366,7 +366,7 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 				if err == nil {
 					eval := c.staticEvaluator(ctx)
 					if len(c.staticVars) > 0 {
-						eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
+						eval = eval.Variables(c.staticVars)
 					}
 					result, err := eval.Evaluate(ctx, compiled, nil)
 					if err == nil {

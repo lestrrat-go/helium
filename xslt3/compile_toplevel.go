@@ -162,7 +162,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 						eval = c.resolveXMLBaseEvaluator(ctx, eval, elemBase)
 					}
 					if len(c.staticVars) > 0 {
-						eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
+						eval = eval.Variables(c.staticVars)
 					}
 					result, err := eval.Evaluate(ctx, compiled, nil)
 					if err != nil {
@@ -345,7 +345,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 							eval = c.resolveXMLBaseEvaluator(ctx, eval, elemBase)
 						}
 						if len(c.staticVars) > 0 {
-							eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
+							eval = eval.Variables(c.staticVars)
 						}
 						result, err := eval.Evaluate(ctx, compiled, nil)
 						if err == nil {

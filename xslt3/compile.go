@@ -942,7 +942,7 @@ func (c *compiler) staticEvaluator(_ context.Context) xpath3.Evaluator {
 		fnNameTransform: &xsltFunc{min: 1, max: 1, fn: c.staticFnTransform},
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
+		Functions(fns, nil)
 	ns := make(map[string]string, len(c.nsBindings)+1)
 	maps.Copy(ns, c.nsBindings)
 	if c.xpathDefaultNS != "" {
@@ -1018,7 +1018,7 @@ func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 		fnNameElementAvailable:  &xsltFunc{min: 1, max: 1, fn: c.useWhenElementAvailable},
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(xpath3.FunctionLibraryFromMaps(fns, nil))
+		Functions(fns, nil)
 	if len(c.nsBindings) > 0 || c.xpathDefaultNS != "" {
 		ns := make(map[string]string, len(c.nsBindings)+1)
 		maps.Copy(ns, c.nsBindings)
@@ -1028,7 +1028,7 @@ func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 		eval = eval.Namespaces(ns)
 	}
 	if len(c.staticVars) > 0 {
-		eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
+		eval = eval.Variables(c.staticVars)
 	}
 	if c.baseURI != "" {
 		eval = eval.BaseURI(ensureFileURI(c.baseURI))

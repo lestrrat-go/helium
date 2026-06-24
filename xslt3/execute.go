@@ -1176,8 +1176,8 @@ func (ec *execContext) accumulatorStateKey(name string) string {
 func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
 	vars := ec.collectAllVars(ctx)
 	eval := ec.baseXPathEvaluator().
-		Variables(xpath3.VariablesFromMap(vars)).
-		Functions(xpath3.FunctionLibraryFromMaps(ec.xsltFunctions(), ec.xsltFunctionsNS()))
+		Variables(vars).
+		Functions(ec.xsltFunctions(), ec.xsltFunctionsNS())
 	if ec.typeAnnotations != nil {
 		eval = eval.TypeAnnotations(ec.typeAnnotations)
 	}

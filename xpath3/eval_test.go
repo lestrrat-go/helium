@@ -66,9 +66,9 @@ func TestEvalLiteral(t *testing.T) {
 func TestEvalVariable(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"x": xpath3.SingleInteger(42),
-		}))
+		})
 	seq := evalExprWithEval(t, eval, doc, "$x")
 	require.Equal(t, 1, seq.Len())
 	av := seq.Get(0).(xpath3.AtomicValue)
@@ -309,13 +309,13 @@ func TestEvalSimpleMap(t *testing.T) {
 func TestEvalFLWOR(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"items": xpath3.ItemSlice{
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
 			},
-		}))
+		})
 
 	t.Run("simple for", func(t *testing.T) {
 		seq := evalExprWithEval(t, eval, doc, "for $x in $items return $x")
@@ -333,13 +333,13 @@ func TestEvalFLWOR(t *testing.T) {
 func TestEvalQuantified(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+		Variables(map[string]xpath3.Sequence{
 			"nums": xpath3.ItemSlice{
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
 				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
 			},
-		}))
+		})
 
 	t.Run("some", func(t *testing.T) {
 		seq := evalExprWithEval(t, eval, doc, "some $x in $nums satisfies $x = 2")
@@ -538,9 +538,9 @@ func TestEvalUserFunction(t *testing.T) {
 	}
 
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-		Functions(xpath3.FunctionLibraryFromMaps(map[string]xpath3.Function{
+		Functions(map[string]xpath3.Function{
 			"myfunc": fn,
-		}, nil))
+		}, nil)
 
 	parsed := mustParseExpr(t, `myfunc("arg")`)
 	compiled, err := xpath3.NewCompiler().CompileExpr(parsed)

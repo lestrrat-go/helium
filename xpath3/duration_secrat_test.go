@@ -316,10 +316,10 @@ func TestDayTimeDurationDivSchemaDerivedDecimal(t *testing.T) {
 	dur, err := xpath3.CastFromString("PT10S", xpath3.TypeDayTimeDuration)
 	require.NoError(t, err)
 
-	vars := xpath3.NewVariables()
-	vars.Set("d", xpath3.SingleAtomic(dur))
-	vars.Set("h", xpath3.SingleAtomic(half))
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(vars)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
+		"d": xpath3.SingleAtomic(dur),
+		"h": xpath3.SingleAtomic(half),
+	})
 
 	seq := evalExprWithEval(t, eval, doc, `$d div $h`)
 	require.Equal(t, 1, seq.Len())

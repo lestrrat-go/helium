@@ -997,10 +997,7 @@ func (integerIdentityFn) FuncReturnType() *xpath3.SequenceType {
 func TestFunctionLookupTypedParamValidation(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("f", integerIdentityFn{})
-
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(lib)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(map[string]xpath3.Function{"f": integerIdentityFn{}}, nil)
 
 	t.Run("bad-typed arg raises XPTY0004", func(t *testing.T) {
 		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)("bad")`)
@@ -1089,10 +1086,7 @@ func (customPrefixParamFn) FuncReturnType() *xpath3.SequenceType {
 func TestFunctionLookupCustomPrefixParamNoPanic(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
-	lib := xpath3.NewFunctionLibrary()
-	lib.Set("f", customPrefixParamFn{})
-
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(lib)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Functions(map[string]xpath3.Function{"f": customPrefixParamFn{}}, nil)
 
 	compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(1)`)
 	require.NoError(t, err)

@@ -20,13 +20,13 @@ func TestSerialize_OptionsNode(t *testing.T) {
 	doc := mustParseXML(t, paramsXML)
 	paramsElem := doc.DocumentElement()
 
-	vars := xpath3.NewVariables()
 	nodes, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Evaluate(t.Context(), mustCompile(t, `.`), paramsElem)
 	require.NoError(t, err)
-	vars.Set("params", nodes.Sequence())
 
-	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(vars)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
+		"params": nodes.Sequence(),
+	})
 	compiled := mustCompile(t, `serialize("hello", $params)`)
 	res, err := eval.Evaluate(t.Context(), compiled, doc)
 	require.NoError(t, err)
