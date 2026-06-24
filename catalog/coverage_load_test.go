@@ -193,7 +193,14 @@ func TestLocalhostFileURI(t *testing.T) {
 </catalog>`
 	require.NoError(t, os.WriteFile(p, []byte(xml), 0o600))
 
-	uri := "file://localhost" + filepath.ToSlash(p)
+	// Build "file://localhost/<path>". On Windows the slashed path is
+	// "C:/..." (no leading slash), so prepend one to avoid producing
+	// "file://localhostC:/..." where "localhostC:" is read as the host.
+	slashed := filepath.ToSlash(p)
+	if !strings.HasPrefix(slashed, "/") {
+		slashed = "/" + slashed
+	}
+	uri := "file://localhost" + slashed
 	cat, err := catalog.Load(t.Context(), uri)
 	require.NoError(t, err)
 	got := cat.Resolve(t.Context(), "", "sid")

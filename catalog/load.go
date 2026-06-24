@@ -198,10 +198,18 @@ func catalogFilePath(ref string) (string, bool, error) {
 // space rather than as bare filesystem paths.
 //
 // (&url.URL{Scheme: "file", Path: ...}).String() percent-encodes as needed and,
-// on Windows, converts the OS separator to "/" via filepath.ToSlash, yielding
-// "file:///C:/tmp/catalog.xml". On POSIX the absolute path already uses "/".
+// on Windows, converts the OS separator to "/" via filepath.ToSlash. A Windows
+// drive-letter absolute path slashes to "C:/tmp/catalog.xml" — with NO leading
+// slash — which url.URL.String() would render as "file://C:/tmp/catalog.xml",
+// reading "C:" as the authority/host. Prepend the missing leading slash so the
+// result is the correct "file:///C:/tmp/catalog.xml". On POSIX the absolute
+// path already begins with "/", so this is a no-op there.
 func localPathToFileURI(absPath string) string {
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(absPath)}
+	slashed := filepath.ToSlash(absPath)
+	if !strings.HasPrefix(slashed, "/") {
+		slashed = "/" + slashed
+	}
+	u := url.URL{Scheme: "file", Path: slashed}
 	return u.String()
 }
 

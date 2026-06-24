@@ -18,6 +18,20 @@ import (
 
 const encUTF8 = "utf-8"
 
+// fileURI builds a proper "file:///" URI from a native absolute path on any OS.
+// Naively concatenating fileURI(path) is correct on POSIX (the path begins
+// with "/", giving "file:///tmp/x"), but on Windows the path is "C:\\..." so
+// the result is "file://C:\\..." where "C:" is mis-parsed as the URI host.
+// Normalizing backslashes to slashes and ensuring a single leading slash before
+// the path yields "file:///C:/..." (and keeps "file:///tmp/x" on POSIX).
+func fileURI(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return "file://" + p
+}
+
 func TestSplitLines(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -289,7 +303,7 @@ func TestReadURI(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte("file-uri"), 0644))
 
 		cfg := &unparsedtext.Config{URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir}}
-		data, err := unparsedtext.ReadURI(t.Context(), cfg, "file://"+path)
+		data, err := unparsedtext.ReadURI(t.Context(), cfg, fileURI(path))
 		require.NoError(t, err)
 		require.Equal(t, "file-uri", string(data))
 	})
@@ -344,7 +358,7 @@ func TestMaxBytes(t *testing.T) {
 			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
 			MaxBytes:    10,
 		}
-		_, err := unparsedtext.LoadText(t.Context(), cfg, "file://"+path, "")
+		_, err := unparsedtext.LoadText(t.Context(), cfg, fileURI(path), "")
 		require.Error(t, err)
 		var ue *unparsedtext.Error
 		require.ErrorAs(t, err, &ue)
@@ -360,7 +374,7 @@ func TestMaxBytes(t *testing.T) {
 			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
 			MaxBytes:    10,
 		}
-		text, err := unparsedtext.LoadText(t.Context(), cfg, "file://"+path, "")
+		text, err := unparsedtext.LoadText(t.Context(), cfg, fileURI(path), "")
 		require.NoError(t, err)
 		require.Equal(t, strings.Repeat("a", 10), text)
 	})
@@ -374,7 +388,7 @@ func TestMaxBytes(t *testing.T) {
 			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
 			MaxBytes:    10,
 		}
-		_, err := unparsedtext.ReadURI(t.Context(), cfg, "file://"+path)
+		_, err := unparsedtext.ReadURI(t.Context(), cfg, fileURI(path))
 		require.Error(t, err)
 		var ue *unparsedtext.Error
 		require.ErrorAs(t, err, &ue)
@@ -401,7 +415,7 @@ func TestMaxBytes(t *testing.T) {
 			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
 			MaxBytes:    -1,
 		}
-		text, err := unparsedtext.LoadText(t.Context(), cfg, "file://"+path, "")
+		text, err := unparsedtext.LoadText(t.Context(), cfg, fileURI(path), "")
 		require.NoError(t, err)
 		require.Len(t, text, 100)
 	})
@@ -413,7 +427,7 @@ func TestLoadText(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello world"), 0644))
 
 		cfg := &unparsedtext.Config{
-			BaseURI:     "file://" + dir + "/",
+			BaseURI:     fileURI(dir) + "/",
 			URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir},
 		}
 		text, err := unparsedtext.LoadText(t.Context(), cfg, "test.txt", "")
@@ -427,7 +441,7 @@ func TestLoadText(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte("hello\x00world"), 0644))
 
 		cfg := &unparsedtext.Config{URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir}}
-		text, err := unparsedtext.LoadText(t.Context(), cfg, "file://"+path, "")
+		text, err := unparsedtext.LoadText(t.Context(), cfg, fileURI(path), "")
 		require.Error(t, err)
 		require.Empty(t, text)
 		var ue *unparsedtext.Error
@@ -452,7 +466,7 @@ func TestLoadTextLines(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("line1\r\nline2\nline3"), 0644))
 
 	cfg := &unparsedtext.Config{URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir}}
-	lines, err := unparsedtext.LoadTextLines(t.Context(), cfg, "file://"+path, "")
+	lines, err := unparsedtext.LoadTextLines(t.Context(), cfg, fileURI(path), "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"line1", "line2", "line3"}, lines)
 }
@@ -463,8 +477,8 @@ func TestIsAvailable(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("ok"), 0644))
 
 	cfg := &unparsedtext.Config{URIResolver: &unparsedtext.FileURIResolver{BaseDir: dir}}
-	require.True(t, unparsedtext.IsAvailable(t.Context(), cfg, "file://"+path, ""))
-	require.False(t, unparsedtext.IsAvailable(t.Context(), cfg, "file://"+filepath.Join(dir, "nope.txt"), ""))
+	require.True(t, unparsedtext.IsAvailable(t.Context(), cfg, fileURI(path), ""))
+	require.False(t, unparsedtext.IsAvailable(t.Context(), cfg, fileURI(filepath.Join(dir, "nope.txt")), ""))
 }
 
 func TestFileURIResolver(t *testing.T) {
@@ -495,6 +509,18 @@ func TestFileURIResolver(t *testing.T) {
 		_, err := r.ResolveURI("ftp://example.com/file.txt")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "unsupported URI scheme")
+	})
+
+	// A bare Windows absolute path is mis-parsed by url.Parse as scheme "c",
+	// but must NOT be rejected as an unsupported URI scheme: the resolver has
+	// to treat it as a local path. This string is exercised on every OS, so the
+	// classification fix is covered on Linux CI. On Linux the path is not a real
+	// file, so the resolver fails later at the filesystem layer — the assertion
+	// is only that it does NOT fail with "unsupported URI scheme: c".
+	t.Run("bare windows path not treated as scheme c", func(t *testing.T) {
+		_, err := r.ResolveURI(`C:\does\not\exist.txt`)
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), "unsupported URI scheme")
 	})
 }
 
@@ -529,7 +555,7 @@ func TestReadURINoFileReadByDefault(t *testing.T) {
 	require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
 
 	// nil config — file:// URI
-	_, err = unparsedtext.ReadURI(t.Context(), nil, "file://"+path)
+	_, err = unparsedtext.ReadURI(t.Context(), nil, fileURI(path))
 	require.Error(t, err)
 	require.ErrorAs(t, err, &ue)
 	require.Equal(t, unparsedtext.ErrCodeRetrieval, ue.Code)
@@ -556,7 +582,7 @@ func TestLoadTextNoFileReadByDefault(t *testing.T) {
 	path := filepath.Join(dir, "secret.txt")
 	require.NoError(t, os.WriteFile(path, []byte("secret"), 0644))
 
-	_, err := unparsedtext.LoadText(t.Context(), nil, "file://"+path, "")
+	_, err := unparsedtext.LoadText(t.Context(), nil, fileURI(path), "")
 	require.Error(t, err)
 	var ue *unparsedtext.Error
 	require.ErrorAs(t, err, &ue)
@@ -582,7 +608,7 @@ func TestFileURIResolverRejectsTraversal(t *testing.T) {
 	})
 
 	t.Run("file URI with absolute path refused", func(t *testing.T) {
-		_, err := r.ResolveURI("file://" + outside)
+		_, err := r.ResolveURI(fileURI(outside))
 		require.Error(t, err)
 	})
 }

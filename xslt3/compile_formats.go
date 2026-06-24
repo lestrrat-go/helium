@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"maps"
-	"path/filepath"
+	"path"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
@@ -534,8 +535,13 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 			if rErr == nil {
 				uri = resolved
 			}
-		case !filepath.IsAbs(href):
-			uri = filepath.Join(filepath.Dir(baseURI), href)
+		case !uripath.IsAbsolutePath(href):
+			// Local filesystem base: resolve with forward-slash (path)
+			// semantics so the result uses '/' on every OS; on Windows
+			// filepath.Dir/Join would emit '\'. uripath.IsAbsolutePath
+			// recognizes both POSIX- and Windows-absolute hrefs regardless
+			// of GOOS.
+			uri = uripath.JoinLocalBaseDir(path.Dir(uripath.ToSlash(baseURI)), href)
 		}
 	}
 

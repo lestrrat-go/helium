@@ -3,8 +3,11 @@ package xsd
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/uripath"
 )
 
 // URIScheme reports the scheme of s when s is an absolute URI reference (it has
@@ -74,17 +77,26 @@ func ResolveSchemaURI(ref, base string) (string, error) {
 	if uriScheme(base) != "" {
 		return resolveURIReference(base, ref)
 	}
+	// Local filesystem base + ref. Resolve in FORWARD-SLASH space so the
+	// returned name — used as a key into the configured fs.FS, whose contract
+	// mandates '/' (io/fs.ValidPath) — never gains backslashes on Windows, where
+	// filepath.Join/Rel/Separator would otherwise produce "schemas\\x" and miss
+	// every MapFS / os.DirFS key. The shape-based detection and slash math are
+	// GOOS-independent, so the escape guard is exercised identically on POSIX.
+	slashRef := uripath.ToSlash(ref)
 	if base == "" {
-		return filepath.Clean(ref), nil
+		return path.Clean(slashRef), nil
 	}
-	p := filepath.Join(base, ref)
-	rel, err := filepath.Rel(base, p)
+	slashBase := uripath.ToSlash(base)
+	p := path.Join(slashBase, slashRef)
+	rel, err := filepath.Rel(slashBase, p)
 	if err != nil {
 		// Rel only fails when one is absolute and the other isn't;
 		// nothing actionable here — accept and let the loader decide.
 		return p, nil //nolint:nilerr
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	rel = uripath.ToSlash(rel)
+	if rel == ".." || strings.HasPrefix(rel, "../") {
 		return "", fmt.Errorf("%w: %q", errSchemaPathEscape, ref)
 	}
 	return p, nil

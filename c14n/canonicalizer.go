@@ -11,6 +11,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 )
 
 type canonicalizer struct {
@@ -861,12 +862,42 @@ func (c *canonicalizer) documentBaseURI() string {
 	if u, err := url.Parse(c.baseURI); err == nil && u.IsAbs() && len(u.Scheme) > 1 {
 		return c.baseURI
 	}
-	// Convert file path to URL for proper URI resolution.
-	absPath, err := filepath.Abs(c.baseURI)
-	if err != nil {
-		return c.baseURI
+	// A Windows-absolute base ("D:\dir\doc.xml", "D:/dir/doc.xml", or a UNC path)
+	// is already absolute, so it is converted to a forward-slash "file:" URI
+	// directly — WITHOUT filepath.Abs. This is detected from the string shape
+	// (uripath), so it is handled identically on POSIX and Windows: on a POSIX
+	// host filepath.Abs would misread "D:\..." as a relative path and prepend the
+	// working directory, corrupting the base. On Windows, prepending a bare
+	// "file://" to the native backslash path ("file://D:\dir\doc.xml") yields a
+	// value url.Parse cannot navigate, collapsing the downstream ".." in
+	// relativizeURI into output like "..//x"; WindowsToFileURI rewrites it to the
+	// proper "file:///D:/dir/doc.xml".
+	if uripath.IsWindowsAbsolute(c.baseURI) {
+		return uripath.WindowsToFileURI(c.baseURI)
 	}
-	return "file://" + absPath
+
+	// A POSIX-absolute base is already anchored; normalize separators, remove
+	// dot-segments, and attach the file scheme. A relative base is anchored
+	// against the working directory with filepath.Abs first (POSIX result is a
+	// "/..."-rooted path). SlashClean (not ToSlash) preserves the historical
+	// behavior of the old unconditional filepath.Abs, which collapsed "." / ".."
+	// / "//" in the base; this matters because the base feeds relativizeURI and
+	// the C14N 1.1 xml:base fixup, so a non-canonical base would change canonical
+	// output bytes (which are XML-signature input).
+	abs := c.baseURI
+	if !uripath.IsPOSIXAbsolute(abs) {
+		anchored, err := filepath.Abs(c.baseURI)
+		if err != nil {
+			return c.baseURI
+		}
+		// On Windows filepath.Abs may produce a drive-letter path; route it
+		// through the Windows converter for a correct "file:///C:/..." URI.
+		if uripath.IsWindowsAbsolute(anchored) {
+			return uripath.WindowsToFileURI(anchored)
+		}
+		abs = anchored
+	}
+	return "file://" + uripath.SlashClean(abs)
 }
 
 // xmlBaseLocalName is the local name of the xml:base attribute.

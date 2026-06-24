@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -90,11 +91,21 @@ func fnEnvironmentVariable(_ context.Context, args []Sequence) (Sequence, error)
 	if val, ok := qt3EnvironmentVariables[name]; ok {
 		return SingleString(val), nil
 	}
-	val, ok := os.LookupEnv(name)
-	if !ok {
-		return validNilSequence, nil
+	// Look the name up against os.Environ() with an EXACT, case-sensitive match
+	// rather than os.LookupEnv. On Windows os.LookupEnv is case-insensitive and
+	// the canonical name differs in case (e.g. "Path"), so environment-variable
+	// ("path") would return a value while available-environment-variables()
+	// lists only "Path" — making the two accessors mutually inconsistent and
+	// breaking F&O conformance (env var names are case-sensitive). Enumerating
+	// os.Environ() (the same source fnAvailableEnvVars uses) keeps them in lock
+	// step on every OS. POSIX behavior is unchanged.
+	for _, env := range os.Environ() {
+		k, v, ok := strings.Cut(env, "=")
+		if ok && k == name {
+			return SingleString(v), nil
+		}
 	}
-	return SingleString(val), nil
+	return validNilSequence, nil
 }
 
 func fnCurrentDateTime(ctx context.Context, _ []Sequence) (Sequence, error) {

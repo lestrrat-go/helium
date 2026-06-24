@@ -4,26 +4,26 @@ Arrows show "imports" direction. Indented items are transitive.
 
 ```
 cmd/helium     → internal/cli/heliumcmd
-internal/cli/heliumcmd → helium, c14n, relaxng, schematron, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil
+internal/cli/heliumcmd → helium, c14n, relaxng, schematron, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil, internal/uripath, internal/iofs
 shim           → helium, stream, enum, internal/encoding, internal/xmlchar
-xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/lexicon
+xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/lexicon, internal/uripath
                   → xpath1 (via xpointer)
                   → internal/xmlchar (via xpointer)
 xpath1         → helium, internal/lexicon, internal/domutil
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil
-xslt3          → helium, xpath3, xsd, html, internal/lexicon, internal/sequence, internal/xpathstream, internal/domutil, xslt3/internal/elements
-xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, internal/xsdregex
-relaxng        → helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar
+xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, xslt3/internal/elements
+xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs
+relaxng        → helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar, internal/uripath
 schematron     → helium, xpath1
 xpointer       → helium, xpath1, internal/xmlchar
-c14n           → helium, internal/lexicon, internal/domutil
+c14n           → helium, internal/lexicon, internal/domutil, internal/uripath
 xmldsig1       → helium, c14n, internal/lexicon, internal/domutil
 xmlenc1        → helium, internal/domutil
 html           → helium, sax, push, internal/xmlchar
 catalog        → helium, internal/catalog, internal/lexicon, internal/xmlchar
 stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
-helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack
+helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath, internal/iofs
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)
@@ -32,7 +32,9 @@ push → (none)
 internal/heliumtest → (none)
 internal/sequence → (none)
 internal/strcursor → (none)
-internal/unparsedtext → internal/xmlchar
+internal/unparsedtext → internal/xmlchar, internal/uripath, internal/iofs
+internal/catalog → internal/uripath
+internal/uripath → (none)
 internal/xsdregex → (none)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, internal/lexicon, internal/xmlchar
@@ -41,7 +43,7 @@ test           → helium
 ```
 
 ## Leaf packages (no helium deps)
-sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/catalog, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/unparsedtext, internal/xsdregex
+sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/xsdregex, internal/uripath
 
 ## Core layer
 helium (root) → sax, enum, internal/*

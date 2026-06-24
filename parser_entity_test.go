@@ -16,6 +16,7 @@ import (
 	"github.com/lestrrat-go/helium"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1157,4 +1158,59 @@ func TestEntityRefToUnparsedEntity(t *testing.T) {
 
 	_, err := helium.NewParser().Parse(t.Context(), []byte(src))
 	require.Error(t, err)
+}
+
+// trimSlashFS adapts an fs.FS so a leading-slash absolute name (such as the
+// "/C:/..." path FileURIToPath yields on a POSIX host) is accepted by an
+// fs.ValidPath-enforcing FS like fstest.MapFS.
+type trimSlashFS struct{ inner fs.FS }
+
+func (f trimSlashFS) Open(name string) (fs.File, error) {
+	// Normalize to forward slashes (the native open name is backslash-separated
+	// on Windows: "C:\\win\\dir\\ext.dtd") and drop the leading slash the POSIX
+	// "/C:/..." form carries, so fstest.MapFS (keyed "C:/win/dir/ext.dtd")
+	// serves it on every OS.
+	return f.inner.Open(strings.TrimPrefix(filepath.ToSlash(name), "/")) //nolint:wrapcheck // test helper
+}
+
+// TestExternalSubsetResolvesAgainstWindowsDriveFileURIBase is the string-shaped
+// (GOOS-independent) regression for the Windows nested-external-DTD failure: a
+// document parsed with a Windows-drive "file:" base URI
+// ("file:///C:/win/dir/doc.xml") that declares a RELATIVE external DTD
+// ("ext.dtd"). The resolver must combine them into a proper "file:" URI (via
+// BuildURI) and convert it to a local path before Open, NOT mangle it with
+// filepath.Dir/Join — on Windows that cleared the directory and dropped the DTD.
+// The base is a plain string, so this exercises the Windows branch on every OS.
+// The resolved open name is whatever FileURIToPath yields for the combined
+// "file:///C:/win/dir/ext.dtd": "/C:/win/dir/ext.dtd" on a POSIX host,
+// "C:\\win\\dir\\ext.dtd" on Windows. Derive it the same way so the assertion
+// is correct on both, and let trimSlashFS normalize either form to the MapFS key.
+func TestExternalSubsetResolvesAgainstWindowsDriveFileURIBase(t *testing.T) {
+	t.Parallel()
+
+	const dtd = `<!ELEMENT chapter (#PCDATA)>
+<!ENTITY greet "hello from nested dtd">`
+
+	openName, err := iofs.FileURIToPath("file:///C:/win/dir/ext.dtd")
+	require.NoError(t, err)
+	fsys := &recordingFS{inner: trimSlashFS{fstest.MapFS{"C:/win/dir/ext.dtd": {Data: []byte(dtd)}}}}
+
+	xml := `<?xml version="1.0"?>` +
+		`<!DOCTYPE chapter SYSTEM "ext.dtd">` +
+		`<chapter>text</chapter>`
+
+	doc, err := helium.NewParser().
+		LoadExternalDTD(true).
+		BaseURI("file:///C:/win/dir/doc.xml").
+		FS(fsys).
+		Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	// The relative SYSTEM id resolved into the base directory (never dropped to a
+	// bare "ext.dtd", the Windows filepath.Join failure mode), so the DTD was
+	// found and its general entity declared.
+	require.True(t, fsys.wasOpened(openName),
+		"relative SYSTEM id must resolve against the windows-drive file: base")
+	_, found := doc.GetEntity("greet")
+	require.True(t, found, "entity from external DTD must be declared, proving the file: DTD URI was resolved")
 }

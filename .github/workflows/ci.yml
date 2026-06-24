@@ -8,14 +8,62 @@ permissions:
   contents: read
 
 jobs:
+  # Tier 1: lint runs first. Every heavier tier below gates on it via needs,
+  # so a lint failure short-circuits the whole pipeline before any tests or
+  # fuzzing run.
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        with:
+          version: v2.12.2
+          args: --timeout=5m
+
+      - name: Run go vet
+        run: go vet ./...
+
+  # Tier 2: main tests, only after lint succeeds.
   test:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -race -timeout 20m ./...
+
+  verify:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Cache dependencies
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -33,7 +81,7 @@ jobs:
         run: go mod download
 
       - name: Install stringer
-        run: go install golang.org/x/tools/cmd/stringer@latest
+        run: go install golang.org/x/tools/cmd/stringer@v0.46.0
 
       - name: Check generated parser state file
         run: |
@@ -44,10 +92,6 @@ jobs:
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
-
-      - name: Run tests
-        run: |
-          go test -race -timeout 20m ./...
 
       - name: Build helium command
         run: |
@@ -61,3 +105,85 @@ jobs:
             git status --porcelain
             exit 1
           fi
+
+  govulncheck:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.4.0 ./...
+
+  # Tier 3: fuzz smoke run, only after the main tests (test, verify,
+  # govulncheck) all succeed.
+  fuzz-smoke:
+    needs: [test, verify, govulncheck]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ['.', 'c14n', 'catalog', 'html', 'relaxng', 'schematron', 'sink', 'stream', 'xinclude', 'xpath1', 'xpath3', 'xpointer', 'xsd', 'xslt3']
+    name: "Fuzz smoke ${{ matrix.package }}"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Cache dependencies
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run fuzz smoke tests
+        run: |
+          FUZZTIME="5s"
+          mkdir -p /tmp/fuzz-output
+          for target in $(go test ./${{ matrix.package }}/ -list '^Fuzz' -run '^$' | grep '^Fuzz' || true); do
+            echo "::group::${target}"
+            go test ./${{ matrix.package }}/ -run '^$' -fuzz "^${target}\$" -fuzztime "${FUZZTIME}" 2>&1 \
+              | tee -a /tmp/fuzz-output/log.txt
+            echo "::endgroup::"
+          done
+
+      - name: Collect failing corpus
+        if: failure()
+        run: |
+          mkdir -p /tmp/fuzz-failures
+          grep -oP 'Failing input written to \K\S+' /tmp/fuzz-output/log.txt \
+            | while read -r f; do
+                pkg="${{ matrix.package }}"
+                path="${f}"
+                if [ "$pkg" != "." ]; then
+                  path="${pkg}/${f}"
+                fi
+                if [ -f "$path" ]; then
+                  cp --parents "$path" /tmp/fuzz-failures/
+                fi
+              done
+
+      - name: Upload failing corpus
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-corpus-${{ matrix.package }}
+          path: /tmp/fuzz-failures/
+          if-no-files-found: ignore
+          retention-days: 30

@@ -28,6 +28,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/tools/internal/gen"
 	"golang.org/x/net/html/charset"
 )
@@ -1070,7 +1071,7 @@ func addTransitiveDeps(assetFiles map[string]struct{}, sourceDir, relPath string
 // absolute path, or ok=false (with a logged warning) when the reference is
 // absolute or escapes the root.
 func resolveDep(root, dir, ref string) (string, bool) {
-	if filepath.IsAbs(ref) {
+	if isAbsoluteAnyOS(ref) {
 		log.Printf("xslt3gen: skipping absolute dependency %q", ref)
 		return "", false
 	}
@@ -2078,7 +2079,7 @@ func catalogRelPath(sourceDir, tsDir, file string) (string, bool) {
 	if file == "" {
 		return "", false
 	}
-	if filepath.IsAbs(file) || filepath.IsAbs(normalizeAssetPath(file)) {
+	if isAbsoluteAnyOS(file) || isAbsoluteAnyOS(normalizeAssetPath(file)) {
 		log.Printf("xslt3gen: skipping absolute catalog path %q (under %q)", file, tsDir)
 		return "", false
 	}
@@ -2102,7 +2103,7 @@ func catalogRelPath(sourceDir, tsDir, file string) (string, bool) {
 // "../../xslt3/pwn.go" or "/etc/passwd") from causing the generator to read or
 // write outside the intended testdata tree.
 func containedPath(root, relPath string) (string, error) {
-	if filepath.IsAbs(relPath) {
+	if isAbsoluteAnyOS(relPath) {
 		return "", fmt.Errorf("absolute path not allowed: %q", relPath)
 	}
 	cleaned := filepath.Clean(filepath.Join(root, relPath))
@@ -2114,6 +2115,16 @@ func containedPath(root, relPath string) (string, error) {
 		return "", fmt.Errorf("path escapes root %q: %q", root, relPath)
 	}
 	return cleaned, nil
+}
+
+// isAbsoluteAnyOS reports whether p is absolute under EITHER POSIX or Windows
+// conventions, regardless of the host OS. The containment guards above must use
+// this rather than filepath.IsAbs: on Windows filepath.IsAbs("/etc/passwd") is
+// false (no drive letter) and on POSIX filepath.IsAbs("C:\\Windows") is false,
+// so a single-OS check lets a path that is absolute on the "other" OS slip past
+// the path-traversal rejection. This closes that gap on every platform.
+func isAbsoluteAnyOS(p string) bool {
+	return filepath.IsAbs(p) || uripath.IsAbsolutePath(p)
 }
 
 func boolAttrTrue(v string) bool {

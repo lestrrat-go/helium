@@ -239,6 +239,11 @@ func TestElementTypeString(t *testing.T) {
 func TestDTDDeclarationNodeWrappers(t *testing.T) {
 	t.Parallel()
 
+	// The ElementDecl/AttributeDecl subtests below share and mutate a single
+	// parsed doc (AppendText/AddChild allocate text and comment nodes off the
+	// document). helium Documents are a DOM tree and are not concurrency-safe,
+	// so these subtests must run sequentially — do NOT add t.Parallel() to them.
+
 	// Parse a doc that declares both an element and an attribute so we obtain
 	// real ElementDecl and AttributeDecl nodes from the DTD.
 	const src = `<?xml version="1.0"?>
@@ -253,7 +258,6 @@ func TestDTDDeclarationNodeWrappers(t *testing.T) {
 	require.NotNil(t, dtd)
 
 	t.Run("ElementDecl wrappers", func(t *testing.T) {
-		t.Parallel()
 		edecl, ok := dtd.LookupElement("doc", "")
 		require.True(t, ok)
 		require.Equal(t, helium.ElementDeclNode, edecl.Type())
@@ -270,7 +274,6 @@ func TestDTDDeclarationNodeWrappers(t *testing.T) {
 	})
 
 	t.Run("AttributeDecl wrappers", func(t *testing.T) {
-		t.Parallel()
 		adecls := dtd.AttributesForElement("doc")
 		require.NotEmpty(t, adecls)
 		adecl := adecls[0]
@@ -283,7 +286,6 @@ func TestDTDDeclarationNodeWrappers(t *testing.T) {
 	})
 
 	t.Run("DTD AppendText and Free", func(t *testing.T) {
-		t.Parallel()
 		d3 := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 		dtd3, derr := d3.CreateInternalSubset("doc", "", "")
 		require.NoError(t, derr)
@@ -292,7 +294,6 @@ func TestDTDDeclarationNodeWrappers(t *testing.T) {
 	})
 
 	t.Run("Entity AddSibling and Replace", func(t *testing.T) {
-		t.Parallel()
 		d4 := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 		dtd4, derr := d4.CreateInternalSubset("doc", "", "")
 		require.NoError(t, derr)

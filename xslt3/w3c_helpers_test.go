@@ -1004,8 +1004,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		sourceParser := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true)
 		if tc.SourceDocPath != "" {
 			sourceParser = sourceParser.SubstituteEntities(true).FixBaseURIs(false)
-			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-			sourceParser = sourceParser.BaseURI(srcAbsPath)
+			sourceParser = sourceParser.BaseURI(w3cAbsBaseURI(tc.SourceDocPath))
 		}
 		var parseErr error
 		sourceDoc, parseErr = sourceParser.Parse(t.Context(), sourceData)
@@ -1016,11 +1015,9 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 			t.Fatalf("cannot parse source: %v", parseErr)
 		}
 		if tc.SourceDocPath != "" {
-			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-			sourceDoc.SetURL(srcAbsPath)
+			sourceDoc.SetURL(w3cAbsBaseURI(tc.SourceDocPath))
 		} else if tc.SourceContent != "" && tc.StylesheetPath != "" {
-			ssAbsPath, _ := filepath.Abs(w3cResolvePath(tc.StylesheetPath))
-			sourceDoc.SetURL(ssAbsPath)
+			sourceDoc.SetURL(w3cAbsBaseURI(tc.StylesheetPath))
 		}
 	}
 
@@ -1031,13 +1028,12 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	if tc.EmbeddedStylesheet && tc.StylesheetPath == "" {
 		// Extract embedded stylesheet from source document
 		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
-		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
+		compiler := xslt3.NewCompiler().BaseURI(w3cAbsBaseURI(tc.SourceDocPath)).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
 		ss, err = compiler.Compile(t.Context(), ssDoc)
 	} else if len(tc.PackageDeps) > 0 || len(tc.Params) > 0 || len(tc.ImportSchemaPaths) > 0 {
 		// When package deps, external params, or import schemas exist, compile without caching.
 		ssPath := w3cResolvePath(tc.StylesheetPath)
-		absPath, _ := filepath.Abs(ssPath)
+		absPath := w3cAbsBaseURI(tc.StylesheetPath)
 		compiler := xslt3.NewCompiler().BaseURI(absPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
 		if len(tc.PackageDeps) > 0 {
 			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps, versionResolution: tc.VersionResolution})
@@ -1085,8 +1081,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		// The source doc has an embedded stylesheet that imports/includes the
 		// standalone stylesheet. Extract and compile the embedded one.
 		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
-		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
+		compiler := xslt3.NewCompiler().BaseURI(w3cAbsBaseURI(tc.SourceDocPath)).URIResolver(w3cTestCompileResolver).AllowExternalEntities(true)
 		ss, err = compiler.Compile(t.Context(), ssDoc)
 	} else {
 		ssPath := w3cResolvePath(tc.StylesheetPath)
@@ -2597,6 +2592,10 @@ func w3cCompileCached(ctx context.Context, path string) (*xslt3.Stylesheet, erro
 	if absErr != nil {
 		absPath = path
 	}
+	// A base URI is a URI: force forward-slash so static-base-uri(), $err:module
+	// (tokenized on '/'), and document-uri() are OS-independent (see
+	// w3cAbsBaseURI). On POSIX this is a no-op.
+	absPath = filepath.ToSlash(absPath)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -2634,6 +2633,18 @@ func w3cResolvePath(rel string) string {
 		return rel
 	}
 	return filepath.Join(w3cTestdataDir, rel)
+}
+
+// w3cAbsBaseURI returns the absolute base URI for a stylesheet/source path in
+// FORWARD-SLASH form. A base URI is a URI, not a native path: tests such as
+// try-004 do tokenize($err:module, '/') and accessor/base-uri tests resolve
+// relative URIs against it, all of which assume '/' separators. On POSIX
+// filepath.Abs already yields '/'; on Windows it yields backslashes, which
+// would leak into static-base-uri()/$err:module and break those tests. Passing
+// a forward-slash base makes the harness behave identically on every OS.
+func w3cAbsBaseURI(rel string) string {
+	abs, _ := filepath.Abs(w3cResolvePath(rel))
+	return filepath.ToSlash(abs)
 }
 
 // w3cCollectionResolver implements xpath3.CollectionResolver for W3C tests.

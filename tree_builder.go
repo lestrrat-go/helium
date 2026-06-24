@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/url"
-	"path/filepath"
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -14,6 +13,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/strcursor"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/sax"
 )
 
@@ -354,13 +354,26 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		return nil
 	}
 
-	// Resolve system URI against document's base URI
+	// Resolve the system URI against the document's base URI. Use BuildURI (the
+	// same GOOS-independent, forward-slash/file:-URI-aware resolver used for
+	// entity URIs) rather than filepath.Dir/Join: on Windows filepath.Join
+	// mangles a "file:///C:/dir/doc.xml" base (it cleans "file://" to "file:/"
+	// and emits '\' separators), so a nested external DTD declared with a
+	// relative SYSTEM id ("inc.dtd") never resolves and is silently dropped.
+	// BuildURI keeps a drive-rooted result wrapped as "file:///C:/dir/inc.dtd",
+	// which the fsys (normalizingFS) converts back to a native path. POSIX
+	// output is unchanged: "file:///tmp/doc.xml" + "inc.dtd" -> "file:///tmp/inc.dtd".
 	resolved := uri
-	if !filepath.IsAbs(uri) && ctx.baseURI != "" {
-		resolved = filepath.Join(filepath.Dir(ctx.baseURI), uri)
+	if !uripath.IsAbsolutePath(uri) && !uripath.HasURIScheme(uri) && ctx.baseURI != "" {
+		if built := BuildURI(uri, ctx.baseURI); built != "" {
+			resolved = built
+		}
 	}
 
-	f, err := ctx.fsys.Open(resolved)
+	// resolved may be a "file:" URI (e.g. "file:///C:/dir/inc.dtd" from a
+	// drive-rooted base); convert it to a native path before Open, the same way
+	// a catalog-resolved file: URI is handled. A plain path is returned verbatim.
+	f, err := ctx.fsys.Open(catalogOpenName(resolved))
 	if err != nil {
 		// Silently ignore missing external DTDs
 		return nil

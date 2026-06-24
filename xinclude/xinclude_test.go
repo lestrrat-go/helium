@@ -23,6 +23,19 @@ func parseXML(t *testing.T, s string) *helium.Document {
 	return doc
 }
 
+// fileURIFromPath builds a proper "file:///" URI from a native absolute path on
+// any OS. Setting url.URL.Path to a Windows drive path ("C:/x") yields
+// "file://C:/x", where "C:" is mis-parsed as the host; ensuring a single
+// leading slash before the slash-normalized path yields "file:///C:/x" (and
+// keeps "file:///tmp/x" on POSIX).
+func fileURIFromPath(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
+}
+
 func docElement(doc *helium.Document) *helium.Element {
 	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
 		if n.Type() == helium.ElementNode {
@@ -1654,7 +1667,7 @@ func TestXIncludeFileURIHref(t *testing.T) {
 	target := filepath.Join(dir, "inc.xml")
 	require.NoError(t, os.WriteFile(target, []byte(`<loaded>FromFileURI</loaded>`), 0o600))
 
-	fileURI := (&url.URL{Scheme: "file", Path: filepath.ToSlash(target)}).String()
+	fileURI := fileURIFromPath(target)
 
 	doc := parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="%s"/>
@@ -1699,7 +1712,7 @@ func TestXIncludeFileURINestedExternalDTD(t *testing.T) {
 			`<!DOCTYPE chapter SYSTEM "inc.dtd">`+
 			`<chapter>text</chapter>`), 0o600))
 
-	fileURI := (&url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(dir, "inc.xml"))}).String()
+	fileURI := fileURIFromPath(filepath.Join(dir, "inc.xml"))
 
 	doc := parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="%s"/>

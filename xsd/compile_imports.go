@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"path/filepath"
+	"path"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/uripath"
 )
 
 // errImportDepthExceeded signals that xs:import recursion reached the
@@ -78,7 +79,10 @@ func schemaBaseDir(loc string) string {
 	if uriScheme(loc) != "" {
 		return loc
 	}
-	return filepath.Dir(loc)
+	// loc is an fs.FS key in forward-slash form (see ResolveSchemaURI); derive
+	// its parent directory with path.Dir so the result stays slash-separated on
+	// every OS rather than gaining backslashes via filepath.Dir on Windows.
+	return path.Dir(uripath.ToSlash(loc))
 }
 
 // schemaDisplayLoc builds the human-readable location shown in import/include
@@ -95,7 +99,9 @@ func schemaDisplayLoc(filename, loc string) string {
 			return resolved
 		}
 	}
-	return filepath.Join(filepath.Dir(filename), loc)
+	// Join in forward-slash space so the diagnostic path is stable across OSes
+	// (filepath.Join would emit '\' on Windows).
+	return path.Join(path.Dir(uripath.ToSlash(filename)), uripath.ToSlash(loc))
 }
 
 // processIncludes handles xs:include and xs:import elements.
