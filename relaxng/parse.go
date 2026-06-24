@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -489,7 +491,12 @@ func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href str
 	// branches from bypassing the containment guard.
 	var resolved string
 	switch {
-	case filepath.IsAbs(href):
+	case uripath.IsAbsolutePath(href):
+		// uripath.IsAbsolutePath recognizes both POSIX- ("/etc/passwd") and
+		// Windows-absolute ("C:\\x", UNC) shapes regardless of GOOS, so an
+		// absolute href is kept verbatim — and the containment guard below sees
+		// it as absolute — on every OS. filepath.IsAbs alone would miss
+		// "/etc/passwd" on Windows and wrongly join it onto baseDir.
 		resolved = href
 	default:
 		if doc := elem.OwnerDocument(); doc != nil {
@@ -538,18 +545,35 @@ func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href str
 		return resolved, nil
 	}
 
-	// filepath.Rel fails when one path is absolute and the other relative
-	// (e.g. a relative baseDir against an absolute href). That mismatch is
-	// itself a containment failure: an absolute href can never be proven to
-	// live inside a relative baseDir, so reject rather than silently skip.
-	rel, err := filepath.Rel(c.baseDir, filepath.Clean(checkPath))
+	// Containment is computed in forward-slash space so it is GOOS-independent:
+	// on Windows filepath.Rel/Separator would key off '\' and mis-handle the
+	// POSIX-shaped paths that flow through here (e.g. a "/etc/passwd" href).
+	//
+	// An absolute checkPath (under either OS convention) can never be proven to
+	// live inside a relative baseDir, and filepath.Rel mixing absolute+relative
+	// is itself a containment failure — so reject up front when only one side is
+	// absolute.
+	slashBase := uripath.ToSlash(c.baseDir)
+	slashTarget := path.Clean(uripath.ToSlash(checkPath))
+	baseAbs := uripath.IsAbsolutePath(slashBase)
+	targetAbs := uripath.IsAbsolutePath(slashTarget)
+	if baseAbs != targetAbs {
+		return "", fmt.Errorf("href %q escapes base directory", href)
+	}
+	rel, err := filepath.Rel(slashBase, slashTarget)
 	if err != nil {
 		return "", fmt.Errorf("href %q escapes base directory", href)
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	rel = uripath.ToSlash(rel)
+	if rel == ".." || strings.HasPrefix(rel, "../") {
 		return "", fmt.Errorf("href %q escapes base directory", href)
 	}
-	return resolved, nil
+	// The returned path is used as a key into the configured fs.FS, whose
+	// contract mandates forward slashes (see io/fs.ValidPath). On Windows
+	// filepath.Join above would have produced backslashes, which never match a
+	// MapFS / os.DirFS key, so normalize to slashes here. POSIX paths already
+	// use '/', so this is a no-op there.
+	return uripath.ToSlash(resolved), nil
 }
 
 // uriScheme returns the URI scheme of s if s begins with a "<scheme>://"
@@ -654,7 +678,7 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 
 	// Parse the included grammar content, skipping overridden components.
 	oldBaseDir := c.baseDir
-	c.baseDir = filepath.Dir(path)
+	c.baseDir = uripath.SlashDir(path)
 	c.parseGrammarContentSkipping(ctx, root, skip)
 	c.baseDir = oldBaseDir
 
@@ -1064,7 +1088,7 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 	}
 
 	oldBaseDir := c.baseDir
-	c.baseDir = filepath.Dir(path)
+	c.baseDir = uripath.SlashDir(path)
 
 	// An <externalRef> target is an INDEPENDENT schema (unlike <include>, which
 	// merges into the includer). It must NOT see the includer's grammar scope:
