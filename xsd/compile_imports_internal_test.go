@@ -112,6 +112,18 @@ func TestValidateSchemaPathLocalUnchanged(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, filepath.Join("/tmp/s", "/etc/passwd"), got)
 	})
+	// Windows-shaped fixtures (plain strings) exercise the forward-slash
+	// resolution and the escape guard on Linux. The returned name is an fs.FS
+	// key, which must be slash-separated on every OS — never "schemas\\x".
+	t.Run("windows-shaped base joins with forward slashes", func(t *testing.T) {
+		got, err := validateSchemaPath(`schemas\sub`, "part.xsd")
+		require.NoError(t, err)
+		require.Equal(t, "schemas/sub/part.xsd", got)
+	})
+	t.Run("windows-shaped backslash escape denied", func(t *testing.T) {
+		_, err := validateSchemaPath("schemas", `..\..\etc\passwd`)
+		require.ErrorIs(t, err, errSchemaPathEscape)
+	})
 }
 
 // TestSchemaBaseDir verifies the nested-include base used for the import
@@ -121,4 +133,7 @@ func TestSchemaBaseDir(t *testing.T) {
 	require.Equal(t, "https://example.com/s/main.xsd", schemaBaseDir("https://example.com/s/main.xsd"))
 	require.Equal(t, "file:///tmp/s/main.xsd", schemaBaseDir("file:///tmp/s/main.xsd"))
 	require.Equal(t, filepath.Dir("/tmp/s/main.xsd"), schemaBaseDir("/tmp/s/main.xsd"))
+	// An fs.FS-key loc is slash-separated; its parent stays slash-separated on
+	// every OS (a backslash-shaped input is normalized, exercising Windows on Linux).
+	require.Equal(t, "schemas", schemaBaseDir(`schemas\intermediate.xsd`))
 }
