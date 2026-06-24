@@ -72,7 +72,7 @@ func rsaKeyInfoXML(modulus, exponent string) string {
 		`</ds:RSAKeyValue></ds:KeyValue></ds:KeyInfo>`, NamespaceDSig, modulus, exponent)
 }
 
-func TestParseECKeyValue(t *testing.T) {
+func TestParseECKeyValueErrors(t *testing.T) {
 	// unsupported curve covers the unsupported-curve branch.
 	t.Run("unsupported curve", func(t *testing.T) {
 		elem := ecElem(t, `<dsig11:NamedCurve xmlns:dsig11="`+NamespaceDSig11+`" URI="urn:oid:bogus"/>`)
