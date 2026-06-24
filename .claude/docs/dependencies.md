@@ -4,16 +4,16 @@ Arrows show "imports" direction. Indented items are transitive.
 
 ```
 cmd/helium     → internal/cli/heliumcmd
-internal/cli/heliumcmd → helium, c14n, relaxng, schematron, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil
+internal/cli/heliumcmd → helium, c14n, relaxng, schematron, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil, internal/uripath
 shim           → helium, stream, enum, internal/encoding, internal/xmlchar
-xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/lexicon
+xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/lexicon, internal/uripath
                   → xpath1 (via xpointer)
                   → internal/xmlchar (via xpointer)
 xpath1         → helium, internal/lexicon, internal/domutil
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil
 xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, xslt3/internal/elements
-xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, internal/xsdregex
-relaxng        → helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar
+xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, internal/xsdregex, internal/uripath
+relaxng        → helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar, internal/uripath
 schematron     → helium, xpath1
 xpointer       → helium, xpath1, internal/xmlchar
 c14n           → helium, internal/lexicon, internal/domutil, internal/uripath
@@ -23,7 +23,7 @@ html           → helium, sax, push, internal/xmlchar
 catalog        → helium, internal/catalog, internal/lexicon, internal/xmlchar
 stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
-helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack
+helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)
