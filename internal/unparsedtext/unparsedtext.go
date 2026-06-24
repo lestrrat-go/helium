@@ -32,6 +32,7 @@ import (
 
 	iencoding "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -534,11 +535,16 @@ func (r *FileURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	}
 
 	var target string
-	switch parsed.Scheme {
-	case lexicon.SchemeFile:
+	switch {
+	case parsed.Scheme == lexicon.SchemeFile:
 		target = parsed.Path
-	case "":
-		if filepath.IsAbs(uri) {
+	// A bare Windows absolute path ("C:\\dir\\data.txt") is mis-parsed by
+	// url.Parse as scheme "c"; treat it as a local absolute path, not a URI.
+	case parsed.Scheme == "" || isWindowsDriveScheme(parsed):
+		// uripath.IsAbsolutePath recognizes both POSIX- and Windows-absolute
+		// shapes regardless of GOOS, so a "/abs" or "C:\\abs" reference is kept
+		// absolute rather than joined against BaseDir.
+		if filepath.IsAbs(uri) || uripath.IsAbsolutePath(uri) {
 			target = uri
 		} else {
 			target = filepath.Join(r.BaseDir, uri)

@@ -496,6 +496,18 @@ func TestFileURIResolver(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "unsupported URI scheme")
 	})
+
+	// A bare Windows absolute path is mis-parsed by url.Parse as scheme "c",
+	// but must NOT be rejected as an unsupported URI scheme: the resolver has
+	// to treat it as a local path. This string is exercised on every OS, so the
+	// classification fix is covered on Linux CI. On Linux the path is not a real
+	// file, so the resolver fails later at the filesystem layer — the assertion
+	// is only that it does NOT fail with "unsupported URI scheme: c".
+	t.Run("bare windows path not treated as scheme c", func(t *testing.T) {
+		_, err := r.ResolveURI(`C:\does\not\exist.txt`)
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), "unsupported URI scheme")
+	})
 }
 
 func TestReadURINoNetworkByDefault(t *testing.T) {
