@@ -10,7 +10,10 @@
 // that the Windows-specific behavior is exercised by the Linux test suite.
 package uripath
 
-import "path"
+import (
+	"path"
+	"strings"
+)
 
 // IsWindowsDriveLetter reports whether b is an ASCII letter usable as a Windows
 // drive letter ([A-Za-z]).
@@ -164,6 +167,137 @@ func LocalBaseDir(base string) string {
 // OS-dependent filepath.Dir, which would reintroduce backslashes on Windows.
 func SlashDir(p string) string {
 	return path.Dir(ToSlash(p))
+}
+
+// SlashClean is path.Clean over a backslash-normalized input, so a Windows path
+// (or a path with mixed separators, as produced when a forward-slash URI ref is
+// joined with a backslash OS base) is collapsed using forward-slash dot-segment
+// semantics on every OS. Unlike filepath.Clean it never emits '\' and never
+// applies Windows volume/UNC handling, so the result is byte-identical across
+// platforms.
+func SlashClean(p string) string {
+	return path.Clean(ToSlash(p))
+}
+
+// SlashRel computes the relative reference from the directory tree rooted at
+// baseDir to target, using pure forward-slash (RFC 3986 dot-segment) semantics
+// — the slash-space analogue of filepath.Rel. Both inputs are normalized with
+// [ToSlash] and [path.Clean] first, so the computation never depends on
+// runtime.GOOS or filepath.Separator (filepath.Rel diverges on Windows: it
+// splits on '\', mishandles a path that already uses '/', and applies
+// drive-letter rules). baseDir and target must agree on rootedness (both
+// absolute or both relative); when they don't, target is returned cleaned and
+// unchanged, mirroring filepath.Rel's error path where the caller falls back to
+// the absolute target.
+//
+// The result is the minimal sequence of ".." and forward path segments that,
+// resolved against baseDir, yields target. It is the value used verbatim as an
+// xml:base relative reference, so it MUST be byte-identical on POSIX and
+// Windows.
+func SlashRel(baseDir, target string) string {
+	base := SlashClean(baseDir)
+	targ := SlashClean(target)
+	if base == targ {
+		return "."
+	}
+
+	baseAbs := IsPOSIXAbsolute(base)
+	targAbs := IsPOSIXAbsolute(targ)
+	if baseAbs != targAbs {
+		// Cannot relativize across rootedness; caller treats this like
+		// filepath.Rel's error and keeps the (cleaned) target.
+		return targ
+	}
+
+	baseSeg := splitSlash(base)
+	targSeg := splitSlash(targ)
+
+	// Drop the longest common prefix of segments.
+	i := 0
+	for i < len(baseSeg) && i < len(targSeg) && baseSeg[i] == targSeg[i] {
+		i++
+	}
+
+	var out []string
+	for j := i; j < len(baseSeg); j++ {
+		// A ".." in the remaining base means base escaped above a point that
+		// target shares, which filepath.Rel reports as impossible; fall back.
+		if baseSeg[j] == ".." {
+			return targ
+		}
+		out = append(out, "..")
+	}
+	out = append(out, targSeg[i:]...)
+	if len(out) == 0 {
+		return "."
+	}
+	return path.Join(out...)
+}
+
+// SlashCommonDir returns the longest common directory prefix of the directories
+// of a and b, in forward-slash form — the slash-space analogue of the previous
+// filepath-based commonAncestorDir. Inputs are normalized with [ToSlash] and
+// [path.Clean]; the directory of each (its last segment dropped) is compared
+// segment by segment. Returns "." when there is no shared directory prefix.
+func SlashCommonDir(a, b string) string {
+	aDir := SlashDir(SlashClean(a))
+	bDir := SlashDir(SlashClean(b))
+	aParts := splitSlash(aDir)
+	bParts := splitSlash(bDir)
+
+	n := min(len(aParts), len(bParts))
+	common := 0
+	for i := range n {
+		if aParts[i] != bParts[i] {
+			break
+		}
+		common = i + 1
+	}
+	if common == 0 {
+		return "."
+	}
+	return joinSlashSegments(aParts[:common])
+}
+
+// joinSlashSegments rejoins segments produced by splitSlash, preserving the
+// leading-slash root marker. path.Join would silently drop a leading "" segment
+// (and with it the absolute-path root), so reconstruct it explicitly: an empty
+// first segment means the path was rooted ("/"+rest), otherwise it is relative.
+func joinSlashSegments(segs []string) string {
+	if len(segs) == 0 {
+		return "."
+	}
+	if segs[0] == "" {
+		if len(segs) == 1 {
+			return "/"
+		}
+		return "/" + path.Join(segs[1:]...)
+	}
+	return path.Join(segs...)
+}
+
+// splitSlash splits a cleaned forward-slash path into its non-empty segments,
+// preserving a leading-slash marker as an empty first segment so an absolute
+// path keeps its root during segment comparison.
+func splitSlash(p string) []string {
+	if p == "" || p == "." {
+		return nil
+	}
+	rooted := p[0] == '/'
+	trimmed := p
+	for len(trimmed) > 0 && trimmed[0] == '/' {
+		trimmed = trimmed[1:]
+	}
+	var segs []string
+	for s := range strings.SplitSeq(trimmed, "/") {
+		if s != "" {
+			segs = append(segs, s)
+		}
+	}
+	if rooted {
+		return append([]string{""}, segs...)
+	}
+	return segs
 }
 
 func containsDot(s string) bool {

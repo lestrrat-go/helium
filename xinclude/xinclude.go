@@ -1147,23 +1147,19 @@ func relativeURI(target, base string) string {
 	return makeRelativePath(targetPath, basePath)
 }
 
-// makeRelativePath computes a relative path from basePath's directory to targetPath.
+// makeRelativePath computes a relative path from basePath's directory to
+// targetPath. The computation is pure forward-slash (RFC 3986 dot-segment)
+// semantics via [uripath.SlashRel], NOT filepath.Rel: the result is an xml:base
+// relative reference that MUST be byte-identical on POSIX and Windows (where
+// filepath.Rel splits on '\', mishandles '/'-bearing inputs, and applies
+// drive-letter rules, producing wrong "../" sequences).
 func makeRelativePath(targetPath, basePath string) string {
-	// Split into directory components
-	baseDir := filepath.Dir(basePath)
+	baseDir := uripath.SlashDir(basePath)
 	if baseDir == "." {
-		// Base has no directory component — target is already relative
-		return targetPath
+		// Base has no directory component — target is already relative.
+		return uripath.ToSlash(targetPath)
 	}
-
-	// Use filepath.Rel for the computation
-	rel, err := filepath.Rel(baseDir, targetPath)
-	if err != nil {
-		return targetPath
-	}
-
-	// filepath.Rel uses OS separators; normalize to forward slashes
-	return strings.ReplaceAll(rel, string(filepath.Separator), "/")
+	return uripath.SlashRel(baseDir, targetPath)
 }
 
 func newXIncludeMarker(doc *helium.Document, etype helium.ElementType, name string) helium.Node {
@@ -1309,35 +1305,13 @@ func resolveBase(currentBase, xmlBase string) string {
 	syntheticBase := syntheticPrefix + currentBase
 	absBase, err := url.Parse(syntheticBase)
 	if err != nil {
-		return filepath.Join(filepath.Dir(currentBase), xmlBase)
+		// Forward-slash fallback (never filepath.Join, which emits '\' on
+		// Windows): drop the base's last segment and append the relative base.
+		return uripath.JoinLocalBaseDir(uripath.SlashDir(currentBase), xmlBase)
 	}
 	resolved := absBase.ResolveReference(xmlBaseURL)
 	result := strings.TrimPrefix(resolved.String(), syntheticPrefix)
 	return result
-}
-
-// commonAncestorDir returns the longest common directory prefix of two paths.
-func commonAncestorDir(a, b string) string {
-	aDir := filepath.Dir(filepath.Clean(a))
-	bDir := filepath.Dir(filepath.Clean(b))
-	aParts := strings.Split(aDir, string(filepath.Separator))
-	bParts := strings.Split(bDir, string(filepath.Separator))
-
-	n := min(len(aParts), len(bParts))
-
-	common := 0
-	for i := range n {
-		if aParts[i] != bParts[i] {
-			break
-		}
-		common = i + 1
-	}
-
-	if common == 0 {
-		return "."
-	}
-
-	return strings.Join(aParts[:common], string(filepath.Separator))
 }
 
 // computeFixupBases computes relative URI bases for xml:base fixup.
@@ -1345,18 +1319,21 @@ func commonAncestorDir(a, b string) string {
 // they are converted to relative paths against their common ancestor
 // directory. This ensures that ".." traversal in xml:base attributes
 // is bounded at the logical root, matching RFC 3986 URI resolution.
+//
+// The relativization is pure forward-slash ([uripath.SlashCommonDir] +
+// [uripath.SlashRel]), NOT filepath.*: sourceURI arrives in forward-slash form
+// (resolveURI normalizes it) while p.baseURI is a native OS path, so on Windows
+// they mix '/' and '\'. filepath.Clean/Dir/Rel then split on '\', fail to find
+// the common ancestor, and emit wrong "../" sequences. uripath normalizes both
+// to '/' first so the output is byte-identical on POSIX and Windows.
 func (p *processor) computeFixupBases(inc *helium.Element, sourceURI string) (string, string) {
-	relSource := sourceURI
-	relTarget := p.baseURI
+	relSource := uripath.ToSlash(sourceURI)
+	relTarget := uripath.ToSlash(p.baseURI)
 
-	if filepath.IsAbs(sourceURI) && filepath.IsAbs(p.baseURI) {
-		root := commonAncestorDir(sourceURI, p.baseURI)
-		if rel, err := filepath.Rel(root, sourceURI); err == nil {
-			relSource = rel
-		}
-		if rel, err := filepath.Rel(root, p.baseURI); err == nil {
-			relTarget = rel
-		}
+	if uripath.IsAbsolutePath(sourceURI) && uripath.IsAbsolutePath(p.baseURI) {
+		root := uripath.SlashCommonDir(sourceURI, p.baseURI)
+		relSource = uripath.SlashRel(root, sourceURI)
+		relTarget = uripath.SlashRel(root, p.baseURI)
 	}
 
 	return relSource, effectiveBaseURI(inc, relTarget)

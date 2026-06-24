@@ -163,6 +163,67 @@ func TestSlashDir(t *testing.T) {
 	require.Equal(t, "C:/a", uripath.SlashDir(`C:\a\b.xsl`))
 }
 
+// SlashRel must compute a forward-slash relative reference (RFC 3986
+// dot-segment semantics) identically on POSIX and Windows, NEVER using
+// filepath.Rel. Windows drive-rooted and mixed-separator inputs are plain
+// strings, so the Windows behavior is exercised on any GOOS.
+func TestSlashRel(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		baseDir string
+		target  string
+		want    string
+	}{
+		// xml:base relativization cases mirrored from the XInclude base.xml golden.
+		{"docs/one", "docs/one/two/three/four", "two/three/four"},
+		{"docs/one", "ents/one/two2", "../../ents/one/two2"},
+		{"docs/one", "ents/one2/two", "../../ents/one2/two"},
+		// Absolute POSIX inputs keep their root through segment comparison.
+		{"/a/b/docs/one", "/a/b/ents/one/two2", "../../ents/one/two2"},
+		// Mixed separators (forward-slash URI ref joined against a backslash OS
+		// base, as happens on Windows) must still relativize correctly.
+		{`docs\one`, "docs/one/two/three/four", "two/three/four"},
+		{`D:/a/b/docs/one`, `D:\a\b\ents\one\two2`, "../../ents/one/two2"},
+		// Identical paths collapse to ".".
+		{"a/b", "a/b", "."},
+		// Rootedness mismatch falls back to the cleaned target (filepath.Rel error path).
+		{"/a/b", "c/d", "c/d"},
+	}
+	for _, tc := range cases {
+		require.Equalf(t, tc.want, uripath.SlashRel(tc.baseDir, tc.target),
+			"baseDir=%q target=%q", tc.baseDir, tc.target)
+	}
+}
+
+// SlashCommonDir must find the longest common directory prefix in forward-slash
+// form, preserving the leading-slash root (path.Join would otherwise drop it).
+func TestSlashCommonDir(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		a    string
+		b    string
+		want string
+	}{
+		{"/x/y/ents/inc.xml", "/x/y/docs/doc.xml", "/x/y"},
+		{"x/y/ents/inc.xml", "x/y/docs/doc.xml", "x/y"},
+		// Windows drive paths share the drive segment; backslashes are normalized.
+		{`D:\x\y\ents\inc.xml`, "D:/x/y/docs/doc.xml", "D:/x/y"},
+		// No shared directory prefix.
+		{"/a/x.xml", "/b/y.xml", "/"},
+		{"a/x.xml", "b/y.xml", "."},
+	}
+	for _, tc := range cases {
+		require.Equalf(t, tc.want, uripath.SlashCommonDir(tc.a, tc.b), "a=%q b=%q", tc.a, tc.b)
+	}
+}
+
+func TestSlashClean(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "/a/c", uripath.SlashClean("/a/b/../c"))
+	require.Equal(t, "a/b", uripath.SlashClean(`a\b`))
+	require.Equal(t, "C:/a/b", uripath.SlashClean(`C:\a\.\b`))
+}
+
 func TestWindowsToFileURI(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

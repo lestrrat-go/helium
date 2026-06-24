@@ -16,7 +16,7 @@ xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, interna
 relaxng        → helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar
 schematron     → helium, xpath1
 xpointer       → helium, xpath1, internal/xmlchar
-c14n           → helium, internal/lexicon, internal/domutil
+c14n           → helium, internal/lexicon, internal/domutil, internal/uripath
 xmldsig1       → helium, c14n, internal/lexicon, internal/domutil
 xmlenc1        → helium, internal/domutil
 html           → helium, sax, push, internal/xmlchar
