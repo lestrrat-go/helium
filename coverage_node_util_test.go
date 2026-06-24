@@ -22,6 +22,33 @@ func TestBuildURI(t *testing.T) {
 		{"relative against http base", "a.dtd", "http://host/dir/doc.xml", "http://host/dir/a.dtd"},
 		{"relative against file path", "a.dtd", "/dir/doc.xml", "/dir/a.dtd"},
 		{"absolute local path", "/abs/a.dtd", "/dir/doc.xml", "/abs/a.dtd"},
+		// Windows shapes are plain strings, so the Windows behavior below is
+		// exercised on any GOOS. A native Windows base must NOT route the drive
+		// letter through url.Parse (which would emit "c:///a.dtd"); it resolves
+		// with local-path (forward-slash) semantics.
+		{"relative against windows backslash base", "child.xml", `C:\dir\main.xml`, "C:/dir/child.xml"},
+		{"relative against windows forward-slash base", "a.dtd", "D:/dir/doc.xml", "D:/dir/a.dtd"},
+		{"windows-absolute system id returned verbatim", `C:\abs\a.dtd`, `D:\dir\doc.xml`, `C:\abs\a.dtd`},
+		{"interior dot-dot against windows base", "../sib/child.xml", `C:\a\b\main.xml`, "C:/a/sib/child.xml"},
+		{"unc base resolves relative ref", "child.xml", `\\host\share\main.xml`, "//host/share/child.xml"},
+		// An absolute-URI systemID stands on its own even when the base is a
+		// native Windows path. Without the scheme check this collapsed "http://"
+		// to "http:/" and joined it onto the drive-letter base (Windows-only
+		// regression that broke the W3C resolve-uri/base-uri cluster).
+		{"absolute http system id against windows drive base", "http://example.com/a/b", `D:\dir\doc.xsl`, "http://example.com/a/b"},
+		{"absolute http system id against windows slash base", "http://example.com/a/b", "D:/dir/doc.xsl", "http://example.com/a/b"},
+		{"absolute file system id against windows base", "file:///x/y", `C:\dir\doc.xsl`, "file:///x/y"},
+		// A RELATIVE Windows base (backslashes, no drive — what filepath.Join
+		// yields on Windows for a relative test path) must keep its directory so a
+		// sibling entity resolves inside it. Without backslash-aware handling this
+		// dropped to a bare "world.txt" and the external entity could not be found.
+		{"sibling against relative windows base", "world.txt", `..\d\e\example.xml`, "../d/e/world.txt"},
+		// A file: base with a Windows drive letter must yield a proper file: URI
+		// (not the drive-rooted "/D:/..." path url.Parse exposes), so file-URI-aware
+		// loaders convert it back to a native path. The POSIX file: base below
+		// keeps returning a plain path, proving POSIX is unaffected.
+		{"sibling against windows drive file uri", "nested.dtd", "file:///D:/tmp/t/inc.xml", "file:///D:/tmp/t/nested.dtd"},
+		{"sibling against posix file uri", "nested.dtd", "file:///tmp/t/inc.xml", "/tmp/t/nested.dtd"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

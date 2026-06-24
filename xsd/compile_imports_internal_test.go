@@ -1,7 +1,6 @@
 package xsd
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -96,12 +95,14 @@ func TestValidateSchemaPathLocalUnchanged(t *testing.T) {
 	t.Run("relative join", func(t *testing.T) {
 		got, err := validateSchemaPath("/tmp/s", part)
 		require.NoError(t, err)
-		require.Equal(t, filepath.Join("/tmp/s", part), got)
+		// ResolveSchemaURI resolves in forward-slash (fs.FS-key) space, so the
+		// result is slash-separated on every OS — never filepath.Join's "\tmp\s".
+		require.Equal(t, "/tmp/s/"+part, got)
 	})
 	t.Run("empty base cleans", func(t *testing.T) {
 		got, err := validateSchemaPath("", "./a/../part.xsd")
 		require.NoError(t, err)
-		require.Equal(t, filepath.Clean("./a/../part.xsd"), got)
+		require.Equal(t, part, got)
 	})
 	t.Run("escape denied", func(t *testing.T) {
 		_, err := validateSchemaPath("/tmp/s", "../../etc/passwd")
@@ -110,7 +111,19 @@ func TestValidateSchemaPathLocalUnchanged(t *testing.T) {
 	t.Run("absolute local location lands inside base", func(t *testing.T) {
 		got, err := validateSchemaPath("/tmp/s", "/etc/passwd")
 		require.NoError(t, err)
-		require.Equal(t, filepath.Join("/tmp/s", "/etc/passwd"), got)
+		require.Equal(t, "/tmp/s/etc/passwd", got)
+	})
+	// Windows-shaped fixtures (plain strings) exercise the forward-slash
+	// resolution and the escape guard on Linux. The returned name is an fs.FS
+	// key, which must be slash-separated on every OS — never "schemas\\x".
+	t.Run("windows-shaped base joins with forward slashes", func(t *testing.T) {
+		got, err := validateSchemaPath(`schemas\sub`, "part.xsd")
+		require.NoError(t, err)
+		require.Equal(t, "schemas/sub/part.xsd", got)
+	})
+	t.Run("windows-shaped backslash escape denied", func(t *testing.T) {
+		_, err := validateSchemaPath("schemas", `..\..\etc\passwd`)
+		require.ErrorIs(t, err, errSchemaPathEscape)
 	})
 }
 
@@ -120,5 +133,10 @@ func TestValidateSchemaPathLocalUnchanged(t *testing.T) {
 func TestSchemaBaseDir(t *testing.T) {
 	require.Equal(t, "https://example.com/s/main.xsd", schemaBaseDir("https://example.com/s/main.xsd"))
 	require.Equal(t, "file:///tmp/s/main.xsd", schemaBaseDir("file:///tmp/s/main.xsd"))
-	require.Equal(t, filepath.Dir("/tmp/s/main.xsd"), schemaBaseDir("/tmp/s/main.xsd"))
+	// schemaBaseDir uses path.Dir (slash space), so the parent is slash-separated
+	// on every OS — never filepath.Dir's "\tmp\s" on Windows.
+	require.Equal(t, "/tmp/s", schemaBaseDir("/tmp/s/main.xsd"))
+	// An fs.FS-key loc is slash-separated; its parent stays slash-separated on
+	// every OS (a backslash-shaped input is normalized, exercising Windows on Linux).
+	require.Equal(t, "schemas", schemaBaseDir(`schemas\intermediate.xsd`))
 }

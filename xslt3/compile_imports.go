@@ -3,12 +3,13 @@ package xslt3
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -82,11 +83,17 @@ func resolveModuleURI(href, baseURI string) (string, error) {
 	if xsd.URIScheme(href) != "" || xsd.URIScheme(baseURI) != "" {
 		return xsd.ResolveSchemaURI(href, baseURI) //nolint:wrapcheck // static error passthrough
 	}
-	// Local filesystem base (a FILE path): keep historical filepath semantics.
-	if filepath.IsAbs(href) {
+	// Local filesystem base (a FILE path): resolve with forward-slash (path)
+	// semantics so the result uses '/' on every OS. A Windows-absolute href was
+	// already handled by isWindowsDrivePath above; uripath.IsAbsolutePath here
+	// keeps a POSIX-absolute href verbatim. On Windows filepath.Dir/Join would
+	// emit '\' and corrupt a virtual or POSIX-shaped base (e.g. "/virtual/x.xsl"
+	// against href "common.xsl" -> "\\virtual\\common.xsl"), missing a resolver
+	// keyed on the forward-slash form.
+	if uripath.IsAbsolutePath(href) {
 		return href, nil
 	}
-	return filepath.Join(filepath.Dir(baseURI), href), nil
+	return uripath.JoinLocalBaseDir(path.Dir(uripath.ToSlash(baseURI)), href), nil
 }
 
 // isWindowsDrivePath reports whether s begins with a Windows drive-letter prefix

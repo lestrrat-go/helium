@@ -11,6 +11,7 @@ const (
 	testStylesMainXSL = "/styles/main.xsl"
 	testDocsDir       = "/docs"
 	testDocsMainXML   = "/docs/main.xml"
+	testChildXML      = "child.xml"
 )
 
 // TestResolveAgainstBaseURIAbsolute verifies that resolveAgainstBaseURI
@@ -28,14 +29,40 @@ func TestResolveAgainstBaseURIAbsolute(t *testing.T) {
 		{"urn opaque", "urn:shared", testDocsMainXML, "urn:shared"},
 		{"file single slash", "file:/docs/d.xml", testDocsMainXML, "file:/docs/d.xml"},
 		{"http authority", "http://example.com/d.xml", testDocsMainXML, "http://example.com/d.xml"},
-		{"relative against local base", "child.xml", testDocsMainXML, "/docs/child.xml"},
+		{"relative against local base", testChildXML, testDocsMainXML, "/docs/child.xml"},
 		// Root-relative ref against a URI base keeps scheme+authority.
 		{"root-relative against uri base", "/other/d.xml", "mem:/docs/main.xml", "mem:/other/d.xml"},
-		{"relative against uri base", "child.xml", "mem:/docs/main.xml", "mem:/docs/child.xml"},
+		{"relative against uri base", testChildXML, "mem:/docs/main.xml", "mem:/docs/child.xml"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := resolveAgainstBaseURI(tc.uri, tc.base)
 			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestEnsureFileURI verifies that ensureFileURI normalizes both POSIX- and
+// Windows-absolute filesystem paths into "file:" URIs (so a later url.Parse
+// never reads a Windows drive letter as a URI scheme), and leaves paths that
+// already carry a scheme untouched. The Windows shapes are plain strings, so
+// the Windows behavior is exercised on Linux CI.
+func TestEnsureFileURI(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"posix absolute", "/a/b/main.xsl", "file:///a/b/main.xsl"},
+		{"windows drive backslash", `D:\a\helium\main.xsl`, "file:///D:/a/helium/main.xsl"},
+		{"windows drive forward slash", `C:/styles/main.xsl`, "file:///C:/styles/main.xsl"},
+		{"windows unc", `\\host\share\main.xsl`, "file://host/share/main.xsl"},
+		{"already file uri", "file:///a/b.xsl", "file:///a/b.xsl"},
+		{"already http uri", "http://example.com/a.xsl", "http://example.com/a.xsl"},
+		{"relative left alone", "child.xsl", "child.xsl"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, ensureFileURI(tc.in))
 		})
 	}
 }
@@ -118,12 +145,21 @@ func TestResolveDocumentURIAbsolute(t *testing.T) {
 		{"file single slash", "file:/x.xml", testDocsDir, "file:/x.xml"},
 		{"http authority", "http://example.com/d.xml", testDocsDir, "http://example.com/d.xml"},
 		// Relative ref against a URI base keeps scheme/authority.
-		{"relative under uri base", "child.xml", "mem://pkg", "mem://pkg/child.xml"},
+		{"relative under uri base", testChildXML, "mem://pkg", "mem://pkg/child.xml"},
 		{"root-relative under uri base", "/other.xml", "mem://pkg/sub", "mem://pkg/other.xml"},
 		// Both local: historical filepath behavior preserved.
-		{"local relative", "child.xml", testDocsDir, "/docs/child.xml"},
+		{"local relative", testChildXML, testDocsDir, "/docs/child.xml"},
 		{"local absolute", "/abs.xml", testDocsDir, "/abs.xml"},
+		// A POSIX-shaped file: URI resolves to a forward-slash path on every OS;
+		// the ToSlash normalization on the FileURIToPath result is what stops
+		// Windows from emitting "\abs\x.xml" here. (A drive-letter file: URI is
+		// GOOS-dependent via FileURIToPath, so it is not asserted in this
+		// cross-OS table.)
 		{"file triple slash", "file:///abs/x.xml", testDocsDir, "/abs/x.xml"},
+		// Windows-shaped local base resolves with forward-slash output on any OS
+		// (a plain string here, so the Windows behavior is exercised on Linux).
+		{"windows base relative ref", testChildXML, `C:\docs`, "C:/docs/child.xml"},
+		{"windows-absolute ref verbatim", `C:\abs.xml`, `C:\docs`, `C:\abs.xml`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ec.resolveDocumentURI(tc.uri, tc.baseDir)

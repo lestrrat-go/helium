@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xsd"
 )
 
@@ -97,8 +98,8 @@ func isFatalSchemaLoadError(err error) bool {
 // the full FILE path of the referencing stylesheet or document. An absolute
 // local ref is returned as-is; otherwise the ref is joined onto the base's
 // directory. The base may be a full file path (e.g. "/a/b/style.xsl") or a
-// directory-like path from xml:base processing (e.g. "/a/b"); baseURIDir
-// distinguishes the two so a directory base is not truncated by filepath.Dir.
+// directory-like path from xml:base processing (e.g. "/a/b"); uripath.LocalBaseDir
+// distinguishes the two so a directory base is not truncated.
 func resolveSchemaURI(ref, baseURI string) (string, error) {
 	if ref == "" || baseURI == "" {
 		return ref, nil
@@ -111,11 +112,13 @@ func resolveSchemaURI(ref, baseURI string) (string, error) {
 		return xsd.ResolveSchemaURI(ref, baseURI)
 	}
 
-	// Local filesystem base (a FILE path): keep historical filepath semantics.
-	if filepath.IsAbs(ref) {
+	// Local filesystem base (a FILE path): resolve with forward-slash
+	// (path) semantics so the result uses '/' on every OS. uripath.IsAbsolutePath
+	// recognizes both POSIX- and Windows-absolute shapes regardless of GOOS.
+	if uripath.IsAbsolutePath(ref) {
 		return ref, nil
 	}
-	return filepath.Join(baseURIDir(baseURI), ref), nil
+	return uripath.JoinLocalBaseDir(uripath.LocalBaseDir(baseURI), ref), nil
 }
 
 // schemaCompileBaseDir maps a base URI/path to the value passed to

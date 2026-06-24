@@ -4,12 +4,26 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/catalog"
 	"github.com/stretchr/testify/require"
 )
+
+// nativePathToFileURI builds a "file:///" URI from a native absolute path on any
+// OS. On POSIX the path begins with "/", so "file://" + "/tmp/x" already yields
+// the correct "file:///tmp/x". On Windows the slashed path is "C:/..." (no
+// leading slash), so a leading slash is prepended to avoid "file://C:/..."
+// where "C:" is mis-read as the URI host.
+func nativePathToFileURI(p string) string {
+	slashed := filepath.ToSlash(p)
+	if !strings.HasPrefix(slashed, "/") {
+		slashed = "/" + slashed
+	}
+	return "file://" + slashed
+}
 
 func TestCatalogExternalSubset(t *testing.T) {
 	t.Parallel()
@@ -70,7 +84,7 @@ func TestCatalogExternalSubsetFileURI(t *testing.T) {
 	// Catalog mapping the system ID to a "file:" URI rather than a bare path.
 	// The resolved value reaches the parser as "file:///...", which must be
 	// converted to a local path before being opened (CAT-001).
-	fileURI := "file://" + filepath.ToSlash(dtdPath)
+	fileURI := nativePathToFileURI(dtdPath)
 	catContent := `<?xml version="1.0"?>
 <catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
   <system systemId="http://example.com/test.dtd" uri="` + fileURI + `"/>
@@ -114,7 +128,7 @@ func TestCatalogResolveEntityFileURI(t *testing.T) {
 	entPath := filepath.Join(dir, "ext.ent")
 	require.NoError(t, os.WriteFile(entPath, []byte(entContent), 0644))
 
-	fileURI := "file://" + filepath.ToSlash(entPath)
+	fileURI := nativePathToFileURI(entPath)
 	catContent := `<?xml version="1.0"?>
 <catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
   <system systemId="http://example.com/ext.ent" uri="` + fileURI + `"/>

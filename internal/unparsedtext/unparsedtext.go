@@ -31,7 +31,9 @@ import (
 	"golang.org/x/text/transform"
 
 	iencoding "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -534,11 +536,28 @@ func (r *FileURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	}
 
 	var target string
-	switch parsed.Scheme {
-	case lexicon.SchemeFile:
-		target = parsed.Path
-	case "":
-		if filepath.IsAbs(uri) {
+	switch {
+	case parsed.Scheme == lexicon.SchemeFile:
+		// Convert the "file:" URI to a native filesystem path. On Windows a
+		// drive-letter URI ("file:///C:/dir/x.txt") yields a native path
+		// ("C:\\dir\\x.txt") rather than the spurious leading-slash, forward-slash
+		// form ("/C:/dir/x.txt") that parsed.Path holds; otherwise the
+		// containedRel check below compares it against a native BaseDir and
+		// wrongly reports the target as outside the base. iofs.FileURIToPath is
+		// GOOS-parameterized, so POSIX behavior ("file:///a/b" -> "/a/b") is
+		// unchanged.
+		p, ferr := iofs.FileURIToPath(uri)
+		if ferr != nil {
+			return nil, ferr
+		}
+		target = p
+	// A bare Windows absolute path ("C:\\dir\\data.txt") is mis-parsed by
+	// url.Parse as scheme "c"; treat it as a local absolute path, not a URI.
+	case parsed.Scheme == "" || isWindowsDriveScheme(parsed):
+		// uripath.IsAbsolutePath recognizes both POSIX- and Windows-absolute
+		// shapes regardless of GOOS, so a "/abs" or "C:\\abs" reference is kept
+		// absolute rather than joined against BaseDir.
+		if filepath.IsAbs(uri) || uripath.IsAbsolutePath(uri) {
 			target = uri
 		} else {
 			target = filepath.Join(r.BaseDir, uri)

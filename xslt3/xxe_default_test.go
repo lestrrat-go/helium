@@ -23,6 +23,14 @@ type xxeResolver struct {
 func (r *xxeResolver) Resolve(uri string) (io.ReadCloser, error) {
 	body, ok := r.files[uri]
 	if !ok {
+		// The map is keyed on native paths (filepath.Join). helium's URI
+		// resolution emits forward slashes on every OS, so on Windows the
+		// resolved URI is "C:/dir/x" while the key is "C:\\dir\\x". Retry with
+		// the native-separator form so the lookup matches on both platforms
+		// (filepath.FromSlash is a no-op on POSIX).
+		body, ok = r.files[filepath.FromSlash(uri)]
+	}
+	if !ok {
 		return nil, os.ErrNotExist
 	}
 	return io.NopCloser(strings.NewReader(body)), nil

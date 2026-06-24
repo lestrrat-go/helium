@@ -13,6 +13,7 @@ import (
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/catalog"
 	henc "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xinclude"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/lestrrat-go/helium/xsd"
@@ -501,12 +502,46 @@ func (c *command) pathDirs(cfg *config) []string {
 		return nil
 	}
 	var dirs []string
-	for d := range strings.SplitSeq(cfg.pathDirs, ":") {
+	for _, d := range splitSearchPath(cfg.pathDirs) {
 		if d != "" {
 			dirs = append(dirs, d)
 		}
 	}
 	return dirs
+}
+
+// splitSearchPath splits a colon-separated DTD/entity search path (xmllint
+// style) while keeping a Windows drive-letter prefix ("D:\\dtd", "C:/x")
+// attached to its directory. A naive strings.Split on ':' would shatter
+// "D:\\dtd" into "D" and "\\dtd", corrupting the search path on Windows and
+// making a DTD resolved via --path unfindable (validation then spuriously
+// fails). A colon is treated as a drive separator — and NOT a list separator —
+// only when it is the SECOND character of a segment, follows a single ASCII
+// letter, and is itself followed by a path separator ('/' or '\\') or the end
+// of the segment. This is GOOS-independent (string-shape based), so the
+// behavior is exercised on POSIX too; a genuine POSIX list like
+// "/a/b:/c/d" still splits normally because "/a/b" does not match the
+// drive-prefix shape.
+func splitSearchPath(s string) []string {
+	var out []string
+	start := 0
+	for i := range len(s) {
+		if s[i] != ':' {
+			continue
+		}
+		// A "X:" at the very start of the current segment, where X is a single
+		// ASCII letter and the next char is a separator (or segment end), is a
+		// Windows drive prefix, not a list separator.
+		if i == start+1 && uripath.IsWindowsDriveLetter(s[start]) {
+			if i+1 >= len(s) || s[i+1] == '/' || s[i+1] == '\\' {
+				continue
+			}
+		}
+		out = append(out, s[start:i])
+		start = i + 1
+	}
+	out = append(out, s[start:])
+	return out
 }
 
 func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
