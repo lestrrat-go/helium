@@ -18,6 +18,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/xpointer"
 )
 
@@ -994,6 +995,24 @@ func findAttr(elem *helium.Element, name string) (string, bool) {
 }
 
 func resolveURI(href, base string) (string, error) {
+	// A native Windows base ("D:\\dir\\main.xml", "D:/dir/main.xml", or a UNC
+	// "\\host\\share") is a local filesystem path, not a URI. url.Parse would
+	// read its drive letter "D" as a URI scheme and emit garbage like
+	// "d:///fragment.xml", so resolve it with local-path (forward-slash)
+	// semantics BEFORE the URI machinery. The shape is detected from the string
+	// alone (uripath), so this branch is exercised on POSIX too.
+	if uripath.IsWindowsAbsolute(base) {
+		hrefURL, perr := url.Parse(href)
+		if perr != nil {
+			return "", fmt.Errorf("xi:include: invalid href %q: %w", href, perr)
+		}
+		if hrefURL.IsAbs() {
+			return href, nil
+		}
+		slashBase := uripath.ToSlash(base)
+		return path.Join(path.Dir(slashBase), href), nil
+	}
+
 	hrefURL, err := url.Parse(href)
 	if err != nil {
 		return "", fmt.Errorf("xi:include: invalid href %q: %w", href, err)
@@ -1007,7 +1026,7 @@ func resolveURI(href, base string) (string, error) {
 		return href, nil
 	}
 
-	// For file-like paths (no scheme), use filepath-based resolution
+	// For file-like paths (no scheme), use slash-based resolution
 	// to avoid Go's url.ResolveReference quirk that adds leading '/'
 	// to purely relative paths.
 	// If base fails to parse as a URL, fall back to returning href unresolved.
@@ -1020,7 +1039,9 @@ func resolveURI(href, base string) (string, error) {
 		if basePath == "" {
 			basePath = base
 		}
-		return filepath.Join(filepath.Dir(basePath), href), nil
+		// Join with forward-slash (path) semantics so the result uses '/' on
+		// every OS; on Windows filepath.Dir/Join would emit '\'.
+		return path.Join(path.Dir(uripath.ToSlash(basePath)), href), nil
 	}
 
 	return baseURL.ResolveReference(hrefURL).String(), nil
