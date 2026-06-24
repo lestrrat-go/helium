@@ -1274,6 +1274,24 @@ func resolveBase(currentBase, xmlBase string) string {
 		return xmlBase
 	}
 
+	// A native Windows base ("D:\\dir\\doc.xml", "D:/dir/doc.xml", or a UNC path)
+	// is a local filesystem path, not a URI. url.Parse would read its drive
+	// letter as a scheme and emit garbage like "d:///one/two", so resolve it with
+	// local-path (forward-slash) semantics, matching resolveURI's Windows branch.
+	// xmlBase is relative here (absolute was handled above), so its directory is
+	// dropped and the new base segment is appended. The shape is detected from
+	// the string alone, so the branch runs on POSIX too.
+	if uripath.IsWindowsAbsolute(currentBase) {
+		slashBase := uripath.ToSlash(currentBase)
+		const syntheticPrefix = "synthetic://h/"
+		absBase, perr := url.Parse(syntheticPrefix + slashBase)
+		if perr != nil {
+			return path.Join(path.Dir(slashBase), xmlBase)
+		}
+		resolved := absBase.ResolveReference(xmlBaseURL)
+		return strings.TrimPrefix(resolved.String(), syntheticPrefix)
+	}
+
 	baseURL, err := url.Parse(currentBase)
 	if err != nil {
 		return xmlBase

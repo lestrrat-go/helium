@@ -92,8 +92,16 @@ func BuildURI(systemID, base string) string {
 
 	// When the base is a native Windows path, resolve the (relative) systemID
 	// against it with local-path semantics, bypassing the URI machinery so the
-	// drive letter is never mistaken for a scheme.
-	if uripath.IsWindowsAbsolute(base) {
+	// drive letter is never mistaken for a scheme. This also covers a RELATIVE
+	// Windows base (a backslash-bearing path with no URI scheme, e.g.
+	// "..\dir\doc.xml" as produced by filepath.Join on Windows): url.Parse would
+	// treat the backslashes as opaque, drop the directory via path.Dir, and
+	// resolve "world.txt" to a bare "world.txt" that no longer points inside the
+	// base directory. buildLocalPathURI normalizes with uripath.ToSlash first, so
+	// the directory is preserved on every OS. A backslash in a POSIX filename is
+	// pathological and not a real base shape, so gating on '\' is safe.
+	if uripath.IsWindowsAbsolute(base) ||
+		(!uripath.HasURIScheme(base) && strings.ContainsRune(base, '\\')) {
 		return buildLocalPathURI(systemID, base)
 	}
 
@@ -133,7 +141,26 @@ func BuildURI(systemID, base string) string {
 	if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
 		result += "/"
 	}
+	// A "file:" base with a Windows drive letter (url.Parse("file:///D:/x").Path
+	// == "/D:/x") yields a drive-rooted "/D:/..." result here, which is neither a
+	// usable native path nor a "file:" URI: an fs.FS keyed on native paths can't
+	// open "/D:/...". Re-attach the "file://" scheme so the value round-trips as
+	// a proper file: URI ("file:///D:/...") that downstream file-URI-aware
+	// loaders (normalizingFS, the entity resolver, catalogs) convert back to a
+	// native path. A POSIX file: base ("file:///tmp/x" -> "/tmp/...") is left
+	// untouched, so POSIX behavior is identical.
+	if baseURL.Scheme == "file" && isDriveRootedPath(result) {
+		return "file://" + result
+	}
 	return result
+}
+
+// isDriveRootedPath reports whether p has the shape "/X:/..." — a leading slash
+// followed by a Windows drive letter and colon. This is the malformed form that
+// url.Parse produces for the path component of a "file:///X:/..." URI. The check
+// is purely string-based, so it is GOOS-independent (and testable on POSIX).
+func isDriveRootedPath(p string) bool {
+	return len(p) >= 3 && p[0] == '/' && uripath.IsWindowsDriveLetter(p[1]) && p[2] == ':'
 }
 
 // buildLocalPathURI resolves a relative systemID against a native Windows base

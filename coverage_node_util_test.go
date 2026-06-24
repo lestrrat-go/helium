@@ -38,6 +38,17 @@ func TestBuildURI(t *testing.T) {
 		{"absolute http system id against windows drive base", "http://example.com/a/b", `D:\dir\doc.xsl`, "http://example.com/a/b"},
 		{"absolute http system id against windows slash base", "http://example.com/a/b", "D:/dir/doc.xsl", "http://example.com/a/b"},
 		{"absolute file system id against windows base", "file:///x/y", `C:\dir\doc.xsl`, "file:///x/y"},
+		// A RELATIVE Windows base (backslashes, no drive — what filepath.Join
+		// yields on Windows for a relative test path) must keep its directory so a
+		// sibling entity resolves inside it. Without backslash-aware handling this
+		// dropped to a bare "world.txt" and the external entity could not be found.
+		{"sibling against relative windows base", "world.txt", `..\d\e\example.xml`, "../d/e/world.txt"},
+		// A file: base with a Windows drive letter must yield a proper file: URI
+		// (not the drive-rooted "/D:/..." path url.Parse exposes), so file-URI-aware
+		// loaders convert it back to a native path. The POSIX file: base below
+		// keeps returning a plain path, proving POSIX is unaffected.
+		{"sibling against windows drive file uri", "inc.dtd", "file:///D:/tmp/t/inc.xml", "file:///D:/tmp/t/inc.dtd"},
+		{"sibling against posix file uri", "inc.dtd", "file:///tmp/t/inc.xml", "/tmp/t/inc.dtd"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
