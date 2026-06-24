@@ -3,7 +3,6 @@ package helium
 import (
 	"net/url"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -64,8 +63,9 @@ func SetNodeBaseURI(n Node, uri string) {
 }
 
 // BuildURI resolves a relative system ID against a base URI.
-// For local file paths (no scheme or file: scheme), it uses filepath.Join.
-// For other schemes, it uses url.ResolveReference.
+// For local file paths (no scheme or file: scheme), it joins with
+// forward-slash (path) semantics. For other schemes, it uses
+// url.ResolveReference.
 //
 // Native Windows paths (a drive-letter prefix such as "C:\\dir\\doc.xml" or a
 // backslash/UNC path) are recognized and resolved with local-path semantics
@@ -103,18 +103,22 @@ func BuildURI(systemID, base string) string {
 		return baseURL.ResolveReference(u).String()
 	}
 
-	if filepath.IsAbs(systemID) || uripath.IsPOSIXAbsolute(systemID) {
+	if uripath.IsPOSIXAbsolute(systemID) {
 		return systemID
 	}
 	basePath := baseURL.Path
 	if basePath == "" {
 		basePath = base
 	}
-	dir := filepath.Dir(basePath)
+	// Resolve with forward-slash (path) semantics, not filepath, so the
+	// returned URI/path uses '/' on every OS. On Windows filepath.Dir/Join
+	// would emit '\' here and corrupt a POSIX-shaped or file:-URI base (a
+	// sibling "a.dtd" against "/dir/doc.xml" would become "\\dir\\a.dtd").
+	dir := path.Dir(basePath)
 	if strings.HasSuffix(basePath, "/") {
 		dir = strings.TrimRight(basePath, "/")
 	}
-	result := filepath.Join(dir, systemID)
+	result := path.Join(dir, systemID)
 	if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
 		result += "/"
 	}
