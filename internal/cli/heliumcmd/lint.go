@@ -525,7 +525,7 @@ func (c *command) pathDirs(cfg *config) []string {
 func splitSearchPath(s string) []string {
 	var out []string
 	start := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] != ':' {
 			continue
 		}

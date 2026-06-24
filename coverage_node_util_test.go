@@ -47,8 +47,8 @@ func TestBuildURI(t *testing.T) {
 		// (not the drive-rooted "/D:/..." path url.Parse exposes), so file-URI-aware
 		// loaders convert it back to a native path. The POSIX file: base below
 		// keeps returning a plain path, proving POSIX is unaffected.
-		{"sibling against windows drive file uri", "inc.dtd", "file:///D:/tmp/t/inc.xml", "file:///D:/tmp/t/inc.dtd"},
-		{"sibling against posix file uri", "inc.dtd", "file:///tmp/t/inc.xml", "/tmp/t/inc.dtd"},
+		{"sibling against windows drive file uri", "nested.dtd", "file:///D:/tmp/t/inc.xml", "file:///D:/tmp/t/nested.dtd"},
+		{"sibling against posix file uri", "nested.dtd", "file:///tmp/t/inc.xml", "/tmp/t/nested.dtd"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
