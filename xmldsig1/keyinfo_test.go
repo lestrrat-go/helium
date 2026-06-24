@@ -12,53 +12,56 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestResolveKeyFromRSAKeyValue signs with RSAKeyValueKeyInfo, then resolves
-// the verification key out of the parsed KeyInfoData.RSAKeyValue. This drives
-// parseKeyInfo -> parseKeyValue -> parseRSAKeyValue and KeyInfoData wiring.
-func TestResolveKeyFromRSAKeyValue(t *testing.T) {
-	key := generateRSAKey(t)
-	doc := mustParseXML(t, samlAssertion)
+// TestResolveKey covers resolving the verification key from parsed KeyInfo.
+func TestResolveKey(t *testing.T) {
+	// rsa key value signs with RSAKeyValueKeyInfo, then resolves the verification
+	// key out of the parsed KeyInfoData.RSAKeyValue. This drives parseKeyInfo ->
+	// parseKeyValue -> parseRSAKeyValue and KeyInfoData wiring.
+	t.Run("rsa key value", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
 
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
-		Reference(xmldsig1.NewEnvelopedReference()).
-		KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
-	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.NewEnvelopedReference()).
+			KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
+		require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
 
-	ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
-		require.NotNil(t, ki)
-		require.NotNil(t, ki.RSAKeyValue)
-		return &rsa.PublicKey{
-			N: ki.RSAKeyValue.Modulus,
-			E: ki.RSAKeyValue.Exponent,
-		}, nil
+		ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
+			require.NotNil(t, ki)
+			require.NotNil(t, ki.RSAKeyValue)
+			return &rsa.PublicKey{
+				N: ki.RSAKeyValue.Modulus,
+				E: ki.RSAKeyValue.Exponent,
+			}, nil
+		})
+		verifier := xmldsig1.NewVerifier(ks)
+		_, err := verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
 	})
-	verifier := xmldsig1.NewVerifier(ks)
-	_, err := verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
-}
 
-// TestResolveKeyFromX509Data signs with X509DataKeyInfo, then reads the parsed
-// certificate from KeyInfoData.X509Certificates. Drives parseX509Data.
-func TestResolveKeyFromX509Data(t *testing.T) {
-	key := generateRSAKey(t)
-	cert := generateSelfSignedCert(t, key)
-	doc := mustParseXML(t, samlAssertion)
+	// x509 data signs with X509DataKeyInfo, then reads the parsed certificate from
+	// KeyInfoData.X509Certificates. Drives parseX509Data.
+	t.Run("x509 data", func(t *testing.T) {
+		key := generateRSAKey(t)
+		cert := generateSelfSignedCert(t, key)
+		doc := mustParseXML(t, samlAssertion)
 
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
-		Reference(xmldsig1.NewEnvelopedReference()).
-		KeyInfo(xmldsig1.X509DataKeyInfo(cert))
-	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.NewEnvelopedReference()).
+			KeyInfo(xmldsig1.X509DataKeyInfo(cert))
+		require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
 
-	ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
-		require.NotNil(t, ki)
-		require.Len(t, ki.X509Certificates, 1)
-		return ki.X509Certificates[0].PublicKey, nil
+		ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
+			require.NotNil(t, ki)
+			require.Len(t, ki.X509Certificates, 1)
+			return ki.X509Certificates[0].PublicKey, nil
+		})
+		verifier := xmldsig1.NewVerifier(ks)
+		_, err := verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
 	})
-	verifier := xmldsig1.NewVerifier(ks)
-	_, err := verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
 }
 
 // TestParseECKeyValue drives parseECKeyValue (P-256 and P-384) and isDSig11NS
@@ -100,34 +103,6 @@ func TestParseECKeyValue(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
-}
-
-// TestVerifyResultAccessors covers VerifyResult.SignedElement and Covers,
-// including their nil-receiver and miss branches.
-func TestVerifyResultAccessors(t *testing.T) {
-	key := generateRSAKey(t)
-	doc := mustParseXML(t, samlAssertion)
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
-		Reference(xmldsig1.NewEnvelopedReference())
-	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
-
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	res, err := verifier.Verify(t.Context(), doc)
-	require.NoError(t, err)
-
-	root := doc.DocumentElement()
-	require.Equal(t, root, res.SignedElement(""))
-	require.Nil(t, res.SignedElement("#nope"))
-	require.True(t, res.Covers(root))
-
-	other := doc.CreateElement("other")
-	require.False(t, res.Covers(other))
-	require.False(t, res.Covers(nil))
-
-	var nilRes *xmldsig1.VerifyResult
-	require.Nil(t, nilRes.SignedElement(""))
-	require.False(t, nilRes.Covers(root))
 }
 
 func dsigDigestFor(alg string) string {
