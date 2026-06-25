@@ -167,6 +167,47 @@ func TestXIncludeNewFSResolver(t *testing.T) {
 // processor resolves the href against the base before handing it to the
 // resolver, so the FS resolver must not join the base directory a second
 // time (which would open dir/dir/inc.xml instead of dir/inc.xml).
+func TestXIncludeMaxDepth(t *testing.T) {
+	t.Parallel()
+
+	const main = `<root xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="deep.xml"/></root>`
+	deep := strings.Repeat("<a>", 300) + "x" + strings.Repeat("</a>", 300)
+	deepFS := fstest.MapFS{"deep.xml": &fstest.MapFile{Data: []byte(deep)}}
+
+	t.Run("default cap rejects a deep included document", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, main)
+		_, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(deepFS)).
+			Process(t.Context(), doc)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("MaxDepth(0) permits a deep included document", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, main)
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(deepFS)).
+			MaxDepth(0).
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("MaxDepth(2) rejects a 3-deep included document", func(t *testing.T) {
+		t.Parallel()
+		shallowFS := fstest.MapFS{"deep.xml": &fstest.MapFile{Data: []byte(`<a><b><c/></b></a>`)}}
+		doc := parseXML(t, main)
+		_, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(shallowFS)).
+			MaxDepth(2).
+			Process(t.Context(), doc)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+}
+
 func TestXIncludeSubdirRelativeBase(t *testing.T) {
 	t.Parallel()
 

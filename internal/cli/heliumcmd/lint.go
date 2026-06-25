@@ -49,6 +49,11 @@ type config struct {
 	// so the parser's XXE block is lifted and a permissive FS installed.
 	loadExternal bool
 
+	// maxDepth holds the --max-depth value (-1 = unset) so it can be applied to
+	// both the main parser and, under --xinclude, the XInclude processor's
+	// inner parser.
+	maxDepth int
+
 	noout      bool
 	format     bool
 	outputFile string
@@ -268,6 +273,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		pretty:        -1,
 		repeat:        1,
 		maxInputBytes: DefaultMaxInputBytes,
+		maxDepth:      -1,
 	}
 	var files []string
 
@@ -409,6 +415,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
 				return nil, nil
 			}
+			cfg.maxDepth = n
 			cfg.parser = cfg.parser.MaxDepth(n)
 		case "--repeat":
 			i++
@@ -660,6 +667,9 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 		if cfg.noBaseFixup {
 			xiProc = xiProc.NoBaseFixup()
+		}
+		if cfg.maxDepth >= 0 {
+			xiProc = xiProc.MaxDepth(cfg.maxDepth)
 		}
 		if !input.stdin {
 			xiProc = xiProc.BaseURI(input.name)
