@@ -127,7 +127,7 @@ func evaluateNodeSet(t *testing.T, doc *helium.Document, expr string, nss map[st
 	return result.NodeSet
 }
 
-func runC14NTest(t *testing.T, category, name string, mode c14n.Mode, can c14n.Canonicalizer) {
+func runC14NTest(t *testing.T, category, name string, can c14n.Canonicalizer) {
 	t.Helper()
 
 	key := category + "/" + name
@@ -189,7 +189,7 @@ func TestC14N10WithoutComments(t *testing.T) {
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			runC14NTest(t, "without-comments", name, c14n.C14N10, c14n.NewCanonicalizer(c14n.C14N10))
+			runC14NTest(t, "without-comments", name, c14n.NewCanonicalizer(c14n.C14N10))
 		})
 	}
 }
@@ -220,7 +220,7 @@ func TestExclusiveC14N10WithoutComments(t *testing.T) {
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			runC14NTest(t, "exc-without-comments", name, c14n.ExclusiveC14N10, c14n.NewCanonicalizer(c14n.ExclusiveC14N10))
+			runC14NTest(t, "exc-without-comments", name, c14n.NewCanonicalizer(c14n.ExclusiveC14N10))
 		})
 	}
 }
@@ -240,7 +240,7 @@ func TestC14N10WithComments(t *testing.T) {
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			runC14NTest(t, "with-comments", name, c14n.C14N10, c14n.NewCanonicalizer(c14n.C14N10).Comments())
+			runC14NTest(t, "with-comments", name, c14n.NewCanonicalizer(c14n.C14N10).Comments())
 		})
 	}
 }
@@ -281,7 +281,7 @@ func TestC14N11WithoutComments(t *testing.T) {
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			runC14NTest(t, "1-1-without-comments", name, c14n.C14N11, c14n.NewCanonicalizer(c14n.C14N11))
+			runC14NTest(t, "1-1-without-comments", name, c14n.NewCanonicalizer(c14n.C14N11))
 		})
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"slices"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
@@ -871,8 +872,8 @@ func (c *canonicalizer) processXMLBase11(e *helium.Element, entries *[]attrSortE
 	// Join chain, outermost→innermost: omitted-ancestor bases then the element's
 	// own base.
 	chain := make([]string, 0, len(innerToOuter)+1)
-	for i := len(innerToOuter) - 1; i >= 0; i-- {
-		chain = append(chain, innerToOuter[i])
+	for _, v := range slices.Backward(innerToOuter) {
+		chain = append(chain, v)
 	}
 	if hasOwn && (!c.strictXMLAttrs || c.isVisible(ownAttr)) {
 		chain = append(chain, ownAttr.Value())
