@@ -51,7 +51,6 @@ const (
 
 	// W3C test skip messages reused by multiple tests.
 	skipXML11NSUndecl       = "XML 1.1: namespace undeclaration not supported by parser"
-	skipParserEntityInAttr  = "parser limitation: entity ref in single-quoted attribute value"
 	skipJSONToXMLValidate   = "json-to-xml validate option does not annotate result nodes"
 	skipSchemaAttrTypeCheck = "schema-attribute type check fails"
 
@@ -1602,20 +1601,6 @@ var w3cImplicitSkips = map[string]string{
 	"xml-version-009": "XML 1.1: control character serialization as numeric refs not implemented",
 	"xml-version-010": "XML 1.1: control character serialization as numeric refs not implemented",
 	"xml-version-018": "XML 1.1: control character serialization as numeric refs not implemented",
-
-	// regex-070*: XSL file uses entity reference pattern that trips parser
-	"regex-070a": skipParserEntityInAttr,
-	"regex-070b": skipParserEntityInAttr,
-	"regex-070c": skipParserEntityInAttr,
-	"regex-070d": skipParserEntityInAttr,
-	"regex-070e": skipParserEntityInAttr,
-	"regex-070f": skipParserEntityInAttr,
-	"regex-070g": skipParserEntityInAttr,
-	"regex-070h": skipParserEntityInAttr,
-	"regex-070i": skipParserEntityInAttr,
-	"regex-070j": skipParserEntityInAttr,
-	"regex-070k": skipParserEntityInAttr,
-	"regex-070l": skipParserEntityInAttr,
 
 	// whitespace-011: external parameter entity resolution not supported
 	"whitespace-011": "parser limitation: external parameter entity resolution not supported",
