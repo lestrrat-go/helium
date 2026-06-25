@@ -3,12 +3,26 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
+
+// pendingOverrideTypeCheck is a deferred XTSE3070 same-type check for an
+// xsl:override of a global variable whose required type is a custom schema type.
+// It is resolved after all top-level declarations (including the using package's
+// own xsl:import-schema) are compiled, so c.stylesheet.schemas is populated.
+type pendingOverrideTypeCheck struct {
+	varName    string
+	overrideAs string
+	overrideNS map[string]string
+	baseAs     string
+	basePkg    *Stylesheet
+}
 
 // overrideSet collects compiled override components from xsl:override.
 type overrideSet struct {
@@ -439,16 +453,38 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 
 	v := &variable{Name: resolvedName, As: getAttr(elem, "as"), Visibility: getAttr(elem, "visibility")}
 
-	// XTSE3070: the required type of the override must match the base.
-	// Only check when both types are standard XSD types (xs: prefix or
-	// built-in names). Custom schema types from xsl:import-schema cannot
-	// be reliably compared by name alone.
+	// XTSE3070: the required type of the override must be the same as the base
+	// variable's required type. A standard XSD/keyword type pair is compared
+	// lexically. For a custom schema type (a named simpleType from
+	// xsl:import-schema) the comparison is STRUCTURAL: the override's type is
+	// resolved against the using package's schemas, the base's type against the
+	// declaring package's schemas, and the two definitions are compared for type
+	// identity (same builtin base, or same flattened union member-type set). This
+	// is what distinguishes override-v-005 (u2 = union{time,dateTime,date} is the
+	// same type as base u1 = union{date,time,dateTime}, accepted) from
+	// override-v-006 (u6 = union{dateTime,date} is a different type, rejected).
+	// The comparison only fires when BOTH names resolve to a definition we can
+	// compare confidently; anything else is left un-flagged to avoid a false
+	// XTSE3070.
 	if pkgVar != nil && v.As != "" && pkgVar.As != "" && v.As != pkgVar.As {
 		if isStandardType(v.As) && isStandardType(pkgVar.As) {
 			return nil, staticError(errCodeXTSE3070,
 				"override variable %q type %q does not match base type %q",
 				name, v.As, pkgVar.As)
 		}
+		// Custom schema types are compared structurally, but the using package's
+		// own xsl:import-schema declarations are not yet compiled at this point in
+		// the pass (xsl:use-package precedes xsl:import-schema in the compile
+		// order). Defer the comparison to the end of compilation, when
+		// c.stylesheet.schemas is fully populated. The base package's schemas are
+		// already available via the stable pkg pointer.
+		c.pendingOverrideTypeChecks = append(c.pendingOverrideTypeChecks, pendingOverrideTypeCheck{
+			varName:    name,
+			overrideAs: v.As,
+			overrideNS: maps.Clone(c.nsBindings),
+			baseAs:     pkgVar.As,
+			basePkg:    pkg,
+		})
 	}
 
 	// Link the original variable for $xsl:original references.
@@ -673,6 +709,154 @@ func checkOverrideModeVisibility(mode, displayMode string, pkg *Stylesheet) erro
 // isStandardType returns true if the type name is a well-known XSD type
 // (xs: prefix) or standard type keyword. Returns false for custom schema
 // types defined via xsl:import-schema.
+// checkPendingOverrideTypes runs the deferred XTSE3070 override-variable
+// same-type checks after all top-level declarations have been compiled, so the
+// using package's own xsl:import-schema types are available in
+// c.stylesheet.schemas.
+func (c *compiler) checkPendingOverrideTypes() error {
+	for _, p := range c.pendingOverrideTypeChecks {
+		same, decided := sameOverrideSchemaType(p.overrideAs, p.overrideNS, c.stylesheet.schemas, p.baseAs, p.basePkg)
+		if decided && !same {
+			return staticError(errCodeXTSE3070,
+				"override variable %q type %q does not match base type %q",
+				p.varName, p.overrideAs, p.baseAs)
+		}
+	}
+	return nil
+}
+
+// sameOverrideSchemaType decides whether the override variable's required type
+// and the base variable's required type denote the SAME custom schema type, for
+// the XTSE3070 same-type constraint. decided=false means the comparison was not
+// attempted (the caller raises no error): this happens unless BOTH "as" values
+// are a single simple named-type reference that resolves to a definition in its
+// package's schemas. When decided=true, same reports type identity.
+//
+// The override's type is resolved against overrideSchemas (using package) in the
+// overrideNS namespace context; the base's against the base (used) package's own
+// schemas and namespace context. Resolving each side in its own package is what
+// lets two packages that each import an identically-shaped union compare equal.
+func sameOverrideSchemaType(overrideAs string, overrideNS map[string]string, overrideSchemas []*xsd.Schema, baseAs string, basePkg *Stylesheet) (bool, bool) {
+	overrideName, ok := simpleTypeQNameRef(overrideAs)
+	if !ok {
+		return false, false
+	}
+	baseName, ok := simpleTypeQNameRef(baseAs)
+	if !ok {
+		return false, false
+	}
+	if basePkg == nil {
+		return false, false
+	}
+	overrideTD, ok := lookupSchemaTypeDef(overrideName, overrideNS, overrideSchemas)
+	if !ok {
+		return false, false
+	}
+	baseTD, ok := lookupSchemaTypeDef(baseName, basePkg.namespaces, basePkg.schemas)
+	if !ok {
+		return false, false
+	}
+	return schemaTypesIdentical(overrideTD, baseTD), true
+}
+
+// lookupSchemaTypeDef resolves a simple type-name reference (with an optional
+// trailing occurrence indicator already stripped by the caller) to its xsd
+// TypeDef using the given namespace context and schema set.
+func lookupSchemaTypeDef(typeName string, ns map[string]string, schemas []*xsd.Schema) (*xsd.TypeDef, bool) {
+	if len(schemas) == 0 {
+		return nil, false
+	}
+	local := typeName
+	uri := ""
+	if prefix, rest, hasPrefix := strings.Cut(typeName, ":"); hasPrefix {
+		local = rest
+		if u, found := ns[prefix]; found {
+			uri = u
+		}
+	}
+	for _, s := range schemas {
+		if td, found := s.LookupType(local, uri); found {
+			return td, true
+		}
+	}
+	return nil, false
+}
+
+// schemaTypesIdentical reports whether two resolved schema type definitions are
+// the same type for the purpose of the XTSE3070 same-type constraint. Two union
+// types are identical iff their flattened member-type sets are equal (member
+// order and the union's own name are irrelevant). Otherwise the two are compared
+// by their flattened atomic identity — the canonical name a non-union reduces to.
+func schemaTypesIdentical(a, b *xsd.TypeDef) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	aUnion := a.Variety == xsd.TypeVarietyUnion
+	bUnion := b.Variety == xsd.TypeVarietyUnion
+	if aUnion != bUnion {
+		return false
+	}
+	if aUnion {
+		am := flattenUnionMemberNames(a, map[*xsd.TypeDef]struct{}{})
+		bm := flattenUnionMemberNames(b, map[*xsd.TypeDef]struct{}{})
+		if len(am) != len(bm) {
+			return false
+		}
+		for name := range am {
+			if _, ok := bm[name]; !ok {
+				return false
+			}
+		}
+		return true
+	}
+	return xsdTypeNameFromDef(a) == xsdTypeNameFromDef(b)
+}
+
+// flattenUnionMemberNames returns the set of canonical member-type names of a
+// union, descending into nested union members so that union(union(a,b),c) and
+// union(a,b,c) compare equal. visited guards against cyclic member references.
+func flattenUnionMemberNames(td *xsd.TypeDef, visited map[*xsd.TypeDef]struct{}) map[string]struct{} {
+	out := make(map[string]struct{})
+	if td == nil {
+		return out
+	}
+	if _, seen := visited[td]; seen {
+		return out
+	}
+	visited[td] = struct{}{}
+	for _, m := range td.MemberTypes {
+		if m == nil {
+			continue
+		}
+		if m.Variety == xsd.TypeVarietyUnion {
+			for name := range flattenUnionMemberNames(m, visited) {
+				out[name] = struct{}{}
+			}
+			continue
+		}
+		out[xsdTypeNameFromDef(m)] = struct{}{}
+	}
+	return out
+}
+
+// simpleTypeQNameRef returns the bare type-name QName from an "as" attribute that
+// is a single named type reference (with an optional trailing ?/*/+ occurrence
+// indicator), and ok=true. For any structured sequence type — a kind test, a
+// function/map/array test, a parenthesised type, or a multi-token form — it
+// returns ok=false so the caller skips the name-identity comparison.
+func simpleTypeQNameRef(as string) (string, bool) {
+	name := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(as), "?*+"))
+	if name == "" || isStandardType(name) {
+		return "", false
+	}
+	// Reject anything that is not a single simple/EQName type reference:
+	// parentheses (kind/function tests), commas, or internal whitespace.
+	if strings.ContainsAny(name, "(), \t\r\n") {
+		return "", false
+	}
+	return name, true
+}
+
 func isStandardType(as string) bool {
 	// Strip occurrence indicator
 	name := strings.TrimRight(as, "?*+")
