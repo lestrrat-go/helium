@@ -399,13 +399,9 @@ func checkPatternAgainstSchema(p *pattern, reg *schemaRegistry) error {
 func checkExprAgainstSchema(expr xpath3.Expr, reg *schemaRegistry, xpathDefaultNS string, nsBindings map[string]string) error {
 	switch e := expr.(type) {
 	case xpath3.LocationPath:
-		if len(e.Steps) > 0 {
-			return checkStepAgainstSchema(e.Steps[0], reg, xpathDefaultNS, nsBindings)
-		}
+		return checkStepsAgainstSchema(e.Steps, reg, xpathDefaultNS, nsBindings)
 	case *xpath3.LocationPath:
-		if len(e.Steps) > 0 {
-			return checkStepAgainstSchema(e.Steps[0], reg, xpathDefaultNS, nsBindings)
-		}
+		return checkStepsAgainstSchema(e.Steps, reg, xpathDefaultNS, nsBindings)
 	case xpath3.PathStepExpr:
 		// For path/step, check the leftmost expression's first step
 		return checkExprAgainstSchema(e.Left, reg, xpathDefaultNS, nsBindings)
@@ -425,6 +421,32 @@ func checkExprAgainstSchema(expr xpath3.Expr, reg *schemaRegistry, xpathDefaultN
 			return err
 		}
 		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS, nsBindings)
+	}
+	return nil
+}
+
+// checkStepsAgainstSchema applies the XTSE3105 element-name check to a location
+// path's step sequence. Per the spec the check targets the first StepExprP whose
+// axis has principal node kind Element and whose NodeTest is an EQName. Leading
+// steps that are not element-name tests — the synthetic descendant-or-self::node()
+// produced by the "//" abbreviation, a root/document-node step, an attribute axis,
+// or a kind test such as element(*) — are not EQName element-axis steps and are
+// skipped so the first genuine element NameTest (e.g. the "foo" in "//foo") is the
+// one checked. Once such a step is found the check is applied to it alone; a later
+// step in the same path (e.g. the "b" in "a/b") is not an additional XTSE3105 site.
+func checkStepsAgainstSchema(steps []xpath3.Step, reg *schemaRegistry, xpathDefaultNS string, nsBindings map[string]string) error {
+	for _, step := range steps {
+		// Skip steps on axes whose principal node kind is not Element.
+		if step.Axis == xpath3.AxisAttribute || step.Axis == xpath3.AxisNamespace {
+			continue
+		}
+		// Only an EQName NodeTest (NameTest, non-wildcard) is an XTSE3105 site;
+		// kind tests, node() (from "//"), and wildcards are skipped.
+		nt, ok := step.NodeTest.(xpath3.NameTest)
+		if !ok || nt.Local == "*" || nt.Prefix == "*" {
+			continue
+		}
+		return checkStepAgainstSchema(step, reg, xpathDefaultNS, nsBindings)
 	}
 	return nil
 }

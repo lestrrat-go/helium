@@ -1695,13 +1695,10 @@ var w3cImplicitSkips = map[string]string{
 	"match-210": "schema-aware attribute type pattern match fails",
 	"match-221": "schema-aware numeric type pattern match fails",
 	"match-232": "schema-aware type pattern match missing items",
-	"match-244": "expected error XTSE3105 not raised for schema pattern",
 	"match-262": "deep-copy does not preserve type annotations",
 	"match-263": "deep-copy does not preserve type annotations",
 
 	// evaluate tests requiring schema-aware processing
-	"evaluate-012": "schema-aware xsl:evaluate: expected XTDE3160 not raised",
-	"evaluate-013": "schema-aware xsl:evaluate: expected XTDE3160 not raised",
 	"evaluate-048": "requires network access to saxonica.com",
 
 	// slow xsl:evaluate tests (~30s each with -race on CI)
