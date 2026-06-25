@@ -163,6 +163,7 @@ source: [examples/xinclude_process_example_test.go](https://github.com/lestrrat-
 | `Resolver(Resolver)` | Supply a custom resource resolver (see `NewFSResolver`). |
 | `BaseURI(string)` | Base URI for resolving relative hrefs. |
 | `MaxIncludeSize(int)` | Cap bytes read from a single included resource (default 10 MiB). |
+| `MaxIncludeDepth(int)` | Cap the nesting depth of `xi:include` directives (default 40). |
 
 ## Security
 
