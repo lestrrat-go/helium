@@ -651,6 +651,15 @@ func isXMLNameChar(b byte) bool {
 }
 
 func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
+	return idLookup(ctx, args, false)
+}
+
+// idLookup implements both fn:id and fn:element-with-id. The two functions
+// agree whenever the is-id node is an attribute (the result is the element
+// bearing the attribute) and differ when the is-id node is an element: fn:id
+// returns that element itself, whereas fn:element-with-id returns its parent
+// element. The elementWithID flag selects the latter behavior.
+func idLookup(ctx context.Context, args []Sequence, elementWithID bool) (Sequence, error) {
 	doc, err := resolveIDLookupDocument(ctx, args)
 	if err != nil {
 		return nil, err
@@ -666,15 +675,18 @@ func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	nodes := make([]helium.Node, 0, len(tokens))
 	for _, token := range tokens {
+		// GetElementByID resolves DTD-declared ID attributes; the returned
+		// element already bears the ID attribute, so it is the correct
+		// result for both fn:id and fn:element-with-id.
 		if elem := doc.GetElementByID(token); elem != nil {
 			nodes = append(nodes, elem)
 		}
 	}
-	nodes = append(nodes, idElementsFromTypeAnnotations(doc, tokens, getFnContext(ctx))...)
+	nodes = append(nodes, idElementsFromTypeAnnotations(doc, tokens, getFnContext(ctx), elementWithID)...)
 	return sequenceFromDocOrderedNodes(ctx, nodes)
 }
 
-func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *evalContext) []helium.Node {
+func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *evalContext, elementWithID bool) []helium.Node {
 	if ec == nil || len(tokens) == 0 {
 		return nil
 	}
@@ -717,13 +729,25 @@ func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *ev
 				seen[parent] = struct{}{}
 				nodes = append(nodes, parent)
 			case *helium.Element:
-				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; ok {
-					if _, dup := seen[typed]; dup {
+				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+					continue
+				}
+				// fn:id returns the is-id element itself; fn:element-with-id
+				// returns the element that CONTAINS the is-id element, i.e. its
+				// parent.
+				result := helium.Node(typed)
+				if elementWithID {
+					parent, ok := typed.Parent().(*helium.Element)
+					if !ok {
 						continue
 					}
-					seen[typed] = struct{}{}
-					nodes = append(nodes, typed)
+					result = parent
 				}
+				if _, dup := seen[result]; dup {
+					continue
+				}
+				seen[result] = struct{}{}
+				nodes = append(nodes, result)
 			}
 		}
 	}
@@ -843,7 +867,7 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnElementWithID(ctx context.Context, args []Sequence) (Sequence, error) {
-	return fnID(ctx, args)
+	return idLookup(ctx, args, true)
 }
 
 func fnCollection(ctx context.Context, args []Sequence) (Sequence, error) {

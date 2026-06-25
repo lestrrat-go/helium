@@ -1718,8 +1718,6 @@ var w3cImplicitSkips = map[string]string{
 	// arrays: array construction and apply-templates on arrays
 
 	// schema-aware match tests: pattern matching with schema types
-	"match-054": "element-with-id pattern match returns child instead of parent",
-	"match-055": "element-with-id pattern match returns child instead of parent",
 	"match-174": "xsl:type annotation on constructed elements not propagated",
 	"match-181": "xsl:type annotation on constructed elements not propagated",
 	"match-210": "schema-aware attribute type pattern match fails",
