@@ -756,6 +756,12 @@ func (c *canonicalizer) hasGap(e *helium.Element) bool {
 	return !c.isVisible(parent)
 }
 
+// strict reports whether strict W3C node-set xml:* handling applies. The toggle
+// governs node-set processing only, so it has no effect in whole-document mode.
+func (c *canonicalizer) strict() bool {
+	return c.strictXMLAttrs && c.nodeSet != nil
+}
+
 // inheritXMLAttrs10 imports xml:* attributes from omitted ancestors for C14N 1.0
 // node-set processing. Inheritance happens only across a gap; the nearest
 // ancestor value for each xml:* name is imported unless that name is blocked.
@@ -769,7 +775,7 @@ func (c *canonicalizer) inheritXMLAttrs10(e *helium.Element, entries *[]attrSort
 	}
 
 	blocked := make(map[string]struct{})
-	if c.strictXMLAttrs {
+	if c.strict() {
 		for _, attr := range e.Attributes() {
 			if attr.URI() == lexicon.NamespaceXML {
 				blocked[attr.LocalName()] = struct{}{}
@@ -813,7 +819,7 @@ func (c *canonicalizer) inheritXMLAttrs10(e *helium.Element, entries *[]attrSort
 // across a gap.
 func (c *canonicalizer) processSimpleInheritable11(e *helium.Element, entries *[]attrSortEntry, localName string) {
 	if own, ok := xmlAttrOf(e, localName); ok {
-		if !c.strictXMLAttrs || c.isVisible(own) {
+		if !c.strict() || c.isVisible(own) {
 			*entries = append(*entries, attrSortEntry{attr: own, nsURI: lexicon.NamespaceXML, localName: localName})
 		}
 		return // own attribute blocks inheritance regardless of mode
@@ -861,21 +867,25 @@ func (c *canonicalizer) processXMLBase11(e *helium.Element, entries *[]attrSortE
 
 	// Strict mode performs the fixup only when an omitted ancestor actually
 	// carries xml:base; an excluded own xml:base then renders as an ordinary
-	// attribute (if visible) but never seeds a fixup.
-	if c.strictXMLAttrs && !hiddenHasBase {
+	// attribute (if visible) but never seeds a fixup. An empty value is dropped,
+	// matching the join's empty result.
+	if c.strict() && !hiddenHasBase {
 		if hasOwn && c.isVisible(ownAttr) {
-			c.setXMLBaseEntry(entries, ownAttr.Value())
+			if v := ownAttr.Value(); v != "" {
+				c.setXMLBaseEntry(entries, v)
+			}
 		}
 		return
 	}
 
 	// Join chain, outermost→innermost: omitted-ancestor bases then the element's
-	// own base.
+	// own base. The own value is the innermost term of the join sequence and is
+	// included whether or not the attribute node is itself in the node set.
 	chain := make([]string, 0, len(innerToOuter)+1)
 	for _, v := range slices.Backward(innerToOuter) {
 		chain = append(chain, v)
 	}
-	if hasOwn && (!c.strictXMLAttrs || c.isVisible(ownAttr)) {
+	if hasOwn {
 		chain = append(chain, ownAttr.Value())
 	}
 

@@ -25,6 +25,15 @@ func TestJoinURIReference(t *testing.T) {
 		{"urn-ref-wins", "../bar/", "urn:foo", "urn:foo"},
 		// Trailing-dot append (libxml2 forces upward traversal).
 		{"dotdot-base-keeps-slash", "..", "y/", "../y/"},
+		// Empty-path (query/fragment-only) reference keeps the base path (BASE-001).
+		{"query-only-ref", "a/b", "?q=1", "a/b?q=1"},
+		{"fragment-only-ref", "a/b", "#f", "a/b#f"},
+		// Relative path that fully cancels yields empty, not "/" (BASE-002).
+		{"relative-cancels-to-empty", "abc/", "../", ""},
+		// Network-path reference keeps its authority (BASE-003).
+		{"network-path-ref", "a/", "//h/x", "//h/x"},
+		// Absolute base merge collapses consecutive slashes (BASE-004).
+		{"absolute-base-double-slash", "http://h/a//b/", "c", "http://h/a/b/c"},
 	}
 
 	for _, tt := range tests {
@@ -54,7 +63,7 @@ func TestReduceXMLBase(t *testing.T) {
 	}
 }
 
-func TestRemoveDotSegmentsKeepLeading(t *testing.T) {
+func TestNormalizeURIPath(t *testing.T) {
 	tests := []struct {
 		in   string
 		want string
@@ -66,11 +75,16 @@ func TestRemoveDotSegmentsKeepLeading(t *testing.T) {
 		{"a/b/../c", "a/c"},
 		{"foo/./bar", "foo/bar"},
 		{"a//b", "a/b"},
+		{"abc/../", ""},       // relative cancels to empty, not "/"
+		{"/a//b/c", "/a/b/c"}, // collapse consecutive slashes
+		{"foo/..", ""},
+		{"a/b/..", "a/"},
+		{"abc/", "abc/"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
-			require.Equal(t, tt.want, removeDotSegmentsKeepLeading(tt.in))
+			require.Equal(t, tt.want, normalizeURIPath(tt.in))
 		})
 	}
 }

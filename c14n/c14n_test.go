@@ -470,6 +470,40 @@ func TestC14N11ExcludedOwnXMLLang(t *testing.T) {
 	require.NotContains(t, string(gotStrict), "xml:lang", "strict mode omits an excluded own xml:lang (still blocking inheritance), got: %s", string(gotStrict))
 }
 
+// TestC14N11StrictXMLBaseIncludesOwnValue verifies that when strict-mode fixup
+// runs (an omitted ancestor carries xml:base), the element's own xml:base value
+// is still part of the join sequence even though the attribute is excluded from
+// the node set — matching default mode here.
+func TestC14N11StrictXMLBaseIncludesOwnValue(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base="a/"><child xml:base="b">text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	nodes := collectDescendantElements(t, doc)
+
+	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictNodeSetXMLAttributes().CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Contains(t, string(gotStrict), `xml:base="a/b"`, "strict join must include the element's own value, got: %s", string(gotStrict))
+}
+
+// TestC14N11StrictWholeDocumentUnaffected verifies the StrictNodeSetXMLAttributes
+// toggle does not change whole-document output (it governs node-set processing
+// only): an empty xml:base must be dropped in both default and strict, with no
+// node set.
+func TestC14N11StrictWholeDocumentUnaffected(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xml:base=""><child/></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	gotDefault, err := c14n.NewCanonicalizer(c14n.C14N11).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N11).StrictNodeSetXMLAttributes().CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, string(gotDefault), string(gotStrict), "strict must not change whole-document output")
+	require.NotContains(t, string(gotStrict), "xml:base", "empty xml:base must be dropped, got: %s", string(gotStrict))
+}
+
 // TestC14N10ExcludedOwnXMLLang covers the C14N 1.0 inheritance-blocking
 // divergence. With a rendered element's own xml:lang excluded from the node set,
 // the default (libxml2) blocks only on rendered attributes and so imports the
