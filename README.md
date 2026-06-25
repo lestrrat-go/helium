@@ -119,9 +119,10 @@ with no extra configuration. By default:
   no network loader, so this is belt-and-suspenders.
 - Element nesting depth is **capped at 256** (`MaxDepth(256)`; `0` = unbounded).
 - Entity substitution and external DTD loading are off
-  (`SubstituteEntities(false)`, `LoadExternalDTD(false)`), entity-expansion
-  amplification limits are on (`RelaxLimits(false)`), and any external DTD
-  subset — once explicitly enabled — is capped at 10 MiB.
+  (`SubstituteEntities(false)`, `LoadExternalDTD(false)`); the entity-expansion
+  amplification, name-length, and content-model-depth guards are at their
+  defaults (`MaxEntityAmplification`, `MaxNameLength`, `MaxContentModelDepth`);
+  and any external DTD subset — once explicitly enabled — is capped at 10 MiB.
 
 The builder is clone-on-write, so one configured parser is safe to reuse across
 goroutines.
@@ -148,8 +149,9 @@ caller should also:
 
 - Enforce a maximum raw document size before calling `Parse`.
 - Pass a `context.Context` with a deadline to `Parse` / `ParseReader`.
-- Keep `RelaxLimits` disabled — enabling it lifts the entity-amplification and
-  name-length guards.
+- Leave the entity-amplification, name-length, and content-model-depth limits
+  at their defaults — passing a negative value to `MaxEntityAmplification`,
+  `MaxNameLength`, or `MaxContentModelDepth` removes that guard.
 - Be cautious enabling XInclude, catalogs, DTD validation, or
   default-DTD-attribute processing for untrusted input; when you do, keep every
   external resource allowlisted and size-bounded. `xinclude.Processor.MaxDepth`

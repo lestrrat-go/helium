@@ -43,7 +43,6 @@ const (
 	parseNoXIncNode     = parser.NoXIncNode
 	parseCompact        = parser.Compact
 	parseNoBaseFix      = parser.NoBaseFix
-	parseHuge           = parser.Huge
 	parseIgnoreEnc      = parser.IgnoreEnc
 	parseBigLines       = parser.BigLines
 	parseNoXXE          = parser.NoXXE

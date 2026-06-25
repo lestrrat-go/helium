@@ -79,7 +79,7 @@ State affects parsing rules: e.g., external entity refs forbidden in `psAttribut
 
 ### Entity Amplification Guard
 - `sizeentcopy int64` — cumulative entity expansion bytes
-- `maxAmpl int` — max amplification factor (5 default, 0 with RelaxLimits(true))
+- `maxAmpl int` — max amplification factor (5 default, 0 with MaxEntityAmplification(-1))
 - `inputSize int64` — original input size
 - Rules: 1MB baseline before ratio check; 20 bytes fixed cost per entity ref
 
@@ -134,7 +134,7 @@ document-end gate.
 2. `entityCheck(ent, size)` — amplification guard
    - Baseline: 1MB free
    - Fixed cost: 20 bytes per ref (charged once per reference)
-   - Max amplification: 5× input (disabled with RelaxLimits(true))
+   - Max amplification: 5× input (disabled with MaxEntityAmplification(-1))
    - Already-checked entities use cached `expandedSize`
    - Raw-byte variant `entityCheckBytes(size)` charges expansion bytes WITHOUT the fixed cost, used for external content already charged the fixed cost by `parseReference`
 3. Parse entity content if needed (`parseBalancedChunkInternal`, or `parseExternalEntityPrivate` for external entities)
@@ -364,7 +364,8 @@ The legacy-prefix-resolves-vs-literal decision mirrors `parseCharRef`, but the b
 | LoadExternalDTD(true) | loadsubset.Set(DetectIDs) (load external DTD; external subset system IDs resolve relative to the DTD base URI) |
 | DefaultDTDAttributes(true) | loadsubset.Set(CompleteAttrs) (apply default attrs) |
 | ValidateDTD(true) | validate content models after parse |
-| RelaxLimits(true) | maxAmpl=0 (disable amplification checks) |
+| MaxEntityAmplification(-1) | maxAmpl=0 (disable amplification ratio check; 1 GiB hard ceiling still applies) |
+| MaxNameLength(-1) / MaxContentModelDepth(-1) | disable the name-length / DTD content-model-depth caps |
 | MergeCDATA(true) | deliver CDATA as Characters (not CDataBlock) |
 | RecoverOnError(true) | error recovery (continue on errors) |
 | IgnoreEncoding(true) | don't use XML decl encoding |

@@ -314,7 +314,16 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		case "--nonet":
 			cfg.parser = cfg.parser.AllowNetwork(false)
 		case "--huge":
-			cfg.parser = cfg.parser.RelaxLimits(true)
+			// --huge removes internal arbitrary parser limits: relax the
+			// name-length, entity-amplification, and content-model-depth guards,
+			// and lift the default element-depth cap (propagated to the XInclude
+			// processor via cfg.maxDepth) so deeply nested input is accepted.
+			cfg.maxDepth = 0
+			cfg.parser = cfg.parser.
+				MaxNameLength(-1).
+				MaxEntityAmplification(-1).
+				MaxContentModelDepth(-1).
+				MaxDepth(0)
 		case "--noenc":
 			cfg.parser = cfg.parser.IgnoreEncoding(true)
 		case "--noxincludenode":

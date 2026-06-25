@@ -409,7 +409,7 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 		}
 		off += w
 	}
-	if off > MaxNameLength && !pctx.options.IsSet(parseHuge) {
+	if pctx.nameTooLong(off) {
 		err = pctx.error(ctx, ErrNameTooLong)
 		return
 	}
@@ -435,10 +435,8 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {
 		prefixBytes, localBytes, nBytes, ok := u8.ScanQNameBytes()
 		if ok {
-			if !pctx.options.IsSet(parseHuge) {
-				if len(prefixBytes) > MaxNameLength || len(localBytes) > MaxNameLength {
-					return "", "", pctx.error(ctx, ErrNameTooLong)
-				}
+			if pctx.nameTooLong(len(prefixBytes)) || pctx.nameTooLong(len(localBytes)) {
+				return "", "", pctx.error(ctx, ErrNameTooLong)
 			}
 			if len(prefixBytes) > 0 {
 				prefix = pctx.internNameBytes(prefixBytes)
@@ -559,7 +557,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 			err = pctx.error(ctx, fmt.Errorf("invalid name start char %q (U+%04X)", c, c))
 			return
 		}
-		if nRunes > MaxNameLength && !pctx.options.IsSet(parseHuge) {
+		if pctx.nameTooLong(nRunes) {
 			err = pctx.error(ctx, ErrNameTooLong)
 			return
 		}
@@ -604,7 +602,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 		}
 		off += w
 	}
-	if off > MaxNameLength && !pctx.options.IsSet(parseHuge) {
+	if pctx.nameTooLong(off) {
 		err = pctx.error(ctx, ErrNameTooLong)
 		return
 	}

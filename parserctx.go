@@ -44,19 +44,17 @@ const (
 
 var errInvalidUTF8Name = errors.New("invalid UTF-8 sequence in name")
 
-const MaxNameLength = 50000
-
 const (
 	entityAllowedExpansion int64 = 1_000_000 // 1 MB baseline before ratio check
 	entityFixedCost        int64 = 20        // fixed byte cost per entity reference
-	entityMaxAmplDefault         = 5         // default max amplification factor
 	// entityHardCeiling caps total entity expansion even when the ratio
-	// check is disabled (maxAmpl=0 via [Parser.RelaxLimits]). Without it,
-	// RelaxLimits permits unbounded amplification — a single document
-	// could expand to many GB of resident memory. 1 GB is permissive enough
-	// for any realistic XML workload but blocks the unbounded billion-laughs
-	// path that a hostile document could otherwise exploit.
-	entityHardCeiling int64 = 1_000_000_000 // 1 GB absolute cap, survives RelaxLimits
+	// check is disabled (maxAmpl=0 via [Parser.MaxEntityAmplification](-1)).
+	// Without it, disabling the ratio check would permit unbounded
+	// amplification — a single document could expand to many GB of resident
+	// memory. 1 GB is permissive enough for any realistic XML workload but
+	// blocks the unbounded billion-laughs path that a hostile document could
+	// otherwise exploit.
+	entityHardCeiling int64 = 1_000_000_000 // 1 GB absolute cap, always enforced
 	// externalEntityMaxBytes caps the number of bytes read from a single
 	// external parsed entity. Without it, a resolver returning an unbounded
 	// source (e.g. SYSTEM "/dev/zero") would be read via io.ReadAll and exhaust
@@ -118,7 +116,7 @@ type parserCtx struct {
 	nodeTab     nodeStack
 	sizeentcopy int64 // cumulative entity expansion bytes (non-entity-specific)
 	inputSize   int64 // total input document size
-	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via parseHuge)
+	maxAmpl     int   // max entity amplification factor (default 5; 0 = ratio check disabled)
 	// nbentities int
 	inputTab         inputStack
 	cachedCursor     strcursor.Cursor // cached result of getCursor(); invalidated on push/pop
@@ -127,6 +125,8 @@ type parserCtx struct {
 	recoverErr       error             // first fatal error saved during recovery
 	elemDepth        int               // current element nesting depth
 	maxElemDepth     int               // max allowed element nesting depth (0 = unlimited)
+	maxNameLength    int               // max element/attribute/NCName length (0 = unlimited)
+	maxCMDepth       int               // max DTD content-model declaration depth (0 = unlimited)
 	maxExtDTDSize    int               // max bytes read from an external DTD subset (<= 0 = MaxExternalDTDSize)
 	currentEntityURI string            // URI of the external entity currently being replayed (for base-uri tracking)
 	nameCache        map[string]string // per-parse string interning for element/attribute names
@@ -352,6 +352,26 @@ func (ctx *parserCtx) currentInputID() any {
 	return ctx.inputTab.PeekOne()
 }
 
+// resolveLimit maps a builder-supplied limit value to its effective
+// parser-context value: zero selects def, a negative value means "no limit"
+// (returns 0, the context sentinel for unlimited / disabled), and a positive
+// value is used verbatim.
+func resolveLimit(v, def int) int {
+	if v == 0 {
+		return def
+	}
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
+// nameTooLong reports whether a name of n bytes exceeds the configured maximum
+// name length. A maxNameLength of zero means no limit is enforced.
+func (ctx *parserCtx) nameTooLong(n int) bool {
+	return ctx.maxNameLength > 0 && n > ctx.maxNameLength
+}
+
 func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.pushInput(strcursor.NewByteCursor(in))
 	ctx.detectedEncoding = encUTF8
@@ -367,7 +387,9 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.spaceTab = ctx.spaceTab[:0]
 	ctx.spaceTab = append(ctx.spaceTab, -1) // initial value before any element
 	ctx.inputSize = int64(len(ctx.rawInput))
-	ctx.maxAmpl = entityMaxAmplDefault
+	ctx.maxAmpl = DefaultMaxEntityAmplification
+	ctx.maxNameLength = DefaultMaxNameLength
+	ctx.maxCMDepth = DefaultMaxContentModelDepth
 	if p != nil {
 		ctx.sax = p.sax
 		if tb, ok := p.sax.(*TreeBuilder); ok {
@@ -392,14 +414,14 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 		if ctx.options.IsSet(parseNoEnt) {
 			ctx.replaceEntities = true
 		}
-		if ctx.options.IsSet(parseHuge) {
-			ctx.maxAmpl = 0
-		}
 		if ctx.options.IsSet(parseSkipIDs) {
 			ctx.loadsubset.Set(SkipIDs)
 		}
 		ctx.maxElemDepth = p.maxDepth
 		ctx.maxExtDTDSize = p.maxExtDTDSize
+		ctx.maxAmpl = resolveLimit(p.maxEntityAmpl, DefaultMaxEntityAmplification)
+		ctx.maxNameLength = resolveLimit(p.maxNameLength, DefaultMaxNameLength)
+		ctx.maxCMDepth = resolveLimit(p.maxCMDepth, DefaultMaxContentModelDepth)
 	}
 	if ctx.fsys == nil {
 		ctx.fsys = iofs.DenyAll{}

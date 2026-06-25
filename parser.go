@@ -52,6 +52,9 @@ type parserConfig struct {
 	fsys           fs.FS
 	maxDepth       int
 	maxExtDTDSize  int
+	maxNameLength  int
+	maxEntityAmpl  int
+	maxCMDepth     int
 	errorHandler   ErrorHandler
 }
 
@@ -350,18 +353,56 @@ func (p Parser) FixBaseURIs(v bool) Parser {
 	return p
 }
 
-// RelaxLimits controls whether hardcoded parser limits (name length,
-// entity expansion) are relaxed. Use with caution — disabling limits
-// may expose the parser to denial-of-service attacks.
-// libxml2: XML_PARSE_HUGE
-// Default: false
-func (p Parser) RelaxLimits(v bool) Parser {
+// Default values for the per-limit parser knobs. Each [Parser] limit method
+// treats a zero argument as "use the default" and a negative argument as
+// "no limit".
+const (
+	// DefaultMaxNameLength is the default cap on the length, in bytes, of a
+	// single element / attribute / namespace-prefix / NCName token.
+	DefaultMaxNameLength = 50000
+	// DefaultMaxEntityAmplification is the default entity-expansion
+	// amplification factor: the parser rejects a document whose total
+	// expanded entity bytes exceed this multiple of the input size (beyond a
+	// fixed baseline). The 1 GiB absolute expansion ceiling applies
+	// regardless of this factor.
+	DefaultMaxEntityAmplification = 5
+	// DefaultMaxContentModelDepth is the default cap on the nesting depth of a
+	// DTD element content-model declaration (the parenthesized groups in
+	// <!ELEMENT ...>).
+	DefaultMaxContentModelDepth = 128
+)
+
+// MaxNameLength sets the maximum length, in bytes, of a single element,
+// attribute, namespace-prefix, or NCName token. A value of zero (the default)
+// uses [DefaultMaxNameLength] (50000); a negative value removes the limit.
+// Removing the limit lets a hostile document allocate very large name tokens,
+// so do so only for trusted input.
+func (p Parser) MaxNameLength(n int) Parser {
 	p = p.clone()
-	if !v {
-		p.cfg.options.Clear(parseHuge)
-		return p
-	}
-	p.cfg.options.Set(parseHuge)
+	p.cfg.maxNameLength = n
+	return p
+}
+
+// MaxEntityAmplification sets the maximum entity-expansion amplification
+// factor: the parser rejects a document whose cumulative expanded entity
+// bytes exceed n times the input size (past a fixed baseline), the guard
+// against "billion laughs" style attacks. A value of zero (the default) uses
+// [DefaultMaxEntityAmplification] (5); a negative value disables the ratio
+// check. The 1 GiB absolute expansion ceiling is always enforced, even when
+// the ratio check is disabled.
+func (p Parser) MaxEntityAmplification(n int) Parser {
+	p = p.clone()
+	p.cfg.maxEntityAmpl = n
+	return p
+}
+
+// MaxContentModelDepth sets the maximum nesting depth of a DTD element
+// content-model declaration (the parenthesized groups in <!ELEMENT ...>). A
+// value of zero (the default) uses [DefaultMaxContentModelDepth] (128); a
+// negative value removes the limit.
+func (p Parser) MaxContentModelDepth(n int) Parser {
+	p = p.clone()
+	p.cfg.maxCMDepth = n
 	return p
 }
 
