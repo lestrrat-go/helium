@@ -216,11 +216,11 @@ func build(cases []caseResult, name, repo, commit string) junitSuites {
 // and leaf "match-054". Nested subtests keep their intermediate path in the
 // leaf name.
 func splitClass(full string) (string, string) {
-	idx := strings.Index(full, "/")
-	if idx < 0 {
+	class, leaf, found := strings.Cut(full, "/")
+	if !found {
 		return full, full
 	}
-	return full[:idx], full[idx+1:]
+	return class, leaf
 }
 
 // skipReason extracts the t.Skip message from a leaf test's output lines. Go
@@ -231,8 +231,8 @@ func skipReason(output []string) string {
 		if !strings.Contains(trimmed, "_test.go:") {
 			continue
 		}
-		if idx := strings.Index(trimmed, ": "); idx >= 0 {
-			return strings.TrimSpace(trimmed[idx+2:])
+		if _, reason, found := strings.Cut(trimmed, ": "); found {
+			return strings.TrimSpace(reason)
 		}
 	}
 	return ""
