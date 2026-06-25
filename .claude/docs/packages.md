@@ -210,13 +210,14 @@ HTML 4.01 parser producing helium DOM or SAX events.
 XInclude 1.0 processing with recursive inclusion and fallback.
 
 - **NewProcessor() → Processor** — create fluent builder
-- Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`, `MaxIncludeSize(int)`, `ErrorHandler(helium.ErrorHandler)`, `Parser(helium.Parser)`
+- Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`, `MaxIncludeSize(int)`, `MaxIncludeDepth(int)`, `ErrorHandler(helium.ErrorHandler)`, `Parser(helium.Parser)`
 - `Processor.Parser(helium.Parser)` — supplies the **resource limits** (depth/name-length/amplification/content-model-depth) used to parse included documents. XInclude still forces its own loading policy: external-DTD loading is on and the filesystem is confined to the `Resolver`'s sandbox (the injected parser's FS is NOT used for included docs — the `Resolver` is the security boundary). Unset → default `helium.NewParser()` base.
 - Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
 - `Resolver` interface — custom resource loader; receives the href already resolved against the effective base (base arg is informational only — do NOT re-resolve, or the base directory is double-applied)
-- `MaxIncludeSize` — default per-include byte cap (10 MiB), used when `Processor.MaxIncludeSize` is unset or ≤ 0; over-cap reads fail with `ErrIncludeTooLarge`
+- `Processor.MaxIncludeSize(int)` — per-include byte cap; unset or ≤ 0 uses the default 10 MiB (unexported `defaultMaxIncludeSize`); over-cap reads fail with `ErrIncludeTooLarge`
+- `Processor.MaxIncludeDepth(int)` — xi:include nesting-depth cap; unset or ≤ 0 uses the default 40 (unexported `defaultMaxIncludeDepth`); over-cap fails with "maximum include depth exceeded". Bounds nesting only — cyclic includes are caught separately by circular detection
 - Default `NewFSResolver` converts absolute `file:` hrefs to OS paths via `internal/iofs.FileURIToPath` (non-local hosts rejected)
-- Max depth 40, max URI 2000 chars, circular detection, doc/text caching
+- Max URI 2000 chars, circular detection, doc/text caching
 - Files: `xinclude.go`
 - Imports: helium, xpointer/, internal/encoding/, internal/iofs/, internal/lexicon/
 

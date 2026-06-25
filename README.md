@@ -154,8 +154,9 @@ caller should also:
   `MaxNameLength`, or `MaxContentModelDepth` removes that guard.
 - Be cautious enabling XInclude, catalogs, DTD validation, or
   default-DTD-attribute processing for untrusted input; when you do, keep every
-  external resource allowlisted and size-bounded. `xinclude.Processor.MaxDepth`
-  bounds the nesting depth of included documents.
+  external resource allowlisted and size-bounded. `xinclude.Processor.MaxIncludeDepth`
+  bounds the nesting depth of included documents, and `MaxIncludeSize` caps the
+  bytes read per included resource.
 
 **Caveat:** a permissive or directory-rooted `FS` is not yet a complete sandbox.
 External-resource paths are joined against the document base URI and may be
