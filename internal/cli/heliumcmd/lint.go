@@ -49,6 +49,13 @@ type config struct {
 	// so the parser's XXE block is lifted and a permissive FS installed.
 	loadExternal bool
 
+	// huge records --huge; maxDepth records --max-depth (-1 = unset). Both are
+	// applied once after argument parsing so the result is order-independent:
+	// --huge lifts the limits, then an explicit --max-depth (the more specific
+	// flag) re-imposes its cap and wins regardless of flag order.
+	huge     bool
+	maxDepth int
+
 	noout      bool
 	format     bool
 	outputFile string
@@ -268,6 +275,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		pretty:        -1,
 		repeat:        1,
 		maxInputBytes: DefaultMaxInputBytes,
+		maxDepth:      -1,
 	}
 	var files []string
 
@@ -308,14 +316,9 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		case "--nonet":
 			cfg.parser = cfg.parser.AllowNetwork(false)
 		case "--huge":
-			// --huge removes internal arbitrary parser limits: relax the
-			// name-length, entity-amplification, and content-model-depth guards,
-			// and lift the default element-depth cap.
-			cfg.parser = cfg.parser.
-				MaxNameLength(-1).
-				MaxEntityAmplification(-1).
-				MaxContentModelDepth(-1).
-				MaxDepth(0)
+			// Recorded and applied post-loop (see parseArgs end) so flag order
+			// does not matter relative to --max-depth.
+			cfg.huge = true
 		case "--noenc":
 			cfg.parser = cfg.parser.IgnoreEncoding(true)
 		case "--noxincludenode":
@@ -416,7 +419,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
 				return nil, nil
 			}
-			cfg.parser = cfg.parser.MaxDepth(n)
+			cfg.maxDepth = n
 		case "--repeat":
 			i++
 			if i >= len(args) {
@@ -473,6 +476,20 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	// (see run), either via --path's search FS or a plain permissive root.
 	if cfg.loadExternal {
 		cfg.parser = cfg.parser.BlockXXE(false)
+	}
+
+	// Apply --huge then --max-depth so the result is independent of flag order.
+	// --huge lifts the tunable limits (including the depth cap); an explicit
+	// --max-depth then re-imposes its cap and wins, being the more specific flag.
+	if cfg.huge {
+		cfg.parser = cfg.parser.
+			MaxNameLength(-1).
+			MaxEntityAmplification(-1).
+			MaxContentModelDepth(-1).
+			MaxDepth(0)
+	}
+	if cfg.maxDepth >= 0 {
+		cfg.parser = cfg.parser.MaxDepth(cfg.maxDepth)
 	}
 
 	return cfg, files

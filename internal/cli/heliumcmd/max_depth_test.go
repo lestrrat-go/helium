@@ -113,3 +113,21 @@ func TestLintHugeLiftsDepthCap(t *testing.T) {
 	require.Equal(t, heliumcmd.ExitOK, code,
 		"--huge must lift the depth cap; stderr: %s", errOut)
 }
+
+// TestLintHugeMaxDepthOrderIndependent verifies that --huge and --max-depth
+// produce the same result regardless of flag order: an explicit --max-depth
+// (the more specific flag) wins over --huge's limit-lifting.
+func TestLintHugeMaxDepthOrderIndependent(t *testing.T) {
+	const depth3 = `<a><b><c/></b></a>` // nesting depth 3
+
+	t.Run("--max-depth before --huge still caps", func(t *testing.T) {
+		_, _, code := executeLintStdin(t, depth3, "--noout", "--max-depth", "2", "--huge")
+		require.NotEqual(t, heliumcmd.ExitOK, code,
+			"explicit --max-depth 2 must win over --huge regardless of order")
+	})
+
+	t.Run("--huge before --max-depth still caps", func(t *testing.T) {
+		_, _, code := executeLintStdin(t, depth3, "--noout", "--huge", "--max-depth", "2")
+		require.NotEqual(t, heliumcmd.ExitOK, code)
+	})
+}
