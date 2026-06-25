@@ -8,6 +8,83 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestExpression(t *testing.T) {
+	t.Run("String", func(t *testing.T) {
+		compiled := xpath1.MustCompile("/root/a")
+		require.Equal(t, "/root/a", compiled.String())
+	})
+
+	t.Run("nil receiver", func(t *testing.T) {
+		doc := parseXML(t, `<root/>`)
+
+		t.Run("Expression.Evaluate nil receiver", func(t *testing.T) {
+			var e *xpath1.Expression
+			_, err := e.Evaluate(t.Context(), doc)
+			require.ErrorIs(t, err, xpath1.ErrNilExpression)
+		})
+
+		t.Run("Evaluator.Evaluate nil expression", func(t *testing.T) {
+			_, err := xpath1.NewEvaluator().Evaluate(t.Context(), nil, doc)
+			require.ErrorIs(t, err, xpath1.ErrNilExpression)
+		})
+	})
+}
+
+func TestEvaluator(t *testing.T) {
+	t.Run("Find", func(t *testing.T) {
+		doc := parseXML(t, `<root><a/><b/></root>`)
+
+		t.Run("node-set", func(t *testing.T) {
+			nodes, err := xpath1.NewEvaluator().Find(t.Context(), xpath1.MustCompile("/root/*"), doc)
+			require.NoError(t, err)
+			require.Len(t, nodes, 2)
+		})
+
+		t.Run("not a node-set", func(t *testing.T) {
+			_, err := xpath1.NewEvaluator().Find(t.Context(), xpath1.MustCompile("1+1"), doc)
+			require.ErrorIs(t, err, xpath1.ErrNotNodeSet)
+		})
+	})
+
+	t.Run("additional namespaces and variables", func(t *testing.T) {
+		doc := parseXML(t, `<root xmlns:p="urn:x"><p:foo>v</p:foo></root>`)
+
+		t.Run("AdditionalNamespaces from empty", func(t *testing.T) {
+			nodes, err := xpath1.NewEvaluator().
+				AdditionalNamespaces(map[string]string{"p": nsURIX}).
+				Find(t.Context(), xpath1.MustCompile("//p:foo"), doc)
+			require.NoError(t, err)
+			require.Len(t, nodes, 1)
+		})
+
+		t.Run("AdditionalNamespaces merges", func(t *testing.T) {
+			nodes, err := xpath1.NewEvaluator().
+				Namespaces(map[string]string{"q": "urn:q"}).
+				AdditionalNamespaces(map[string]string{"p": nsURIX}).
+				Find(t.Context(), xpath1.MustCompile("//p:foo"), doc)
+			require.NoError(t, err)
+			require.Len(t, nodes, 1)
+		})
+
+		t.Run("AdditionalVariables from empty", func(t *testing.T) {
+			r, err := xpath1.NewEvaluator().
+				AdditionalVariables(map[string]any{"x": float64(2)}).
+				Evaluate(t.Context(), xpath1.MustCompile("$x + 1"), doc)
+			require.NoError(t, err)
+			require.Equal(t, 3.0, r.Number)
+		})
+
+		t.Run("AdditionalVariables merges", func(t *testing.T) {
+			r, err := xpath1.NewEvaluator().
+				Variables(map[string]any{"y": float64(10)}).
+				AdditionalVariables(map[string]any{"x": float64(2)}).
+				Evaluate(t.Context(), xpath1.MustCompile("$x + $y"), doc)
+			require.NoError(t, err)
+			require.Equal(t, 12.0, r.Number)
+		})
+	})
+}
+
 // TestFunctionContextAccessors exercises the FunctionContext accessor methods
 // (Node, Position, Size, Namespace, Variable) from within a custom function.
 func TestFunctionContextAccessors(t *testing.T) {
@@ -45,79 +122,6 @@ func TestFunctionContextAccessors(t *testing.T) {
 	require.Equal(t, "urn:p", nsURI)
 	require.True(t, varOK)
 	require.Equal(t, float64(7), varVal)
-}
-
-func TestAdditionalNamespacesAndVariables(t *testing.T) {
-	doc := parseXML(t, `<root xmlns:p="urn:x"><p:foo>v</p:foo></root>`)
-
-	t.Run("AdditionalNamespaces from empty", func(t *testing.T) {
-		nodes, err := xpath1.NewEvaluator().
-			AdditionalNamespaces(map[string]string{"p": nsURIX}).
-			Find(t.Context(), xpath1.MustCompile("//p:foo"), doc)
-		require.NoError(t, err)
-		require.Len(t, nodes, 1)
-	})
-
-	t.Run("AdditionalNamespaces merges", func(t *testing.T) {
-		nodes, err := xpath1.NewEvaluator().
-			Namespaces(map[string]string{"q": "urn:q"}).
-			AdditionalNamespaces(map[string]string{"p": nsURIX}).
-			Find(t.Context(), xpath1.MustCompile("//p:foo"), doc)
-		require.NoError(t, err)
-		require.Len(t, nodes, 1)
-	})
-
-	t.Run("AdditionalVariables from empty", func(t *testing.T) {
-		r, err := xpath1.NewEvaluator().
-			AdditionalVariables(map[string]any{"x": float64(2)}).
-			Evaluate(t.Context(), xpath1.MustCompile("$x + 1"), doc)
-		require.NoError(t, err)
-		require.Equal(t, 3.0, r.Number)
-	})
-
-	t.Run("AdditionalVariables merges", func(t *testing.T) {
-		r, err := xpath1.NewEvaluator().
-			Variables(map[string]any{"y": float64(10)}).
-			AdditionalVariables(map[string]any{"x": float64(2)}).
-			Evaluate(t.Context(), xpath1.MustCompile("$x + $y"), doc)
-		require.NoError(t, err)
-		require.Equal(t, 12.0, r.Number)
-	})
-}
-
-func TestExpressionString(t *testing.T) {
-	compiled := xpath1.MustCompile("/root/a")
-	require.Equal(t, "/root/a", compiled.String())
-}
-
-func TestEvaluatorFind(t *testing.T) {
-	doc := parseXML(t, `<root><a/><b/></root>`)
-
-	t.Run("node-set", func(t *testing.T) {
-		nodes, err := xpath1.NewEvaluator().Find(t.Context(), xpath1.MustCompile("/root/*"), doc)
-		require.NoError(t, err)
-		require.Len(t, nodes, 2)
-	})
-
-	t.Run("not a node-set", func(t *testing.T) {
-		_, err := xpath1.NewEvaluator().Find(t.Context(), xpath1.MustCompile("1+1"), doc)
-		require.ErrorIs(t, err, xpath1.ErrNotNodeSet)
-	})
-}
-
-func TestNilExpression(t *testing.T) {
-	doc := parseXML(t, `<root/>`)
-
-	t.Run("Expression.Evaluate nil receiver", func(t *testing.T) {
-		var e *xpath1.Expression
-		_, err := e.Evaluate(t.Context(), doc)
-		require.ErrorIs(t, err, xpath1.ErrNilExpression)
-	})
-
-	t.Run("Evaluator.Evaluate nil expression", func(t *testing.T) {
-		_, err := xpath1.NewEvaluator().Evaluate(t.Context(), nil, doc)
-		require.ErrorIs(t, err, xpath1.ErrNilExpression)
-	})
 }
 
 // TestCompareNodeSetWithBooleanAndNumberScalars exercises compareWithScalar's
