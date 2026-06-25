@@ -22,22 +22,24 @@ import (
 	"github.com/lestrrat-go/helium/xpointer"
 )
 
-const (
-	maxDepth     = 40
-	maxURILength = 2000
-)
+const maxURILength = 2000
 
-// MaxIncludeSize is the default maximum number of bytes read from a single
-// included resource (XML or text) when no cap is configured via
-// [Processor.MaxIncludeSize]. It guards against a hostile or pathological
+// defaultMaxIncludeSize is the per-include byte cap used when none is configured
+// via [Processor.MaxIncludeSize]. It guards against a hostile or pathological
 // Resolver (e.g. one returning an endless or multi-gigabyte reader) exhausting
 // memory: the bytes of every included resource are read fully and cached.
-const MaxIncludeSize = 10 << 20 // 10 MiB
+const defaultMaxIncludeSize = 10 << 20 // 10 MiB
+
+// defaultMaxIncludeDepth is the xi:include nesting-depth cap used when none is
+// configured via [Processor.MaxIncludeDepth]. It guards against pathological or
+// maliciously deep include chains. This bounds nesting depth only; cyclic
+// includes are caught separately by circular-inclusion detection.
+const defaultMaxIncludeDepth = 40
 
 // ErrIncludeTooLarge is returned when an included resource exceeds the
-// configured maximum size (see [Processor.MaxIncludeSize], default
-// [MaxIncludeSize]). The cap is enforced against the actual number of bytes
-// read, not any reported size.
+// configured maximum size (see [Processor.MaxIncludeSize]; 10 MiB by default).
+// The cap is enforced against the actual number of bytes read, not any reported
+// size.
 var ErrIncludeTooLarge = errors.New("xi:include: included resource exceeds maximum allowed size")
 
 // Resolver loads content from a URI.
@@ -56,13 +58,14 @@ type Resolver interface {
 
 // processorCfg holds the configuration for a Processor.
 type processorCfg struct {
-	noMarkers      bool
-	noBaseFixup    bool
-	resolver       Resolver
-	baseURI        string
-	errorHandler   helium.ErrorHandler
-	maxIncludeSize int
-	parser         *helium.Parser
+	noMarkers       bool
+	noBaseFixup     bool
+	resolver        Resolver
+	baseURI         string
+	errorHandler    helium.ErrorHandler
+	maxIncludeSize  int
+	maxIncludeDepth int
+	parser          *helium.Parser
 }
 
 // Processor configures XInclude processing. It is a value-style wrapper:
@@ -169,12 +172,22 @@ func (p Processor) BaseURI(uri string) Processor {
 // resource (XML or text). The cap is enforced against the actual number of
 // bytes read, guarding against a hostile or pathological Resolver (e.g. an
 // endless or multi-gigabyte reader) exhausting memory before the bytes are
-// cached. A value less than or equal to zero (the default) means
-// [MaxIncludeSize] (10 MiB) is used. Exceeding the cap fails the include with
-// [ErrIncludeTooLarge].
+// cached. A value less than or equal to zero (the default) means 10 MiB is
+// used. Exceeding the cap fails the include with [ErrIncludeTooLarge].
 func (p Processor) MaxIncludeSize(n int) Processor {
 	p = p.clone()
 	p.cfg.maxIncludeSize = n
+	return p
+}
+
+// MaxIncludeDepth sets the maximum nesting depth of xi:include directives — how
+// deeply an included document may itself include further documents before
+// processing fails with "maximum include depth exceeded". It bounds nesting
+// depth only; cyclic includes are caught separately by circular-inclusion
+// detection. A value less than or equal to zero (the default) means 40 is used.
+func (p Processor) MaxIncludeDepth(n int) Processor {
+	p = p.clone()
+	p.cfg.maxIncludeDepth = n
 	return p
 }
 
@@ -211,18 +224,19 @@ type txtCacheEntry struct {
 }
 
 type processor struct {
-	noMarkers      bool
-	noBaseFixup    bool
-	resolver       Resolver
-	baseURI        string
-	expanding      map[string]bool          // circular inclusion detection (set during recursive expansion)
-	docCache       map[string]docCacheEntry // cached raw bytes for XML documents
-	txtCache       map[string]txtCacheEntry // cached text inclusions
-	errorHandler   helium.ErrorHandler
-	maxIncludeSize int
-	parser         *helium.Parser
-	depth          int
-	count          int
+	noMarkers       bool
+	noBaseFixup     bool
+	resolver        Resolver
+	baseURI         string
+	expanding       map[string]bool          // circular inclusion detection (set during recursive expansion)
+	docCache        map[string]docCacheEntry // cached raw bytes for XML documents
+	txtCache        map[string]txtCacheEntry // cached text inclusions
+	errorHandler    helium.ErrorHandler
+	maxIncludeSize  int
+	maxIncludeDepth int
+	parser          *helium.Parser
+	depth           int
+	count           int
 }
 
 // Process performs XInclude processing on the document.
@@ -250,16 +264,17 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		cfg = &processorCfg{}
 	}
 	p := &processor{
-		noMarkers:      cfg.noMarkers,
-		noBaseFixup:    cfg.noBaseFixup,
-		resolver:       cfg.resolver,
-		baseURI:        cfg.baseURI,
-		errorHandler:   cfg.errorHandler,
-		maxIncludeSize: cfg.maxIncludeSize,
-		parser:         cfg.parser,
-		expanding:      make(map[string]bool),
-		docCache:       make(map[string]docCacheEntry),
-		txtCache:       make(map[string]txtCacheEntry),
+		noMarkers:       cfg.noMarkers,
+		noBaseFixup:     cfg.noBaseFixup,
+		resolver:        cfg.resolver,
+		baseURI:         cfg.baseURI,
+		errorHandler:    cfg.errorHandler,
+		maxIncludeSize:  cfg.maxIncludeSize,
+		maxIncludeDepth: cfg.maxIncludeDepth,
+		parser:          cfg.parser,
+		expanding:       make(map[string]bool),
+		docCache:        make(map[string]docCacheEntry),
+		txtCache:        make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
 		p.resolver = NewFSResolver(nil)
@@ -272,8 +287,12 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 }
 
 func (p *processor) processNode(ctx context.Context, n helium.Node) error {
+	maxDepth := p.maxIncludeDepth
+	if maxDepth <= 0 {
+		maxDepth = defaultMaxIncludeDepth
+	}
 	if p.depth > maxDepth {
-		return fmt.Errorf("xi:include: maximum recursion depth (%d) exceeded", maxDepth)
+		return fmt.Errorf("xi:include: maximum include depth (%d) exceeded", maxDepth)
 	}
 
 	// Repeatedly collect and process xi:include elements at this level.
@@ -707,7 +726,7 @@ func (p *processor) resolve(uri, base string) (io.ReadCloser, error) {
 func (p *processor) readCapped(r io.Reader) ([]byte, error) {
 	limit := p.maxIncludeSize
 	if limit <= 0 {
-		limit = MaxIncludeSize
+		limit = defaultMaxIncludeSize
 	}
 
 	data, exceeded, err := iolimit.ReadAll(r, int64(limit))

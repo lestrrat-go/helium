@@ -783,28 +783,80 @@ func TestXIncludeNewNamespaceFallback(t *testing.T) {
 	require.True(t, found, "fallback content not found with 2003 namespace")
 }
 
+// includeChainResolver builds a resolver where levelN.xml includes level(N+1).xml
+// up to levels-1, with levelN.xml as a plain leaf, so an include starting at
+// level0.xml nests `levels` deep.
+func includeChainResolver(levels int) *stringResolver {
+	resolver := &stringResolver{files: make(map[string]string)}
+	for i := range levels {
+		resolver.files[fmt.Sprintf("level%d.xml", i)] = fmt.Sprintf(
+			`<level xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="level%d.xml"/></level>`, i+1)
+	}
+	resolver.files[fmt.Sprintf("level%d.xml", levels)] = `<leaf/>`
+	return resolver
+}
+
 func TestXIncludeDepthLimit(t *testing.T) {
 	t.Parallel()
-	// Create a chain that would exceed maxDepth (40)
-	resolver := &stringResolver{files: make(map[string]string)}
-	for i := range 50 {
-		next := i + 1
-		resolver.files[fmt.Sprintf("level%d.xml", i)] = fmt.Sprintf(
-			`<level xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="level%d.xml"/></level>`, next)
-	}
-	resolver.files["level50.xml"] = `<leaf/>`
-
+	// A chain deeper than the default limit (40) is rejected.
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="level0.xml"/>
 	</root>`)
 
 	_, err := xinclude.NewProcessor().
-		Resolver(resolver).
+		Resolver(includeChainResolver(50)).
 		NoXIncludeMarkers().
 		NoBaseFixup().
 		Process(t.Context(), doc)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "depth")
+	require.Contains(t, err.Error(), "maximum include depth")
+}
+
+func TestXIncludeMaxIncludeDepth(t *testing.T) {
+	t.Parallel()
+
+	build := func() *helium.Document {
+		return parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="level0.xml"/>
+		</root>`)
+	}
+
+	t.Run("custom limit rejects a chain deeper than it", func(t *testing.T) {
+		t.Parallel()
+		_, err := xinclude.NewProcessor().
+			Resolver(includeChainResolver(20)).
+			MaxIncludeDepth(5).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum include depth (5) exceeded")
+	})
+
+	t.Run("custom limit allows a chain within it", func(t *testing.T) {
+		t.Parallel()
+		count, err := xinclude.NewProcessor().
+			Resolver(includeChainResolver(3)).
+			MaxIncludeDepth(20).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.NoError(t, err)
+		require.Positive(t, count)
+	})
+
+	t.Run("non-positive falls back to the default", func(t *testing.T) {
+		t.Parallel()
+		// A chain past the default (40) still fails when the configured value is <= 0.
+		_, err := xinclude.NewProcessor().
+			Resolver(includeChainResolver(50)).
+			MaxIncludeDepth(0).
+			NoXIncludeMarkers().
+			NoBaseFixup().
+			Process(t.Context(), build())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum include depth (40) exceeded")
+	})
 }
 
 func TestXIncludeSameURLTwice(t *testing.T) {
