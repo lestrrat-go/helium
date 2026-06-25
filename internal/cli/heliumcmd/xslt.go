@@ -91,9 +91,14 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 		t0 = time.Now()
 	}
 
+	// NewParser blocks external loading by default; a stylesheet is a trusted
+	// local input, so lift the XXE block and install the permissive FS to
+	// preserve the historical behavior of loading its external DTD/entities.
 	ssDoc, err := helium.NewParser().
+		BlockXXE(false).
 		LoadExternalDTD(true).
 		SubstituteEntities(true).
+		FS(iofsPermissiveRoot()).
 		BaseURI(cfg.stylesheetFile).
 		Parse(ctx, ssBuf)
 	if err != nil {
