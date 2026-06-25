@@ -43,6 +43,12 @@ type config struct {
 	noCatalogs  bool
 	pathDirs    string
 
+	// loadExternal records that a flag requesting external DTD/entity loading
+	// (--loaddtd, --valid, --dtdattr, --noent) was given. NewParser blocks
+	// external loading by default; these flags are the user's explicit opt-in,
+	// so the parser's XXE block is lifted and a permissive FS installed.
+	loadExternal bool
+
 	noout      bool
 	format     bool
 	outputFile string
@@ -252,6 +258,7 @@ func (c *command) showUsage() {
 	--dropdtd : remove the DOCTYPE of the result
 	--repeat N : parse N times for benchmarking
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
+	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
 `, c.prog)
 }
 
@@ -277,13 +284,17 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 			cfg.parser = cfg.parser.RecoverOnError(true)
 		case "--noent":
 			cfg.parser = cfg.parser.SubstituteEntities(true)
+			cfg.loadExternal = true
 		case "--loaddtd":
 			cfg.parser = cfg.parser.LoadExternalDTD(true)
+			cfg.loadExternal = true
 		case "--dtdattr":
 			cfg.parser = cfg.parser.DefaultDTDAttributes(true)
+			cfg.loadExternal = true
 		case "--valid":
 			cfg.parser = cfg.parser.ValidateDTD(true)
 			cfg.dtdValid = true
+			cfg.loadExternal = true
 		case "--nowarning":
 			cfg.parser = cfg.parser.SuppressWarnings(true)
 		case "--pedantic":
@@ -387,6 +398,18 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 				return nil, nil
 			}
 			cfg.pathDirs = args[i] //nolint:gosec // bounds checked above
+		case "--max-depth":
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.Atoi(args[i]) //nolint:gosec // bounds checked above
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
+				return nil, nil
+			}
+			cfg.parser = cfg.parser.MaxDepth(n)
 		case "--repeat":
 			i++
 			if i >= len(args) {
@@ -435,6 +458,14 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	if cfg.outputFile != "" && cfg.noout && cfg.xpathExpr == "" {
 		_, _ = fmt.Fprintf(c.stderr, "%s: --output cannot be combined with --noout\n", c.prog)
 		return nil, nil
+	}
+
+	// A flag requesting external DTD/entity loading is the user's explicit
+	// opt-in, so lift the parser's default XXE block. The permissive FS that
+	// makes loading actually reach the filesystem is installed at parse time
+	// (see run), either via --path's search FS or a plain permissive root.
+	if cfg.loadExternal {
+		cfg.parser = cfg.parser.BlockXXE(false)
 	}
 
 	return cfg, files
@@ -595,6 +626,11 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 		if dirs := c.pathDirs(cfg); len(dirs) > 0 {
 			p = p.FS(pathSearchFS{base: iofsPermissiveRoot(), dirs: dirs})
+		} else if cfg.loadExternal {
+			// External loading opted in (see parseArgs) but no --path given:
+			// NewParser now defaults to a deny-all FS, so install the permissive
+			// root that the historical CLI used to open DTDs/entities.
+			p = p.FS(iofsPermissiveRoot())
 		}
 
 		doc, err = p.Parse(ctx, buf)

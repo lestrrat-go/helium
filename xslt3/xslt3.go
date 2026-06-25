@@ -44,11 +44,18 @@ type externalEntityLoader func(ctx context.Context, uri string) ([]byte, error)
 func parseExternalXML(ctx context.Context, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader, extraOpts func(helium.Parser) helium.Parser) (*helium.Document, error) {
 	var p helium.Parser
 	if allowExternalEntities {
-		p = helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)
+		// NewParser now blocks external loading by default; this branch is the
+		// explicit opt-in, so lift the block. Loads are still confined to the
+		// configured loader (or the permissive fallback) selected below.
+		p = helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true)
 		if entityLoader != nil {
 			// Route opted-in external DTD/entity resolution through the
 			// configured resolver-backed loader instead of the parser default.
 			p = p.FS(schemaResolverFS{ctx: ctx, load: entityLoader})
+		} else {
+			// No loader configured: restore the historical permissive resource
+			// access (NewParser now defaults to a deny-all FS).
+			p = p.FS(helium.PermissiveFS())
 		}
 		if extraOpts != nil {
 			p = extraOpts(p)

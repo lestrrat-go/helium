@@ -402,7 +402,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 		ctx.maxExtDTDSize = p.maxExtDTDSize
 	}
 	if ctx.fsys == nil {
-		ctx.fsys = iofs.PermissiveRoot{}
+		ctx.fsys = iofs.DenyAll{}
 	}
 	return nil
 }

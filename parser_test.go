@@ -436,7 +436,7 @@ func TestParseExternalEntity(t *testing.T) {
 		"ext.xml": &fstest.MapFile{Data: []byte("<inner>hello</inner>")},
 	}
 
-	p := helium.NewParser().SubstituteEntities(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse with external entity should succeed")
 	require.NotNil(t, doc, "external entity parse should produce a document")
@@ -487,7 +487,7 @@ func TestParseExternalEntityMalformedEncoding(t *testing.T) {
 
 	fsys := fstest.MapFS{"ext.xml": &fstest.MapFile{Data: ent}}
 
-	p := helium.NewParser().SubstituteEntities(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed UTF-16 external entity must fail rather than inserting U+FFFD")
 }
@@ -504,7 +504,7 @@ func TestParseExternalDTDSizeLimit(t *testing.T) {
 	oversized := bytes.Repeat([]byte(" "), helium.MaxExternalDTDSize+1)
 	fsys := fstest.MapFS{"huge.dtd": &fstest.MapFile{Data: oversized}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "oversized external DTD must produce a parse error")
 }
@@ -564,7 +564,7 @@ func TestParseExternalDTDBoundedRead(t *testing.T) {
 	var read int64
 	fsys := underReportingFS{read: &read}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "oversized external DTD must produce a parse error even when Stat under-reports size")
 	require.ErrorIs(t, err, helium.ErrExternalDTDTooLarge, "rejection must come from the byte-count cap")
@@ -630,7 +630,7 @@ func TestParseExternalDTDReadErrorStillCapped(t *testing.T) {
 	var hitReadErr bool
 	fsys := errReadingFS{cap: smallCap, hitReadErr: &hitReadErr}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).
 		MaxExternalDTDBytes(smallCap).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.True(t, hitReadErr, "the simulated non-EOF read error must actually be returned by the fake")
@@ -694,7 +694,7 @@ func TestParseExternalDTDStatAdvisory(t *testing.T) {
 	// subset was actually loaded and applied, not silently skipped.
 	fsys := overReportingFS{data: []byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">")}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "small valid DTD must load even when Stat over-reports its size")
 
@@ -719,7 +719,7 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 		oversized := bytes.Repeat([]byte(" "), 2<<10)
 		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: oversized}}
 
-		p := helium.NewParser().
+		p := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
 			DefaultDTDAttributes(true).
 			MaxExternalDTDBytes(1 << 10).
@@ -737,7 +737,7 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 		// not silently skipped.
 		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: []byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">")}}
 
-		p := helium.NewParser().
+		p := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
 			DefaultDTDAttributes(true).
 			MaxExternalDTDBytes(1 << 10).
@@ -761,7 +761,7 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 		large := append([]byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">"), bytes.Repeat([]byte(" "), 4<<10)...)
 		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: large}}
 
-		p := helium.NewParser().
+		p := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
 			DefaultDTDAttributes(true).
 			FS(fsys)
@@ -818,7 +818,7 @@ func TestParseExternalDTDPartialReadErrorSurfaces(t *testing.T) {
 	// accept the document as if no external subset existed.
 	fsys := partialReadFS{prefix: []byte("<!ELEMENT r EMPTY>")}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "a truncated external DTD read must surface as a parse error")
 }
@@ -835,7 +835,7 @@ func TestParseExternalDTDMalformedDeclTerminates(t *testing.T) {
 	// terminating error instead of an infinite loop.
 	fsys := fstest.MapFS{"bogus.dtd": &fstest.MapFile{Data: []byte("<!BOGUS")}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 
 	done := make(chan struct{})
 	var err error
@@ -871,7 +871,7 @@ func TestParseExternalDTDParameterEntityExpands(t *testing.T) {
 `
 	fsys := fstest.MapFS{"pe.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "valid external-subset parameter-entity reference must parse")
 	require.NotNil(t, doc, "document must be returned")
@@ -906,7 +906,7 @@ func TestParseExternalDTDPEConditionalSectionFollowedByDecl(t *testing.T) {
 `
 	fsys := fstest.MapFS{"cs.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "PE expanding to a conditional section must parse")
 	require.NotNil(t, doc, "document must be returned")
@@ -941,7 +941,7 @@ func TestParseExternalDTDPEWhitespaceFollowedByDecl(t *testing.T) {
 `
 	fsys := fstest.MapFS{"ws.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "PE expanding to only whitespace must parse")
 	require.NotNil(t, doc, "document must be returned")
@@ -975,7 +975,7 @@ func TestParseExternalDTDPEInIncludeSectionExpands(t *testing.T) {
 ]]>`
 	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "PE reference inside an INCLUDE section must parse")
 	require.NotNil(t, doc, "document must be returned")
@@ -1001,7 +1001,7 @@ func TestParseExternalDTDMalformedDeclLocation(t *testing.T) {
 	// active so the reported File carries the DTD path.
 	fsys := fstest.MapFS{"bogus.dtd": &fstest.MapFile{Data: []byte("<!BOGUS")}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "a malformed external DTD declaration must produce a parse error")
 
@@ -1027,7 +1027,7 @@ func TestParseExternalDTDMalformedDeclInIncludeSurfaces(t *testing.T) {
 	const dtd = `<![INCLUDE[ <!BOGUS ]]>`
 	fsys := fstest.MapFS{"inc.dtd": &fstest.MapFile{Data: []byte(dtd)}}
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "a malformed declaration inside a top-level INCLUDE section must surface as a parse error")
 }
@@ -1834,7 +1834,7 @@ func TestEntitySubParserFSSandbox(t *testing.T) {
 		rfs := &recordingFS{inner: fstest.MapFS{
 			"outer.xml": &fstest.MapFile{Data: []byte(`<wrap>&secret;</wrap>`)},
 		}}
-		p := helium.NewParser().SubstituteEntities(true).FS(rfs)
+		p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(rfs)
 		doc, _ := p.Parse(t.Context(), []byte(input))
 
 		// The on-disk secret must never surface in the resulting document.
@@ -1867,7 +1867,7 @@ func TestEntitySubParserFSSandbox(t *testing.T) {
 			"outer.xml":   &fstest.MapFile{Data: []byte(`<wrap>&allowed;</wrap>`)},
 			"allowed.xml": &fstest.MapFile{Data: []byte("<inner>ok</inner>")},
 		}}
-		p := helium.NewParser().SubstituteEntities(true).FS(rfs)
+		p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(rfs)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		require.True(t, rfs.wasOpened("allowed.xml"),
@@ -2360,7 +2360,7 @@ func TestMaxDepth(t *testing.T) {
 			"nested.xml": &fstest.MapFile{Data: []byte(`<a/>`)},
 		}
 		input := []byte(`<!DOCTYPE r [<!ENTITY e SYSTEM "nested.xml">]><r>&e;</r>`)
-		p := helium.NewParser().SubstituteEntities(true).MaxDepth(1).FS(fsys)
+		p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).MaxDepth(1).FS(fsys)
 
 		_, err := p.Parse(t.Context(), input)
 		require.Error(t, err)
@@ -2879,7 +2879,7 @@ func TestParseFileResolvesRelativeExternalEntity(t *testing.T) {
 	mainPath := filepath.Join(dir, "main.xml")
 	require.NoError(t, os.WriteFile(mainPath, []byte(main), 0o600))
 
-	doc, err := helium.NewParser().SubstituteEntities(true).ParseFile(t.Context(), mainPath)
+	doc, err := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(helium.PermissiveFS()).ParseFile(t.Context(), mainPath)
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 

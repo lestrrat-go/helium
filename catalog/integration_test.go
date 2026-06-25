@@ -51,7 +51,7 @@ func TestCatalogExternalSubset(t *testing.T) {
 	cat, err := catalog.Load(context.Background(), catPath)
 	require.NoError(t, err)
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).Catalog(cat)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).Catalog(cat).FS(helium.PermissiveFS())
 
 	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestCatalogExternalSubsetFileURI(t *testing.T) {
 	cat, err := catalog.Load(context.Background(), catPath)
 	require.NoError(t, err)
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).Catalog(cat)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).Catalog(cat).FS(helium.PermissiveFS())
 
 	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestCatalogResolveEntityFileURI(t *testing.T) {
 	cat, err := catalog.Load(context.Background(), catPath)
 	require.NoError(t, err)
 
-	p := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).Catalog(cat)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true).Catalog(cat).FS(helium.PermissiveFS())
 
 	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)
@@ -183,7 +183,7 @@ func TestCatalogPublicIDResolution(t *testing.T) {
 	cat, err := catalog.Load(context.Background(), catPath)
 	require.NoError(t, err)
 
-	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).Catalog(cat)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).DefaultDTDAttributes(true).Catalog(cat).FS(helium.PermissiveFS())
 
 	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)

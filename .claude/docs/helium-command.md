@@ -83,7 +83,7 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 | Parser | `--recover`, `--noent`, `--loaddtd`, `--dtdattr`, `--valid`, `--nowarning`, `--pedantic`, `--noblanks`, `--nsclean`, `--nocdata`, `--nonet`, `--huge`, `--noenc`, `--noxincludenode`, `--nofixup-base-uris` |
 | Features | `--xinclude`, `--schema FILE`, `--xpath EXPR`, `--catalogs`, `--nocatalogs`, `--path DIRS` |
 | Output | `--noout`, `--format`, `--pretty N`, `--encode ENC`, `--output FILE`, `--c14n`, `--c14n11`, `--exc-c14n`, `--dropdtd` |
-| Behavior | `--quiet`, `--timing`, `--repeat N`, `--max-input-bytes N`, `--version` |
+| Behavior | `--quiet`, `--timing`, `--repeat N`, `--max-input-bytes N`, `--max-depth N`, `--version` |
 
 ### Cascades
 
@@ -91,6 +91,7 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 - `--valid` → also sets `--loaddtd`
 - `--xpath EXPR` → also sets `--noout`
 - `--pretty N>=1` → also sets `--format`
+- `--loaddtd` / `--dtdattr` / `--valid` / `--noent` → external-loading opt-in: each lifts the parser's default `BlockXXE` block and installs a permissive FS (or the `--path` search FS) so the requested external DTD/entity actually loads. Bare `lint` is safe-by-default (`NewParser` blocks external loading and uses a deny-all FS), matching the library.
 
 ### Output / Input Safety
 
@@ -98,6 +99,7 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 - `--output FILE` combined with `--noout` → rejected (`--output cannot be combined with --noout`). Exception: `--xpath` (which also sets `--noout` internally) still writes its result, so it is allowed.
 - The output file is closed explicitly after processing; a close error is folded into the exit status (`ExitErr`).
 - `--max-input-bytes N` caps the bytes read per input (file or stdin); default `DefaultMaxInputBytes` (100 MiB). `0` disables the cap. Exceeding it fails with `input exceeds maximum size` and `ExitReadFile`.
+- `--max-depth N` caps element nesting depth; default `256` (the `NewParser` default), `0` = unlimited. Exceeding it fails the parse (`exceeded max depth`).
 - `--quiet` suppresses informational output: timing messages are silenced and parser/validator warnings are suppressed.
 - `--path DIRS` (colon-separated) is wired into DTD/entity resolution: a `pathSearchFS` falls back to each listed directory (by base name) when the default loader cannot open a referenced resource.
 

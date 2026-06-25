@@ -41,6 +41,7 @@ func TestStripSpacePreservesExternalDTDIDs(t *testing.T) {
 
 	parseSource := func() *helium.Document {
 		src, err := helium.NewParser().
+			BlockXXE(false).
 			LoadExternalDTD(true).
 			FS(fsys).
 			Parse(t.Context(), []byte(source))

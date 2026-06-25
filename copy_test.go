@@ -45,7 +45,7 @@ func TestCopyExtSubset(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + dtdPath + `">
 <root/>`
 
-	src, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	src, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	require.NotNil(t, src.ExtSubset())
 

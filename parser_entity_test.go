@@ -85,7 +85,7 @@ func TestExternalEntitySizeCap(t *testing.T) {
 <!DOCTYPE r [<!ENTITY x SYSTEM "big">]><r>&x;</r>`
 
 	var closed atomic.Bool
-	p := helium.NewParser().
+	p := helium.NewParser().BlockXXE(false).
 		SubstituteEntities(true).
 		FS(finiteFS{size: externalEntityMaxBytes + 1, closed: &closed})
 
@@ -129,7 +129,7 @@ func TestExternalEntityInputClosed(t *testing.T) {
 <!DOCTYPE r [<!ENTITY x SYSTEM "ext">]><r>&x;</r>`
 
 	var closed atomic.Bool
-	p := helium.NewParser().SubstituteEntities(true).FS(closingFS{data: "<e>ok</e>", closed: &closed})
+	p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(closingFS{data: "<e>ok</e>", closed: &closed})
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 	require.True(t, closed.Load(), "resolved external entity input must be closed on success")
@@ -184,7 +184,7 @@ func TestExternalEntityClosedBeforeContentParsed(t *testing.T) {
 ]><r>&x;</r>`
 
 	var extClosed, extClosedAtNestOpen, nestOpened atomic.Bool
-	p := helium.NewParser().SubstituteEntities(true).FS(orderingFS{
+	p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(orderingFS{
 		extClosed:           &extClosed,
 		extClosedAtNestOpen: &extClosedAtNestOpen,
 		nestOpened:          &nestOpened,
@@ -249,7 +249,7 @@ func TestExternalEntityAmplification(t *testing.T) {
 		const input = `<?xml version="1.0"?>
 <!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r>&x;</r>`
 
-		doc, err := helium.NewParser().
+		doc, err := helium.NewParser().BlockXXE(false).
 			SubstituteEntities(true).
 			FS(countingFS{data: body, opens: &opens}).
 			Parse(t.Context(), []byte(input))
@@ -278,7 +278,7 @@ func TestExternalEntityAmplification(t *testing.T) {
 		input := fmt.Sprintf(`<?xml version="1.0"?>
 <!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r><!--%s-->%s</r>`, padding, refs.String())
 
-		_, err := helium.NewParser().
+		_, err := helium.NewParser().BlockXXE(false).
 			SubstituteEntities(true).
 			FS(countingFS{data: body, opens: &opens}).
 			Parse(t.Context(), []byte(input))
@@ -453,7 +453,7 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 		const input = `<?xml version="1.0"?>` + "\n" +
 			`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
 
-		_, err := helium.NewParser().
+		_, err := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
 			FS(fsys).
 			Parse(t.Context(), []byte(input))
@@ -490,7 +490,7 @@ func TestEntityValueRefValidationIsSideEffectFree(t *testing.T) {
 	input := `<?xml version="1.0"?>` + "\n" +
 		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
 
-	doc, err := helium.NewParser().
+	doc, err := helium.NewParser().BlockXXE(false).
 		LoadExternalDTD(true).
 		FS(fsys).
 		Parse(t.Context(), []byte(input))
@@ -882,7 +882,7 @@ func TestExternalDTDConditionalSections(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + path + `">
 <root/>`
 
-	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	_, found := doc.GetEntity("included")
@@ -909,7 +909,7 @@ func TestExternalDTDNotationsAndEntities(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + path + `">
 <root/>`
 
-	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	require.NotNil(t, doc.ExtSubset(), "external subset must be present")
@@ -933,7 +933,7 @@ func TestExternalDTDPublicIdentifier(t *testing.T) {
 <!DOCTYPE root PUBLIC "-//Example//DTD root//EN" "` + path + `">
 <root/>`
 
-	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	_, found := doc.GetEntity("who")
 	require.True(t, found)
@@ -1199,7 +1199,7 @@ func TestExternalSubsetResolvesAgainstWindowsDriveFileURIBase(t *testing.T) {
 		`<!DOCTYPE chapter SYSTEM "ext.dtd">` +
 		`<chapter>text</chapter>`
 
-	doc, err := helium.NewParser().
+	doc, err := helium.NewParser().BlockXXE(false).
 		LoadExternalDTD(true).
 		BaseURI("file:///C:/win/dir/doc.xml").
 		FS(fsys).

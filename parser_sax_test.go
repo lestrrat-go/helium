@@ -623,7 +623,7 @@ func TestStopParser(t *testing.T) {
 			return nil, sax.ErrHandlerUnspecified
 		}))
 
-		p := helium.NewParser().SAXHandler(s).SubstituteEntities(true)
+		p := helium.NewParser().BlockXXE(false).SAXHandler(s).SubstituteEntities(true)
 
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "StopParser should work while expanding external parsed entities")

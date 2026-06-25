@@ -33,7 +33,7 @@ func TestExtSubsetLookup_ElementInExtSubset(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + dtdPath + `">
 <root><child role="main"/></root>`
 
-	p := helium.NewParser().LoadExternalDTD(true).ValidateDTD(true)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).ValidateDTD(true).FS(helium.PermissiveFS())
 	_, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err, "validation should pass when declarations are in extSubset")
 }
@@ -50,7 +50,7 @@ func TestExtSubsetLookup_EntityInExtSubset(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + dtdPath + `">
 <root/>`
 
-	p := helium.NewParser().LoadExternalDTD(true)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS())
 	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
@@ -73,7 +73,7 @@ func TestExtSubsetLookup_AttributeInExtSubset(t *testing.T) {
 <root><child/></root>`
 
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-	p := helium.NewParser().LoadExternalDTD(true).ValidateDTD(true).ErrorHandler(collector)
+	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).ValidateDTD(true).ErrorHandler(collector).FS(helium.PermissiveFS())
 	_, err := p.Parse(t.Context(), []byte(xml))
 
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)

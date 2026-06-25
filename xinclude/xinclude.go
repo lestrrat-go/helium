@@ -726,8 +726,13 @@ func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, s
 	// XInclude hrefs would spuriously reject the document's own external
 	// entities/DTDs.
 	if fr, ok := p.resolver.(fsBacked); ok {
-		parser = parser.FS(normalizingFS{fsys: fr.FS()})
+		// NewParser now blocks external entity/DTD loading by default; lift that
+		// block so the included document's own external references resolve, but
+		// keep them confined to the resolver's sandbox FS (set below).
+		parser = parser.BlockXXE(false).FS(normalizingFS{fsys: fr.FS()})
 	} else {
+		// Custom (non-FS) resolver: keep the default XXE block AND deny the FS so
+		// inner SYSTEM references cannot reach the host (defense in depth).
 		parser = parser.FS(denyAllFS{})
 	}
 	if substituteEntities {
