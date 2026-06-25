@@ -470,6 +470,27 @@ func TestC14N11ExcludedOwnXMLLang(t *testing.T) {
 	require.NotContains(t, string(gotStrict), "xml:lang", "strict mode omits an excluded own xml:lang (still blocking inheritance), got: %s", string(gotStrict))
 }
 
+// TestC14N10ExcludedOwnXMLLang covers the C14N 1.0 inheritance-blocking
+// divergence. With a rendered element's own xml:lang excluded from the node set,
+// the default (libxml2) blocks only on rendered attributes and so imports the
+// ancestor "en"; strict mode blocks on the element's full attribute axis and so
+// imports nothing.
+func TestC14N10ExcludedOwnXMLLang(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><a xml:lang="en"><hidden><child xml:lang="fr">text</child></hidden></a>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	nodes := collectDescendantElements(t, doc)
+
+	gotDefault, err := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Contains(t, string(gotDefault), `xml:lang="en"`, "libxml2 default imports the ancestor xml:lang, got: %s", string(gotDefault))
+
+	gotStrict, err := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).StrictNodeSetXMLAttributes().CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.NotContains(t, string(gotStrict), "xml:lang", "strict mode blocks inheritance via the excluded own xml:lang, got: %s", string(gotStrict))
+}
+
 // TestC14N10OmittedElementNSSuppression verifies that a namespace node carried
 // in the node set on an omitted intermediate element is not re-emitted as text
 // when the nearest visible ancestor already renders the same prefix and value
