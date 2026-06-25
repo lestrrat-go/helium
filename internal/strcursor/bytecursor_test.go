@@ -1,4 +1,4 @@
-package strcursor
+package strcursor_test
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ func (r *dataThenErrReader) Read(p []byte) (int, error) {
 
 func TestByteCursorSurfacesErrorReturnedWithData(t *testing.T) {
 	wantErr := errors.New("checksum mismatch")
-	cur := NewByteCursor(&dataThenErrReader{
+	cur := strcursor.NewByteCursor(&dataThenErrReader{
 		data: []byte("<root/>"),
 		err:  wantErr,
 	})
@@ -57,7 +58,7 @@ func (zeroProgressReader) Read(p []byte) (int, error) {
 }
 
 func TestByteCursorZeroProgressReaderDoesNotHang(t *testing.T) {
-	cur := NewByteCursor(zeroProgressReader{})
+	cur := strcursor.NewByteCursor(zeroProgressReader{})
 
 	type result struct {
 		done bool
@@ -105,7 +106,7 @@ func (r *slowSplitReader) Read(p []byte) (int, error) {
 }
 
 func TestByteCursorSlowSplitReaderMakesProgress(t *testing.T) {
-	cur := NewByteCursor(&slowSplitReader{data: []byte("<root/>")})
+	cur := strcursor.NewByteCursor(&slowSplitReader{data: []byte("<root/>")})
 
 	type result struct {
 		hasPrefix bool
@@ -127,7 +128,7 @@ func TestByteCursorSlowSplitReaderMakesProgress(t *testing.T) {
 }
 
 func TestByteCursorTreatsEOFWithDataAsCleanEnd(t *testing.T) {
-	cur := NewByteCursor(&dataThenErrReader{
+	cur := strcursor.NewByteCursor(&dataThenErrReader{
 		data: []byte("<root/>"),
 		err:  io.EOF,
 	})

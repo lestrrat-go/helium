@@ -1,9 +1,10 @@
-package helium
+package helium_test
 
 import (
 	"fmt"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/bitset"
 	"github.com/stretchr/testify/require"
 )
@@ -11,26 +12,26 @@ import (
 func TestLoadSubsetOptionFlagsAreUnique(t *testing.T) {
 	t.Parallel()
 
-	assertUniqueFlags(t, []LoadSubsetOption{
-		DetectIDs,
-		CompleteAttrs,
-		SkipIDs,
+	assertUniqueFlags(t, []helium.LoadSubsetOption{
+		helium.DetectIDs,
+		helium.CompleteAttrs,
+		helium.SkipIDs,
 	})
 }
 
 func TestSetAndIsSet(t *testing.T) {
 	t.Parallel()
 
-	var l LoadSubsetOption
-	require.False(t, l.IsSet(DetectIDs))
+	var l helium.LoadSubsetOption
+	require.False(t, l.IsSet(helium.DetectIDs))
 
-	l.Set(DetectIDs)
-	require.True(t, l.IsSet(DetectIDs))
-	require.False(t, l.IsSet(CompleteAttrs))
+	l.Set(helium.DetectIDs)
+	require.True(t, l.IsSet(helium.DetectIDs))
+	require.False(t, l.IsSet(helium.CompleteAttrs))
 
-	l.Set(CompleteAttrs)
-	require.True(t, l.IsSet(DetectIDs))
-	require.True(t, l.IsSet(CompleteAttrs))
+	l.Set(helium.CompleteAttrs)
+	require.True(t, l.IsSet(helium.DetectIDs))
+	require.True(t, l.IsSet(helium.CompleteAttrs))
 }
 
 func assertUniqueFlags[T bitset.Field](t *testing.T, flags []T) {
