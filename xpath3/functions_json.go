@@ -24,6 +24,7 @@ type jsonOptions struct {
 	liberal    bool
 	duplicates string // "reject", "use-first", "use-last" (default)
 	escape     bool
+	validate   bool // validate=true(): type-annotate the json-to-xml result tree
 	fallback   *FunctionItem
 	invalidEsc map[rune]string
 }
