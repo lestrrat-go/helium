@@ -754,21 +754,41 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		nsBindings[""] = ec.xpathDefaultNS
 	}
 
-	// 4b. Evaluate schema-aware avt if present
+	// 4b. Evaluate schema-aware avt if present. The default is "no": only an
+	// explicit yes/true/1 makes the dynamic expression schema-aware.
+	schemaAware := false
 	if inst.SchemaAwareAVT != nil {
 		saStr, saErr := inst.SchemaAwareAVT.evaluate(ctx, ec.contextNode)
 		if saErr != nil {
 			return saErr
 		}
-		if _, ok := parseXSDBool(saStr); !ok {
+		sa, ok := parseXSDBool(saStr)
+		if !ok {
 			return staticError(errCodeXTSE0020, "xsl:evaluate: invalid value %q for schema-aware attribute", saStr)
 		}
+		schemaAware = sa
 	}
 
 	// 5. Compile the dynamic XPath expression.
 	dynExpr, compileErr := xpath3.NewCompiler().Compile(xpathStr)
 	if compileErr != nil {
 		return dynamicError(errCodeXTDE3160, "xsl:evaluate: cannot compile XPath expression %q: %v", xpathStr, compileErr)
+	}
+
+	// 5b. XTDE3160: per XSLT 3.0 §20.3, when the dynamic expression is NOT
+	// schema-aware its static context includes only the built-in schema
+	// components — none of the schema types imported by xsl:import-schema. A
+	// SequenceType in the target expression (instance of / cast as / castable as
+	// / treat as) that names a user-defined schema type is therefore a static
+	// error when analyzing the string, surfaced as the dynamic error XTDE3160.
+	// (When schema-aware is yes the imported types ARE in scope, so the gate is
+	// skipped.) The unprefixed / no-default-namespace form already fails through
+	// the xs:-prefix resolution path; this closes the prefixed form.
+	if !schemaAware {
+		if badType := dynExprReferencesSchemaType(dynExpr.AST(), nsBindings); badType != "" {
+			return dynamicError(errCodeXTDE3160,
+				"xsl:evaluate: type %q is not in scope (schema-aware is not enabled)", badType)
+		}
 	}
 
 	// 5a. XTDE3160: certain XSLT functions are not allowed in xsl:evaluate
@@ -905,6 +925,54 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 
 	// 9. Output the result sequence.
 	return ec.outputSequence(seq)
+}
+
+// dynExprReferencesSchemaType reports the first SequenceType atomic/union type in
+// a dynamic xsl:evaluate target expression that names a user-defined schema type
+// (a type whose namespace is non-empty and is not the XSD built-in namespace). It
+// is used to detect XTDE3160 when the dynamic expression is not schema-aware: such
+// a type is not in the dynamic static context, so referencing it (in instance of /
+// cast as / castable as / treat as) is a static error.
+//
+// A prefix that resolves to no namespace, or to the XSD namespace, names a
+// built-in type and is always in scope; only a prefix bound to a non-XSD
+// namespace identifies an imported schema type. The unprefixed form is handled
+// elsewhere (it resolves through the xs: built-in path and already fails), so it
+// is not flagged here. Returns "" when no such reference is present.
+func dynExprReferencesSchemaType(ast xpath3.Expr, nsBindings map[string]string) string {
+	var found string
+	check := func(prefix, name string) bool {
+		if prefix == "" || prefix == "xs" || prefix == "xsd" {
+			return false
+		}
+		uri, ok := nsBindings[prefix]
+		if !ok || uri == "" || uri == lexicon.NamespaceXSD {
+			return false
+		}
+		found = prefix + ":" + name
+		return true
+	}
+	xpathstream.WalkExpr(ast, func(e xpath3.Expr) bool {
+		if found != "" {
+			return false
+		}
+		switch n := e.(type) {
+		case xpath3.InstanceOfExpr:
+			if t, ok := n.Type.ItemTest.(xpath3.AtomicOrUnionType); ok {
+				check(t.Prefix, t.Name)
+			}
+		case xpath3.TreatAsExpr:
+			if t, ok := n.Type.ItemTest.(xpath3.AtomicOrUnionType); ok {
+				check(t.Prefix, t.Name)
+			}
+		case xpath3.CastExpr:
+			check(n.Type.Prefix, n.Type.Name)
+		case xpath3.CastableExpr:
+			check(n.Type.Prefix, n.Type.Name)
+		}
+		return found == ""
+	})
+	return found
 }
 
 // checkEvaluateAsType checks the xsl:evaluate as= type constraint.
