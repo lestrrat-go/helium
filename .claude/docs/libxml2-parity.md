@@ -8,7 +8,7 @@
 |---------|-------|------|------|------|--------------|
 | Core XML (DOM) | 150+ | all | 0 | ~100% | — |
 | Core XML (SAX2) | 150+ | all | 0 | ~100% | — |
-| C14N | 76 | 76 | 0 | 100% | — |
+| C14N | 73 | 73 | 0 | 100% | — |
 | XSD | 226 | 225 | 1 | 99.6% | libxml2 IDC quirk with ref + attributeFormDefault |
 | RELAX NG | 159 | 159 | 0 | 100% | — |
 | Schematron | 42 | 42 | 0 | 100% | — |
