@@ -92,6 +92,18 @@ Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-
 ### `functions_json_xml.go`
 `json-to-xml`, `xml-to-json`
 
+`json-to-xml` with the `validate:true()` option type-annotates the result tree:
+each result element records the type defined by the json-to-xml result schema
+(`schema-for-json.xsd`, target namespace = fn namespace) keyed by node into
+`ec.typeAnnotations`, so downstream `instance of element(j:map, j:mapType)` /
+`element(j:string, j:stringType)` / `element(j:boolean, xs:boolean)` tests over
+the produced tree succeed. The mapping is a fixed function of each node's JSON
+kind (`mapType`/`arrayType`/`stringType`/`numberType`/`nullType` in the fn
+namespace; `boolean` → `xs:boolean`), so no general XSD validation pass runs.
+`ec.typeAnnotations` (handed in by the caller and shared across concurrent
+`Evaluate` calls) is copied into a fresh per-evaluation map before the new nodes'
+annotations are merged in — the shared config map is never mutated.
+
 ### `functions_serialize.go`
 `serialize`
 

@@ -55,21 +55,80 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid trailing content: %v", err)}
 	}
 
+	ec := getFnContext(ctx)
 	doc := helium.NewDefaultDocument()
-	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+	if ec != nil && ec.baseURI != "" {
 		doc.SetURL(ec.baseURI)
 	}
-	root, err := buildJSONToXMLTree(doc, item, opts, true)
+
+	// When validate=true(), record a type annotation for every result node so
+	// that downstream instance-of / schema-aware type tests over the produced
+	// tree (element(j:map, j:mapType), element(j:string, j:stringType), ...)
+	// observe the types defined by the json-to-xml result schema. The mapping
+	// is a fixed function of each node's JSON kind, so no general XSD validation
+	// pass is required.
+	var annotations map[helium.Node]string
+	if opts.validate {
+		annotations = make(map[helium.Node]string)
+	}
+
+	root, err := buildJSONToXMLTree(doc, item, opts, true, annotations)
 	if err != nil {
 		return nil, err
 	}
 	if err := doc.SetDocumentElement(root); err != nil {
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
+
+	if opts.validate && ec != nil && len(annotations) > 0 {
+		installJSONToXMLAnnotations(ec, annotations)
+	}
+
 	return ItemSlice{NodeItem{Node: doc}}, nil
 }
 
-func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root bool) (*helium.Element, error) {
+// installJSONToXMLAnnotations merges the json-to-xml result-tree annotations
+// into the evaluation context's node→type map. The map handed to the evaluator
+// by the caller (cfg.typeAnnotations) is shared across concurrent Evaluate
+// calls and must not be mutated in place; this copies it into a fresh map owned
+// by the per-evaluation evalContext before adding the new nodes' annotations.
+// The new nodes only exist in this call's freshly built result tree, so the
+// merge cannot collide with annotations for any pre-existing input node.
+func installJSONToXMLAnnotations(ec *evalContext, annotations map[helium.Node]string) {
+	merged := make(map[helium.Node]string, len(ec.typeAnnotations)+len(annotations))
+	for n, ann := range ec.typeAnnotations {
+		merged[n] = ann
+	}
+	for n, ann := range annotations {
+		merged[n] = ann
+	}
+	ec.typeAnnotations = merged
+}
+
+// jsonToXMLTypeAnnotation maps a json-to-xml result element name to the type
+// annotation defined by the json-to-xml result schema (schema-for-json.xsd),
+// whose target namespace is the fn namespace. The boolean element is typed
+// directly as xs:boolean; the others use the named complex/simple types.
+func jsonToXMLTypeAnnotation(name string) string {
+	switch name {
+	case jsonKindMap:
+		return QAnnotation(NSFn, "mapType")
+	case jsonKindArray:
+		return QAnnotation(NSFn, "arrayType")
+	case lexicon.TypeString:
+		return QAnnotation(NSFn, "stringType")
+	case lexicon.TypeNumber:
+		return QAnnotation(NSFn, "numberType")
+	case lexicon.TypeBoolean:
+		return TypeBoolean
+	case jsonKindNull:
+		return QAnnotation(NSFn, "nullType")
+	default:
+		return ""
+	}
+}
+
+func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root bool, annotations map[helium.Node]string) (*helium.Element, error) {
 	name := jsonKindNull
 	switch v := item.(type) {
 	case MapItem:
@@ -89,6 +148,11 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 	}
 
 	elem := doc.CreateElement(name)
+	if annotations != nil {
+		if ann := jsonToXMLTypeAnnotation(name); ann != "" {
+			annotations[elem] = ann
+		}
+	}
 	if root {
 		if err := elem.DeclareNamespace("", NSFn); err != nil {
 			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
@@ -103,7 +167,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		return elem, nil
 	case MapItem:
 		if err := v.forEach0(func(key AtomicValue, value Sequence) error {
-			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(value), opts, false)
+			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(value), opts, false, annotations)
 			if err != nil {
 				return err
 			}
@@ -121,7 +185,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		}
 	case ArrayItem:
 		for _, member := range v.members0() {
-			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(member), opts, false)
+			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(member), opts, false, annotations)
 			if err != nil {
 				return nil, err
 			}
@@ -214,6 +278,7 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 	} else if found {
 		validateSet = true
 		validate = validateValue
+		opts.validate = validateValue
 	}
 
 	if escape, found, err := readBool("escape"); err != nil {

@@ -51,7 +51,6 @@ const (
 
 	// W3C test skip messages reused by multiple tests.
 	skipXML11NSUndecl       = "XML 1.1: namespace undeclaration not supported by parser"
-	skipJSONToXMLValidate   = "json-to-xml validate option does not annotate result nodes"
 	skipSchemaAttrTypeCheck = "schema-attribute type check fails"
 
 	// Collection URI used by merge tests for log-file collections.
@@ -1607,15 +1606,6 @@ var w3cImplicitSkips = map[string]string{
 
 	// nodetest: child::schema-attribute axis conversion produces non-empty result
 	"nodetest-032": "child::schema-attribute axis conversion vs XPath 2.0 expected output mismatch",
-
-	// json-to-xml typed tests: fn:json-to-xml validate option does not type-annotate result
-	"json-to-xml-typed-001": skipJSONToXMLValidate,
-	"json-to-xml-typed-002": skipJSONToXMLValidate,
-	"json-to-xml-typed-003": skipJSONToXMLValidate,
-	"json-to-xml-typed-004": skipJSONToXMLValidate,
-	"json-to-xml-typed-005": skipJSONToXMLValidate,
-	"json-to-xml-typed-006": skipJSONToXMLValidate,
-	"json-to-xml-typed-007": skipJSONToXMLValidate,
 
 	// import-schema-029: the full XSLT 2.0 schema (schema-for-xslt20.xsd)
 	// triggers a fatal schema-construction diagnostic in our xsd compiler
