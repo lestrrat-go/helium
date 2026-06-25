@@ -1645,7 +1645,6 @@ var w3cImplicitSkips = map[string]string{
 
 	// override: schema-aware union types from xsl:import-schema
 	"override-f-031": "schema-aware union type conversion fails",
-	"override-v-006": "schema-aware union type comparison fails",
 
 	// use-package: package-scoped namespace serialization in result-document
 	"use-package-108":  "package-scoped namespace alias serialization not implemented",

@@ -58,6 +58,7 @@ type compiler struct {
 	effectiveVersion          string                     // effective XSLT version for forwards-compat processing
 	importSchemas             []*xsd.Schema              // pre-compiled schemas for xsl:import-schema namespace resolution
 	pendingPatternValidations []pendingPatternValidation // deferred pattern function validations
+	pendingOverrideTypeChecks []pendingOverrideTypeCheck // deferred XTSE3070 override variable same-type checks
 	usedModes                 map[string]struct{}        // all mode names referenced (for XTSE3085)
 	usedAttrSetRefs           []string                   // all use-attribute-sets names referenced (for XTSE0710)
 	localTemplateNames        map[string]struct{}        // pre-scanned named templates in this module (for XTSE3055)
@@ -1420,6 +1421,12 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// XTSE3105: for modes with typed="strict", check that match pattern
 	// element names are declared in the imported schemas.
 	if err := checkTypedModePatterns(c.stylesheet); err != nil {
+		return nil, err
+	}
+
+	// XTSE3070: deferred override-variable same-type checks for custom schema
+	// types, now that the using package's import-schema types are compiled.
+	if err := c.checkPendingOverrideTypes(); err != nil {
 		return nil, err
 	}
 
