@@ -56,17 +56,12 @@ type Resolver interface {
 
 // processorCfg holds the configuration for a Processor.
 type processorCfg struct {
-	noMarkers       bool
-	noBaseFixup     bool
-	resolver        Resolver
-	baseURI         string
-	errorHandler    helium.ErrorHandler
-	maxIncludeSize  int
-	maxElemDepth    int
-	maxElemDepthSet bool
-	maxNameLength   int
-	maxEntityAmpl   int
-	maxCMDepth      int
+	noMarkers      bool
+	noBaseFixup    bool
+	resolver       Resolver
+	baseURI        string
+	errorHandler   helium.ErrorHandler
+	maxIncludeSize int
 }
 
 // Processor configures XInclude processing. It is a value-style wrapper:
@@ -182,46 +177,6 @@ func (p Processor) MaxIncludeSize(n int) Processor {
 	return p
 }
 
-// MaxDepth sets the maximum element nesting depth for parsing included
-// documents (passed through to [helium.Parser.MaxDepth] on the inner parser).
-// A value of 0 means no limit. When unset, the inner parser's own default
-// applies. Use this to permit a legitimately deep included document, or to
-// tighten the bound below the parser default for untrusted includes.
-func (p Processor) MaxDepth(n int) Processor {
-	p = p.clone()
-	p.cfg.maxElemDepth = n
-	p.cfg.maxElemDepthSet = true
-	return p
-}
-
-// MaxNameLength sets the maximum element/attribute/NCName byte length for
-// parsing included documents (see [helium.Parser.MaxNameLength]). Zero (the
-// default) uses the parser default; a negative value removes the limit.
-func (p Processor) MaxNameLength(n int) Processor {
-	p = p.clone()
-	p.cfg.maxNameLength = n
-	return p
-}
-
-// MaxEntityAmplification sets the maximum entity-expansion amplification factor
-// for parsing included documents (see [helium.Parser.MaxEntityAmplification]).
-// Zero (the default) uses the parser default; a negative value disables the
-// ratio check (the absolute ceiling still applies).
-func (p Processor) MaxEntityAmplification(n int) Processor {
-	p = p.clone()
-	p.cfg.maxEntityAmpl = n
-	return p
-}
-
-// MaxContentModelDepth sets the maximum DTD content-model nesting depth for
-// parsing included documents (see [helium.Parser.MaxContentModelDepth]). Zero
-// (the default) uses the parser default; a negative value removes the limit.
-func (p Processor) MaxContentModelDepth(n int) Processor {
-	p = p.clone()
-	p.cfg.maxCMDepth = n
-	return p
-}
-
 // ErrorHandler sets a handler for non-fatal warnings such as
 // entity definition mismatches during XInclude entity merging.
 // Errors delivered to the handler have ErrorLevelWarning.
@@ -242,22 +197,17 @@ type txtCacheEntry struct {
 }
 
 type processor struct {
-	noMarkers       bool
-	noBaseFixup     bool
-	resolver        Resolver
-	baseURI         string
-	expanding       map[string]bool          // circular inclusion detection (set during recursive expansion)
-	docCache        map[string]docCacheEntry // cached raw bytes for XML documents
-	txtCache        map[string]txtCacheEntry // cached text inclusions
-	errorHandler    helium.ErrorHandler
-	maxIncludeSize  int
-	maxElemDepth    int
-	maxElemDepthSet bool
-	maxNameLength   int
-	maxEntityAmpl   int
-	maxCMDepth      int
-	depth           int
-	count           int
+	noMarkers      bool
+	noBaseFixup    bool
+	resolver       Resolver
+	baseURI        string
+	expanding      map[string]bool          // circular inclusion detection (set during recursive expansion)
+	docCache       map[string]docCacheEntry // cached raw bytes for XML documents
+	txtCache       map[string]txtCacheEntry // cached text inclusions
+	errorHandler   helium.ErrorHandler
+	maxIncludeSize int
+	depth          int
+	count          int
 }
 
 // Process performs XInclude processing on the document.
@@ -285,20 +235,15 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		cfg = &processorCfg{}
 	}
 	p := &processor{
-		noMarkers:       cfg.noMarkers,
-		noBaseFixup:     cfg.noBaseFixup,
-		resolver:        cfg.resolver,
-		baseURI:         cfg.baseURI,
-		errorHandler:    cfg.errorHandler,
-		maxIncludeSize:  cfg.maxIncludeSize,
-		maxElemDepth:    cfg.maxElemDepth,
-		maxElemDepthSet: cfg.maxElemDepthSet,
-		maxNameLength:   cfg.maxNameLength,
-		maxEntityAmpl:   cfg.maxEntityAmpl,
-		maxCMDepth:      cfg.maxCMDepth,
-		expanding:       make(map[string]bool),
-		docCache:        make(map[string]docCacheEntry),
-		txtCache:        make(map[string]txtCacheEntry),
+		noMarkers:      cfg.noMarkers,
+		noBaseFixup:    cfg.noBaseFixup,
+		resolver:       cfg.resolver,
+		baseURI:        cfg.baseURI,
+		errorHandler:   cfg.errorHandler,
+		maxIncludeSize: cfg.maxIncludeSize,
+		expanding:      make(map[string]bool),
+		docCache:       make(map[string]docCacheEntry),
+		txtCache:       make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
 		p.resolver = NewFSResolver(nil)
@@ -761,18 +706,6 @@ func (p *processor) readCapped(r io.Reader) ([]byte, error) {
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
 	parser := helium.NewParser().LoadExternalDTD(true).BaseURI(uri)
-	// Apply the caller-configured element-depth limit (Processor.MaxDepth) to
-	// the inner parser; when unset, the parser keeps its own default.
-	if p.maxElemDepthSet {
-		parser = parser.MaxDepth(p.maxElemDepth)
-	}
-	// Apply the granular limit knobs. Their zero value already means "parser
-	// default" (matching the helium.Parser limit semantics), so they can be
-	// applied unconditionally without a separate "set" flag.
-	parser = parser.
-		MaxNameLength(p.maxNameLength).
-		MaxEntityAmplification(p.maxEntityAmpl).
-		MaxContentModelDepth(p.maxCMDepth)
 	// Thread the resolver's filesystem into the inner parser so external
 	// entities and external DTDs declared inside the included document
 	// resolve through the SAME sandbox as XInclude itself, not the parser's

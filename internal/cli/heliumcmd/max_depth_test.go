@@ -15,30 +15,6 @@ func deepXML(n int) string {
 	return strings.Repeat("<a>", n-1) + "<a/>" + strings.Repeat("</a>", n-1)
 }
 
-// TestLintXIncludeMaxDepth verifies that lint's --max-depth propagates into the
-// XInclude processor's inner parser, so a deep included document is governed by
-// the same flag as the main document.
-func TestLintXIncludeMaxDepth(t *testing.T) {
-	const main = `<?xml version="1.0"?>
-<book xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="deep.xml"/></book>`
-
-	t.Run("default cap rejects deep included document", func(t *testing.T) {
-		dir := t.TempDir()
-		writeFile(t, dir, "deep.xml", deepXML(300))
-		f := writeFile(t, dir, "main.xml", main)
-		_, _, code := executeLintFile(t, f, "--xinclude", "--noout")
-		require.NotEqual(t, heliumcmd.ExitOK, code)
-	})
-
-	t.Run("--max-depth 0 permits deep included document", func(t *testing.T) {
-		dir := t.TempDir()
-		writeFile(t, dir, "deep.xml", deepXML(300))
-		f := writeFile(t, dir, "main.xml", main)
-		_, errOut, code := executeLintFile(t, f, "--xinclude", "--noout", "--max-depth", "0")
-		require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
-	})
-}
-
 func executeXPath(t *testing.T, xml string, args ...string) (string, int) {
 	t.Helper()
 	dir := t.TempDir()

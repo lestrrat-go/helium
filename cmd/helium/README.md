@@ -72,8 +72,8 @@ loading flags `--loaddtd`, `--dtdattr`, `--valid`, and `--noent` are an explicit
 opt-in — each one lifts that block and installs a permissive filesystem (or the
 `--path` search path) so the requested external DTD/entity is actually loaded.
 
-`--max-depth` and `--huge` govern the **document being processed** (and, with
-`--xinclude`, its included documents). Schema and stylesheet **compilation**
+`--max-depth` and `--huge` govern the **document being processed**. Schema and
+stylesheet **compilation**
 (XSD / RELAX NG / Schematron / XSLT, including nested include/import/module loads)
 parses with the default parser limits; tuning those compiler-internal limits is
 a separate follow-up, not exposed here.

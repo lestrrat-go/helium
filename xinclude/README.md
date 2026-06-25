@@ -163,8 +163,6 @@ source: [examples/xinclude_process_example_test.go](https://github.com/lestrrat-
 | `Resolver(Resolver)` | Supply a custom resource resolver (see `NewFSResolver`). |
 | `BaseURI(string)` | Base URI for resolving relative hrefs. |
 | `MaxIncludeSize(int)` | Cap bytes read from a single included resource (default 10 MiB). |
-| `MaxDepth(int)` | Cap element nesting depth when parsing included documents (`0` = unlimited; unset → the inner parser's default). |
-| `MaxNameLength(int)` / `MaxEntityAmplification(int)` / `MaxContentModelDepth(int)` | The granular parser limit knobs (see `helium.Parser`) applied to included-document parsing (`0` = parser default, negative = unlimited). |
 
 ## Security
 
@@ -173,5 +171,4 @@ default, but the **default XInclude resolver opens any OS path**
 (`NewFSResolver(nil)`), preserving historical behavior. When processing
 untrusted input, supply a confined resolver — `Resolver(NewFSResolver(fsys))`
 with an `fsys` backed by `os.Root.FS` (Go 1.24+) is the appropriate sandbox;
-`os.DirFS` rejects `../` but does **not** stop symlink escapes. Use `MaxDepth`
-to bound the nesting of included documents.
+`os.DirFS` rejects `../` but does **not** stop symlink escapes.
