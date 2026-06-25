@@ -51,6 +51,16 @@ func TestMaxNameLength(t *testing.T) {
 		require.NotNil(t, d)
 	})
 
+	t.Run("limit bounds the full prefixed QName", func(t *testing.T) {
+		t.Parallel()
+		// The element QName "aaaa:bbbbb" is 10 bytes. A per-part check would
+		// wrongly accept it under MaxNameLength(5) (each NCName part is <= 5);
+		// the limit must bound the whole QName.
+		src := `<aaaa:bbbbb xmlns:aaaa="u"/>`
+		_, err := helium.NewParser().MaxNameLength(5).Parse(t.Context(), []byte(src))
+		require.Error(t, err, "a 10-byte prefixed QName must be rejected at a 5-byte limit")
+	})
+
 	t.Run("limit applies inside entity expansion", func(t *testing.T) {
 		t.Parallel()
 		// The entity replacement text contains an element whose name (8 bytes)

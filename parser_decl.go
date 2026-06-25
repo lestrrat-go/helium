@@ -435,7 +435,10 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {
 		prefixBytes, localBytes, nBytes, ok := u8.ScanQNameBytes()
 		if ok {
-			if pctx.nameTooLong(len(prefixBytes)) || pctx.nameTooLong(len(localBytes)) {
+			// Bound the full QName (prefix + ':' + local), not just each part,
+			// so a prefixed name can't exceed the cap by splitting across the
+			// colon. nBytes is the total scanned QName length.
+			if pctx.nameTooLong(nBytes) {
 				return "", "", pctx.error(ctx, ErrNameTooLong)
 			}
 			if len(prefixBytes) > 0 {
@@ -482,6 +485,11 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 		return "", "", pctx.error(ctx, err)
 	}
 	local = v
+	// Bound the full QName (prefix + ':' + local), not just each NCName part,
+	// so a prefixed name can't bypass the cap by splitting across the colon.
+	if pctx.nameTooLong(len(prefix) + len(local) + 1) {
+		return "", "", pctx.error(ctx, ErrNameTooLong)
+	}
 	return
 }
 
