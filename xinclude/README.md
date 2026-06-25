@@ -151,3 +151,26 @@ func Example_xinclude_process() {
 ```
 source: [examples/xinclude_process_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xinclude_process_example_test.go)
 <!-- END INCLUDE -->
+
+## Options
+
+`Processor` is a clone-on-write builder. Notable options:
+
+| Method | Effect |
+|--------|--------|
+| `NoXIncludeMarkers()` | Remove the bracketing `xi:include` marker nodes from the result. |
+| `NoBaseFixup()` | Skip `xml:base` fixup on included content. |
+| `Resolver(Resolver)` | Supply a custom resource resolver (see `NewFSResolver`). |
+| `BaseURI(string)` | Base URI for resolving relative hrefs. |
+| `MaxIncludeSize(int)` | Cap bytes read from a single included resource (default 10 MiB). |
+| `MaxDepth(int)` | Cap element nesting depth when parsing included documents (`0` = unlimited; unset → the inner parser's default). |
+
+## Security
+
+Note the asymmetry with the core parser: `helium.NewParser()` is deny-all by
+default, but the **default XInclude resolver opens any OS path**
+(`NewFSResolver(nil)`), preserving historical behavior. When processing
+untrusted input, supply a confined resolver — `Resolver(NewFSResolver(fsys))`
+with an `fsys` backed by `os.Root.FS` (Go 1.24+) is the appropriate sandbox;
+`os.DirFS` rejects `../` but does **not** stop symlink escapes. Use `MaxDepth`
+to bound the nesting of included documents.

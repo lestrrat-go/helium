@@ -108,47 +108,58 @@ documentation.
 
 # Security
 
-Helium exposes the controls needed to process untrusted XML safely, but a
-zero-value `NewParser()` is tuned for compatibility, not for hostile input.
-By default:
+`NewParser()` is **secure by default** — it is safe to point at untrusted XML
+with no extra configuration. By default:
 
-- Entity substitution is **off** (`SubstituteEntities(false)`).
-- External DTD loading is **off** (`LoadExternalDTD(false)`).
-- Entity-expansion amplification limits are **on** (`RelaxLimits(false)`), and
-  any external DTD subset is capped at 10 MiB regardless of that setting.
-- Network access is **allowed** (`AllowNetwork(true)`), the filesystem resolver
-  is **permissive** (any path handed to the parser can be opened), and element
-  nesting depth is **unbounded** (`MaxDepth(0)`).
+- External entity and DTD loading is **blocked** (`BlockXXE(true)`), so XML
+  External Entity (XXE) attacks are rejected.
+- No filesystem is exposed: the parser's `FS` is a **deny-all** filesystem, so
+  even a document that reaches a loader cannot open host paths.
+- Network access is **forbidden** (`AllowNetwork(false)`). The core parser has
+  no network loader, so this is belt-and-suspenders.
+- Element nesting depth is **capped at 256** (`MaxDepth(256)`; `0` = unbounded).
+- Entity substitution and external DTD loading are off
+  (`SubstituteEntities(false)`, `LoadExternalDTD(false)`), entity-expansion
+  amplification limits are on (`RelaxLimits(false)`), and any external DTD
+  subset — once explicitly enabled — is capped at 10 MiB.
 
-When parsing documents from an untrusted source, build one hardened parser and
-reuse it — the builder is clone-on-write, so a shared value is safe to reuse
-across goroutines:
+The builder is clone-on-write, so one configured parser is safe to reuse across
+goroutines.
+
+To deliberately load external resources from a **trusted** source, opt back in
+explicitly:
 
 ```go
-p := helium.NewParser().
-    BlockXXE(true).            // reject external entities and DTDs (XXE)
-    AllowNetwork(false).       // no outbound fetches during parsing
-    SubstituteEntities(false). // do not expand entities
-    LoadExternalDTD(false).    // do not read the external DTD subset
-    MaxDepth(256)              // bound nesting depth (0 = unbounded)
+doc, err := helium.NewParser().
+    BlockXXE(false).            // allow external entities and DTDs
+    LoadExternalDTD(true).      // read the external DTD subset
+    SubstituteEntities(true).   // expand entities
+    FS(helium.PermissiveFS()).  // open any os.Open path (or pass a confined fs.FS)
+    Parse(ctx, xmlBytes)
 ```
 
-The parser cannot know your resource budget, so the caller should also:
+`helium.PermissiveFS()` returns an `fs.FS` that opens any path via `os.Open`,
+restoring the historical unsandboxed behavior; prefer a confined `fs.FS` rooted
+at a trusted directory when the document's external references are known.
+Passing `FS(nil)` restores the deny-all default.
+
+The parser cannot know your resource budget, so even with the safe defaults the
+caller should also:
 
 - Enforce a maximum raw document size before calling `Parse`.
 - Pass a `context.Context` with a deadline to `Parse` / `ParseReader`.
 - Keep `RelaxLimits` disabled — enabling it lifts the entity-amplification and
   name-length guards.
-- Avoid enabling XInclude, catalogs, DTD validation, or default-DTD-attribute
-  processing for untrusted input unless every external resource is explicitly
-  allowlisted and size-bounded.
+- Be cautious enabling XInclude, catalogs, DTD validation, or
+  default-DTD-attribute processing for untrusted input; when you do, keep every
+  external resource allowlisted and size-bounded. `xinclude.Processor.MaxDepth`
+  bounds the nesting depth of included documents.
 
-**Caveat:** the `FS` option is not yet a complete sandbox. External-resource
-paths are joined against the document base URI and may be absolute or use
-OS-specific separators, so `os.DirFS`-style roots (which enforce `fs.ValidPath`)
-reject them. Until path normalization lands, restrict filesystem access by
-disabling external loading (as above) rather than relying on a chroot-style
-`fs.FS`.
+**Caveat:** a permissive or directory-rooted `FS` is not yet a complete sandbox.
+External-resource paths are joined against the document base URI and may be
+absolute or use OS-specific separators, so `os.DirFS`-style roots (which enforce
+`fs.ValidPath`) reject them. Until path normalization lands, rely on the deny-all
+default for confinement rather than a chroot-style `fs.FS`.
 
 The `xmldsig1` (signatures) and `xmlenc1` (encryption) packages are
 **experimental** and should not be relied on inside a security or compliance
