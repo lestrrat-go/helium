@@ -99,7 +99,7 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 - `--output FILE` combined with `--noout` → rejected (`--output cannot be combined with --noout`). Exception: `--xpath` (which also sets `--noout` internally) still writes its result, so it is allowed.
 - The output file is closed explicitly after processing; a close error is folded into the exit status (`ExitErr`).
 - `--max-input-bytes N` caps the bytes read per input (file or stdin); default `DefaultMaxInputBytes` (100 MiB). `0` disables the cap. Exceeding it fails with `input exceeds maximum size` and `ExitReadFile`.
-- `--max-depth N` caps element nesting depth; default `256` (the `NewParser` default), `0` = unlimited. Exceeding it fails the parse (`exceeded max depth`).
+- `--max-depth N` caps element nesting depth; default `256` (the `NewParser` default), `0` = unlimited. Exceeding it fails the parse (`exceeded max depth`). `--max-depth` (and `--huge`) apply to the **document being processed** (the linted/validated/transformed instance) and, under `--xinclude`, to included documents. Schema and stylesheet **compilation** (XSD/RELAX NG/Schematron/XSLT, including nested include/import/module loads) parses with the default parser limits; exposing those compiler-internal limits is intentionally out of scope here and left as a follow-up.
 - `--quiet` suppresses informational output: timing messages are silenced and parser/validator warnings are suppressed.
 - `--path DIRS` (colon-separated) is wired into DTD/entity resolution: a `pathSearchFS` falls back to each listed directory (by base name) when the default loader cannot open a referenced resource.
 

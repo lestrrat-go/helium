@@ -41,7 +41,7 @@ Run `helium lint` with no arguments to print the authoritative usage text
 | `--nsclean` | Remove redundant namespace declarations |
 | `--nocdata` | Replace CDATA sections by equivalent text nodes |
 | `--nonet` | Refuse to fetch DTDs or entities over network |
-| `--huge` | Remove any internal arbitrary parser limits |
+| `--huge` | Lift the tunable parser limits (element depth, name length, DTD content-model depth, entity-amplification ratio). The absolute 1 GB entity-expansion ceiling is always retained as a billion-laughs backstop |
 | `--noenc` | Ignore any encoding specified inside the document |
 | `--noxincludenode` | Do not generate XInclude START/END nodes |
 | `--nofixup-base-uris` | Do not fix up `xml:base` URIs in XInclude |
@@ -71,6 +71,12 @@ The parser is **secure by default** (see the library's Security section): bare
 loading flags `--loaddtd`, `--dtdattr`, `--valid`, and `--noent` are an explicit
 opt-in — each one lifts that block and installs a permissive filesystem (or the
 `--path` search path) so the requested external DTD/entity is actually loaded.
+
+`--max-depth` and `--huge` govern the **document being processed** (and, with
+`--xinclude`, its included documents). Schema and stylesheet **compilation**
+(XSD / RELAX NG / Schematron / XSLT, including nested include/import/module loads)
+parses with the default parser limits; tuning those compiler-internal limits is
+a separate follow-up, not exposed here.
 
 ## `helium xpath`
 

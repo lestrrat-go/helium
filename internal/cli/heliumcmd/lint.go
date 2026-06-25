@@ -244,7 +244,7 @@ func (c *command) showUsage() {
 	--nsclean : remove redundant namespace declarations
 	--nocdata : replace CDATA section by equivalent text nodes
 	--nonet : refuse to fetch DTDs or entities over network
-	--huge : remove any internal arbitrary parser limits
+	--huge : lift the tunable parser limits (element depth, name length, DTD content-model depth, entity-amplification ratio); the absolute 1 GB entity-expansion ceiling is always kept
 	--noenc : ignore any encoding specified inside the document
 	--noxincludenode : do not generate XInclude START/END nodes
 	--nofixup-base-uris : do not fixup xml:base URIs in XInclude
