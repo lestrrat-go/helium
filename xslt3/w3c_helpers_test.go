@@ -50,8 +50,7 @@ const (
 	versionResolutionLowest = "lowest"
 
 	// W3C test skip messages reused by multiple tests.
-	skipXML11NSUndecl       = "XML 1.1: namespace undeclaration not supported by parser"
-	skipSchemaAttrTypeCheck = "schema-attribute type check fails"
+	skipXML11NSUndecl = "XML 1.1: namespace undeclaration not supported by parser"
 
 	// Collection URI used by merge tests for log-file collections.
 	w3cLogFilesCollectionURI = "log-files"
@@ -1637,11 +1636,6 @@ var w3cImplicitSkips = map[string]string{
 	"validation-0701": "schema-aware XSLT schema querying fails",
 	"validation-1202": "instance of schema-element fails",
 	"validation-1204": "instance of schema-element fails",
-
-	// as tests: schema-attribute type checks
-	"as-1812": skipSchemaAttrTypeCheck,
-	"as-1813": skipSchemaAttrTypeCheck,
-	"as-1814": skipSchemaAttrTypeCheck,
 
 	// override: schema-aware union types from xsl:import-schema
 	"override-f-031": "schema-aware union type conversion fails",

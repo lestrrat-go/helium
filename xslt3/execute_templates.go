@@ -691,10 +691,12 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 								"cannot add attribute to element after children have been added")
 						}
 						if attr.URI() != "" {
-							ns, _ := out.doc.CreateNamespace(attr.Prefix(), attr.URI())
-							if err := elem.SetLiteralAttributeNS(attr.LocalName(), string(attr.Content()), ns); err != nil {
-								return err
-							}
+							// Use copyAttributeToElement so the attribute's
+							// namespace is declared on the element (and prefix
+							// conflicts are resolved). Setting only the attribute
+							// without a namespace declaration would leave the
+							// prefix undeclared in the serialized output.
+							copyAttributeToElement(elem, attr)
 						} else {
 							if _, err := elem.SetAttribute(attr.LocalName(), string(attr.Content())); err != nil {
 								return err
