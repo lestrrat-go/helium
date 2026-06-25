@@ -207,7 +207,7 @@ func (pctx *parserCtx) validateEntityValueRefs(ctx context.Context, s []byte) er
 	if err != nil {
 		return err
 	}
-	return scanEntityValueGeneralRefs(expanded)
+	return scanEntityValueGeneralRefs(expanded, pctx.maxNameLength)
 }
 
 // expandEntityValueForRefCheck produces the lexical stream over which general
@@ -284,7 +284,7 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 // scanEntityValueGeneralRefs validates that every '&' in the (PE-expanded)
 // EntityValue stream begins a well-formed character or general reference. A
 // missing semicolon or an otherwise malformed reference is rejected.
-func scanEntityValueGeneralRefs(s []byte) error {
+func scanEntityValueGeneralRefs(s []byte, maxNameLength int) error {
 	for len(s) > 0 {
 		i := bytes.IndexByte(s, '&')
 		if i < 0 {
@@ -304,7 +304,7 @@ func scanEntityValueGeneralRefs(s []byte) error {
 		if len(s) < 2 {
 			return errors.New("malformed entity reference in entity value")
 		}
-		_, width, err := parseStringName(s[1:])
+		_, width, err := parseStringName(s[1:], maxNameLength)
 		if err != nil {
 			return errors.New("malformed entity reference in entity value")
 		}

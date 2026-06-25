@@ -61,6 +61,18 @@ func TestMaxNameLength(t *testing.T) {
 		require.Error(t, err, "a 10-byte prefixed QName must be rejected at a 5-byte limit")
 	})
 
+	t.Run("limit bounds entity-reference names in entity values", func(t *testing.T) {
+		t.Parallel()
+		// A general-entity reference name inside an entity's replacement value
+		// (here 8 bytes) must be rejected at declaration time under a 4-byte
+		// cap, not silently stored and only caught if the entity is expanded.
+		src := `<?xml version="1.0"?>` + "\n" +
+			`<!DOCTYPE r [<!ENTITY e "&aaaaaaaa;">]>` + "\n" +
+			`<r/>`
+		_, err := helium.NewParser().MaxNameLength(4).Parse(t.Context(), []byte(src))
+		require.Error(t, err, "over-limit entity-reference name in an entity value must be rejected")
+	})
+
 	t.Run("limit applies inside entity expansion", func(t *testing.T) {
 		t.Parallel()
 		// The entity replacement text contains an element whose name (8 bytes)
