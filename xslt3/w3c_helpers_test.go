@@ -1657,7 +1657,6 @@ var w3cImplicitSkips = map[string]string{
 
 	// validation tests: schema-aware processing
 	"validation-0202": "schema-aware result validation fails",
-	"validation-0213": "schema-aware result validation fails",
 	"validation-0501": "schema-aware XSLT schema querying fails",
 	"validation-0601": "schema-aware XSLT schema querying fails",
 	"validation-0701": "schema-aware XSLT schema querying fails",
@@ -1668,9 +1667,6 @@ var w3cImplicitSkips = map[string]string{
 	"as-1812": skipSchemaAttrTypeCheck,
 	"as-1813": skipSchemaAttrTypeCheck,
 	"as-1814": skipSchemaAttrTypeCheck,
-	"as-3601": skipSchemaAttrTypeCheck,
-	"as-3602": skipSchemaAttrTypeCheck,
-	"as-3603": skipSchemaAttrTypeCheck,
 
 	// override: schema-aware union types from xsl:import-schema
 	"override-f-031": "schema-aware union type conversion fails",
@@ -1728,7 +1724,6 @@ var w3cImplicitSkips = map[string]string{
 	"match-244": "expected error XTSE3105 not raised for schema pattern",
 	"match-262": "deep-copy does not preserve type annotations",
 	"match-263": "deep-copy does not preserve type annotations",
-	"match-287": "schema-attribute pattern match fails (XTTE0780)",
 
 	// evaluate tests requiring schema-aware processing
 	"evaluate-012": "schema-aware xsl:evaluate: expected XTDE3160 not raised",
