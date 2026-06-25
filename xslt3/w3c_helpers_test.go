@@ -1689,8 +1689,6 @@ var w3cImplicitSkips = map[string]string{
 	"match-210": "schema-aware attribute type pattern match fails",
 	"match-221": "schema-aware numeric type pattern match fails",
 	"match-232": "schema-aware type pattern match missing items",
-	"match-262": "deep-copy does not preserve type annotations",
-	"match-263": "deep-copy does not preserve type annotations",
 
 	// evaluate tests requiring schema-aware processing
 	"evaluate-048": "requires network access to saxonica.com",

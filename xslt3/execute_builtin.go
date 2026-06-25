@@ -249,6 +249,8 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 		return nil
 	case helium.ElementNode, helium.TextNode, helium.CDATASectionNode,
 		helium.CommentNode, helium.ProcessingInstructionNode:
+		out := ec.currentOutput()
+		pendingBefore := len(out.pendingItems)
 		copied, err := helium.CopyNode(node, ec.resultDoc)
 		if err != nil {
 			return err
@@ -262,6 +264,11 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 				helium.SetNodeBaseURI(copied, srcBase)
 			}
 		}
+		// XSLT 3.0 §16.1.1: on-no-match="deep-copy" preserves type annotations.
+		// Transfer the source subtree's annotations to the copy and surface them
+		// on the captured NodeItem so instance-of checks on the result succeed.
+		ec.deepTransferAnnotations(node, copied)
+		ec.propagateValidationAnnotationsToPending(out, pendingBefore)
 		return nil
 	case helium.AttributeNode:
 		attr, ok := node.(*helium.Attribute)
@@ -269,6 +276,28 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 			return nil
 		}
 		out := ec.currentOutput()
+		// In sequence mode (e.g. an xsl:variable with as="attribute()"), capture
+		// the copied attribute as a standalone item rather than attaching it to
+		// the capturing element, mirroring xsl:copy-of. Preserve the source
+		// attribute's type annotation per XSLT 3.0 §16.1.1.
+		if out.sequenceMode {
+			var attrNS *helium.Namespace
+			if attr.URI() != "" {
+				if ns, nsErr := out.doc.CreateNamespace(attr.Prefix(), attr.URI()); nsErr == nil {
+					attrNS = ns
+				}
+			}
+			copiedAttr, err := out.doc.CreateAttribute(attr.LocalName(), attr.Value(), attrNS)
+			if err != nil {
+				return err
+			}
+			if ann, found := ec.typeAnnotations[attr]; found {
+				ec.annotateNode(copiedAttr, ann)
+			}
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: copiedAttr, TypeAnnotation: ec.typeAnnotations[attr]})
+			out.noteOutput()
+			return nil
+		}
 		if outElem, ok := out.current.(*helium.Element); ok {
 			copyAttributeToElement(outElem, attr)
 			out.noteOutput()
