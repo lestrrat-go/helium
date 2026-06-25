@@ -176,8 +176,11 @@ func (c *canonicalizer) processElement(e *helium.Element) error {
 			return err
 		}
 	} else if c.nodeSet != nil {
-		// Non-visible element: output namespace nodes in the node set as text.
-		// In exclusive mode, only output ns nodes whose prefix is in the inclusive list.
+		// Non-visible element with node-set members: libxml2 still processes its
+		// namespace axis and then its attribute axis (xmlC14NProcessElementNode
+		// calls both with visible=0), rendering in-node-set nodes as text.
+		// In exclusive mode, only namespace nodes whose prefix is in the inclusive
+		// list are output.
 		if c.mode == ExclusiveC14N10 {
 			if len(c.inclusivePrefixes) > 0 {
 				if err := c.renderNSNodesAsText(e, func(prefix string) bool {
@@ -187,10 +190,11 @@ func (c *canonicalizer) processElement(e *helium.Element) error {
 					return err
 				}
 			}
-		} else {
-			if err := c.renderNSNodesAsText(e, nil); err != nil {
-				return err
-			}
+		} else if err := c.renderNSNodesAsText(e, nil); err != nil {
+			return err
+		}
+		if err := c.renderOmittedAttributes(e); err != nil {
+			return err
 		}
 	}
 
@@ -436,18 +440,52 @@ func (c *canonicalizer) renderNSNodesAsText(e *helium.Element, include func(stri
 			continue
 		}
 		if include != nil {
-			if !include(nsn.prefix) {
+			// Exclusive mode: only inclusive prefixes, and only when not already
+			// rendered on the rendered-namespace stack.
+			if !include(nsn.prefix) || !c.nsStack.needsOutput(nsn.prefix, nsn.uri) {
 				continue
 			}
 		} else if c.nsRenderedByAncestor(e, nsn.prefix, nsn.uri) {
+			// Inclusive mode: ignore a namespace already rendered by the nearest
+			// visible ancestor.
 			continue
 		}
 		toOutput = append(toOutput, nsn)
 	}
 	sortNamespaces(toOutput)
 
+	// A non-visible element only consults the rendered-namespace stack for
+	// suppression; it never adds to it (libxml2 calls xmlC14NVisibleNsStackAdd
+	// for visible elements only). Adding here would wrongly suppress the same
+	// declaration on sibling omitted elements.
 	for _, ns := range toOutput {
 		if err := c.writeNSDecl(ns.prefix, ns.uri); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// renderOmittedAttributes outputs, as text, the in-node-set attributes of a
+// non-visible element (libxml2's xmlC14NProcessAttrsAxis with visible=0). No
+// xml:* inheritance or xml:base fixup is performed — that applies to visible
+// elements only; an omitted element simply emits its node-set attributes.
+func (c *canonicalizer) renderOmittedAttributes(e *helium.Element) error {
+	attrs := e.Attributes()
+	entries := make([]attrSortEntry, 0, len(attrs))
+	for _, attr := range attrs {
+		if !c.isVisible(attr) {
+			continue
+		}
+		entries = append(entries, attrSortEntry{
+			attr:      attr,
+			localName: attr.LocalName(),
+			nsURI:     attr.URI(),
+		})
+	}
+	sortAttributes(entries)
+	for _, entry := range entries {
+		if err := c.writeAttribute(entry); err != nil {
 			return err
 		}
 	}

@@ -546,6 +546,42 @@ func TestC14N10OmittedElementNSSuppression(t *testing.T) {
 	require.Equal(t, `<root xmlns:p="urn:p"><child></child></root>`, string(got))
 }
 
+// TestExclusiveC14NOmittedElementNSSuppression verifies that in exclusive C14N a
+// namespace node on an omitted element is not re-emitted as text when it was
+// already rendered (here via the inclusive prefix on the visible root).
+func TestExclusiveC14NOmittedElementNSSuppression(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xmlns:p="urn:p"><mid><child/></mid></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	nodes := evaluateNodeSet(t, doc, "(//. | //@* | //namespace::*)[not(self::mid)]", nil)
+
+	got, err := c14n.NewCanonicalizer(c14n.ExclusiveC14N10).
+		NodeSet(nodes).
+		InclusiveNamespaces([]string{"p"}).
+		CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `<root xmlns:p="urn:p"><child></child></root>`, string(got))
+}
+
+// TestC14N10OmittedElementAttributes verifies that an omitted element still
+// emits its in-node-set attributes as text (libxml2 processes the attribute axis
+// for non-visible elements). Here root is excluded but its attribute @a is in the
+// node set, so it must appear as leading text before the visible child.
+func TestC14N10OmittedElementAttributes(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root a="1"><child>x</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	nodes := evaluateNodeSet(t, doc, "//child | //child/text() | //@a", nil)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, ` a="1"<child>x</child>`, string(got))
+}
+
 // TestRelativeNamespaceColonRejected verifies that a relative namespace URI
 // containing a colon outside a scheme (e.g. "a/b:c") is still rejected. C14N
 // requires an operation failure on relative namespace URIs, and a stray colon
