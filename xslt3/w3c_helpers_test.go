@@ -1661,8 +1661,9 @@ var w3cImplicitSkips = map[string]string{
 	"use-package-108":  "package-scoped namespace alias serialization not implemented",
 	"use-package-108b": "package-scoped namespace alias serialization not implemented",
 
-	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
-	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
+	// error-FODC0002a-ignore is now skipped by the generator via the
+	// ignore_doc_failure dependency (see tools/xslt3gen getDepsSkipReason),
+	// so it no longer needs a name-based skip here.
 
 	// merge: schema-element instance test on merged items
 	"merge-049":   "schema-element() instance test on merged items fails",

@@ -900,6 +900,18 @@ func getDepsSkipReason(deps *xslDependencies) string {
 			if d.Satisfied == "false" {
 				return "test requires assertions disabled; we evaluate assertions"
 			}
+		case "ignore_doc_failure":
+			// XSLT 3.0 makes the handling of a failed document()/fn:doc()
+			// retrieval implementation-defined: a processor may either raise
+			// the dynamic error FODC0002 or recover by returning an empty
+			// sequence. Our processor always raises FODC0002 (secure-by-default
+			// document loading), i.e. it does NOT ignore document failures.
+			// A test with satisfied="true" only applies to processors that
+			// recover silently, so skip it. satisfied="false" matches us and
+			// runs (expects the FODC0002 error).
+			if d.Satisfied == "true" {
+				return "processor raises FODC0002 instead of ignoring document() failures"
+			}
 		}
 	}
 	return ""
