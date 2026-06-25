@@ -4,14 +4,10 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"path/filepath"
-	"slices"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/internal/uripath"
 )
 
 type canonicalizer struct {
@@ -21,7 +17,7 @@ type canonicalizer struct {
 	withComments      bool
 	nodeSet           map[helium.Node]struct{} // nil = whole document
 	inclusivePrefixes map[string]struct{}
-	baseURI           string // document base URI for C14N 1.1 xml:base fixup
+	strictXMLAttrs    bool // strict W3C node-set xml:* handling (default: libxml2)
 	nsStack           *visibleNSStack
 	// nsNodesByElement indexes NamespaceNodeWrapper nodes by their parent element.
 	// Built once during process() when nodeSet is non-nil.
@@ -131,7 +127,16 @@ func checkRelativeNamespaceURI(e *helium.Element, ns *helium.Namespace) error {
 		return nil
 	}
 	uri := ns.URI()
-	if uri != "" && !strings.Contains(uri, ":") {
+	if uri == "" {
+		return nil
+	}
+	// C14N requires an operation failure on a relative namespace URI. A URI is
+	// relative unless it carries a scheme, so parse it and require a non-empty
+	// scheme rather than testing for a stray ":" (which a relative reference such
+	// as "a/b:c" also contains). Mirrors libxml2's xmlC14NCheckForRelativeNamespaces
+	// (xmlParseURI + scheme==NULL).
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Scheme == "" {
 		return fmt.Errorf("c14n: relative namespace URI %q on element %s", uri, e.Name())
 	}
 	return nil
@@ -414,8 +419,10 @@ func (c *canonicalizer) renderNamespacesNodeSet(e *helium.Element) error {
 // renderNSNodesAsText outputs namespace nodes on non-visible elements as text.
 // When a namespace node is in the node set but its parent element is not visible,
 // the namespace declaration is rendered as text content (e.g. " xmlns:foo=\"uri\"").
-// Only namespace nodes whose prefix satisfies include are output; pass nil to
-// output all (non-xml) prefixes.
+// In exclusive mode only prefixes accepted by include are output. In inclusive
+// mode (include == nil) a namespace node already rendered by the nearest visible
+// ancestor is suppressed, matching the inclusive-C14N rule that such a namespace
+// node is ignored.
 func (c *canonicalizer) renderNSNodesAsText(e *helium.Element, include func(string) bool) error {
 	nsNodes := c.nsNodesByElement[e]
 	if len(nsNodes) == 0 {
@@ -427,7 +434,11 @@ func (c *canonicalizer) renderNSNodesAsText(e *helium.Element, include func(stri
 		if nsn.prefix == lexicon.PrefixXML {
 			continue
 		}
-		if include != nil && !include(nsn.prefix) {
+		if include != nil {
+			if !include(nsn.prefix) {
+				continue
+			}
+		} else if c.nsRenderedByAncestor(e, nsn.prefix, nsn.uri) {
 			continue
 		}
 		toOutput = append(toOutput, nsn)
@@ -673,30 +684,30 @@ func (c *canonicalizer) writeNSDecl(prefix, uri string) error {
 func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 	attrs := e.Attributes()
 
-	// Build sort entries
 	entries := make([]attrSortEntry, 0, len(attrs))
 	for _, attr := range attrs {
-		// In node-set mode, skip non-visible attributes
+		// C14N 1.1 handles xml:lang, xml:space and xml:base specially (below), so
+		// keep them out of the ordinary visible-attribute pass.
+		if c.mode == C14N11 && isInheritableXMLAttr(attr) {
+			continue
+		}
 		if c.nodeSet != nil && !c.isVisible(attr) {
 			continue
 		}
-		entry := attrSortEntry{
+		entries = append(entries, attrSortEntry{
 			attr:      attr,
 			localName: attr.LocalName(),
 			nsURI:     attr.URI(),
-		}
-		entries = append(entries, entry)
+		})
 	}
 
-	// Handle xml:* attribute inheritance from hidden ancestors in node-set mode
-	if c.nodeSet != nil && c.mode == C14N10 {
-		c.inheritXMLAttrsFiltered(e, &entries, nil)
-	} else if c.nodeSet != nil && c.mode == C14N11 {
-		// C14N 1.1: only inherit xml:lang and xml:space (not xml:id or xml:base).
-		c.inheritXMLAttrsFiltered(e, &entries, func(ln string) bool {
-			return ln == "lang" || ln == "space"
-		})
-		c.fixupXMLBase(e, &entries)
+	switch {
+	case c.nodeSet != nil && c.mode == C14N10:
+		c.inheritXMLAttrs10(e, &entries)
+	case c.mode == C14N11:
+		c.processSimpleInheritable11(e, &entries, "lang")
+		c.processSimpleInheritable11(e, &entries, "space")
+		c.processXMLBase11(e, &entries)
 	}
 
 	sortAttributes(entries)
@@ -709,34 +720,65 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 	return nil
 }
 
-// inheritXMLAttrsFiltered adds xml:* attributes inherited from ancestors in
-// node-set mode. The accept predicate selects which xml:* local names to
-// inherit; pass nil to inherit all of them (C14N 1.0).
-//
-// The rule: an element E needs to re-render inherited xml:* attributes only
-// when there is a "non-visible gap" — i.e., E's immediate parent element is
-// NOT in the node set. If the parent is visible, its output carries the xml:*
-// attributes through normal XML scoping, so no re-rendering is needed.
-//
-// When there IS a gap, walk ALL ancestors to find the nearest one with each
-// xml:* attribute and inherit from it.
-func (c *canonicalizer) inheritXMLAttrsFiltered(e *helium.Element, entries *[]attrSortEntry, accept func(string) bool) {
-	// Only inherit if there's a non-visible gap
-	if parentNode := e.Parent(); parentNode != nil {
-		if parentElem, ok := helium.AsNode[*helium.Element](parentNode); ok {
-			if c.isVisible(parentElem) {
-				// Parent is visible — no gap, xml:* attrs flow through normally
-				return
-			}
+// isInheritableXMLAttr reports whether attr is one of the xml-namespace
+// attributes that C14N 1.1 processes specially (xml:lang, xml:space, xml:base).
+func isInheritableXMLAttr(attr *helium.Attribute) bool {
+	if attr.URI() != lexicon.NamespaceXML {
+		return false
+	}
+	switch attr.LocalName() {
+	case "lang", "space", xmlBaseLocalName:
+		return true
+	}
+	return false
+}
+
+// xmlAttrOf returns the element's attribute with the given local name in the
+// xml namespace, whether or not it is in the node set.
+func xmlAttrOf(e *helium.Element, localName string) (*helium.Attribute, bool) {
+	for _, attr := range e.Attributes() {
+		if attr.LocalName() == localName && attr.URI() == lexicon.NamespaceXML {
+			return attr, true
 		}
 	}
+	return nil, false
+}
 
-	// Parent is NOT visible (gap exists).
-	// Walk ALL ancestors to find xml:* attrs. Take the nearest value for each.
-	present := make(map[string]bool)
-	for _, entry := range *entries {
-		if entry.nsURI == lexicon.NamespaceXML {
-			present[entry.localName] = true
+// hasGap reports whether the element's parent element is omitted from the node
+// set (so inherited xml:* attributes must be re-rendered on the element). A
+// non-element parent (the document) counts as a gap.
+func (c *canonicalizer) hasGap(e *helium.Element) bool {
+	parent, ok := helium.AsNode[*helium.Element](e.Parent())
+	if !ok {
+		return true
+	}
+	return !c.isVisible(parent)
+}
+
+// inheritXMLAttrs10 imports xml:* attributes from omitted ancestors for C14N 1.0
+// node-set processing. Inheritance happens only across a gap; the nearest
+// ancestor value for each xml:* name is imported unless that name is blocked.
+//
+// libxml2 blocks only on the element's already-rendered (visible) xml:*
+// attributes. The strict W3C reading blocks on the element's entire attribute
+// axis — any xml:* attribute it carries, whether or not it is in the node set.
+func (c *canonicalizer) inheritXMLAttrs10(e *helium.Element, entries *[]attrSortEntry) {
+	if !c.hasGap(e) {
+		return
+	}
+
+	blocked := make(map[string]struct{})
+	if c.strictXMLAttrs {
+		for _, attr := range e.Attributes() {
+			if attr.URI() == lexicon.NamespaceXML {
+				blocked[attr.LocalName()] = struct{}{}
+			}
+		}
+	} else {
+		for _, entry := range *entries {
+			if entry.nsURI == lexicon.NamespaceXML {
+				blocked[entry.localName] = struct{}{}
+			}
 		}
 	}
 
@@ -750,10 +792,7 @@ func (c *canonicalizer) inheritXMLAttrsFiltered(e *helium.Element, entries *[]at
 				continue
 			}
 			ln := attr.LocalName()
-			if accept != nil && !accept(ln) {
-				continue
-			}
-			if present[ln] {
+			if _, ok := blocked[ln]; ok {
 				continue
 			}
 			*entries = append(*entries, attrSortEntry{
@@ -761,272 +800,94 @@ func (c *canonicalizer) inheritXMLAttrsFiltered(e *helium.Element, entries *[]at
 				nsURI:     lexicon.NamespaceXML,
 				localName: ln,
 			})
-			present[ln] = true
+			blocked[ln] = struct{}{}
 		}
 	}
 }
 
-// fixupXMLBase computes the xml:base fixup for C14N 1.1.
-// When there's a non-visible gap, the element's xml:base must be adjusted
-// to account for non-visible ancestors' xml:base contributions.
-func (c *canonicalizer) fixupXMLBase(e *helium.Element, entries *[]attrSortEntry) {
-	if parentNode := e.Parent(); parentNode != nil {
-		if parentElem, ok := helium.AsNode[*helium.Element](parentNode); ok {
-			if c.isVisible(parentElem) {
-				return // Parent visible, no fixup needed
-			}
+// processSimpleInheritable11 handles a C14N 1.1 simple inheritable attribute
+// (xml:lang or xml:space). The element's own value blocks inheritance and is
+// emitted — unless strict mode suppresses an own value that is excluded from the
+// node set. With no own value, the nearest omitted-ancestor value is inherited
+// across a gap.
+func (c *canonicalizer) processSimpleInheritable11(e *helium.Element, entries *[]attrSortEntry, localName string) {
+	if own, ok := xmlAttrOf(e, localName); ok {
+		if !c.strictXMLAttrs || c.isVisible(own) {
+			*entries = append(*entries, attrSortEntry{attr: own, nsURI: lexicon.NamespaceXML, localName: localName})
 		}
+		return // own attribute blocks inheritance regardless of mode
 	}
 
-	// Compute E's effective base URI
-	eBase := c.effectiveBaseURI(e)
-
-	// Find nearest visible ancestor's effective base URI
-	vaBase := ""
 	for n := e.Parent(); n != nil; n = n.Parent() {
-		if anc, ok := helium.AsNode[*helium.Element](n); ok {
-			if c.isVisible(anc) {
-				vaBase = c.effectiveBaseURI(anc)
-				break
-			}
+		anc, ok := helium.AsNode[*helium.Element](n)
+		if !ok {
+			return
+		}
+		if c.isVisible(anc) {
+			return // reached a rendered ancestor: it carries the value normally
+		}
+		if a, ok := xmlAttrOf(anc, localName); ok {
+			*entries = append(*entries, attrSortEntry{attr: a, nsURI: lexicon.NamespaceXML, localName: localName})
+			return
 		}
 	}
-	if vaBase == "" {
-		// No visible ancestor: use document base URI
-		vaBase = c.documentBaseURI()
+}
+
+// processXMLBase11 computes the C14N 1.1 xml:base value, following libxml2's
+// xmlC14NFixupBaseAttr: the in-document xml:base values of the element and its
+// contiguous omitted ancestors are joined lexically (join-URI-References). No
+// external/retrieval base URI participates.
+func (c *canonicalizer) processXMLBase11(e *helium.Element, entries *[]attrSortEntry) {
+	ownAttr, hasOwn := xmlAttrOf(e, xmlBaseLocalName)
+
+	// xml:base values of contiguous omitted ancestors (inner→outer), stopping at
+	// the first rendered ancestor.
+	var innerToOuter []string
+	hiddenHasBase := false
+	for n := e.Parent(); n != nil; n = n.Parent() {
+		anc, ok := helium.AsNode[*helium.Element](n)
+		if !ok {
+			break
+		}
+		if c.isVisible(anc) {
+			break
+		}
+		if a, ok := xmlAttrOf(anc, xmlBaseLocalName); ok {
+			innerToOuter = append(innerToOuter, a.Value())
+			hiddenHasBase = true
+		}
 	}
 
-	if eBase == vaBase {
-		// Remove xml:base from entries if present (same base, no need)
-		c.removeXMLBaseEntry(entries)
+	// Strict mode performs the fixup only when an omitted ancestor actually
+	// carries xml:base; an excluded own xml:base then renders as an ordinary
+	// attribute (if visible) but never seeds a fixup.
+	if c.strictXMLAttrs && !hiddenHasBase {
+		if hasOwn && c.isVisible(ownAttr) {
+			c.setXMLBaseEntry(entries, ownAttr.Value())
+		}
 		return
 	}
 
-	// Compute the relative xml:base value
-	xmlBaseValue := relativizeURI(vaBase, eBase)
-
-	// Replace or add xml:base in entries
-	c.setXMLBaseEntry(entries, xmlBaseValue)
-}
-
-// effectiveBaseURI computes the effective base URI for an element
-// by resolving xml:base attributes from the document root down.
-func (c *canonicalizer) effectiveBaseURI(e *helium.Element) string {
-	// Collect ancestor chain
-	var chain []*helium.Element
-	for n := helium.Node(e); n != nil; n = n.Parent() {
-		if elem, ok := helium.AsNode[*helium.Element](n); ok {
-			chain = append(chain, elem)
-		}
+	// Join chain, outermost→innermost: omitted-ancestor bases then the element's
+	// own base.
+	chain := make([]string, 0, len(innerToOuter)+1)
+	for i := len(innerToOuter) - 1; i >= 0; i-- {
+		chain = append(chain, innerToOuter[i])
+	}
+	if hasOwn && (!c.strictXMLAttrs || c.isVisible(ownAttr)) {
+		chain = append(chain, ownAttr.Value())
 	}
 
-	// Start with document base URI
-	base := c.documentBaseURI()
-
-	// Process from outermost to innermost
-	for _, v := range slices.Backward(chain) {
-		elem := v
-		xmlBase := getXMLBaseAttr(elem)
-		if xmlBase == "" {
-			continue
-		}
-
-		baseURL, err := url.Parse(base)
-		if err != nil {
-			base = xmlBase
-			continue
-		}
-		ref, err := url.Parse(xmlBase)
-		if err != nil {
-			continue
-		}
-		base = baseURL.ResolveReference(ref).String()
+	if len(chain) == 0 {
+		return
 	}
-	return base
-}
-
-// documentBaseURI returns the document's base URI suitable for RFC 3986
-// relative-reference resolution. If the configured base URI is already an
-// absolute URI (it has a scheme and authority, e.g. "http://example.com/..."),
-// it is preserved as-is so that xml:base fixup uses proper URI semantics. Only
-// plain filesystem paths are converted to a file:// URL.
-func (c *canonicalizer) documentBaseURI() string {
-	if c.baseURI == "" {
-		return ""
+	if res := reduceXMLBase(chain); res != "" {
+		c.setXMLBaseEntry(entries, res)
 	}
-	// An absolute URI (one with a scheme, e.g. "http://example.com/...",
-	// "file:/tmp/doc.xml", or "urn:...") must not be rewritten as a filesystem
-	// path. url.Parse treats a single-letter Windows drive prefix (e.g.
-	// "c:\dir") as a scheme, so exclude single-letter schemes to keep treating
-	// drive-letter paths as filesystem paths.
-	if u, err := url.Parse(c.baseURI); err == nil && u.IsAbs() && len(u.Scheme) > 1 {
-		return c.baseURI
-	}
-	// A Windows-absolute base ("D:\dir\doc.xml", "D:/dir/doc.xml", or a UNC path)
-	// is already absolute, so it is converted to a forward-slash "file:" URI
-	// directly — WITHOUT filepath.Abs. This is detected from the string shape
-	// (uripath), so it is handled identically on POSIX and Windows: on a POSIX
-	// host filepath.Abs would misread "D:\..." as a relative path and prepend the
-	// working directory, corrupting the base. On Windows, prepending a bare
-	// "file://" to the native backslash path ("file://D:\dir\doc.xml") yields a
-	// value url.Parse cannot navigate, collapsing the downstream ".." in
-	// relativizeURI into output like "..//x"; WindowsToFileURI rewrites it to the
-	// proper "file:///D:/dir/doc.xml".
-	if uripath.IsWindowsAbsolute(c.baseURI) {
-		return uripath.WindowsToFileURI(c.baseURI)
-	}
-
-	// A POSIX-absolute base is already anchored; normalize separators, remove
-	// dot-segments, and attach the file scheme. A relative base is anchored
-	// against the working directory with filepath.Abs first (POSIX result is a
-	// "/..."-rooted path). SlashClean (not ToSlash) preserves the historical
-	// behavior of the old unconditional filepath.Abs, which collapsed "." / ".."
-	// / "//" in the base; this matters because the base feeds relativizeURI and
-	// the C14N 1.1 xml:base fixup, so a non-canonical base would change canonical
-	// output bytes (which are XML-signature input).
-	abs := c.baseURI
-	if !uripath.IsPOSIXAbsolute(abs) {
-		anchored, err := filepath.Abs(c.baseURI)
-		if err != nil {
-			return c.baseURI
-		}
-		// On Windows filepath.Abs may produce a drive-letter path; route it
-		// through the Windows converter for a correct "file:///C:/..." URI.
-		if uripath.IsWindowsAbsolute(anchored) {
-			return uripath.WindowsToFileURI(anchored)
-		}
-		abs = anchored
-	}
-	return "file://" + uripath.SlashClean(abs)
 }
 
 // xmlBaseLocalName is the local name of the xml:base attribute.
 const xmlBaseLocalName = "base"
-
-// getXMLBaseAttr returns the xml:base attribute value of an element, or "".
-func getXMLBaseAttr(e *helium.Element) string {
-	for _, attr := range e.Attributes() {
-		if attr.LocalName() == xmlBaseLocalName && attr.URI() == lexicon.NamespaceXML {
-			return attr.Value()
-		}
-	}
-	return ""
-}
-
-// relativizeURI computes a relative URI from base to target.
-// If the URIs have different schemes or hosts, returns the absolute target.
-func relativizeURI(base, target string) string {
-	baseURL, err := url.Parse(base)
-	if err != nil {
-		return target
-	}
-	targetURL, err := url.Parse(target)
-	if err != nil {
-		return target
-	}
-
-	// Different scheme or authority: return absolute
-	if baseURL.Scheme != targetURL.Scheme || baseURL.Host != targetURL.Host {
-		return target
-	}
-
-	// Opaque / non-hierarchical URIs (e.g. "urn:target") carry their data in
-	// Opaque rather than Path, so there is no path to relativize. Path-based
-	// relativization would yield a meaningless (and possibly empty) result, so
-	// return the target absolutely instead.
-	if baseURL.Opaque != "" || targetURL.Opaque != "" {
-		return target
-	}
-
-	basePath := baseURL.Path
-	targetPath := targetURL.Path
-
-	// Find common directory prefix
-	baseDir := basePath[:strings.LastIndex(basePath, "/")+1]
-
-	// Find longest common directory prefix
-	common := ""
-	bi, ti := 0, 0
-	for bi < len(baseDir) && ti < len(targetPath) {
-		if baseDir[bi] != targetPath[ti] {
-			break
-		}
-		if baseDir[bi] == '/' {
-			common = baseDir[:bi+1]
-		}
-		bi++
-		ti++
-	}
-	// Count remaining directories in base after common prefix
-	remaining := baseDir[len(common):]
-	ups := 0
-	for _, ch := range remaining {
-		if ch == '/' {
-			ups++
-		}
-	}
-
-	// Build the path-relative part and the query/fragment suffix separately so
-	// the relative-reference candidates below can be assembled and tested
-	// independently.
-	pathRelative := strings.Repeat("../", ups) + targetPath[len(common):]
-
-	suffix := ""
-	if targetURL.RawQuery != "" || targetURL.ForceQuery {
-		suffix += "?" + targetURL.RawQuery
-	}
-	if targetURL.Fragment != "" {
-		suffix += "#" + targetURL.EscapedFragment()
-	}
-
-	// roundTrips reports whether resolving the candidate reference against the
-	// base reproduces the exact target. A relative reference is only correct if
-	// it round-trips; otherwise it would silently change the URI.
-	roundTrips := func(ref string) bool {
-		candidate, err := url.Parse(ref)
-		if err != nil {
-			return false
-		}
-		return baseURL.ResolveReference(candidate).String() == targetURL.String()
-	}
-
-	// Primary candidate: the relativized path plus the carried query/fragment.
-	candidate := pathRelative + suffix
-	if roundTrips(candidate) {
-		return candidate
-	}
-
-	// When the path part is empty the target lives in the base document's own
-	// directory. The bare suffix (e.g. "?q=1#frag") resolves against the base
-	// *document* (re-using its filename), so it points at the base document with
-	// the suffix attached rather than the directory. If that does not round-trip
-	// to the target, a leading "." selects the directory itself: "./?q=1#frag"
-	// (or ".?q=1#frag" when no path remains) resolves to the directory plus the
-	// suffix, which is the correct minimal relative reference for a same-directory
-	// target carrying only a query/fragment.
-	if pathRelative == "" {
-		dotCandidate := "." + suffix
-		if roundTrips(dotCandidate) {
-			return dotCandidate
-		}
-	}
-
-	// No relative candidate round-trips; emit the absolute target so the
-	// canonical xml:base resolves to the exact target.
-	return targetURL.String()
-}
-
-// removeXMLBaseEntry removes any xml:base entry from the attr list.
-func (c *canonicalizer) removeXMLBaseEntry(entries *[]attrSortEntry) {
-	result := (*entries)[:0]
-	for _, entry := range *entries {
-		if entry.nsURI == lexicon.NamespaceXML && entry.localName == xmlBaseLocalName {
-			continue
-		}
-		result = append(result, entry)
-	}
-	*entries = result
-}
 
 // setXMLBaseEntry sets or adds xml:base in the attr list with the given value.
 func (c *canonicalizer) setXMLBaseEntry(entries *[]attrSortEntry, value string) {
