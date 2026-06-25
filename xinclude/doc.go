@@ -12,9 +12,10 @@
 // # Security
 //
 // Included documents are parsed with their own inner parser. By default that
-// parser inherits helium's safe element-depth cap; use [Processor.MaxDepth] to
-// raise it for a legitimately deep included document, or to tighten it for
-// untrusted input. The default resolver opens any OS path
+// parser inherits helium's safe limits; use [Processor.MaxDepth],
+// [Processor.MaxNameLength], [Processor.MaxEntityAmplification], and
+// [Processor.MaxContentModelDepth] to raise them for legitimately large
+// included documents, or to tighten them for untrusted input. The default resolver opens any OS path
 // ([NewFSResolver](nil)); when processing untrusted input, supply a confined
 // resolver via [Processor.Resolver] / [NewFSResolver] (e.g. backed by
 // [os.Root.FS]).

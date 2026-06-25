@@ -50,6 +50,21 @@ func TestMaxNameLength(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, d)
 	})
+
+	t.Run("limit applies inside entity expansion", func(t *testing.T) {
+		t.Parallel()
+		// The entity replacement text contains an element whose name (8 bytes)
+		// exceeds the limit. The cap must be enforced during entity expansion,
+		// not just on the top-level document (the nested parser inherits it).
+		src := `<?xml version="1.0"?>` + "\n" +
+			`<!DOCTYPE r [<!ENTITY e "<longname/>">]>` + "\n" +
+			`<r>&e;</r>`
+		_, err := helium.NewParser().
+			SubstituteEntities(true).
+			MaxNameLength(4).
+			Parse(t.Context(), []byte(src))
+		require.Error(t, err, "MaxNameLength must be enforced inside entity expansion")
+	})
 }
 
 func TestMaxContentModelDepth(t *testing.T) {

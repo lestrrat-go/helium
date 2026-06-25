@@ -208,6 +208,34 @@ func TestXIncludeMaxDepth(t *testing.T) {
 	})
 }
 
+func TestXIncludeMaxNameLength(t *testing.T) {
+	t.Parallel()
+
+	const main = `<root xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="inc.xml"/></root>`
+	// The included document's element name "longname" is 8 bytes.
+	incFS := fstest.MapFS{"inc.xml": &fstest.MapFile{Data: []byte(`<longname/>`)}}
+
+	t.Run("default accepts the included name", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, main)
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(incFS)).
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("MaxNameLength(4) rejects the included name", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, main)
+		_, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(incFS)).
+			MaxNameLength(4).
+			Process(t.Context(), doc)
+		require.Error(t, err, "name-length limit must apply to included documents")
+	})
+}
+
 func TestXIncludeSubdirRelativeBase(t *testing.T) {
 	t.Parallel()
 

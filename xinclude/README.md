@@ -164,6 +164,7 @@ source: [examples/xinclude_process_example_test.go](https://github.com/lestrrat-
 | `BaseURI(string)` | Base URI for resolving relative hrefs. |
 | `MaxIncludeSize(int)` | Cap bytes read from a single included resource (default 10 MiB). |
 | `MaxDepth(int)` | Cap element nesting depth when parsing included documents (`0` = unlimited; unset → the inner parser's default). |
+| `MaxNameLength(int)` / `MaxEntityAmplification(int)` / `MaxContentModelDepth(int)` | The granular parser limit knobs (see `helium.Parser`) applied to included-document parsing (`0` = parser default, negative = unlimited). |
 
 ## Security
 

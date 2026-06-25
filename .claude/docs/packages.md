@@ -207,7 +207,7 @@ HTML 4.01 parser producing helium DOM or SAX events.
 XInclude 1.0 processing with recursive inclusion and fallback.
 
 - **NewProcessor() → Processor** — create fluent builder
-- Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`, `MaxIncludeSize(int)`, `MaxDepth(int)` (element-depth cap for the inner parser that parses included documents; 0 = unlimited; unset → inner parser default), `ErrorHandler(helium.ErrorHandler)`
+- Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`, `MaxIncludeSize(int)`, `MaxDepth(int)` (element-depth cap for the inner parser that parses included documents; 0 = unlimited; unset → inner parser default), `MaxNameLength(int)` / `MaxEntityAmplification(int)` / `MaxContentModelDepth(int)` (the granular parser limit knobs applied to included-document parsing; 0 = parser default, negative = unlimited), `ErrorHandler(helium.ErrorHandler)`
 - Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
 - `Resolver` interface — custom resource loader; receives the href already resolved against the effective base (base arg is informational only — do NOT re-resolve, or the base directory is double-applied)
 - `MaxIncludeSize` — default per-include byte cap (10 MiB), used when `Processor.MaxIncludeSize` is unset or ≤ 0; over-cap reads fail with `ErrIncludeTooLarge`

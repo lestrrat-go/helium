@@ -64,6 +64,9 @@ type processorCfg struct {
 	maxIncludeSize  int
 	maxElemDepth    int
 	maxElemDepthSet bool
+	maxNameLength   int
+	maxEntityAmpl   int
+	maxCMDepth      int
 }
 
 // Processor configures XInclude processing. It is a value-style wrapper:
@@ -191,6 +194,34 @@ func (p Processor) MaxDepth(n int) Processor {
 	return p
 }
 
+// MaxNameLength sets the maximum element/attribute/NCName byte length for
+// parsing included documents (see [helium.Parser.MaxNameLength]). Zero (the
+// default) uses the parser default; a negative value removes the limit.
+func (p Processor) MaxNameLength(n int) Processor {
+	p = p.clone()
+	p.cfg.maxNameLength = n
+	return p
+}
+
+// MaxEntityAmplification sets the maximum entity-expansion amplification factor
+// for parsing included documents (see [helium.Parser.MaxEntityAmplification]).
+// Zero (the default) uses the parser default; a negative value disables the
+// ratio check (the absolute ceiling still applies).
+func (p Processor) MaxEntityAmplification(n int) Processor {
+	p = p.clone()
+	p.cfg.maxEntityAmpl = n
+	return p
+}
+
+// MaxContentModelDepth sets the maximum DTD content-model nesting depth for
+// parsing included documents (see [helium.Parser.MaxContentModelDepth]). Zero
+// (the default) uses the parser default; a negative value removes the limit.
+func (p Processor) MaxContentModelDepth(n int) Processor {
+	p = p.clone()
+	p.cfg.maxCMDepth = n
+	return p
+}
+
 // ErrorHandler sets a handler for non-fatal warnings such as
 // entity definition mismatches during XInclude entity merging.
 // Errors delivered to the handler have ErrorLevelWarning.
@@ -222,6 +253,9 @@ type processor struct {
 	maxIncludeSize  int
 	maxElemDepth    int
 	maxElemDepthSet bool
+	maxNameLength   int
+	maxEntityAmpl   int
+	maxCMDepth      int
 	depth           int
 	count           int
 }
@@ -259,6 +293,9 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		maxIncludeSize:  cfg.maxIncludeSize,
 		maxElemDepth:    cfg.maxElemDepth,
 		maxElemDepthSet: cfg.maxElemDepthSet,
+		maxNameLength:   cfg.maxNameLength,
+		maxEntityAmpl:   cfg.maxEntityAmpl,
+		maxCMDepth:      cfg.maxCMDepth,
 		expanding:       make(map[string]bool),
 		docCache:        make(map[string]docCacheEntry),
 		txtCache:        make(map[string]txtCacheEntry),
@@ -729,6 +766,13 @@ func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, s
 	if p.maxElemDepthSet {
 		parser = parser.MaxDepth(p.maxElemDepth)
 	}
+	// Apply the granular limit knobs. Their zero value already means "parser
+	// default" (matching the helium.Parser limit semantics), so they can be
+	// applied unconditionally without a separate "set" flag.
+	parser = parser.
+		MaxNameLength(p.maxNameLength).
+		MaxEntityAmplification(p.maxEntityAmpl).
+		MaxContentModelDepth(p.maxCMDepth)
 	// Thread the resolver's filesystem into the inner parser so external
 	// entities and external DTDs declared inside the included document
 	// resolve through the SAME sandbox as XInclude itself, not the parser's

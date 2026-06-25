@@ -54,6 +54,10 @@ type config struct {
 	// inner parser.
 	maxDepth int
 
+	// huge records that --huge was given, so the same all-limits-lifted policy
+	// is propagated to the XInclude processor's inner parser.
+	huge bool
+
 	noout      bool
 	format     bool
 	outputFile string
@@ -316,9 +320,11 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		case "--huge":
 			// --huge removes internal arbitrary parser limits: relax the
 			// name-length, entity-amplification, and content-model-depth guards,
-			// and lift the default element-depth cap (propagated to the XInclude
-			// processor via cfg.maxDepth) so deeply nested input is accepted.
+			// and lift the default element-depth cap. The same policy is
+			// propagated to the XInclude processor (cfg.maxDepth + cfg.huge) so
+			// included documents are not still bound by the defaults.
 			cfg.maxDepth = 0
+			cfg.huge = true
 			cfg.parser = cfg.parser.
 				MaxNameLength(-1).
 				MaxEntityAmplification(-1).
@@ -679,6 +685,12 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 		if cfg.maxDepth >= 0 {
 			xiProc = xiProc.MaxDepth(cfg.maxDepth)
+		}
+		if cfg.huge {
+			xiProc = xiProc.
+				MaxNameLength(-1).
+				MaxEntityAmplification(-1).
+				MaxContentModelDepth(-1)
 		}
 		if !input.stdin {
 			xiProc = xiProc.BaseURI(input.name)
