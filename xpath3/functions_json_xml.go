@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 	"unicode/utf8"
 
@@ -96,12 +97,8 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 // merge cannot collide with annotations for any pre-existing input node.
 func installJSONToXMLAnnotations(ec *evalContext, annotations map[helium.Node]string) {
 	merged := make(map[helium.Node]string, len(ec.typeAnnotations)+len(annotations))
-	for n, ann := range ec.typeAnnotations {
-		merged[n] = ann
-	}
-	for n, ann := range annotations {
-		merged[n] = ann
-	}
+	maps.Copy(merged, ec.typeAnnotations)
+	maps.Copy(merged, annotations)
 	ec.typeAnnotations = merged
 }
 
