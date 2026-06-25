@@ -651,37 +651,9 @@ func TestEntityAmplification(t *testing.T) {
 		require.NotNil(t, doc)
 	})
 
-	t.Run("MaxEntityAmplification(-1) still capped by absolute ceiling", func(t *testing.T) {
-		// Intentionally NOT t.Parallel: this subtest drives expansion up
-		// to entityHardCeiling (1 GiB). Running it alongside the parallel
-		// subtests above amplified peak memory under loaded CI runners.
-		// The ceiling does eventually trip, but the parser still
-		// materializes nontrivial intermediate state, so we serialize it.
-		// A bigger billion-laughs that would expand to many GB even with
-		// the ratio check disabled. The absolute ceiling (entityHardCeiling
-		// in parserctx.go) must still trip and abort the parse.
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE lolz [
-  <!ENTITY lol "lol">
-  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
-  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
-  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
-  <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
-  <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
-  <!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
-  <!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
-  <!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
-]>
-<root>&lol9;</root>`
-
-		p := helium.NewParser().SubstituteEntities(true).MaxEntityAmplification(-1)
-		_, err := p.Parse(t.Context(), []byte(xml))
-		require.Error(t, err, "absolute ceiling must trip even with the ratio check disabled")
-		require.Contains(t, err.Error(), "maximum entity expansion size",
-			"error must explain the ceiling, got: %v", err)
-		require.Regexp(t, `\(\d+ > \d+\)`, err.Error(),
-			"error must include observed and configured sizes for diagnosis, got: %v", err)
-	})
+	// The absolute hard-ceiling behavior (it trips even with the ratio check
+	// disabled) is covered by TestEntityHardCeiling in the internal test, which
+	// lowers entityHardCeiling so it need not actually expand toward 1 GB.
 }
 
 // TestParseFileLargeEntityNotFalselyAmplified guards against a regression where

@@ -457,7 +457,7 @@ Generic bitset operations for bitmask types.
 Parser option bitset type and constants. Bit positions match libxml2's XML_PARSE_* constants.
 
 - **Option** — int-based bitset type for parser flags
-- Constants: `Recover`, `NoEnt`, `DTDLoad`, `DTDAttr`, `DTDValid`, `NoError`, `NoWarning`, `Pedantic`, `NoBlanks`, `XInclude`, `NoNet`, `NoDict`, `NsClean`, `NoCDATA`, `NoXIncNode`, `Compact`, `NoBaseFix`, `Huge`, `IgnoreEnc`, `BigLines`, `NoXXE`, `NoUnzip`, `NoSysCatalog`, `CatalogPI`, `SkipIDs`, `LenientXMLDecl`
+- Constants: `Recover`, `NoEnt`, `DTDLoad`, `DTDAttr`, `DTDValid`, `NoError`, `NoWarning`, `Pedantic`, `NoBlanks`, `XInclude`, `NoNet`, `NoDict`, `NsClean`, `NoCDATA`, `NoXIncNode`, `Compact`, `NoBaseFix`, `IgnoreEnc`, `BigLines`, `NoXXE`, `NoUnzip`, `NoSysCatalog`, `CatalogPI`, `SkipIDs`, `LenientXMLDecl` (the `Huge`/`XML_PARSE_HUGE` bit is retired — replaced by the `Parser` per-limit knobs `MaxNameLength`/`MaxEntityAmplification`/`MaxContentModelDepth`)
 - Methods: `Set(Option)`, `Clear(Option)`, `IsSet(Option) → bool`
 - Files: `options.go`
 - Imports: internal/bitset

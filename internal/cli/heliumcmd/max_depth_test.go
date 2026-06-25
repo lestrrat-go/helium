@@ -122,3 +122,18 @@ func TestXSDValidateMaxDepth(t *testing.T) {
 		require.Equal(t, heliumcmd.ExitErr, code)
 	})
 }
+
+// TestLintHugeLiftsDepthCap verifies that --huge removes the default element
+// depth cap (along with the other internal limits), so deeply nested input
+// that the default would reject parses successfully.
+func TestLintHugeLiftsDepthCap(t *testing.T) {
+	deep := deepXML(300)
+
+	_, _, code := executeLintStdin(t, deep, "--noout")
+	require.NotEqual(t, heliumcmd.ExitOK, code,
+		"default 256 depth cap must reject 300-deep input")
+
+	_, errOut, code := executeLintStdin(t, deep, "--noout", "--huge")
+	require.Equal(t, heliumcmd.ExitOK, code,
+		"--huge must lift the depth cap; stderr: %s", errOut)
+}

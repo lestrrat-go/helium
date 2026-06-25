@@ -28,6 +28,17 @@ func TestMaxNameLength(t *testing.T) {
 		require.ErrorContains(t, err, "name is too long")
 	})
 
+	t.Run("limit is in bytes, not runes", func(t *testing.T) {
+		t.Parallel()
+		// "a界界" is 3 runes but 7 bytes (each 界 is 3 UTF-8 bytes). With a
+		// byte limit of 4 it must be rejected; a rune-based check (the bug this
+		// guards) would wrongly accept it (3 <= 4). The over-long name is
+		// surfaced as a name-parse failure.
+		mb := "<a界界></a界界>"
+		_, err := helium.NewParser().MaxNameLength(4).Parse(t.Context(), []byte(mb))
+		require.Error(t, err, "a 7-byte name must be rejected at a 4-byte limit")
+	})
+
 	t.Run("negative limit removes the cap", func(t *testing.T) {
 		t.Parallel()
 		// A name far past the 50000-char default still parses when the limit

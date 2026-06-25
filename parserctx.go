@@ -47,14 +47,6 @@ var errInvalidUTF8Name = errors.New("invalid UTF-8 sequence in name")
 const (
 	entityAllowedExpansion int64 = 1_000_000 // 1 MB baseline before ratio check
 	entityFixedCost        int64 = 20        // fixed byte cost per entity reference
-	// entityHardCeiling caps total entity expansion even when the ratio
-	// check is disabled (maxAmpl=0 via [Parser.MaxEntityAmplification](-1)).
-	// Without it, disabling the ratio check would permit unbounded
-	// amplification — a single document could expand to many GB of resident
-	// memory. 1 GB is permissive enough for any realistic XML workload but
-	// blocks the unbounded billion-laughs path that a hostile document could
-	// otherwise exploit.
-	entityHardCeiling int64 = 1_000_000_000 // 1 GB absolute cap, always enforced
 	// externalEntityMaxBytes caps the number of bytes read from a single
 	// external parsed entity. Without it, a resolver returning an unbounded
 	// source (e.g. SYSTEM "/dev/zero") would be read via io.ReadAll and exhaust
@@ -62,6 +54,16 @@ const (
 	// blocking the unbounded-read denial-of-service path.
 	externalEntityMaxBytes int64 = 10 * 1024 * 1024 // 10 MiB
 )
+
+// entityHardCeiling caps total entity expansion even when the ratio check is
+// disabled (maxAmpl=0 via [Parser.MaxEntityAmplification](-1)). Without it,
+// disabling the ratio check would permit unbounded amplification — a single
+// document could expand to many GB of resident memory. 1 GB is permissive
+// enough for any realistic XML workload but blocks the unbounded billion-laughs
+// path that a hostile document could otherwise exploit. It is a package var
+// (not a const) only so tests can lower it to verify the ceiling without
+// actually expanding toward 1 GB; production never reassigns it.
+var entityHardCeiling int64 = 1_000_000_000 // 1 GB absolute cap, always enforced
 
 const (
 	notInSubset = iota

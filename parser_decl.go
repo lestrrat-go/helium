@@ -557,7 +557,10 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 			err = pctx.error(ctx, fmt.Errorf("invalid name start char %q (U+%04X)", c, c))
 			return
 		}
-		if pctx.nameTooLong(nRunes) {
+		// The limit is in bytes (see [Parser.MaxNameLength]); use the byte
+		// length, not the rune count, so a name with multibyte runes cannot
+		// exceed the byte cap and still pass.
+		if pctx.nameTooLong(len(nameBytes)) {
 			err = pctx.error(ctx, ErrNameTooLong)
 			return
 		}
