@@ -189,7 +189,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
 
-	doc, err := helium.NewParser().Parse(ctx, data)
+	doc, err := c.parse(ctx, data)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to parse include %q: %w", location, err)
 	}
@@ -292,7 +292,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
 
-	doc, err := helium.NewParser().Parse(ctx, data)
+	doc, err := c.parse(ctx, data)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to parse redefine %q: %w", location, err)
 	}
@@ -631,7 +631,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}
 
-	doc, err := helium.NewParser().Parse(ctx, data)
+	doc, err := c.parse(ctx, data)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to parse import %q: %w", location, err)
 	}
@@ -678,6 +678,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		},
 		baseDir:                  schemaBaseDir(path),
 		fsys:                     c.fsys,
+		parser:                   c.parser,
 		typeRefs:                 make(map[*TypeDef]QName),
 		elemRefs:                 make(map[*ElementDecl]QName),
 		elemRefSources:           make(map[*ElementDecl]elemRefSource),

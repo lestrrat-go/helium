@@ -7,13 +7,22 @@ import (
 	"github.com/lestrrat-go/helium"
 )
 
-// secureXMLParser returns a parser hardened against XML External Entity (XXE)
+// secureXMLParser returns the base parser for an xslt3-internal parse of
+// externally-sourced XML (resolver/HTTP-fetched stylesheet modules, schema
+// documents, and runtime documents).
+//
+// When injected is non-nil the caller-supplied parser (Compiler.Parser /
+// Invocation.Parser) is used as the base, taking its parse policy as-is. When
+// injected is nil the base is hardened against XML External Entity (XXE)
 // attacks: external DTD/entity loading is blocked and network access is
-// forbidden. This is the default for every xslt3-internal parse of
-// externally-sourced XML (resolver/HTTP-fetched stylesheet modules and runtime
-// documents).
-func secureXMLParser(baseURI string) helium.Parser {
-	p := helium.NewParser().BlockXXE(true).LoadExternalDTD(false).AllowNetwork(false)
+// forbidden. The BaseURI is applied in either case.
+func secureXMLParser(injected *helium.Parser, baseURI string) helium.Parser {
+	var p helium.Parser
+	if injected != nil {
+		p = *injected
+	} else {
+		p = helium.NewParser().BlockXXE(true).LoadExternalDTD(false).AllowNetwork(false)
+	}
 	if baseURI != "" {
 		p = p.BaseURI(baseURI)
 	}
@@ -41,13 +50,26 @@ type externalEntityLoader func(ctx context.Context, uri string) ([]byte, error)
 // are re-asserted AFTER extraOpts so an extraOpts hook cannot accidentally
 // re-enable external loading — only internal-subset behaviors (e.g.
 // DefaultDTDAttributes) survive.
-func parseExternalXML(ctx context.Context, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader, extraOpts func(helium.Parser) helium.Parser) (*helium.Document, error) {
+//
+// When injected is non-nil the caller-supplied parser (Compiler.Parser /
+// Invocation.Parser) is the base in BOTH branches; the functional opts below
+// (and the permissive-branch external-loading opts) are still forced, but the
+// secure branch does NOT re-assert the XXE guards on top — the injected policy
+// wins. When injected is nil the historical hardened default is the base and the
+// guards are re-asserted exactly as before.
+func parseExternalXML(ctx context.Context, injected *helium.Parser, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader, extraOpts func(helium.Parser) helium.Parser) (*helium.Document, error) {
+	base := func() helium.Parser {
+		if injected != nil {
+			return *injected
+		}
+		return helium.NewParser()
+	}
 	var p helium.Parser
 	if allowExternalEntities {
 		// NewParser now blocks external loading by default; this branch is the
 		// explicit opt-in, so lift the block. Loads are still confined to the
 		// configured loader (or the permissive fallback) selected below.
-		p = helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true)
+		p = base().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true)
 		if entityLoader != nil {
 			// Route opted-in external DTD/entity resolution through the
 			// configured resolver-backed loader instead of the parser default.
@@ -67,14 +89,22 @@ func parseExternalXML(ctx context.Context, data []byte, baseURI string, allowExt
 		// external entity, and network access. Without SubstituteEntities a
 		// resolver-loaded doc() with an internal entity ref would surface an
 		// EntityRefNode instead of substituted text.
-		p = helium.NewParser().SubstituteEntities(true).BlockXXE(true).LoadExternalDTD(false).AllowNetwork(false)
+		p = base().SubstituteEntities(true)
+		if injected == nil {
+			p = p.BlockXXE(true).LoadExternalDTD(false).AllowNetwork(false)
+		}
 		if extraOpts != nil {
 			p = extraOpts(p)
 		}
+		// Force internal-entity substitution regardless of base/extraOpts.
+		p = p.SubstituteEntities(true)
 		// Re-assert the XXE guards so extraOpts cannot weaken the secure posture;
 		// only internal-subset behaviors layered by extraOpts (e.g.
-		// DefaultDTDAttributes, internal-entity substitution) are kept.
-		p = p.SubstituteEntities(true).BlockXXE(true).AllowNetwork(false).LoadExternalDTD(false)
+		// DefaultDTDAttributes, internal-entity substitution) are kept. When a
+		// parser is injected its policy wins, so the guards are NOT re-asserted.
+		if injected == nil {
+			p = p.BlockXXE(true).AllowNetwork(false).LoadExternalDTD(false)
+		}
 	}
 	if baseURI != "" {
 		p = p.BaseURI(baseURI)
@@ -85,8 +115,8 @@ func parseExternalXML(ctx context.Context, data []byte, baseURI string, allowExt
 // parseStylesheetDocument parses an externally-sourced stylesheet module
 // (xsl:import / xsl:include / xsl:use-package / fn:transform stylesheets).
 // XXE is blocked unless allowExternalEntities opts into the legacy behavior.
-func parseStylesheetDocument(ctx context.Context, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader) (*helium.Document, error) {
-	return parseExternalXML(ctx, data, baseURI, allowExternalEntities, entityLoader, nil)
+func parseStylesheetDocument(ctx context.Context, injected *helium.Parser, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader) (*helium.Document, error) {
+	return parseExternalXML(ctx, injected, data, baseURI, allowExternalEntities, entityLoader, nil)
 }
 
 // CompileStylesheet compiles a parsed XSLT stylesheet document.

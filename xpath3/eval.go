@@ -71,6 +71,19 @@ type evalContext struct {
 	schemaDeclarations     SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
 	allowXML11Chars        bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
 	traceWriter            io.Writer              // destination for fn:trace output (nil = os.Stderr)
+	parser                 *helium.Parser         // injected parser for fn:parse-xml, fn:parse-xml-fragment, fn:doc (nil = default helium.NewParser)
+}
+
+// xmlParser returns the injected helium.Parser when one is configured,
+// otherwise a default helium.NewParser(). The default is safe-by-default
+// (XXE blocked, network disabled). Used by fn:parse-xml,
+// fn:parse-xml-fragment, and fn:doc.
+func (ec *evalContext) xmlParser() helium.Parser {
+	p := helium.NewParser()
+	if ec != nil && ec.parser != nil {
+		p = *ec.parser
+	}
+	return p
 }
 
 type variableScope struct {

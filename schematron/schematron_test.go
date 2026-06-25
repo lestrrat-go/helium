@@ -1205,3 +1205,39 @@ func TestValidateNilSchema(t *testing.T) {
 		require.ErrorIs(t, verr, schematron.ErrNoSchema)
 	})
 }
+
+// TestCompilerParserInjection verifies that a parser injected via
+// Compiler.Parser governs the internal parse of the schema document: a parser
+// configured with a tiny MaxDepth rejects a deeply nested schema, while the
+// same schema compiles when no parser policy is injected.
+func TestCompilerParserInjection(t *testing.T) {
+	t.Parallel()
+
+	// schema(1) > pattern(2) > rule(3) > assert(4)
+	const schemaSrc = `<schema xmlns="http://www.ascc.net/xml/schematron">
+  <pattern name="test">
+    <rule context="AAA">
+      <assert test="BBB">BBB element is missing.</assert>
+    </rule>
+  </pattern>
+</schema>`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schema.sch")
+	require.NoError(t, os.WriteFile(path, []byte(schemaSrc), 0o600))
+
+	t.Run("injected parser policy enforced", func(t *testing.T) {
+		t.Parallel()
+		_, err := schematron.NewCompiler().
+			Parser(helium.NewParser().MaxDepth(2)).
+			CompileFile(t.Context(), path)
+		require.Error(t, err, "schema nested deeper than the injected MaxDepth must fail to parse")
+	})
+
+	t.Run("control without injection", func(t *testing.T) {
+		t.Parallel()
+		schema, err := schematron.NewCompiler().CompileFile(t.Context(), path)
+		require.NoError(t, err)
+		require.NotNil(t, schema)
+	})
+}

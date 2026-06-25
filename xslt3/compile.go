@@ -34,6 +34,7 @@ type compiler struct {
 	minImportPrec             int                 // importPrec value before processing this module's xsl:import elements
 	importStack               map[string]struct{} // circular import detection
 	allowExternalEntities     bool                // opt-in: legacy permissive parse of external stylesheet modules
+	parser                    *helium.Parser      // injected base parser governing parse policy (nil = hardened default)
 	baseURI                   string
 	moduleKey                 string
 	resolver                  URIResolver
@@ -95,6 +96,7 @@ type xsltCompilerCfg struct {
 	importSchemas         []*xsd.Schema
 	maxResourceBytes      int64
 	allowExternalEntities bool
+	parser                *helium.Parser
 }
 
 // NewCompiler creates a new Compiler with default settings.
@@ -206,6 +208,30 @@ func (c Compiler) AllowExternalEntities(v bool) Compiler {
 	return c
 }
 
+// Parser sets the [helium.Parser] used as the base for every XML parse the
+// XSLT engine performs at compile time — stylesheet modules (xsl:import /
+// xsl:include / xsl:use-package), xsl:import-schema documents, and serialization
+// parameter documents — and is inherited by the transformation as the base for
+// runtime source / fn:doc / document() parses unless overridden via
+// [Invocation.Parser]. The injected parser governs parse policy: resource
+// limits and XXE / filesystem / network controls.
+//
+// The injected parser is also forwarded into the xsd compilers (for
+// xsl:import-schema) and the xpath3 evaluators (for fn:doc / fn:parse-xml) that
+// the engine builds internally, so one configured parser uniformly governs all
+// of XSLT's XML parsing.
+//
+// When unset, a hardened default is used (external DTD / entity loading blocked
+// and network access forbidden); the existing AllowExternalEntities opt-in is
+// unaffected. When a parser is injected, its policy is taken as-is and the
+// default XXE guards are NOT re-asserted on top of it — the injected policy
+// wins.
+func (c Compiler) Parser(p helium.Parser) Compiler {
+	c = c.clone()
+	c.cfg.parser = &p
+	return c
+}
+
 // ClearStaticParameters removes all static parameter bindings.
 func (c Compiler) ClearStaticParameters() Compiler {
 	c = c.clone()
@@ -245,6 +271,7 @@ func (c Compiler) toCompileConfig() *compileConfig {
 		importSchemas:         c.cfg.importSchemas,
 		maxResourceBytes:      c.cfg.maxResourceBytes,
 		allowExternalEntities: c.cfg.allowExternalEntities,
+		parser:                c.cfg.parser,
 	}
 	if c.cfg.staticParams != nil {
 		cfg.staticParams = maps.Clone(c.cfg.staticParams.toMap())
@@ -944,6 +971,9 @@ func (c *compiler) staticEvaluator(_ context.Context) xpath3.Evaluator {
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Functions(fns, nil)
+	if c.parser != nil {
+		eval = eval.Parser(*c.parser)
+	}
 	ns := make(map[string]string, len(c.nsBindings)+1)
 	maps.Copy(ns, c.nsBindings)
 	if c.xpathDefaultNS != "" {
@@ -992,7 +1022,7 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 	// newNestedCompiler) and the transformConfig (consulted by runtime reads)
 	// so Compiler.MaxResourceBytes governs static-variable transform() loads.
 	ec := &execContext{
-		stylesheet:          &Stylesheet{baseURI: c.baseURI, uriResolver: c.resolver, maxResourceBytes: c.maxResourceBytes, allowExternalEntities: c.allowExternalEntities},
+		stylesheet:          &Stylesheet{baseURI: c.baseURI, uriResolver: c.resolver, maxResourceBytes: c.maxResourceBytes, allowExternalEntities: c.allowExternalEntities, parser: c.parser},
 		resultDoc:           helium.NewDefaultDocument(),
 		globalVars:          make(map[string]xpath3.Sequence),
 		outputStack:         []*outputFrame{{doc: helium.NewDefaultDocument(), current: helium.NewDefaultDocument()}},
@@ -1002,7 +1032,7 @@ func (c *compiler) staticFnTransform(ctx context.Context, args []xpath3.Sequence
 		accumulatorState:    make(map[string]xpath3.Sequence),
 		resultDocuments:     make(map[string]*helium.Document),
 		usedResultURIs:      make(map[string]struct{}),
-		transformConfig:     &transformConfig{maxResourceBytes: c.maxResourceBytes, allowExternalEntities: c.allowExternalEntities},
+		transformConfig:     &transformConfig{maxResourceBytes: c.maxResourceBytes, allowExternalEntities: c.allowExternalEntities, parser: c.parser},
 	}
 	ec.setCurrentTemplate(nil)
 	return ec.fnTransform(ctx, args)
@@ -1020,6 +1050,9 @@ func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 	}
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Functions(fns, nil)
+	if c.parser != nil {
+		eval = eval.Parser(*c.parser)
+	}
 	if len(c.nsBindings) > 0 || c.xpathDefaultNS != "" {
 		ns := make(map[string]string, len(c.nsBindings)+1)
 		maps.Copy(ns, c.nsBindings)
@@ -1114,6 +1147,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.importSchemas = cfg.importSchemas
 		c.maxResourceBytes = cfg.maxResourceBytes
 		c.allowExternalEntities = cfg.allowExternalEntities
+		c.parser = cfg.parser
 	}
 	if c.moduleKey == "" {
 		c.moduleKey = "<main>"
@@ -1443,6 +1477,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	}
 	c.stylesheet.maxResourceBytes = c.maxResourceBytes
 	c.stylesheet.allowExternalEntities = c.allowExternalEntities
+	c.stylesheet.parser = c.parser
 
 	// Topologically sort accumulators so dependencies are evaluated first.
 	sortAccumulatorOrder(c.stylesheet)

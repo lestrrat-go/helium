@@ -26,7 +26,8 @@ const (
 type compiler struct {
 	grammar      *Grammar
 	baseDir      string
-	fsys         fs.FS // filesystem for loading include/externalRef targets
+	fsys         fs.FS          // filesystem for loading include/externalRef targets
+	parser       *helium.Parser // parser governing parse policy for nested include/externalRef schemas
 	filename     string
 	errorHandler helium.ErrorHandler
 	errorCount   int
@@ -68,6 +69,17 @@ type defineEntry struct {
 	noCombine int    // count of definitions with no combine attribute
 }
 
+// parse parses a nested schema document (include/externalRef) using the
+// injected parser policy when one was configured on the Compiler, or a default
+// [helium.NewParser] otherwise.
+func (c *compiler) parse(ctx context.Context, data []byte) (*helium.Document, error) {
+	p := helium.NewParser()
+	if c.parser != nil {
+		p = *c.parser
+	}
+	return p.Parse(ctx, data)
+}
+
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Grammar, error) { //nolint:unparam // error always nil but callers check for future-proofing
 	var eh helium.ErrorHandler = helium.NilErrorHandler{}
 	if cfg.errorHandler != nil {
@@ -92,6 +104,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		},
 		baseDir:      baseDir,
 		fsys:         fsys,
+		parser:       cfg.parser,
 		filename:     label,
 		errorHandler: eh,
 		includeLimit: 1000,
@@ -648,7 +661,7 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 		c.addBareSchemaError(ctx, msg)
 		return
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
+	doc, err := c.parse(ctx, data)
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.addBareSchemaError(ctx, msg)
@@ -1072,7 +1085,7 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 		c.addBareSchemaError(ctx, msg)
 		return nil
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
+	doc, err := c.parse(ctx, data)
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.addBareSchemaError(ctx, msg)

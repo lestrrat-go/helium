@@ -14,6 +14,7 @@ type compileConfig struct {
 	label        string
 	baseDir      string
 	errorHandler helium.ErrorHandler
+	parser       *helium.Parser
 }
 
 type validateConfig struct {
@@ -76,6 +77,17 @@ func (c Compiler) ErrorHandler(h helium.ErrorHandler) Compiler {
 	return c
 }
 
+// Parser sets the [helium.Parser] used to parse the Schematron document in
+// [Compiler.CompileFile]. When unset, a default [helium.NewParser] is used.
+// The injected parser supplies parse policy — resource limits, filesystem
+// access, and XXE/network controls — so a caller can apply one uniform policy
+// across every helium component.
+func (c Compiler) Parser(p helium.Parser) Compiler {
+	c = c.clone()
+	c.cfg.parser = &p
+	return c
+}
+
 func (c Compiler) closeHandler() {
 	if c.cfg != nil && c.cfg.errorHandler != nil {
 		if cl, ok := c.cfg.errorHandler.(io.Closer); ok {
@@ -108,13 +120,17 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	if err != nil {
 		return nil, fmt.Errorf("schematron: read file: %w", err)
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
-	if err != nil {
-		return nil, fmt.Errorf("schematron: parse document: %w", err)
-	}
 	cfg := c.cfg
 	if cfg == nil {
 		cfg = &compileConfig{}
+	}
+	p := helium.NewParser()
+	if cfg.parser != nil {
+		p = *cfg.parser
+	}
+	doc, err := p.Parse(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("schematron: parse document: %w", err)
 	}
 	schema, compileErr := compileSchema(ctx, doc, cfg)
 	c.closeHandler()

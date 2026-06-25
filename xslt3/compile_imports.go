@@ -209,7 +209,7 @@ func (c *compiler) loadModuleDoc(ctx context.Context, uri string) (*helium.Docum
 		return nil, fmt.Errorf("cannot read %q: %w", uri, err)
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, uri, c.allowExternalEntities, c.loadResourceBytes)
+	doc, err := parseStylesheetDocument(ctx, c.parser, data, uri, c.allowExternalEntities, c.loadResourceBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
@@ -577,6 +577,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 				packageResolver:       c.packageResolver,
 				maxResourceBytes:      c.maxResourceBytes,
 				allowExternalEntities: c.allowExternalEntities,
+				parser:                c.parser,
 			})
 			if err != nil {
 				return err
@@ -720,8 +721,10 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 		c.resolver = cfg.resolver
 		c.packageResolver = cfg.packageResolver
 		c.maxResourceBytes = cfg.maxResourceBytes
+		c.parser = cfg.parser
 	}
 	c.stylesheet.maxResourceBytes = c.maxResourceBytes
+	c.stylesheet.parser = c.parser
 
 	c.collectNamespaces(ctx, root)
 

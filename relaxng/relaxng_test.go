@@ -601,3 +601,46 @@ func TestZeroValidatorFluent(t *testing.T) {
 		_ = v2
 	})
 }
+
+// TestCompilerParserInjection verifies that a parser injected via
+// Compiler.Parser governs the internal parse of the schema document: a parser
+// configured with a tiny MaxDepth rejects a deeply nested schema, while the
+// same schema compiles when no parser policy is injected.
+func TestCompilerParserInjection(t *testing.T) {
+	t.Parallel()
+
+	// grammar(1) > start(2) > element(3) > empty(4)
+	const schemaSrc = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="a"><empty/></element>
+  </start>
+</grammar>`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schema.rng")
+	require.NoError(t, os.WriteFile(path, []byte(schemaSrc), 0o600))
+
+	t.Run("injected parser policy enforced", func(t *testing.T) {
+		t.Parallel()
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err := relaxng.NewCompiler().
+			ErrorHandler(collector).
+			Parser(helium.NewParser().MaxDepth(2)).
+			CompileFile(t.Context(), path)
+		require.NoError(t, err)
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.NotEmpty(t, compileErrors, "schema nested deeper than the injected MaxDepth must fail to parse")
+	})
+
+	t.Run("control without injection", func(t *testing.T) {
+		t.Parallel()
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		grammar, err := relaxng.NewCompiler().
+			ErrorHandler(collector).
+			CompileFile(t.Context(), path)
+		require.NoError(t, err)
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.Empty(t, compileErrors, "schema should compile without the injected limit")
+		require.NotNil(t, grammar)
+	})
+}

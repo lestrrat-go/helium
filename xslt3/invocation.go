@@ -104,6 +104,11 @@ type invocationConfig struct {
 	allowExternalEntities    bool
 	allowExternalEntitiesSet bool
 
+	// parser is the caller-injected base parser governing parse policy for
+	// runtime source / fn:doc / document() parses. When nil, the parser
+	// compiled into the stylesheet (Compiler.Parser) is inherited.
+	parser *helium.Parser
+
 	// resolved holds the effective output definition for the primary result
 	// after a terminal method (Do/Serialize/WriteTo) completes. It is stored
 	// behind a pointer with its own mutex so that concurrent terminal-method
@@ -331,6 +336,21 @@ func (inv Invocation) AllowExternalEntities(v bool) Invocation {
 	return inv
 }
 
+// Parser sets the [helium.Parser] used as the base for every XML parse the
+// transformation performs — runtime source documents, fn:doc / document() /
+// xsl:source-document / xsl:merge documents, and source-schema documents — and
+// is forwarded into the xsd compilers and xpath3 evaluators built at runtime.
+// The injected parser governs parse policy: resource limits and XXE /
+// filesystem / network controls.
+//
+// When left unset, the parser configured on the Compiler (Compiler.Parser) for
+// the stylesheet is inherited; when neither is set, a hardened default is used.
+func (inv Invocation) Parser(p helium.Parser) Invocation {
+	inv = inv.clone()
+	inv.cfg.parser = &p
+	return inv
+}
+
 // BaseOutputURI sets the base output URI for current-output-uri().
 func (inv Invocation) BaseOutputURI(uri string) Invocation {
 	inv = inv.clone()
@@ -543,6 +563,16 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		tcfg.allowExternalEntities = c.allowExternalEntities
 	case c.ss != nil:
 		tcfg.allowExternalEntities = c.ss.allowExternalEntities
+	}
+
+	// Injected parser: an explicit per-invocation parser wins; otherwise inherit
+	// the parser compiled into the stylesheet (Compiler.Parser). nil = hardened
+	// default.
+	switch {
+	case c.parser != nil:
+		tcfg.parser = c.parser
+	case c.ss != nil:
+		tcfg.parser = c.ss.parser
 	}
 
 	// Entry mode

@@ -347,6 +347,9 @@ func (ss *Stylesheet) newNestedCompiler() Compiler {
 	if ss.allowExternalEntities {
 		c = c.AllowExternalEntities(true)
 	}
+	if ss.parser != nil {
+		c = c.Parser(*ss.parser)
+	}
 	return c
 }
 
@@ -494,7 +497,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
+		doc, parseErr := parseStylesheetDocument(ctx, ec.injectedParser(), data, baseURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
 		}
@@ -519,7 +522,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if readErr != nil {
 			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
 		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, location, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
+		doc, parseErr := parseStylesheetDocument(ctx, ec.injectedParser(), data, location, ec.allowExternalEntities(), ec.retrieveDocumentBytes)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse package %q: %v", packageName, parseErr)
 		}
@@ -607,6 +610,9 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	// caller. Without this the nested transform would force the secure (blocked)
 	// parse even when the outer invocation opted in.
 	fnTransformCfg.allowExternalEntities = ec.allowExternalEntities()
+	// Inherit the injected base parser so nested-transform runtime parses use the
+	// same parse policy as the caller.
+	fnTransformCfg.parser = ec.injectedParser()
 
 	// Apply map-valued options from the fn:transform options map.
 	for _, mp := range []struct {

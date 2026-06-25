@@ -73,7 +73,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		if err != nil {
 			return nil, fmt.Errorf("load source schema %q: %w", uri, err)
 		}
-		schemaDoc, err := secureXMLParser("").Parse(ctx, data)
+		schemaDoc, err := secureXMLParser(ec.injectedParser(), "").Parse(ctx, data)
 		if err != nil {
 			return nil, fmt.Errorf("parse source schema %q: %w", uri, err)
 		}
@@ -82,7 +82,11 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		// and route those nested loads through the invocation's resolver
 		// (default-deny) instead of the xsd compiler's default os.Open.
 		fsys := schemaResolverFS{ctx: ctx, load: ec.retrieveDocumentBytes}
-		schema, err := xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys).Compile(ctx, schemaDoc)
+		schemaCompiler := xsd.NewCompiler().BaseDir(schemaCompileBaseDir(uri)).FS(fsys)
+		if p := ec.injectedParser(); p != nil {
+			schemaCompiler = schemaCompiler.Parser(*p)
+		}
+		schema, err := schemaCompiler.Compile(ctx, schemaDoc)
 		if err != nil {
 			return nil, fmt.Errorf("compile source schema %q: %w", uri, err)
 		}
