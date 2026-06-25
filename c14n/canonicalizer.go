@@ -493,12 +493,19 @@ func (c *canonicalizer) findNearestRenderedDefaultNS(e *helium.Element) string {
 		if !c.isVisible(anc) {
 			continue
 		}
-		ancNS := c.nsNodesByElement[anc]
-		for _, ans := range ancNS {
+		// The nearest visible ancestor determines the default namespace in
+		// scope for e in the canonical output, so this ancestor is
+		// authoritative — never walk further up. The XPath namespace axis only
+		// yields a default-namespace node when the in-scope default URI is
+		// non-empty; its absence here means the default namespace is empty (it
+		// was reset via xmlns=""). Returning "" in that case stops us from
+		// reaching past a reset to a more distant, no-longer-in-scope default.
+		for _, ans := range c.nsNodesByElement[anc] {
 			if ans.prefix == "" {
 				return ans.uri
 			}
 		}
+		return ""
 	}
 	return ""
 }
@@ -577,9 +584,15 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 	// Determine "candidate" prefixes: visibly utilized ∪ inclusive
 	candidates := make(map[string]bool)
 
-	// Element's own namespace prefix
+	// Element's own namespace prefix. An element in no namespace (e.g. after an
+	// xmlns="" reset) has a nil active namespace; it still visibly utilizes the
+	// empty default-namespace prefix, so make "" a candidate. The undeclaration
+	// check below then emits xmlns="" iff an output ancestor left a non-empty
+	// default namespace in scope (mirrors the whole-document exclusive path).
 	if ns := e.Namespace(); ns != nil {
 		candidates[ns.Prefix()] = true
+	} else {
+		candidates[""] = true
 	}
 
 	// Attribute namespace prefixes (only visible attributes)

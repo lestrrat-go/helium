@@ -12,25 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	testdataBase       = "../testdata/libxml2-compat/c14n"
-	parseFailDupNSDecl = "duplicate namespace declaration handling"
-)
-
-// knownParseFailures lists test cases that fail during parsing due to
-// helium parser limitations (not C14N bugs).
-var knownParseFailures = map[string]string{
-	"without-comments/example-3":     parseFailDupNSDecl,
-	"without-comments/example-4":     "entity reference in single-quoted attribute",
-	"without-comments/test-2":        parseFailDupNSDecl,
-	"without-comments/test-3":        parseFailDupNSDecl,
-	"with-comments/example-3":        parseFailDupNSDecl,
-	"with-comments/example-4":        "entity reference in single-quoted attribute",
-	"exc-without-comments/test-0":    parseFailDupNSDecl,
-	"exc-without-comments/test-1":    parseFailDupNSDecl,
-	"1-1-without-comments/example-3": parseFailDupNSDecl,
-	"1-1-without-comments/example-4": "entity reference in single-quoted attribute",
-}
+const testdataBase = "../testdata/libxml2-compat/c14n"
 
 func parseTestDoc(t *testing.T, path string) *helium.Document {
 	t.Helper()
@@ -129,11 +111,6 @@ func evaluateNodeSet(t *testing.T, doc *helium.Document, expr string, nss map[st
 
 func runC14NTest(t *testing.T, category, name string, mode c14n.Mode, can c14n.Canonicalizer) {
 	t.Helper()
-
-	key := category + "/" + name
-	if reason, ok := knownParseFailures[key]; ok {
-		t.Skipf("skipping due to parser limitation: %s", reason)
-	}
 
 	inputPath := filepath.Join(testdataBase, category, "test", name+".xml")
 	expectedPath := filepath.Join(testdataBase, category, "result", name)
