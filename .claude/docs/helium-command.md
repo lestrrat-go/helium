@@ -121,9 +121,10 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 
 Primary file: `internal/cli/heliumcmd/xpath.go`
 
-- Usage: `helium xpath [--engine 1|3] [--max-input-bytes N] EXPR [XMLfiles ...]`
+- Usage: `helium xpath [--engine 1|3] [--max-input-bytes N] [--max-depth N] EXPR [XMLfiles ...]`
 - Default engine: `3`
 - `--max-input-bytes N` caps bytes read per input (default 100 MiB; `0` = unlimited)
+- `--max-depth N` caps element nesting depth (default `256`, `0` = unlimited); when absent, the `NewParser` default is left untouched
 - `EXPR` mandatory + non-empty
 - Engine `1` → `xpath1`
 - Engine `3` → `xpath3`
@@ -137,9 +138,10 @@ Primary file: `internal/cli/heliumcmd/xpath.go`
 
 Primary file: `internal/cli/heliumcmd/xsd_validate.go`
 
-- Usage: `helium xsd validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]`
+- Usage: `helium xsd validate [--timing] [--max-input-bytes N] [--max-depth N] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
 - `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
+- `--max-depth N` caps element nesting depth (default `256`, `0` = unlimited); when absent, the `NewParser` default is left untouched; over-cap fails the parse (`ExitErr`)
 - Schema compiled once with `xsd.NewCompiler().Label(schema).ErrorHandler(...).CompileFile(ctx, schema)`; a `compileErrorHandler` streams compilation diagnostics (file/line/detail) to stderr and records whether any FATAL diagnostic was seen
 - The xsd compiler may return a non-nil schema with a nil error for a malformed schema; the CLI folds that into a failure (`errSchemaCompilation`) when the handler saw a fatal diagnostic, so it never validates against a bad schema. Compilation failure → `ExitSchemaComp`
 - Each XML input parsed with `helium.NewParser()` (file inputs get `.BaseURI(name)`) + validated with `xsd.NewValidator(schema).ErrorHandler(...).Validate(ctx, doc)`, diagnostics streamed to stderr via a `writerErrorHandler`
@@ -148,9 +150,10 @@ Primary file: `internal/cli/heliumcmd/xsd_validate.go`
 
 Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 
-- Usage: `helium relaxng validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]`
+- Usage: `helium relaxng validate [--timing] [--max-input-bytes N] [--max-depth N] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
 - `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
+- `--max-depth N` caps element nesting depth (default `256`, `0` = unlimited); when absent, the `NewParser` default is left untouched; over-cap fails the parse (`ExitErr`)
 - Grammar compiled once with `relaxng.NewCompiler().CompileFile()`
 - Each XML input parsed with `helium.NewParser()` + validated with `relaxng.NewValidator(grammar).Validate()`
 
@@ -158,9 +161,10 @@ Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 
 Primary file: `internal/cli/heliumcmd/schematron_validate.go`
 
-- Usage: `helium schematron validate [--timing] [--max-input-bytes N] SCHEMA [XMLfiles ...]`
+- Usage: `helium schematron validate [--timing] [--max-input-bytes N] [--max-depth N] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
 - `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
+- `--max-depth N` caps element nesting depth (default `256`, `0` = unlimited); when absent, the `NewParser` default is left untouched; over-cap fails the parse (`ExitErr`)
 - Schema compiled once with `schematron.NewCompiler().Label(path).CompileFile(ctx, path)`
 - Each XML input parsed with `helium.NewParser()` + validated with `schematron.NewValidator(schema).Label(name).Validate(ctx, doc)`
 - Validation passes `.Label(input.name)` so error output names the current XML source
@@ -175,6 +179,7 @@ Primary file: `internal/cli/heliumcmd/xslt.go`
 - A filesystem `URIResolver` is installed so local `xsl:include`/`xsl:import` modules load (the compiler default-denies module loading without one)
 - `fileResolver.Resolve` accepts plain relative/absolute paths AND `file:` URIs (`localFilePath` in `safety.go`): a `file:` URI is parsed, only an empty or `localhost` host is accepted, the path is percent-decoded (and de-slashed before a Windows drive letter); any other scheme (`http`/`https`/...) is rejected so the resolver never reaches the network. A bare Windows drive path (`C:\...`) is not mistaken for a scheme.
 - Each XML input parsed with `helium.NewParser()`, transformed with `ss.Transform(doc).WriteTo(ctx, out)`
-- Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--max-input-bytes N`, `--version`
+- Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--max-input-bytes N`, `--max-depth N`, `--version`
+- `--max-depth N` caps element nesting depth (default `256`, `0` = unlimited) and applies to BOTH the stylesheet parser and the source-document parser; when absent, the `NewParser` default is left untouched
 - Parameters passed via `inv.GlobalParameters()`
 - Same output safety as `helium lint`: `--output` is rejected when it matches an input or the stylesheet, or when combined with `--noout`; close errors fold into the exit status; inputs are read under the `--max-input-bytes` cap

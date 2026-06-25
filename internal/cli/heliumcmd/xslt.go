@@ -23,6 +23,7 @@ type xsltConfig struct {
 	version        bool
 	params         []xsltParam
 	maxInputBytes  int64
+	maxDepth       int
 }
 
 type xsltParam struct {
@@ -94,13 +95,16 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 	// NewParser blocks external loading by default; a stylesheet is a trusted
 	// local input, so lift the XXE block and install the permissive FS to
 	// preserve the historical behavior of loading its external DTD/entities.
-	ssDoc, err := helium.NewParser().
+	ssParser := helium.NewParser().
 		BlockXXE(false).
 		LoadExternalDTD(true).
 		SubstituteEntities(true).
 		FS(iofsPermissiveRoot()).
-		BaseURI(cfg.stylesheetFile).
-		Parse(ctx, ssBuf)
+		BaseURI(cfg.stylesheetFile)
+	if cfg.maxDepth >= 0 {
+		ssParser = ssParser.MaxDepth(cfg.maxDepth)
+	}
+	ssDoc, err := ssParser.Parse(ctx, ssBuf)
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: failed to parse stylesheet: %s\n", c.prog, err)
 		return ExitXSLT
@@ -241,6 +245,9 @@ func (c *xsltCommand) processInput(ctx context.Context, cfg *xsltConfig, input x
 	}
 
 	p := helium.NewParser()
+	if cfg.maxDepth >= 0 {
+		p = p.MaxDepth(cfg.maxDepth)
+	}
 	if !input.stdin {
 		p = p.BaseURI(input.name)
 	}
@@ -293,12 +300,13 @@ Options:
 	--noout          : suppress output
 	--timing         : print timing information to stderr
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
+	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
 	--version        : display the version of the XML library used
 `, c.prog)
 }
 
 func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
-	cfg := &xsltConfig{maxInputBytes: DefaultMaxInputBytes}
+	cfg := &xsltConfig{maxInputBytes: DefaultMaxInputBytes, maxDepth: -1}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -343,6 +351,18 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 				return nil, nil
 			}
 			cfg.maxInputBytes = n
+		case flagMaxDepth:
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth: invalid argument %q\n", c.prog, args[i])
+				return nil, nil
+			}
+			cfg.maxDepth = n
 		default:
 			if len(arg) > 0 && arg[0] == '-' {
 				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)

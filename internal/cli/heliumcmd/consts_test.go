@@ -8,5 +8,6 @@ const (
 	cmdValidate   = "validate"
 	flagVersion   = "--version"
 	flagMaxInput  = "--max-input-bytes"
+	flagMaxDepth  = "--max-depth"
 	xpathBook     = "//book"
 )
