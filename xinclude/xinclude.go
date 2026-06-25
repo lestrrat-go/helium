@@ -62,6 +62,7 @@ type processorCfg struct {
 	baseURI        string
 	errorHandler   helium.ErrorHandler
 	maxIncludeSize int
+	parser         *helium.Parser
 }
 
 // Processor configures XInclude processing. It is a value-style wrapper:
@@ -177,6 +178,19 @@ func (p Processor) MaxIncludeSize(n int) Processor {
 	return p
 }
 
+// Parser sets the [helium.Parser] used to parse included documents. The
+// injected parser supplies the inner parse's resource limits (element depth,
+// name length, entity amplification, content-model depth) and is used as the
+// base; XInclude still forces its own loading policy on top — external DTD
+// loading is enabled and the filesystem is confined to the configured
+// [Resolver]'s sandbox (see [Processor.Resolver]), regardless of the injected
+// parser's FS. When unset, a default [helium.NewParser] is used as the base.
+func (p Processor) Parser(parser helium.Parser) Processor {
+	p = p.clone()
+	p.cfg.parser = &parser
+	return p
+}
+
 // ErrorHandler sets a handler for non-fatal warnings such as
 // entity definition mismatches during XInclude entity merging.
 // Errors delivered to the handler have ErrorLevelWarning.
@@ -206,6 +220,7 @@ type processor struct {
 	txtCache       map[string]txtCacheEntry // cached text inclusions
 	errorHandler   helium.ErrorHandler
 	maxIncludeSize int
+	parser         *helium.Parser
 	depth          int
 	count          int
 }
@@ -241,6 +256,7 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		baseURI:        cfg.baseURI,
 		errorHandler:   cfg.errorHandler,
 		maxIncludeSize: cfg.maxIncludeSize,
+		parser:         cfg.parser,
 		expanding:      make(map[string]bool),
 		docCache:       make(map[string]docCacheEntry),
 		txtCache:       make(map[string]txtCacheEntry),
@@ -705,7 +721,15 @@ func (p *processor) readCapped(r io.Reader) ([]byte, error) {
 }
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
-	parser := helium.NewParser().LoadExternalDTD(true).BaseURI(uri)
+	// Start from the caller-injected parser (for its resource limits) or a
+	// default, then force XInclude's own loading policy on top: external DTD
+	// loading and the per-include base URI. The FS is set below to the
+	// resolver's sandbox (NOT the injected parser's FS) — see Processor.Parser.
+	base := helium.NewParser()
+	if p.parser != nil {
+		base = *p.parser
+	}
+	parser := base.LoadExternalDTD(true).BaseURI(uri)
 	// Thread the resolver's filesystem into the inner parser so external
 	// entities and external DTDs declared inside the included document
 	// resolve through the SAME sandbox as XInclude itself, not the parser's

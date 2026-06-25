@@ -1666,3 +1666,42 @@ func TestCompileFatalReturnsError(t *testing.T) {
 		require.NotNil(t, schema)
 	})
 }
+
+// TestCompilerParserInjection verifies that a parser injected via
+// Compiler.Parser governs the internal parse of the schema document: a parser
+// configured with a tiny MaxDepth rejects a deeply nested schema, while the
+// same schema compiles when no parser policy is injected.
+func TestCompilerParserInjection(t *testing.T) {
+	t.Parallel()
+
+	// schema(1) > element(2) > complexType(3) > sequence(4) > element(5)
+	const schemaSrc = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="child" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schema.xsd")
+	require.NoError(t, os.WriteFile(path, []byte(schemaSrc), 0o600))
+
+	t.Run("injected parser policy enforced", func(t *testing.T) {
+		t.Parallel()
+		_, err := xsd.NewCompiler().
+			Parser(helium.NewParser().MaxDepth(3)).
+			CompileFile(t.Context(), path)
+		require.Error(t, err, "schema nested deeper than the injected MaxDepth must fail to parse")
+	})
+
+	t.Run("control without injection", func(t *testing.T) {
+		t.Parallel()
+		schema, err := xsd.NewCompiler().CompileFile(t.Context(), path)
+		requireCompileResultErr(t, err)
+		require.NotNil(t, schema)
+	})
+}

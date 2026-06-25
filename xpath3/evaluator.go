@@ -64,6 +64,7 @@ type evaluatorCfg struct {
 	traceWriter            io.Writer
 	maxNodes               int   // 0 means use the package default (maxNodeSetLength)
 	maxResourceBytes       int64 // per-resource read cap for fn:unparsed-text / fn:doc / fn:json-doc; 0 = unparsedtext default
+	parser                 *helium.Parser
 }
 
 // NewEvaluator creates a new Evaluator with the given options.
@@ -213,6 +214,16 @@ func (e Evaluator) NamedDecimalFormats(dfs map[QualifiedName]DecimalFormat) Eval
 func (e Evaluator) BaseURI(uri string) Evaluator {
 	e = e.clone()
 	e.cfg.baseURI = uri
+	return e
+}
+
+// Parser sets the helium.Parser used to parse XML in fn:parse-xml,
+// fn:parse-xml-fragment, and fn:doc. When unset, a default helium.NewParser()
+// is used. The injected parser governs parse policy (limits, filesystem,
+// XXE/network controls).
+func (e Evaluator) Parser(p helium.Parser) Evaluator {
+	e = e.clone()
+	e.cfg.parser = &p
 	return e
 }
 
@@ -399,6 +410,7 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	ec.collectionResolver = cfg.collectionResolver
 	ec.httpClient = cfg.httpClient
 	ec.maxResourceBytes = cfg.maxResourceBytes
+	ec.parser = cfg.parser
 
 	// limits
 	ec.opLimit = cfg.opLimit

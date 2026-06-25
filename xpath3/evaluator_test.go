@@ -130,6 +130,34 @@ func TestEvaluator(t *testing.T) {
 	})
 }
 
+func TestParserInjection(t *testing.T) {
+	// fn:parse-xml on a string literal whose element name is 9 bytes long.
+	// An injected parser with MaxNameLength(8) must reject it; without the
+	// injection (default parser) the same parse succeeds. This proves the
+	// injected parser's policy reaches the fn:parse-xml parse site.
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	expr, err := xpath3.NewCompiler().Compile(`parse-xml("<elementXY/>")`)
+	require.NoError(t, err)
+
+	t.Run("default parser parses long element name", func(t *testing.T) {
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Evaluate(t.Context(), expr, doc)
+		require.NoError(t, err)
+		nodes, err := result.Nodes()
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	t.Run("injected parser enforces MaxNameLength", func(t *testing.T) {
+		_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Parser(helium.NewParser().MaxNameLength(8)).
+			Evaluate(t.Context(), expr, doc)
+		require.Error(t, err)
+	})
+}
+
 func TestDocEmptyArgFragmentBaseURI(t *testing.T) {
 	// doc("") resolves to the base URI verbatim. When that base URI carries a
 	// fragment identifier the call must raise FODC0005, the same as a fragment

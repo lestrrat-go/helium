@@ -15,8 +15,9 @@ import (
 // compiler holds state during schema compilation.
 type compiler struct {
 	schema  *Schema
-	baseDir string // directory of the schema file, for resolving relative paths
-	fsys    fs.FS  // filesystem for loading xs:include/xs:import/xs:redefine targets
+	baseDir string         // directory of the schema file, for resolving relative paths
+	fsys    fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
+	parser  *helium.Parser // parser governing parse policy for nested include/import/redefine schemas
 	// unresolved type references: maps from element/type QName to the type ref string
 	typeRefs map[*TypeDef]QName
 	elemRefs map[*ElementDecl]QName
@@ -336,6 +337,17 @@ func (c *compiler) schemaError(ctx context.Context, msg string) {
 	c.errorCount++
 }
 
+// parse parses a nested schema document (xs:include/xs:import/xs:redefine)
+// using the injected parser policy when one was configured on the Compiler,
+// or a default [helium.NewParser] otherwise.
+func (c *compiler) parse(ctx context.Context, data []byte) (*helium.Document, error) {
+	p := helium.NewParser()
+	if c.parser != nil {
+		p = *c.parser
+	}
+	return p.Parse(ctx, data)
+}
+
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {
 	root := findDocumentElement(doc)
 	if root == nil {
@@ -350,6 +362,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	if cfg != nil && cfg.fsys != nil {
 		fsys = cfg.fsys
 	}
+	var parser *helium.Parser
+	if cfg != nil {
+		parser = cfg.parser
+	}
 	c := &compiler{
 		schema: &Schema{
 			elements:    make(map[QName]*ElementDecl),
@@ -361,6 +377,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		},
 		baseDir:                  baseDir,
 		fsys:                     fsys,
+		parser:                   parser,
 		typeRefs:                 make(map[*TypeDef]QName),
 		elemRefs:                 make(map[*ElementDecl]QName),
 		elemRefSources:           make(map[*ElementDecl]elemRefSource),

@@ -506,7 +506,7 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 		defer func() { _ = rc.Close() }()
 		return readResourceBounded(rc, c.maxResourceBytes)
 	}
-	return loadParameterDocumentFromFile(ctx, outDef, baseURI, href, loadBytes, false)
+	return loadParameterDocumentFromFile(ctx, c.parser, outDef, baseURI, href, loadBytes, false)
 }
 
 // loadParameterDocumentFromFile loads a serialization parameter document and
@@ -520,7 +520,7 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 // A runtime failure must NOT also satisfy errors.Is(err, ErrStaticError), so the
 // runtime path never applies the static wrapper. A distinguishable cause such as
 // [ErrResourceTooLarge] survives either way via errors.Join.
-func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseURI, href string, loadBytes func(context.Context, string) ([]byte, error), runtime bool) error {
+func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser, outDef *OutputDef, baseURI, href string, loadBytes func(context.Context, string) ([]byte, error), runtime bool) error {
 	// Decide absoluteness with xsd.URIScheme (RFC 3986), not filepath.IsAbs or a
 	// "://" substring check: an absolute-URI href may carry a scheme with no
 	// "//" authority (e.g. "urn:params", "file:/p/p.xml") and must pass through
@@ -563,8 +563,9 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 		return staticErrorCause(errCodeXTSE0090, err, "cannot read parameter-document %q: %v", href, err)
 	}
 	// Serialization parameter documents have a fixed W3C schema and never use
-	// external entities; parse with XXE blocked unconditionally.
-	doc, err := secureXMLParser("").Parse(ctx, data)
+	// external entities; parse with the injected base parser (or XXE blocked by
+	// default when none is injected).
+	doc, err := secureXMLParser(injected, "").Parse(ctx, data)
 	if err != nil {
 		if runtime {
 			return dynamicError(errCodeFODC0002, "cannot parse parameter-document %q: %v", href, err)

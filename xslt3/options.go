@@ -35,6 +35,9 @@ type compileConfig struct {
 	// stylesheet modules (resolver-mediated external entity / DTD loading).
 	// Default false: XXE is blocked.
 	allowExternalEntities bool
+	// parser is the caller-injected base parser governing parse policy for
+	// stylesheet/schema parsing. nil = use the hardened default.
+	parser *helium.Parser
 }
 
 // --- Transform configuration (internal) ---
@@ -73,6 +76,10 @@ type transformConfig struct {
 	// (resolver-mediated external entity / DTD loading). Default false: XXE is
 	// blocked.
 	allowExternalEntities bool
+	// parser is the caller-injected base parser governing parse policy for
+	// runtime source / fn:doc / document() parses. nil = use the hardened
+	// default.
+	parser *helium.Parser
 }
 
 // MessageHandler handles xsl:message output during transformation.

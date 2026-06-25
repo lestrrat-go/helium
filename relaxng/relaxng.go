@@ -15,7 +15,8 @@ import (
 type compileConfig struct {
 	label        string // label for error messages (e.g. source filename)
 	baseDir      string
-	fsys         fs.FS // filesystem for loading include/externalRef targets
+	fsys         fs.FS          // filesystem for loading include/externalRef targets
+	parser       *helium.Parser // parser governing schema-document parse policy
 	errorHandler helium.ErrorHandler
 }
 
@@ -85,6 +86,20 @@ func (c Compiler) FS(fsys fs.FS) Compiler {
 	return c
 }
 
+// Parser sets the [helium.Parser] used to parse RELAX NG schema documents —
+// the top-level schema in [Compiler.CompileFile] as well as every schema pulled
+// in via include and externalRef. When unset, a default [helium.NewParser] is
+// used. The injected parser supplies parse policy — resource limits and
+// XXE/network controls — so a caller can apply one uniform policy across every
+// helium component. Schema documents are parsed plain: the compiler's
+// [Compiler.FS] still fetches the bytes, and no functional options or base URI
+// are forced onto the injected parser.
+func (c Compiler) Parser(p helium.Parser) Compiler {
+	c = c.clone()
+	c.cfg.parser = &p
+	return c
+}
+
 // ErrorHandler sets a handler that receives schema compilation errors.
 func (c Compiler) ErrorHandler(h helium.ErrorHandler) Compiler {
 	c = c.clone()
@@ -130,7 +145,11 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error
 		c.closeHandler()
 		return nil, err
 	}
-	doc, err := helium.NewParser().Parse(ctx, data)
+	p := helium.NewParser()
+	if cfg.parser != nil {
+		p = *cfg.parser
+	}
+	doc, err := p.Parse(ctx, data)
 	if err != nil {
 		if pe, ok := errors.AsType[helium.ErrParseError](err); ok {
 			filename := cfg.label

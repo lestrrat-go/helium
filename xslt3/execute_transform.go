@@ -412,7 +412,11 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if cfg != nil && cfg.globalContextSelect != "" && effectiveSource != nil {
 		expr, compErr := xpath3.NewCompiler().Compile(cfg.globalContextSelect)
 		if compErr == nil {
-			result, evalErr := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, expr, effectiveSource)
+			gcEval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+			if cfg.parser != nil {
+				gcEval = gcEval.Parser(*cfg.parser)
+			}
+			result, evalErr := gcEval.Evaluate(ctx, expr, effectiveSource)
 			if evalErr != nil || sequence.Len(result.Sequence()) == 0 {
 				ec.globalContextAbsent = true
 			}

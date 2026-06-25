@@ -1748,3 +1748,35 @@ func TestXIncludeFileURINonLocalHost(t *testing.T) {
 	require.ErrorContains(t, err, "non-local file URI host",
 		"expected explicit non-local host rejection, got: %v", err)
 }
+
+// TestXIncludeParserInjection verifies that a parser injected via
+// Processor.Parser governs the resource limits used to parse included
+// documents (here, the element-name-length cap), while XInclude continues to
+// own the resolver-confined filesystem.
+func TestXIncludeParserInjection(t *testing.T) {
+	t.Parallel()
+
+	const main = `<root xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="inc.xml"/></root>`
+	// Included document's element name "longname" is 8 bytes.
+	incFS := fstest.MapFS{"inc.xml": &fstest.MapFile{Data: []byte(`<longname/>`)}}
+
+	t.Run("no injection accepts the included name", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, main)
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(incFS)).
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("injected MaxNameLength is enforced on included docs", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, main)
+		_, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(incFS)).
+			Parser(helium.NewParser().MaxNameLength(4)).
+			Process(t.Context(), doc)
+		require.Error(t, err, "injected parser's name-length limit must apply to included documents")
+	})
+}

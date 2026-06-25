@@ -422,7 +422,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// legacy permissive behavior (e.g. XSLT 3.0 W3C tests such as base-uri-051
 	// that resolve external SYSTEM entities) must opt in via
 	// Invocation.AllowExternalEntities(true).
-	doc, err := parseExternalXML(ctx, data, resolvedURI, ec.allowExternalEntities(),
+	doc, err := parseExternalXML(ctx, ec.injectedParser(), data, resolvedURI, ec.allowExternalEntities(),
 		ec.retrieveDocumentBytes,
 		func(p helium.Parser) helium.Parser {
 			return p.DefaultDTDAttributes(true).FixBaseURIs(false)
@@ -528,6 +528,15 @@ func (ec *execContext) resourceLimit() int64 {
 // this transformation. Default false: XXE is blocked.
 func (ec *execContext) allowExternalEntities() bool {
 	return ec != nil && ec.transformConfig != nil && ec.transformConfig.allowExternalEntities
+}
+
+// injectedParser returns the caller-injected base parser governing parse policy
+// for runtime XML parses (nil = hardened default).
+func (ec *execContext) injectedParser() *helium.Parser {
+	if ec != nil && ec.transformConfig != nil {
+		return ec.transformConfig.parser
+	}
+	return nil
 }
 
 func fetchViaResolver(r xpath3.URIResolver, uri string, limit int64) ([]byte, error) {

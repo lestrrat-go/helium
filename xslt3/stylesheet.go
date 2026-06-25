@@ -141,6 +141,7 @@ type Stylesheet struct {
 	compilerImportSchemas []*xsd.Schema               // pre-compiled schemas from compiler (for fn:transform nested compiles)
 	maxResourceBytes      int64                       // per-resource read cap from compiler; 0 = MaxResourceBytes default, <0 = unbounded
 	allowExternalEntities bool                        // compile-time opt-in: legacy permissive external-entity parsing (for fn:transform nested compiles)
+	parser                *helium.Parser              // caller-injected base parser from the compiler (forwarded to runtime + fn:transform nested compiles); nil = hardened default
 }
 
 // globalContextItemDef represents a compiled xsl:global-context-item declaration.

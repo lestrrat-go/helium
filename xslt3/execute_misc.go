@@ -850,6 +850,12 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		Variables(vars).
 		Functions(evalFns, ec.xsltEvaluateFunctionsNS())
 
+	// Forward the injected base parser so fn:doc / fn:parse-xml inside the
+	// dynamically-evaluated XPath uses the same parse policy as the engine.
+	if p := ec.injectedParser(); p != nil {
+		eval = eval.Parser(*p)
+	}
+
 	if len(nsBindings) > 0 {
 		eval = eval.Namespaces(nsBindings)
 	}

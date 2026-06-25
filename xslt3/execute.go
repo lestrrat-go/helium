@@ -1019,6 +1019,11 @@ func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator 
 		if c := ec.transformConfig.httpClient; c != nil {
 			eval = eval.HTTPClient(c)
 		}
+		// Forward the injected base parser so fn:doc / fn:parse-xml inside XPath
+		// expressions parse under the same policy as the rest of the engine.
+		if p := ec.transformConfig.parser; p != nil {
+			eval = eval.Parser(*p)
+		}
 		// Map the xslt3 resource cap onto the xpath3 evaluator so
 		// fn:unparsed-text / fn:json-doc reads honor the same bound. The
 		// xpath3 setter takes 0 = unparsedtext default, so translate the

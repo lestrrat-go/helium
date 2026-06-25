@@ -492,8 +492,9 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	parser := helium.NewParser()
-	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+	ec := getFnContext(ctx)
+	parser := ec.xmlParser()
+	if ec != nil && ec.baseURI != "" {
 		parser = parser.BaseURI(ec.baseURI)
 	}
 	doc, err := parser.Parse(ctx, []byte(s))
@@ -520,11 +521,12 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 
 	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 	doc.SetProperties(doc.Properties() | helium.DocInternal)
-	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+	ec := getFnContext(ctx)
+	if ec != nil && ec.baseURI != "" {
 		doc.SetURL(ec.baseURI)
 	}
 
-	first, err := helium.NewParser().ParseInNodeContext(ctx, doc, []byte(s))
+	first, err := ec.xmlParser().ParseInNodeContext(ctx, doc, []byte(s))
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
 	}
@@ -967,7 +969,8 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	if strings.Contains(resolved, "#") {
 		return nil, &XPathError{Code: errCodeFODC0005, Message: "fn:doc: URI must not contain a fragment identifier"}
 	}
-	if ec := getFnContext(ctx); ec != nil {
+	ec := getFnContext(ctx)
+	if ec != nil {
 		if doc, ok := ec.docCache[resolved]; ok {
 			return doc, nil
 		}
@@ -978,15 +981,15 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
 	}
 
-	// Block external entity expansion and network access in the retrieved
-	// document. Without this, an attacker who controls the resource body
-	// could chain XXE/SSRF on top of the doc() retrieval.
-	doc, err := helium.NewParser().BlockXXE(true).AllowNetwork(false).Parse(ctx, data)
+	// The parser governs external entity expansion and network access for the
+	// retrieved document. The default helium.NewParser() is safe-by-default
+	// (XXE blocked, network disabled); an injected parser's policy wins.
+	doc, err := ec.xmlParser().Parse(ctx, data)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
 	}
 	doc.SetURL(resolved)
-	if ec := getFnContext(ctx); ec != nil {
+	if ec != nil {
 		ec.docCache[resolved] = doc
 	}
 	return doc, nil

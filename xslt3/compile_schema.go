@@ -31,7 +31,7 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// (Compiler.AllowExternalEntities) does NOT extend to schema documents.
 	// External DTDs / general entities in a schema are neither loaded nor
 	// substituted regardless of the compiler's allowExternalEntities setting.
-	doc, err := parseExternalXML(ctx, data, "", false, nil, nil)
+	doc, err := parseExternalXML(ctx, c.parser, data, "", false, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
 	}
@@ -49,11 +49,14 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// inline-schema path in compileImportSchema.
 	errCounter := &fatalErrorCounter{}
 	fsys := schemaResolverFS{ctx: ctx, load: c.loadSchemaBytes}
-	schema, err := xsd.NewCompiler().
+	schemaCompiler := xsd.NewCompiler().
 		ErrorHandler(errCounter).
 		BaseDir(schemaCompileBaseDir(uri)).
-		FS(fsys).
-		Compile(ctx, doc)
+		FS(fsys)
+	if c.parser != nil {
+		schemaCompiler = schemaCompiler.Parser(*c.parser)
+	}
+	schema, err := schemaCompiler.Compile(ctx, doc)
 	// XTSE0220: the schema could not be constructed (e.g. an unresolved
 	// referenced type or a nested xs:import miss). The xsd compiler now
 	// reports this as ErrCompilationFailed (nil schema); the fatalErrorCounter
@@ -285,6 +288,9 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			compiler := xsd.NewCompiler().ErrorHandler(errCounter).FS(fsys)
 			if baseURI != "" {
 				compiler = compiler.BaseDir(schemaCompileBaseDir(baseURI))
+			}
+			if c.parser != nil {
+				compiler = compiler.Parser(*c.parser)
 			}
 			schema, err := compiler.Compile(ctx, inlineDoc)
 			// XTSE0220: the synthetic schema document does not satisfy XSD
