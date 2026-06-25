@@ -675,8 +675,13 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 				}
 			}
 			// Attribute nodes must be set as attributes on the current
-			// element, not added as child nodes.
-			if v.Node.Type() == helium.AttributeNode {
+			// element, not added as child nodes — except in capture/sequence
+			// mode (xsl:function / xsl:variable with as=, etc.), where the
+			// attribute is a free-standing sequence item that must be captured
+			// intact (out.current is not the eventual owner element). Falling
+			// through to ec.addNode captures it as a pendingItem in that case,
+			// mirroring copyNodeToOutput's sequenceMode handling.
+			if v.Node.Type() == helium.AttributeNode && !out.captureItems && !out.sequenceMode {
 				attr, ok := v.Node.(*helium.Attribute)
 				if ok {
 					if elem, ok := out.current.(*helium.Element); ok {

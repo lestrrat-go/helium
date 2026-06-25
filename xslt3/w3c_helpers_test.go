@@ -1723,9 +1723,6 @@ var w3cImplicitSkips = map[string]string{
 
 	"base-uri-052": "XInclude processing not applied to source documents",
 
-	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
-	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
-
 	// XSD 1.1 features: newly unlocked but failing
 	"validation-1301":   "XSD 1.1 xs:alternative type selection not implemented",
 	"import-schema-164": "XSD validation fails for namespaced attribute ref with default",
