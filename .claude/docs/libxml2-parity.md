@@ -8,7 +8,7 @@
 |---------|-------|------|------|------|--------------|
 | Core XML (DOM) | 150+ | all | 0 | ~100% | — |
 | Core XML (SAX2) | 150+ | all | 0 | ~100% | — |
-| C14N | 76 | 66 | 10 | 87% | Parser: duplicate xmlns (7), entity-ref in single-quoted attr (3) |
+| C14N | 73 | 73 | 0 | 100% | — |
 | XSD | 226 | 225 | 1 | 99.6% | libxml2 IDC quirk with ref + attributeFormDefault |
 | RELAX NG | 159 | 159 | 0 | 100% | — |
 | Schematron | 42 | 42 | 0 | 100% | — |
@@ -65,11 +65,12 @@ Test data: `testdata/libxml2-compat/` (golden files generated from libxml2's xml
 
 ## Parser Limitations
 
-These affect multiple packages (especially C14N test skips):
+Cross-element redundant namespace redeclarations and entity references in
+single-quoted attributes (formerly the cause of all 10 C14N skips) now parse
+correctly; the C14N suite runs with no skips. Same-element duplicate namespace
+declarations remain a well-formedness error, as in libxml2.
 
-1. **Duplicate namespace declarations** — helium rejects, libxml2 uses last. Affects 7 C14N tests.
-2. **Entity refs in single-quoted attributes** — not expanded. Affects 3 C14N tests.
-3. **External entity resolution** — limited; requires explicit config. `NewParser` is **secure by default**: `BlockXXE` is on, the `FS` is a deny-all FS, and network is off — so external loading is blocked even when `LoadExternalDTD(true)`/`SubstituteEntities(true)` are set, until `BlockXXE(false)` is also set AND an FS is supplied (`helium.PermissiveFS()` or a confined `fs.FS`). External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. External DTD subsets are read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset exceeding the cap is rejected with `ErrExternalDTDTooLarge`.
+1. **External entity resolution** — limited; requires explicit config. `NewParser` is **secure by default**: `BlockXXE` is on, the `FS` is a deny-all FS, and network is off — so external loading is blocked even when `LoadExternalDTD(true)`/`SubstituteEntities(true)` are set, until `BlockXXE(false)` is also set AND an FS is supplied (`helium.PermissiveFS()` or a confined `fs.FS`). External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. External DTD subsets are read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset exceeding the cap is rejected with `ErrExternalDTDTooLarge`.
 
 ## Feature Status
 
