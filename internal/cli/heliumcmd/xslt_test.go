@@ -32,6 +32,26 @@ func TestXSLTIncludeResolves(t *testing.T) {
 	require.Contains(t, out, "<out>hello</out>")
 }
 
+// TestXSLTStylesheetExternalDTDEntityLoads guards against a regression of the
+// secure-by-default flip: the stylesheet's external DTD entities must still be
+// loaded (the xslt command opts the stylesheet parse back into external loading).
+func TestXSLTStylesheetExternalDTDEntityLoads(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile(t, dir, "style.dtd", `<!ENTITY msg "ok">`)
+	ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>
+<!DOCTYPE xsl:stylesheet SYSTEM "style.dtd">
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root"><out>&msg;</out></xsl:template>
+</xsl:stylesheet>`)
+	xmlFile := writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
+
+	out, errOut, code := executeArgs(t, strings.NewReader(""), "xslt", ssFile, xmlFile)
+	require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+	require.Contains(t, out, "<out>ok</out>",
+		"stylesheet external DTD entity must be loaded, not silently dropped")
+}
+
 // fileURIForPath builds a file: URI from a local filesystem path that is
 // correct cross-platform. On Windows, filepath.ToSlash yields "C:/..." which,
 // without a leading slash, serializes as "file://C:/..." (host "C:") and is

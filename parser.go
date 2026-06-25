@@ -52,6 +52,9 @@ type parserConfig struct {
 	fsys           fs.FS
 	maxDepth       int
 	maxExtDTDSize  int
+	maxNameLength  int
+	maxEntityAmpl  int
+	maxCMDepth     int
 	errorHandler   ErrorHandler
 }
 
@@ -62,12 +65,52 @@ type Parser struct {
 	cfg *parserConfig
 }
 
-// NewParser creates a new Parser with default settings.
+// defaultMaxDepth is the element-nesting limit applied by [NewParser]. It bounds
+// recursion/stack growth from hostile deeply-nested input. Callers parsing
+// legitimately deep documents can raise it with [Parser.MaxDepth] or disable the
+// check entirely with MaxDepth(0).
+const defaultMaxDepth = 256
+
+// NewParser creates a new Parser with secure defaults suited to untrusted input:
+//
+//   - external entities and DTDs are not loaded ([Parser.BlockXXE] is on);
+//   - network access is forbidden ([Parser.AllowNetwork] is off);
+//   - no filesystem is exposed ([Parser.FS] defaults to a deny-all FS, so even a
+//     document that does reach a loader cannot open host paths);
+//   - element nesting is capped at defaultMaxDepth ([Parser.MaxDepth]).
+//
+// Entity substitution, external-DTD loading, XInclude, and DTD validation are
+// likewise off by default. Opt back in explicitly per setting, e.g.
+// NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).
 func NewParser() Parser {
-	return Parser{cfg: &parserConfig{
-		sax:  NewTreeBuilder(),
-		fsys: iofs.PermissiveRoot{},
-	}}
+	cfg := &parserConfig{
+		sax:      NewTreeBuilder(),
+		fsys:     iofs.DenyAll{},
+		maxDepth: defaultMaxDepth,
+	}
+	cfg.options.Set(parseNoXXE)
+	cfg.options.Set(parseNoNet)
+	return Parser{cfg: cfg}
+}
+
+// PermissiveFS returns an [fs.FS] that opens any path via [os.Open] — absolute,
+// relative, or containing "..", anywhere on the host filesystem, without
+// enforcing [fs.ValidPath]. It restores helium's historical unsandboxed loading
+// behavior, which is NOT the default: a parser from [NewParser] loads no
+// external resources at all (see [Parser.FS]).
+//
+// Pass it explicitly to opt back into host filesystem access:
+//
+//	doc, err := helium.NewParser().
+//		BlockXXE(false).
+//		LoadExternalDTD(true).
+//		FS(helium.PermissiveFS()).
+//		Parse(ctx, data)
+//
+// Prefer a confined [fs.FS] rooted at a trusted directory over PermissiveFS when
+// the document's external references are known.
+func PermissiveFS() fs.FS {
+	return iofs.PermissiveRoot{}
 }
 
 func (p Parser) clone() Parser {
@@ -224,7 +267,7 @@ func (p Parser) ProcessXInclude(v bool) Parser {
 // libxml2: XML_PARSE_NONET (note: semantics are inverted — libxml2 sets
 // this flag to *forbid* network access, whereas AllowNetwork(true)
 // *permits* it)
-// Default: true (network access is allowed)
+// Default: false (network access is forbidden)
 func (p Parser) AllowNetwork(v bool) Parser {
 	p = p.clone()
 	if !v {
@@ -310,18 +353,56 @@ func (p Parser) FixBaseURIs(v bool) Parser {
 	return p
 }
 
-// RelaxLimits controls whether hardcoded parser limits (name length,
-// entity expansion) are relaxed. Use with caution — disabling limits
-// may expose the parser to denial-of-service attacks.
-// libxml2: XML_PARSE_HUGE
-// Default: false
-func (p Parser) RelaxLimits(v bool) Parser {
+// Default values for the per-limit parser knobs. Each [Parser] limit method
+// treats a zero argument as "use the default" and a negative argument as
+// "no limit".
+const (
+	// DefaultMaxNameLength is the default cap on the length, in bytes, of a
+	// single element / attribute / namespace-prefix / NCName token.
+	DefaultMaxNameLength = 50000
+	// DefaultMaxEntityAmplification is the default entity-expansion
+	// amplification factor: the parser rejects a document whose total
+	// expanded entity bytes exceed this multiple of the input size (beyond a
+	// fixed baseline). The 1 GiB absolute expansion ceiling applies
+	// regardless of this factor.
+	DefaultMaxEntityAmplification = 5
+	// DefaultMaxContentModelDepth is the default cap on the nesting depth of a
+	// DTD element content-model declaration (the parenthesized groups in
+	// <!ELEMENT ...>).
+	DefaultMaxContentModelDepth = 128
+)
+
+// MaxNameLength sets the maximum length, in bytes, of a single element,
+// attribute, namespace-prefix, or NCName token. A value of zero (the default)
+// uses [DefaultMaxNameLength] (50000); a negative value removes the limit.
+// Removing the limit lets a hostile document allocate very large name tokens,
+// so do so only for trusted input.
+func (p Parser) MaxNameLength(n int) Parser {
 	p = p.clone()
-	if !v {
-		p.cfg.options.Clear(parseHuge)
-		return p
-	}
-	p.cfg.options.Set(parseHuge)
+	p.cfg.maxNameLength = n
+	return p
+}
+
+// MaxEntityAmplification sets the maximum entity-expansion amplification
+// factor: the parser rejects a document whose cumulative expanded entity
+// bytes exceed n times the input size (past a fixed baseline), the guard
+// against "billion laughs" style attacks. A value of zero (the default) uses
+// [DefaultMaxEntityAmplification] (5); a negative value disables the ratio
+// check. The 1 GiB absolute expansion ceiling is always enforced, even when
+// the ratio check is disabled.
+func (p Parser) MaxEntityAmplification(n int) Parser {
+	p = p.clone()
+	p.cfg.maxEntityAmpl = n
+	return p
+}
+
+// MaxContentModelDepth sets the maximum nesting depth of a DTD element
+// content-model declaration (the parenthesized groups in <!ELEMENT ...>). A
+// value of zero (the default) uses [DefaultMaxContentModelDepth] (128); a
+// negative value removes the limit.
+func (p Parser) MaxContentModelDepth(n int) Parser {
+	p = p.clone()
+	p.cfg.maxCMDepth = n
 	return p
 }
 
@@ -357,7 +438,7 @@ func (p Parser) BigLineNumbers(v bool) Parser {
 // BlockXXE controls whether loading of external entities and DTDs is
 // blocked, preventing XML External Entity (XXE) attacks.
 // libxml2: XML_PARSE_NOXXE
-// Default: false
+// Default: true (external entity/DTD loading is blocked)
 func (p Parser) BlockXXE(v bool) Parser {
 	p = p.clone()
 	if !v {
@@ -445,7 +526,11 @@ func (p Parser) CharBufferSize(size int) Parser {
 // MaxDepth sets the maximum element nesting depth allowed during parsing.
 // When depth is greater than zero, the parser returns an error if the input
 // document contains elements nested deeper than this limit. A value of zero
-// (the default) means no limit is enforced.
+// means no limit is enforced.
+//
+// [NewParser] defaults this to 256 (defaultMaxDepth) to bound recursion from
+// hostile input; pass a larger value for legitimately deep documents, or
+// MaxDepth(0) to disable the check.
 func (p Parser) MaxDepth(depth int) Parser {
 	p = p.clone()
 	p.cfg.maxDepth = depth
@@ -476,8 +561,12 @@ func (p Parser) Catalog(c CatalogResolver) Parser {
 
 // FS sets the [fs.FS] used to load external resources referenced by the
 // document — external DTDs ([LoadExternalDTD]) and external entities
-// resolved through [TreeBuilder.ResolveEntity]. A nil value restores the
-// default, which opens any path supplied to the parser via [os.Open].
+// resolved through [TreeBuilder.ResolveEntity].
+//
+// The default (and what a nil value restores) is a deny-all FS that refuses
+// every open: a parser from [NewParser] loads no external resources from the
+// host filesystem. To opt into host access, pass [PermissiveFS] (any os.Open
+// path) or — preferably — a confined [fs.FS] rooted at a trusted directory.
 //
 // Note: the names handed to the FS are built with [filepath.Join] against
 // the document's base URI, so they may be absolute and may use
@@ -489,7 +578,7 @@ func (p Parser) Catalog(c CatalogResolver) Parser {
 func (p Parser) FS(fsys fs.FS) Parser {
 	p = p.clone()
 	if fsys == nil {
-		fsys = iofs.PermissiveRoot{}
+		fsys = iofs.DenyAll{}
 	}
 	p.cfg.fsys = fsys
 	return p

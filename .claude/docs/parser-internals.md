@@ -75,11 +75,11 @@ State affects parsing rules: e.g., external entity refs forbidden in `psAttribut
 - `attsDefault map[string][]*Attribute` — default attributes from DTD
 - `inSubset int` — 0=not in subset, 1=internal, 2=external
 - `replaceEntities bool` — expand entity refs (set by SubstituteEntities(true))
-- `fsys fs.FS` — filesystem used to load external DTDs/entities; defaults to `internal/iofs.PermissiveRoot{}` (passthrough to os.Open), overridden via `Parser.FS()`. Used by `TreeBuilder.ExternalSubset` and `TreeBuilder.ResolveEntity`. When a catalog resolves an identifier to a `file:` URI, `tree_builder.go`'s `catalogOpenName` converts it to a local path via `internal/iofs.FileURIToPath` before `fsys.Open` (mirroring the XInclude `file:` handling); non-file URIs and plain paths pass through unchanged. Entity sub-parsers (`parseExternalEntityPrivate`, `parseBalancedChunkInternal`) both seed their nested context through the shared `inheritNestedParserState` helper (`parser_entity_decl.go`), which copies the parent's `sax`, `treeBuilder`, `attsDefault`, config-derived policy (`options`, `loadsubset`, `replaceEntities`, `keepBlanks`, `pedantic`, `charBufferSize`, `maxExtDTDSize`, `fsys`, `catalog`, `baseURI`), and — critically for depth enforcement — BOTH `maxElemDepth` (the limit) AND the parent's current `elemDepth`. Carrying the current `elemDepth` means element nesting that crosses an entity-expansion boundary keeps accumulating toward `MaxDepth` instead of restarting at 0: without it a single substituted element (`<!ENTITY e "<a/>">` used inside `<r>&e;</r>`) would wrongly pass `MaxDepth(1)` even though the literal `<r><a/></r>` is depth 2. This applies equally to external entity replacement text. The helper does NOT touch `doc`, the `external` flag, or the amplification counters (`sizeentcopy`/`inputSize`/`maxAmpl`); each caller sets those because their lifecycle differs (document swap, external flag, counter write-back on return). Otherwise these would all reset to zero-value defaults, e.g. `maxElemDepth=0` disabling the depth check and `fsys` falling back to `PermissiveRoot`.
+- `fsys fs.FS` — filesystem used to load external DTDs/entities; defaults to `internal/iofs.DenyAll{}` (refuses every open — safe-by-default), overridden via `Parser.FS()` (pass `helium.PermissiveFS()` / `internal/iofs.PermissiveRoot{}` to restore os.Open passthrough). Used by `TreeBuilder.ExternalSubset` and `TreeBuilder.ResolveEntity`. When a catalog resolves an identifier to a `file:` URI, `tree_builder.go`'s `catalogOpenName` converts it to a local path via `internal/iofs.FileURIToPath` before `fsys.Open` (mirroring the XInclude `file:` handling); non-file URIs and plain paths pass through unchanged. Entity sub-parsers (`parseExternalEntityPrivate`, `parseBalancedChunkInternal`) both seed their nested context through the shared `inheritNestedParserState` helper (`parser_entity_decl.go`), which copies the parent's `sax`, `treeBuilder`, `attsDefault`, config-derived policy (`options`, `loadsubset`, `replaceEntities`, `keepBlanks`, `pedantic`, `charBufferSize`, `maxExtDTDSize`, `maxNameLength`, `maxCMDepth`, `fsys`, `catalog`, `baseURI`), and — critically for depth enforcement — BOTH `maxElemDepth` (the limit) AND the parent's current `elemDepth`. (`maxNameLength`/`maxCMDepth` are the granular limit fields that replaced the old `XML_PARSE_HUGE` bit; they must be copied here too or a configured `MaxNameLength`/`MaxContentModelDepth` would not apply inside entity expansion.) Carrying the current `elemDepth` means element nesting that crosses an entity-expansion boundary keeps accumulating toward `MaxDepth` instead of restarting at 0: without it a single substituted element (`<!ENTITY e "<a/>">` used inside `<r>&e;</r>`) would wrongly pass `MaxDepth(1)` even though the literal `<r><a/></r>` is depth 2. This applies equally to external entity replacement text. The helper does NOT touch `doc`, the `external` flag, or the amplification counters (`sizeentcopy`/`inputSize`/`maxAmpl`); each caller sets those because their lifecycle differs (document swap, external flag, counter write-back on return). Otherwise these would all reset to zero-value defaults, e.g. `maxElemDepth=0` disabling the depth check and `fsys` falling back to the safe-by-default `DenyAll`.
 
 ### Entity Amplification Guard
 - `sizeentcopy int64` — cumulative entity expansion bytes
-- `maxAmpl int` — max amplification factor (5 default, 0 with RelaxLimits(true))
+- `maxAmpl int` — max amplification factor (5 default, 0 with MaxEntityAmplification(-1))
 - `inputSize int64` — original input size
 - Rules: 1MB baseline before ratio check; 20 bytes fixed cost per entity ref
 
@@ -134,7 +134,7 @@ document-end gate.
 2. `entityCheck(ent, size)` — amplification guard
    - Baseline: 1MB free
    - Fixed cost: 20 bytes per ref (charged once per reference)
-   - Max amplification: 5× input (disabled with RelaxLimits(true))
+   - Max amplification: 5× input (disabled with MaxEntityAmplification(-1))
    - Already-checked entities use cached `expandedSize`
    - Raw-byte variant `entityCheckBytes(size)` charges expansion bytes WITHOUT the fixed cost, used for external content already charged the fixed cost by `parseReference`
 3. Parse entity content if needed (`parseBalancedChunkInternal`, or `parseExternalEntityPrivate` for external entities)
@@ -364,7 +364,8 @@ The legacy-prefix-resolves-vs-literal decision mirrors `parseCharRef`, but the b
 | LoadExternalDTD(true) | loadsubset.Set(DetectIDs) (load external DTD; external subset system IDs resolve relative to the DTD base URI) |
 | DefaultDTDAttributes(true) | loadsubset.Set(CompleteAttrs) (apply default attrs) |
 | ValidateDTD(true) | validate content models after parse |
-| RelaxLimits(true) | maxAmpl=0 (disable amplification checks) |
+| MaxEntityAmplification(-1) | maxAmpl=0 (disable amplification ratio check; 1 GiB hard ceiling still applies) |
+| MaxNameLength(-1) / MaxContentModelDepth(-1) | disable the name-length / DTD content-model-depth caps |
 | MergeCDATA(true) | deliver CDATA as Characters (not CDataBlock) |
 | RecoverOnError(true) | error recovery (continue on errors) |
 | IgnoreEncoding(true) | don't use XML decl encoding |

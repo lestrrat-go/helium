@@ -9,6 +9,15 @@
 //
 // The returned count indicates how many inclusions were performed.
 //
+// # Security
+//
+// Included documents are parsed with their own inner parser, confined to the
+// resolver's filesystem (see [Processor.Resolver]); supply a confined resolver
+// for untrusted input. The default resolver opens any OS path
+// ([NewFSResolver](nil)); when processing untrusted input, supply a confined
+// resolver via [Processor.Resolver] / [NewFSResolver] (e.g. backed by
+// [os.Root.FS]).
+//
 // # Builder Design
 //
 // Boolean toggles like [Processor.NoXIncludeMarkers] and

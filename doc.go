@@ -19,6 +19,29 @@
 //
 // For streaming input, use [Parser.ParseReader] or [Parser.NewPushParser].
 //
+// # Security defaults
+//
+// [NewParser] is secure by default and safe for untrusted input: it blocks
+// external entity and DTD loading ([Parser.BlockXXE] is on), exposes no
+// filesystem ([Parser.FS] defaults to a deny-all FS), forbids network access
+// ([Parser.AllowNetwork] is off), and caps element nesting depth at 256
+// ([Parser.MaxDepth]). Entity substitution, external-DTD loading, XInclude, and
+// DTD validation are likewise off by default.
+//
+// Because of this, a document that references an external DTD or entity — for
+// example via [Parser.ParseFile] on a file with a SYSTEM DTD — will not load
+// that resource by default. To deliberately load external resources from a
+// trusted source, opt in explicitly and supply a filesystem:
+//
+//	doc, err := helium.NewParser().
+//	    BlockXXE(false).
+//	    LoadExternalDTD(true).
+//	    FS(helium.PermissiveFS()). // any os.Open path; or a confined fs.FS
+//	    Parse(ctx, xmlBytes)
+//
+// [PermissiveFS] restores the historical unsandboxed behavior; prefer a confined
+// [io/fs.FS] when the document's external references are known.
+//
 // # Serialization
 //
 // Use [NewWriter] to serialize documents or nodes back to XML:

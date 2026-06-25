@@ -24,7 +24,7 @@ const (
 	NoXIncNode   Option = 1 << (iota + 1) /* do not generate XINCLUDE START/END nodes */
 	Compact      Option = 1 << (iota + 1) /* compact small text nodes */
 	NoBaseFix    Option = 1 << (iota + 2) /* do not fixup XINCLUDE xml:base uris */
-	Huge         Option = 1 << (iota + 2) /* relax any hardcoded limit from the parser */
+	_            Option = 1 << (iota + 2) /* retired bit (was Huge / XML_PARSE_HUGE); replaced by per-limit knobs */
 	IgnoreEnc    Option = 1 << (iota + 3) /* ignore internal document encoding hint */
 	BigLines     Option = 1 << (iota + 3) /* Store big lines numbers in text PSVI field */
 	NoXXE        Option = 1 << (iota + 3) /* block external entity/DTD loading */

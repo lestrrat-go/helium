@@ -50,6 +50,7 @@ func TestStripSpaceCopyExternalSubsetIsolated(t *testing.T) {
 </doc>`
 
 	src, err := helium.NewParser().
+		BlockXXE(false).
 		LoadExternalDTD(true).
 		FS(fsys).
 		Parse(t.Context(), []byte(source))

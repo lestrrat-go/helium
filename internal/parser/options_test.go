@@ -30,7 +30,6 @@ func TestOptionBitPositions(t *testing.T) {
 	require.Equal(t, parser.Option(32768), parser.NoXIncNode)
 	require.Equal(t, parser.Option(65536), parser.Compact)
 	require.Equal(t, parser.Option(262144), parser.NoBaseFix)
-	require.Equal(t, parser.Option(524288), parser.Huge)
 	require.Equal(t, parser.Option(2097152), parser.IgnoreEnc)
 	require.Equal(t, parser.Option(4194304), parser.BigLines)
 	require.Equal(t, parser.Option(8388608), parser.NoXXE)
@@ -62,7 +61,6 @@ func TestOptionFlagsAreUnique(t *testing.T) {
 		parser.NoXIncNode,
 		parser.Compact,
 		parser.NoBaseFix,
-		parser.Huge,
 		parser.IgnoreEnc,
 		parser.BigLines,
 		parser.NoXXE,

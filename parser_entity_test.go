@@ -85,7 +85,7 @@ func TestExternalEntitySizeCap(t *testing.T) {
 <!DOCTYPE r [<!ENTITY x SYSTEM "big">]><r>&x;</r>`
 
 	var closed atomic.Bool
-	p := helium.NewParser().
+	p := helium.NewParser().BlockXXE(false).
 		SubstituteEntities(true).
 		FS(finiteFS{size: externalEntityMaxBytes + 1, closed: &closed})
 
@@ -129,7 +129,7 @@ func TestExternalEntityInputClosed(t *testing.T) {
 <!DOCTYPE r [<!ENTITY x SYSTEM "ext">]><r>&x;</r>`
 
 	var closed atomic.Bool
-	p := helium.NewParser().SubstituteEntities(true).FS(closingFS{data: "<e>ok</e>", closed: &closed})
+	p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(closingFS{data: "<e>ok</e>", closed: &closed})
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 	require.True(t, closed.Load(), "resolved external entity input must be closed on success")
@@ -184,7 +184,7 @@ func TestExternalEntityClosedBeforeContentParsed(t *testing.T) {
 ]><r>&x;</r>`
 
 	var extClosed, extClosedAtNestOpen, nestOpened atomic.Bool
-	p := helium.NewParser().SubstituteEntities(true).FS(orderingFS{
+	p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(orderingFS{
 		extClosed:           &extClosed,
 		extClosedAtNestOpen: &extClosedAtNestOpen,
 		nestOpened:          &nestOpened,
@@ -249,7 +249,7 @@ func TestExternalEntityAmplification(t *testing.T) {
 		const input = `<?xml version="1.0"?>
 <!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r>&x;</r>`
 
-		doc, err := helium.NewParser().
+		doc, err := helium.NewParser().BlockXXE(false).
 			SubstituteEntities(true).
 			FS(countingFS{data: body, opens: &opens}).
 			Parse(t.Context(), []byte(input))
@@ -278,7 +278,7 @@ func TestExternalEntityAmplification(t *testing.T) {
 		input := fmt.Sprintf(`<?xml version="1.0"?>
 <!DOCTYPE r [<!ENTITY x SYSTEM "big.txt">]><r><!--%s-->%s</r>`, padding, refs.String())
 
-		_, err := helium.NewParser().
+		_, err := helium.NewParser().BlockXXE(false).
 			SubstituteEntities(true).
 			FS(countingFS{data: body, opens: &opens}).
 			Parse(t.Context(), []byte(input))
@@ -453,7 +453,7 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 		const input = `<?xml version="1.0"?>` + "\n" +
 			`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
 
-		_, err := helium.NewParser().
+		_, err := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
 			FS(fsys).
 			Parse(t.Context(), []byte(input))
@@ -490,7 +490,7 @@ func TestEntityValueRefValidationIsSideEffectFree(t *testing.T) {
 	input := `<?xml version="1.0"?>` + "\n" +
 		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
 
-	doc, err := helium.NewParser().
+	doc, err := helium.NewParser().BlockXXE(false).
 		LoadExternalDTD(true).
 		FS(fsys).
 		Parse(t.Context(), []byte(input))
@@ -631,9 +631,9 @@ func TestEntityAmplification(t *testing.T) {
 		require.NotNil(t, doc)
 	})
 
-	t.Run("RelaxLimits disables guard", func(t *testing.T) {
+	t.Run("MaxEntityAmplification(-1) disables guard", func(t *testing.T) {
 		t.Parallel()
-		// With RelaxLimits, billion laughs should be allowed (guard disabled).
+		// With the ratio check disabled, billion laughs should be allowed.
 		// Use a smaller version to avoid actual memory exhaustion.
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE lolz [
@@ -645,43 +645,15 @@ func TestEntityAmplification(t *testing.T) {
 ]>
 <root>&lol5;</root>`
 
-		p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true)
+		p := helium.NewParser().SubstituteEntities(true).MaxEntityAmplification(-1)
 		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 		require.NotNil(t, doc)
 	})
 
-	t.Run("RelaxLimits still capped by absolute ceiling", func(t *testing.T) {
-		// Intentionally NOT t.Parallel: this subtest drives expansion up
-		// to entityHardCeiling (1 GiB). Running it alongside the parallel
-		// subtests above amplified peak memory under loaded CI runners.
-		// The ceiling does eventually trip, but the parser still
-		// materializes nontrivial intermediate state, so we serialize it.
-		// A bigger billion-laughs that would expand to many GB even with
-		// the ratio check disabled. The absolute ceiling (entityHardCeiling
-		// in parserctx.go) must still trip and abort the parse.
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE lolz [
-  <!ENTITY lol "lol">
-  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
-  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
-  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
-  <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
-  <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
-  <!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
-  <!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
-  <!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
-]>
-<root>&lol9;</root>`
-
-		p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true)
-		_, err := p.Parse(t.Context(), []byte(xml))
-		require.Error(t, err, "absolute ceiling must trip even with RelaxLimits")
-		require.Contains(t, err.Error(), "maximum entity expansion size",
-			"error must explain the ceiling, got: %v", err)
-		require.Regexp(t, `\(\d+ > \d+\)`, err.Error(),
-			"error must include observed and configured sizes for diagnosis, got: %v", err)
-	})
+	// The absolute hard-ceiling behavior (it trips even with the ratio check
+	// disabled) is covered by TestEntityHardCeiling in the internal test, which
+	// lowers entityHardCeiling so it need not actually expand toward 1 GB.
 }
 
 // TestParseFileLargeEntityNotFalselyAmplified guards against a regression where
@@ -824,7 +796,7 @@ func TestEntityDepthLimit(t *testing.T) {
 	dtd.WriteString("]>\n")
 	dtd.WriteString("<root>&e45;</root>")
 
-	p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true) // disable amplification guard to test depth only
+	p := helium.NewParser().SubstituteEntities(true).MaxEntityAmplification(-1) // disable amplification guard to test depth only
 	_, err := p.Parse(t.Context(), []byte(dtd.String()))
 	require.Error(t, err, "depth > 40 should still error")
 	require.Contains(t, err.Error(), "entity loop")
@@ -882,7 +854,7 @@ func TestExternalDTDConditionalSections(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + path + `">
 <root/>`
 
-	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	_, found := doc.GetEntity("included")
@@ -909,7 +881,7 @@ func TestExternalDTDNotationsAndEntities(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + path + `">
 <root/>`
 
-	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	require.NotNil(t, doc.ExtSubset(), "external subset must be present")
@@ -933,7 +905,7 @@ func TestExternalDTDPublicIdentifier(t *testing.T) {
 <!DOCTYPE root PUBLIC "-//Example//DTD root//EN" "` + path + `">
 <root/>`
 
-	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	_, found := doc.GetEntity("who")
 	require.True(t, found)
@@ -1199,7 +1171,7 @@ func TestExternalSubsetResolvesAgainstWindowsDriveFileURIBase(t *testing.T) {
 		`<!DOCTYPE chapter SYSTEM "ext.dtd">` +
 		`<chapter>text</chapter>`
 
-	doc, err := helium.NewParser().
+	doc, err := helium.NewParser().BlockXXE(false).
 		LoadExternalDTD(true).
 		BaseURI("file:///C:/win/dir/doc.xml").
 		FS(fsys).

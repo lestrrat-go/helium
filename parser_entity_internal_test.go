@@ -129,3 +129,32 @@ func TestValidateEntityValueRefsRestoresOnResolvedPE(t *testing.T) {
 	require.Equal(t, int64(0), pctx.sizeentcopy,
 		"sizeentcopy must be restored after a resolved-PE validation")
 }
+
+// TestEntityHardCeiling verifies the absolute entity-expansion ceiling trips
+// even when the amplification ratio check is disabled
+// (MaxEntityAmplification(-1)). It lowers entityHardCeiling for the duration of
+// the test so the ceiling can be exercised with a modest document rather than
+// expanding toward the production 1 GB cap (which risked CI OOM).
+func TestEntityHardCeiling(t *testing.T) {
+	orig := entityHardCeiling
+	entityHardCeiling = 50_000 // tiny ceiling: trips well under any real memory
+	defer func() { entityHardCeiling = orig }()
+
+	// A billion-laughs document whose expansion comfortably exceeds the lowered
+	// ceiling but stays small in absolute terms.
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE lolz [
+  <!ENTITY lol "lol">
+  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+  <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+]>
+<root>&lol5;</root>`
+
+	p := NewParser().SubstituteEntities(true).MaxEntityAmplification(-1)
+	_, err := p.Parse(context.Background(), []byte(xml))
+	require.Error(t, err, "the absolute ceiling must trip even with the ratio check disabled")
+	require.Contains(t, err.Error(), "maximum entity expansion size",
+		"error must explain the ceiling, got: %v", err)
+}

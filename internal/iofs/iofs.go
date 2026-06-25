@@ -43,6 +43,22 @@ func (PermissiveRoot) Open(name string) (fs.File, error) {
 	return os.Open(name) //nolint:gosec,wrapcheck // intentional passthrough; see type doc
 }
 
+// DenyAll is an [fs.FS] that refuses every Open with [fs.ErrNotExist]. It is
+// the default FS of a freshly constructed parser: no external resource (DTD,
+// entity, ...) referenced by a document is loaded unless the caller explicitly
+// supplies an FS via Parser.FS. Making "load nothing" the default keeps
+// untrusted input from reaching the host filesystem (XXE / local-file
+// disclosure). To restore the historical permissive behavior, pass
+// [PermissiveRoot] (exposed publicly as helium.PermissiveFS).
+type DenyAll struct{}
+
+// Open implements [fs.FS]. It always fails with [fs.ErrNotExist] so callers
+// that treat a missing resource as "skip silently" behave as if no file was
+// present.
+func (DenyAll) Open(name string) (fs.File, error) {
+	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+}
+
 // FileURIToPath converts a "file:" URI into a local filesystem path. It mirrors
 // the conversion performed in package catalog (added in PR #602) so that other
 // loaders — notably the XInclude processor — resolve "file:" hrefs identically.

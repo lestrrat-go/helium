@@ -343,7 +343,11 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 	return
 }
 
-func parseStringName(s []byte) (string, int, error) {
+// parseStringName scans an XML Name from the front of s. maxNameLength bounds
+// the name's byte length (0 = no limit) so entity/parameter-entity reference
+// names in stored entity values are held to the same MaxNameLength cap as names
+// parsed from the document stream.
+func parseStringName(s []byte, maxNameLength int) (string, int, error) {
 	i := 0
 	r, w := utf8.DecodeRune(s)
 	if r == utf8.RuneError {
@@ -375,6 +379,9 @@ func parseStringName(s []byte) (string, int, error) {
 		s = s[w:]
 	}
 
+	if maxNameLength > 0 && out.Len() > maxNameLength {
+		return "", 0, ErrNameTooLong
+	}
 	return out.String(), i, nil
 }
 
@@ -417,7 +424,7 @@ func (pctx *parserCtx) parseStringEntityRef(ctx context.Context, s []byte) (sax.
 	}
 
 	i := 1
-	name, width, err := parseStringName(s[1:])
+	name, width, err := parseStringName(s[1:], pctx.maxNameLength)
 	if err != nil {
 		return nil, 0, errors.New("failed to parse name")
 	}
@@ -483,7 +490,7 @@ func (pctx *parserCtx) parseStringPEReference(ctx context.Context, s []byte) (sa
 	}
 
 	i := 1
-	name, width, err := parseStringName(s[1:])
+	name, width, err := parseStringName(s[1:], pctx.maxNameLength)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -713,8 +720,8 @@ func saturatedAdd(a, b int64) int64 {
 
 func (ctx *parserCtx) entityCheck(ent sax.Entity, size int) error {
 	// Account expanded bytes even when the ratio check is disabled
-	// (maxAmpl=0 via RelaxLimits) so the absolute ceiling below can
-	// catch unbounded growth.
+	// (maxAmpl=0 via MaxEntityAmplification(-1)) so the absolute ceiling
+	// below can catch unbounded growth.
 	if e, ok := ent.(*Entity); ok && e != nil && e.Checked() {
 		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, e.expandedSize)
 		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, entityFixedCost)
@@ -736,10 +743,10 @@ func (ctx *parserCtx) entityCheckBytes(size int) error {
 }
 
 func (ctx *parserCtx) entityCheckLimits() error {
-	// Absolute ceiling: enforced even when RelaxLimits disables the
-	// amplification-ratio check. A document opting into "relaxed limits"
-	// is asserting that legitimate large entities are OK, not that
-	// unbounded billion-laughs expansion is OK.
+	// Absolute ceiling: enforced even when MaxEntityAmplification(-1)
+	// disables the amplification-ratio check. Disabling the ratio check
+	// asserts that legitimate large entities are OK, not that unbounded
+	// billion-laughs expansion is OK.
 	if ctx.sizeentcopy > entityHardCeiling {
 		// The "maximum entity expansion size" prefix matches the historical
 		// error text; substring callers (tests) keep matching. The

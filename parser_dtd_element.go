@@ -217,11 +217,7 @@ func (pctx *parserCtx) parseElementMixedContentDecl(ctx context.Context) (*Eleme
 }
 
 func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, depth int) (*ElementContent, error) {
-	maxDepth := 128
-	if pctx.options.IsSet(parseHuge) {
-		maxDepth = 2048
-	}
-	if depth > maxDepth {
+	if pctx.maxCMDepth > 0 && depth > pctx.maxCMDepth {
 		return nil, fmt.Errorf("xmlParseElementChildrenContentDecl : depth %d too deep", depth)
 	}
 	startInput := pctx.currentInputID()

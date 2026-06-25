@@ -69,7 +69,7 @@ These affect multiple packages (especially C14N test skips):
 
 1. **Duplicate namespace declarations** — helium rejects, libxml2 uses last. Affects 7 C14N tests.
 2. **Entity refs in single-quoted attributes** — not expanded. Affects 3 C14N tests.
-3. **External entity resolution** — limited; requires explicit config. External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. `BlockXXE(true)` blocks all. External DTD subsets are read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset exceeding the cap is rejected with `ErrExternalDTDTooLarge`.
+3. **External entity resolution** — limited; requires explicit config. `NewParser` is **secure by default**: `BlockXXE` is on, the `FS` is a deny-all FS, and network is off — so external loading is blocked even when `LoadExternalDTD(true)`/`SubstituteEntities(true)` are set, until `BlockXXE(false)` is also set AND an FS is supplied (`helium.PermissiveFS()` or a confined `fs.FS`). External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. External DTD subsets are read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset exceeding the cap is rejected with `ErrExternalDTDTooLarge`.
 
 ## Feature Status
 
@@ -132,14 +132,16 @@ These affect multiple packages (especially C14N test skips):
 | PedanticErrors(bool) | XML_PARSE_PEDANTIC | ✅ | Pedantic error reporting |
 | StripBlanks(bool) | XML_PARSE_NOBLANKS | ✅ | Remove blank nodes |
 | ProcessXInclude(bool) | XML_PARSE_XINCLUDE | ✅ | XInclude processing |
-| AllowNetwork(bool) | XML_PARSE_NONET | ✅ | Inverted: false → forbid network |
+| AllowNetwork(bool) | XML_PARSE_NONET | ✅ | Inverted: false → forbid network. **Default false** (NONET set by NewParser); cosmetic — core parser has no network loader |
 | CleanNamespaces(bool) | XML_PARSE_NSCLEAN | ✅ | Remove redundant NS decls |
 | MergeCDATA(bool) | XML_PARSE_NOCDATA | ✅ | Merge CDATA as text |
 | XIncludeNodes(bool) | XML_PARSE_NOXINCNODE | ✅ | Inverted: false → skip markers |
 | FixBaseURIs(bool) | XML_PARSE_NOBASEFIX | ✅ | Inverted: false → skip fixup |
-| RelaxLimits(bool) | XML_PARSE_HUGE | ✅ | Relax limits |
+| MaxNameLength(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max name length (0=default 50000, <0=unlimited). Replaced RelaxLimits |
+| MaxEntityAmplification(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max entity-amplification ratio (0=default 5, <0=ratio check off; 1 GiB hard ceiling always applies) |
+| MaxContentModelDepth(int) | (was XML_PARSE_HUGE) | ✅ | Per-limit knob: max DTD content-model depth (0=default 128, <0=unlimited) |
 | IgnoreEncoding(bool) | XML_PARSE_IGNORE_ENC | ✅ | Ignore encoding hint |
-| BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks |
+| BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks. **Default true** (NOXXE set by NewParser; libxml2 defaults off) |
 | SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |
 | ReuseDict(bool) | XML_PARSE_NODICT | no-op | Accepted for libxml2 parity but currently has no effect: `ReuseDict(false)` sets the `XML_PARSE_NODICT` bit, but nothing reads it. Name interning always uses the global well-known table plus a per-parse `nameCache` (see `intern.go`) regardless of this flag, so it never disables interning or selects a fresh dictionary |
 | LenientXMLDecl(bool) | *(helium extension)* | ✅ | Relaxed XML decl attribute order |

@@ -16,6 +16,7 @@ type schematronValidateConfig struct {
 	timing        bool
 	version       bool
 	maxInputBytes int64
+	maxDepth      int
 }
 
 type schematronValidateInput struct {
@@ -97,12 +98,13 @@ func (c *schematronValidateCommand) showUsage() {
 	Validate XML files against a Schematron schema
 	--timing : print timing information to stderr
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
+	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
 	--version : display the version of the XML library used
 `, c.prog)
 }
 
 func (c *schematronValidateCommand) parseArgs(args []string) (*schematronValidateConfig, []string) {
-	cfg := &schematronValidateConfig{maxInputBytes: DefaultMaxInputBytes}
+	cfg := &schematronValidateConfig{maxInputBytes: DefaultMaxInputBytes, maxDepth: -1}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -124,6 +126,18 @@ func (c *schematronValidateCommand) parseArgs(args []string) (*schematronValidat
 				return nil, nil
 			}
 			cfg.maxInputBytes = n
+		case flagMaxDepth:
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth requires an argument\n", c.prog)
+				return nil, nil
+			}
+			n, err := strconv.Atoi(args[i]) //nolint:gosec // bounds checked above
+			if err != nil || n < 0 {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --max-depth: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
+				return nil, nil
+			}
+			cfg.maxDepth = n
 		default:
 			if len(arg) > 0 && arg[0] == '-' {
 				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)
@@ -165,6 +179,9 @@ func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schem
 	}
 
 	p := helium.NewParser()
+	if cfg.maxDepth >= 0 {
+		p = p.MaxDepth(cfg.maxDepth)
+	}
 	if !input.stdin {
 		p = p.BaseURI(input.name)
 	}
