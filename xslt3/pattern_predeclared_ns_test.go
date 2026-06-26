@@ -793,6 +793,66 @@ func TestTypedStrictPatternPredeclaredPrefix(t *testing.T) {
 	})
 }
 
+// TestPatternStartFunctionRequiresFnNamespace verifies that only functions in
+// the XPath functions namespace qualify as built-in pattern-start functions
+// (key/id/idref/doc/element-with-id/root). An allowlisted LOCAL name in any
+// other namespace — e.g. a user-declared Q{urn:custom}key() — must NOT be
+// admitted as a pattern-start function, even when a matching xsl:function
+// exists. Only the fn-namespace spellings key()/fn:key()/Q{fn-ns}key() are
+// accepted.
+func TestPatternStartFunctionRequiresFnNamespace(t *testing.T) {
+	t.Parallel()
+
+	const fnNS = "http://www.w3.org/2005/xpath-functions"
+
+	// A custom Q{urn:custom}key#1 is declared as an xsl:function so that the
+	// downstream function-existence check (validatePatternFunctions) would
+	// happily accept it; the ONLY thing that must reject it is the structural
+	// pattern-start check, which requires the functions namespace.
+	const tmpl = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:c="urn:custom">
+  <xsl:key name="k" match="a" use="@id"/>
+  <xsl:function name="c:key" as="xs:boolean">
+    <xsl:param name="x"/>
+    <xsl:sequence select="true()"/>
+  </xsl:function>
+  <xsl:template match="%s"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	tests := []struct {
+		name    string
+		match   string
+		wantErr bool
+	}{
+		{name: "custom-prefixed-key-rejected", match: "c:key('x')", wantErr: true},
+		{name: "custom-eqname-key-rejected", match: "Q{urn:custom}key('x')", wantErr: true},
+		{name: "unprefixed-key-accepted", match: "key('k', '1')"},
+		{name: "fn-prefixed-key-accepted", match: "fn:key('k', '1')"},
+		{name: "fn-eqname-key-accepted", match: "Q{" + fnNS + "}key('k', '1')"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := strings.Replace(tmpl, "%s", tc.match, 1)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+
+			_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+			if tc.wantErr {
+				require.Error(t, err,
+					"a non-fn-namespace function %q must not be admitted as a pattern-start function", tc.match)
+				return
+			}
+			require.NoError(t, err,
+				"the fn-namespace key() spelling %q must remain an accepted pattern-start function", tc.match)
+		})
+	}
+}
+
 // TestPatternFnCurrentCompiles verifies fn:current() is accepted (not rejected
 // as XPST0017) inside a pattern predicate.
 func TestPatternFnCurrentCompiles(t *testing.T) {
