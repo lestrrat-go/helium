@@ -163,7 +163,25 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, e
 	if cfg == nil {
 		cfg = &compileConfig{}
 	}
-	schema, err := compileSchema(ctx, doc, cfg.baseDir, cfg)
+	// Seed the circular-include guard with the root schema's own resolved key,
+	// mirroring CompileFile, so a cycle back to the top-level schema
+	// (main -> inc -> main) treats the root as already-loaded instead of
+	// re-parsing it and emitting spurious duplicate-component errors. Unlike
+	// CompileFile, the in-memory/resolver path has no filesystem path to derive
+	// the key from, so it is taken from the document's own URL (the canonical
+	// key a nested back-reference computes) or, lacking that, from a full-URI
+	// BaseDir (which by the URI-aware convention IS the root schema's location).
+	// A clone of cfg keeps the shared config (clone-on-write contract) intact.
+	cfgWithRoot := *cfg
+	switch {
+	case doc.URL() != "":
+		if rootKey, rkErr := ResolveSchemaURI(doc.URL(), ""); rkErr == nil {
+			cfgWithRoot.rootKey = rootKey
+		}
+	case uriScheme(cfg.baseDir) != "":
+		cfgWithRoot.rootKey = cfg.baseDir
+	}
+	schema, err := compileSchema(ctx, doc, cfgWithRoot.baseDir, &cfgWithRoot)
 	c.closeHandler()
 	return schema, err
 }

@@ -337,9 +337,24 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
 
-	// Load each redefined document at most once (shared with xs:include), so a
-	// re-redefine cannot re-register declarations or recurse forever.
+	// A redefine whose target document is ALREADY loaded — via a prior xs:include
+	// or an earlier xs:redefine of the same schema — must not silently drop its
+	// override children. Re-running Phase A would re-register the redefined
+	// schema's declarations (duplicate components) or recurse forever, so loading
+	// is correctly skipped; but the Phase-B overrides below depend on the Phase-A
+	// (after - before) component delta to identify which components belong to the
+	// redefined schema, and that delta cannot be reconstructed once the document
+	// is already merged. Repeated redefinition of an already-loaded schema is
+	// therefore reported as a schema error rather than being ignored (which would
+	// silently yield a schema missing the intended overrides).
 	if _, seen := c.includeVisited[path]; seen {
+		displayLoc := location
+		if c.filename != "" {
+			displayLoc = schemaDisplayLoc(c.filename, location)
+		}
+		c.schemaError(ctx, schemaParserError(c.filename, redefineElem.Line(),
+			redefineElem.LocalName(), elemRedefine,
+			"The schema '"+displayLoc+"' was already loaded (via an earlier include or redefine); repeated redefinition of an already-loaded schema is not supported."))
 		return nil
 	}
 	c.includeVisited[path] = struct{}{}
@@ -784,6 +799,12 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 	// conditionally forward them. This matches libxml2's behavior of
 	// stopping error reporting after the first import failure.
 	subCollector := helium.NewErrorCollector(ctx, helium.ErrorLevelNone)
+	// Guarantee the sub-collector's backing sink is drained on every exit path,
+	// including the fatal early returns below (parseSchemaChildren failure and the
+	// include-depth/path-escape/resource-limit fatal nested-load). Close is
+	// idempotent, so the explicit Close before the Errors() read below still runs
+	// and the collected diagnostics remain available for forwarding.
+	defer func() { _ = subCollector.Close() }()
 	impC.errorHandler = subCollector
 
 	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
