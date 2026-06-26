@@ -55,6 +55,29 @@ func TestResultDocumentSecondaryJSONDuplicateKeyAllowed(t *testing.T) {
 		"allow-duplicate-names=yes must permit duplicate JSON keys in a secondary result document")
 }
 
+// A primary xsl:result-document that carries only AVT-only serialization
+// attributes (media-type, html-version, include-content-type, etc.) must NOT
+// force the output method to become explicit. When the base xsl:output did not
+// explicitly set a method, html/xhtml auto-detection has to keep working: a
+// result tree rooted at <html> in no namespace serializes with the HTML method
+// (void elements like <br> are not self-closed).
+func TestResultDocumentPrimaryAVTOnlyKeepsHTMLAutoDetect(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output encoding="UTF-8"/>
+  <xsl:template match="/">
+    <xsl:result-document media-type="{'text/html'}"><html><body><br/></body></html></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "<br>",
+		"AVT-only primary result-document must keep html auto-detection (void br not self-closed)")
+	require.NotContains(t, out, "<br/>",
+		"forcing MethodExplicit must not disable html auto-detection back to XML serialization")
+}
+
 // An invalid AVT value for ANY boolean serialization parameter on
 // xsl:result-document must raise SEPM0016 rather than being silently coerced to
 // false. All boolean serialization-param AVTs route through one shared helper,

@@ -770,7 +770,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		ov := cloneOutputDef(ec.primaryOutputOverrides)
 		if ov.Method != "" {
 			outDef.Method = ov.Method
-			outDef.MethodExplicit = true
+			// Carry the override's explicitness rather than forcing it true:
+			// an override built solely from AVT-only attributes (media-type,
+			// html-version, etc.) inherits the base method without making it
+			// explicit, so forcing MethodExplicit=true here would wrongly
+			// disable html/xhtml auto-detection in serializeResult.
+			outDef.MethodExplicit = ov.MethodExplicit
 		}
 		if ov.Standalone != "" {
 			outDef.Standalone = ov.Standalone
