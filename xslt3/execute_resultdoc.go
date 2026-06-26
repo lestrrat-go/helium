@@ -914,6 +914,19 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		}
 	}
 
+	// SERE0022: a SECONDARY (href) JSON result document must reject duplicate
+	// keys unless allow-duplicate-names="yes", exactly like the primary path. The
+	// final SerializeItems pass in execute_transform.go does NOT re-validate
+	// staged secondary items, so without this check a secondary
+	// method="json" build-tree="no" result document would silently accept
+	// map{1:'a','1':'b'}. Validate against the preflighted output definition
+	// before committing so a thrown SERE0022 leaves no per-href side effect.
+	if effectiveMethod == methodJSON && stagedItems != nil && !stagedOutDef.AllowDuplicateNames {
+		if err := validateJSONItems(stagedItems); err != nil {
+			return err
+		}
+	}
+
 	// COMMIT POINT: body and every post-body validation step succeeded. Publish
 	// all staged per-href state atomically, then mark the transaction committed
 	// so the deferred rollback leaves the usedResultURIs reservation in place.
@@ -926,6 +939,27 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	ec.resultDocuments[href] = tmpDoc
 	committed = true
 	return nil
+}
+
+// evalBoolSerializationAVT evaluates a boolean serialization-parameter AVT on
+// xsl:result-document and returns its xs:boolean value. A non-empty value that
+// is not a valid xs:boolean lexical form raises SEPM0016 instead of being
+// silently coerced to false. This is the SINGLE chokepoint that EVERY boolean
+// serialization parameter (indent, omit-xml-declaration, byte-order-mark,
+// escape-uri-attributes, include-content-type, allow-duplicate-names) must route
+// through, so the invalid-value validation can never drift parameter-by-parameter
+// again. (standalone is a tri-state yes/no/omit value and is handled separately.)
+func (ec *execContext) evalBoolSerializationAVT(ctx context.Context, a *avt, paramName string) (bool, error) {
+	v, err := a.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return false, err
+	}
+	b, ok := parseXSDBool(strings.TrimSpace(v))
+	if !ok {
+		return false, dynamicError(errCodeSEPM0016,
+			"%q is not a valid value for xsl:result-document/@%s", v, paramName)
+	}
+	return b, nil
 }
 
 // evalResultDocOutputDef evaluates serialization parameter AVTs on
@@ -997,19 +1031,17 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		base.Standalone = v
 	}
 	if inst.Indent != nil {
-		v, err := evalAVT(inst.Indent)
+		b, err := ec.evalBoolSerializationAVT(ctx, inst.Indent, paramIndent)
 		if err != nil {
 			return nil, err
 		}
-		b, _ := parseXSDBool(strings.TrimSpace(v))
 		base.Indent = b
 	}
 	if inst.OmitXMLDeclaration != nil {
-		v, err := evalAVT(inst.OmitXMLDeclaration)
+		b, err := ec.evalBoolSerializationAVT(ctx, inst.OmitXMLDeclaration, paramOmitXMLDeclaration)
 		if err != nil {
 			return nil, err
 		}
-		b, _ := parseXSDBool(strings.TrimSpace(v))
 		base.OmitDeclaration = b
 	}
 	if inst.DoctypeSystem != nil {
@@ -1041,13 +1073,11 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		base.Version = strings.TrimSpace(v)
 	}
 	if inst.ByteOrderMark != nil {
-		v, err := evalAVT(inst.ByteOrderMark)
+		b, err := ec.evalBoolSerializationAVT(ctx, inst.ByteOrderMark, paramByteOrderMark)
 		if err != nil {
 			return nil, err
 		}
-		if b, ok := parseXSDBool(strings.TrimSpace(v)); ok {
-			base.ByteOrderMark = b
-		}
+		base.ByteOrderMark = b
 	}
 	if inst.CDATASectionElements != nil {
 		v, err := evalAVT(inst.CDATASectionElements)
@@ -1083,33 +1113,25 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		base.HTMLVersion = strings.TrimSpace(v)
 	}
 	if inst.IncludeContentType != nil {
-		v, err := evalAVT(inst.IncludeContentType)
+		b, err := ec.evalBoolSerializationAVT(ctx, inst.IncludeContentType, paramIncludeContentType)
 		if err != nil {
 			return nil, err
 		}
-		b, _ := parseXSDBool(strings.TrimSpace(v))
 		base.IncludeContentType = &b
 	}
 	if inst.AllowDuplicateNames != nil {
-		v, err := evalAVT(inst.AllowDuplicateNames)
+		b, err := ec.evalBoolSerializationAVT(ctx, inst.AllowDuplicateNames, paramAllowDuplicateNames)
 		if err != nil {
 			return nil, err
-		}
-		b, ok := parseXSDBool(strings.TrimSpace(v))
-		if !ok {
-			return nil, dynamicError(errCodeSEPM0016,
-				"%q is not a valid value for xsl:result-document/@%s", v, paramAllowDuplicateNames)
 		}
 		base.AllowDuplicateNames = b
 	}
 	if inst.EscapeURIAttributes != nil {
-		v, err := evalAVT(inst.EscapeURIAttributes)
+		b, err := ec.evalBoolSerializationAVT(ctx, inst.EscapeURIAttributes, paramEscapeURIAttributes)
 		if err != nil {
 			return nil, err
 		}
-		if b, ok := parseXSDBool(strings.TrimSpace(v)); ok {
-			base.EscapeURIAttributes = &b
-		}
+		base.EscapeURIAttributes = &b
 	}
 	if inst.JSONNodeOutputMethodAVT != nil {
 		v, err := evalAVT(inst.JSONNodeOutputMethodAVT)
