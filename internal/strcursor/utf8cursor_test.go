@@ -75,7 +75,7 @@ func TestUTF8CursorScanCharDataSliceSpansBufferEdge(t *testing.T) {
 		chunk: 2,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil)
+	data, n := cur.ScanCharDataSlice(nil, 0)
 	require.Equal(t, 4, n)
 	require.Equal(t, "    ", string(data))
 }
@@ -86,7 +86,7 @@ func TestUTF8CursorScanCharDataSliceConsumesCRLFAcrossBufferEdge(t *testing.T) {
 		chunk: 1,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil)
+	data, n := cur.ScanCharDataSlice(nil, 0)
 	require.Equal(t, 2, n)
 	require.Equal(t, "\n", string(data))
 }
@@ -97,7 +97,7 @@ func TestUTF8CursorScanCharDataSlicePreservesWhitespaceRunAcrossBufferEdge(t *te
 		chunk: 3,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil)
+	data, n := cur.ScanCharDataSlice(nil, 0)
 	require.Equal(t, 7, n)
 	require.Equal(t, strings.Repeat(" ", 7), string(data))
 }

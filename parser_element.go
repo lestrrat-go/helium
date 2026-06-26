@@ -43,7 +43,16 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	// Fast path: UTF8Cursor can scan directly into a []byte slice,
 	// avoiding the bytes.Buffer intermediate.
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
-		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0])
+		// Streaming SAX consumers that configured a char-buffer size get
+		// bounded memory: scan and deliver the run in fixed-size chunks rather
+		// than buffering the whole delimiter-free run (which would also grow the
+		// cursor's internal buffer) before chunking only the delivery.
+		if pctx.charBufferSize > 0 && pctx.treeBuilder == nil &&
+			pctx.sax != nil && !pctx.disableSAX {
+			return pctx.parseCharDataChunkedSAX(ctx, u8)
+		}
+
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], 0)
 		if i <= 0 {
 			if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 				return pctx.error(ctx, ErrMisplacedCDATAEnd)
@@ -122,6 +131,57 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// parseCharDataChunkedSAX scans and delivers a character-data run to a streaming
+// SAX consumer in chunks of at most pctx.charBufferSize bytes. Unlike the
+// single-shot fast path it never materializes the whole delimiter-free run, so a
+// huge run delivers with bounded memory. Context cancellation is checked between
+// chunks. Used only when charBufferSize > 0 and no DOM is being built (the DOM
+// path must classify blank-vs-text over the whole run to drive whitespace
+// stripping, so it stays single-shot).
+func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcursor.UTF8Cursor) error {
+	s := pctx.sax
+	limit := pctx.charBufferSize
+	first := true
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], limit)
+		if i <= 0 {
+			if !first {
+				// The run ended on the previous chunk; the next byte is a
+				// delimiter (<, &, ]]>) or EOF, handled by the caller.
+				return nil
+			}
+			if u8.Peek() == ']' && u8.PeekAt(1) == ']' && u8.PeekAt(2) == '>' {
+				return pctx.error(ctx, ErrMisplacedCDATAEnd)
+			}
+			return errors.New("invalid char data")
+		}
+		first = false
+
+		if err := u8.AdvanceFast(i); err != nil {
+			return err
+		}
+
+		// Keep the grown buffer for the next chunk/call.
+		pctx.charBuf = data
+
+		// Each chunk is at most charBufferSize bytes, so deliverCharacters
+		// emits it in a single callback. Classification is per-chunk; for a
+		// streaming SAX consumer this only changes which handler (Characters vs
+		// IgnorableWhitespace) receives the bytes, never whether they arrive.
+		handler := s.Characters
+		if pctx.areBlanksBytes(data, false) {
+			handler = s.IgnorableWhitespace
+		}
+		if err := pctx.deliverCharacters(ctx, handler, data); err != nil {
+			return err
+		}
+	}
 }
 
 func (pctx *parserCtx) parseElement(ctx context.Context) error {

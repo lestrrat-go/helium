@@ -223,9 +223,11 @@ HTML encoding detection over a stream (`wrapReaderForHTML`) peeks the first 1024
 - Walk back from chunk boundary to find UTF-8 rune start
 - Deliver chunks via SAX Characters callback
 
-Controlled by `Parser.SetCharBufferSize(size)`.
+Controlled by `Parser.CharBufferSize(size)`.
 
-For the UTF-8 cursor fast path, character-data scanners now continue across reader chunk boundaries before classifying the text run. This preserves CRLF normalization and prevents whitespace-only content from being split into mixed `Characters` / `IgnorableWhitespace` events at buffer edges.
+For the UTF-8 cursor fast path, character-data scanners normally continue across reader chunk boundaries before classifying the text run. This preserves CRLF normalization and prevents whitespace-only content from being split into mixed `Characters` / `IgnorableWhitespace` events at buffer edges.
+
+**Bounded char-data scan for streaming SAX consumers.** When `CharBufferSize(size)` is set (`size > 0`) AND no DOM is being built (a custom SAX handler replaced the default `TreeBuilder`, so `pctx.treeBuilder == nil`), `parseCharDataContent` delegates to `parseCharDataChunkedSAX`, which scans and delivers a delimiter-free run in `size`-byte chunks instead of materializing the whole run first. This bounds BOTH the reusable `charBuf` and the `UTF8Cursor`'s internal read buffer (the single-shot scanner never advances `bufpos` mid-run, so `fillBuffer` would otherwise grow it to the full run length). `UTF8Cursor.ScanCharDataSlice(dst, maxBytes)` takes a byte budget: `maxBytes > 0` stops the scan on a UTF-8 boundary once that many input bytes are consumed (a lone rune wider than `maxBytes` is still returned whole to guarantee progress); `maxBytes <= 0` is the unbounded default. Context cancellation is checked between chunks. Blank-vs-text classification is per-chunk here, which for a streaming consumer only changes which handler (`Characters` vs `IgnorableWhitespace`) receives the bytes, never whether they arrive. The DOM/`TreeBuilder` path stays single-shot because it classifies the whole run to drive whitespace stripping (a per-chunk flip could drop leading whitespace of a non-blank run), and the DOM holds the full text node anyway. Misplaced `]]>`, control-char, and EOF handling are unchanged: the chunked loop yields control at the delimiter and the next `parseContent` dispatch re-enters char-data parsing, surfacing the same error as the single-shot path.
 
 ## UTF-8 Parser Fast Paths
 

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -3080,6 +3081,99 @@ func TestParserCharBufferSizeAffectsParse(t *testing.T) {
 	doc, err := helium.NewParser().CharBufferSize(16).Parse(t.Context(), b)
 	require.NoError(t, err)
 	require.Equal(t, "root", doc.DocumentElement().Name())
+}
+
+// genCharDataReader lazily produces "<root>" + n copies of fill + "</root>"
+// without ever holding the whole payload in memory, so the parser's own
+// character-data buffering is the only large allocation under test.
+type genCharDataReader struct {
+	prefix []byte
+	fill   byte
+	remain int
+	suffix []byte
+}
+
+func (r *genCharDataReader) Read(p []byte) (int, error) {
+	n := 0
+	if len(r.prefix) > 0 {
+		c := copy(p, r.prefix)
+		r.prefix = r.prefix[c:]
+		n += c
+	}
+	if n < len(p) && r.remain > 0 {
+		c := min(len(p)-n, r.remain)
+		for i := range c {
+			p[n+i] = r.fill
+		}
+		r.remain -= c
+		n += c
+	}
+	if n < len(p) && len(r.prefix) == 0 && r.remain == 0 && len(r.suffix) > 0 {
+		c := copy(p[n:], r.suffix)
+		r.suffix = r.suffix[c:]
+		n += c
+	}
+	if n == 0 {
+		return 0, io.EOF
+	}
+	return n, nil
+}
+
+// TestParserCharBufferSizeBoundsCharDataMemory verifies that a large
+// delimiter-free character-data run delivered to a streaming SAX consumer is
+// scanned and delivered in bounded chunks rather than materialized whole. Before
+// the fix the entire run was buffered (in charBuf and the cursor's internal
+// buffer) before the first chunk was delivered, so peak heap held the whole run.
+func TestParserCharBufferSizeBoundsCharDataMemory(t *testing.T) {
+	t.Parallel()
+
+	const fillBytes = 32 << 20 // 32 MiB delimiter-free run
+	const bufSize = 8192
+
+	var chunkCount, total, maxChunk int
+	var heapAtFirstChunk uint64
+
+	handler := sax.New()
+	record := func(_ context.Context, ch []byte) error {
+		if chunkCount == 0 {
+			var ms runtime.MemStats
+			runtime.ReadMemStats(&ms)
+			heapAtFirstChunk = ms.HeapAlloc
+		}
+		chunkCount++
+		total += len(ch)
+		maxChunk = max(maxChunk, len(ch))
+		return nil
+	}
+	handler.SetOnCharacters(sax.CharactersFunc(record))
+	handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(record))
+
+	var ms runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&ms)
+	baseHeap := ms.HeapAlloc
+
+	r := &genCharDataReader{
+		prefix: []byte("<root>"),
+		fill:   'a',
+		remain: fillBytes,
+		suffix: []byte("</root>"),
+	}
+
+	p := helium.NewParser().SAXHandler(handler).CharBufferSize(bufSize)
+	_, err := p.ParseReader(context.Background(), r)
+	require.NoError(t, err)
+
+	require.Equal(t, fillBytes, total, "every character byte is delivered")
+	require.LessOrEqual(t, maxChunk, bufSize, "no chunk exceeds the configured buffer size")
+	require.Greater(t, chunkCount, 1, "the run is delivered in multiple chunks")
+
+	var growth uint64
+	if heapAtFirstChunk > baseHeap {
+		growth = heapAtFirstChunk - baseHeap
+	}
+	require.Less(t, growth, uint64(8<<20),
+		"char-data scan buffer must stay bounded; heap grew %d bytes by the first chunk", growth)
 }
 
 // nopCatalog is a CatalogResolver that never resolves anything. It exists only
