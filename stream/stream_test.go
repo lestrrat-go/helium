@@ -279,6 +279,94 @@ func TestStartAttributeNSRejectsInvalidParts(t *testing.T) {
 	require.Error(t, w.StartAttributeNS("p", "bad local", "urn:x"))
 }
 
+func TestNamespaceNSRejectsReservedMisuse(t *testing.T) {
+	t.Parallel()
+	const (
+		xmlNS   = "http://www.w3.org/XML/1998/namespace"
+		xmlnsNS = "http://www.w3.org/2000/xmlns/"
+	)
+
+	t.Run("element rebinding xml prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartElementNS("xml", "foo", "urn:bad"))
+		require.Empty(t, buf.String())
+	})
+	t.Run("element xmlns prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartElementNS("xmlns", "foo", "urn:x"))
+		require.Empty(t, buf.String())
+	})
+	t.Run("element foreign prefix on XML namespace rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartElementNS("p", "foo", xmlNS))
+		require.Empty(t, buf.String())
+	})
+	t.Run("element default binding of xmlns namespace rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.Error(t, w.StartElementNS("", "foo", xmlnsNS))
+		require.Empty(t, buf.String())
+	})
+	t.Run("element xml prefix bound to XML namespace accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElementNS("xml", "foo", xmlNS))
+		require.NoError(t, w.EndElement())
+	})
+	t.Run("attribute rebinding xml prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.StartAttributeNS("xml", "lang", "urn:bad"))
+		require.Empty(t, buf.String())
+	})
+	t.Run("attribute xmlns prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		buf.Reset()
+		require.Error(t, w.StartAttributeNS("xmlns", "p", "urn:x"))
+		require.Empty(t, buf.String())
+	})
+	t.Run("attribute xml:lang with empty URI accepted", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w := stream.NewWriter(&buf)
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.WriteAttributeNS("xml", "lang", "", "en"))
+		require.NoError(t, w.EndElement())
+		require.Equal(t, `<root xml:lang="en"/>`, buf.String())
+	})
+}
+
+func TestStartAttributeNSRejectsSameScopeConflict(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElementNS("a", "root", "urn:A"))
+	before := buf.String()
+	// Reusing prefix "a" with a different URI on the same element must be
+	// rejected, not silently dropped.
+	require.Error(t, w.StartAttributeNS("a", "attr", "urn:B"))
+	require.Equal(t, before, buf.String())
+
+	// Reusing the same prefix with the same URI is a harmless no-op.
+	require.NoError(t, w.StartAttributeNS("a", "attr", "urn:A"))
+	require.NoError(t, w.EndAttribute())
+	require.NoError(t, w.EndElement())
+}
+
 func TestNamespaceURIRejectsInvalidChars(t *testing.T) {
 	t.Parallel()
 	badUTF8 := string([]byte{0xff})
