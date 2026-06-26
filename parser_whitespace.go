@@ -94,9 +94,11 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 // Unlike areBlanksBytes it omits the byte-level blankness test and the
 // cursor lookahead at the end of the run, so it can be evaluated once for a
 // run that is delivered in streaming chunks (where the end-of-run delimiter is
-// not yet in view). For the cursorless (pure-SAX) case it returns true rather
-// than peeking for the trailing delimiter; the chunked caller compensates by
-// tracking blankness incrementally.
+// not yet in view). For the cursorless (pure-SAX, doc == nil) case it returns
+// true rather than peeking for the trailing delimiter; the chunked caller
+// compensates by tracking blankness incrementally AND by re-applying the
+// trailing-delimiter check once the run ends (a blank run ending at '&' rather
+// than '<'/CR is character data, matching the single-shot path).
 func (ctx *parserCtx) whitespaceContextIgnorable() bool {
 	if ctx.spaceTab[len(ctx.spaceTab)-1] == 1 {
 		return false

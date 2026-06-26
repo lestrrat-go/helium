@@ -165,6 +165,15 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 	s := pctx.sax
 	limit := pctx.charBufferSize
 
+	// blankBudget bounds the as-yet-unclassified all-whitespace prefix that may
+	// be buffered before it is downgraded to character data. A blank run cannot
+	// be proven ignorable whitespace until its end is in view, so without a cap
+	// a pathological multi-megabyte run of pure whitespace would accumulate
+	// whole in acc before the first callback. The budget is a small multiple of
+	// the configured chunk size with a fixed floor, so realistic indentation
+	// runs still classify as ignorable whitespace while memory stays bounded.
+	blankBudget := max(limit*8, minPendingBlankBytes)
+
 	// blank tracks whether the run could still be ignorable whitespace. When the
 	// context makes whitespace non-ignorable, it starts false so the first chunk
 	// commits to Characters immediately (no blank-prefix accumulation).
@@ -189,7 +198,8 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 			}
 			// The run ended; everything accumulated is blank (a non-blank byte
 			// would have returned via the Characters branch below). Deliver it
-			// as ignorable whitespace, chunked by deliverCharacters.
+			// as ignorable whitespace or character data per the final
+			// classification below.
 			break
 		}
 		first = false
@@ -203,10 +213,17 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 			blank = false
 		}
 
+		// Bounded-whitespace policy: an unclassified blank prefix that grows
+		// past the budget is downgraded to character data so memory stays
+		// bounded for a pathological pure-whitespace run.
+		if blank && len(acc) > blankBudget {
+			blank = false
+		}
+
 		if !blank {
-			// Proven to be character data: flush the accumulated prefix (which
-			// includes this chunk) as Characters, then stream the rest of the
-			// run in bounded chunks.
+			// Proven to be (or downgraded to) character data: flush the
+			// accumulated prefix (which includes this chunk) as Characters, then
+			// stream the rest of the run in bounded chunks.
 			if err := pctx.deliverCharacters(ctx, s.Characters, acc); err != nil {
 				return err
 			}
@@ -218,8 +235,29 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 	if len(acc) == 0 {
 		return nil
 	}
-	return pctx.deliverCharacters(ctx, s.IgnorableWhitespace, acc)
+
+	// The run was blank to its end. Match the single-shot areBlanksBytes
+	// classification: when no DOM document drives the decision, a blank run is
+	// ignorable whitespace only if the delimiter that ended it is '<' or CR. A
+	// run ending at '&' (an entity reference) or any other delimiter is
+	// character data — the delimiter check whitespaceContextIgnorable omits is
+	// re-applied here, now that the end of the run (and thus the delimiter) is
+	// in view.
+	handler := s.IgnorableWhitespace
+	if pctx.doc == nil {
+		if c := u8.Peek(); c != '<' && c != 0xD {
+			handler = s.Characters
+		}
+	}
+	return pctx.deliverCharacters(ctx, handler, acc)
 }
+
+// minPendingBlankBytes is the floor for the blank-prefix budget in
+// parseCharDataChunkedSAX: a blank character-data run up to this size is
+// buffered and classified as ignorable whitespace even when the configured
+// chunk size is tiny, so realistic indentation is never downgraded to
+// character data by the bounded-whitespace policy.
+const minPendingBlankBytes = 1 << 16 // 64 KiB
 
 // streamCharDataChunks scans the remainder of a character-data run and delivers
 // it via handler in chunks of at most limit bytes, with bounded memory. It is

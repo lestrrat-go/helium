@@ -3248,6 +3248,121 @@ func TestParserCharBufferSizeConsistentWhitespaceClassification(t *testing.T) {
 	})
 }
 
+// TestParserCharBufferSizeWhitespaceBeforeEntity pins the chunked streaming-SAX
+// path's classification of an all-whitespace run that ends at an entity
+// reference ('&') rather than a start/end tag ('<'). The single-shot path
+// (areBlanksBytes) treats such a run as character data — it is ignorable
+// whitespace only when the delimiter that ends it is '<' or CR. An earlier
+// chunked implementation dropped that trailing-delimiter check and misreported
+// the leading blanks as IgnorableWhitespace. Both paths must agree.
+func TestParserCharBufferSizeWhitespaceBeforeEntity(t *testing.T) {
+	t.Parallel()
+
+	type event struct {
+		ignorable bool
+		content   string
+	}
+
+	run := func(src string, bufSize int) []event {
+		var events []event
+		handler := sax.New()
+		handler.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, event{ignorable: false, content: string(ch)})
+			return nil
+		}))
+		handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, event{ignorable: true, content: string(ch)})
+			return nil
+		}))
+		_, err := helium.NewParser().SAXHandler(handler).CharBufferSize(bufSize).
+			Parse(context.Background(), []byte(src))
+		require.NoError(t, err)
+		return events
+	}
+
+	// Leading whitespace, then an entity reference. The run "   " ends at '&',
+	// so it is character data, not ignorable whitespace.
+	const src = `<root>   &amp;</root>`
+
+	// Single-shot path (no chunking) is the reference classification.
+	single := run(src, 0)
+	require.NotEmpty(t, single)
+	for _, e := range single {
+		require.False(t, e.ignorable,
+			"single-shot: a whitespace run ending at '&' is character data, not ignorable whitespace")
+	}
+
+	// Chunked path must match: no IgnorableWhitespace event, leading blanks
+	// delivered as characters.
+	chunked := run(src, 2)
+	require.NotEmpty(t, chunked)
+	var b strings.Builder
+	for _, e := range chunked {
+		require.False(t, e.ignorable,
+			"chunked: a whitespace run ending at '&' must match the single-shot path (character data)")
+		b.WriteString(e.content)
+	}
+	require.Equal(t, "   &", b.String(), "every character byte (including leading blanks) is delivered")
+}
+
+// TestParserCharBufferSizeBoundsWhitespaceMemory verifies that a large
+// delimiter-free all-whitespace run delivered to a streaming SAX consumer is
+// bounded in memory. A blank run cannot be proven ignorable whitespace until
+// its end is in view, so a naive implementation buffers it whole before the
+// first callback. The bounded-whitespace policy downgrades an over-budget blank
+// prefix to character data and streams the rest in fixed-size chunks, so the
+// first callback fires after reading only a bounded prefix. This mirrors
+// TestParserCharBufferSizeBoundsCharDataMemory but uses a whitespace fill byte.
+func TestParserCharBufferSizeBoundsWhitespaceMemory(t *testing.T) {
+	t.Parallel()
+
+	const fillBytes = 32 << 20 // 32 MiB delimiter-free whitespace run
+	const bufSize = 8192
+
+	r := &genCharDataReader{
+		prefix: []byte("<root>"),
+		fill:   ' ',
+		remain: fillBytes,
+		suffix: []byte("</root>"),
+	}
+
+	var chunkCount, total, maxChunk, readAtFirstChunk int
+	sawIgnorable := false
+
+	handler := sax.New()
+	record := func(ignorable bool) func(context.Context, []byte) error {
+		return func(_ context.Context, ch []byte) error {
+			if chunkCount == 0 {
+				readAtFirstChunk = r.nread
+			}
+			if ignorable {
+				sawIgnorable = true
+			}
+			chunkCount++
+			total += len(ch)
+			maxChunk = max(maxChunk, len(ch))
+			return nil
+		}
+	}
+	handler.SetOnCharacters(sax.CharactersFunc(record(false)))
+	handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(record(true)))
+
+	p := helium.NewParser().SAXHandler(handler).CharBufferSize(bufSize)
+	_, err := p.ParseReader(context.Background(), r)
+	require.NoError(t, err)
+
+	require.Equal(t, fillBytes, total, "every whitespace byte is delivered")
+	require.LessOrEqual(t, maxChunk, bufSize, "no chunk exceeds the configured buffer size")
+	require.Greater(t, chunkCount, 1, "the run is delivered in multiple chunks")
+	require.False(t, sawIgnorable,
+		"an over-budget blank run is downgraded to character data, not buffered whole as ignorable whitespace")
+
+	// The first callback must fire well before the whole run has been read,
+	// proving the blank prefix is bounded rather than materialized whole.
+	require.Less(t, readAtFirstChunk, 1<<20,
+		"bounded-whitespace policy must deliver the first chunk after reading only a bounded prefix; read %d bytes first", readAtFirstChunk)
+}
+
 // TestParserCharBufferSizeNeverSplitsRune verifies the chunked streaming-SAX
 // path never splits a UTF-8 rune, even when CharBufferSize is smaller than a
 // single multi-byte rune. ScanCharDataSlice returns a lone over-budget rune
