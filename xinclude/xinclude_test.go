@@ -1108,6 +1108,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 			require.NoError(t, err, "parsing %s", name)
 
 			_, procErr := xinclude.NewProcessor().
+				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 				NoXIncludeMarkers().
 				BaseURI(docPath).
 				Process(t.Context(), doc)
@@ -1161,6 +1162,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err, "parsing %s", name)
 
 			_, err = xinclude.NewProcessor().
+				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 				NoXIncludeMarkers().
 				BaseURI(docPath).
 				Process(t.Context(), doc)
@@ -1197,6 +1199,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err, "parsing %s", tc.name)
 
 			_, err = xinclude.NewProcessor().
+				Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 				NoXIncludeMarkers().
 				BaseURI(docPath).
 				Process(t.Context(), doc)
@@ -1713,8 +1716,8 @@ func TestXIncludeFileURIHref(t *testing.T) {
 	t.Parallel()
 
 	// Write a real include target and reference it via an absolute file:// URI.
-	// The default permissive resolver must convert the URI to an OS path rather
-	// than handing "file:/..." to os.Open verbatim.
+	// The permissive resolver must convert the URI to an OS path rather than
+	// handing "file:/..." to os.Open verbatim.
 	dir := t.TempDir()
 	target := filepath.Join(dir, "inc.xml")
 	require.NoError(t, os.WriteFile(target, []byte(`<loaded>FromFileURI</loaded>`), 0o600))
@@ -1726,6 +1729,7 @@ func TestXIncludeFileURIHref(t *testing.T) {
 	</root>`, fileURI))
 
 	count, err := xinclude.NewProcessor().
+		Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 		NoXIncludeMarkers().NoBaseFixup().
 		Process(t.Context(), doc)
 	require.NoError(t, err)
@@ -1771,6 +1775,7 @@ func TestXIncludeFileURINestedExternalDTD(t *testing.T) {
 	</root>`, fileURI))
 
 	count, err := xinclude.NewProcessor().
+		Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 		NoXIncludeMarkers().NoBaseFixup().
 		Process(t.Context(), doc)
 	require.NoError(t, err)
@@ -1799,6 +1804,55 @@ func TestXIncludeFileURINonLocalHost(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "non-local file URI host",
 		"expected explicit non-local host rejection, got: %v", err)
+}
+
+// TestXIncludeDenyAllDefault verifies the secure-by-default contract: a
+// Processor with no resolver configured must NOT read local files, so untrusted
+// input cannot disclose them via an xi:include. Supplying an explicit
+// permissive resolver opts back into host access.
+func TestXIncludeDenyAllDefault(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	secret := filepath.Join(dir, "secret.txt")
+	const secretContent = "TOP SECRET CONTENTS"
+	require.NoError(t, os.WriteFile(secret, []byte(secretContent), 0o600))
+
+	mainDoc := func() *helium.Document {
+		return parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include parse="text" href="%s"/>
+		</root>`, secret))
+	}
+
+	t.Run("default resolver denies local file disclosure", func(t *testing.T) {
+		t.Parallel()
+		doc := mainDoc()
+		_, err := xinclude.NewProcessor().
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.Error(t, err, "default processor must not read local files")
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.NotContains(t, s, secretContent,
+			"secret file contents must not leak into the document")
+	})
+
+	t.Run("explicit permissive resolver opts back in", func(t *testing.T) {
+		t.Parallel()
+		doc := mainDoc()
+		count, err := xinclude.NewProcessor().
+			Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.Contains(t, s, secretContent,
+			"explicit permissive resolver must read the file")
+	})
 }
 
 // TestXIncludeParserInjection verifies that a parser injected via

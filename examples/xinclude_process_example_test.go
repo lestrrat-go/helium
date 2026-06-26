@@ -76,8 +76,13 @@ func Example_xinclude_process() {
 		return
 	}
 
-	// Configure an XInclude processor.
+	// Configure an XInclude processor. The processor is secure by default and
+	// denies all filesystem access unless a resolver is supplied, so grant
+	// access with an FS-backed resolver. helium.PermissiveFS() opens any OS
+	// path (these files live in a temp dir); for untrusted input prefer a
+	// confined fs.FS such as os.Root.FS.
 	proc := xinclude.NewProcessor().
+		Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 		BaseURI(mainPath). // resolve relative hrefs against this path
 		NoBaseFixup()      // skip xml:base fixup on included nodes
 
@@ -109,6 +114,7 @@ func Example_xinclude_process() {
 	// Same processor settings, plus NoXIncludeMarkers to suppress the
 	// bracketing xi:include nodes.
 	proc = xinclude.NewProcessor().
+		Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
 		BaseURI(mainPath).
 		NoBaseFixup().
 		NoXIncludeMarkers() // strip marker nodes from the result tree

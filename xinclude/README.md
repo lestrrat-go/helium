@@ -84,8 +84,13 @@ func Example_xinclude_process() {
     return
   }
 
-  // Configure an XInclude processor.
+  // Configure an XInclude processor. The processor is secure by default and
+  // denies all filesystem access unless a resolver is supplied, so grant
+  // access with an FS-backed resolver. helium.PermissiveFS() opens any OS
+  // path (these files live in a temp dir); for untrusted input prefer a
+  // confined fs.FS such as os.Root.FS.
   proc := xinclude.NewProcessor().
+    Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
     BaseURI(mainPath). // resolve relative hrefs against this path
     NoBaseFixup()      // skip xml:base fixup on included nodes
 
@@ -117,6 +122,7 @@ func Example_xinclude_process() {
   // Same processor settings, plus NoXIncludeMarkers to suppress the
   // bracketing xi:include nodes.
   proc = xinclude.NewProcessor().
+    Resolver(xinclude.NewFSResolver(helium.PermissiveFS())).
     BaseURI(mainPath).
     NoBaseFixup().
     NoXIncludeMarkers() // strip marker nodes from the result tree
@@ -167,9 +173,19 @@ source: [examples/xinclude_process_example_test.go](https://github.com/lestrrat-
 
 ## Security
 
-Note the asymmetry with the core parser: `helium.NewParser()` is deny-all by
-default, but the **default XInclude resolver opens any OS path**
-(`NewFSResolver(nil)`), preserving historical behavior. When processing
-untrusted input, supply a confined resolver — `Resolver(NewFSResolver(fsys))`
-with an `fsys` backed by `os.Root.FS` (Go 1.24+) is the appropriate sandbox;
-`os.DirFS` rejects `../` but does **not** stop symlink escapes.
+The processor is **secure by default**, matching the core parser
+(`helium.NewParser()`): a `Processor` with no resolver configured denies all
+filesystem access, so untrusted input cannot disclose local files via
+`<xi:include parse="text" href="/etc/passwd"/>`.
+
+To grant filesystem access, supply a resolver explicitly:
+
+```go
+// Confined sandbox (recommended for untrusted input): os.Root.FS (Go 1.24+)
+// refuses symlink escapes. os.DirFS rejects "../" but does NOT stop symlink
+// escapes, so it is not a security boundary.
+proc := xinclude.NewProcessor().Resolver(xinclude.NewFSResolver(fsys))
+
+// Historical behavior — opens any OS path verbatim. Use only for trusted input.
+proc := xinclude.NewProcessor().Resolver(xinclude.NewFSResolver(helium.PermissiveFS()))
+```

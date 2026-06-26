@@ -154,9 +154,13 @@ caller should also:
   `MaxNameLength`, or `MaxContentModelDepth` removes that guard.
 - Be cautious enabling XInclude, catalogs, DTD validation, or
   default-DTD-attribute processing for untrusted input; when you do, keep every
-  external resource allowlisted and size-bounded. `xinclude.Processor.MaxIncludeDepth`
-  bounds the nesting depth of included documents, and `MaxIncludeSize` caps the
-  bytes read per included resource.
+  external resource allowlisted and size-bounded. The `xinclude` processor is
+  also secure by default — with no resolver configured it denies all filesystem
+  access; grant access with `Resolver(xinclude.NewFSResolver(fsys))` backed by a
+  confined `fs.FS` (`os.Root.FS`), or restore historical OS-path access with
+  `xinclude.NewFSResolver(helium.PermissiveFS())`.
+  `xinclude.Processor.MaxIncludeDepth` bounds the nesting depth of included
+  documents, and `MaxIncludeSize` caps the bytes read per included resource.
 
 **Caveat:** a permissive or directory-rooted `FS` is not yet a complete sandbox.
 External-resource paths are joined against the document base URI and may be

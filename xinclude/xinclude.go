@@ -101,10 +101,13 @@ func (p Processor) NoBaseFixup() Processor {
 	return p
 }
 
-// Resolver sets a custom resource resolver. When unset, an FS-backed
-// resolver opens any OS path verbatim via [os.Open], preserving
-// historical behavior. Callers handling untrusted documents should
-// supply a Resolver backed by a stricter [fs.FS] — see [NewFSResolver].
+// Resolver sets a custom resource resolver. When unset, the processor is
+// secure by default: it uses a deny-all resolver that refuses every
+// filesystem access, so untrusted input cannot disclose local files (mirrors
+// the deny-all default of [helium.NewParser]). To grant access, supply a
+// Resolver backed by a confined [fs.FS] — see [NewFSResolver], e.g.
+// NewFSResolver(fsys) with fsys from [os.Root.FS]. To restore the historical
+// behavior of opening any OS path, pass NewFSResolver([helium.PermissiveFS]()).
 func (p Processor) Resolver(r Resolver) Processor {
 	p = p.clone()
 	p.cfg.resolver = r
@@ -277,7 +280,12 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		txtCache:        make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
-		p.resolver = NewFSResolver(nil)
+		// Secure by default: an unset resolver denies all filesystem access
+		// (mirroring helium.NewParser()'s deny-all FS). Untrusted input cannot
+		// disclose local files via <xi:include href="/etc/passwd"/>. Callers
+		// opt back into host access with Resolver(NewFSResolver(helium.PermissiveFS()))
+		// or, preferably, a confined fs.FS (os.Root.FS).
+		p.resolver = NewFSResolver(iofs.DenyAll{})
 	}
 
 	if err := p.processNode(ctx, node); err != nil {
@@ -754,10 +762,10 @@ func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, s
 	// resolve through the SAME sandbox as XInclude itself, not the parser's
 	// default permissive filesystem. Otherwise an attacker-supplied included
 	// document could expand a SYSTEM entity (e.g. "/etc/passwd") off the host
-	// filesystem, bypassing a strict Resolver (XXE). For the default
-	// permissive resolver this is identical to the previous behavior; a custom
-	// (non-FS) resolver gets a deny-all FS so inner SYSTEM references cannot
-	// reach the host.
+	// filesystem, bypassing a strict Resolver (XXE). The default resolver is
+	// deny-all, so inner SYSTEM references are blocked unless the caller opts
+	// into an FS-backed resolver; a custom (non-FS) resolver gets a deny-all FS
+	// so inner SYSTEM references cannot reach the host.
 	//
 	// Detection uses the fsBacked capability interface rather than a concrete
 	// *fsResolver assertion so callers can wrap NewFSResolver (e.g. for
@@ -1398,10 +1406,12 @@ func isFileURI(href string) bool {
 	return u.Scheme == lexicon.SchemeFile
 }
 
-// fsResolver resolves URIs by reading from an [fs.FS]. The default FS
-// is [iofs.PermissiveRoot] which opens any OS path verbatim; callers
-// handling untrusted input should construct one with a stricter fs.FS
-// via [NewFSResolver].
+// fsResolver resolves URIs by reading from an [fs.FS]. Passing a nil fsys to
+// [NewFSResolver] yields [iofs.PermissiveRoot], which opens any OS path
+// verbatim; callers handling untrusted input should construct one with a
+// stricter fs.FS via [NewFSResolver]. Note that a Processor with no resolver
+// configured does NOT use this permissive form — it denies all access (see
+// [Processor.Resolver]).
 type fsResolver struct {
 	fsys fs.FS
 }
