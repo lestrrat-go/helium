@@ -706,6 +706,22 @@ func TestNewFileResolver(t *testing.T) {
 	require.Contains(t, err.Error(), "absolute path")
 }
 
+func TestNewFileResolverRejectsBackslashTraversal(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ok.txt"), []byte("via-fs"), 0644))
+
+	r := unparsedtext.NewFileResolver(os.DirFS(dir))
+	cfg := &unparsedtext.Config{URIResolver: r}
+
+	// path.Clean only treats '/' as a separator, so a backslash-based
+	// traversal must still be refused as a containment escape.
+	for _, name := range []string{`..\secret`, `foo\..\..\secret`} {
+		_, err := unparsedtext.ReadURI(t.Context(), cfg, name)
+		require.Error(t, err, "backslash traversal %q must be refused", name)
+		require.Contains(t, err.Error(), "escapes the FS root")
+	}
+}
+
 func TestErrorType(t *testing.T) {
 	err := &unparsedtext.Error{Code: "FOUT1170", Message: "test error"}
 	require.Equal(t, "FOUT1170: test error", err.Error())
