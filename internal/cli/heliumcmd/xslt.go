@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -108,7 +109,20 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 	// are confined to the stylesheet's own directory (not a raw permissive root)
 	// so an attacker-controlled SYSTEM identifier still cannot exfiltrate
 	// arbitrary local files.
-	ssParser := helium.NewParser().BaseURI(cfg.stylesheetFile)
+	// Absolutize the stylesheet path ONCE and use the result for the parser base
+	// URI, the confined FS root, and the compiler base URI. With a RELATIVE
+	// stylesheet path (e.g. "sub/main.xsl") a relative base URI would make the
+	// parser resolve "style.dtd" to "sub/style.dtd", which the confined FS
+	// (rooted at the absolute "sub" directory) would then join under its root
+	// AGAIN, producing a nonexistent "sub/sub/style.dtd". An absolute base makes
+	// every system ID resolve to an absolute path that lands directly inside the
+	// confined root.
+	absSS, err := filepath.Abs(cfg.stylesheetFile)
+	if err != nil {
+		absSS = cfg.stylesheetFile
+	}
+
+	ssParser := helium.NewParser().BaseURI(absSS)
 	if cfg.substituteEntities {
 		ssParser = ssParser.SubstituteEntities(true)
 	}
@@ -116,7 +130,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 		ssParser = ssParser.LoadExternalDTD(true)
 	}
 	if cfg.loadExternal {
-		ssParser = ssParser.BlockXXE(false).FS(newConfinedDirFS(cfg.stylesheetFile))
+		ssParser = ssParser.BlockXXE(false).FS(newConfinedDirFS(absSS))
 	}
 	if cfg.maxDepth >= 0 {
 		ssParser = ssParser.MaxDepth(cfg.maxDepth)
@@ -131,7 +145,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 	// xsl:include/xsl:import modules load. Without one, the compiler
 	// default-denies module loading and local stylesheets fail to compile.
 	ss, err := xslt3.NewCompiler().
-		BaseURI(cfg.stylesheetFile).
+		BaseURI(absSS).
 		URIResolver(fileResolver{maxInputBytes: cfg.maxInputBytes}).
 		Compile(ctx, ssDoc)
 	if cfg.timing {

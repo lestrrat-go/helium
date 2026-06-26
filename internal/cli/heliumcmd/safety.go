@@ -336,7 +336,41 @@ func (c confinedDirFS) Open(name string) (fs.File, error) {
 	if !withinDir(c.root, path) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
 	}
-	return os.Open(path) //nolint:gosec // confined to the stylesheet directory
+	rel, err := filepath.Rel(c.root, path)
+	if err != nil {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+	}
+
+	// The lexical withinDir check only constrains the cleaned path; os.Open would
+	// then follow symlinks, so a "leak -> /etc/passwd" link living INSIDE the
+	// stylesheet directory would escape it. os.Root confines traversal: it
+	// rejects any path component that is a symlink resolving outside the root,
+	// closing that hole. Links that stay within the root still resolve.
+	root, err := os.OpenRoot(c.root)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // caller reports raw error
+	}
+	f, err := root.Open(rel)
+	if err != nil {
+		_ = root.Close()
+		return nil, err //nolint:wrapcheck // caller reports raw error
+	}
+	return &rootFile{File: f, root: root}, nil
+}
+
+// rootFile keeps the owning os.Root alive for the lifetime of the open file and
+// closes it when the file is closed.
+type rootFile struct {
+	*os.File
+	root *os.Root
+}
+
+func (f *rootFile) Close() error {
+	err := f.File.Close()
+	if cerr := f.root.Close(); err == nil {
+		err = cerr
+	}
+	return err //nolint:wrapcheck // caller reports raw error
 }
 
 // withinDir reports whether path is the directory root itself or lies beneath

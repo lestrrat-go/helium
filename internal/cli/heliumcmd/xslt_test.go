@@ -53,6 +53,36 @@ func TestXSLTStylesheetExternalDTDEntityLoads(t *testing.T) {
 		"with --loaddtd --noent the stylesheet external DTD entity must load")
 }
 
+// TestXSLTRelativeStylesheetExternalDTDEntityLoads verifies that opt-in DTD/
+// entity loading works when the stylesheet is named by a RELATIVE path
+// (e.g. "sub/main.xsl"). The stylesheet path must be absolutized once so the
+// parser base URI, the confined FS root, and the compiler base URI all agree;
+// otherwise the base resolves "style.dtd" to "sub/style.dtd" and the confined
+// FS joins it under its own "sub" root again ("sub/sub/style.dtd"), so the
+// entity never loads.
+func TestXSLTRelativeStylesheetExternalDTDEntityLoads(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
+
+	writeFile(t, dir, filepath.Join("sub", "style.dtd"), `<!ENTITY msg "ok">`)
+	writeFile(t, dir, filepath.Join("sub", "main.xsl"), `<?xml version="1.0"?>
+<!DOCTYPE xsl:stylesheet SYSTEM "style.dtd">
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root"><out>&msg;</out></xsl:template>
+</xsl:stylesheet>`)
+	writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
+
+	// Run from dir so the stylesheet is addressed by the relative path
+	// "sub/main.xsl" rather than an absolute temp path.
+	t.Chdir(dir)
+
+	out, errOut, code := executeArgs(t, strings.NewReader(""),
+		"xslt", "--loaddtd", "--noent", filepath.Join("sub", "main.xsl"), "in.xml")
+	require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+	require.Contains(t, out, "<out>ok</out>",
+		"a relative stylesheet path must still load its external DTD entity from its own directory")
+}
+
 // TestXSLTStylesheetSystemEntityXXE verifies the secure default and the opt-in
 // for the stylesheet parser. By default a SYSTEM entity must NOT read local
 // files (the XXE/local-file-disclosure vector); --noent re-enables it but the
