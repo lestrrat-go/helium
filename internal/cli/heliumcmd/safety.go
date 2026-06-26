@@ -297,6 +297,61 @@ func samePath(a, b string) bool {
 	return os.SameFile(fiA, fiB)
 }
 
+// confinedDirFS is an fs.FS that opens files only at or below a single root
+// directory. It is the xslt command's opt-in FS for loading a stylesheet's
+// external DTD/entities (--noent / --loaddtd): unlike PermissiveRoot it refuses
+// any path that resolves outside the stylesheet's own directory, so even with
+// external loading enabled an attacker-supplied SYSTEM identifier (e.g.
+// "/etc/passwd" or "../../secret") cannot exfiltrate arbitrary local files into
+// the transform output.
+//
+// The helium parser builds the names handed to Open by resolving each system ID
+// against the stylesheet's base URI, so they are typically absolute paths (or
+// "file:" URIs). localFilePath normalizes "file:" URIs and rejects non-file
+// schemes (http/https/...), so this FS never reaches the network either.
+type confinedDirFS struct {
+	root string // absolute, cleaned directory path
+}
+
+// newConfinedDirFS returns a confinedDirFS rooted at the directory containing
+// file (the stylesheet path).
+func newConfinedDirFS(file string) confinedDirFS {
+	dir := filepath.Dir(file)
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = filepath.Clean(dir)
+	}
+	return confinedDirFS{root: abs}
+}
+
+func (c confinedDirFS) Open(name string) (fs.File, error) {
+	path, err := localFilePath(name)
+	if err != nil {
+		return nil, err
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(c.root, path)
+	}
+	path = filepath.Clean(path)
+	if !withinDir(c.root, path) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+	}
+	return os.Open(path) //nolint:gosec // confined to the stylesheet directory
+}
+
+// withinDir reports whether path is the directory root itself or lies beneath
+// it. Both arguments must be absolute and cleaned.
+func withinDir(root, path string) bool {
+	if path == root {
+		return true
+	}
+	prefix := root
+	if !strings.HasSuffix(prefix, string(filepath.Separator)) {
+		prefix += string(filepath.Separator)
+	}
+	return strings.HasPrefix(path, prefix)
+}
+
 // fileResolver loads stylesheet modules off the local filesystem. It is the
 // CLI's explicit opt-in to xsl:include/xsl:import resolution: the xslt3
 // compiler default-denies module loading unless a URIResolver is installed.

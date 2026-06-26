@@ -32,9 +32,9 @@ func TestXSLTIncludeResolves(t *testing.T) {
 	require.Contains(t, out, "<out>hello</out>")
 }
 
-// TestXSLTStylesheetExternalDTDEntityLoads guards against a regression of the
-// secure-by-default flip: the stylesheet's external DTD entities must still be
-// loaded (the xslt command opts the stylesheet parse back into external loading).
+// TestXSLTStylesheetExternalDTDEntityLoads verifies that the --noent/--loaddtd
+// opt-in re-enables loading the stylesheet's external DTD entities. The DTD
+// lives in the stylesheet's own directory, so the confined FS allows it.
 func TestXSLTStylesheetExternalDTDEntityLoads(t *testing.T) {
 	dir := t.TempDir()
 
@@ -46,10 +46,68 @@ func TestXSLTStylesheetExternalDTDEntityLoads(t *testing.T) {
 </xsl:stylesheet>`)
 	xmlFile := writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
 
-	out, errOut, code := executeArgs(t, strings.NewReader(""), "xslt", ssFile, xmlFile)
+	out, errOut, code := executeArgs(t, strings.NewReader(""),
+		"xslt", "--loaddtd", "--noent", ssFile, xmlFile)
 	require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
 	require.Contains(t, out, "<out>ok</out>",
-		"stylesheet external DTD entity must be loaded, not silently dropped")
+		"with --loaddtd --noent the stylesheet external DTD entity must load")
+}
+
+// TestXSLTStylesheetSystemEntityXXE verifies the secure default and the opt-in
+// for the stylesheet parser. By default a SYSTEM entity must NOT read local
+// files (the XXE/local-file-disclosure vector); --noent re-enables it but the
+// confined FS still blocks reads outside the stylesheet's directory.
+func TestXSLTStylesheetSystemEntityXXE(t *testing.T) {
+	const secret = "TOPSECRETXXE"
+
+	newCase := func(t *testing.T) (ssFile, xmlFile string) {
+		t.Helper()
+		dir := t.TempDir()
+		writeFile(t, dir, "secret.txt", secret)
+		ssFile = writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>
+<!DOCTYPE xsl:stylesheet [ <!ENTITY x SYSTEM "secret.txt"> ]>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root"><out>&x;</out></xsl:template>
+</xsl:stylesheet>`)
+		xmlFile = writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
+		return ssFile, xmlFile
+	}
+
+	t.Run("default rejects SYSTEM entity", func(t *testing.T) {
+		ssFile, xmlFile := newCase(t)
+		out, _, _ := executeArgs(t, strings.NewReader(""), "xslt", ssFile, xmlFile)
+		require.NotContains(t, out, secret,
+			"the secure default must not read a local file via a SYSTEM entity")
+	})
+
+	t.Run("--noent re-enables in-directory load", func(t *testing.T) {
+		ssFile, xmlFile := newCase(t)
+		out, errOut, code := executeArgs(t, strings.NewReader(""),
+			"xslt", "--noent", ssFile, xmlFile)
+		require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+		require.Contains(t, out, secret,
+			"--noent must re-enable loading an entity from the stylesheet's directory")
+	})
+
+	t.Run("--noent still blocks escape outside directory", func(t *testing.T) {
+		// The secret lives OUTSIDE the stylesheet's directory. Even with --noent
+		// the confined FS must refuse to read it, so it never reaches the output.
+		outsideDir := t.TempDir()
+		secretFile := writeFile(t, outsideDir, "secret.txt", secret)
+
+		dir := t.TempDir()
+		ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>
+<!DOCTYPE xsl:stylesheet [ <!ENTITY x SYSTEM "`+secretFile+`"> ]>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root"><out>&x;</out></xsl:template>
+</xsl:stylesheet>`)
+		xmlFile := writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
+
+		out, _, _ := executeArgs(t, strings.NewReader(""),
+			"xslt", "--noent", ssFile, xmlFile)
+		require.NotContains(t, out, secret,
+			"the confined FS must block reads outside the stylesheet's directory even with --noent")
+	})
 }
 
 // fileURIForPath builds a file: URI from a local filesystem path that is

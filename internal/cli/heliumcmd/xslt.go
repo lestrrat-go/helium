@@ -24,6 +24,15 @@ type xsltConfig struct {
 	params         []xsltParam
 	maxInputBytes  int64
 	maxDepth       int
+	// substituteEntities records --noent; loadExternalDTD records --loaddtd.
+	// loadExternal is set by either and is the explicit opt-in that lifts the
+	// stylesheet parser's default XXE block and installs an FS confined to the
+	// stylesheet's directory so its external DTDs/entities actually load.
+	// Without it the stylesheet is parsed with the secure NewParser default and
+	// no external resource reaches the filesystem.
+	substituteEntities bool
+	loadExternalDTD    bool
+	loadExternal       bool
 }
 
 type xsltParam struct {
@@ -92,15 +101,23 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 		t0 = time.Now()
 	}
 
-	// NewParser blocks external loading by default; a stylesheet is a trusted
-	// local input, so lift the XXE block and install the permissive FS to
-	// preserve the historical behavior of loading its external DTD/entities.
-	ssParser := helium.NewParser().
-		BlockXXE(false).
-		LoadExternalDTD(true).
-		SubstituteEntities(true).
-		FS(iofsPermissiveRoot()).
-		BaseURI(cfg.stylesheetFile)
+	// NewParser is secure by default: it blocks external DTD/entity loading and
+	// uses a deny-all FS, so a hostile stylesheet cannot read local files via a
+	// SYSTEM entity. The legacy permissive behavior is opt-in only, mirroring
+	// the lint command's --noent/--loaddtd flags. When opted in, external loads
+	// are confined to the stylesheet's own directory (not a raw permissive root)
+	// so an attacker-controlled SYSTEM identifier still cannot exfiltrate
+	// arbitrary local files.
+	ssParser := helium.NewParser().BaseURI(cfg.stylesheetFile)
+	if cfg.substituteEntities {
+		ssParser = ssParser.SubstituteEntities(true)
+	}
+	if cfg.loadExternalDTD {
+		ssParser = ssParser.LoadExternalDTD(true)
+	}
+	if cfg.loadExternal {
+		ssParser = ssParser.BlockXXE(false).FS(newConfinedDirFS(cfg.stylesheetFile))
+	}
 	if cfg.maxDepth >= 0 {
 		ssParser = ssParser.MaxDepth(cfg.maxDepth)
 	}
@@ -298,6 +315,8 @@ Options:
 	--param NAME VAL : pass XPath parameter
 	--stringparam NAME VAL : pass string parameter
 	--noout          : suppress output
+	--noent          : substitute entities, loading the stylesheet's external entities (opt-in; off by default)
+	--loaddtd        : load the stylesheet's external DTD subset (opt-in; off by default)
 	--timing         : print timing information to stderr
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
 	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
@@ -318,6 +337,12 @@ func (c *xsltCommand) parseArgs(args []string) (*xsltConfig, []string) {
 			cfg.timing = true
 		case "--noout":
 			cfg.noout = true
+		case "--noent":
+			cfg.substituteEntities = true
+			cfg.loadExternal = true
+		case "--loaddtd":
+			cfg.loadExternalDTD = true
+			cfg.loadExternal = true
 		case "--output", "-o":
 			i++
 			if i >= len(args) {
