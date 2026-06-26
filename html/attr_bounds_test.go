@@ -35,6 +35,35 @@ func TestAttrValueOverCapFails(t *testing.T) {
 	}
 }
 
+// TestAttrValueEntityRunOverCapFails verifies that a '&'-led or '&#'-led run in
+// an attribute value cannot bypass the per-byte hard cap. The entity-name and
+// numeric-digit scans are bounded (maxEntityNameLen), so an unterminated run
+// longer than the cap falls through to the capped loop and hard-fails with
+// ErrContentSizeExceeded instead of slurping unbounded into one allocation.
+func TestAttrValueEntityRunOverCapFails(t *testing.T) {
+	const limit = 64
+	overName := strings.Repeat("a", limit*4)   // alphanumeric entity-name run
+	overDigits := strings.Repeat("9", limit*4) // decimal numeric-ref run
+
+	testCases := []struct {
+		name  string
+		input string
+	}{
+		{name: "named_run", input: `<p x="&` + overName},
+		{name: "numeric_decimal_run", input: `<p x="&#` + overDigits},
+		{name: "numeric_hex_run", input: `<p x="&#x` + overName},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := html.NewParser().MaxContentSize(limit).
+				Parse(t.Context(), []byte(tc.input))
+			require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+				"over-cap entity-led attribute run must fail with ErrContentSizeExceeded")
+		})
+	}
+}
+
 // TestAttrValueWithinCapParses verifies an attribute value at exactly the cap
 // (followed by its terminator) parses cleanly, pinning the off-by-one boundary.
 func TestAttrValueWithinCapParses(t *testing.T) {

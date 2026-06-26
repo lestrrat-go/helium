@@ -1070,12 +1070,16 @@ func resolveNamedEntity(name string, hasSemicolon bool) (val, remainder string, 
 // digits were present. Callers handle post-scan emission/normalization.
 func (p *parser) scanNumericCharRef() (codepoint int, haveDigits bool) {
 	_ = p.cur.Advance(1) // skip '#'
+	// Bound the digit scan to maxEntityNameLen so a runaway '&#'-led digit run
+	// cannot slurp unbounded into one allocation, bypassing the caller's per-byte
+	// hard cap. Any over-cap tail falls through to the caller's capped loop; no
+	// valid numeric reference needs this many digits.
 	if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 		_ = p.cur.Advance(1) // skip 'x'
-		hexStr := p.parseWhile(xmlchar.IsHexDigit)
+		hexStr, _ := p.parseWhileMaxErr(xmlchar.IsHexDigit, maxEntityNameLen)
 		codepoint, haveDigits = parseNumericCharRef(hexStr, 16)
 	} else {
-		numStr := p.parseWhile(xmlchar.IsASCIIDigit)
+		numStr, _ := p.parseWhileMaxErr(xmlchar.IsASCIIDigit, maxEntityNameLen)
 		codepoint, haveDigits = parseNumericCharRef(numStr, 10)
 	}
 	if p.cur.Peek() == ';' {
@@ -2160,7 +2164,12 @@ func (p *parser) resolveEntityInAttr() string {
 		return ""
 	}
 
-	name := p.parseWhile(isAlphanumeric)
+	// Bound the entity-name scan to maxEntityNameLen so a runaway '&'-led
+	// alphanumeric run cannot slurp unbounded into one allocation, bypassing the
+	// caller's per-byte hard cap. No real entity name reaches this length, so any
+	// over-cap tail falls through to the caller's capped loop and output for valid
+	// entities is unchanged.
+	name, _ := p.parseWhileMaxErr(isAlphanumeric, maxEntityNameLen)
 	hasSemicolon := false
 	if p.cur.Peek() == ';' {
 		hasSemicolon = true

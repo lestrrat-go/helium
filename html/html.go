@@ -118,11 +118,13 @@ func (p Parser) Strict(v bool) Parser {
 // full content; MaxContentSize does not make DOM parsing memory-bounded for
 // large documents. Use a SAX-only consumer to benefit from the streaming bound.
 //
-// For comments, bogus comments, and processing instructions it is a HARD cap:
-// these constructs map to a single indivisible SAX event and DOM node and
-// cannot be chunked without corrupting the document, so a comment/PI exceeding
-// this size before its terminator fails the parse with [ErrContentSizeExceeded]
-// rather than emitting a truncated node.
+// For comments, bogus comments, processing instructions, and attribute values
+// it is a HARD cap: these constructs map to a single indivisible SAX event and
+// DOM node and cannot be chunked without corrupting the document, so one
+// exceeding this size before its terminator fails the parse with
+// [ErrContentSizeExceeded] rather than emitting a truncated node. The attribute
+// cap is enforced per byte and also covers '&'-led entity and '&#'-led numeric
+// runs, so an unterminated value cannot buffer without limit.
 //
 // A value <= 0 selects the default (16 MiB).
 //
