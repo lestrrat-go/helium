@@ -354,6 +354,48 @@ func TestTinyChunkLoneLtImpliedBody(t *testing.T) {
 		"the space, '<', and ' b' must form one run under the implied <body>")
 }
 
+func TestTinyChunkLeadingSpaceWhitespaceCharRefImpliedBody(t *testing.T) {
+	// Regression: a deferred leading space followed by a WHITESPACE-producing
+	// character reference (which opens the implied <body> via htmlStartCharData and
+	// thereby fixes the insertion target) must flush the pending space BEFORE the
+	// char-ref's whitespace chunk. For `<html> &#9;a</html>` under MaxContentSize(1)
+	// the run is " \ta": the leading space, then the tab from the char-ref, then "a".
+	// Previously the all-whitespace fall-through emitted the tab first and only
+	// flushed the pending space when "a" arrived, producing "\t a" — reordered.
+	for _, tc := range []struct {
+		name  string
+		input string
+	}{
+		{name: "numeric", input: `<html> &#9;a</html>`},
+		{name: "named", input: `<html> &Tab;a</html>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var collected []byte
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+				collected = append(collected, ch...)
+				return nil
+			}))
+			require.NoError(t, html.NewParser().MaxContentSize(1).
+				ParseWithSAX(t.Context(), []byte(tc.input), sax))
+			require.Equal(t, " \ta", string(collected),
+				"the deferred leading space must precede the whitespace char-ref output")
+
+			doc, err := html.NewParser().MaxContentSize(1).Parse(t.Context(), []byte(tc.input))
+			require.NoError(t, err)
+			htmlEl := doc.FirstChild()
+			require.NotNil(t, htmlEl)
+			require.Equal(t, "html", htmlEl.Name())
+			first := htmlEl.FirstChild()
+			require.NotNil(t, first)
+			require.Equal(t, "body", first.Name(),
+				"the run must land under the implied <body>")
+			require.Equal(t, " \ta", string(first.Content()),
+				"DOM text must preserve the leading-space-before-tab order")
+		})
+	}
+}
+
 func TestDefaultModeOverCapSpacesSoftCap(t *testing.T) {
 	// Regression: with StripBlanks OFF and the insertion target already established
 	// (inside <p>), ordinary data-state whitespace must stream in MaxContentSize

@@ -1690,6 +1690,15 @@ func (p *parser) emitCharacters(data []byte) error {
 		// emit it immediately under the SOFT cap — no deferral, no undecidable-
 		// whitespace hard-fail. This is the normal data-state text path, e.g.
 		// <p> + over-cap spaces + </p>, including under SuppressImplied.
+		//
+		// Flush any deferred leading whitespace FIRST so output order is preserved.
+		// The insertion target is now fixed (e.g. a whitespace-producing char-ref such
+		// as &#9; / &Tab; just opened the implied <body> via htmlStartCharData), and
+		// the pendingWS prefix lexically precedes this chunk; emitting this whitespace
+		// ahead of the still-deferred prefix would reorder the run (e.g. `<html> &#9;a`
+		// must yield " \ta", not "\t a"). flushPendingWS is a no-op when nothing was
+		// deferred.
+		p.handleSAXErr(p.flushPendingWS())
 	}
 	if bytes.ContainsRune(data, '\uFFFD') {
 		if p.encodingError {
