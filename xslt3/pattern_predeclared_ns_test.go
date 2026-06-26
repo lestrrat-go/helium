@@ -249,6 +249,36 @@ func TestPatternForbiddenFunctionRespectsExplicitBinding(t *testing.T) {
 	require.Error(t, err, "unprefixed current-group() in a pattern must be forbidden")
 }
 
+// TestPatternForbiddenFunctionEQName verifies that the forbidden-in-pattern
+// check also catches the EQName spelling Q{uri}local. The xpath3 parser keeps
+// an EQName function call's whole braced spelling in the name with an empty
+// prefix, so resolving identity from the prefix alone would miss it. Each of the
+// four forbidden grouping/merge functions written as
+// Q{http://www.w3.org/2005/xpath-functions}fn() in a pattern must be rejected.
+func TestPatternForbiddenFunctionEQName(t *testing.T) {
+	t.Parallel()
+
+	const fnNS = "http://www.w3.org/2005/xpath-functions"
+	for _, fn := range []string{
+		"current-group",
+		"current-grouping-key",
+		"current-merge-key",
+		"current-merge-group",
+	} {
+		t.Run(fn, func(t *testing.T) {
+			t.Parallel()
+			src := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="a[Q{` + fnNS + `}` + fn + `()]"><out/></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+			require.Error(t, err, "EQName Q{...}%s() in a pattern must be forbidden", fn)
+		})
+	}
+}
+
 // TestPatternLexicalNamespaceSnapshot verifies that each match pattern resolves
 // prefixes against its OWN lexical namespace context (the xmlns declarations in
 // scope at the pattern's position), not against a mutable stylesheet-global map.
@@ -761,6 +791,78 @@ func TestTypedStrictPatternPredeclaredPrefix(t *testing.T) {
 		require.Error(t, err,
 			"match=\"math:nope\" must fail XTSE3105: math: resolves to the math namespace, but {math-ns}nope is not declared")
 	})
+}
+
+// TestPatternStartFunctionRequiresFnNamespace verifies that only functions in
+// the XPath functions namespace qualify as built-in pattern-start functions
+// (key/id/idref/doc/element-with-id/root). An allowlisted LOCAL name in any
+// other namespace — e.g. a user-declared Q{urn:custom}key() — must NOT be
+// admitted as a pattern-start function, even when a matching xsl:function
+// exists. Only the fn-namespace spellings key()/fn:key()/Q{fn-ns}key() are
+// accepted.
+func TestPatternStartFunctionRequiresFnNamespace(t *testing.T) {
+	t.Parallel()
+
+	const fnNS = "http://www.w3.org/2005/xpath-functions"
+
+	// A custom Q{urn:custom}key#1 is declared as an xsl:function so that the
+	// downstream function-existence check (validatePatternFunctions) would
+	// happily accept it; the ONLY thing that must reject it is the structural
+	// pattern-start check, which requires the functions namespace.
+	const tmpl = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:c="urn:custom">
+  <xsl:key name="k" match="a" use="@id"/>
+  <xsl:function name="c:key" as="xs:boolean">
+    <xsl:param name="x"/>
+    <xsl:sequence select="true()"/>
+  </xsl:function>
+  <xsl:template match="%s"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	tests := []struct {
+		name    string
+		match   string
+		wantErr bool
+	}{
+		{name: "custom-prefixed-key-rejected", match: "c:key('x')", wantErr: true},
+		{name: "custom-eqname-key-rejected", match: "Q{urn:custom}key('x')", wantErr: true},
+		{name: "unprefixed-key-accepted", match: "key('k', '1')"},
+		{name: "fn-prefixed-key-accepted", match: "fn:key('k', '1')"},
+		{name: "fn-eqname-key-accepted", match: "Q{" + fnNS + "}key('k', '1')"},
+		// FilterExpr (predicate) variants: a predicate after the function call
+		// must not let a non-fn-namespace pattern-start function through the
+		// gate (the FilterExpr pattern-primary case must consult
+		// isAllowedPatternFunction too).
+		{name: "custom-prefixed-key-predicate-rejected", match: "c:key('x')[true()]", wantErr: true},
+		{name: "custom-eqname-key-predicate-rejected", match: "Q{urn:custom}key('x')[true()]", wantErr: true},
+		{name: "fn-eqname-key-predicate-accepted", match: "Q{" + fnNS + "}key('k', '1')[true()]"},
+		{name: "unprefixed-key-predicate-accepted", match: "key('k', '1')[1]"},
+		// A predicate-wrapped function call as a NON-leading path step must also
+		// be rejected — pattern-start functions are only valid at the start, so
+		// the FilterExpr wrapper must not smuggle a custom function mid-path.
+		{name: "custom-key-predicate-mid-path-rejected", match: "*/c:key('x')[true()]", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := strings.Replace(tmpl, "%s", tc.match, 1)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+
+			_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+			if tc.wantErr {
+				require.Error(t, err,
+					"a non-fn-namespace function %q must not be admitted as a pattern-start function", tc.match)
+				return
+			}
+			require.NoError(t, err,
+				"the fn-namespace key() spelling %q must remain an accepted pattern-start function", tc.match)
+		})
+	}
 }
 
 // TestPatternFnCurrentCompiles verifies fn:current() is accepted (not rejected

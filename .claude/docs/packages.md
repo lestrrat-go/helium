@@ -400,7 +400,8 @@ Shared spec vocabulary strings reused across packages.
 - XML vocabulary: common prefixes + attribute/value names such as `xml:base`
 - Catalog vocabulary: OASIS catalog element names, attribute names, `prefer` values
 - XSLT vocabulary: `XSLTElement*` constants for all XSLT element local names
-- Files: `ns.go`, `xml.go`, `catalog.go`, `xslt.go`
+- Streamability helpers: `IsFnNamespacePrefix`, `StreamFnLocalName` (shared by xpath3/xslt3/xpathstream; normalizes EQName `Q{...}local` fn calls)
+- Files: `ns.go`, `xml.go`, `catalog.go`, `xslt.go`, `fn.go`
 - Imports: none
 
 - **Load(name) → encoding.Encoding** — lookup by normalized name

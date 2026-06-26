@@ -38,7 +38,7 @@ internal/uripath → (none)
 internal/xsdregex → (none)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, internal/lexicon, internal/xmlchar
-internal/xpathstream → xpath3
+internal/xpathstream → xpath3, internal/lexicon
 test           → helium
 ```
 

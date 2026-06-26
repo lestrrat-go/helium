@@ -83,9 +83,14 @@ type vmLocationPathExpr struct {
 func (vmLocationPathExpr) exprNode() {}
 
 type vmPathExpr struct {
-	Filter        Expr
-	Path          *vmLocationPathExpr
-	PreserveOrder bool // true when filter is reverse()/sort() — skip doc-order sort
+	Filter Expr
+	Path   *vmLocationPathExpr
+	// OrderFilter holds the original (un-lowered) filter expression so the
+	// order-preservation decision can be made at runtime against the actual
+	// function binding. The lowered Filter becomes an opaque compiledExprRef
+	// that cannot be inspected, so the un-lowered call is retained here for
+	// filterPreservesOrder. Nil when the filter is not a function call.
+	OrderFilter Expr
 }
 
 func (vmPathExpr) exprNode() {}
@@ -591,7 +596,18 @@ func (b *vmBuilder) lowerPathExpr(expr PathExpr) (Expr, error) {
 		}
 		path = &lp
 	}
-	return vmPathExpr{Filter: filter, Path: path, PreserveOrder: filterPreservesOrder(expr.Filter)}, nil
+	return vmPathExpr{Filter: filter, Path: path, OrderFilter: orderFilterFrom(expr.Filter)}, nil
+}
+
+// orderFilterFrom returns the filter expression to retain for runtime
+// order-preservation resolution: the un-lowered function call when the filter is
+// one, otherwise nil. Keeping only function calls avoids holding unrelated
+// subtrees alive.
+func orderFilterFrom(filter Expr) Expr {
+	if _, ok := filter.(FunctionCall); ok {
+		return filter
+	}
+	return nil
 }
 
 func (b *vmBuilder) lowerVMPathExpr(expr vmPathExpr) (Expr, error) {
@@ -611,7 +627,7 @@ func (b *vmBuilder) lowerVMPathExpr(expr vmPathExpr) (Expr, error) {
 		}
 		path = &lp
 	}
-	return vmPathExpr{Filter: filter, Path: path, PreserveOrder: expr.PreserveOrder}, nil
+	return vmPathExpr{Filter: filter, Path: path, OrderFilter: expr.OrderFilter}, nil
 }
 
 func (b *vmBuilder) lowerPathStepExpr(expr PathStepExpr) (Expr, error) {
