@@ -342,20 +342,32 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 
 		defaults, ok := pctx.lookupAttributeDefault(elemName)
 		if ok {
-			// First pass: apply default xmlns="..." (must come before prefixed)
+			// First pass: apply default xmlns="..." (must come before prefixed).
+			// Skip a DTD default whose prefix (the empty string for the default
+			// namespace) was already explicitly declared on this start tag: an
+			// explicit binding must win over a DTD-supplied default. Because
+			// nsStack.Lookup is LIFO, pushing the DTD default afterwards would
+			// otherwise shadow the explicit one.
 			for _, attr := range defaults {
 				if attr.LocalName() == lexicon.PrefixXMLNS && attr.Prefix() == "" {
+					if slices.Contains(nsDeclared, "") {
+						continue
+					}
 					pctx.pushNS("", attr.Value())
 					nbNs++
 				}
 			}
-			// Second pass: apply xmlns:prefix="..." and regular attributes
+			// Second pass: apply xmlns:prefix="..." and regular attributes.
+			// Likewise skip a prefixed DTD default already declared explicitly.
 			for _, attr := range defaults {
 				attname := attr.LocalName()
 				aprefix := attr.Prefix()
 				if attname == lexicon.PrefixXMLNS && aprefix == "" {
 					continue
 				} else if aprefix == lexicon.PrefixXMLNS {
+					if slices.Contains(nsDeclared, attname) {
+						continue
+					}
 					pctx.pushNS(attname, attr.Value())
 					nbNs++
 				} else {
