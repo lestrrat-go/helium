@@ -16,6 +16,14 @@ import (
 // normalized by normalizeURIPath. Paths are handled decoded — as libxml2 does
 // after unescaping on parse — and re-escaped on output, so an encoded delimiter
 // like %2F acts as "/" while a space round-trips to %20.
+//
+// This matches libxml2 byte-for-byte for every well-formed xml:base value
+// (relative/absolute paths, http(s)/file/urn URIs, and protocol-relative
+// //host/path). It does not reproduce libxml2's behavior on degenerate inputs
+// that are not valid xml:base values — an empty-authority base ("//", "///",
+// "urn://"), a percent-encoded delimiter inside an authority, or a bare "//"
+// reference — where libxml2 itself is inconsistent. Such values never occur in
+// canonical signature input.
 func joinURIReference(base, ref string) string {
 	// libxml2 appends "/" when the base's second-to-last character is '.', i.e.
 	// the base ends with ".." (or "x."), forcing the join to traverse upward.
@@ -42,10 +50,14 @@ func joinURIReference(base, ref string) string {
 		return ref
 	}
 	// Go parses a scheme-only base like "urn:base" with its payload in Opaque
-	// rather than Path; libxml2 treats that payload as the path, so fold it back.
+	// rather than Path; libxml2 treats that payload as the (decoded) path, so fold
+	// it back, decoding it the way url.Parse already decodes Path.
 	basePath := baseURL.Path
 	if baseURL.Opaque != "" {
 		basePath = baseURL.Opaque
+		if dec, derr := url.PathUnescape(baseURL.Opaque); derr == nil {
+			basePath = dec
+		}
 	}
 
 	// Work on the decoded path (like libxml2, which unescapes on parse): an
