@@ -558,15 +558,27 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 
 		// For children that resolve to groups, track per-member progress.
 		// This allows group members to be matched one-by-one with other
-		// interleave children consuming elements between them.
+		// interleave children consuming elements between them. A repeatable
+		// child wrapping a group (zeroOrMore/oneOrMore of group(a,b)) is tracked
+		// the same way, with repeat=true so a completed iteration restarts at the
+		// first member — letting another interleave branch consume between group
+		// members across iterations.
 		type groupState struct {
-			members []*pattern
-			pos     int
+			members      []*pattern
+			pos          int
+			repeat       bool // member-group wrapped in zeroOrMore/oneOrMore
+			iterConsumed bool // current iteration consumed at least one item
 		}
 		groupStates := make([]*groupState, len(pat.children))
 		for i, child := range pat.children {
 			if grp := v.resolveToGroup(child); grp != nil {
 				groupStates[i] = &groupState{members: grp.children, pos: 0}
+				continue
+			}
+			if child.kind == patternZeroOrMore || child.kind == patternOneOrMore {
+				if grp := v.resolveToGroup(wrapChildren(child.children)); grp != nil {
+					groupStates[i] = &groupState{members: grp.children, pos: 0, repeat: true}
+				}
 			}
 		}
 
@@ -608,42 +620,57 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				}
 
 				// Group children: match member-by-member so other interleave
-				// children can consume elements between group members.
+				// children can consume elements between group members. For a
+				// repeatable member-group, a completed iteration that consumed
+				// something restarts at the first member (a fresh group iteration).
 				if gs := groupStates[i]; gs != nil {
-					for gs.pos < len(gs.members) {
-						member := gs.members[gs.pos]
-						savedState := state.clone()
-						savedAttrUsed := make([]bool, len(attrUsed))
-						copy(savedAttrUsed, attrUsed)
-						savedLen := len(v.pendingErrors)
-						savedValid := v.valid
-						v.suppressDepth++
-						ret := v.validateContentPat(member, elem, attrs, attrUsed, state)
-						v.suppressDepth--
-						if ret == 0 && (!seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed)) {
-							// Member consumed something — advance.
-							consumed[i] = true
-							progress = true
-							gs.pos++
-							v.pendingErrors = v.pendingErrors[:savedLen]
-							v.valid = savedValid
-							// Continue trying next members in same round
-							// (they might also match immediately).
-						} else {
-							// Member didn't consume. If nullable, skip it
-							// and try the next member.
-							*state = *savedState
-							copy(attrUsed, savedAttrUsed)
-							v.pendingErrors = v.pendingErrors[:savedLen]
-							v.valid = savedValid
-							if v.isNullable(member) {
+					for {
+						gs.iterConsumed = false
+						blocked := false
+						for gs.pos < len(gs.members) {
+							member := gs.members[gs.pos]
+							savedState := state.clone()
+							savedAttrUsed := make([]bool, len(attrUsed))
+							copy(savedAttrUsed, attrUsed)
+							savedLen := len(v.pendingErrors)
+							savedValid := v.valid
+							v.suppressDepth++
+							ret := v.validateContentPat(member, elem, attrs, attrUsed, state)
+							v.suppressDepth--
+							if ret == 0 && (!seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed)) {
+								// Member consumed something — advance.
+								consumed[i] = true
+								progress = true
+								gs.iterConsumed = true
 								gs.pos++
-								continue
+								v.pendingErrors = v.pendingErrors[:savedLen]
+								v.valid = savedValid
+								// Continue trying next members in same round
+								// (they might also match immediately).
+							} else {
+								// Member didn't consume. If nullable, skip it
+								// and try the next member.
+								*state = *savedState
+								copy(attrUsed, savedAttrUsed)
+								v.pendingErrors = v.pendingErrors[:savedLen]
+								v.valid = savedValid
+								if v.isNullable(member) {
+									gs.pos++
+									continue
+								}
+								// Not nullable — stop trying this group for now.
+								// Other interleave children may consume first.
+								blocked = true
+								break
 							}
-							// Not nullable — stop trying this group for now.
-							// Other interleave children may consume first.
-							break
 						}
+						// Restart a repeatable member-group only after a full
+						// iteration that consumed something; otherwise stop.
+						if gs.repeat && !blocked && gs.pos >= len(gs.members) && gs.iterConsumed {
+							gs.pos = 0
+							continue
+						}
+						break
 					}
 					if gs.pos >= len(gs.members) {
 						if !isRepeatable[i] {
@@ -713,6 +740,22 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 					v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
 				}
 				return -1
+			}
+		}
+		// A repeatable member-group that ends mid-iteration with a non-nullable
+		// remaining member has a dangling partial group (e.g. zeroOrMore(group(a,b))
+		// fed an unpaired trailing a): that is incomplete content.
+		for i := range pat.children {
+			gs := groupStates[i]
+			if gs == nil || !gs.repeat || gs.pos <= 0 || gs.pos >= len(gs.members) {
+				continue
+			}
+			for j := gs.pos; j < len(gs.members); j++ {
+				if !v.isNullable(gs.members[j]) {
+					v.addError(elem, "Invalid sequence in interleave")
+					v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+					return -1
+				}
 			}
 		}
 		return 0
