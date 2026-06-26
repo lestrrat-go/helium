@@ -358,7 +358,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, fmt.Errorf("xsd: root element is not xs:schema")
 	}
 
-	fsys := fs.FS(iofs.PermissiveRoot{})
+	// Default to a deny-all FS so an untrusted schema cannot reach the host
+	// filesystem via xs:include/xs:import/xs:redefine (local-file disclosure /
+	// resource exhaustion). Callers opt into host access explicitly via
+	// [Compiler.FS] (e.g. helium.PermissiveFS or a confined fs.FS). This mirrors
+	// the secure-by-default flip applied to helium.NewParser.
+	fsys := fs.FS(iofs.DenyAll{})
 	if cfg != nil && cfg.fsys != nil {
 		fsys = cfg.fsys
 	}

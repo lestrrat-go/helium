@@ -228,7 +228,11 @@ func TestGoldenFiles(t *testing.T) {
 			// Compile schema.
 			xsdFilename := "./test/schemas/" + tc.xsdBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-			schema, err := xsd.NewCompiler().Label(xsdFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.xsdPath)
+			// These are trusted committed fixtures whose xs:include/xs:import/
+			// xs:redefine targets live next to the schema; restore permissive
+			// host access (the compiler now denies nested-schema FS access by
+			// default — see Compiler.FS).
+			schema, err := xsd.NewCompiler().Label(xsdFilename).FS(helium.PermissiveFS()).ErrorHandler(collector).CompileFile(t.Context(), tc.xsdPath)
 			// A schema with fatal diagnostics now returns ErrCompilationFailed
 			// (and a nil schema); the diagnostics themselves are delivered to
 			// the collector and compared below. Any other error is a genuine
@@ -612,7 +616,7 @@ func TestRedefine(t *testing.T) {
 	compileAndValidate := func(t *testing.T, xsdPath, xmlStr string) error {
 		t.Helper()
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		schema, err := xsd.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
+		schema, err := xsd.NewCompiler().FS(helium.PermissiveFS()).ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
 		require.NoError(t, err, "schema compilation failed")
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -824,7 +828,7 @@ func TestRedefine(t *testing.T) {
 	compileErrors := func(t *testing.T, xsdPath string) string {
 		t.Helper()
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err := xsd.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
+		_, err := xsd.NewCompiler().FS(helium.PermissiveFS()).ErrorHandler(collector).CompileFile(t.Context(), xsdPath)
 		requireCompileResultErr(t, err)
 		require.NoError(t, collector.Close())
 		_, errors := partitionCompileErrors(collector.Errors())
