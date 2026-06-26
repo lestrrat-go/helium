@@ -140,3 +140,63 @@ func TestMaxNodeContentSize(t *testing.T) {
 		require.True(t, errors.Is(err, helium.ErrNodeContentTooLarge))
 	})
 }
+
+func TestMaxNodeContentSizeAttrValue(t *testing.T) {
+	t.Parallel()
+
+	// fast: a simple value (no entities/special whitespace) taking the
+	// ScanSimpleAttrValue fast path. slow: a value containing an entity
+	// reference, forcing the buffer-accumulating slow path.
+	bodies := map[string]func(n int) string{
+		"fast": func(n int) string {
+			return `<r a="` + strings.Repeat("a", n) + `"/>`
+		},
+		"slow": func(n int) string {
+			return `<r a="` + strings.Repeat("a", n) + `&amp;"/>`
+		},
+	}
+
+	t.Run("oversized attribute value fails with ErrNodeContentTooLarge", func(t *testing.T) {
+		t.Parallel()
+		for kind, mk := range bodies {
+			t.Run(kind, func(t *testing.T) {
+				t.Parallel()
+				_, err := helium.NewParser().
+					MaxNodeContentSize(64).
+					Parse(t.Context(), []byte(mk(200)))
+				require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
+			})
+		}
+	})
+
+	t.Run("within-cap attribute value parses fine", func(t *testing.T) {
+		t.Parallel()
+		for kind, mk := range bodies {
+			t.Run(kind, func(t *testing.T) {
+				t.Parallel()
+				d, err := helium.NewParser().
+					MaxNodeContentSize(64).
+					Parse(t.Context(), []byte(mk(32)))
+				require.NoError(t, err)
+				require.NotNil(t, d)
+			})
+		}
+	})
+
+	t.Run("negative limit disables the cap", func(t *testing.T) {
+		t.Parallel()
+		// A value far past the 10 MiB default still parses when the cap is
+		// disabled with a negative value.
+		d, err := helium.NewParser().
+			MaxNodeContentSize(-1).
+			Parse(t.Context(), []byte(bodies["fast"](12<<20)))
+		require.NoError(t, err)
+		require.NotNil(t, d)
+	})
+
+	t.Run("secure default rejects an attribute value over 10 MiB", func(t *testing.T) {
+		t.Parallel()
+		_, err := helium.NewParser().Parse(t.Context(), []byte(bodies["fast"](11<<20)))
+		require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
+	})
+}

@@ -821,7 +821,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 
 	if !normalize {
 		if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
-			if v, nBytes := u8.ScanSimpleAttrValue(qch); nBytes > 0 {
+			if v, nBytes := u8.ScanSimpleAttrValue(qch, pctx.nodeContentScanBudget()); nBytes > 0 {
 				if err = u8.AdvanceFast(nBytes); err != nil {
 					return
 				}
@@ -836,6 +836,13 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	defer releaseBuffer(b)
 
 	for {
+		// Enforce the node-content cap during accumulation so a giant
+		// attribute value fails before its closing quote is reached, rather
+		// than after buffering the whole value (matches CDATA/PI/comment).
+		if pctx.nodeContentTooLong(b.Len()) {
+			err = pctx.error(ctx, ErrNodeContentTooLarge)
+			return
+		}
 		c := cur.PeekRune()
 		if (qch != 0x0 && c == rune(qch)) || c == '<' {
 			break

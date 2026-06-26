@@ -239,9 +239,10 @@ For the UTF-8 cursor fast path, character-data scanners normally continue across
 
 ## Indivisible-Content Cap (`MaxNodeContentSize`)
 
-A CDATA section, comment body, processing-instruction body, and character-data
-run each map to a single SAX event / DOM node and cannot be chunked, so a giant
-one on untrusted input is a memory-amplification DoS. `parserCtx.maxNodeContent`
+A CDATA section, comment body, processing-instruction body, character-data
+run, and attribute value each map to a single SAX event / DOM node and cannot
+be chunked, so a giant one on untrusted input is a memory-amplification DoS.
+`parserCtx.maxNodeContent`
 caps the byte size of any single such run (`Parser.MaxNodeContentSize(int)`; `0` =
 `DefaultMaxNodeContentSize` 10 MiB, applied by `NewParser`; negative = unlimited;
 resolved via `resolveLimit`). Over-cap fails the parse with
@@ -262,6 +263,12 @@ hard content cap:
   a multi-byte rune straddles the boundary, so a truncated run is never
   delivered. `ScanCharDataInto` gained a `maxBytes int` parameter (output-byte
   budget) across all three cursor implementations and the interface.
+- `parseAttributeValueInternal` (`parser_element.go`) caps attribute values
+  both ways: the slow accumulating path checks `nodeContentTooLong(b.Len())` at
+  the top of its scan loop (strict-greater), and the `ScanSimpleAttrValue` fast
+  path takes `nodeContentScanBudget()` as a `maxBytes` argument and bails
+  (falling back to the slow path, which reports the error) once it exceeds the
+  budget, bounding the cursor buffer instead of materializing the whole value.
 - Entity-expansion sub-parses inherit the cap via `inheritNestedParserState`.
 - The bounded streaming SAX char-data path (`parseCharDataChunkedSAX`, used when
   `CharBufferSize > 0` and no DOM is built) is EXEMPT from the char-data cap: it
