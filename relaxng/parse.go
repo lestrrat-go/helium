@@ -12,6 +12,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
+	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/uripath"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -21,6 +22,14 @@ const (
 	combineInterleave = "interleave"
 	combineChoice     = "choice"
 )
+
+// defaultMaxResourceBytes bounds the number of bytes read from a single
+// include/externalRef target when no cap is configured via
+// [Compiler.MaxResourceBytes]. It guards against a hostile or pathological
+// resource (e.g. a named pipe to /dev/zero behind a permissive FS) exhausting
+// memory. Aligned with the parser's external-entity cap and XInclude's
+// per-include cap (10 MiB).
+const defaultMaxResourceBytes = 10 << 20 // 10 MiB
 
 // compiler holds state during schema compilation.
 type compiler struct {
@@ -33,6 +42,9 @@ type compiler struct {
 	errorCount   int
 	includeStack map[string]struct{} // recursion guard for include/externalRef (lookup in O(1))
 	includeLimit int
+	// maxResourceBytes caps the bytes read from a single include/externalRef
+	// target. Zero means use defaultMaxResourceBytes.
+	maxResourceBytes int
 	// grammarStack tracks nested grammars for parentRef resolution. It holds
 	// the currently-open lexical grammar scopes during parsing; the top is the
 	// nearest enclosing <grammar>.
@@ -94,7 +106,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		label = "(string)"
 	}
 
-	fsys := fs.FS(iofs.PermissiveRoot{})
+	// Default to a deny-all FS so untrusted schemas cannot read host files via
+	// include/externalRef hrefs. Callers opt into host access (or a confined
+	// directory) explicitly with [Compiler.FS]. Mirrors [helium.NewParser].
+	fsys := fs.FS(iofs.DenyAll{})
 	if cfg.fsys != nil {
 		fsys = cfg.fsys
 	}
@@ -102,12 +117,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		grammar: &Grammar{
 			defines: make(map[string]*pattern),
 		},
-		baseDir:      baseDir,
-		fsys:         fsys,
-		parser:       cfg.parser,
-		filename:     label,
-		errorHandler: eh,
-		includeLimit: 1000,
+		baseDir:          baseDir,
+		fsys:             fsys,
+		parser:           cfg.parser,
+		filename:         label,
+		errorHandler:     eh,
+		includeLimit:     1000,
+		maxResourceBytes: cfg.maxResourceBytes,
 	}
 
 	root := findDocumentElement(doc)
@@ -622,6 +638,26 @@ func uriScheme(s string) string {
 	return strings.ToLower(scheme)
 }
 
+// readResource opens path through the configured fs.FS and reads it under the
+// per-resource byte cap (defaultMaxResourceBytes unless overridden via
+// [Compiler.MaxResourceBytes]). exceeded reports that the resource was larger
+// than the cap; in that case the returned data is truncated and must not be
+// used. The cap is enforced against bytes actually read so a hostile or endless
+// resource behind a permissive FS cannot exhaust memory.
+func (c *compiler) readResource(path string) (data []byte, exceeded bool, err error) {
+	f, err := c.fsys.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer f.Close()
+
+	limit := c.maxResourceBytes
+	if limit <= 0 {
+		limit = defaultMaxResourceBytes
+	}
+	return iolimit.ReadAll(f, int64(limit))
+}
+
 // parseInclude parses an <include> element.
 func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 	href := getUnqualifiedAttr(elem, "href")
@@ -655,7 +691,12 @@ func (c *compiler) parseInclude(ctx context.Context, elem *helium.Element) {
 	defer delete(c.includeStack, path)
 
 	// Read and parse the included file
-	data, err := fs.ReadFile(c.fsys, path)
+	data, exceeded, err := c.readResource(path)
+	if exceeded {
+		msg := fmt.Sprintf("xmlRelaxNGParse: %s exceeds the maximum resource size", href)
+		c.addBareSchemaError(ctx, msg)
+		return
+	}
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.addBareSchemaError(ctx, msg)
@@ -1089,7 +1130,12 @@ func (c *compiler) parseExternalRef(ctx context.Context, node *helium.Element) *
 	c.includeStack[path] = struct{}{}
 	defer delete(c.includeStack, path)
 
-	data, err := fs.ReadFile(c.fsys, path)
+	data, exceeded, err := c.readResource(path)
+	if exceeded {
+		msg := fmt.Sprintf("xmlRelaxNGParse: %s exceeds the maximum resource size", href)
+		c.addBareSchemaError(ctx, msg)
+		return nil
+	}
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.addBareSchemaError(ctx, msg)

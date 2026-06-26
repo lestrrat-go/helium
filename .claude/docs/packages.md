@@ -172,10 +172,11 @@ XML Schema (XSD) 1.0 compilation and validation.
 RELAX NG schema compilation and validation.
 
 - **NewCompiler() → Compiler** — create fluent builder for grammar compilation
-  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `ErrorHandler(h)` — builder methods (clone-on-write)
+  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `MaxResourceBytes(int)`, `ErrorHandler(h)` — builder methods (clone-on-write)
   - `Compiler.BaseDir(dir)` — base directory for resolving relative paths in `include` and `externalRef` during compilation
   - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the grammar and its `include`/`externalRef` targets; supplies parse policy (limits, FS, XXE/network), distinct from the fetch `FS`. Unset → default `helium.NewParser()`.
-  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `include` and `externalRef`. A nil value restores the default permissive FS (`internal/iofs.PermissiveRoot`, opens via `os.Open`). Resolution (`resolveHref` in `parse.go`) honors an absolute href as-is first; otherwise it resolves against ancestor `xml:base` via `BuildURI`; only when neither applies does it fall back to `filepath.Join(BaseDir, href)`, and finally to the bare href. The resolved name may thus be absolute / OS-style; FS implementations enforcing `fs.ValidPath` (`os.DirFS`, `fstest.MapFS`) reject them, so a sandboxing FS must accept OS-style names
+  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `include` and `externalRef`. **Secure by default**: the default (and what a nil value restores) is a deny-all FS (`internal/iofs.DenyAll`, opens nothing), mirroring `helium.NewParser`, so an untrusted schema cannot read host files via `include`/`externalRef`. Pass `helium.PermissiveFS()` (any `os.Open` path) or a confined FS to opt into loading. Resolution (`resolveHref` in `parse.go`) honors an absolute href as-is first; otherwise it resolves against ancestor `xml:base` via `BuildURI`; only when neither applies does it fall back to `filepath.Join(BaseDir, href)`, and finally to the bare href. The resolved name may thus be absolute / OS-style; FS implementations enforcing `fs.ValidPath` (`os.DirFS`, `fstest.MapFS`) reject them, so a sandboxing FS must accept OS-style names
+  - `Compiler.MaxResourceBytes(int)` — per-resource byte cap on each `include`/`externalRef` target read (`readResource` in `parse.go`, via `internal/iolimit`). Default 10 MiB (`defaultMaxResourceBytes`); `<= 0` restores the default. An over-cap resource fails to load with an "exceeds the maximum resource size" compile error rather than being read in full
   - `Compile(ctx, *Document) → (*Grammar, error)` / `CompileFile(ctx, path) → (*Grammar, error)` — terminal methods
 - **NewValidator(grammar) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)` — builder methods
@@ -186,7 +187,7 @@ RELAX NG schema compilation and validation.
 - `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError`
 - `ValidationError{Filename, Line, Element, Message}` — per-error structured type
 - Files: `relaxng.go` (API + config), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `parse_check.go` (compile checks), `validate.go` (engine), `errors.go` (error types + formatting)
-- Imports: helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar
+- Imports: helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xmlchar, internal/uripath
 - Status: 159/159 golden tests passing
 
 ## html/

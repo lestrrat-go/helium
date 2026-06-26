@@ -155,8 +155,9 @@ Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 - Schema path mandatory positional arg
 - `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
 - `--max-depth N` caps element nesting depth (default `256`, `0` = unlimited); when absent, the `NewParser` default is left untouched; over-cap fails the parse (`ExitErr`)
-- Grammar compiled once with `relaxng.NewCompiler().CompileFile()`
-- Each XML input parsed with `helium.NewParser()` + validated with `relaxng.NewValidator(grammar).Validate()`
+- Grammar compiled once with `relaxng.NewCompiler().FS(helium.PermissiveFS()).Label(schema).ErrorHandler(...).CompileFile(ctx, schema)`; `FS(helium.PermissiveFS())` opts back into host-filesystem loading for `include`/`externalRef` (the compiler's FS now defaults to deny-all), mirroring `lint`/`xslt`; a `compileErrorHandler` streams compilation diagnostics (file/line/detail) to stderr and records whether any FATAL diagnostic was seen
+- The RELAX NG compiler may return a non-nil grammar with a nil error (a poisoned `notAllowed` grammar) on a fatal diagnostic; the CLI folds that into a failure (`errSchemaCompilation`) when the handler saw a fatal diagnostic, so it never validates against a bad grammar. Compilation failure → `ExitSchemaComp`
+- Each XML input parsed with `helium.NewParser()` (file inputs get `.BaseURI(name)`) + validated with `relaxng.NewValidator(grammar).Label(name).ErrorHandler(...).Validate(ctx, doc)`, diagnostics streamed to stderr via a `writerErrorHandler`
 
 ## `helium schematron validate`
 
