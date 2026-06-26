@@ -91,7 +91,7 @@ func TestLoadParameterDocumentURIAbsolute(t *testing.T) {
 				// care which URI the loader was asked for.
 				return nil, errStopAfterResolve
 			}
-			_, _, _ = loadParameterDocumentFromFile(context.Background(), nil, &OutputDef{}, tc.base, tc.href, loadBytes, false, false)
+			_, _, _ = loadParameterDocumentFromFile(context.Background(), nil, &OutputDef{}, tc.base, tc.href, loadBytes, false, false, 0)
 			require.Equal(t, tc.want, seen)
 		})
 	}

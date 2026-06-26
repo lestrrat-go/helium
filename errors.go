@@ -46,6 +46,15 @@ var (
 	// MaxExternalDTDSize when no cap is configured. The cap is enforced
 	// against the actual number of bytes read, not any advisory Stat size.
 	ErrExternalDTDTooLarge = errors.New("external DTD exceeds maximum allowed size")
+	// ErrNodeContentTooLarge is returned when a single indivisible content run —
+	// a CDATA section, comment body, processing-instruction body, or
+	// character-data run — exceeds the configured byte cap (set via
+	// Parser.MaxNodeContentSize), or DefaultMaxNodeContentSize when no cap is
+	// configured. These constructs map to a single SAX event / DOM node and
+	// cannot be chunked, so an oversized one is a memory-amplification vector on
+	// untrusted input. The cap fires during accumulation, before the whole run
+	// is buffered; match with errors.Is.
+	ErrNodeContentTooLarge = errors.New("node content exceeds maximum allowed size")
 	errParserStopped       = errors.New("parser stopped")
 	errNoCursor            = errors.New("parser has no input")
 )

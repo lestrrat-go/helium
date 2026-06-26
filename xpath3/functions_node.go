@@ -996,7 +996,16 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	// The parser governs external entity expansion and network access for the
 	// retrieved document. The default helium.NewParser() is safe-by-default
 	// (XXE blocked, network disabled); an injected parser's policy wins.
-	doc, err := ec.xmlParser().Parse(ctx, data)
+	//
+	// The retrieved resource is already bounded by the resource read cap
+	// (ec.maxResourceBytes), so the parser's separate per-node content cap is
+	// redundant on this path. Align it with the resource cap so a raised
+	// MaxResourceBytes actually accepts large single-node content instead of
+	// being silently overridden by the parser's default node-content cap. The
+	// 0/negative/positive convention (default / unbounded / explicit) matches
+	// between MaxResourceBytes and MaxNodeContentSize.
+	p := ec.xmlParser().MaxNodeContentSize(clampInt64ToInt(ec.maxResourceBytes))
+	doc, err := p.Parse(ctx, data)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
 	}
@@ -1005,6 +1014,19 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 		ec.docCache[resolved] = doc
 	}
 	return doc, nil
+}
+
+// clampInt64ToInt narrows an int64 limit to int without wrapping on 32-bit
+// platforms. The sign is preserved so the 0/negative/positive limit convention
+// (default / unbounded / explicit) survives the conversion.
+func clampInt64ToInt(n int64) int {
+	if n > int64(math.MaxInt) {
+		return math.MaxInt
+	}
+	if n < int64(math.MinInt) {
+		return math.MinInt
+	}
+	return int(n)
 }
 
 func docURIArg(seq Sequence, fnName string) (string, error) {

@@ -55,6 +55,7 @@ type parserConfig struct {
 	maxNameLength  int
 	maxEntityAmpl  int
 	maxCMDepth     int
+	maxNodeContent int
 	errorHandler   ErrorHandler
 }
 
@@ -370,6 +371,13 @@ const (
 	// DTD element content-model declaration (the parenthesized groups in
 	// <!ELEMENT ...>).
 	DefaultMaxContentModelDepth = 128
+	// DefaultMaxNodeContentSize is the default cap, in bytes, on a single
+	// indivisible content run — a CDATA section, comment body,
+	// processing-instruction body, or character-data run. Each such construct
+	// maps to a single SAX event / DOM node and cannot be chunked, so an
+	// oversized one is a memory-amplification vector on untrusted input. The
+	// 10 MiB value mirrors the intent of libxml2's XML_MAX_TEXT_LENGTH.
+	DefaultMaxNodeContentSize = 10 << 20
 )
 
 // MaxNameLength sets the maximum length, in bytes, of a single element,
@@ -403,6 +411,25 @@ func (p Parser) MaxEntityAmplification(n int) Parser {
 func (p Parser) MaxContentModelDepth(n int) Parser {
 	p = p.clone()
 	p.cfg.maxCMDepth = n
+	return p
+}
+
+// MaxNodeContentSize sets the maximum size, in bytes, of a single indivisible
+// content run: a CDATA section, comment body, processing-instruction body, or
+// character-data run. Each maps to a single SAX event / DOM node and cannot be
+// chunked, so an oversized one on untrusted input is a memory-amplification
+// vector. The cap fires during accumulation — the parse fails with
+// [ErrNodeContentTooLarge] the moment a run exceeds it, before the whole run is
+// buffered. A value of zero (the default) uses [DefaultMaxNodeContentSize]
+// (10 MiB); a negative value removes the limit. Removing the limit lets a
+// hostile document drive unbounded memory use, so do so only for trusted input.
+//
+// A streaming SAX consumer that configured [Parser.SetCharBufferSize] receives
+// character data in bounded chunks and is not subject to this cap (its memory is
+// already bounded); the cap still applies to its CDATA, comment, and PI runs.
+func (p Parser) MaxNodeContentSize(n int) Parser {
+	p = p.clone()
+	p.cfg.maxNodeContent = n
 	return p
 }
 

@@ -517,7 +517,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 				// callers can observe it, and an over-cap read keeps
 				// [ErrResourceTooLarge] in the chain (matched via errors.Is)
 				// while errors.Is(err, ErrStaticError) stays false.
-				_, presence, loadErr := loadParameterDocumentFromFile(ctx, ec.injectedParser(), outDef, baseURI, pdHref, ec.retrieveDocumentBytes, true, false)
+				_, presence, loadErr := loadParameterDocumentFromFile(ctx, ec.injectedParser(), outDef, baseURI, pdHref, ec.retrieveDocumentBytes, true, false, ec.resourceLimit())
 				if loadErr != nil {
 					return loadErr
 				}

@@ -426,7 +426,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 		ec.retrieveDocumentBytes,
 		func(p helium.Parser) helium.Parser {
 			return p.DefaultDTDAttributes(true).FixBaseURIs(false)
-		})
+		}, ec.resourceLimit())
 	if err != nil {
 		return nil, dynamicError(errCodeFODC0002, "cannot parse document %q: %v", uri, err)
 	}

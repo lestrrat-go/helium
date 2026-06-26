@@ -11,6 +11,7 @@ All error formatting matches libxml2 output for golden test compatibility.
 - **`ErrorLeveler`** interface — optional interface for errors to report their `ErrorLevel()`; default is `ErrorLevelWarning`
 - **`NewLeveledError(msg, level)`** — factory creating error implementing `ErrorLeveler`
 - **`ErrExternalDTDTooLarge`** (`errors.go`) — sentinel returned from the `ExternalSubset` bounded read when a loaded external DTD subset exceeds the byte cap (`MaxExternalDTDBytes` or default `MaxExternalDTDSize`, 10 MiB). Enforced against actual bytes read, never the advisory `fs.FileInfo.Size()`, and checked before any read error; match with `errors.Is`
+- **`ErrNodeContentTooLarge`** (`errors.go`) — sentinel returned when a single indivisible content run — a CDATA section (`parseCDataContent`), comment body (`parseComment`), processing-instruction body (`parsePI`), or character-data run (`parseCharDataContent`) — exceeds the byte cap (`MaxNodeContentSize` or default `DefaultMaxNodeContentSize`, 10 MiB). The cap fires DURING accumulation (the loop scanners check `buf.Len()` each iteration; the char-data fast/fallback scanners pass a `maxBytes` budget into `ScanCharDataSlice`/`ScanCharDataInto`) so the parse fails before the whole run is buffered. `NewParser` applies the default (secure by default); `MaxNodeContentSize(-1)` disables it. The streaming SAX char-data path (`CharBufferSize>0`) is exempt — it is already chunked. Match with `errors.Is`
 
 ### ErrParseError (root package, `errors.go`)
 

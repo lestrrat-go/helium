@@ -3,9 +3,36 @@ package xslt3
 import (
 	"context"
 	"io"
+	"math"
 
 	"github.com/lestrrat-go/helium"
 )
+
+// alignNodeContentCap returns p with its parser-level per-node content cap
+// aligned to the resource read cap (resourceLimit) used to fetch the bytes it
+// will parse. The bytes handed to these xslt3-internal parses are already read
+// fully into memory bounded by resourceLimit, so the parser's separate
+// per-node content cap (default 10 MiB) must not independently reject a single
+// large node that the raised resource cap already admitted. The 0/negative/
+// positive convention (default / unbounded / explicit) matches between the
+// resource cap and [helium.Parser.MaxNodeContentSize], so a resourceLimit of 0
+// keeps the parser default unchanged.
+func alignNodeContentCap(p helium.Parser, resourceLimit int64) helium.Parser {
+	return p.MaxNodeContentSize(clampInt64ToInt(resourceLimit))
+}
+
+// clampInt64ToInt narrows an int64 limit to int without wrapping on 32-bit
+// platforms; the sign is preserved so the 0/negative/positive convention
+// survives the conversion.
+func clampInt64ToInt(n int64) int {
+	if n > int64(math.MaxInt) {
+		return math.MaxInt
+	}
+	if n < int64(math.MinInt) {
+		return math.MinInt
+	}
+	return int(n)
+}
 
 // secureXMLParser returns the base parser for an xslt3-internal parse of
 // externally-sourced XML (resolver/HTTP-fetched stylesheet modules, schema
@@ -16,7 +43,7 @@ import (
 // injected is nil the base is hardened against XML External Entity (XXE)
 // attacks: external DTD/entity loading is blocked and network access is
 // forbidden. The BaseURI is applied in either case.
-func secureXMLParser(injected *helium.Parser, baseURI string) helium.Parser {
+func secureXMLParser(injected *helium.Parser, baseURI string, resourceLimit int64) helium.Parser {
 	var p helium.Parser
 	if injected != nil {
 		p = *injected
@@ -26,7 +53,7 @@ func secureXMLParser(injected *helium.Parser, baseURI string) helium.Parser {
 	if baseURI != "" {
 		p = p.BaseURI(baseURI)
 	}
-	return p
+	return alignNodeContentCap(p, resourceLimit)
 }
 
 // externalEntityLoader loads the bytes for an external DTD / general entity
@@ -57,7 +84,7 @@ type externalEntityLoader func(ctx context.Context, uri string) ([]byte, error)
 // secure branch does NOT re-assert the XXE guards on top — the injected policy
 // wins. When injected is nil the historical hardened default is the base and the
 // guards are re-asserted exactly as before.
-func parseExternalXML(ctx context.Context, injected *helium.Parser, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader, extraOpts func(helium.Parser) helium.Parser) (*helium.Document, error) {
+func parseExternalXML(ctx context.Context, injected *helium.Parser, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader, extraOpts func(helium.Parser) helium.Parser, resourceLimit int64) (*helium.Document, error) {
 	base := func() helium.Parser {
 		if injected != nil {
 			return *injected
@@ -109,14 +136,20 @@ func parseExternalXML(ctx context.Context, injected *helium.Parser, data []byte,
 	if baseURI != "" {
 		p = p.BaseURI(baseURI)
 	}
+	// Align the per-node content cap with the resource read cap. The bytes are
+	// already fully in memory bounded by resourceLimit, so the parser's default
+	// node-content cap must not independently reject content the resource cap
+	// already admitted. Applied last so it survives the XXE-guard re-assertions
+	// above (node-content size is not an XXE guard).
+	p = alignNodeContentCap(p, resourceLimit)
 	return p.Parse(ctx, data)
 }
 
 // parseStylesheetDocument parses an externally-sourced stylesheet module
 // (xsl:import / xsl:include / xsl:use-package / fn:transform stylesheets).
 // XXE is blocked unless allowExternalEntities opts into the legacy behavior.
-func parseStylesheetDocument(ctx context.Context, injected *helium.Parser, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader) (*helium.Document, error) {
-	return parseExternalXML(ctx, injected, data, baseURI, allowExternalEntities, entityLoader, nil)
+func parseStylesheetDocument(ctx context.Context, injected *helium.Parser, data []byte, baseURI string, allowExternalEntities bool, entityLoader externalEntityLoader, resourceLimit int64) (*helium.Document, error) {
+	return parseExternalXML(ctx, injected, data, baseURI, allowExternalEntities, entityLoader, nil, resourceLimit)
 }
 
 // CompileStylesheet compiles a parsed XSLT stylesheet document.

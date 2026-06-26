@@ -530,7 +530,7 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 		defer func() { _ = rc.Close() }()
 		return readResourceBounded(rc, c.maxResourceBytes)
 	}
-	return loadParameterDocumentFromFile(ctx, c.parser, outDef, baseURI, href, loadBytes, false, adnExplicit)
+	return loadParameterDocumentFromFile(ctx, c.parser, outDef, baseURI, href, loadBytes, false, adnExplicit, c.maxResourceBytes)
 }
 
 // loadParameterDocumentFromFile loads a serialization parameter document and
@@ -557,7 +557,7 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 // from "explicit false") and travel alongside the resulting delta so
 // foldParamDocOverrides leaves an inherited xsl:output default intact for any
 // boolean the parameter-document omits.
-func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser, outDef *OutputDef, baseURI, href string, loadBytes func(context.Context, string) ([]byte, error), runtime bool, adnExplicit bool) (bool, paramDocPresence, error) {
+func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser, outDef *OutputDef, baseURI, href string, loadBytes func(context.Context, string) ([]byte, error), runtime bool, adnExplicit bool, resourceLimit int64) (bool, paramDocPresence, error) {
 	var presence paramDocPresence
 	// Decide absoluteness with xsd.URIScheme (RFC 3986), not filepath.IsAbs or a
 	// "://" substring check: an absolute-URI href may carry a scheme with no
@@ -603,7 +603,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 	// Serialization parameter documents have a fixed W3C schema and never use
 	// external entities; parse with the injected base parser (or XXE blocked by
 	// default when none is injected).
-	doc, err := secureXMLParser(injected, "").Parse(ctx, data)
+	doc, err := secureXMLParser(injected, "", resourceLimit).Parse(ctx, data)
 	if err != nil {
 		if runtime {
 			return adnExplicit, presence, dynamicError(errCodeFODC0002, "cannot parse parameter-document %q: %v", href, err)

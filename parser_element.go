@@ -59,12 +59,18 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 			return pctx.parseCharDataChunkedSAX(ctx, u8)
 		}
 
-		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], 0)
+		// Bound the scan to the node-content cap (plus a rune of slack) so an
+		// oversized delimiter-free run is detected and rejected before the whole
+		// run — and the cursor's internal buffer — is materialized.
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], pctx.nodeContentScanBudget())
 		if i <= 0 {
 			if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 				return pctx.error(ctx, ErrMisplacedCDATAEnd)
 			}
 			return errors.New("invalid char data")
+		}
+		if pctx.nodeContentTooLong(i) {
+			return pctx.error(ctx, ErrNodeContentTooLarge)
 		}
 
 		if err := cur.AdvanceFast(i); err != nil {
@@ -102,12 +108,15 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
-	i := cur.ScanCharDataInto(buf)
+	i := cur.ScanCharDataInto(buf, pctx.nodeContentScanBudget())
 	if i <= 0 {
 		if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 			return pctx.error(ctx, ErrMisplacedCDATAEnd)
 		}
 		return errors.New("invalid char data")
+	}
+	if pctx.nodeContentTooLong(buf.Len()) {
+		return pctx.error(ctx, ErrNodeContentTooLarge)
 	}
 
 	if err := cur.AdvanceFast(i); err != nil {

@@ -209,7 +209,7 @@ func (c *compiler) loadModuleDoc(ctx context.Context, uri string) (*helium.Docum
 		return nil, fmt.Errorf("cannot read %q: %w", uri, err)
 	}
 
-	doc, err := parseStylesheetDocument(ctx, c.parser, data, uri, c.allowExternalEntities, c.loadResourceBytes)
+	doc, err := parseStylesheetDocument(ctx, c.parser, data, uri, c.allowExternalEntities, c.loadResourceBytes, c.maxResourceBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
