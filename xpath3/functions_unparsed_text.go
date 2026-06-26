@@ -104,6 +104,17 @@ func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error)
 	if err != nil {
 		return nil, wrapUnparsedTextError(err)
 	}
+	// Enforce the aggregate node-set/sequence cap (and charge ops + honor
+	// cancellation) BEFORE materializing one Item per line, matching how
+	// functions_array / functions_map guard one-shot materialization.
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	if maxNodes > 0 && len(lines) > maxNodes {
+		return nil, ErrNodeSetLimit
+	}
+	if err := fnCountOps(ctx, ec, len(lines)); err != nil {
+		return nil, err
+	}
 	result := make(ItemSlice, len(lines))
 	for i, line := range lines {
 		result[i] = AtomicValue{TypeName: TypeString, Value: line}

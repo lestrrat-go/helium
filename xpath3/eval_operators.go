@@ -189,7 +189,11 @@ func evalSimpleMapExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContex
 		if err != nil {
 			return nil, err
 		}
-		result, err = appendBounded(result, seqMaterialize(r), ec.maxNodes)
+		// Accumulate the right-hand sequence lazily so the aggregate maxNodes /
+		// OpLimit / cancellation bound is enforced item-by-item BEFORE the whole
+		// sub-sequence is materialized — a per-item right expression producing a
+		// large lazy Sequence is rejected without first allocating it in full.
+		result, err = appendBoundedSeq(ctx, ec, result, r, ec.maxNodes)
 		if err != nil {
 			return nil, err
 		}
