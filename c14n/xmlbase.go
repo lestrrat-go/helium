@@ -55,16 +55,7 @@ func joinURIReference(base, ref string) (string, bool) {
 	if err != nil {
 		return ref, false
 	}
-	// Go parses a scheme-only base like "urn:base" with its payload in Opaque
-	// rather than Path; libxml2 treats that payload as the (decoded) path, so fold
-	// it back, decoding it the way url.Parse already decodes Path.
-	basePath := baseURL.Path
-	if baseURL.Opaque != "" {
-		basePath = baseURL.Opaque
-		if dec, derr := url.PathUnescape(baseURL.Opaque); derr == nil {
-			basePath = dec
-		}
-	}
+	basePath := decodedBasePath(baseURL)
 
 	// Work on the decoded path (like libxml2, which unescapes on parse): an
 	// encoded delimiter such as %2F acts as "/", and %2E as ".". The result is
@@ -215,6 +206,36 @@ func uriHasAuthority(raw string) bool {
 	return strings.HasPrefix(raw, "//")
 }
 
+// decodedBasePath returns a parsed base's path in decoded form. Go parses a
+// scheme-only base like "urn:base" with its payload in Opaque rather than Path;
+// libxml2 treats that payload as the (decoded) path, so fold it back, decoding
+// it the way url.Parse already decodes Path.
+func decodedBasePath(u *url.URL) string {
+	if u.Opaque == "" {
+		return u.Path
+	}
+	if dec, err := url.PathUnescape(u.Opaque); err == nil {
+		return dec
+	}
+	return u.Opaque
+}
+
+// faithfulXMLBaseValue reports whether a standalone xml:base value can be
+// canonicalized faithfully: it must parse as a URI reference and not be a
+// degenerate empty-authority form ("//", "///", "urn://", …). An empty value is
+// fine — it is dropped rather than emitted. Strict mode rejects a chain term for
+// which this is false, even a lone term that never participates in a join.
+func faithfulXMLBaseValue(v string) bool {
+	if v == "" {
+		return true
+	}
+	u, err := url.Parse(v)
+	if err != nil {
+		return false
+	}
+	return !degenerateBaseAuthority(v, u, decodedBasePath(u))
+}
+
 // emptyAuthority reports whether a URI reference carries a "//" authority marker
 // with no host or userinfo (e.g. "//", "///", "urn://", "//?q").
 func emptyAuthority(raw string, u *url.URL) bool {
@@ -358,14 +379,15 @@ func normalizeURIPath(path string) string {
 // reduceXMLBase folds a chain of xml:base values, ordered outermost to
 // innermost, into a single canonical value. Per C14N 1.1 the innermost value is
 // combined with the next-outer as base, and so on outward. The bool is false if
-// any join in the chain could not be performed faithfully (see joinURIReference).
+// any chain term is itself un-canonicalizable, or any join could not be
+// performed faithfully — so a lone term (no join) is still validated.
 func reduceXMLBase(chain []string) (string, bool) {
 	res := chain[len(chain)-1]
-	faithful := true
+	faithful := faithfulXMLBaseValue(res)
 	for i := len(chain) - 2; i >= 0; i-- {
-		var ok bool
-		res, ok = joinURIReference(chain[i], res)
-		faithful = faithful && ok
+		faithful = faithful && faithfulXMLBaseValue(chain[i])
+		joined, ok := joinURIReference(chain[i], res)
+		res, faithful = joined, faithful && ok
 	}
 	return res, faithful
 }

@@ -525,6 +525,27 @@ func TestC14N11StrictFailClosedXMLBase(t *testing.T) {
 	require.Contains(t, err.Error(), "xml:base")
 }
 
+// TestC14N11StrictFailClosedSingleValue verifies the strict fail-closed guard
+// also covers a lone degenerate xml:base with no ancestor to join against (the
+// term is validated even though no join occurs). The visible element's own
+// xml:base "urn://" must error in strict mode but emit best-effort by default.
+func TestC14N11StrictFailClosedSingleValue(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root><child xml:base="urn://">t</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	// Node set includes the child, its text, and its own xml:base attribute; root
+	// is omitted (a gap) but carries no xml:base.
+	nodes := evaluateNodeSet(t, doc, "//child | //child/@xml:base | //child/text()", nil)
+
+	gotDefault, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err, "default mode emits the lone value verbatim")
+	require.Contains(t, string(gotDefault), `xml:base="urn://"`)
+
+	_, err = c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictXMLAttributes().CanonicalizeTo(doc)
+	require.Error(t, err, "strict mode must reject a lone degenerate xml:base")
+}
+
 // TestC14N10ExcludedOwnXMLLang covers the C14N 1.0 inheritance-blocking
 // divergence. With a rendered element's own xml:lang excluded from the node set,
 // the default (libxml2) blocks only on rendered attributes and so imports the

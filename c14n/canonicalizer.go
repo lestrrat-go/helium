@@ -918,6 +918,9 @@ func (c *canonicalizer) processXMLBase11(e *helium.Element, entries *[]attrSortE
 	if c.strict() && !hiddenHasBase {
 		if hasOwn && c.isVisible(ownAttr) {
 			if v := ownAttr.Value(); v != "" {
+				if !faithfulXMLBaseValue(v) {
+					return fmt.Errorf("c14n: xml:base on element %s cannot be canonicalized faithfully", e.Name())
+				}
 				c.setXMLBaseEntry(entries, v)
 			}
 		}

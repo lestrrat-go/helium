@@ -9,6 +9,7 @@ import (
 const (
 	pathUpX   = "../x"
 	pathUpUpX = "../../x"
+	urnBase   = "urn:base"
 )
 
 func TestJoinURIReference(t *testing.T) {
@@ -55,9 +56,9 @@ func TestJoinURIReference(t *testing.T) {
 		// Empty-but-present authority (file:///) is preserved.
 		{"file-empty-authority", "file:///a/b", "c", "file:///a/c"},
 		// Opaque base (urn:) payload is treated as the path.
-		{"opaque-base-empty-ref", "urn:base", "", "urn:base"},
-		{"opaque-base-query", "urn:base", "?q=1", "urn:base?q=1"},
-		{"opaque-base-relative", "urn:base", "x", "urn:x"},
+		{"opaque-base-empty-ref", urnBase, "", urnBase},
+		{"opaque-base-query", urnBase, "?q=1", "urn:base?q=1"},
+		{"opaque-base-relative", urnBase, "x", "urn:x"},
 	}
 
 	for _, tt := range tests {
@@ -69,25 +70,28 @@ func TestJoinURIReference(t *testing.T) {
 	}
 }
 
-func TestJoinURIReferenceUnfaithful(t *testing.T) {
-	// Degenerate empty-authority forms cannot be reproduced byte-for-byte.
-	cases := [][2]string{
-		{"//", "c"},
-		{"///", "c"},
-		{"urn://", "c"},
-		{"a/", "//"},  // empty-authority reference
-		{"a/", "///"}, // empty-authority reference
+func TestFaithfulXMLBaseValue(t *testing.T) {
+	// Degenerate / malformed standalone values are rejected, even as a lone term.
+	for _, v := range []string{"//", "///", "urn://", "http://%"} {
+		require.False(t, faithfulXMLBaseValue(v), "%q should be unfaithful", v)
 	}
-	for _, c := range cases {
-		_, faithful := joinURIReference(c[0], c[1])
-		require.False(t, faithful, "join(%q,%q) should be flagged unfaithful", c[0], c[1])
+	// Well-formed values (including empty-authority file:/// and protocol-relative
+	// //host) are accepted.
+	for _, v := range []string{"", "a/b", "../x", "/abs/", "http://h/p", "file:///a", "//host/p", urnBase} {
+		require.True(t, faithfulXMLBaseValue(v), "%q should be faithful", v)
 	}
+}
 
-	// Well-formed empty-authority and protocol-relative forms stay faithful.
-	for _, c := range [][2]string{{"file:///a/b", "c"}, {"//host/p/", "c"}, {"http://h/", "c"}} {
-		_, faithful := joinURIReference(c[0], c[1])
-		require.True(t, faithful, "join(%q,%q) should be faithful", c[0], c[1])
-	}
+func TestReduceXMLBaseUnfaithful(t *testing.T) {
+	// A lone degenerate term (no join) is flagged.
+	_, ok := reduceXMLBase([]string{"//"})
+	require.False(t, ok, "lone degenerate term must be unfaithful")
+	// A degenerate innermost absolute-scheme term (join fast-path) is flagged.
+	_, ok = reduceXMLBase([]string{"a/", "urn://"})
+	require.False(t, ok, "degenerate innermost term must be unfaithful")
+	// Well-formed chains stay faithful.
+	_, ok = reduceXMLBase([]string{"a/b/", "../c"})
+	require.True(t, ok)
 }
 
 func TestReduceXMLBase(t *testing.T) {
