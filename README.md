@@ -158,6 +158,14 @@ caller should also:
   bounds the nesting depth of included documents, and `MaxIncludeSize` caps the
   bytes read per included resource.
 
+The `xsd` schema compiler is likewise **secure by default**: `xsd.NewCompiler()`
+denies all nested-schema filesystem access, so an untrusted schema cannot
+disclose local files or exhaust resources through a hostile
+`xs:include`/`xs:import`/`xs:redefine` `schemaLocation`. Each nested schema is
+read through a fixed byte cap regardless of the `fs.FS` in use. Opt into host
+access with `Compiler.FS(helium.PermissiveFS())` or a confined `fs.FS`;
+`Compiler.FS(nil)` restores the deny-all default.
+
 **Caveat:** a permissive or directory-rooted `FS` is not yet a complete sandbox.
 External-resource paths are joined against the document base URI and may be
 absolute or use OS-specific separators, so `os.DirFS`-style roots (which enforce

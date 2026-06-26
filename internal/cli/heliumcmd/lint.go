@@ -605,8 +605,12 @@ func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, 
 	// discards them and the user sees only the terminal "schema compilation
 	// failed" summary with no clue what went wrong.
 	handler := &compileErrorHandler{w: c.stderr, suppressWarnings: cfg.quiet}
+	// The xsd compiler now denies nested-schema FS access by default; the CLI is
+	// a trusted local tool, so restore permissive host access for
+	// xs:include/xs:import/xs:redefine (mirrors the parser FS lift below).
 	schema, err := xsd.NewCompiler().
 		Label(cfg.schemaFile).
+		FS(iofsPermissiveRoot()).
 		ErrorHandler(handler).
 		CompileFile(ctx, cfg.schemaFile)
 	if err == nil && handler.fatal {
