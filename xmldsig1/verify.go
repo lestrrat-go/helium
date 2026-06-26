@@ -253,6 +253,14 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 }
 
 func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
+	// The XML-Signature schema fixes SignedInfo's content model as
+	// (CanonicalizationMethod, SignatureMethod, Reference+) with exactly one
+	// CanonicalizationMethod and exactly one SignatureMethod. Enforce that
+	// cardinality rather than accepting duplicates last-one-wins: a crafted
+	// SignedInfo carrying two SignatureMethod (or CanonicalizationMethod)
+	// children is schema-invalid and ambiguous about which algorithm the
+	// signature actually commits to, so a conforming verifier must reject it.
+	var c14nSeen, sigMethodSeen bool
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
@@ -268,6 +276,10 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 		}
 		switch domutil.LocalName(e) {
 		case "CanonicalizationMethod":
+			if c14nSeen {
+				return fmt.Errorf("%w: multiple CanonicalizationMethod elements", ErrInvalidSignature)
+			}
+			c14nSeen = true
 			alg, ok := e.GetAttribute("Algorithm")
 			if !ok {
 				return fmt.Errorf("%w: CanonicalizationMethod missing Algorithm", ErrInvalidSignature)
@@ -279,6 +291,10 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 			}
 			parsed.c14nPrefixes = prefixes
 		case "SignatureMethod":
+			if sigMethodSeen {
+				return fmt.Errorf("%w: multiple SignatureMethod elements", ErrInvalidSignature)
+			}
+			sigMethodSeen = true
 			alg, ok := e.GetAttribute("Algorithm")
 			if !ok {
 				return fmt.Errorf("%w: SignatureMethod missing Algorithm", ErrInvalidSignature)
@@ -296,6 +312,20 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 		}
 	}
 
+	// SignedInfo's content model fixes CanonicalizationMethod and
+	// SignatureMethod at exactly one each, not merely at most one. Enforcing
+	// only "at most one" lets a SignedInfo missing either element parse OK and
+	// fail much later — as an unsupported-algorithm error, sometimes only after
+	// key resolution — instead of as a clean ErrInvalidSignature. Reject the
+	// absence here so a structurally invalid SignedInfo never reaches
+	// canonicalization or key resolution.
+	if !c14nSeen {
+		return fmt.Errorf("%w: missing CanonicalizationMethod", ErrInvalidSignature)
+	}
+	if !sigMethodSeen {
+		return fmt.Errorf("%w: missing SignatureMethod", ErrInvalidSignature)
+	}
+
 	// XML-Signature requires at least one Reference. A SignatureValue computed
 	// over a reference-free SignedInfo verifies cryptographically yet covers no
 	// document content, so accepting it would attest to nothing. Reject it.
@@ -309,6 +339,14 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 	ref := parsedReference{}
 	ref.uri, _ = elem.GetAttribute("URI")
 
+	// The XML-Signature schema fixes Reference's content model as
+	// (Transforms?, DigestMethod, DigestValue) with at most one Transforms and
+	// exactly one DigestMethod and one DigestValue. Enforce that cardinality
+	// rather than accepting duplicates last-one-wins: a crafted Reference with
+	// two DigestValue children (the second crafted to match the recomputed
+	// digest) is schema-invalid and ambiguous about which digest the signature
+	// commits to, so a conforming verifier must reject it.
+	var transformsSeen, digestMethodSeen, digestValueSeen bool
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
@@ -323,6 +361,10 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 		}
 		switch domutil.LocalName(e) {
 		case "Transforms":
+			if transformsSeen {
+				return ref, fmt.Errorf("%w: multiple Transforms elements", ErrInvalidSignature)
+			}
+			transformsSeen = true
 			for tc := e.FirstChild(); tc != nil; tc = tc.NextSibling() {
 				te, ok := helium.AsNode[*helium.Element](tc)
 				if !ok {
@@ -357,18 +399,39 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 				ref.transforms = append(ref.transforms, parsedTransform{algorithm: alg, prefixes: prefixes})
 			}
 		case "DigestMethod":
+			if digestMethodSeen {
+				return ref, fmt.Errorf("%w: multiple DigestMethod elements", ErrInvalidSignature)
+			}
+			digestMethodSeen = true
 			alg, ok := e.GetAttribute("Algorithm")
 			if !ok {
 				return ref, fmt.Errorf("%w: DigestMethod missing Algorithm", ErrInvalidSignature)
 			}
 			ref.digestAlgorithm = alg
 		case "DigestValue":
+			if digestValueSeen {
+				return ref, fmt.Errorf("%w: multiple DigestValue elements", ErrInvalidSignature)
+			}
+			digestValueSeen = true
 			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return ref, fmt.Errorf("%w: invalid DigestValue base64: %v", ErrInvalidSignature, err)
 			}
 			ref.digestValue = decoded
 		}
+	}
+
+	// Reference's content model fixes DigestMethod and DigestValue at exactly
+	// one each, not merely at most one. Enforcing only "at most one" lets a
+	// Reference missing either element parse OK and fail much later — a missing
+	// DigestMethod surfaces as an unsupported-digest error and a missing
+	// DigestValue as a digest mismatch (the empty digest never matches) —
+	// instead of as a clean ErrInvalidSignature. Reject the absence here.
+	if !digestMethodSeen {
+		return ref, fmt.Errorf("%w: missing DigestMethod", ErrInvalidSignature)
+	}
+	if !digestValueSeen {
+		return ref, fmt.Errorf("%w: missing DigestValue", ErrInvalidSignature)
 	}
 	return ref, nil
 }

@@ -1003,6 +1003,12 @@ func (v *validator) attributeMatches(pat *pattern, attr *helium.Attribute) bool 
 	if pat.nameClass != nil {
 		return nameClassMatches(pat.nameClass, localName, uri)
 	}
+	// Fail closed: an attribute pattern with no name class and no name/ns is
+	// malformed (parseAttribute should have poisoned it). Never treat it as a
+	// wildcard that matches any attribute.
+	if pat.name == "" && pat.ns == "" {
+		return false
+	}
 	if pat.name != "" && pat.name != localName {
 		return false
 	}
@@ -1769,8 +1775,57 @@ func matchXSDValue(typeName, text, expected string) int {
 	return -1
 }
 
-// matchData checks if text matches a data type pattern.
+// matchData checks if text matches a data type pattern, including any
+// <except> patterns nested under the <data>. The base datatype must match
+// first; then any value excluded by the except patterns is rejected.
 func (v *validator) matchData(pat *pattern, text string) int {
+	if ret := v.matchDataType(pat, text); ret != 0 {
+		return ret
+	}
+	// A <data> may carry an <except> (stored as a patternChoice child by
+	// parseData). The base datatype matched above, so a value that also matches
+	// any except pattern must be rejected.
+	if v.matchesExcept(pat, text) {
+		return -1
+	}
+	return 0
+}
+
+// matchesExcept reports whether text matches any of the <except> patterns
+// stored under a <data> pattern. Each <except> is compiled into a patternChoice
+// child; its alternatives are value/data patterns (optionally combined with
+// nested choice).
+func (v *validator) matchesExcept(pat *pattern, text string) bool {
+	for _, child := range pat.children {
+		if v.matchExceptPattern(child, text) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchExceptPattern reports whether text matches a single pattern appearing
+// inside a <data>'s <except>. Only value, data, and choice patterns are valid
+// there per the RELAX NG schema for except-in-data.
+func (v *validator) matchExceptPattern(ex *pattern, text string) bool {
+	switch ex.kind {
+	case patternData:
+		return v.matchData(ex, text) == 0
+	case patternValue:
+		return v.matchValue(ex, text) == 0
+	case patternChoice:
+		for _, c := range ex.children {
+			if v.matchExceptPattern(c, text) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// matchDataType checks if text matches a data type pattern's base datatype,
+// without considering any <except> patterns.
+func (v *validator) matchDataType(pat *pattern, text string) int {
 	if pat.dataType == nil {
 		return 0
 	}

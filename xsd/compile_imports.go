@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"maps"
 	"path"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/uripath"
 )
 
@@ -22,6 +22,41 @@ var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
 // as a fatal error rather than swallowing it as a generic I/O warning,
 // so the containment violation is visible to callers.
 var errSchemaPathEscape = errors.New("xsd: schema location escapes base directory")
+
+// errSchemaTooLarge signals that a nested schema (xs:include/xs:import/
+// xs:redefine target) exceeded [maxNestedSchemaSize] while being read. It is a
+// resource-limit guard, so it is classified fatal by [IsFatalSchemaLoad] and
+// must not be silently demoted to an I/O warning on the xs:import path: a
+// hostile schemaLocation (e.g. /dev/zero) must abort compilation rather than
+// be swallowed.
+var errSchemaTooLarge = errors.New("xsd: schema resource exceeds size limit")
+
+// maxNestedSchemaSize bounds the number of bytes read from any single nested
+// schema document loaded via xs:include/xs:import/xs:redefine, so an endless or
+// oversized source cannot exhaust memory. It mirrors xinclude's per-resource
+// cap (10 MiB).
+const maxNestedSchemaSize = 10 << 20 // 10 MiB
+
+// readNestedSchema opens path through the configured fs.FS and reads it under a
+// strict [maxNestedSchemaSize] byte cap (allowing one extra byte so a source
+// that under-reports its size is still caught). It returns [errSchemaTooLarge]
+// when the cap is crossed so an endless source cannot exhaust memory, replacing
+// the unbounded fs.ReadFile used by every nested-schema loader.
+func (c *compiler) readNestedSchema(path string) ([]byte, error) {
+	f, err := c.fsys.Open(path)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // callers wrap with the schemaLocation for context
+	}
+	data, exceeded, readErr := iolimit.ReadAll(f, maxNestedSchemaSize)
+	_ = f.Close()
+	if exceeded {
+		return nil, errSchemaTooLarge
+	}
+	if readErr != nil {
+		return nil, readErr //nolint:wrapcheck // callers wrap with the schemaLocation for context
+	}
+	return data, nil
+}
 
 // FatalSchemaLoader is implemented by errors raised from a configured [fs.FS]
 // (see [Compiler.FS]) that must abort compilation rather than be demoted to a
@@ -48,6 +83,7 @@ type FatalSchemaLoader interface {
 //
 //   - the schemaLocation escaped its base directory via ".." ([errSchemaPathEscape]);
 //   - xs:import recursion exceeded the configured depth ([errImportDepthExceeded]);
+//   - a nested schema exceeded the byte cap while being read ([errSchemaTooLarge]);
 //   - the configured [fs.FS] returned an error satisfying [FatalSchemaLoader]
 //     (e.g. a resource-limit breach such as a too-large external resource).
 //
@@ -56,7 +92,7 @@ type FatalSchemaLoader interface {
 // matched via errors.Is / errors.As, so they remain unexported; this helper is
 // the public surface.
 func IsFatalSchemaLoad(err error) bool {
-	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) {
+	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) || errors.Is(err, errSchemaTooLarge) {
 		return true
 	}
 	var f FatalSchemaLoader
@@ -184,7 +220,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
 
-	data, err := fs.ReadFile(c.fsys, path)
+	data, err := c.readNestedSchema(path)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
@@ -287,7 +323,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
 
-	data, err := fs.ReadFile(c.fsys, path)
+	data, err := c.readNestedSchema(path)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
@@ -626,7 +662,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}
 
-	data, err := fs.ReadFile(c.fsys, path)
+	data, err := c.readNestedSchema(path)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}

@@ -40,6 +40,20 @@ func buildExcC14NReference(t *testing.T, doc *helium.Document, incPx, incNS, pre
 	require.NoError(t, inc.SetLiteralAttribute("PrefixList", prefixList))
 	require.NoError(t, transform.AddChild(inc))
 
+	// DigestMethod/DigestValue are mandatory under Reference's content model, so
+	// include them: parseReferenceElement now rejects a Reference missing either,
+	// and this helper exercises the transform/InclusiveNamespaces parsing of an
+	// otherwise complete Reference.
+	digestMethod := doc.CreateElement("DigestMethod")
+	require.NoError(t, digestMethod.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, digestMethod.SetLiteralAttribute("Algorithm", DigestSHA256))
+	require.NoError(t, ref.AddChild(digestMethod))
+
+	digestValue := doc.CreateElement("DigestValue")
+	require.NoError(t, digestValue.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, digestValue.AddChild(doc.CreateText([]byte("AA=="))))
+	require.NoError(t, ref.AddChild(digestValue))
+
 	return ref
 }
 
