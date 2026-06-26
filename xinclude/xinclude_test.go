@@ -1973,6 +1973,40 @@ func TestXIncludeShorthandPointerSkipIDs(t *testing.T) {
 		"SkipIDs snapshot must not resolve the shorthand pointer, leaving target empty")
 }
 
+// TestXIncludeSameDocumentFragmentNotCrossDocumentCircular verifies that a
+// fragment-only same-document include is keyed by the current document identity,
+// not the literal "#xptr". A root href="#a" selects a subtree containing an
+// external include of inc.xml, and inc.xml carries its OWN href="#a"; the
+// included document's same-document reference must NOT be falsely rejected as
+// circular just because it shares the fragment text with the includer.
+func TestXIncludeSameDocumentFragmentNotCrossDocumentCircular(t *testing.T) {
+	t.Parallel()
+
+	const main = `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<source xml:id="a"><xi:include href="inc.xml"/></source>
+		<target><xi:include href="#a"/></target>
+	</root>`
+	const inc = `<incroot xmlns:xi="http://www.w3.org/2001/XInclude">
+		<data xml:id="a">world</data>
+		<ref><xi:include href="#a"/></ref>
+	</incroot>`
+	incFS := fstest.MapFS{"inc.xml": &fstest.MapFile{Data: []byte(inc)}}
+
+	doc := parseXML(t, main)
+	count, err := xinclude.NewProcessor().
+		BaseURI("main.xml").
+		Resolver(xinclude.NewFSResolver(incFS)).
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err, `inc.xml's own href="#a" must not be flagged circular against the root href="#a"`)
+	require.Greater(t, count, 0)
+
+	s, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.Contains(t, s, "world",
+		"the included document's same-document reference must resolve")
+}
+
 // TestXIncludeParserInjection verifies that a parser injected via
 // Processor.Parser governs the resource limits used to parse included
 // documents (here, the element-name-length cap), while XInclude continues to

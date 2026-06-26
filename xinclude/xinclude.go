@@ -414,13 +414,17 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 	// through the resolver — which, under the deny-all default resolver, would
 	// fail even though the target is the current document.
 
-	// Circular inclusion check key includes xpointer expression
+	// Circular inclusion check key includes xpointer expression. For a
+	// same-document reference (resolved == "") the key must also carry the
+	// current document identity (p.baseURI); otherwise every fragment-only
+	// include collapses to the literal "#xptr" and an included document's own
+	// same-document include would collide with the includer's.
 	circularKey := resolved
 	if xptrExpr != "" {
 		if resolved != "" {
 			circularKey = resolved + "#" + xptrExpr
 		} else {
-			circularKey = "#" + xptrExpr
+			circularKey = p.baseURI + "#" + xptrExpr
 		}
 	}
 	if p.expanding[circularKey] {
@@ -615,8 +619,10 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 	p.replaceWithNodes(inc, copies)
 	p.count++
 
-	// Circular detection key
-	circularKey := "#" + xptrExpr
+	// Circular detection key. For a same-document reference (uri == "") the key
+	// carries the current document identity (p.baseURI) so it matches the key
+	// computed in processNode and does not collide across documents.
+	circularKey := p.baseURI + "#" + xptrExpr
 	if uri != "" {
 		circularKey = uri + "#" + xptrExpr
 	}
