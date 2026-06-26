@@ -248,7 +248,7 @@ Schematron schema compilation and validation.
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
 - Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go` (validation), `errors.go` (error types + formatting)
-- Imports: helium, xpath1/
+- Imports: helium, internal/xpath, xpath1/
 
 ## catalog/
 
