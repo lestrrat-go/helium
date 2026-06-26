@@ -17,11 +17,29 @@ type docIndex struct {
 //
 // A single DocOrderCache may be shared across concurrent Evaluate calls, so all
 // access to its maps is guarded by mu.
+//
+// The cached positions describe the tree as it was when first indexed. Callers
+// MUST call Reset after mutating any document this cache describes (inserting,
+// removing, or moving nodes), otherwise order results may be stale. Subsequent
+// lookups after Reset recompute order from the current tree.
 type DocOrderCache struct {
 	mu        sync.Mutex
 	documents map[helium.Node]docIndex
 	// rootCache caches DocumentRoot results to avoid repeated parent-chain walks.
 	rootCache map[helium.Node]helium.Node
+}
+
+// Reset clears all cached document-order state so the same cache value can be
+// safely reused after the underlying document(s) are mutated. Subsequent
+// lookups recompute order from the current tree.
+//
+// Callers MUST call Reset after mutating a document this cache describes, or
+// order results may be stale.
+func (c *DocOrderCache) Reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.documents = nil
+	c.rootCache = nil
 }
 
 // cachedRootLocked returns the DocumentRoot for n, using the rootCache to
