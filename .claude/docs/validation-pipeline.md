@@ -154,7 +154,8 @@ nested union (`outer=union(inner)`, `inner=union(xs:string)`) resolves to the
 leaf type rather than an intermediate union. On an ATOMIC restriction the range facets
 (`min`/`maxInclusive`, `min`/`maxExclusive`) apply ONLY to types whose primitive
 value space is ORDERED, so `compareForRangeFacet` first gates `builtinLocal` on
-the `orderedRangeFacetTypes` allowlist — the numeric leaves (decimal and derived
+`value.Orderable` (the shared `orderedRangeFacetTypes` allowlist in
+`internal/xsd/value`, also used by relaxng) — the numeric leaves (decimal and derived
 integers, float, double) AND the date/time/duration family (duration, dateTime,
 time, date, and the gregorian g-types). For every NON-ordered leaf — string-family
 and anyURI, boolean, the binary types (hexBinary/base64Binary), QName/NOTATION,
@@ -177,7 +178,7 @@ facet-family consistency check to the family's applicable type/variety, so it ne
 adds a spurious error on top of an applicability rejection: the LENGTH check
 (`minLength>maxLength`) runs only on a list variety or a `lengthApplicableTypes`
 atomic; the DIGIT check (`fractionDigits>totalDigits`) runs only on a
-`decimalFamilyTypes` atomic (so `xs:double`+`totalDigits`/`fractionDigits` reports only
+`value.IsDecimalFamily` atomic (so `xs:double`+`totalDigits`/`fractionDigits` reports only
 the two "not allowed" errors); the RANGE checks run only on an ordered atomic. It
 compares same-type range bounds (`min`/`maxInclusive`, `min`/`maxExclusive`) in the
 restricted type's ORDERED VALUE SPACE (`value.CompareFloatFacetBound` for float/double
@@ -444,6 +445,22 @@ names/libraries fail rather than matching by raw equality.
 `facetLength`: rune count for string-family types, XML-whitespace token COUNT
 for XSD list builtins (`NMTOKENS`/`IDREFS`/`ENTITIES`), and decoded OCTET count
 for binary (`hexBinary`/`base64Binary`).
+
+**Ordering / digit facets.** `validateWithParams` also enforces the range facets
+(`min`/`maxInclusive`, `min`/`maxExclusive`) via `facetOrderingOK` (shared
+`value.Compare`) and the digit facets (`totalDigits`/`fractionDigits`) via
+`value.CountTotalDigits`/`CountFractionDigits` on the `value.IsDecimalFamily`
+types. `facetOrderingOK` returns SATISFIED when `value.Compare` reports `ok=false`
+for two valid ORDERED operands (an indeterminate comparison, e.g. mixed-timezone
+`xs:dateTime`), matching XSD semantics. Facet APPLICABILITY is enforced at COMPILE
+time by `checkDataFacets` (`parse_check.go`, run from the `patternData` case of
+`checkPattern`): an ordering facet on a non-ordered datatype (`!value.Orderable`)
+or with an invalid bound, and a digit facet on a non-decimal datatype, are fatal
+schema errors — which makes the whole grammar unmatchable (`compileSchema`
+replaces `start` with `notAllowed`). `effectiveXSDDatatype` resolves the `<data>`
+datatype the same way `matchData` does (explicit XSD library, or a bare recognized
+name only when `datatypeLibrary` is absent). Any other `<param>` name
+(`enumeration`, `whiteSpace`, unknown) fails closed at validation.
 
 **Tokenization.** All `<list>`, attribute `<group>`/repetition, and
 `<value type="token">` token splitting uses `xmlFields` (XML whitespace #x20,

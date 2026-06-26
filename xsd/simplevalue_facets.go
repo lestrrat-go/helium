@@ -15,48 +15,20 @@ func compareDecimal(a, b string) int {
 	return value.CompareDecimal(a, b)
 }
 
-// orderedRangeFacetTypes is the set of builtin base types whose PRIMITIVE value
-// space is ORDERED, so the range facets (min/maxInclusive, min/maxExclusive) may
-// apply to them. Per XSD 1.1 (§4.2.x, the {ordered} fundamental facet), the
-// ordered primitives are the numeric types (decimal and its derived integers,
-// float, double) and the date/time/duration family (duration, dateTime, time,
-// date, and the gregorian g-types). Every other primitive — string-family,
-// boolean, hexBinary, base64Binary, anyURI, QName, NOTATION — is {ordered}=false,
-// so a range facet is INAPPLICABLE to it and the bound is treated as satisfied.
-//
-// value.Compare can return a deterministic total order for some of these
-// non-ordered types (boolean, hexBinary, base64Binary) purely so enumeration can
-// rely on cmp==0; that order is NOT the XSD value-space order and must never be
-// used to fire a range facet. Gating on this allowlist keeps the range facets off
-// those types regardless of what value.Compare would return.
-var orderedRangeFacetTypes = map[string]struct{}{
-	// Numeric (decimal-derived integers, plus the standalone decimal).
-	lexicon.TypeDecimal: {}, lexicon.TypeInteger: {}, lexicon.TypeNonPositiveInteger: {}, lexicon.TypeNegativeInteger: {},
-	lexicon.TypeLong: {}, lexicon.TypeInt: {}, lexicon.TypeShort: {}, lexicon.TypeByte: {},
-	lexicon.TypeNonNegativeInteger: {}, lexicon.TypeUnsignedLong: {}, lexicon.TypeUnsignedInt: {},
-	lexicon.TypeUnsignedShort: {}, lexicon.TypeUnsignedByte: {}, lexicon.TypePositiveInteger: {},
-	// Floating point.
-	lexicon.TypeFloat: {}, lexicon.TypeDouble: {},
-	// Date/time/duration family (all ordered, non-numeric).
-	"dateTime": {}, "date": {}, "time": {}, "duration": {},
-	"gYear": {}, "gYearMonth": {}, "gMonth": {}, "gDay": {}, "gMonthDay": {},
-}
-
 // compareForRangeFacet compares two ordered values for a range facet
 // (min/maxInclusive, min/maxExclusive) in the value space identified by
 // builtinLocal. The range facets are defined ONLY on types whose primitive value
-// space is ordered (orderedRangeFacetTypes); for every other builtin — a
-// string-family type, boolean, the binary types, anyURI, QName/NOTATION, or a
-// non-atomic (list/union) carrier with an empty/unknown local — the facet is
-// INAPPLICABLE and this returns (0, false), which the caller treats as the bound
-// being satisfied rather than coercing the value into a spurious comparison.
+// space is ordered (value.Orderable); for every other builtin — a string-family
+// type, boolean, the binary types, anyURI, QName/NOTATION, or a non-atomic
+// (list/union) carrier with an empty/unknown local — the facet is INAPPLICABLE
+// and this returns (0, false), which the caller treats as the bound being
+// satisfied rather than coercing the value into a spurious comparison.
 //
 // For the ordered types the actual ordering is deferred to value.Compare, which
 // orders numeric and date/time/duration value spaces and itself returns ok=false
 // when an operand fails the strict lexical space. Note value.Compare also returns
 // a deterministic order for boolean and the binary types (so enumeration can use
-// cmp==0); those are NOT in orderedRangeFacetTypes, so a range facet can never
-// fire on them here.
+// cmp==0); those are NOT orderable, so a range facet can never fire on them here.
 //
 // There is deliberately NO empty-local fallback. A genuine ordered atomic value
 // always reaches this function with its concrete ordered builtinLocal; an empty
@@ -66,7 +38,7 @@ var orderedRangeFacetTypes = map[string]struct{}{
 // mis-firing on a list active member of a numeric-looking union (e.g.
 // union(list(xs:int)) with minInclusive), wrongly rejecting a valid list instance.
 func compareForRangeFacet(v, bound, builtinLocal string) (int, bool) {
-	if _, ordered := orderedRangeFacetTypes[builtinLocal]; !ordered {
+	if !value.Orderable(builtinLocal) {
 		return 0, false
 	}
 	return value.Compare(v, bound, builtinLocal)
@@ -153,14 +125,14 @@ func enumerationValueEqual(v, ev, builtinLocal string) bool {
 	return ok && cmp == 0
 }
 
-func checkFacets(ctx context.Context, value string, valueNS map[string]string, fs *FacetSet, builtinLocal, whiteSpace, elemName, filename string, line int, vc *validationContext) error {
+func checkFacets(ctx context.Context, val string, valueNS map[string]string, fs *FacetSet, builtinLocal, whiteSpace, elemName, filename string, line int, vc *validationContext) error {
 	var anyErr error
 
 	// Enumeration.
 	if len(fs.Enumeration) > 0 {
 		found := false
 		if builtinLocal == lexicon.TypeQName || builtinLocal == lexicon.TypeNotation {
-			valueQN, err := resolveLexicalQName(value, valueNS)
+			valueQN, err := resolveLexicalQName(val, valueNS)
 			if err == nil {
 				for i, ev := range fs.Enumeration {
 					var enumNS map[string]string
@@ -190,7 +162,7 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 			// "a  b" (two spaces) would never match the collapsed instance "a b".
 			for _, ev := range fs.Enumeration {
 				nev := normalizeWhiteSpace(ev, whiteSpace)
-				if nev == value || enumerationValueEqual(value, nev, builtinLocal) {
+				if nev == val || enumerationValueEqual(val, nev, builtinLocal) {
 					found = true
 					break
 				}
@@ -198,7 +170,7 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 		}
 		if !found {
 			set := "'" + strings.Join(fs.Enumeration, "', '") + "'"
-			msg := fmt.Sprintf("[facet 'enumeration'] The value '%s' is not an element of the set {%s}.", value, set)
+			msg := fmt.Sprintf("[facet 'enumeration'] The value '%s' is not an element of the set {%s}.", val, set)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("enumeration")
 		}
@@ -206,8 +178,8 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 
 	// minInclusive.
 	if fs.MinInclusive != nil {
-		if !checkMinInclusive(value, *fs.MinInclusive, builtinLocal) {
-			msg := fmt.Sprintf("[facet 'minInclusive'] The value '%s' is less than the minimum value allowed ('%s').", value, *fs.MinInclusive)
+		if !checkMinInclusive(val, *fs.MinInclusive, builtinLocal) {
+			msg := fmt.Sprintf("[facet 'minInclusive'] The value '%s' is less than the minimum value allowed ('%s').", val, *fs.MinInclusive)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("minInclusive")
 		}
@@ -215,8 +187,8 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 
 	// maxInclusive.
 	if fs.MaxInclusive != nil {
-		if !checkMaxInclusive(value, *fs.MaxInclusive, builtinLocal) {
-			msg := fmt.Sprintf("[facet 'maxInclusive'] The value '%s' is greater than the maximum value allowed ('%s').", value, *fs.MaxInclusive)
+		if !checkMaxInclusive(val, *fs.MaxInclusive, builtinLocal) {
+			msg := fmt.Sprintf("[facet 'maxInclusive'] The value '%s' is greater than the maximum value allowed ('%s').", val, *fs.MaxInclusive)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("maxInclusive")
 		}
@@ -224,8 +196,8 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 
 	// minExclusive.
 	if fs.MinExclusive != nil {
-		if !checkMinExclusive(value, *fs.MinExclusive, builtinLocal) {
-			msg := fmt.Sprintf("[facet 'minExclusive'] The value '%s' must be greater than '%s'.", value, *fs.MinExclusive)
+		if !checkMinExclusive(val, *fs.MinExclusive, builtinLocal) {
+			msg := fmt.Sprintf("[facet 'minExclusive'] The value '%s' must be greater than '%s'.", val, *fs.MinExclusive)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("minExclusive")
 		}
@@ -233,8 +205,8 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 
 	// maxExclusive.
 	if fs.MaxExclusive != nil {
-		if !checkMaxExclusive(value, *fs.MaxExclusive, builtinLocal) {
-			msg := fmt.Sprintf("[facet 'maxExclusive'] The value '%s' must be less than '%s'.", value, *fs.MaxExclusive)
+		if !checkMaxExclusive(val, *fs.MaxExclusive, builtinLocal) {
+			msg := fmt.Sprintf("[facet 'maxExclusive'] The value '%s' must be less than '%s'.", val, *fs.MaxExclusive)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("maxExclusive")
 		}
@@ -242,9 +214,9 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 
 	// totalDigits.
 	if fs.TotalDigits != nil {
-		digits := countTotalDigits(value)
+		digits := value.CountTotalDigits(val)
 		if digits > *fs.TotalDigits {
-			msg := fmt.Sprintf("[facet 'totalDigits'] The value '%s' has more digits than are allowed ('%d').", value, *fs.TotalDigits)
+			msg := fmt.Sprintf("[facet 'totalDigits'] The value '%s' has more digits than are allowed ('%d').", val, *fs.TotalDigits)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("totalDigits")
 		}
@@ -252,16 +224,16 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 
 	// fractionDigits.
 	if fs.FractionDigits != nil {
-		frac := countFractionDigits(value)
+		frac := value.CountFractionDigits(val)
 		if frac > *fs.FractionDigits {
-			msg := fmt.Sprintf("[facet 'fractionDigits'] The value '%s' has more fractional digits than are allowed ('%d').", value, *fs.FractionDigits)
+			msg := fmt.Sprintf("[facet 'fractionDigits'] The value '%s' has more fractional digits than are allowed ('%d').", val, *fs.FractionDigits)
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("fractionDigits")
 		}
 	}
 
 	// Length facets — interpretation depends on the builtin base type.
-	valueLen := facetLength(value, builtinLocal)
+	valueLen := facetLength(val, builtinLocal)
 
 	if fs.Length != nil {
 		if valueLen != *fs.Length {
@@ -299,7 +271,7 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 				continue
 			}
 			anyValid = true
-			if re.MatchString(value) {
+			if re.MatchString(val) {
 				matched = true
 				break
 			}
@@ -307,9 +279,9 @@ func checkFacets(ctx context.Context, value string, valueNS map[string]string, f
 		if anyValid && !matched {
 			var msg string
 			if len(fs.Patterns) == 1 {
-				msg = fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the pattern '%s'.", value, fs.Patterns[0])
+				msg = fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the pattern '%s'.", val, fs.Patterns[0])
 			} else {
-				msg = fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the patterns '%s'.", value, strings.Join(fs.Patterns, "', '"))
+				msg = fmt.Sprintf("[facet 'pattern'] The value '%s' is not accepted by the patterns '%s'.", val, strings.Join(fs.Patterns, "', '"))
 			}
 			vc.reportValidityError(ctx, filename, line, elemName, msg)
 			anyErr = fmt.Errorf("pattern")
@@ -341,54 +313,6 @@ func resolveLexicalQName(value string, ns map[string]string) (QName, error) {
 		return QName{}, fmt.Errorf("undeclared prefix %q", parts[0])
 	}
 	return QName{Local: parts[1], NS: uri}, nil
-}
-
-// countTotalDigits counts the total number of significant digits in a decimal value.
-// Per XML Schema spec: strip sign, then count digits in the numeral excluding
-// leading zeros before the integer part and trailing zeros after the fraction.
-// Examples: "0.123" → 3, "0.023" → 3, "123" → 3, "12.3" → 3, "0.0" → 1
-func countTotalDigits(value string) int {
-	// Strip sign.
-	s := value
-	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
-		s = s[1:]
-	}
-
-	dotIdx := strings.Index(s, ".")
-	if dotIdx < 0 {
-		// No decimal point — count digits in integer, stripping leading zeros.
-		s = strings.TrimLeft(s, "0")
-		if s == "" {
-			return 1
-		}
-		return len(s)
-	}
-
-	// Has decimal point. Integer part = s[:dotIdx], fraction part = s[dotIdx+1:]
-	intPart := strings.TrimLeft(s[:dotIdx], "0")
-	fracPart := strings.TrimRight(s[dotIdx+1:], "0")
-
-	total := len(intPart) + len(fracPart)
-	if total == 0 {
-		return 1 // "0.0" has 1 digit
-	}
-	return total
-}
-
-// countFractionDigits counts the number of significant digits after the
-// decimal point. The fractionDigits facet constrains the value, not the
-// lexical form, so trailing zeros are not significant: "1.20" → 1, "2.00" → 0,
-// "1.0" → 0. If there is no decimal point, returns 0.
-func countFractionDigits(value string) int {
-	s := value
-	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
-		s = s[1:]
-	}
-	_, frac, found := strings.Cut(s, ".")
-	if !found {
-		return 0
-	}
-	return len(strings.TrimRight(frac, "0"))
 }
 
 // facetLength returns the effective length of a value for facet checking.

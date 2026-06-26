@@ -1848,6 +1848,30 @@ var xsdDatatypeNames = map[string]struct{}{
 	"language": {}, "base64Binary": {}, "hexBinary": {},
 }
 
+// effectiveXSDDatatype returns the XSD builtin datatype local name a <data>
+// dataType resolves to for facet-applicability purposes, and whether it is an
+// XSD-validated type. It mirrors matchData's resolution: an explicit XSD datatype
+// library names an XSD type directly, and — when no datatypeLibrary was declared
+// anywhere — a bare recognized XSD name resolves to its XSD type (the libxml2
+// compatibility fallback). Anything else (the built-in string/token library, an
+// explicit datatypeLibrary="" reset, or an unknown name) is not an XSD-validated
+// type and returns ("", false).
+func effectiveXSDDatatype(dt *dataType) (string, bool) {
+	if dt == nil {
+		return "", false
+	}
+	switch dt.library {
+	case lexicon.NamespaceXSDDatatypes:
+		_, ok := xsdDatatypeNames[dt.name]
+		return dt.name, ok
+	case "":
+		if _, ok := xsdDatatypeNames[dt.name]; ok && !dt.libraryDeclared {
+			return dt.name, true
+		}
+	}
+	return "", false
+}
+
 // validateXSDType validates a value against an XSD datatype. Recognized type
 // names are validated through the shared XSD value validator so RELAX NG and
 // XSD stay consistent (date/time/duration value-space ranges, integer subtype
@@ -1881,13 +1905,18 @@ func validateXSDType(typeName, text string, params []*param) int {
 // The parameter is named text (not value) so the internal/xsd/value package
 // stays reachable for the ordering-facet comparisons below.
 //
-// The length facets (length/minLength/maxLength) are measured via facetLength,
-// and the ordering facets (min/maxInclusive, min/maxExclusive) are evaluated
-// through the shared XSD value engine (value.Compare) so RELAX NG and XSD agree
-// on the value space (e.g. xs:integer "5" really is less than "10"). Any other
-// param name — enumeration, totalDigits, fractionDigits, whiteSpace, or an
-// unknown facet — is unsupported and fails closed: it cannot be silently
-// accepted, which would let a <data> match values the facet was meant to reject.
+// The length facets (length/minLength/maxLength) are measured via facetLength;
+// the ordering facets (min/maxInclusive, min/maxExclusive) are evaluated through
+// the shared XSD value engine (value.Compare) so RELAX NG and XSD agree on the
+// value space (e.g. xs:integer "5" really is less than "10"); and the digit
+// facets (totalDigits, fractionDigits) are measured via value.CountTotalDigits/
+// CountFractionDigits on the xs:decimal family. Facet applicability — an ordering
+// facet on a non-ordered type, a digit facet on a non-decimal type, and bound
+// validity — is enforced at compile time (checkDataFacets), so the grammar is
+// already unmatchable when an inapplicable facet is present. Any other param name
+// — enumeration, whiteSpace, or an unknown facet — is unsupported and fails
+// closed: it cannot be silently accepted, which would let a <data> match values
+// the facet was meant to reject.
 func validateWithParams(text, typeName string, params []*param) int {
 	for _, p := range params {
 		switch p.name {
@@ -1939,10 +1968,30 @@ func validateWithParams(text, typeName string, params []*param) int {
 			if !facetOrderingOK(text, p.value, typeName, func(cmp int) bool { return cmp < 0 }) {
 				return -1
 			}
+		case "totalDigits":
+			// totalDigits applies only to the xs:decimal family (an inapplicable
+			// facet is rejected at compile time). The instance value has already
+			// passed lexical validation, so count its significant digits and reject
+			// when they exceed the bound.
+			n, err := strconv.Atoi(strings.TrimSpace(p.value))
+			if err != nil || !value.IsDecimalFamily(typeName) {
+				return -1
+			}
+			if value.CountTotalDigits(text) > n {
+				return -1
+			}
+		case "fractionDigits":
+			n, err := strconv.Atoi(strings.TrimSpace(p.value))
+			if err != nil || !value.IsDecimalFamily(typeName) {
+				return -1
+			}
+			if value.CountFractionDigits(text) > n {
+				return -1
+			}
 		default:
-			// Unsupported / unrecognized facet (enumeration, totalDigits,
-			// fractionDigits, whiteSpace, …). Fail closed rather than silently
-			// accept: an unenforced facet must not let the value through.
+			// Unsupported / unrecognized facet (enumeration, whiteSpace, or an
+			// unknown name). Fail closed rather than silently accept: an unenforced
+			// facet must not let the value through.
 			return -1
 		}
 	}
@@ -1951,18 +2000,28 @@ func validateWithParams(text, typeName string, params []*param) int {
 
 // facetOrderingOK reports whether the instance value satisfies an ordering facet
 // (min/maxInclusive, min/maxExclusive) whose bound lexical is facetBound. The
-// instance value and the bound are compared in the datatype's value space via
-// the shared XSD engine (value.Compare). accept is given the comparison sign of
-// text relative to facetBound (-1/0/+1) and decides whether the facet is met.
+// instance value and the bound are compared in the datatype's value space via the
+// shared XSD engine (value.Compare). accept is given the comparison sign of text
+// relative to facetBound (-1/0/+1) and decides whether the facet is met.
 //
-// When value.Compare cannot order the two operands — a string-family datatype
-// (ordering facets are undefined there) or an unparsable/invalid bound — the
-// facet is treated as unsatisfiable and ok=false is returned, so the value is
-// rejected rather than silently accepted.
+// Ordering facets are defined ONLY on a datatype whose value space is ordered
+// (value.Orderable): value.Compare returns a deterministic total order even for
+// the non-ordered types (boolean, hexBinary, base64Binary) so enumeration can use
+// cmp==0, but that order must never fire a range facet. Such facets are rejected
+// at compile time (checkDataFacets makes the grammar unmatchable), so this is
+// belt-and-suspenders — a non-ordered type fails closed if ever reached.
+//
+// For an ordered type, value.Compare can still return ok=false when two VALID
+// operands are indeterminate (e.g. a mixed-timezone xs:dateTime comparison). XSD
+// treats an indeterminate ordered comparison as SATISFYING the range facet, so the
+// value is accepted rather than rejected — matching the XSD layer's semantics.
 func facetOrderingOK(text, facetBound, typeName string, accept func(int) bool) bool {
+	if !value.Orderable(typeName) {
+		return false
+	}
 	cmp, ok := value.Compare(text, facetBound, typeName)
 	if !ok {
-		return false
+		return true
 	}
 	return accept(cmp)
 }
