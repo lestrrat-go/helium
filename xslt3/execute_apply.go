@@ -400,28 +400,41 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 
 	// Evaluate with-param values BEFORE clearing the context for use="absent",
 	// because the with-param select expressions need the caller's context item.
+	//
+	// Two-phase param evaluation (mirrors xsl:apply-templates): evaluate ALL
+	// with-param values into LOCAL maps first, THEN merge tunnel params into
+	// ec.tunnelParams. This prevents a later with-param body that invokes
+	// another template (e.g. via an error caught by xsl:try/xsl:catch) from
+	// observing a tentative tunnel override before control has actually been
+	// transferred to the called template.
 	paramOverrides := make(map[string]xpath3.Sequence)
-	savedTunnel := ec.tunnelParams
-	hasTunnelOverrides := false
+	var newTunnelParams map[string]xpath3.Sequence
 	for _, wp := range inst.Params {
 		val, err := ec.evaluateWithParam(ctx, wp)
 		if err != nil {
 			return err
 		}
 		if wp.Tunnel {
-			if !hasTunnelOverrides {
-				merged := make(map[string]xpath3.Sequence)
-				maps.Copy(merged, ec.tunnelParams)
-				ec.tunnelParams = merged
-				hasTunnelOverrides = true
+			if newTunnelParams == nil {
+				newTunnelParams = make(map[string]xpath3.Sequence)
 			}
-			ec.tunnelParams[wp.Name] = val
+			newTunnelParams[wp.Name] = val
 		} else {
 			if _, dup := paramOverrides[wp.Name]; dup {
 				return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:call-template", wp.Name)
 			}
 			paramOverrides[wp.Name] = val
 		}
+	}
+
+	// Merge tunnel params and register the restore only after every with-param
+	// value has been computed.
+	savedTunnel := ec.tunnelParams
+	if newTunnelParams != nil {
+		merged := make(map[string]xpath3.Sequence)
+		maps.Copy(merged, ec.tunnelParams)
+		maps.Copy(merged, newTunnelParams)
+		ec.tunnelParams = merged
 	}
 	defer func() { ec.tunnelParams = savedTunnel }()
 
@@ -556,36 +569,39 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 	mode := ec.currentMode
 
 	// Process with-param (tunnel and regular).
-	// Copy tunnel params to avoid mutating the caller's map.
+	//
+	// Two-phase param evaluation (mirrors xsl:apply-templates): evaluate ALL
+	// with-param values into LOCAL maps first, THEN merge tunnel params into
+	// ec.tunnelParams. This prevents a later with-param body that invokes
+	// another template (e.g. via an error caught by xsl:try/xsl:catch) from
+	// observing a tentative tunnel override before control has actually been
+	// transferred to the next-match template.
 	var pv map[string]xpath3.Sequence
+	var newTunnelParams map[string]xpath3.Sequence
+	for _, wp := range inst.Params {
+		val, err := ec.evaluateWithParam(ctx, wp)
+		if err != nil {
+			return err
+		}
+		if wp.Tunnel {
+			if newTunnelParams == nil {
+				newTunnelParams = make(map[string]xpath3.Sequence)
+			}
+			newTunnelParams[wp.Name] = val
+		} else {
+			if pv == nil {
+				pv = make(map[string]xpath3.Sequence)
+			}
+			pv[wp.Name] = val
+		}
+	}
+
 	savedTunnel := ec.tunnelParams
-	if len(inst.Params) > 0 {
-		hasTunnel := false
-		for _, wp := range inst.Params {
-			if wp.Tunnel {
-				hasTunnel = true
-				break
-			}
-		}
-		if hasTunnel {
-			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
-			maps.Copy(newTunnel, ec.tunnelParams)
-			ec.tunnelParams = newTunnel
-		}
-		for _, wp := range inst.Params {
-			val, err := ec.evaluateWithParam(ctx, wp)
-			if err != nil {
-				return err
-			}
-			if wp.Tunnel {
-				ec.tunnelParams[wp.Name] = val
-			} else {
-				if pv == nil {
-					pv = make(map[string]xpath3.Sequence)
-				}
-				pv[wp.Name] = val
-			}
-		}
+	if newTunnelParams != nil {
+		merged := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(newTunnelParams))
+		maps.Copy(merged, ec.tunnelParams)
+		maps.Copy(merged, newTunnelParams)
+		ec.tunnelParams = merged
 	}
 	defer func() { ec.tunnelParams = savedTunnel }()
 
@@ -668,36 +684,39 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 	maxPrec := ec.currentTemplate.ImportPrec
 
 	// Process with-param (tunnel and regular).
-	// Copy tunnel params to avoid mutating the caller's map.
+	//
+	// Two-phase param evaluation (mirrors xsl:apply-templates): evaluate ALL
+	// with-param values into LOCAL maps first, THEN merge tunnel params into
+	// ec.tunnelParams. This prevents a later with-param body that invokes
+	// another template (e.g. via an error caught by xsl:try/xsl:catch) from
+	// observing a tentative tunnel override before control has actually been
+	// transferred to the imported template.
 	var pv map[string]xpath3.Sequence
+	var newTunnelParams map[string]xpath3.Sequence
+	for _, wp := range inst.Params {
+		val, err := ec.evaluateWithParam(ctx, wp)
+		if err != nil {
+			return err
+		}
+		if wp.Tunnel {
+			if newTunnelParams == nil {
+				newTunnelParams = make(map[string]xpath3.Sequence)
+			}
+			newTunnelParams[wp.Name] = val
+		} else {
+			if pv == nil {
+				pv = make(map[string]xpath3.Sequence)
+			}
+			pv[wp.Name] = val
+		}
+	}
+
 	savedTunnel := ec.tunnelParams
-	if len(inst.Params) > 0 {
-		hasTunnel := false
-		for _, wp := range inst.Params {
-			if wp.Tunnel {
-				hasTunnel = true
-				break
-			}
-		}
-		if hasTunnel {
-			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
-			maps.Copy(newTunnel, ec.tunnelParams)
-			ec.tunnelParams = newTunnel
-		}
-		for _, wp := range inst.Params {
-			val, err := ec.evaluateWithParam(ctx, wp)
-			if err != nil {
-				return err
-			}
-			if wp.Tunnel {
-				ec.tunnelParams[wp.Name] = val
-			} else {
-				if pv == nil {
-					pv = make(map[string]xpath3.Sequence)
-				}
-				pv[wp.Name] = val
-			}
-		}
+	if newTunnelParams != nil {
+		merged := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(newTunnelParams))
+		maps.Copy(merged, ec.tunnelParams)
+		maps.Copy(merged, newTunnelParams)
+		ec.tunnelParams = merged
 	}
 	defer func() { ec.tunnelParams = savedTunnel }()
 
