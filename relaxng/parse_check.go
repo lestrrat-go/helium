@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 )
 
 // ruleFlags tracks ancestor context for forbidden-pattern-nesting checks.
@@ -161,6 +162,7 @@ func (c *compiler) checkPattern(ctx context.Context, pat *pattern, flags ruleFla
 		return
 
 	case patternData:
+		c.checkDataFacets(ctx, pat)
 		// Children of data are except patterns.
 		childFlags := flags | inDataExcept
 		for _, child := range pat.children {
@@ -190,6 +192,56 @@ func (c *compiler) checkPattern(ctx context.Context, pat *pattern, flags ruleFla
 	// Default: choice, optional, mixed — pass flags through.
 	for _, child := range pat.children {
 		c.checkPattern(ctx, child, flags, visited)
+	}
+}
+
+// checkDataFacets validates, at compile time, the XSD <param> facets carried by a
+// <data> pattern, failing closed on a facet that cannot apply to the datatype:
+//
+//   - an ordering facet (min/maxInclusive, min/maxExclusive) on a datatype whose
+//     value space is not ordered (value.Orderable) — value.Compare returns a
+//     deterministic order for boolean and the binary types so enumeration can use
+//     it, but that order must never fire a range facet — or whose bound is not a
+//     valid value of the datatype.
+//   - a digit facet (totalDigits, fractionDigits) on a datatype outside the
+//     xs:decimal family (value.IsDecimalFamily).
+//
+// These mirror the XSD facet-applicability rules (internal/xsd/value) so RELAX NG
+// and XSD agree on which facets a datatype admits. An inapplicable facet is a
+// fatal compile error, which makes the whole grammar unmatchable (compileSchema).
+func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
+	typeName, ok := effectiveXSDDatatype(pat.dataType)
+	if !ok {
+		return
+	}
+	for _, p := range pat.params {
+		switch p.name {
+		case "minInclusive", "maxInclusive", "minExclusive", "maxExclusive":
+			if !value.Orderable(typeName) {
+				c.addPatternError(ctx, pat, fmt.Sprintf("facet '%s' is not allowed on the non-ordered datatype '%s'", p.name, typeName))
+				continue
+			}
+			if value.ValidateBuiltin(value.Normalize(p.value, typeName), typeName) != nil {
+				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet '%s' is not a valid '%s'", p.value, p.name, typeName))
+			}
+		case "totalDigits", "fractionDigits":
+			if !value.IsDecimalFamily(typeName) {
+				c.addPatternError(ctx, pat, fmt.Sprintf("facet '%s' is not allowed on the datatype '%s'", p.name, typeName))
+				continue
+			}
+			// The digit-facet bound must itself be a valid integer in its XSD value
+			// space: totalDigits is an xs:positiveInteger, fractionDigits an
+			// xs:nonNegativeInteger. Validating here (with XSD whitespace/lexical
+			// rules — so e.g. an NBSP-padded bound is rejected, not silently trimmed)
+			// keeps an out-of-space bound from being parsed leniently at validation.
+			boundType := "positiveInteger"
+			if p.name == "fractionDigits" {
+				boundType = "nonNegativeInteger"
+			}
+			if value.ValidateBuiltin(value.Normalize(p.value, boundType), boundType) != nil {
+				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet '%s' is not a valid '%s'", p.value, p.name, boundType))
+			}
+		}
 	}
 }
 
