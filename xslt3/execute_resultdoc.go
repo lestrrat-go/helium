@@ -1050,6 +1050,9 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 			return nil, err
 		}
 		base.OmitDeclaration = b
+		// The result-document explicitly specified omit-xml-declaration, so the
+		// xhtml/html5 serializer must not flip it back to "yes" by default.
+		base.OmitDeclarationExplicit = true
 	}
 	if inst.DoctypeSystem != nil {
 		v, err := evalAVT(inst.DoctypeSystem)

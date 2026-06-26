@@ -790,6 +790,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		// true. OR-ing would wrongly keep the inherited true on.
 		outDef.Indent = ov.Indent
 		outDef.OmitDeclaration = ov.OmitDeclaration
+		// Carry the omit-xml-declaration explicitness so the xhtml/html5
+		// serializer respects an explicit value rather than defaulting it to
+		// "yes" (output_html.go keys on OmitDeclarationExplicit).
+		outDef.OmitDeclarationExplicit = ov.OmitDeclarationExplicit
 		if ov.DoctypeSystem != "" {
 			outDef.DoctypeSystem = ov.DoctypeSystem
 		}

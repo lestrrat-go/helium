@@ -155,3 +155,26 @@ func TestResultDocumentSoleSuppressIndentationHonored(t *testing.T) {
 	require.Contains(t, out, "<p><b>x</b><i>y</i></p>",
 		"sole suppress-indentation override must be honored (p children not indented)")
 }
+
+// XHTML/HTML5 serialization defaults omit-xml-declaration to "yes" only when the
+// value was NOT explicitly set. A primary xsl:result-document that evaluates
+// omit-xml-declaration="{false()}" explicitly specifies it, so the XML
+// declaration must be emitted. Before the fix the OmitDeclarationExplicit flag
+// was dropped on the result-document AVT path and the html5 serializer flipped
+// the declaration back off.
+func TestResultDocumentXHTMLOmitDeclarationFalseExplicit(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="xhtml" html-version="5"/>
+  <xsl:template match="/">
+    <xsl:result-document omit-xml-declaration="{false()}">
+      <html xmlns="http://www.w3.org/1999/xhtml"><body><p>x</p></body></html>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "<?xml",
+		"explicit omit-xml-declaration=false on the result-document must keep the XML declaration in XHTML/HTML5 output")
+}
