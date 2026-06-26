@@ -207,6 +207,68 @@ func TestParseReferenceElement(t *testing.T) {
 		require.Len(t, ref.transforms, 1)
 		require.Equal(t, []string{"a", "b"}, ref.transforms[0].prefixes)
 	})
+
+	// ec:InclusiveNamespaces is an Exclusive C14N parameter; under a
+	// non-exclusive Reference Transform (C14N10/C14N11/enveloped-signature) the
+	// prefixes are silently dropped during canonicalization. Accepting it would
+	// be fail-open, so it must be rejected — even an empty PrefixList.
+	t.Run("InclusiveNamespaces on non-exclusive transform rejected", func(t *testing.T) {
+		for _, alg := range []string{C14N10, C14N11URI, TransformEnvelopedSignature} {
+			t.Run(alg, func(t *testing.T) {
+				r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+					`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+					`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + alg + `">` +
+					`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="a b"/>` +
+					`</ds:Transform></ds:Transforms>` +
+					`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+					`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+					`</ds:Reference>`
+				doc := mustParse(t, r)
+				_, err := parseReferenceElement(doc.DocumentElement())
+				require.ErrorIs(t, err, ErrUnsupportedTransform)
+				require.Contains(t, err.Error(), "ec:InclusiveNamespaces")
+			})
+		}
+	})
+
+	// An empty PrefixList is still misplaced under a non-exclusive transform; the
+	// boolean-tracked match must reject it rather than treat "no prefixes" as
+	// harmless.
+	t.Run("empty InclusiveNamespaces on non-exclusive transform rejected", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+			`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + C14N10 + `">` +
+			`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `"/>` +
+			`</ds:Transform></ds:Transforms>` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+	})
+
+	// Accept arm: ec:InclusiveNamespaces on an exclusive c14n transform is valid
+	// and its PrefixList is honored.
+	t.Run("InclusiveNamespaces on exclusive transform accepted", func(t *testing.T) {
+		for _, alg := range []string{ExcC14N10, ExcC14N10Comments} {
+			t.Run(alg, func(t *testing.T) {
+				r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+					`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+					`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + alg + `">` +
+					`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="a b"/>` +
+					`</ds:Transform></ds:Transforms>` +
+					`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+					`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+					`</ds:Reference>`
+				doc := mustParse(t, r)
+				ref, err := parseReferenceElement(doc.DocumentElement())
+				require.NoError(t, err)
+				require.Len(t, ref.transforms, 1)
+				require.Equal(t, []string{"a", "b"}, ref.transforms[0].prefixes)
+			})
+		}
+	})
 }
 
 // TestEmptyReferencesRejected guards against a SignedInfo that carries zero

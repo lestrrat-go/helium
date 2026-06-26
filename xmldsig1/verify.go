@@ -346,6 +346,7 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 				// foreign-namespace look-alike contributes no prefixes (it is
 				// silently ignored here rather than rejected, because an unknown
 				// child of a per-Reference Transform is not necessarily fatal).
+				var hasInclusiveNS bool
 				for inc := te.FirstChild(); inc != nil; inc = inc.NextSibling() {
 					incElem, ok := helium.AsNode[*helium.Element](inc)
 					if !ok {
@@ -353,6 +354,19 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 					}
 					if px, ok := excInclusiveNamespacePrefixes(incElem); ok {
 						t.prefixes = px
+						hasInclusiveNS = true
+					}
+				}
+				// ec:InclusiveNamespaces is an Exclusive C14N parameter; it is
+				// only honored for the exclusive c14n transforms. Under any other
+				// transform algorithm (C14N10/C14N11/enveloped-signature/...) the
+				// prefixes are silently dropped during canonicalization, so the
+				// Reference would digest bytes that differ from what the signer
+				// declared — a fail-open gap. Reject it fail-closed, including an
+				// empty PrefixList, mirroring the SignedInfo gating.
+				if hasInclusiveNS {
+					if err := gateInclusiveNamespaces(alg); err != nil {
+						return ref, err
 					}
 				}
 				ref.transforms = append(ref.transforms, t)
@@ -416,12 +430,26 @@ func parseCanonicalizationParameters(elem *helium.Element, alg string) ([]string
 		if !matched {
 			return nil, fmt.Errorf("%w: unsupported CanonicalizationMethod parameter %s", ErrUnsupportedTransform, domutil.LocalName(ce))
 		}
-		if alg != ExcC14N10 && alg != ExcC14N10Comments {
-			return nil, fmt.Errorf("%w: ec:InclusiveNamespaces is only valid for exclusive c14n, not %s", ErrUnsupportedTransform, alg)
+		if err := gateInclusiveNamespaces(alg); err != nil {
+			return nil, err
 		}
 		prefixes = px
 	}
 	return prefixes, nil
+}
+
+// gateInclusiveNamespaces rejects an ec:InclusiveNamespaces PrefixList declared
+// under a non-exclusive c14n algorithm. The PrefixList is only honored for the
+// exclusive c14n modes (ExcC14N10 / ExcC14N10Comments); on any other algorithm
+// (C14N10/C14N11/enveloped-signature/...) the prefixes are silently dropped
+// during canonicalization, so accepting one would canonicalize differently from
+// what the signer declared. Shared by the SignedInfo CanonicalizationMethod and
+// per-Reference Transform gating so both fail closed identically.
+func gateInclusiveNamespaces(alg string) error {
+	if alg != ExcC14N10 && alg != ExcC14N10Comments {
+		return fmt.Errorf("%w: ec:InclusiveNamespaces is only valid for exclusive c14n, not %s", ErrUnsupportedTransform, alg)
+	}
+	return nil
 }
 
 // rejectSignatureMethodParameters fails closed on any child element of
