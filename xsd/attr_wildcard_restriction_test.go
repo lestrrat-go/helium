@@ -62,6 +62,6 @@ func TestAttrWildcardRestrictionSubset(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="t:Derived"/>
 </xs:schema>`
-		require.NotContains(t, compileFatalErrors(t, schema), notValidSubset)
+		require.Empty(t, compileFatalErrors(t, schema))
 	})
 }
