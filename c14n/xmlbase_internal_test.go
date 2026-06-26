@@ -80,9 +80,12 @@ func TestFaithfulXMLBaseValue(t *testing.T) {
 	} {
 		require.False(t, faithfulXMLBaseValue(v), "%q should be unfaithful", v)
 	}
-	// Well-formed values (including empty-authority file:/// and protocol-relative
-	// //host) are accepted.
-	for _, v := range []string{"", "a/b", "../x", "/abs/", "http://h/p", "file:///a", "//host/p", urnBase} {
+	// Well-formed values (including empty-authority file:///, protocol-relative
+	// //host, fragments/queries, marks, and IPv6 authority literals) are accepted.
+	for _, v := range []string{
+		"", "a/b", "../x", "/abs/", "http://h/p", "file:///a", "//host/p", urnBase,
+		"a#f", "a?q=1", "a~!*'()b", "a%20b", "http://[::1]/p", "//[::1]/p", "http://[::1]:8080/x",
+	} {
 		require.True(t, faithfulXMLBaseValue(v), "%q should be faithful", v)
 	}
 }

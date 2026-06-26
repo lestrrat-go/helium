@@ -242,12 +242,14 @@ func faithfulXMLBaseValue(v string) bool {
 	return !degenerateBaseAuthority(v, u, decodedBasePath(u))
 }
 
-// validURIReference reports whether s is lexically a URI reference per RFC 2396
-// (the grammar libxml2's parser enforces): every byte is unreserved, reserved,
-// "#", or part of a well-formed "%"HEXHEX escape. This rejects the "unwise" set
-// ("{}|\\^`[]"), spaces, control bytes, and truncated escapes — values libxml2
-// canonicalization fails on.
+// validURIReference reports whether s is lexically a URI reference as libxml2's
+// parser accepts it: every byte is unreserved, reserved, "#", or part of a
+// well-formed "%"HEXHEX escape. This rejects raw spaces, control bytes, truncated
+// escapes, and the "unwise" set ("{}|\\^`") — values libxml2 canonicalization
+// fails on. Square brackets are allowed only as an IPv6 authority literal
+// (e.g. "http://[::1]/"), matching libxml2 which accepts that but rejects "a[b]".
 func validURIReference(s string) bool {
+	brackets := 0
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if c == '%' {
@@ -257,11 +259,25 @@ func validURIReference(s string) bool {
 			i += 2
 			continue
 		}
+		if c == '[' || c == ']' {
+			brackets++
+			continue
+		}
 		if !validURIChar(c) {
 			return false
 		}
 	}
-	return true
+	if brackets == 0 {
+		return true
+	}
+	// The only legal brackets are the single pair delimiting an IPv6 host, which
+	// url.Parse surfaces in Host (possibly with a ":port" suffix).
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return brackets == 2 && strings.HasPrefix(u.Host, "[") &&
+		strings.Count(u.Host, "[") == 1 && strings.Count(u.Host, "]") == 1
 }
 
 func validURIChar(c byte) bool {
