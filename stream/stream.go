@@ -363,6 +363,54 @@ func validateNSParts(kind, prefix, localName string) error {
 	return nil
 }
 
+// Reserved namespace names (Namespaces in XML 1.0 §3). The "xml" prefix is
+// bound by definition to xmlNamespaceURI, and the "xmlns" prefix to
+// xmlnsNamespaceURI; neither may be rebound or otherwise misused.
+const (
+	xmlNamespaceURI   = "http://www.w3.org/XML/1998/namespace"
+	xmlnsNamespaceURI = "http://www.w3.org/2000/xmlns/"
+)
+
+// validateReservedNS rejects misuse of the reserved "xml" and "xmlns" prefixes
+// and their reserved namespace names (Namespaces in XML 1.0 §3). Binding
+// "xmlns" as a prefix, rebinding "xml" to a foreign URI, binding the XML
+// namespace to any prefix other than "xml", or declaring the xmlns namespace
+// all produce non-conformant output, so they are rejected before any markup is
+// emitted. An empty namespaceURI on the "xml" prefix means "use the implicit
+// xml binding" and is allowed. kind is "element" or "attribute".
+func validateReservedNS(kind, prefix, namespaceURI string) error {
+	if prefix == "xmlns" {
+		return fmt.Errorf("stream: reserved %s prefix %q must not be used", kind, prefix)
+	}
+	if prefix == "xml" && namespaceURI != "" && namespaceURI != xmlNamespaceURI {
+		return fmt.Errorf("stream: reserved prefix \"xml\" must be bound to %q, not %q", xmlNamespaceURI, namespaceURI)
+	}
+	if namespaceURI == xmlNamespaceURI && prefix != "xml" {
+		return fmt.Errorf("stream: XML namespace %q must be bound only to the \"xml\" prefix", xmlNamespaceURI)
+	}
+	if namespaceURI == xmlnsNamespaceURI {
+		return fmt.Errorf("stream: reserved namespace %q must not be declared", xmlnsNamespaceURI)
+	}
+	return nil
+}
+
+// nsPrefixConflict reports whether prefix is already declared in the current
+// element scope bound to a different namespace URI. Redeclaring a prefix to a
+// conflicting URI within the same scope would silently corrupt the binding (the
+// existing declaration wins), so callers reject it instead.
+func (w *Writer) nsPrefixConflict(prefix, uri string) bool {
+	if len(w.nsStack) == 0 {
+		return false
+	}
+	scope := &w.nsStack[len(w.nsStack)-1]
+	for _, ns := range scope.decls {
+		if ns.prefix == prefix {
+			return ns.uri != uri
+		}
+	}
+	return false
+}
+
 // isValidXMLVersion reports whether v is a valid XML declaration VersionNum.
 // VersionNum ::= '1.' [0-9]+ (XML 1.0 §2.8). Restricting to this grammar
 // prevents an untrusted version string from injecting markup into the XML
@@ -704,6 +752,11 @@ func (w *Writer) StartElementNS(prefix, localName, namespaceURI string) error {
 	if err := validateNSParts("element", prefix, localName); err != nil {
 		return err
 	}
+	// Reject reserved-prefix/namespace misuse before any markup is emitted, so
+	// an illegal binding (e.g. rebinding "xml") never reaches the output.
+	if err := validateReservedNS("element", prefix, namespaceURI); err != nil {
+		return err
+	}
 	// Validate the namespace URI before StartElement emits anything or
 	// declareNS records a declaration, so an untrusted URI cannot inject
 	// markup as an xmlns attribute value and a rejected call leaves the
@@ -895,6 +948,11 @@ func (w *Writer) StartAttributeNS(prefix, localName, namespaceURI string) error 
 	if err := validateNSParts("attribute", prefix, localName); err != nil {
 		return err
 	}
+	// Reject reserved-prefix/namespace misuse before declareNS records a
+	// declaration or StartAttribute emits anything.
+	if err := validateReservedNS("attribute", prefix, namespaceURI); err != nil {
+		return err
+	}
 	// Validate the namespace URI before declareNS records a declaration or
 	// StartAttribute emits anything, so an untrusted URI cannot inject markup
 	// as an xmlns attribute value and a rejected call leaves the writer
@@ -911,6 +969,12 @@ func (w *Writer) StartAttributeNS(prefix, localName, namespaceURI string) error 
 		return errors.New("stream: StartAttribute called outside element opening tag")
 	}
 	if namespaceURI != "" && prefix != "" {
+		// Reject a same-scope prefix conflict before emitting markup: declareNS
+		// would otherwise silently keep the existing binding, producing an
+		// attribute whose prefix resolves to the wrong namespace.
+		if w.nsPrefixConflict(prefix, namespaceURI) {
+			return fmt.Errorf("stream: attribute prefix %q already bound to a different namespace in this element", prefix)
+		}
 		w.declareNS(prefix, namespaceURI)
 	}
 	return w.StartAttribute(qualifiedName(prefix, localName))
