@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -1086,7 +1085,7 @@ type xpathRegexCacheKey struct {
 	flags   string
 }
 
-var compiledXPathRegexCache sync.Map
+var compiledXPathRegexCache = newRegexLRUCache(xpathRegexCacheCapacity)
 
 // DefaultRegexMatchTimeout bounds how long the backtracking regex engine
 // will spend on a single match before returning a timeout error. Patterns
@@ -1317,7 +1316,7 @@ func detectSimpleUnicodePattern(pattern, flags string) (*unicode.RangeTable, boo
 func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	cacheKey := xpathRegexCacheKey{pattern: pattern, flags: flags}
 	if cached, ok := compiledXPathRegexCache.Load(cacheKey); ok {
-		return cached.(*compiledXPathRegex), nil //nolint:forcetypeassert
+		return cached, nil
 	}
 
 	// Detect simple \p{Name} / \P{Name} patterns for single-rune fast paths
@@ -1407,7 +1406,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 			isSimple:     simpleOk,
 		}
 		actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
-		return actual.(*compiledXPathRegex), nil //nolint:forcetypeassert
+		return actual, nil
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -1420,7 +1419,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 		isSimple:     simpleOk,
 	}
 	actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
-	return actual.(*compiledXPathRegex), nil //nolint:forcetypeassert
+	return actual, nil
 }
 
 // stripFreeSpacing removes unescaped whitespace from a regex pattern (x flag).
