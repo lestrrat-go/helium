@@ -36,10 +36,28 @@ const defaultMaxIncludeSize = 10 << 20 // 10 MiB
 // includes are caught separately by circular-inclusion detection.
 const defaultMaxIncludeDepth = 40
 
-// ErrIncludeTooLarge is returned when an included resource exceeds the
-// configured maximum size (see [Processor.MaxIncludeSize]; 10 MiB by default).
-// The cap is enforced against the actual number of bytes read, not any reported
-// size.
+// maxIncludeAggregateMultiplier bounds the cumulative bytes materialized across
+// the entire XInclude expansion as a multiple of the effective per-include cap
+// (see effectiveMaxIncludeSize). The per-include cap only stops a single
+// oversized resource; without an aggregate bound a document could splice many
+// includes — each under the per-include cap, or the same cached resource reused
+// repeatedly — and still materialize unbounded total bytes (a memory/
+// amplification DoS). Expressing the aggregate as a multiple of the per-include
+// cap keeps it proportional: lowering MaxIncludeSize lowers the aggregate too.
+// With the 10 MiB default per-include cap the aggregate is 1 GiB.
+const maxIncludeAggregateMultiplier = 100
+
+// maxTotalIncludes bounds the aggregate number of resources spliced across the
+// entire XInclude expansion, independent of their individual sizes. It guards
+// against amplification by a very large number of tiny includes.
+const maxTotalIncludes = 1 << 16 // 65536
+
+// ErrIncludeTooLarge is returned when an included resource exceeds the maximum
+// allowed size. This covers both the per-include cap (see
+// [Processor.MaxIncludeSize]; 10 MiB by default), enforced against the actual
+// number of bytes read, and the internal aggregate bound across the whole
+// expansion (cumulative bytes / spliced-resource count) that guards against
+// amplification by many includes each staying under the per-include cap.
 var ErrIncludeTooLarge = errors.New("xi:include: included resource exceeds maximum allowed size")
 
 // Resolver loads content from a URI.
@@ -242,6 +260,7 @@ type processor struct {
 	snapshotURI     string           // base URI the snapshot corresponds to
 	depth           int
 	count           int
+	totalBytes      int64 // aggregate bytes materialized across all includes (bounds amplification)
 }
 
 // Process performs XInclude processing on the document.
@@ -358,6 +377,14 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 	}
 	if p.depth+1 > maxDepth {
 		return fmt.Errorf("xi:include: maximum include depth (%d) exceeded", maxDepth)
+	}
+
+	// Aggregate-count guard: bound the total number of resources spliced across
+	// the whole expansion. p.count is the running total of substitutions made so
+	// far; reject before processing one more so repeated (cached) includes cannot
+	// amplify into unbounded subtree materialization.
+	if p.count >= maxTotalIncludes {
+		return fmt.Errorf("xi:include: aggregate of %d included resources: %w", maxTotalIncludes, ErrIncludeTooLarge)
 	}
 
 	if err := validateIncludeChildren(inc); err != nil {
@@ -732,6 +759,11 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, sub
 		if entry.err != nil {
 			return nil, entry.err
 		}
+		// A cached resource still materializes a fresh subtree on every reuse, so
+		// it counts toward the aggregate bound just like a freshly fetched one.
+		if err := p.accountIncludedBytes(uri, len(entry.data)); err != nil {
+			return nil, err
+		}
 		// Re-parse from cached bytes: each inclusion needs independent
 		// nodes since they get moved into the target document tree.
 		return p.parseXMLData(ctx, entry.data, uri, substituteEntities)
@@ -740,6 +772,12 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, sub
 	data, err := p.fetch(uri, base)
 	if err != nil {
 		p.docCache[cacheKey] = docCacheEntry{err: err}
+		return nil, err
+	}
+	if err := p.accountIncludedBytes(uri, len(data)); err != nil {
+		// Cache the bytes anyway so a later same-URI include hits the same
+		// aggregate guard rather than re-fetching.
+		p.docCache[cacheKey] = docCacheEntry{data: data}
 		return nil, err
 	}
 
@@ -770,10 +808,7 @@ func (p *processor) resolve(uri, base string) (io.ReadCloser, error) {
 // enforced against the bytes actually read so a Resolver that returns an
 // endless or oversized reader cannot exhaust memory.
 func (p *processor) readCapped(r io.Reader) ([]byte, error) {
-	limit := p.maxIncludeSize
-	if limit <= 0 {
-		limit = defaultMaxIncludeSize
-	}
+	limit := p.effectiveMaxIncludeSize()
 
 	data, exceeded, err := iolimit.ReadAll(r, int64(limit))
 	if exceeded {
@@ -783,6 +818,29 @@ func (p *processor) readCapped(r io.Reader) ([]byte, error) {
 		return nil, err //nolint:wrapcheck // caller wraps with the URI for context
 	}
 	return data, nil
+}
+
+// effectiveMaxIncludeSize returns the per-include byte cap in effect: the
+// configured [Processor.MaxIncludeSize] or defaultMaxIncludeSize when unset.
+func (p *processor) effectiveMaxIncludeSize() int {
+	if p.maxIncludeSize > 0 {
+		return p.maxIncludeSize
+	}
+	return defaultMaxIncludeSize
+}
+
+// accountIncludedBytes adds the bytes materialized by one included resource to
+// the running aggregate and fails once the cumulative total exceeds the
+// aggregate bound (maxIncludeAggregateMultiplier × the per-include cap). It is
+// called for every spliced occurrence — including repeated cache hits — so the
+// bound covers both many distinct includes and one cached resource reused many
+// times. uri is included for diagnostic context.
+func (p *processor) accountIncludedBytes(uri string, n int) error {
+	p.totalBytes += int64(n)
+	if p.totalBytes > int64(p.effectiveMaxIncludeSize())*maxIncludeAggregateMultiplier {
+		return fmt.Errorf("xi:include: aggregate size including %q exceeds maximum: %w", uri, ErrIncludeTooLarge)
+	}
+	return nil
 }
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
@@ -875,7 +933,15 @@ func (p *processor) includeText(inc *helium.Element, uri string, incBase string)
 
 func (p *processor) loadText(uri string, base string) ([]byte, error) {
 	if entry, ok := p.txtCache[uri]; ok {
-		return entry.data, entry.err
+		if entry.err != nil {
+			return nil, entry.err
+		}
+		// A cached text resource is re-materialized on every reuse, so it counts
+		// toward the aggregate bound just like a freshly fetched one.
+		if err := p.accountIncludedBytes(uri, len(entry.data)); err != nil {
+			return nil, err
+		}
+		return entry.data, nil
 	}
 
 	data, err := p.fetch(uri, base)
@@ -885,6 +951,9 @@ func (p *processor) loadText(uri string, base string) ([]byte, error) {
 	}
 
 	p.txtCache[uri] = txtCacheEntry{data: data}
+	if err := p.accountIncludedBytes(uri, len(data)); err != nil {
+		return nil, err
+	}
 	return data, nil
 }
 
