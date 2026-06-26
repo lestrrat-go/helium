@@ -1071,6 +1071,10 @@ func TestParseExternalDTDUnterminatedIncludeNoHang(t *testing.T) {
 	}
 }
 
+// dtdSystemID is the external-DTD SYSTEM identifier (and MapFS filename) shared
+// by the external-subset parser tests in this package.
+const dtdSystemID = "d.dtd"
+
 func TestParseExternalDTDTrailingWSPreservesPostDoctypeMisc(t *testing.T) {
 	t.Parallel()
 
@@ -1087,7 +1091,7 @@ func TestParseExternalDTDTrailingWSPreservesPostDoctypeMisc(t *testing.T) {
 	// them from the parsed document. Inspecting the floor cursor directly (rather
 	// than via getCursor) stops at the floor instead, so the misc nodes survive.
 	const dtd = "<!ELEMENT r EMPTY>\n"
-	fsys := fstest.MapFS{"d.dtd": &fstest.MapFile{Data: []byte(dtd)}}
+	fsys := fstest.MapFS{dtdSystemID: &fstest.MapFile{Data: []byte(dtd)}}
 
 	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).FS(fsys)
 	doc, err := p.Parse(t.Context(), []byte(input))

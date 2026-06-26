@@ -445,7 +445,7 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 		// The malformed per-declaration error in the external subset must now
 		// surface as a top-level parse error rather than being swallowed.
 		fsys := fstest.MapFS{
-			"d.dtd": {Data: []byte(
+			dtdSystemID: {Data: []byte(
 				`<!ENTITY c "control">` + "\n" +
 					`<!ENTITY % amp "&#38;">` + "\n" +
 					`<!ENTITY e "%amp;broken">`)},
@@ -474,7 +474,7 @@ func TestExternalSystemParameterEntityCaptured(t *testing.T) {
 	t.Parallel()
 
 	fsys := fstest.MapFS{
-		"d.dtd": {Data: []byte(
+		dtdSystemID: {Data: []byte(
 			`<!ENTITY ctrl "control">` + "\n" +
 				`<!ENTITY % pe SYSTEM "pe.ent">`)},
 	}
@@ -505,7 +505,7 @@ func TestExternalPublicParameterEntityCaptured(t *testing.T) {
 	t.Parallel()
 
 	fsys := fstest.MapFS{
-		"d.dtd": {Data: []byte(
+		dtdSystemID: {Data: []byte(
 			`<!ENTITY ctrl "control">` + "\n" +
 				`<!ENTITY % pe PUBLIC "-//x//pe" "pe.ent">`)},
 	}
@@ -550,7 +550,7 @@ func TestEntityValueRefValidationIsSideEffectFree(t *testing.T) {
 	dtd := `<!ENTITY c "control">` + "\n" +
 		`<!ENTITY % p "` + big + `">` + "\n" +
 		`<!ENTITY e "%p;">`
-	fsys := fstest.MapFS{"d.dtd": {Data: []byte(dtd)}}
+	fsys := fstest.MapFS{dtdSystemID: {Data: []byte(dtd)}}
 	input := `<?xml version="1.0"?>` + "\n" +
 		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
 
