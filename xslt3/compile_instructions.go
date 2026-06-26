@@ -713,7 +713,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			}
 		}
 		// Validate boolean output attributes on xsl:result-document.
-		for _, boolAttr := range []string{paramByteOrderMark, paramEscapeURIAttributes,
+		for _, boolAttr := range []string{paramAllowDuplicateNames, paramByteOrderMark, paramEscapeURIAttributes,
 			paramIncludeContentType, paramIndent, paramOmitXMLDeclaration, paramUndeclarePrefixes} {
 			if v := getAttr(elem, boolAttr); v != "" {
 				if !strings.ContainsAny(v, "{}") {

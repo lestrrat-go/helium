@@ -479,3 +479,43 @@ func TestResultDocumentPrimaryJSONAllowDuplicateNamesDefaultOutput(t *testing.T)
 	require.NoError(t, err,
 		"duplicate JSON keys must be accepted when the default xsl:output sets allow-duplicate-names=yes, even for a bare result-document")
 }
+
+// An xsl:result-document with a CONSTANT (non-AVT) invalid allow-duplicate-names
+// value must be rejected at compile time with SEPM0016, like every other boolean
+// serialization attribute. (Regression: allow-duplicate-names was missing from
+// the compile-time boolean-validation list, so "bogus" compiled cleanly.)
+func TestResultDocumentAllowDuplicateNamesInvalidConstantCompileError(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document allow-duplicate-names="bogus"><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`))
+	require.NoError(t, err)
+
+	_, err = xslt3.CompileStylesheet(t.Context(), doc)
+	require.Error(t, err, "an invalid constant allow-duplicate-names must fail compilation")
+	require.Contains(t, err.Error(), "SEPM0016")
+}
+
+// An xsl:result-document whose allow-duplicate-names AVT resolves to an invalid
+// xs:boolean lexical form must raise a dynamic SEPM0016 error, NOT silently fall
+// back to an inherited value. (Regression: an invalid AVT result was dropped on
+// the floor, leaving an inherited allow-duplicate-names="yes" wrongly in force
+// and permitting duplicate JSON keys.)
+func TestResultDocumentAllowDuplicateNamesInvalidAVTDynamicError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="json" allow-duplicate-names="yes"/>
+  <xsl:template match="/">
+    <xsl:result-document allow-duplicate-names="{'bogus'}">
+      <xsl:sequence select="map{1:'a','1':'b'}"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.Error(t, err,
+		"an invalid allow-duplicate-names AVT must raise a dynamic error, not fall back to the inherited value")
+	require.Contains(t, err.Error(), "SEPM0016")
+}

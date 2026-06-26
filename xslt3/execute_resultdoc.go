@@ -1076,9 +1076,12 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		if err != nil {
 			return nil, err
 		}
-		if b, ok := parseXSDBool(strings.TrimSpace(v)); ok {
-			base.AllowDuplicateNames = b
+		b, ok := parseXSDBool(strings.TrimSpace(v))
+		if !ok {
+			return nil, dynamicError(errCodeSEPM0016,
+				"%q is not a valid value for xsl:result-document/@%s", v, paramAllowDuplicateNames)
 		}
+		base.AllowDuplicateNames = b
 	}
 	if inst.EscapeURIAttributes != nil {
 		v, err := evalAVT(inst.EscapeURIAttributes)
