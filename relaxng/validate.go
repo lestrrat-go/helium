@@ -1876,11 +1876,23 @@ func validateXSDType(typeName, text string, params []*param) int {
 	return validateWithParams(text, typeName, params)
 }
 
-func validateWithParams(value, typeName string, params []*param) int {
+// validateWithParams applies the RELAX NG <param> facets carried by a <data>
+// pattern to an already whitespace-normalized, lexically-valid instance value.
+// The parameter is named text (not value) so the internal/xsd/value package
+// stays reachable for the ordering-facet comparisons below.
+//
+// The length facets (length/minLength/maxLength) are measured via facetLength,
+// and the ordering facets (min/maxInclusive, min/maxExclusive) are evaluated
+// through the shared XSD value engine (value.Compare) so RELAX NG and XSD agree
+// on the value space (e.g. xs:integer "5" really is less than "10"). Any other
+// param name — enumeration, totalDigits, fractionDigits, whiteSpace, or an
+// unknown facet — is unsupported and fails closed: it cannot be silently
+// accepted, which would let a <data> match values the facet was meant to reject.
+func validateWithParams(text, typeName string, params []*param) int {
 	for _, p := range params {
 		switch p.name {
 		case "pattern":
-			matched, err := regexp.MatchString("^(?:"+p.value+")$", value)
+			matched, err := regexp.MatchString("^(?:"+p.value+")$", text)
 			if err != nil || !matched {
 				return -1
 			}
@@ -1889,7 +1901,7 @@ func validateWithParams(value, typeName string, params []*param) int {
 			if err != nil {
 				return -1
 			}
-			length, ok := facetLength(value, typeName)
+			length, ok := facetLength(text, typeName)
 			if !ok || length != n {
 				return -1
 			}
@@ -1898,7 +1910,7 @@ func validateWithParams(value, typeName string, params []*param) int {
 			if err != nil {
 				return -1
 			}
-			length, ok := facetLength(value, typeName)
+			length, ok := facetLength(text, typeName)
 			if !ok || length < n {
 				return -1
 			}
@@ -1907,13 +1919,52 @@ func validateWithParams(value, typeName string, params []*param) int {
 			if err != nil {
 				return -1
 			}
-			length, ok := facetLength(value, typeName)
+			length, ok := facetLength(text, typeName)
 			if !ok || length > n {
 				return -1
 			}
+		case "minInclusive":
+			if !facetOrderingOK(text, p.value, typeName, func(cmp int) bool { return cmp >= 0 }) {
+				return -1
+			}
+		case "maxInclusive":
+			if !facetOrderingOK(text, p.value, typeName, func(cmp int) bool { return cmp <= 0 }) {
+				return -1
+			}
+		case "minExclusive":
+			if !facetOrderingOK(text, p.value, typeName, func(cmp int) bool { return cmp > 0 }) {
+				return -1
+			}
+		case "maxExclusive":
+			if !facetOrderingOK(text, p.value, typeName, func(cmp int) bool { return cmp < 0 }) {
+				return -1
+			}
+		default:
+			// Unsupported / unrecognized facet (enumeration, totalDigits,
+			// fractionDigits, whiteSpace, …). Fail closed rather than silently
+			// accept: an unenforced facet must not let the value through.
+			return -1
 		}
 	}
 	return 0
+}
+
+// facetOrderingOK reports whether the instance value satisfies an ordering facet
+// (min/maxInclusive, min/maxExclusive) whose bound lexical is facetBound. The
+// instance value and the bound are compared in the datatype's value space via
+// the shared XSD engine (value.Compare). accept is given the comparison sign of
+// text relative to facetBound (-1/0/+1) and decides whether the facet is met.
+//
+// When value.Compare cannot order the two operands — a string-family datatype
+// (ordering facets are undefined there) or an unparsable/invalid bound — the
+// facet is treated as unsatisfiable and ok=false is returned, so the value is
+// rejected rather than silently accepted.
+func facetOrderingOK(text, facetBound, typeName string, accept func(int) bool) bool {
+	cmp, ok := value.Compare(text, facetBound, typeName)
+	if !ok {
+		return false
+	}
+	return accept(cmp)
 }
 
 // facetLength returns the value's length in the units the length/minLength/
