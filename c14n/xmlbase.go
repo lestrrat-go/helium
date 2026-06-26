@@ -13,8 +13,9 @@ import (
 // It is a port of xmlBuildURI's component algorithm (RFC 2396 §5.2): empty-path
 // references keep the base path, network-path references keep their authority,
 // absolute-path references replace the path, and a merged relative path is
-// normalized by normalizeURIPath. All work is done on the raw (percent-encoded)
-// path so encoding is preserved byte-for-byte.
+// normalized by normalizeURIPath. Paths are handled decoded — as libxml2 does
+// after unescaping on parse — and re-escaped on output, so an encoded delimiter
+// like %2F acts as "/" while a space round-trips to %20.
 func joinURIReference(base, ref string) string {
 	// libxml2 appends "/" when the base's second-to-last character is '.', i.e.
 	// the base ends with ".." (or "x."), forcing the join to traverse upward.
@@ -40,6 +41,12 @@ func joinURIReference(base, ref string) string {
 	if err != nil {
 		return ref
 	}
+	// Go parses a scheme-only base like "urn:base" with its payload in Opaque
+	// rather than Path; libxml2 treats that payload as the path, so fold it back.
+	basePath := baseURL.Path
+	if baseURL.Opaque != "" {
+		basePath = baseURL.Opaque
+	}
 
 	// Work on the decoded path (like libxml2, which unescapes on parse): an
 	// encoded delimiter such as %2F acts as "/", and %2E as ".". The result is
@@ -58,7 +65,7 @@ func joinURIReference(base, ref string) string {
 		r.scheme = baseURL.Scheme
 		r.hasAuthority = uriHasAuthority(base)
 		r.authority = authorityOf(baseURL)
-		r.path = baseURL.Path
+		r.path = basePath
 		if refHasQuery {
 			r.query, r.hasQuery = refQuery, true
 		} else {
@@ -91,7 +98,7 @@ func joinURIReference(base, ref string) string {
 		r.scheme = baseURL.Scheme
 		r.hasAuthority = baseHasAuthority
 		r.authority = authorityOf(baseURL)
-		r.path = normalizeURIPath(mergePaths(baseURL.Path, refPath, baseHasAuthority))
+		r.path = normalizeURIPath(mergePaths(basePath, refPath, baseHasAuthority))
 		r.query, r.hasQuery = refQuery, refHasQuery
 		r.fragment, r.hasFragment = refFrag, refHasFrag
 	}

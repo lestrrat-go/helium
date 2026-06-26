@@ -54,6 +54,10 @@ func TestJoinURIReference(t *testing.T) {
 		{"encoded-slash-dotdot", "%2F..%2Fx/", "c", "/x/c"},
 		// Empty-but-present authority (file:///) is preserved.
 		{"file-empty-authority", "file:///a/b", "c", "file:///a/c"},
+		// Opaque base (urn:) payload is treated as the path.
+		{"opaque-base-empty-ref", "urn:base", "", "urn:base"},
+		{"opaque-base-query", "urn:base", "?q=1", "urn:base?q=1"},
+		{"opaque-base-relative", "urn:base", "x", "urn:x"},
 	}
 
 	for _, tt := range tests {
