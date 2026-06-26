@@ -312,6 +312,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 - Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeySourceFunc`
 - Key info builders: `X509DataKeyInfo(certs...)`, `RSAKeyValueKeyInfo()`
 - Transforms: `Enveloped()`, `C14NTransform(uri)`, `ExcC14NTransform(prefixes...)`
+- Reference transforms run as an ordered pipeline (node-set → octets): a c14n transform ends the pipeline, so a transform/2nd c14n ordered after it is rejected (`ErrUnsupportedTransform`); an omitted final transform defaults to **inclusive C14N 1.0** (not ExcC14N). `ec:InclusiveNamespaces` PrefixList on SignedInfo/CanonicalizationMethod is parsed and threaded into SignedInfo c14n; unknown CanonicalizationMethod parameters and any SignatureMethod child parameter (e.g. HMACOutputLength) are rejected fail-closed.
 - Algorithms: RSA-SHA1/SHA256, ECDSA-SHA256/SHA384, HMAC-SHA1/SHA256, Ed25519
 - Digests: SHA-1, SHA-256, SHA-384, SHA-512
 - **SHA-1 rejected by default** (rsa-sha1/hmac-sha1/sha1) on both sign and verify → `ErrWeakAlgorithm`; opt in with `Signer.AllowSHA1(true)` / `Verifier.AllowSHA1(true)` for legacy interop. SHA-256+ unaffected.

@@ -34,6 +34,7 @@ func isNilKeySource(ks KeySource) bool {
 type parsedSignature struct {
 	signedInfoElem *helium.Element
 	c14nMethod     string
+	c14nPrefixes   []string // ec:InclusiveNamespaces PrefixList on CanonicalizationMethod
 	signatureAlg   string
 	references     []parsedReference
 	signatureValue []byte
@@ -90,8 +91,9 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		return nil, err
 	}
 
-	// Canonicalize SignedInfo.
-	canonical, err := canonicalizeSubtree(parsed.c14nMethod, parsed.signedInfoElem, nil)
+	// Canonicalize SignedInfo, honoring any ec:InclusiveNamespaces PrefixList
+	// declared on its CanonicalizationMethod (relevant for Exclusive C14N).
+	canonical, err := canonicalizeSubtree(parsed.c14nMethod, parsed.signedInfoElem, parsed.c14nPrefixes)
 	if err != nil {
 		return nil, err
 	}
@@ -126,31 +128,20 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 		return nil, err
 	}
 
-	// Check for enveloped-signature transform.
-	hasEnveloped := false
-	for _, t := range ref.transforms {
-		if t.algorithm == TransformEnvelopedSignature {
-			hasEnveloped = true
-			break
-		}
+	// Interpret the transforms as an ordered pipeline. Fail closed: any
+	// transform whose URI we cannot apply, or one ordered after an
+	// octet-producing c14n transform, is rejected before digesting — otherwise a
+	// Reference could declare an unsupported or mis-ordered transform and still
+	// verify against the untransformed canonical bytes. When no c14n transform is
+	// declared the default node-set->octet conversion is inclusive Canonical
+	// XML 1.0.
+	steps := make([]transformStep, len(ref.transforms))
+	for i, t := range ref.transforms {
+		steps[i] = transformStep(t)
 	}
-
-	// Find the c14n method. Fail closed: any transform whose URI we cannot
-	// apply must be rejected before digesting, otherwise a Reference could
-	// declare an unsupported transform (XPath, Base64, custom URI) and still
-	// verify against the untransformed canonical bytes.
-	c14nMethod := ExcC14N10
-	var prefixes []string
-	for _, t := range ref.transforms {
-		switch t.algorithm {
-		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
-			c14nMethod = t.algorithm
-			prefixes = t.prefixes
-		case TransformEnvelopedSignature:
-			// Handled by canonicalizeEnveloped below; no-op here.
-		default:
-			return nil, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
-		}
+	c14nMethod, prefixes, hasEnveloped, err := resolveTransformPipeline(steps)
+	if err != nil {
+		return nil, err
 	}
 
 	// For enveloped signatures the Signature element and its descendants must
@@ -294,6 +285,11 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 				return fmt.Errorf("%w: CanonicalizationMethod missing Algorithm", ErrInvalidSignature)
 			}
 			parsed.c14nMethod = alg
+			prefixes, err := parseCanonicalizationParameters(e, alg)
+			if err != nil {
+				return err
+			}
+			parsed.c14nPrefixes = prefixes
 		case "SignatureMethod":
 			if sigMethodSeen {
 				return fmt.Errorf("%w: multiple SignatureMethod elements", ErrInvalidSignature)
@@ -304,6 +300,9 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 				return fmt.Errorf("%w: SignatureMethod missing Algorithm", ErrInvalidSignature)
 			}
 			parsed.signatureAlg = alg
+			if err := rejectSignatureMethodParameters(e); err != nil {
+				return err
+			}
 		case "Reference":
 			ref, err := parseReferenceElement(e)
 			if err != nil {
@@ -384,31 +383,20 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 					continue
 				}
 				alg, _ := te.GetAttribute("Algorithm")
-				t := parsedTransform{algorithm: alg}
-				// Parse InclusiveNamespaces for Exclusive C14N.
-				for inc := te.FirstChild(); inc != nil; inc = inc.NextSibling() {
-					incElem, ok := helium.AsNode[*helium.Element](inc)
-					if !ok {
-						continue
-					}
-					// InclusiveNamespaces is an Exclusive XML Canonicalization
-					// element and lives ONLY in the exc-c14n namespace
-					// (http://www.w3.org/2001/10/xml-exc-c14n#), not the core
-					// XML-Signature namespace. Matching on local name alone would
-					// let a foreign-namespace look-alike inject a PrefixList and
-					// alter which namespaces are canonicalized, so require the
-					// exact exc-c14n namespace.
-					if !isExcC14NNS(incElem) {
-						continue
-					}
-					if domutil.LocalName(incElem) == "InclusiveNamespaces" {
-						pl, _ := incElem.GetAttribute("PrefixList")
-						if pl != "" {
-							t.prefixes = strings.Fields(pl)
-						}
-					}
+				// Validate the Transform's child elements by algorithm. For a
+				// supported transform those children are algorithm parameters;
+				// accepting an unknown one while digesting as if it were absent
+				// would be fail-open. The only parameter helium honors is
+				// ec:InclusiveNamespaces under the exclusive c14n transforms;
+				// every other child — and ec:InclusiveNamespaces under a
+				// non-exclusive algorithm (enveloped-signature/C14N10/C14N11/...)
+				// — is rejected fail-closed, mirroring the SignedInfo
+				// CanonicalizationMethod handling.
+				prefixes, err := parseInclusiveNamespaceParameters(te, alg, "Transform")
+				if err != nil {
+					return ref, err
 				}
-				ref.transforms = append(ref.transforms, t)
+				ref.transforms = append(ref.transforms, parsedTransform{algorithm: alg, prefixes: prefixes})
 			}
 		case "DigestMethod":
 			if digestMethodSeen {
@@ -446,4 +434,101 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 		return ref, fmt.Errorf("%w: missing DigestValue", ErrInvalidSignature)
 	}
 	return ref, nil
+}
+
+// excInclusiveNamespacePrefixes reports whether elem is an ec:InclusiveNamespaces
+// element. InclusiveNamespaces is an Exclusive XML Canonicalization element and
+// lives ONLY in the exc-c14n namespace (http://www.w3.org/2001/10/xml-exc-c14n#),
+// not the core XML-Signature namespace. Matching on local name alone would let a
+// foreign-namespace look-alike inject a PrefixList and alter which namespaces are
+// canonicalized, so the exact exc-c14n namespace is required. When it matches, the
+// PrefixList attribute is split into its individual prefixes.
+func excInclusiveNamespacePrefixes(elem *helium.Element) ([]string, bool) {
+	if !isExcC14NNS(elem) || domutil.LocalName(elem) != "InclusiveNamespaces" {
+		return nil, false
+	}
+	pl, _ := elem.GetAttribute("PrefixList")
+	if pl == "" {
+		return nil, true
+	}
+	return strings.Fields(pl), true
+}
+
+// parseCanonicalizationParameters extracts the ec:InclusiveNamespaces PrefixList
+// from a CanonicalizationMethod element and fails closed on any other child
+// element, which would be a canonicalization parameter we cannot honor. Silently
+// ignoring an unknown parameter would canonicalize SignedInfo differently from
+// what the signer intended, so it is rejected.
+func parseCanonicalizationParameters(elem *helium.Element, alg string) ([]string, error) {
+	return parseInclusiveNamespaceParameters(elem, alg, "CanonicalizationMethod")
+}
+
+// parseInclusiveNamespaceParameters validates the child elements of a
+// CanonicalizationMethod (SignedInfo) or per-Reference Transform element and
+// returns the ec:InclusiveNamespaces PrefixList when one is present. It is the
+// single fail-closed gate for both call sites so they behave identically.
+//
+// The only honored child is ec:InclusiveNamespaces, and only under the
+// exclusive c14n algorithms (ExcC14N10 / ExcC14N10Comments); canonicalize()
+// honors the PrefixList for exclusive modes alone. Under any other algorithm
+// (enveloped-signature/C14N10/C14N11/...) the prefixes are silently dropped
+// during canonicalization, so an ec:InclusiveNamespaces there — even with an
+// empty PrefixList — is rejected. Any other child element is an unknown
+// parameter we cannot honor; accepting it while digesting as if absent would be
+// fail-open, so it too is rejected. A second ec:InclusiveNamespaces is rejected
+// rather than silently letting the last one win. The context label
+// ("CanonicalizationMethod" / "Transform") only shapes the error message.
+func parseInclusiveNamespaceParameters(elem *helium.Element, alg, context string) ([]string, error) {
+	var prefixes []string
+	var seen bool
+	for c := elem.FirstChild(); c != nil; c = c.NextSibling() {
+		ce, ok := helium.AsNode[*helium.Element](c)
+		if !ok {
+			continue
+		}
+		px, matched := excInclusiveNamespacePrefixes(ce)
+		if !matched {
+			return nil, fmt.Errorf("%w: unsupported %s parameter %s", ErrUnsupportedTransform, context, domutil.LocalName(ce))
+		}
+		if err := gateInclusiveNamespaces(alg); err != nil {
+			return nil, err
+		}
+		if seen {
+			return nil, fmt.Errorf("%w: multiple ec:InclusiveNamespaces under %s", ErrUnsupportedTransform, context)
+		}
+		seen = true
+		prefixes = px
+	}
+	return prefixes, nil
+}
+
+// gateInclusiveNamespaces rejects an ec:InclusiveNamespaces PrefixList declared
+// under a non-exclusive c14n algorithm. The PrefixList is only honored for the
+// exclusive c14n modes (ExcC14N10 / ExcC14N10Comments); on any other algorithm
+// (C14N10/C14N11/enveloped-signature/...) the prefixes are silently dropped
+// during canonicalization, so accepting one would canonicalize differently from
+// what the signer declared. Shared by the SignedInfo CanonicalizationMethod and
+// per-Reference Transform gating so both fail closed identically.
+func gateInclusiveNamespaces(alg string) error {
+	if alg != ExcC14N10 && alg != ExcC14N10Comments {
+		return fmt.Errorf("%w: ec:InclusiveNamespaces is only valid for exclusive c14n, not %s", ErrUnsupportedTransform, alg)
+	}
+	return nil
+}
+
+// rejectSignatureMethodParameters fails closed on any child element of
+// SignatureMethod. The only standard child is ds:HMACOutputLength, which requests
+// a truncated HMAC; helium always computes and compares the full-length MAC, so a
+// truncation request is unsupported. Silently ignoring such a parameter would
+// verify against bytes that differ from what the signer intended, so any
+// SignatureMethod parameter is rejected.
+func rejectSignatureMethodParameters(elem *helium.Element) error {
+	for c := elem.FirstChild(); c != nil; c = c.NextSibling() {
+		ce, ok := helium.AsNode[*helium.Element](c)
+		if !ok {
+			continue
+		}
+		return fmt.Errorf("%w: unsupported SignatureMethod parameter %s", ErrUnsupportedAlgorithm, domutil.LocalName(ce))
+	}
+	return nil
 }
