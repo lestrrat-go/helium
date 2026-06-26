@@ -24,6 +24,11 @@ func TestCharsetDetect_WHATWGMetaForms(t *testing.T) {
 		{name: "space-around-equals", meta: `<meta charset = utf-8>`},
 		{name: "single-quoted-space", meta: `<meta charset = 'utf-8'>`},
 		{name: "double-quoted-baseline", meta: `<meta charset="utf-8">`},
+		// The charset value sits inside the still-quoted content attribute, so
+		// the byte after "charset=" is 'u', not a quote. The unquoted-value scan
+		// must still stop at the enclosing quote, yielding "utf-8" rather than
+		// "utf-8\"". (Regression: PR #812 / HTML-004.)
+		{name: "http-equiv-content-type", meta: `<meta http-equiv="Content-Type" content="text/html; charset=utf-8">`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

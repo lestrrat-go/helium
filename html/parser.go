@@ -421,10 +421,15 @@ func extractDeclaredCharset(data []byte) string {
 			return string(lower[pos : pos+end])
 		}
 		// Unquoted value: runs until ASCII whitespace, ';', tag close '>',
-		// or end. (The crude prescan operates on raw markup, so the tag
-		// terminator must bound a bare value like in <meta charset=utf-8>.)
+		// an enclosing quote, or end. (The crude prescan operates on raw
+		// markup, so the tag terminator must bound a bare value like in
+		// <meta charset=utf-8>. The quote terminators handle a value that
+		// sits inside a still-quoted content attribute, as in
+		// <meta http-equiv="Content-Type" content="text/html; charset=utf-8">,
+		// where the char after "charset=" is not a quote but the value is
+		// nonetheless bounded by the enclosing attribute quote.)
 		start := pos
-		for pos < len(lower) && !isASCIIWhitespace(lower[pos]) && lower[pos] != ';' && lower[pos] != '>' {
+		for pos < len(lower) && !isASCIIWhitespace(lower[pos]) && lower[pos] != ';' && lower[pos] != '>' && lower[pos] != '"' && lower[pos] != '\'' {
 			pos++
 		}
 		return string(lower[start:pos])
