@@ -360,29 +360,88 @@ func replaceInvalidUTF8(data []byte, info *invalidByteInfo) ([]byte, bool) {
 	return buf.Bytes(), found
 }
 
-// declaredCharsetIsUTF8 scans the raw (possibly invalid) input bytes for a
-// <meta charset="utf-8"> declaration, returning true if found.
-func declaredCharsetIsUTF8(data []byte) bool {
-	// Case-insensitive search for charset="utf-8" or charset=utf-8
+// isASCIIWhitespace reports whether b is one of the WHATWG ASCII whitespace
+// characters (tab, LF, FF, CR, space).
+func isASCIIWhitespace(b byte) bool {
+	switch b {
+	case '\t', '\n', '\f', '\r', ' ':
+		return true
+	default:
+		return false
+	}
+}
+
+// extractDeclaredCharset scans the raw (possibly invalid) input bytes for a
+// charset declaration (as found in <meta charset=...> or in a <meta
+// http-equiv="content-type" content="...; charset=..."> attribute) and returns
+// the declared encoding name, lowercased, or "" if none is found.
+//
+// The value syntax mirrors the WHATWG "extracting a character encoding from a
+// meta element" algorithm: ASCII whitespace may surround the "=", and the value
+// may be wrapped in single or double quotes, or left unquoted (terminated by
+// whitespace or ";").
+func extractDeclaredCharset(data []byte) string {
 	lower := bytes.ToLower(data)
-	// Limit scan to the first 1024 bytes (charset should appear early)
+	// Limit scan to the first 1024 bytes (charset should appear early).
 	if len(lower) > 1024 {
 		lower = lower[:1024]
 	}
-	return bytes.Contains(lower, []byte("charset=\"utf-8\"")) ||
-		bytes.Contains(lower, []byte("charset=utf-8"))
+	const key = "charset"
+	from := 0
+	for {
+		idx := bytes.Index(lower[from:], []byte(key))
+		if idx < 0 {
+			return ""
+		}
+		pos := from + idx + len(key)
+		from = pos
+		// Skip ASCII whitespace before '='.
+		for pos < len(lower) && isASCIIWhitespace(lower[pos]) {
+			pos++
+		}
+		// Require '='.
+		if pos >= len(lower) || lower[pos] != '=' {
+			continue
+		}
+		pos++
+		// Skip ASCII whitespace after '='.
+		for pos < len(lower) && isASCIIWhitespace(lower[pos]) {
+			pos++
+		}
+		if pos >= len(lower) {
+			return ""
+		}
+		// Quoted value: read up to the matching quote.
+		if q := lower[pos]; q == '"' || q == '\'' {
+			pos++
+			end := bytes.IndexByte(lower[pos:], q)
+			if end < 0 {
+				return ""
+			}
+			return string(lower[pos : pos+end])
+		}
+		// Unquoted value: runs until ASCII whitespace, ';', tag close '>',
+		// or end. (The crude prescan operates on raw markup, so the tag
+		// terminator must bound a bare value like in <meta charset=utf-8>.)
+		start := pos
+		for pos < len(lower) && !isASCIIWhitespace(lower[pos]) && lower[pos] != ';' && lower[pos] != '>' {
+			pos++
+		}
+		return string(lower[start:pos])
+	}
+}
+
+// declaredCharsetIsUTF8 scans the raw (possibly invalid) input bytes for a
+// <meta charset="utf-8"> declaration, returning true if found.
+func declaredCharsetIsUTF8(data []byte) bool {
+	return extractDeclaredCharset(data) == "utf-8"
 }
 
 // declaredCharsetIsLatin1 scans the raw input bytes for an explicit
 // charset=iso-8859-1 declaration. This distinguishes documents that
 // declare ISO-8859-1 from those that are just auto-detected as non-UTF-8.
 func declaredCharsetIsLatin1(data []byte) bool {
-	lower := bytes.ToLower(data)
-	if len(lower) > 1024 {
-		lower = lower[:1024]
-	}
-	return bytes.Contains(lower, []byte("charset=iso-8859-1")) ||
-		bytes.Contains(lower, []byte("charset=\"iso-8859-1\""))
+	return extractDeclaredCharset(data) == "iso-8859-1"
 }
 
 // hasPrefixFold checks if the current input starts with the given prefix
