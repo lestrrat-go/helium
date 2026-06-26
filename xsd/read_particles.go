@@ -201,6 +201,22 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 				Term:      sub,
 			})
 		case isXSDElement(ce, elemAll):
+			// cos-all-limited / Schema Component Constraint: All Group Limited
+			// (XSD Part 1 §3.8.6): an 'all' model group may only constitute the
+			// whole content model of a complex type — it must NOT appear nested
+			// inside an xs:sequence or xs:choice. libxml2 rejects this as invalid
+			// content of the enclosing compositor.
+			if compositor == CompositorSequence || compositor == CompositorChoice {
+				if c.filename != "" {
+					parent := elemSequence
+					if compositor == CompositorChoice {
+						parent = elemChoice
+					}
+					c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), parent,
+						"The content is not valid. Expected is (annotation?, (element | group | choice | sequence | any)*)."))
+				}
+				continue
+			}
 			sub, err := c.parseModelGroup(ctx, ce, CompositorAll)
 			if err != nil {
 				return nil, err
