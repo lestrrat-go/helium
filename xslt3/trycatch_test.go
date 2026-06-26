@@ -60,3 +60,42 @@ func TestTryDoesNotLeakVariables(t *testing.T) {
 		})
 	}
 }
+
+// A tunnel parameter set by an xsl:call-template whose with-param evaluation
+// later fails must not leak into templates invoked from the surrounding
+// xsl:catch. The tunnel param is evaluated (mutating the active tunnel map)
+// before a sibling with-param raises a dynamic error; the error is caught, and
+// a second template called from xsl:catch must see the tunnel param as absent.
+func TestCallTemplateTunnelParamDoesNotLeakAcrossCaughtError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:try>
+        <xsl:call-template name="consume">
+          <xsl:with-param name="tp" select="'LEAKED'" tunnel="yes"/>
+          <xsl:with-param name="bad" select="xs:integer('not-a-number')"/>
+        </xsl:call-template>
+        <xsl:catch>
+          <xsl:call-template name="check"/>
+        </xsl:catch>
+      </xsl:try>
+    </out>
+  </xsl:template>
+
+  <xsl:template name="consume">
+    <xsl:param name="tp" tunnel="yes"/>
+    <xsl:param name="bad"/>
+  </xsl:template>
+
+  <xsl:template name="check">
+    <xsl:param name="tp" select="'NOLEAK'" tunnel="yes"/>
+    <xsl:value-of select="$tp"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	result, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, "NOLEAK")
+	require.NotContains(t, result, "LEAKED")
+}

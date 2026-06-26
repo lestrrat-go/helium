@@ -402,6 +402,11 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 	// because the with-param select expressions need the caller's context item.
 	paramOverrides := make(map[string]xpath3.Sequence)
 	savedTunnel := ec.tunnelParams
+	// Register the tunnel restore BEFORE evaluating params: a tunnel
+	// with-param mutates ec.tunnelParams, and a later param's evaluation
+	// may fail and return — without the defer already in place the
+	// mutation would leak (e.g. across a dynamic error caught by xsl:try).
+	defer func() { ec.tunnelParams = savedTunnel }()
 	hasTunnelOverrides := false
 	for _, wp := range inst.Params {
 		val, err := ec.evaluateWithParam(ctx, wp)
@@ -423,7 +428,6 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 			paramOverrides[wp.Name] = val
 		}
 	}
-	defer func() { ec.tunnelParams = savedTunnel }()
 
 	// xsl:context-item use="absent": make the context item absent within the
 	// called template's body. This means xsl:next-match will fail with
@@ -559,6 +563,11 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 	// Copy tunnel params to avoid mutating the caller's map.
 	var pv map[string]xpath3.Sequence
 	savedTunnel := ec.tunnelParams
+	// Register the tunnel restore BEFORE evaluating params: a tunnel
+	// with-param mutates ec.tunnelParams below, and a later param's
+	// evaluation may fail and return — without the defer already in place
+	// the mutation would leak (e.g. across a dynamic error caught by xsl:try).
+	defer func() { ec.tunnelParams = savedTunnel }()
 	if len(inst.Params) > 0 {
 		hasTunnel := false
 		for _, wp := range inst.Params {
@@ -587,7 +596,6 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 			}
 		}
 	}
-	defer func() { ec.tunnelParams = savedTunnel }()
 
 	// Handle atomic context items (e.g., xsl:next-match when processing integers)
 	if ec.contextItem != nil {
@@ -671,6 +679,11 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 	// Copy tunnel params to avoid mutating the caller's map.
 	var pv map[string]xpath3.Sequence
 	savedTunnel := ec.tunnelParams
+	// Register the tunnel restore BEFORE evaluating params: a tunnel
+	// with-param mutates ec.tunnelParams below, and a later param's
+	// evaluation may fail and return — without the defer already in place
+	// the mutation would leak (e.g. across a dynamic error caught by xsl:try).
+	defer func() { ec.tunnelParams = savedTunnel }()
 	if len(inst.Params) > 0 {
 		hasTunnel := false
 		for _, wp := range inst.Params {
@@ -699,7 +712,6 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 			}
 		}
 	}
-	defer func() { ec.tunnelParams = savedTunnel }()
 
 	// xsl:apply-imports searches only within the current module's import
 	// tree. MinImportPrec marks the lowest precedence among the module's
