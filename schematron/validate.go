@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -240,14 +241,9 @@ func xpathResultToString(r *xpath1.Result) string {
 		if len(r.NodeSet) == 0 {
 			return ""
 		}
-		var sb strings.Builder
-		for i, n := range r.NodeSet {
-			if i > 0 {
-				sb.WriteByte(' ')
-			}
-			sb.WriteString(n.Name())
-		}
-		return sb.String()
+		// XPath 1.0: a node-set converts to the string-value of the node
+		// first in document order.
+		return ixpath.StringValue(r.NodeSet[0])
 	}
 	return ""
 }

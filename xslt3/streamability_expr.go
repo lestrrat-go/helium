@@ -325,7 +325,7 @@ func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
 			return false
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && (fc.Name == "reverse" || fc.Name == "innermost") {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && (local == "reverse" || local == "innermost") {
 				if slices.ContainsFunc(fc.Args, argHasStreamingCrawl) {
 					found = true
 					return false
@@ -353,10 +353,14 @@ func exprHasHigherOrderWithConsumingArg(expr *xpath3.Expression) bool {
 			return false
 		}
 		fc, ok := e.(xpath3.FunctionCall)
-		if !ok || !isFnNamespacePrefix(fc.Prefix) || len(fc.Args) < 2 {
+		if !ok || len(fc.Args) < 2 {
 			return true
 		}
-		switch fc.Name {
+		local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix)
+		if !isFn {
+			return true
+		}
+		switch local {
 		case lexicon.StreamFilter, "fold-right":
 			if argHasStreamingDownwardUngrounded(fc.Args[0]) {
 				found = true
@@ -514,7 +518,7 @@ func exprCallsFunction(expr xpath3.Expr, name string) bool {
 			return false
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && fc.Name == name {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && local == name {
 				found = true
 				return false
 			}
@@ -591,7 +595,7 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 	// Check if this is a grounding function call
 	newGrounding := insideGrounding
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
-		if isFnNamespacePrefix(fc.Prefix) && isGroundingFuncName(fc.Name) {
+		if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && isGroundingFuncName(local) {
 			newGrounding = true
 		}
 	}
@@ -692,8 +696,8 @@ func isGroundingExprSS(ss *Stylesheet, expr xpath3.Expr) bool {
 		return true
 	}
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
-		if isFnNamespacePrefix(fc.Prefix) {
-			return isGroundingFuncName(fc.Name)
+		if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn {
+			return isGroundingFuncName(local)
 		}
 		// Check user-defined absorbing/unclassified functions
 		cat := lookupFuncStreamability(ss, fc.Name, len(fc.Args))
@@ -707,8 +711,8 @@ func isGroundingExprSS(ss *Stylesheet, expr xpath3.Expr) bool {
 	// treating arbitrary filtered expressions as grounded.
 	if fe, ok := expr.(xpath3.FilterExpr); ok {
 		if fc, ok2 := derefXPathExpr(fe.Expr).(xpath3.FunctionCall); ok2 {
-			if isFnNamespacePrefix(fc.Prefix) {
-				return isGroundingFuncName(fc.Name)
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn {
+				return isGroundingFuncName(local)
 			}
 		}
 	}
@@ -740,8 +744,8 @@ func exprProducesAtomicResult(expr xpath3.Expr) bool {
 func isAtomicResultExpr(expr xpath3.Expr) bool {
 	expr = derefXPathExpr(expr)
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
-		if isFnNamespacePrefix(fc.Prefix) {
-			switch fc.Name {
+		if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn {
+			switch local {
 			case "tokenize", "string", "data", "number", "boolean",
 				lexicon.FnName, "local-name", "namespace-uri", "string-length",
 				"normalize-space", "count", "sum", "avg", "min", "max",
@@ -773,7 +777,7 @@ func exprUsesLastOutsideGrounding(expr *xpath3.Expression) bool {
 			return true
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && fc.Name == "last" {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && local == "last" {
 				found = true
 				return false
 			}
@@ -798,7 +802,7 @@ func exprUsesFunctionOutsideGrounding(expr *xpath3.Expression, name string) bool
 			return true
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && fc.Name == name {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && local == name {
 				found = true
 				return false
 			}
@@ -997,19 +1001,20 @@ func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr, step *xpath3.S
 				walkPred(lp, underNonContext || filterIsNonContext)
 			}
 		case xpath3.FunctionCall:
-			if isFnNamespacePrefix(v.Prefix) && v.Name == "last" {
+			local, isFn := lexicon.StreamFnLocalName(v.Name, v.Prefix)
+			if isFn && local == "last" {
 				nonMotionless = true
 				return
 			}
 			// current-group() and current-grouping-key() always return
 			// materialized (grounded) data.  Navigation into them (e.g.
 			// current-group()[1]/Date) is motionless w.r.t. the stream.
-			if isFnNamespacePrefix(v.Prefix) && (v.Name == fnNameCurrentGroup || v.Name == fnNameCurrentGroupingKey) {
+			if isFn && (local == fnNameCurrentGroup || local == fnNameCurrentGroupingKey) {
 				return // skip children — result is grounded
 			}
 			// Property-access functions are motionless.
-			if isFnNamespacePrefix(v.Prefix) {
-				switch v.Name {
+			if isFn {
+				switch local {
 				case lexicon.FnName, "local-name", "namespace-uri", "node-name",
 					"self", "generate-id", "base-uri", "document-uri",
 					"nilled", "has-children", "string-length":

@@ -7,6 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// payloadFragment is the same-document fragment URI used by the internal test
+// suite to reference the element carrying Id="payload".
+const payloadFragment = "#payload"
+
 // mustParse parses xml into a document, failing the test on error. Shared by the
 // internal test suite.
 func mustParse(t *testing.T, xml string) *helium.Document {

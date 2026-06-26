@@ -40,6 +40,20 @@ func buildExcC14NReference(t *testing.T, doc *helium.Document, incPx, incNS, pre
 	require.NoError(t, inc.SetLiteralAttribute("PrefixList", prefixList))
 	require.NoError(t, transform.AddChild(inc))
 
+	// DigestMethod/DigestValue are mandatory under Reference's content model, so
+	// include them: parseReferenceElement now rejects a Reference missing either,
+	// and this helper exercises the transform/InclusiveNamespaces parsing of an
+	// otherwise complete Reference.
+	digestMethod := doc.CreateElement("DigestMethod")
+	require.NoError(t, digestMethod.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, digestMethod.SetLiteralAttribute("Algorithm", DigestSHA256))
+	require.NoError(t, ref.AddChild(digestMethod))
+
+	digestValue := doc.CreateElement("DigestValue")
+	require.NoError(t, digestValue.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, digestValue.AddChild(doc.CreateText([]byte("AA=="))))
+	require.NoError(t, ref.AddChild(digestValue))
+
 	return ref
 }
 
@@ -116,23 +130,23 @@ func TestExcC14NTransformPrefixes(t *testing.T) {
 // TestInclusiveNamespaces guards against namespace confusion in the Exclusive
 // C14N InclusiveNamespaces element.
 func TestInclusiveNamespaces(t *testing.T) {
-	// foreign namespace ignored guards against namespace confusion in the
+	// foreign namespace rejected guards against namespace confusion in the
 	// Exclusive C14N InclusiveNamespaces element. That element lives only in the
 	// exc-c14n namespace; matching on local name alone would let a
 	// foreign-namespace <evil:InclusiveNamespaces> inject a PrefixList and alter
-	// which namespaces are canonicalized. A foreign-namespace look-alike must
-	// therefore contribute no prefixes.
-	t.Run("foreign namespace ignored", func(t *testing.T) {
+	// which namespaces are canonicalized. A foreign-namespace look-alike is not a
+	// recognized Transform parameter, so it must be rejected fail-closed rather
+	// than silently ignored — digesting as if an unknown child were absent is
+	// fail-open.
+	t.Run("foreign namespace rejected", func(t *testing.T) {
 		doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		ref := buildExcC14NReference(t, doc, "evil", "urn:example:evil", "a b c")
 
-		parsed, err := parseReferenceElement(ref)
-		require.NoError(t, err)
-		require.Len(t, parsed.transforms, 1)
-		require.Empty(t, parsed.transforms[0].prefixes,
-			"a foreign-namespace InclusiveNamespaces must contribute no prefixes")
+		_, err = parseReferenceElement(ref)
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Contains(t, err.Error(), "Transform parameter")
 	})
 
 	// exc-c14n parsed is the positive control: an InclusiveNamespaces in the

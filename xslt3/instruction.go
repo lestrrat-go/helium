@@ -368,13 +368,15 @@ type resultDocumentInst struct {
 	HTMLVersion             *avt
 	IncludeContentType      *avt
 	AllowDuplicateNames     *avt
+	UndeclarePrefixes       *avt
 	EscapeURIAttributes     *avt
-	JSONNodeOutputMethodAVT *avt       // json-node-output-method avt
-	NormalizationForm       *avt       // normalization-form avt
-	SuppressIndentation     []string   // suppress-indentation element names
-	ParameterDocAVT         *avt       // parameter-document avt
-	ParameterDocOutputDef   *OutputDef // resolved output def from parameter-document (compile-time)
-	BuildTree               *bool      // build-tree: nil=default(true), true/false
+	JSONNodeOutputMethodAVT *avt             // json-node-output-method avt
+	NormalizationForm       *avt             // normalization-form avt
+	SuppressIndentation     []string         // suppress-indentation element names
+	ParameterDocAVT         *avt             // parameter-document avt
+	ParameterDocOutputDef   *OutputDef       // resolved output def from parameter-document (compile-time)
+	ParameterDocPresence    paramDocPresence // plain-boolean presence flags for the compile-time parameter-document delta
+	BuildTree               *avt             // build-tree avt: nil=default(true); evaluated as xs:boolean
 }
 
 func (*resultDocumentInst) instructionTag() {}

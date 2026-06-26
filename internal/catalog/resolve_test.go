@@ -370,6 +370,46 @@ func TestDelegateLoadCountBounded(t *testing.T) {
 	})
 }
 
+// A catalog with more than MaxNextCatalogs UNIQUE nextCatalog entries must load
+// at most MaxNextCatalogs of them during a single resolution. The sibling
+// fan-out is bounded by a total-load cap, not only by recursion depth (CAT-001).
+func TestNextCatalogLoadCountBounded(t *testing.T) {
+	t.Parallel()
+
+	mkEntries := func() []catalog.Entry {
+		n := catalog.MaxNextCatalogs + 10
+		entries := make([]catalog.Entry, 0, n)
+		for i := range n {
+			// Distinct URL per entry so the visited-set dedup never applies.
+			entries = append(entries, catalog.Entry{
+				Type: catalog.EntryNextCatalog,
+				URL:  "next-" + strconv.Itoa(i) + ".xml",
+			})
+		}
+		return entries
+	}
+
+	t.Run("Resolve", func(t *testing.T) {
+		t.Parallel()
+		loader := &totalLoader{}
+		root := &catalog.Catalog{Entries: mkEntries(), Loader: loader}
+		got := root.Resolve(t.Context(), "", "http://example.com/notfound.dtd")
+		require.Equal(t, "", got)
+		require.LessOrEqual(t, int(loader.calls.Load()), catalog.MaxNextCatalogs,
+			"loaded more nextCatalog targets than MaxNextCatalogs")
+	})
+
+	t.Run("ResolveURI", func(t *testing.T) {
+		t.Parallel()
+		loader := &totalLoader{}
+		root := &catalog.Catalog{Entries: mkEntries(), Loader: loader}
+		got := root.ResolveURI(t.Context(), "http://example.com/notfound")
+		require.Equal(t, "", got)
+		require.LessOrEqual(t, int(loader.calls.Load()), catalog.MaxNextCatalogs,
+			"loaded more nextCatalog targets than MaxNextCatalogs")
+	})
+}
+
 // Per the OASIS XML Catalogs spec, matching delegate entries must be tried
 // most-specific-first: the entry with the longest matching start-string is
 // followed before shorter ones. Here the longer prefix points at a catalog

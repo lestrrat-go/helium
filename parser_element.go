@@ -43,7 +43,23 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	// Fast path: UTF8Cursor can scan directly into a []byte slice,
 	// avoiding the bytes.Buffer intermediate.
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
-		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0])
+		// Streaming SAX consumers that configured a char-buffer size get
+		// bounded memory: scan and deliver the run in fixed-size chunks rather
+		// than buffering the whole delimiter-free run (which would also grow the
+		// cursor's internal buffer) before chunking only the delivery.
+		// pctx.doc == nil ensures no DOM is being built. A SAX wrapper that
+		// delegates to a TreeBuilder has pctx.treeBuilder == nil (it is not the
+		// concrete *TreeBuilder) yet pctx.doc is populated (TreeBuilder.StartDocument
+		// set it). Such wrappers must use the single-shot classification path so a
+		// large whitespace run is classified over the whole run and delivered via
+		// IgnorableWhitespace (which StripBlanks drops) rather than being downgraded
+		// to Characters by the chunked path's blankBudget cap.
+		if pctx.charBufferSize > 0 && pctx.treeBuilder == nil && pctx.doc == nil &&
+			pctx.sax != nil && !pctx.disableSAX {
+			return pctx.parseCharDataChunkedSAX(ctx, u8)
+		}
+
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], 0)
 		if i <= 0 {
 			if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 				return pctx.error(ctx, ErrMisplacedCDATAEnd)
@@ -124,6 +140,176 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	return nil
 }
 
+// parseCharDataChunkedSAX scans and delivers a character-data run to a streaming
+// SAX consumer in chunks of at most pctx.charBufferSize bytes. Unlike the
+// single-shot fast path it never materializes the whole delimiter-free run, so a
+// huge run delivers with bounded memory. Context cancellation is checked between
+// chunks. Used only when charBufferSize > 0 and no DOM is being built (the DOM
+// path must classify blank-vs-text over the whole run to drive whitespace
+// stripping, so it stays single-shot).
+//
+// Whitespace classification must match the single-shot path, which classifies
+// the WHOLE run as one unit: <root>  text</root> is character data (the leading
+// blanks are not ignorable whitespace), while <root>   </root> is ignorable
+// whitespace. The chunked path therefore must NOT emit any IgnorableWhitespace
+// event until it has proven the whole run is blank — an early per-chunk
+// IgnorableWhitespace that a later non-blank byte contradicts cannot be taken
+// back. Two cases keep this bounded:
+//
+//   - When the context makes whitespace non-ignorable here (xml:space="preserve",
+//     mixed content, no open element), the run is character data regardless of
+//     its bytes, so it is streamed in fixed-size chunks directly. This covers the
+//     unbounded-text DoS in those contexts.
+//   - Otherwise the leading blank run is accumulated while every byte seen is
+//     whitespace. The first non-blank byte proves character data: the accumulated
+//     prefix plus the rest of the run is delivered as Characters and the tail is
+//     streamed in bounded chunks. A run that stays blank to its end is delivered
+//     as IgnorableWhitespace. The realistic huge run (non-blank text) commits to
+//     Characters on its first chunk and never accumulates; only a pathological
+//     multi-megabyte run of pure whitespace buffers (it cannot be classified
+//     without seeing its end), and that is whitespace, not the text DoS vector.
+func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcursor.UTF8Cursor) error {
+	s := pctx.sax
+	limit := pctx.charBufferSize
+
+	// blankBudget bounds the as-yet-unclassified all-whitespace prefix that may
+	// be buffered before it is downgraded to character data. A blank run cannot
+	// be proven ignorable whitespace until its end is in view, so without a cap
+	// a pathological multi-megabyte run of pure whitespace would accumulate
+	// whole in acc before the first callback. The budget is a small multiple of
+	// the configured chunk size with a fixed floor, so realistic indentation
+	// runs still classify as ignorable whitespace while memory stays bounded.
+	blankBudget := max(limit*8, minPendingBlankBytes)
+
+	// blank tracks whether the run could still be ignorable whitespace. When the
+	// context makes whitespace non-ignorable, it starts false so the first chunk
+	// commits to Characters immediately (no blank-prefix accumulation).
+	blank := pctx.whitespaceContextIgnorable()
+
+	acc := pctx.charBuf[:0]
+	first := true
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		prev := len(acc)
+		var i int
+		acc, i = u8.ScanCharDataSlice(acc, limit)
+		if i <= 0 {
+			if first {
+				if u8.Peek() == ']' && u8.PeekAt(1) == ']' && u8.PeekAt(2) == '>' {
+					return pctx.error(ctx, ErrMisplacedCDATAEnd)
+				}
+				return errors.New("invalid char data")
+			}
+			// The run ended; everything accumulated is blank (a non-blank byte
+			// would have returned via the Characters branch below). Deliver it
+			// as ignorable whitespace or character data per the final
+			// classification below.
+			break
+		}
+		first = false
+
+		if err := u8.AdvanceFast(i); err != nil {
+			return err
+		}
+		pctx.charBuf = acc
+
+		if blank && !allBlankBytes(acc[prev:]) {
+			blank = false
+		}
+
+		// Bounded-whitespace policy: an unclassified blank prefix that grows
+		// past the budget is downgraded to character data so memory stays
+		// bounded for a pathological pure-whitespace run.
+		//
+		// DOCUMENTED POLICY (intentional reclassification, not a silent quirk):
+		// an all-whitespace run can only be classified as IgnorableWhitespace
+		// once its end-of-run delimiter is in view, so a still-blank prefix must
+		// be buffered until then. To bound memory against a pathological multi-MiB
+		// run of pure whitespace, once the buffered blank prefix grows past
+		// blankBudget we stop treating it as ignorable and deliver it (and the
+		// rest of the run) as Characters rather than IgnorableWhitespace. Only
+		// abnormally large pure-blank runs are affected — realistic indentation /
+		// pretty-printing whitespace is far below blankBudget (see
+		// minPendingBlankBytes) and is still delivered as IgnorableWhitespace.
+		if blank && len(acc) > blankBudget {
+			blank = false
+		}
+
+		if !blank {
+			// Proven to be (or downgraded to) character data: flush the
+			// accumulated prefix (which includes this chunk) as Characters, then
+			// stream the rest of the run in bounded chunks.
+			if err := pctx.deliverCharacters(ctx, s.Characters, acc); err != nil {
+				return err
+			}
+			return pctx.streamCharDataChunks(ctx, u8, limit, s.Characters)
+		}
+	}
+
+	pctx.charBuf = acc
+	if len(acc) == 0 {
+		return nil
+	}
+
+	// The run was blank to its end. Match the single-shot areBlanksBytes
+	// classification: when no DOM document drives the decision, a blank run is
+	// ignorable whitespace only if the delimiter that ended it is '<' or CR. A
+	// run ending at '&' (an entity reference) or any other delimiter is
+	// character data — the delimiter check whitespaceContextIgnorable omits is
+	// re-applied here, now that the end of the run (and thus the delimiter) is
+	// in view.
+	handler := s.IgnorableWhitespace
+	if pctx.doc == nil {
+		if c := u8.Peek(); c != '<' && c != 0xD {
+			handler = s.Characters
+		}
+	}
+	return pctx.deliverCharacters(ctx, handler, acc)
+}
+
+// minPendingBlankBytes is the floor for the blank-prefix budget in
+// parseCharDataChunkedSAX: a blank character-data run up to this size is
+// buffered and classified as ignorable whitespace even when the configured
+// chunk size is tiny, so realistic indentation is never downgraded to
+// character data by the bounded-whitespace policy.
+const minPendingBlankBytes = 1 << 16 // 64 KiB
+
+// streamCharDataChunks scans the remainder of a character-data run and delivers
+// it via handler in chunks of at most limit bytes, with bounded memory. It is
+// called once the run's classification is known and at least one chunk has
+// already been consumed, so an empty scan means the run ended at a delimiter or
+// EOF (handled by the caller) rather than an error.
+func (pctx *parserCtx) streamCharDataChunks(ctx context.Context, u8 *strcursor.UTF8Cursor, limit int, handler func(context.Context, []byte) error) error {
+	for {
+		// A SAX handler may have requested a stop on the previous chunk's
+		// callback. Bail before scanning or advancing so no further chunk is
+		// emitted after the stop.
+		if pctx.stopped {
+			return errParserStopped
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], limit)
+		if i <= 0 {
+			return nil
+		}
+
+		if err := u8.AdvanceFast(i); err != nil {
+			return err
+		}
+		pctx.charBuf = data
+
+		if err := pctx.deliverCharacters(ctx, handler, data); err != nil {
+			return err
+		}
+	}
+}
+
 func (pctx *parserCtx) parseElement(ctx context.Context) error {
 	pctx.elemDepth++
 	defer func() { pctx.elemDepth-- }()
@@ -157,36 +343,41 @@ func (pctx *parserCtx) parseElement(ctx context.Context) error {
 	return nil
 }
 
-// checkPrefixedNamespaceDecl validates a prefixed namespace declaration
-// (xmlns:prefix="value"), enforcing the Namespaces in XML constraints that
-// apply regardless of whether the binding was written inline on the start tag
-// or supplied as a DTD <!ATTLIST> default. It returns skip=true when the
-// declaration is well-formed but should not be pushed (the reserved xml
-// prefix bound to its canonical URI).
-func (pctx *parserCtx) checkPrefixedNamespaceDecl(ctx context.Context, prefix, value string) (bool, error) {
+// validatePrefixedNamespaceDecl enforces the Namespaces in XML constraints
+// that apply to a prefixed namespace declaration (xmlns:prefix="uri"),
+// regardless of whether the declaration is literal on a start tag or supplied
+// as a DTD attribute default. The reserved xml prefix must map to the XML
+// namespace; the xmlns prefix may not be redeclared; the reserved XMLNS
+// namespace URI may not be reused; the URI may not be empty; and, in pedantic
+// mode, the URI must be absolute. It returns a non-nil namespace error when any
+// constraint is violated.
+func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix, uri string) error {
 	if prefix == lexicon.PrefixXML {
-		if value != lexicon.NamespaceXML {
-			return false, pctx.namespaceError(ctx, errors.New("xml namespace prefix mapped to wrong URI"))
+		if uri != lexicon.NamespaceXML {
+			return pctx.namespaceError(ctx, errors.New("xml namespace prefix mapped to wrong URI"))
 		}
-		return true, nil
+		return nil
+	}
+	if uri == lexicon.NamespaceXML {
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: only the xml prefix may be bound to the reserved XML namespace", prefix))
 	}
 	if prefix == lexicon.PrefixXMLNS {
-		return false, pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
+		return pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
 	}
-	if value == lexicon.NamespaceXMLNS {
-		return false, pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name if forbidden"))
+	if uri == lexicon.NamespaceXMLNS {
+		return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name if forbidden"))
 	}
-	if value == "" {
-		return false, pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", prefix))
+	if uri == "" {
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", prefix))
 	}
-	u, err := url.Parse(value)
+	u, err := url.Parse(uri)
 	if err != nil {
-		return false, pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: '%s' is not a validURI", prefix, value))
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: '%s' is not a validURI", prefix, uri))
 	}
 	if pctx.pedantic && u.Scheme == "" {
-		return false, pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", prefix, value))
+		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", prefix, uri))
 	}
-	return false, nil
+	return nil
 }
 
 func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
@@ -281,11 +472,20 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			// Namespace URI entity/character references are expanded inline
 			// during attribute value parsing (replaceEntities forced true in
 			// parseAttribute for namespace attrs), so no post-processing needed.
-			skip, err := pctx.checkPrefixedNamespaceDecl(ctx, attname, attvalue)
-			if err != nil {
+			// The same validity checks are applied to DTD-defaulted namespace
+			// declarations during attribute defaulting below.
+			if err := pctx.validatePrefixedNamespaceDecl(ctx, attname, attvalue); err != nil {
 				return err
 			}
-			if skip {
+			if attname == lexicon.PrefixXML {
+				// Record the explicitly-declared reserved prefix before the
+				// SkipNS shortcut so a conflicting DTD-supplied default for the
+				// same prefix (e.g. <!ATTLIST r xmlns:xml CDATA "urn:dtd">) is
+				// suppressed by the nsDeclared check during attribute
+				// defaulting. Without this, the explicit binding takes the early
+				// goto and is never recorded, letting the DTD default override
+				// the reserved xml namespace.
+				nsDeclared = append(nsDeclared, attname)
 				goto SkipNS
 			}
 
@@ -354,29 +554,45 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 
 		defaults, ok := pctx.lookupAttributeDefault(elemName)
 		if ok {
-			// First pass: apply default xmlns="..." (must come before prefixed)
+			// First pass: apply default xmlns="..." (must come before prefixed).
+			// Skip a DTD default whose prefix (the empty string for the default
+			// namespace) was already explicitly declared on this start tag: an
+			// explicit binding must win over a DTD-supplied default. Because
+			// nsStack.Lookup is LIFO, pushing the DTD default afterwards would
+			// otherwise shadow the explicit one.
 			for _, attr := range defaults {
 				if attr.LocalName() == lexicon.PrefixXMLNS && attr.Prefix() == "" {
+					if slices.Contains(nsDeclared, "") {
+						continue
+					}
 					pctx.pushNS("", attr.Value())
 					nbNs++
 				}
 			}
-			// Second pass: apply xmlns:prefix="..." and regular attributes
+			// Second pass: apply xmlns:prefix="..." and regular attributes.
+			// Likewise skip a prefixed DTD default already declared explicitly.
 			for _, attr := range defaults {
 				attname := attr.LocalName()
 				aprefix := attr.Prefix()
 				if attname == lexicon.PrefixXMLNS && aprefix == "" {
 					continue
 				} else if aprefix == lexicon.PrefixXMLNS {
-					// DTD-defaulted xmlns:prefix bindings must pass the
-					// same Namespaces in XML validity checks an inline
-					// declaration gets (reserved prefixes, reserved
-					// namespace name, empty/invalid URI).
-					skip, err := pctx.checkPrefixedNamespaceDecl(ctx, attname, attr.Value())
-					if err != nil {
+					if slices.Contains(nsDeclared, attname) {
+						continue
+					}
+					// DTD-defaulted namespace declarations are subject to the
+					// same namespace-validity checks as literal ones: a
+					// wrong-URI xmlns:xml, an xmlns:xmlns redefinition, reuse of
+					// the reserved XMLNS namespace, an empty/invalid URI, etc.
+					// are all rejected before the binding is pushed.
+					if err := pctx.validatePrefixedNamespaceDecl(ctx, attname, attr.Value()); err != nil {
 						return err
 					}
-					if skip {
+					// The reserved xml prefix is implicitly bound to the XML
+					// namespace; never let a DTD default push (and thus shadow)
+					// it, even a well-formed one. This mirrors the literal path,
+					// where xmlns:xml takes the SkipNS shortcut without pushing.
+					if attname == lexicon.PrefixXML {
 						continue
 					}
 					pctx.pushNS(attname, attr.Value())

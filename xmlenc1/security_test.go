@@ -263,7 +263,12 @@ func TestGCM(t *testing.T) {
 		xml, err := helium.WriteString(doc)
 		require.NoError(t, err)
 		require.Contains(t, xml, xmlenc1.AES256GCM, "default block algorithm must be AES-256-GCM")
-		require.NotContains(t, xml, "cbc", "default must never emit a CBC algorithm URI")
+		// The serialized XML embeds a random base64 CipherValue whose alphabet
+		// (A-Za-z0-9+/=) can by chance spell "cbc"; assert against the actual CBC
+		// algorithm URIs instead, which contain a hyphen base64 never produces.
+		require.NotContains(t, xml, "-cbc", "default must never emit a CBC algorithm URI")
+		require.NotContains(t, xml, xmlenc1.AES128CBC, "default must never emit a CBC algorithm URI")
+		require.NotContains(t, xml, xmlenc1.AES256CBC, "default must never emit a CBC algorithm URI")
 
 		// A default Decryptor (no CBC opt-in) must round-trip GCM ciphertext.
 		decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)

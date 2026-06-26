@@ -32,8 +32,14 @@ var ErrNilSchema = errors.New("xsd: nil schema")
 var ErrNilDocument = errors.New("xsd: nil document")
 
 type compileConfig struct {
-	label        string         // label for error messages (e.g. source filename)
-	baseDir      string         // base directory for resolving relative includes
+	label   string // label for error messages (e.g. source filename)
+	baseDir string // base directory for resolving relative includes
+	// rootKey is the resolved fs.FS key of the TOP-LEVEL schema document, when
+	// known (set by CompileFile). compileSchema seeds includeVisited with it so a
+	// circular include/redefine that points back at the root (main -> inc -> main)
+	// treats the root as already-loaded instead of re-parsing it and emitting
+	// spurious duplicate-component errors.
+	rootKey      string
 	fsys         fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
 	parser       *helium.Parser // parser governing schema-document parse policy
 	errorHandler helium.ErrorHandler
@@ -93,9 +99,16 @@ func (c Compiler) BaseDir(dir string) Compiler {
 }
 
 // FS sets the [fs.FS] used to load schemas referenced by xs:include,
-// xs:import, and xs:redefine during compilation. A nil value restores
-// the default, which opens any path supplied to the compiler via
-// [os.Open].
+// xs:import, and xs:redefine during compilation.
+//
+// The default (and what a nil value restores) is a deny-all FS that refuses
+// every open: a compiler from [NewCompiler] loads no nested schema from the
+// host filesystem, so an untrusted schema cannot disclose local files or
+// exhaust resources via a hostile schemaLocation. To opt into host access,
+// pass [helium.PermissiveFS] (any os.Open path) or — preferably — a confined
+// [fs.FS] rooted at a trusted directory. Each nested schema is read through a
+// fixed byte cap regardless of the FS, so an endless source (e.g. a
+// schemaLocation pointing at /dev/zero) cannot exhaust memory.
 //
 // Note: schema-location resolution is URI-aware. When [Compiler.BaseDir]
 // is a URI (e.g. "https://example.com/s/main.xsd" or "file:///s/main.xsd"),
@@ -111,7 +124,7 @@ func (c Compiler) BaseDir(dir string) Compiler {
 func (c Compiler) FS(fsys fs.FS) Compiler {
 	c = c.clone()
 	if fsys == nil {
-		fsys = iofs.PermissiveRoot{}
+		fsys = iofs.DenyAll{}
 	}
 	c.cfg.fsys = fsys
 	return c
@@ -157,7 +170,22 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, e
 	if cfg == nil {
 		cfg = &compileConfig{}
 	}
-	schema, err := compileSchema(ctx, doc, cfg.baseDir, cfg)
+	// Seed the circular-include guard with the root schema's own resolved key,
+	// mirroring CompileFile, so a cycle back to the top-level schema
+	// (main -> inc -> main) treats the root as already-loaded instead of
+	// re-parsing it and emitting spurious duplicate-component errors. Unlike
+	// CompileFile, the in-memory/resolver path has no filesystem path to derive
+	// the key from, so it is taken from the document's own URL (or, lacking that,
+	// a full-URI BaseDir). rootSchemaKey is the single shared helper both compile
+	// entry points use, so the seeded key cannot diverge from the key a nested
+	// back-reference to the root computes.
+	//
+	// A clone of cfg keeps the shared config (clone-on-write contract) intact.
+	cfgWithRoot := *cfg
+	if rootKey, ok := rootSchemaKey(doc.URL(), cfg.baseDir); ok {
+		cfgWithRoot.rootKey = rootKey
+	}
+	schema, err := compileSchema(ctx, doc, cfgWithRoot.baseDir, &cfgWithRoot)
 	c.closeHandler()
 	return schema, err
 }
@@ -184,7 +212,20 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 		return nil, fmt.Errorf("xsd: failed to parse %q: %w", path, err)
 	}
 	baseDir := filepath.Dir(path)
-	schema, compileErr := compileSchema(ctx, doc, baseDir, cfg)
+	// Seed the circular-include guard with the root schema's own resolved key, in
+	// the same canonical form a nested xs:include/xs:redefine would compute when it
+	// points back at the root (main -> inc -> main). Without this, includeVisited
+	// only contains documents loaded via loadInclude/loadRedefine, so a cycle back
+	// to the top-level schema re-parses it and emits spurious duplicates.
+	// rootSchemaKey is the single shared helper both compile entry points use, so
+	// the seeded key cannot diverge from the key a nested back-reference computes.
+	// A clone of cfg keeps the shared config (and clone-on-write Compiler
+	// contract) intact.
+	cfgWithRoot := *cfg
+	if rootKey, ok := rootSchemaKey(path, baseDir); ok {
+		cfgWithRoot.rootKey = rootKey
+	}
+	schema, compileErr := compileSchema(ctx, doc, baseDir, &cfgWithRoot)
 	c.closeHandler()
 	return schema, compileErr
 }

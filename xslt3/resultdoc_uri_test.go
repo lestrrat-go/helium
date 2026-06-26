@@ -340,3 +340,235 @@ func TestResultDocumentNestedDuplicateRelativeVsAbsoluteFileURI(t *testing.T) {
 	require.Error(t, err, "nested relative and absolute file: hrefs denoting the same file must collide")
 	require.Contains(t, err.Error(), "XTDE1490")
 }
+
+// XSLT3-ADV-001: every error-prone serialization AVT on xsl:result-document must
+// be evaluated in the preflight, even when it is the ONLY serialization attribute
+// present. Previously media-type, html-version, include-content-type,
+// allow-duplicate-names and output-version were absent from the preflight
+// `hasAny` gate (or never evaluated), so when one of them was the sole
+// serialization attribute the gate short-circuited and a failing AVT (e.g.
+// {1 idiv 0}) was silently swallowed: the body emitted output with err=nil.
+func TestResultDocumentSerializationAVTErrorPropagates(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		attr string
+	}{
+		{"media-type", `media-type="{1 idiv 0}"`},
+		{"output-version", `output-version="{1 idiv 0}"`},
+		{"html-version", `html-version="{1 idiv 0}"`},
+		{"include-content-type", `include-content-type="{1 idiv 0}"`},
+		{"allow-duplicate-names", `allow-duplicate-names="{1 idiv 0}"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document `+tc.attr+`><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+			_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+			require.Error(t, err, "a dynamic error in the %s AVT must not be swallowed", tc.name)
+			require.True(t, strings.Contains(err.Error(), "idiv") || strings.Contains(err.Error(), "FOAR0001") ||
+				strings.Contains(err.Error(), "division") || strings.Contains(err.Error(), "zero"),
+				"error should reflect the division-by-zero dynamic error, got: %v", err)
+		})
+	}
+}
+
+// XSLT3-ADV-001: a primary xsl:result-document whose serialization AVT raises a
+// dynamic error must fail in the preflight, BEFORE any primary output is emitted,
+// so an enclosing xsl:catch can write the sole primary result document with no
+// partial <a/> left behind. This must hold for the AVTs that were previously
+// missing from the preflight gate (media-type / output-version shown here).
+func TestResultDocumentSerializationAVTErrorObservableInTryCatch(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		attr string
+	}{
+		{"media-type", `media-type="{1 idiv 0}"`},
+		{"output-version", `output-version="{1 idiv 0}"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:try>
+      <xsl:result-document `+tc.attr+`><a/></xsl:result-document>
+      <xsl:catch>
+        <xsl:result-document><b/></xsl:result-document>
+      </xsl:catch>
+    </xsl:try>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+			out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+			require.NoError(t, err, "the caught primary result-document must succeed without a spurious conflict")
+			require.Contains(t, out, "<b/>", "the catch's primary result document must be emitted")
+			require.NotContains(t, out, "<a/>", "the failed primary result document must not leave partial output behind")
+		})
+	}
+}
+
+// XSLT3-ADV-001: output-version supplied as a valid AVT on a primary
+// xsl:result-document must reach the effective output definition. Pre-fix the
+// output-version AVT was never evaluated/applied, so the override was dropped.
+func TestResultDocumentPrimaryOutputVersionAVTApplied(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document method="xml" output-version="{concat('1','.','1')}"><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	_, err := inv.Do(t.Context())
+	require.NoError(t, err)
+	od := inv.ResolvedOutputDef()
+	require.NotNil(t, od, "resolved output def must be populated after Do")
+	require.Equal(t, "1.1", od.Version,
+		"the primary result-document's output-version AVT override must reach the effective output def")
+}
+
+// XSLT3-ADV-001: with a default method="json" output, a primary
+// xsl:result-document allow-duplicate-names="{...}" AVT that resolves to true
+// must reach the transform-level SERE0022 dup-key validation. Pre-fix the
+// final validation read ss.outputs[""] (default, no) and the override merge
+// never copied AllowDuplicateNames, so duplicate JSON keys were wrongly
+// rejected even though the result-document permitted them.
+func TestResultDocumentPrimaryJSONAllowDuplicateNamesAVT(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="json"/>
+  <xsl:template match="/">
+    <xsl:result-document allow-duplicate-names="{true()}">
+      <xsl:sequence select="map{1:'a','1':'b'}"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	_, err := inv.Do(t.Context())
+	require.NoError(t, err,
+		"duplicate JSON keys must be accepted when the primary result-document's allow-duplicate-names AVT resolves to true")
+	od := inv.ResolvedOutputDef()
+	require.NotNil(t, od)
+	require.True(t, od.AllowDuplicateNames,
+		"the primary result-document allow-duplicate-names override must reach the effective output def")
+}
+
+// A bare primary <xsl:result-document> (no serialization attributes of its own)
+// must still honor a stylesheet-level
+// <xsl:output method="json" allow-duplicate-names="yes"/>. Pre-fix the JSON
+// dup-key check hard-coded allowDupes=false whenever the result-document carried
+// no overrides (primaryOverrides==nil), so duplicate keys were wrongly rejected
+// even though the default output definition permitted them.
+func TestResultDocumentPrimaryJSONAllowDuplicateNamesDefaultOutput(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="json" allow-duplicate-names="yes"/>
+  <xsl:template match="/">
+    <xsl:result-document>
+      <xsl:sequence select="map{1:'a','1':'b'}"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	_, err := inv.Do(t.Context())
+	require.NoError(t, err,
+		"duplicate JSON keys must be accepted when the default xsl:output sets allow-duplicate-names=yes, even for a bare result-document")
+}
+
+// Secondary equivalent of TestResultDocumentPrimaryJSONAllowDuplicateNamesDefaultOutput:
+// a bare SECONDARY xsl:result-document (href, no format, no serialization
+// attributes of its own) must still honor a stylesheet-level
+// <xsl:output method="json" allow-duplicate-names="yes"/>. Pre-fix
+// buildEffectiveOutputDef left base empty when there was no named format and no
+// parameter-document, so the SERE0022 dup-key check saw allow-duplicate-names=false
+// and wrongly rejected duplicate keys the default output permitted.
+func TestResultDocumentSecondaryJSONAllowDuplicateNamesDefaultOutput(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+                xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:output method="json" allow-duplicate-names="yes"/>
+  <xsl:template match="/">
+    <xsl:result-document href="out.json">
+      <xsl:sequence select="map{1:'a','1':'b'}"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	collector := &resultDocCollect{docs: map[string]*helium.Document{}}
+	_, err := ss.Transform(parseTransformSource(t)).
+		ResultDocumentHandler(collector).
+		Do(t.Context())
+	require.NoError(t, err,
+		"duplicate JSON keys must be accepted when the default xsl:output sets allow-duplicate-names=yes, even for a bare secondary result-document")
+}
+
+// A primary xsl:result-document undeclare-prefixes="{...}" AVT that resolves to
+// true must reach the effective output definition. Pre-fix undeclare-prefixes was
+// validated as a boolean serialization attribute at compile time but never
+// compiled into an AVT, never evaluated, and never copied into the merged output
+// def, so a dynamic value was silently ignored.
+func TestResultDocumentPrimaryUndeclarePrefixesAVT(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document undeclare-prefixes="{true()}">
+      <out/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	_, err := inv.Do(t.Context())
+	require.NoError(t, err,
+		"a primary result-document undeclare-prefixes AVT resolving to true must not fail")
+	od := inv.ResolvedOutputDef()
+	require.NotNil(t, od)
+	require.True(t, od.UndeclarePrefixes,
+		"the primary result-document undeclare-prefixes override must reach the effective output def")
+}
+
+// An xsl:result-document with a CONSTANT (non-AVT) invalid allow-duplicate-names
+// value must be rejected at compile time with SEPM0016, like every other boolean
+// serialization attribute. (Regression: allow-duplicate-names was missing from
+// the compile-time boolean-validation list, so "bogus" compiled cleanly.)
+func TestResultDocumentAllowDuplicateNamesInvalidConstantCompileError(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document allow-duplicate-names="bogus"><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`))
+	require.NoError(t, err)
+
+	_, err = xslt3.CompileStylesheet(t.Context(), doc)
+	require.Error(t, err, "an invalid constant allow-duplicate-names must fail compilation")
+	require.Contains(t, err.Error(), "SEPM0016")
+}
+
+// An xsl:result-document whose allow-duplicate-names AVT resolves to an invalid
+// xs:boolean lexical form must raise a dynamic SEPM0016 error, NOT silently fall
+// back to an inherited value. (Regression: an invalid AVT result was dropped on
+// the floor, leaving an inherited allow-duplicate-names="yes" wrongly in force
+// and permitting duplicate JSON keys.)
+func TestResultDocumentAllowDuplicateNamesInvalidAVTDynamicError(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="json" allow-duplicate-names="yes"/>
+  <xsl:template match="/">
+    <xsl:result-document allow-duplicate-names="{'bogus'}">
+      <xsl:sequence select="map{1:'a','1':'b'}"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.Error(t, err,
+		"an invalid allow-duplicate-names AVT must raise a dynamic error, not fall back to the inherited value")
+	require.Contains(t, err.Error(), "SEPM0016")
+}

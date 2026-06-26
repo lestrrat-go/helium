@@ -19,6 +19,10 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 	ed.ID, _ = elem.GetAttribute("Id")
 	ed.Type, _ = elem.GetAttribute("Type")
 
+	// Track CipherData separately: a decoded CipherValue can be a non-nil
+	// empty slice, so a boolean is the reliable duplicate sentinel.
+	var seenCipherData bool
+
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
@@ -26,6 +30,9 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 		}
 		switch {
 		case isXMLEncElem(e, "EncryptionMethod"):
+			if ed.EncryptionMethod != nil {
+				return nil, fmt.Errorf("%w: duplicate EncryptionMethod", ErrMalformedEncrypted)
+			}
 			em, err := parseEncryptionMethod(e)
 			if err != nil {
 				return nil, err
@@ -36,6 +43,10 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 				return nil, err
 			}
 		case isXMLEncElem(e, "CipherData"):
+			if seenCipherData {
+				return nil, fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
+			}
+			seenCipherData = true
 			cv, err := parseCipherData(e)
 			if err != nil {
 				return nil, err
@@ -46,6 +57,12 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 
 	if ed.CipherValue == nil {
 		return nil, fmt.Errorf("%w: missing CipherData/CipherValue", ErrMalformedEncrypted)
+	}
+
+	// Populate the deprecated single EncryptedKey field with the first
+	// candidate so callers reading it keep working.
+	if len(ed.EncryptedKeys) > 0 {
+		ed.EncryptedKey = ed.EncryptedKeys[0]
 	}
 
 	return ed, nil
@@ -62,8 +79,7 @@ func parseKeyInfoForEncryption(elem *helium.Element, ed *EncryptedData) error {
 			if err != nil {
 				return err
 			}
-			ed.EncryptedKey = ek
-			return nil
+			ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
 		}
 	}
 	return nil
@@ -79,6 +95,8 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 	ek.ID, _ = elem.GetAttribute("Id")
 	ek.Recipient, _ = elem.GetAttribute("Recipient")
 
+	var seenCipherData bool
+
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
@@ -86,12 +104,19 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 		}
 		switch {
 		case isXMLEncElem(e, "EncryptionMethod"):
+			if ek.EncryptionMethod != nil {
+				return nil, fmt.Errorf("%w: duplicate EncryptionMethod", ErrMalformedEncrypted)
+			}
 			em, err := parseEncryptionMethod(e)
 			if err != nil {
 				return nil, err
 			}
 			ek.EncryptionMethod = em
 		case isXMLEncElem(e, "CipherData"):
+			if seenCipherData {
+				return nil, fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
+			}
+			seenCipherData = true
 			cv, err := parseCipherData(e)
 			if err != nil {
 				return nil, err
