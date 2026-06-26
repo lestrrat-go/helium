@@ -287,9 +287,13 @@ const deferredLatin1MaxBuffer = 1 << 20 // 1 MiB
 // Buffering is bounded: deferring until EOF would buffer an endless all-valid
 // stream whole, defeating streaming and the parser's content caps (an
 // unbounded-memory DoS). Once deferredLatin1MaxBuffer bytes have been seen with
-// no non-UTF-8 byte the reader commits to UTF-8 and streams the rest through
-// unchanged. Real (finite) documents settle their encoding far below this cap,
-// so the libxml2-quirk Latin-1-vs-UTF-8 decision is unchanged for them.
+// no non-UTF-8 byte the reader commits to UTF-8 and streams the rest through a
+// sanitizer that replaces any later invalid byte with U+FFFD. Real (finite)
+// documents settle their encoding far below this cap, so the libxml2-quirk
+// Latin-1-vs-UTF-8 decision is unchanged for them; only a pathological undeclared
+// stream that is valid UTF-8 past the cap and THEN turns non-UTF-8 diverges, and
+// it stays well-formed (U+FFFD) rather than reinterpreting the whole document as
+// Latin-1 as the in-memory []byte path would.
 type deferredLatin1Reader struct {
 	r io.Reader
 
@@ -302,6 +306,13 @@ type deferredLatin1Reader struct {
 	eof           bool   // true once the underlying reader has reported EOF
 	enc           string // encoding name reported after switching
 	encOnHit      string // encoding name to report once a non-UTF-8 byte appears
+
+	// sanitizer wraps the remainder of the stream once the reader has committed
+	// to UTF-8 after the bounded prefix. Post-commit bytes are NOT passed through
+	// raw: any byte that is no longer valid UTF-8 (e.g. a late Windows-1252 byte
+	// in an undeclared >1 MiB-valid stream) is replaced with U+FFFD, so invalid
+	// bytes never leak into SAX/DOM. nil until the commit happens.
+	sanitizer *utf8SanitizeReader
 
 	// readErr is a sticky non-EOF error returned by the underlying reader. An
 	// io.Reader may return n > 0 together with a non-EOF error in a single Read;
@@ -437,14 +448,30 @@ func (dr *deferredLatin1Reader) decide() bool {
 
 	// Bounded buffering: a cap's worth of bytes has been seen with no non-UTF-8
 	// byte. Commit to UTF-8 rather than buffer the (possibly endless) stream
-	// whole. Flush what we have and stream the remainder through verbatim. Any
-	// trailing incomplete rune rides along; its continuation bytes follow in the
-	// pass-through path and reassemble downstream.
+	// whole. Flush the complete-UTF-8 prefix verbatim (it is already known valid)
+	// and route the remainder through a sanitizer.
+	//
+	// This is a deliberate, documented divergence from the whole-document []byte
+	// path, and ONLY for the pathological case of an undeclared stream that stays
+	// valid UTF-8 for more than deferredLatin1MaxBuffer bytes and THEN contains a
+	// non-UTF-8 byte: the []byte path would reinterpret the whole document as
+	// Latin-1, but here we have already committed to UTF-8 to keep memory bounded.
+	// Rather than leak the raw invalid byte into SAX/DOM (and leave the document
+	// ill-formed), we sanitize it to U+FFFD exactly as the parser handles any
+	// decode error. A real document that declares or stays in a single encoding
+	// settles far below the cap and is unaffected.
+	//
+	// A trailing incomplete rune at the commit boundary must NOT be flushed
+	// verbatim: its continuation bytes arrive next from the underlying reader, and
+	// the sanitizer would otherwise see them orphaned and mangle them. Split it
+	// off and feed it back into the sanitizer so the rune reassembles intact.
 	if len(dr.pending) >= deferredLatin1MaxBuffer {
 		dr.committedUTF8 = true
-		dr.out = dr.pending
+		head, tail := splitTrailingPartialRune(dr.pending)
+		dr.out = head
 		dr.outPos = 0
 		dr.pending = nil
+		dr.sanitizer = newUTF8SanitizeReader(io.MultiReader(bytes.NewReader(tail), dr.r))
 		return true
 	}
 
@@ -452,19 +479,21 @@ func (dr *deferredLatin1Reader) decide() bool {
 	return false
 }
 
-// fillUTF8 reads raw bytes from the underlying reader straight into p (used once
-// the reader has committed to UTF-8 after the bounded prefix). No conversion is
-// applied; bytes pass through unchanged.
+// fillUTF8 reads from the post-commit sanitizer into p (used once the reader has
+// committed to UTF-8 after the bounded prefix). The sanitizer passes valid UTF-8
+// through unchanged but replaces any later invalid byte with U+FFFD, so a late
+// non-UTF-8 byte in an undeclared >1 MiB-valid stream never leaks raw into
+// SAX/DOM.
 func (dr *deferredLatin1Reader) fillUTF8(p []byte) (int, error) {
 	// A sticky non-EOF error recorded on an earlier read that also returned
-	// bytes has now drained: surface it without re-reading dr.r.
+	// bytes has now drained: surface it without re-reading the source.
 	if dr.readErr != nil {
 		e := dr.readErr
 		dr.readErr = nil
 		return 0, e
 	}
 
-	n, err := dr.r.Read(p)
+	n, err := dr.sanitizer.Read(p)
 	// io.Reader may deliver data together with a non-EOF error. Remember it as
 	// sticky and return the bytes first; surface the error once they drain.
 	if err != nil && err != io.EOF {
@@ -479,6 +508,34 @@ func (dr *deferredLatin1Reader) fillUTF8(p []byte) (int, error) {
 		return 0, e
 	}
 	return 0, err
+}
+
+// splitTrailingPartialRune splits b into a complete-UTF-8 prefix and a trailing
+// incomplete multibyte rune (0-3 bytes). b is assumed valid UTF-8 except for a
+// possible truncated rune at its very end (the only invalid tail the deferred
+// reader can hold at the commit boundary). The complete prefix is safe to emit
+// verbatim; the partial tail must ride along into the sanitizer so its
+// continuation bytes reassemble.
+func splitTrailingPartialRune(b []byte) ([]byte, []byte) {
+	for back := 1; back <= utf8.UTFMax-1 && back <= len(b); back++ {
+		i := len(b) - back
+		c := b[i]
+		if c < 0x80 {
+			// ASCII byte at the boundary: nothing partial trails it.
+			return b, nil
+		}
+		if utf8.RuneStart(c) {
+			// Lead byte: the tail is a complete rune unless DecodeRune reports a
+			// truncated one (size <= 1 with RuneError).
+			r, size := utf8.DecodeRune(b[i:])
+			if r == utf8.RuneError && size <= 1 {
+				return b[:i], b[i:]
+			}
+			return b, nil
+		}
+		// Continuation byte: keep walking back toward its lead byte.
+	}
+	return b, nil
 }
 
 // fillLatin1 converts raw bytes from the underlying reader as Latin-1/Windows

@@ -1,6 +1,7 @@
 package html
 
 import (
+	"bytes"
 	"io"
 	"testing"
 
@@ -70,4 +71,33 @@ func TestDeferredLatin1ReaderCommittedPassthroughDeliversAll(t *testing.T) {
 		require.EqualValues(t, 'a', b)
 	}
 	require.Empty(t, dr.detectedEncoding(), "an all-UTF-8 stream must not switch to Latin-1")
+}
+
+// TestDeferredLatin1ReaderSanitizesPostCommitInvalidByte covers the pathological
+// case the bounded-buffer commit creates: an undeclared stream that stays valid
+// UTF-8 for more than the cap and THEN contains a raw non-UTF-8 byte. After
+// committing to UTF-8 the reader must NOT leak the raw invalid byte into the
+// output; it sanitizes it to U+FFFD (matching the parser's decode-error handling)
+// so SAX/DOM never sees ill-formed UTF-8. It must also not hang or OOM.
+func TestDeferredLatin1ReaderSanitizesPostCommitInvalidByte(t *testing.T) {
+	t.Parallel()
+
+	const prefixSize = deferredLatin1MaxBuffer + 4096 // past the commit cap
+	var src bytes.Buffer
+	src.Grow(prefixSize + 8)
+	for range prefixSize {
+		src.WriteByte('a')
+	}
+	src.WriteByte(0x93) // lone Windows-1252 byte: invalid UTF-8
+	src.WriteByte('z')
+
+	dr := newDeferredLatin1Reader(bytes.NewReader(src.Bytes()), "Windows-1252")
+
+	out, err := io.ReadAll(dr)
+	require.NoError(t, err)
+	require.NotContains(t, out, byte(0x93), "raw invalid byte must never leak into output")
+	require.Contains(t, string(out), "�", "invalid byte must be replaced with U+FFFD")
+	// Output = prefix + U+FFFD (3 bytes) + 'z'.
+	require.Len(t, out, prefixSize+3+1, "all valid bytes delivered, invalid byte sanitized")
+	require.Equal(t, byte('z'), out[len(out)-1], "bytes after the invalid one still flow through")
 }
