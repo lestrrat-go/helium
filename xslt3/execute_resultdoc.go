@@ -727,9 +727,17 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			// xsl:output base) was already evaluated up front in the preflight via
 			// evalResultDocOutputDef; reuse it so a failing AVT was surfaced there
 			// rather than silently swallowed here.
+			// When the primary result-document declares no serialization
+			// attributes of its own, primaryOverrides is nil. In that case the
+			// effective allow-duplicate-names comes from the resolved default
+			// output definition (e.g. a stylesheet-level
+			// <xsl:output method="json" allow-duplicate-names="yes"/>), not a
+			// hard-coded "no".
 			allowDupes := false
 			if primaryOverrides != nil {
 				allowDupes = primaryOverrides.AllowDuplicateNames
+			} else if defDef, ok := ec.effectiveOutputs()[""]; ok {
+				allowDupes = defDef.AllowDuplicateNames
 			}
 			if !allowDupes {
 				if err := validateJSONItems(bufFrame.pendingItems); err != nil {

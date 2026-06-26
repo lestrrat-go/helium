@@ -456,3 +456,26 @@ func TestResultDocumentPrimaryJSONAllowDuplicateNamesAVT(t *testing.T) {
 	require.True(t, od.AllowDuplicateNames,
 		"the primary result-document allow-duplicate-names override must reach the effective output def")
 }
+
+// A bare primary <xsl:result-document> (no serialization attributes of its own)
+// must still honor a stylesheet-level
+// <xsl:output method="json" allow-duplicate-names="yes"/>. Pre-fix the JSON
+// dup-key check hard-coded allowDupes=false whenever the result-document carried
+// no overrides (primaryOverrides==nil), so duplicate keys were wrongly rejected
+// even though the default output definition permitted them.
+func TestResultDocumentPrimaryJSONAllowDuplicateNamesDefaultOutput(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="json" allow-duplicate-names="yes"/>
+  <xsl:template match="/">
+    <xsl:result-document>
+      <xsl:sequence select="map{1:'a','1':'b'}"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	_, err := inv.Do(t.Context())
+	require.NoError(t, err,
+		"duplicate JSON keys must be accepted when the default xsl:output sets allow-duplicate-names=yes, even for a bare result-document")
+}
