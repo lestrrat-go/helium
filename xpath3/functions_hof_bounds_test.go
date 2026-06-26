@@ -20,6 +20,7 @@ const (
 	tcMapForEach       = "map-for-each"
 	tcMapKeyedLookup   = "map-keyed-lookup"
 	tcMapGet           = "map-get"
+	tcMap              = "map"
 )
 
 // panicOnMaterializeSeq is a Sequence of n items where realizing the WHOLE
@@ -1127,4 +1128,133 @@ func TestMapFindDeepNesting(t *testing.T) {
 		// The result is a single array holding the one matched value.
 		require.Equal(t, 1, res.Sequence().Len())
 	})
+}
+
+// TestMapArrayConstructorBounds proves the map / array constructor evaluators
+// (`map { k: v, ... }`, `[ a, b, ... ]`, and `array { expr }`) charge each
+// constructed entry/member against the node-set and op budgets and honor
+// context cancellation while building, instead of materializing an arbitrarily
+// large structure unbounded. Each case binds an oversized value via a variable
+// under EvalBorrowing so the input itself never trips a range/construction
+// guard — only the constructor's own per-entry bound can fire.
+func TestMapArrayConstructorBounds(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1000
+	// A lazy range far larger than anything that could be materialized in memory:
+	// a regression that clones/materializes a member or value would OOM/panic here.
+	const huge = int64(1) << 40
+
+	wideSeq := func(n int) xpath3.Sequence {
+		items := make([]xpath3.Item, n)
+		for i := range items {
+			items[i] = xpath3.SingleInteger(int64(i + 1)).Get(0)
+		}
+		return xpath3.ItemSlice(items)
+	}
+
+	// nodeLimit: the constructed structure exceeds maxNodes; the input stays a
+	// borrowed value so only the constructor's per-entry bound overflows it.
+	nodeLimit := []struct {
+		name string
+		expr string
+		vars map[string]xpath3.Sequence
+	}{
+		// array { $wide }: each of the 1100 items of the borrowed sequence becomes a
+		// singleton member -> 1100 members > 1000.
+		{name: "array-enclosed", expr: `array { $wide }`, vars: varsSet("wide", wideSeq(1100))},
+		// [ $wide ]: one member holding a 1100-item sequence; NewArray clones it, so
+		// the per-member item-count bound must trip before materialization.
+		{name: "array-square", expr: `[ $wide ]`, vars: varsSet("wide", wideSeq(1100))},
+		// map { "k": $wide }: a single entry whose value holds 1100 items; NewMap
+		// clones the value, so the per-value length bound must trip first.
+		{name: tcMap, expr: `map { "k": $wide }`, vars: varsSet("wide", wideSeq(1100))},
+	}
+	for _, tc := range nodeLimit {
+		t.Run("node-limit/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(tc.vars).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrNodeSetLimit)
+		})
+	}
+
+	// opLimit: with NO node-set limit, only the op-counter can fire; each
+	// constructed entry/member must cost an op.
+	opLimit := []struct {
+		name string
+		expr string
+		vars map[string]xpath3.Sequence
+	}{
+		{name: "array-enclosed", expr: `array { $wide }`, vars: varsSet("wide", wideSeq(5000))},
+		{name: "array-square", expr: `[ $wide ]`, vars: varsSet("wide", wideSeq(5000))},
+		{name: tcMap, expr: `map { "k": $wide }`, vars: varsSet("wide", wideSeq(5000))},
+	}
+	for _, tc := range opLimit {
+		t.Run("op-limit/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			_, err = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+				Variables(tc.vars).
+				OpLimit(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.ErrorIs(t, err, xpath3.ErrOpLimit)
+		})
+	}
+
+	// neverMaterialize: a borrowed 1<<40 lazy range reaches the constructor. A
+	// correct streaming/precheck implementation rejects it with ErrNodeSetLimit
+	// without ever materializing it; a regression OOMs/panics.
+	neverMaterialize := []struct {
+		name string
+		expr string
+	}{
+		{name: "array-enclosed", expr: `array { $lazy }`},
+		{name: "array-square", expr: `[ $lazy ]`},
+		{name: tcMap, expr: `map { "k": $lazy }`},
+	}
+	for _, tc := range neverMaterialize {
+		t.Run("never-materialize/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			vars := map[string]xpath3.Sequence{"lazy": xpath3.NewRangeSequence(1, huge)}
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			var evalErr error
+			require.NotPanics(t, func() {
+				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
+					Variables(vars).
+					MaxNodesForTesting(limit).
+					Evaluate(t.Context(), compiled, nil)
+			})
+			require.ErrorIs(t, evalErr, xpath3.ErrNodeSetLimit)
+		})
+	}
+
+	// withinLimit: well-formed constructors below the limit still evaluate.
+	within := []struct {
+		name string
+		expr string
+		want int
+	}{
+		{"array-enclosed", `array:size(array { 1 to 10 })`, 1},
+		{"array-square", `array:size([ 1, 2, 3 ])`, 1},
+		{tcMap, `map:size(map { "a": 1, "b": 2 })`, 1},
+	}
+	for _, tc := range within {
+		t.Run("within/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := xpath3.NewCompiler().Compile(tc.expr)
+			require.NoError(t, err)
+			res, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				MaxNodesForTesting(limit).
+				Evaluate(t.Context(), compiled, nil)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, res.Sequence().Len())
+		})
+	}
 }
