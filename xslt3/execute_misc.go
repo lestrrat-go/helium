@@ -702,37 +702,40 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		if ncSeq != nil {
 			ncLen = sequence.Len(ncSeq)
 		}
-		// XTTE3170: namespace-context must produce a single node.
-		if ncLen > 1 {
+		// XTTE3170: when the namespace-context attribute is supplied, its value
+		// must be a single node. An empty sequence, multiple items, or a non-node
+		// item is a type error rather than being silently ignored.
+		if ncLen != 1 {
 			return dynamicError(errCodeXTTE3170,
 				"xsl:evaluate namespace-context produced %d items; a single node is required", ncLen)
 		}
-		if ncLen > 0 {
-			if ni, nodeOK := ncSeq.Get(0).(xpath3.NodeItem); nodeOK {
-				nsNode := ni.Node
-				// Walk up to find an element
-				for nsNode != nil {
-					if elem, elemOK := nsNode.(*helium.Element); elemOK {
-						// Collect in-scope namespaces walking up
-						seen := make(map[string]struct{})
-						var cur helium.Node = elem
-						for cur != nil {
-							if e, eOK := cur.(*helium.Element); eOK {
-								for _, ns := range e.Namespaces() {
-									prefix := ns.Prefix()
-									if _, exists := seen[prefix]; !exists {
-										seen[prefix] = struct{}{}
-										nsBindings[prefix] = ns.URI()
-									}
-								}
+		ni, nodeOK := ncSeq.Get(0).(xpath3.NodeItem)
+		if !nodeOK {
+			return dynamicError(errCodeXTTE3170,
+				"xsl:evaluate namespace-context must be a single node")
+		}
+		nsNode := ni.Node
+		// Walk up to find an element
+		for nsNode != nil {
+			if elem, elemOK := nsNode.(*helium.Element); elemOK {
+				// Collect in-scope namespaces walking up
+				seen := make(map[string]struct{})
+				var cur helium.Node = elem
+				for cur != nil {
+					if e, eOK := cur.(*helium.Element); eOK {
+						for _, ns := range e.Namespaces() {
+							prefix := ns.Prefix()
+							if _, exists := seen[prefix]; !exists {
+								seen[prefix] = struct{}{}
+								nsBindings[prefix] = ns.URI()
 							}
-							cur = cur.Parent()
 						}
-						break
 					}
-					nsNode = nsNode.Parent()
+					cur = cur.Parent()
 				}
+				break
 			}
+			nsNode = nsNode.Parent()
 		}
 	}
 
