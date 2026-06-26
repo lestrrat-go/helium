@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func (c *compiler) resolveRefs(ctx context.Context) {
@@ -1033,6 +1034,103 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 	}
 }
 
+// builtinRestrictionParent maps each XSD builtin atomic type's local name to
+// the local name of the builtin it is derived (by restriction) from, per the
+// W3C XML Schema Part 2 type hierarchy. It is used to decide builtin-to-builtin
+// restriction validity (e.g. xs:int restricts xs:integer), which the *TypeDef
+// pointer chain cannot express because builtin types carry no BaseType links.
+// The two roots (string, decimal) point at anySimpleType, which terminates the
+// chain. Only atomic types are listed; list builtins (IDREFS/ENTITIES/NMTOKENS)
+// are intentionally absent so their derivation is treated as "unknown" (and the
+// caller stays conservative).
+var builtinRestrictionParent = map[string]string{
+	// string family
+	lexicon.TypeString:           typeAnySimpleType,
+	lexicon.TypeNormalizedString: lexicon.TypeString,
+	lexicon.TypeToken:            lexicon.TypeNormalizedString,
+	typeLanguage:                 lexicon.TypeToken,
+	typeName:                     lexicon.TypeToken,
+	typeNMToken:                  lexicon.TypeToken,
+	typeNCName:                   typeName,
+	typeID:                       typeNCName,
+	lexicon.TypeIDREF:            typeNCName,
+	typeEntity:                   typeNCName,
+	// decimal / integer family
+	lexicon.TypeDecimal:            typeAnySimpleType,
+	lexicon.TypeInteger:            lexicon.TypeDecimal,
+	lexicon.TypeNonPositiveInteger: lexicon.TypeInteger,
+	lexicon.TypeNegativeInteger:    lexicon.TypeNonPositiveInteger,
+	lexicon.TypeLong:               lexicon.TypeInteger,
+	lexicon.TypeInt:                lexicon.TypeLong,
+	lexicon.TypeShort:              lexicon.TypeInt,
+	lexicon.TypeByte:               lexicon.TypeShort,
+	lexicon.TypeNonNegativeInteger: lexicon.TypeInteger,
+	lexicon.TypeUnsignedLong:       lexicon.TypeNonNegativeInteger,
+	lexicon.TypeUnsignedInt:        lexicon.TypeUnsignedLong,
+	lexicon.TypeUnsignedShort:      lexicon.TypeUnsignedInt,
+	lexicon.TypeUnsignedByte:       lexicon.TypeUnsignedShort,
+	lexicon.TypePositiveInteger:    lexicon.TypeNonNegativeInteger,
+}
+
+// builtinDerivesFrom reports whether the builtin type named derived is the same
+// as, or derived by restriction from, the builtin named base. The second bool
+// is false ("unknown") when either name is not a recognized atomic builtin
+// (including the list builtins), so callers can stay conservative on cases the
+// table cannot decide.
+func builtinDerivesFrom(derived, base string) (bool, bool) {
+	if !isAtomicBuiltinName(derived) || !isAtomicBuiltinName(base) {
+		return false, false
+	}
+	for cur := derived; ; {
+		if cur == base {
+			return true, true
+		}
+		parent, ok := builtinRestrictionParent[cur]
+		if !ok {
+			// Reached the anySimpleType root without matching base.
+			return false, true
+		}
+		cur = parent
+	}
+}
+
+// isAtomicBuiltinName reports whether local is a recognized atomic builtin in
+// the restriction hierarchy (a map key, or the anySimpleType root).
+func isAtomicBuiltinName(local string) bool {
+	if local == typeAnySimpleType {
+		return true
+	}
+	_, ok := builtinRestrictionParent[local]
+	return ok
+}
+
+// simpleTypeValidlyRestricts reports whether the derived simple type is a valid
+// restriction of (same as, or derived by restriction from) the base simple
+// type. It first consults the *TypeDef pointer chain (isDerivedFrom) and falls
+// back to the builtin restriction hierarchy for the builtin-to-builtin case the
+// pointer chain cannot see. It is CONSERVATIVE: it returns true (valid) whenever
+// derivation cannot be decided (unresolved types, list/union carriers, or a
+// builtin pair the table does not cover), so it only ever rejects a clearly
+// invalid restriction and never false-rejects a legitimate one.
+func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
+	if derived == nil || base == nil {
+		return true
+	}
+	if isDerivedFrom(derived, base) {
+		return true
+	}
+	db := builtinBaseLocal(derived)
+	bb := builtinBaseLocal(base)
+	if db == "" || bb == "" {
+		return true
+	}
+	ok, known := builtinDerivesFrom(db, bb)
+	if !known {
+		return true
+	}
+	return ok
+}
+
 // checkRestrictionAttrs validates that a restriction-derived type's attributes
 // are compatible with the base type's attribute uses.
 func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
@@ -1075,6 +1173,34 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 				msg := fmt.Sprintf("The 'optional' attribute use is inconsistent with the corresponding 'required' attribute use of the base complex type definition %s.", baseQualified)
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
+			}
+
+			// derivation-ok-restriction.2.1.2: the derived attribute's type must
+			// be the same as, or derived by restriction from, the base
+			// attribute's type. Attribute types are simple types, so any
+			// derivation is by restriction; isDerivedFrom captures the chain.
+			// When either type is unresolved, accept conservatively (mirrors the
+			// element-to-element restriction check).
+			derivedTD := attrUseTypeDef(au, c.schema)
+			baseTD := attrUseTypeDef(baseAU, c.schema)
+			if derivedTD != nil && baseTD != nil && !simpleTypeValidlyRestricts(derivedTD, baseTD) {
+				msg := fmt.Sprintf("The type definition of the attribute use is not a valid restriction of the corresponding attribute use's type definition of the base complex type definition %s.", baseQualified)
+				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
+					component+", attribute use '"+au.Name.Local+"'", msg))
+			}
+
+			// derivation-ok-restriction.2.1.3: a base 'fixed' value constraint
+			// forces the derived attribute to carry a value-space-equal 'fixed'
+			// value (a default, or no constraint, would admit values the base
+			// pins). Compare in value space (so base "1" accepts derived "01" for
+			// xs:integer); fixedValueMatches falls back to lexical equality when
+			// the type is unresolved.
+			if baseAU.Fixed != nil {
+				if au.Fixed == nil || !fixedValueMatches(ctx, *au.Fixed, *baseAU.Fixed, derivedTD, au.FixedNS, baseAU.FixedNS) {
+					msg := fmt.Sprintf("The effective value constraint of the attribute use is inconsistent with the 'fixed' value constraint of the corresponding attribute use of the base complex type definition %s.", baseQualified)
+					c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
+						component+", attribute use '"+au.Name.Local+"'", msg))
+				}
 			}
 		} else if td.BaseType.AnyAttribute == nil || !wildcardMatches(td.BaseType.AnyAttribute, au.Name.NS) {
 			// No matching attribute, and no base wildcard whose namespace
