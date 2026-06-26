@@ -68,17 +68,180 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 	c.stylesheet.globalContextModules[moduleKey] = def
 
 	// XTSE3087: declarations in different modules of one package must agree.
+	// Two @as values agree when they denote the same sequence type, which is a
+	// namespace-aware notion: a raw text compare wrongly conflicts lexically
+	// different but equivalent types (e.g. xs:integer vs a user prefix bound to
+	// the XSD namespace) and wrongly accepts lexically equal types that resolve a
+	// shared prefix to different namespaces across the two declaration sites.
+	// Canonicalize each @as against its own declaration-site namespace context.
 	if existing := c.stylesheet.globalContextItem; existing != nil {
-		normalizeAs := func(s string) string {
-			return strings.Join(strings.Fields(s), "")
-		}
-		if existing.Use != def.Use || normalizeAs(existing.As) != normalizeAs(def.As) {
+		existingKey := canonicalSequenceTypeKey(existing.As,
+			nsResolverFromMap(existing.Namespaces), existing.XPathDefaultNS, existing.HasXPathDefaultNS)
+		defKey := canonicalSequenceTypeKey(def.As,
+			nsResolverFromMap(def.Namespaces), def.XPathDefaultNS, def.HasXPathDefaultNS)
+		if existing.Use != def.Use || existingKey != defKey {
 			return staticError(errCodeXTSE3087, "conflicting xsl:global-context-item declarations")
 		}
 		return nil
 	}
 	c.stylesheet.globalContextItem = def
 	return nil
+}
+
+// canonicalSequenceTypeKey returns a namespace-resolved canonical string for an
+// @as sequence type. It reuses the xpath3 sequence-type parser AST and the single
+// resolveSequenceTypeQName resolver so that the XTSE3087 cross-module agreement
+// check compares the meaning of two types rather than their lexical form: two
+// declarations agree iff their canonical keys are equal. On a parse failure (the
+// type was already rejected upstream) it falls back to whitespace-normalized text.
+func canonicalSequenceTypeKey(as string, resolve nsResolver, defaultElemNS string, hasDefaultElemNS bool) string {
+	st, err := xpath3.ParseSequenceType(strings.TrimSpace(as))
+	if err != nil {
+		return strings.Join(strings.Fields(as), "")
+	}
+	var b strings.Builder
+	writeCanonicalSequenceType(&b, st, resolve, defaultElemNS, hasDefaultElemNS)
+	return b.String()
+}
+
+func writeCanonicalSequenceType(b *strings.Builder, st xpath3.SequenceType, resolve nsResolver, defaultElemNS string, hasDefaultElemNS bool) {
+	if st.Void {
+		b.WriteString("empty-sequence()")
+		return
+	}
+	writeCanonicalNodeTest(b, st.ItemTest, resolve, defaultElemNS, hasDefaultElemNS)
+	switch st.Occurrence {
+	case xpath3.OccurrenceZeroOrOne:
+		b.WriteByte('?')
+	case xpath3.OccurrenceZeroOrMore:
+		b.WriteByte('*')
+	case xpath3.OccurrenceOneOrMore:
+		b.WriteByte('+')
+	}
+}
+
+// writeCanonicalNodeTest writes a canonical, namespace-resolved rendering of a
+// sequence-type item test. Every embedded QName is expanded to Q{uri}local form
+// (or "*" for an absent/wildcard name) using the position-specific rules of
+// resolveSequenceTypeQName, so prefixes and default-namespace differences are
+// normalized away.
+func writeCanonicalNodeTest(b *strings.Builder, nt xpath3.NodeTest, resolve nsResolver, defaultElemNS string, hasDefaultElemNS bool) {
+	writeQName := func(qname string, kind qnameKind) {
+		local, ns := resolveSequenceTypeQName(qname, kind, resolve, defaultElemNS, hasDefaultElemNS)
+		if local == "" || local == "*" {
+			b.WriteByte('*')
+			return
+		}
+		b.WriteString("Q{")
+		b.WriteString(ns)
+		b.WriteByte('}')
+		b.WriteString(local)
+	}
+
+	switch t := nt.(type) {
+	case xpath3.AtomicOrUnionType:
+		qn := t.Name
+		if t.Prefix != "" {
+			qn = t.Prefix + ":" + t.Name
+		}
+		writeQName(qn, qnameTypeName)
+	case xpath3.ElementTest:
+		b.WriteString("element(")
+		writeQName(t.Name, qnameElementName)
+		if t.TypeName != "" {
+			b.WriteByte(',')
+			writeQName(t.TypeName, qnameTypeName)
+			if t.Nillable {
+				b.WriteString(",?")
+			}
+		}
+		b.WriteByte(')')
+	case xpath3.AttributeTest:
+		b.WriteString("attribute(")
+		writeQName(t.Name, qnameAttributeName)
+		if t.TypeName != "" {
+			b.WriteByte(',')
+			writeQName(t.TypeName, qnameTypeName)
+		}
+		b.WriteByte(')')
+	case xpath3.SchemaElementTest:
+		b.WriteString("schema-element(")
+		writeQName(t.Name, qnameElementName)
+		b.WriteByte(')')
+	case xpath3.SchemaAttributeTest:
+		b.WriteString("schema-attribute(")
+		writeQName(t.Name, qnameAttributeName)
+		b.WriteByte(')')
+	case xpath3.DocumentTest:
+		b.WriteString("document-node(")
+		if t.Inner != nil {
+			writeCanonicalNodeTest(b, t.Inner, resolve, defaultElemNS, hasDefaultElemNS)
+		}
+		b.WriteByte(')')
+	case xpath3.PITest:
+		b.WriteString("processing-instruction(")
+		b.WriteString(t.Target)
+		b.WriteByte(')')
+	case xpath3.TypeTest:
+		switch t.Kind {
+		case xpath3.NodeKindText:
+			b.WriteString("text()")
+		case xpath3.NodeKindComment:
+			b.WriteString("comment()")
+		case xpath3.NodeKindProcessingInstruction:
+			b.WriteString("processing-instruction()")
+		default:
+			b.WriteString("node()")
+		}
+	case xpath3.NamespaceNodeTest:
+		b.WriteString("namespace-node()")
+	case xpath3.AnyItemTest:
+		b.WriteString("item()")
+	case xpath3.NameTest:
+		qn := t.Local
+		if t.URI != "" {
+			qn = "Q{" + t.URI + "}" + t.Local
+		} else if t.Prefix != "" {
+			qn = t.Prefix + ":" + t.Local
+		}
+		writeQName(qn, qnameElementName)
+	case xpath3.FunctionTest:
+		if t.AnyFunction {
+			b.WriteString("function(*)")
+			return
+		}
+		b.WriteString("function(")
+		for i, pt := range t.ParamTypes {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			writeCanonicalSequenceType(b, pt, resolve, defaultElemNS, hasDefaultElemNS)
+		}
+		b.WriteString(")as")
+		writeCanonicalSequenceType(b, t.ReturnType, resolve, defaultElemNS, hasDefaultElemNS)
+	case xpath3.MapTest:
+		if t.AnyType {
+			b.WriteString("map(*)")
+			return
+		}
+		b.WriteString("map(")
+		writeCanonicalNodeTest(b, t.KeyType, resolve, defaultElemNS, hasDefaultElemNS)
+		b.WriteByte(',')
+		writeCanonicalSequenceType(b, t.ValType, resolve, defaultElemNS, hasDefaultElemNS)
+		b.WriteByte(')')
+	case xpath3.ArrayTest:
+		if t.AnyType {
+			b.WriteString("array(*)")
+			return
+		}
+		b.WriteString("array(")
+		writeCanonicalSequenceType(b, t.MemberType, resolve, defaultElemNS, hasDefaultElemNS)
+		b.WriteByte(')')
+	default:
+		// Unknown/absent test: a stable placeholder so two unknowns compare equal
+		// without misrepresenting them as item().
+		b.WriteString("?unknown?")
+	}
 }
 
 // isBuiltinXSDLocalName reports whether an unprefixed type name denotes a
