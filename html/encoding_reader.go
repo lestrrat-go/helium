@@ -273,8 +273,23 @@ func (sr *utf8SanitizeReader) trackByte(b byte) {
 //     buffered prefix (and the remainder of the stream) as Latin-1/Windows-1252,
 //     exactly as the []byte path would.
 //
+// deferredLatin1MaxBuffer caps how many undecided UTF-8-valid bytes the
+// deferred reader buffers before it must commit to a UTF-8 interpretation. It
+// is far larger than the 1024-byte charset sniff window (so a real document's
+// first non-UTF-8 byte is virtually always seen first and the libxml2-quirk
+// decision is preserved) yet bounded, so an endless all-valid stream cannot be
+// buffered without limit.
+const deferredLatin1MaxBuffer = 1 << 20 // 1 MiB
+
 // The detected encoding name is reported lazily via detectedEncoding once the
 // switch happens.
+//
+// Buffering is bounded: deferring until EOF would buffer an endless all-valid
+// stream whole, defeating streaming and the parser's content caps (an
+// unbounded-memory DoS). Once deferredLatin1MaxBuffer bytes have been seen with
+// no non-UTF-8 byte the reader commits to UTF-8 and streams the rest through
+// unchanged. Real (finite) documents settle their encoding far below this cap,
+// so the libxml2-quirk Latin-1-vs-UTF-8 decision is unchanged for them.
 type deferredLatin1Reader struct {
 	r io.Reader
 
@@ -282,10 +297,11 @@ type deferredLatin1Reader struct {
 	out     []byte // converted output ready to consume
 	outPos  int
 
-	switched bool   // true once a non-UTF-8 byte forced Latin-1 interpretation
-	eof      bool   // true once the underlying reader has reported EOF
-	enc      string // encoding name reported after switching
-	encOnHit string // encoding name to report once a non-UTF-8 byte appears
+	switched      bool   // true once a non-UTF-8 byte forced Latin-1 interpretation
+	committedUTF8 bool   // true once the bounded prefix settled the stream as UTF-8
+	eof           bool   // true once the underlying reader has reported EOF
+	enc           string // encoding name reported after switching
+	encOnHit      string // encoding name to report once a non-UTF-8 byte appears
 
 	// readErr is a sticky non-EOF error returned by the underlying reader. An
 	// io.Reader may return n > 0 together with a non-EOF error in a single Read;
@@ -325,6 +341,16 @@ func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
 		// stream it through directly without further buffering.
 		if dr.switched {
 			n, err := dr.fillLatin1(p)
+			if n > 0 {
+				return n, nil
+			}
+			return 0, err
+		}
+
+		// Once committed to UTF-8 after the bounded prefix, pass the remaining
+		// bytes through verbatim without further buffering.
+		if dr.committedUTF8 {
+			n, err := dr.fillUTF8(p)
 			if n > 0 {
 				return n, nil
 			}
@@ -382,9 +408,11 @@ func (dr *deferredLatin1Reader) decide() bool {
 		r, size := utf8.DecodeRune(data[i:])
 		if r == utf8.RuneError && size <= 1 {
 			// Incomplete sequence at the tail and more data may still come:
-			// keep buffering unless we already hit EOF.
+			// the scanned prefix holds no genuine non-UTF-8 byte, so stop
+			// scanning and let the bounded-buffer / EOF logic below settle it
+			// (keeps buffering unless we already hit EOF or the cap).
 			if i+utf8.UTFMax > len(data) && !dr.eof {
-				return false
+				break
 			}
 			// Genuine non-UTF-8 byte: reinterpret the ENTIRE buffer (from the
 			// start) as Latin-1/Windows-1252, matching the []byte path.
@@ -398,15 +426,59 @@ func (dr *deferredLatin1Reader) decide() bool {
 		i += size
 	}
 
-	// No invalid byte found. If the stream is exhausted, the whole document is
-	// valid UTF-8: flush it unchanged. Otherwise keep buffering.
+	// No genuine non-UTF-8 byte found. If the stream is exhausted, the whole
+	// document is valid UTF-8: flush it unchanged.
 	if dr.eof {
 		dr.out = dr.pending
 		dr.outPos = 0
 		dr.pending = nil
 		return true
 	}
+
+	// Bounded buffering: a cap's worth of bytes has been seen with no non-UTF-8
+	// byte. Commit to UTF-8 rather than buffer the (possibly endless) stream
+	// whole. Flush what we have and stream the remainder through verbatim. Any
+	// trailing incomplete rune rides along; its continuation bytes follow in the
+	// pass-through path and reassemble downstream.
+	if len(dr.pending) >= deferredLatin1MaxBuffer {
+		dr.committedUTF8 = true
+		dr.out = dr.pending
+		dr.outPos = 0
+		dr.pending = nil
+		return true
+	}
+
+	// Otherwise keep buffering.
 	return false
+}
+
+// fillUTF8 reads raw bytes from the underlying reader straight into p (used once
+// the reader has committed to UTF-8 after the bounded prefix). No conversion is
+// applied; bytes pass through unchanged.
+func (dr *deferredLatin1Reader) fillUTF8(p []byte) (int, error) {
+	// A sticky non-EOF error recorded on an earlier read that also returned
+	// bytes has now drained: surface it without re-reading dr.r.
+	if dr.readErr != nil {
+		e := dr.readErr
+		dr.readErr = nil
+		return 0, e
+	}
+
+	n, err := dr.r.Read(p)
+	// io.Reader may deliver data together with a non-EOF error. Remember it as
+	// sticky and return the bytes first; surface the error once they drain.
+	if err != nil && err != io.EOF {
+		dr.readErr = err
+	}
+	if n > 0 {
+		return n, nil
+	}
+	if dr.readErr != nil {
+		e := dr.readErr
+		dr.readErr = nil
+		return 0, e
+	}
+	return 0, err
 }
 
 // fillLatin1 converts raw bytes from the underlying reader as Latin-1/Windows
