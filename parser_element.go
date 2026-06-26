@@ -157,6 +157,38 @@ func (pctx *parserCtx) parseElement(ctx context.Context) error {
 	return nil
 }
 
+// checkPrefixedNamespaceDecl validates a prefixed namespace declaration
+// (xmlns:prefix="value"), enforcing the Namespaces in XML constraints that
+// apply regardless of whether the binding was written inline on the start tag
+// or supplied as a DTD <!ATTLIST> default. It returns skip=true when the
+// declaration is well-formed but should not be pushed (the reserved xml
+// prefix bound to its canonical URI).
+func (pctx *parserCtx) checkPrefixedNamespaceDecl(ctx context.Context, prefix, value string) (bool, error) {
+	if prefix == lexicon.PrefixXML {
+		if value != lexicon.NamespaceXML {
+			return false, pctx.namespaceError(ctx, errors.New("xml namespace prefix mapped to wrong URI"))
+		}
+		return true, nil
+	}
+	if prefix == lexicon.PrefixXMLNS {
+		return false, pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
+	}
+	if value == lexicon.NamespaceXMLNS {
+		return false, pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name if forbidden"))
+	}
+	if value == "" {
+		return false, pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", prefix))
+	}
+	u, err := url.Parse(value)
+	if err != nil {
+		return false, pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: '%s' is not a validURI", prefix, value))
+	}
+	if pctx.pedantic && u.Scheme == "" {
+		return false, pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", prefix, value))
+	}
+	return false, nil
+}
+
 func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	cur := pctx.getCursor()
 	if cur == nil {
@@ -245,36 +277,16 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			pctx.skipBlanks(ctx)
 			continue
 		} else if aprefix == lexicon.PrefixXMLNS {
-			var u *url.URL
-
 			// <elem xmlns:foo="...">
 			// Namespace URI entity/character references are expanded inline
 			// during attribute value parsing (replaceEntities forced true in
 			// parseAttribute for namespace attrs), so no post-processing needed.
-			if attname == lexicon.PrefixXML {
-				if attvalue != lexicon.NamespaceXML {
-					return pctx.namespaceError(ctx, errors.New("xml namespace prefix mapped to wrong URI"))
-				}
-				goto SkipNS
-			}
-			if attname == lexicon.PrefixXMLNS {
-				return pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
-			}
-
-			if attvalue == lexicon.NamespaceXMLNS {
-				return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name if forbidden"))
-			}
-
-			if attvalue == "" {
-				return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", attname))
-			}
-
-			u, err = url.Parse(attvalue)
+			skip, err := pctx.checkPrefixedNamespaceDecl(ctx, attname, attvalue)
 			if err != nil {
-				return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: '%s' is not a validURI", attname, attvalue))
+				return err
 			}
-			if pctx.pedantic && u.Scheme == "" {
-				return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", attname, attvalue))
+			if skip {
+				goto SkipNS
 			}
 
 			// A same-element duplicate namespace declaration is a
@@ -356,6 +368,17 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				if attname == lexicon.PrefixXMLNS && aprefix == "" {
 					continue
 				} else if aprefix == lexicon.PrefixXMLNS {
+					// DTD-defaulted xmlns:prefix bindings must pass the
+					// same Namespaces in XML validity checks an inline
+					// declaration gets (reserved prefixes, reserved
+					// namespace name, empty/invalid URI).
+					skip, err := pctx.checkPrefixedNamespaceDecl(ctx, attname, attr.Value())
+					if err != nil {
+						return err
+					}
+					if skip {
+						continue
+					}
 					pctx.pushNS(attname, attr.Value())
 					nbNs++
 				} else {

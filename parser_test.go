@@ -268,6 +268,45 @@ func TestParseNamespace(t *testing.T) {
 	require.Equal(t, "value", attr.Value())
 }
 
+func TestParseRejectsMalformedDTDDefaultNamespace(t *testing.T) {
+	// A namespace declaration supplied as a DTD <!ATTLIST> default must be
+	// subject to the same Namespaces in XML validity checks an inline xmlns
+	// declaration gets. These all bind a prefix illegally and must be
+	// rejected even though the binding is never written on the element.
+	reject := []string{
+		// reuse of the reserved xmlns namespace name
+		`<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root xmlns:foo CDATA #FIXED "http://www.w3.org/2000/xmlns/">
+]>
+<root/>`,
+		// reserved xml prefix bound to the wrong URI
+		`<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root xmlns:xml CDATA #FIXED "urn:wrong">
+]>
+<root/>`,
+	}
+	p := helium.NewParser()
+	for _, input := range reject {
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "Parse should reject malformed DTD-defaulted namespace: %s", input)
+	}
+
+	// A well-formed DTD-defaulted xmlns:xml mapped to its canonical URI is
+	// accepted (and not pushed as a real binding).
+	const ok = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root xmlns:xml CDATA #FIXED "http://www.w3.org/XML/1998/namespace">
+]>
+<root/>`
+	_, err := p.Parse(t.Context(), []byte(ok))
+	require.NoError(t, err, "canonical xml prefix binding must be accepted")
+}
+
 func findDocumentElement(doc *helium.Document) helium.Node {
 	return doc.DocumentElement()
 }
