@@ -378,6 +378,55 @@ func TestDefaultModeOverCapSpacesSoftCap(t *testing.T) {
 		"all whitespace must be delivered as chunked Characters")
 }
 
+func TestSuppressImpliedTinyChunkPreservesLeadingSpace(t *testing.T) {
+	// Regression: under SuppressImplied no implied <html>/<body> is ever created,
+	// so mode never reaches insertInBody. The whitespace-deferral/drop decision
+	// must therefore key off whether an element is OPEN, not off whether an <html>
+	// root exists. For `<p> a</p>` under MaxContentSize(1) the leading space lands
+	// while <p> is already open: the insertion target is fixed (implied insertion
+	// is disabled), so the space must be emitted immediately, not dropped as if it
+	// were pre-root whitespace. Previously it was discarded, losing " a" -> "a".
+	const input = `<p> a</p>`
+
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	require.NoError(t, html.NewParser().
+		SuppressImplied(true).
+		MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax))
+	require.Equal(t, " a", string(collected),
+		"leading whitespace inside an open element must survive under SuppressImplied")
+}
+
+func TestSuppressImpliedOverCapWhitespaceSoftCap(t *testing.T) {
+	// Under SuppressImplied with an element already open the insertion target is
+	// fixed and there is nothing to defer, so an over-cap all-whitespace run must
+	// STREAM under the soft cap rather than hard-fail on the undecidable-prefix
+	// path (that path only applies while a parent/significance is genuinely
+	// undecided). `<p>   </p>` must deliver all whitespace and never error.
+	spaces := strings.Repeat(" ", 50)
+	input := `<p>` + spaces + `</p>`
+
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	err := html.NewParser().
+		SuppressImplied(true).
+		MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax)
+	require.NoError(t, err,
+		"over-cap whitespace in an open element under SuppressImplied must stream, not hard-fail")
+	require.Equal(t, spaces, string(collected),
+		"all whitespace must be delivered as chunked Characters")
+}
+
 func TestStripBlanksTinyChunkLeadingSpaceBeforeCharData(t *testing.T) {
 	// Regression: a leading whitespace prefix followed by a char-data token (an
 	// entity, or a non-markup lone '<') must NOT be flushed/stripped before the

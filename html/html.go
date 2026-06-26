@@ -126,17 +126,25 @@ func (p Parser) Strict(v bool) Parser {
 // this size before its terminator fails the parse with [ErrContentSizeExceeded]
 // rather than emitting a truncated node.
 //
-// StripBlanks exception: under [Parser.StripBlanks](true) the soft cap on
-// normal data-state text has one HARD-fail case. A text run is suppressed only
+// Whitespace-deferral exception: the soft cap on normal data-state text has a
+// HARD-fail case whenever a text run's leading whitespace must be DEFERRED
+// because its insertion target or significance is still undecided. This happens
+// in two situations: under [Parser.StripBlanks](true) (a run is suppressed only
 // when EVERY byte is whitespace, a decision that cannot be made until the run's
-// first non-whitespace byte (or its end) is seen. The scanner therefore refuses
-// to flush a run whose leading whitespace prefix alone reaches the cap with yet
-// more whitespace beyond it, because doing so would require buffering the run
-// unbounded to learn whether it is significant. Such a run fails the parse with
-// [ErrContentSizeExceeded] rather than parsing successfully. Once a
+// first non-whitespace byte or its end is seen), and during implied-<body>
+// deferral (the body subtree has not been entered, mode < insertInBody, AND
+// implied insertion is enabled, so the next non-whitespace byte would open the
+// implied <body> and the run's parent is undecided). In either case the scanner
+// refuses to flush a run whose leading whitespace prefix alone reaches the cap
+// with yet more whitespace beyond it, because doing so would require buffering
+// the run unbounded to learn its significance or parent. Such a run fails the
+// parse with [ErrContentSizeExceeded] rather than parsing successfully. Once a
 // non-whitespace byte is seen the run is known significant and is chunked
 // normally (its leading whitespace, including the whole first non-whitespace
-// rune even when the cap splits it, rides along in the first chunk).
+// rune even when the cap splits it, rides along in the first chunk). Default-mode
+// whitespace with a fixed insertion target and no StripBlanks — including under
+// [Parser.SuppressImplied](true) once an element is open — stays a pure soft-cap
+// stream with no hard-fail.
 //
 // A value <= 0 selects the default (16 MiB).
 //

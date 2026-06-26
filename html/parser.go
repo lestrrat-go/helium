@@ -31,7 +31,6 @@ type parser struct {
 	sax       SAXHandler
 	nameStack []string // open element name stack
 	mode      insertMode
-	sawRoot   bool // true once the root <html> element has been opened
 
 	// curTextRunSignificant records that the current normal data-state text run
 	// has already emitted a non-whitespace byte and is therefore significant. A
@@ -394,9 +393,6 @@ func (p *parser) currentName() string {
 
 // pushName pushes an element name onto the stack and tracks insert mode.
 func (p *parser) pushName(name string) {
-	if name == elemHTML {
-		p.sawRoot = true
-	}
 	if p.mode < insertInHead && name == elemHead {
 		p.mode = insertInHead
 	}
@@ -1638,8 +1634,16 @@ func (p *parser) emitCharacters(data []byte) error {
 		// All-whitespace data whose run significance / insertion target may not yet
 		// be established.
 		switch {
-		case !p.sawRoot:
-			// Whitespace before the root element is ignorable; drop it.
+		case len(p.nameStack) == 0 && p.mode == insertInitial:
+			// No element is open yet AND none has ever been opened (insertion mode is
+			// still initial), so this whitespace precedes the document content and is
+			// ignorable; drop it. This is "before the root" regardless of whether an
+			// <html> root will ever be created — under SuppressImplied none is, yet
+			// pre-root whitespace is still ignorable. The mode guard distinguishes
+			// genuine pre-root whitespace from trailing whitespace AFTER the root
+			// closes (stack also empty, but mode has advanced to insertInBody), which
+			// must still be emitted. (Both differ from "no <html> root": an element
+			// other than <html> may already be open, as under SuppressImplied.)
 			return nil
 		case p.currentName() == elemHead:
 			// Inside <head> the insertion target is already correct. StripBlanks still
@@ -1648,23 +1652,27 @@ func (p *parser) emitCharacters(data []byte) error {
 			if p.cfg.noBlanks {
 				return nil
 			}
-		case p.cfg.noBlanks || p.mode < insertInBody:
+		case p.cfg.noBlanks || (!p.cfg.noImplied && p.mode < insertInBody):
 			// Significance or insertion is genuinely UNDECIDED, so defer. Under
 			// StripBlanks a whitespace-only run is stripped, but a following
-			// non-whitespace byte makes this leading whitespace significant. And
-			// before the body subtree is entered (mode < insertInBody) the next
-			// non-whitespace byte would open the implied <body> via htmlStartCharData,
-			// so emitting now would split one logical run across parents. deferPendingWS
-			// hard-fails an over-cap undecidable whitespace prefix rather than buffering
-			// unbounded.
+			// non-whitespace byte makes this leading whitespace significant. And while
+			// implied insertion is ENABLED and the body subtree has not yet been
+			// entered (mode < insertInBody) the next non-whitespace byte would open the
+			// implied <body> via htmlStartCharData, so emitting now would split one
+			// logical run across parents. When implied insertion is DISABLED
+			// (SuppressImplied) and an element is already open, the insertion target is
+			// fixed, so there is nothing to defer — fall through and emit immediately.
+			// deferPendingWS hard-fails an over-cap undecidable whitespace prefix
+			// rather than buffering unbounded.
 			return p.deferPendingWS(data)
 		}
-		// Reaching here means either inside <head> without StripBlanks, or StripBlanks
-		// is OFF and the insertion target is already established (the body subtree has
-		// been entered). The whitespace is significant and lands in the current element
-		// regardless of what follows, so emit it immediately under the SOFT cap — no
-		// deferral, no undecidable-whitespace hard-fail. This is the normal data-state
-		// text path, e.g. <p> + over-cap spaces + </p>.
+		// Reaching here means inside <head> without StripBlanks, or an element is open
+		// with a fixed insertion target (StripBlanks OFF and either the body subtree
+		// has been entered or implied insertion is disabled). The whitespace is
+		// significant and lands in the current element regardless of what follows, so
+		// emit it immediately under the SOFT cap — no deferral, no undecidable-
+		// whitespace hard-fail. This is the normal data-state text path, e.g.
+		// <p> + over-cap spaces + </p>, including under SuppressImplied.
 	}
 	if bytes.ContainsRune(data, '\uFFFD') {
 		if p.encodingError {
@@ -1723,15 +1731,16 @@ func (p *parser) flushPendingWS() error {
 // flushPendingWSRunEnd resolves deferred leading whitespace when the run ends
 // without ever becoming significant — a real markup tag or EOF closes it. The
 // run is therefore entirely whitespace: StripBlanks (noBlanks) drops it,
-// pre-root whitespace drops it, and otherwise it is emitted under the current
-// element. It is a no-op when nothing was deferred.
+// pre-root whitespace (empty stack, insertion mode still initial) drops it, and
+// otherwise it is emitted under the current element. It is a no-op when nothing
+// was deferred.
 func (p *parser) flushPendingWSRunEnd() error {
 	if len(p.pendingWS) == 0 {
 		return nil
 	}
 	ws := p.pendingWS
 	p.pendingWS = nil
-	if p.cfg.noBlanks || !p.sawRoot {
+	if p.cfg.noBlanks || (len(p.nameStack) == 0 && p.mode == insertInitial) {
 		return nil
 	}
 	return p.emitWSChunked(ws)

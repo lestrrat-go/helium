@@ -34,12 +34,16 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // within-lookahead run (e.g. "&ampZ" under a cap of 2) and a saturated ambiguous
 // run (e.g. "&amp" followed by a long alphanumeric tail).
 //
-// Finally, it is returned for one normal-text whitespace case under
-// [Parser.StripBlanks](true): a run is suppressed only when entirely whitespace,
-// so the scanner cannot flush a run whose leading whitespace prefix reaches the
-// cap with yet more whitespace beyond it without buffering the run unbounded to
-// learn whether it is significant — such a run fails rather than parsing
-// successfully.
+// Finally, it is returned for a normal-text whitespace case whenever a run's
+// leading whitespace must be DEFERRED with its parent or significance still
+// undecided: under [Parser.StripBlanks](true) (a run is suppressed only when
+// entirely whitespace) OR during implied-<body> deferral (mode < insertInBody
+// with implied insertion enabled, so the next non-whitespace byte would open the
+// implied <body>). The scanner cannot flush a run whose leading whitespace prefix
+// reaches the cap with yet more whitespace beyond it without buffering the run
+// unbounded to learn its significance or parent — such a run fails rather than
+// parsing successfully. Default-mode whitespace with a fixed insertion target and
+// no StripBlanks stays a soft-cap stream and never hits this case.
 var ErrContentSizeExceeded = errors.New("content size limit exceeded")
 
 // DocumentLocator is an alias for [sax.DocumentLocator].
