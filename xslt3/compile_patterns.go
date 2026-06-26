@@ -368,7 +368,10 @@ func isValidPatternStep(expr xpath3.Expr) bool {
 // start of a path pattern. In XSLT 3.0, key(), id(), and doc() are allowed
 // with literal arguments.
 func isAllowedPatternFunction(fc xpath3.FunctionCall) bool {
-	switch fc.Name {
+	// Normalize the EQName spelling Q{uri}local to its local part so the
+	// braced form Q{...}key() is recognized identically to key()/fn:key().
+	local, _ := lexicon.StreamFnLocalName(fc.Name, fc.Prefix)
+	switch local {
 	case "key", "id", "idref", "doc", "element-with-id", "root":
 		// Check that all arguments are literals or variable refs
 		for _, arg := range fc.Args {
@@ -432,6 +435,21 @@ func resolvePatternFunctionNamespace(prefix string, nsBindings map[string]string
 	return ""
 }
 
+// patternFunctionIdentity resolves a function call's (namespace URI, local name)
+// for pattern validation. The xpath3 parser keeps an EQName function call's whole
+// braced spelling in fc.Name (e.g. "Q{http://www.w3.org/2005/xpath-functions}current-group"),
+// so the braced URI must be read directly from the name rather than resolved
+// through fc.Prefix. For the lexical (unprefixed or prefixed) form it falls back
+// to resolvePatternFunctionNamespace so explicit xmlns overrides are honored.
+func patternFunctionIdentity(fc xpath3.FunctionCall, nsBindings map[string]string) (uri, local string) {
+	if strings.HasPrefix(fc.Name, "Q{") {
+		if idx := strings.IndexByte(fc.Name, '}'); idx >= 0 {
+			return fc.Name[2:idx], fc.Name[idx+1:]
+		}
+	}
+	return resolvePatternFunctionNamespace(fc.Prefix, nsBindings), fc.Name
+}
+
 // validatePatternFunctions checks that all function calls in a pattern
 // reference known functions (built-in XPath or declared xsl:function).
 // Unknown functions like f:special() raise XPST0017 at compile time.
@@ -446,13 +464,14 @@ func (c *compiler) validatePatternFunctions(_ context.Context, p *pattern, sourc
 			if !ok {
 				return true
 			}
-			local := fc.Name
 			// An unprefixed function call names the XPath functions namespace,
-			// the same as the prefixed path. Resolve it explicitly so it gets
-			// the identical existence/arity validation below — a nonexistent
-			// no-such-function() or a wrong-arity key() must be rejected, not
-			// silently allowed.
-			nsURI := resolvePatternFunctionNamespace(fc.Prefix, p.nsBindings)
+			// the same as the prefixed path. Resolve identity (URI + local)
+			// explicitly so it gets the identical existence/arity validation
+			// below — a nonexistent no-such-function() or a wrong-arity key()
+			// must be rejected, not silently allowed. patternFunctionIdentity
+			// also normalizes the EQName spelling Q{uri}local so it is matched
+			// against the same registries as the lexical form.
+			nsURI, local := patternFunctionIdentity(fc, p.nsBindings)
 			displayName := local
 			if fc.Prefix != "" {
 				displayName = fc.Prefix + ":" + local
@@ -518,14 +537,17 @@ func checkPatternForbiddenFunctions(ast xpath3.Expr, nsBindings map[string]strin
 			return true
 		}
 		// The forbidden list applies only to the XSLT/XPath functions
-		// namespace. Resolve the prefix the same way function existence is
-		// resolved (explicit bindings first, predeclared as fallback) so an
-		// explicit xmlns:fn override pointing at a custom namespace makes
-		// fn:current-group() a user function, not the forbidden builtin.
-		if resolvePatternFunctionNamespace(fc.Prefix, nsBindings) != lexicon.NamespaceFn {
+		// namespace. Resolve identity the same way function existence is
+		// resolved (braced EQName URI first, then explicit bindings, then
+		// predeclared as fallback) so an explicit xmlns:fn override pointing
+		// at a custom namespace makes fn:current-group() a user function, not
+		// the forbidden builtin, and the EQName spelling
+		// Q{http://www.w3.org/2005/xpath-functions}current-group() is caught.
+		uri, local := patternFunctionIdentity(fc, nsBindings)
+		if uri != lexicon.NamespaceFn {
 			return true
 		}
-		switch fc.Name {
+		switch local {
 		case "current-merge-key":
 			walkErr = staticError(errCodeXTSE3500, "current-merge-key() must not be used within a pattern")
 			return false

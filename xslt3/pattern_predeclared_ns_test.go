@@ -249,6 +249,36 @@ func TestPatternForbiddenFunctionRespectsExplicitBinding(t *testing.T) {
 	require.Error(t, err, "unprefixed current-group() in a pattern must be forbidden")
 }
 
+// TestPatternForbiddenFunctionEQName verifies that the forbidden-in-pattern
+// check also catches the EQName spelling Q{uri}local. The xpath3 parser keeps
+// an EQName function call's whole braced spelling in the name with an empty
+// prefix, so resolving identity from the prefix alone would miss it. Each of the
+// four forbidden grouping/merge functions written as
+// Q{http://www.w3.org/2005/xpath-functions}fn() in a pattern must be rejected.
+func TestPatternForbiddenFunctionEQName(t *testing.T) {
+	t.Parallel()
+
+	const fnNS = "http://www.w3.org/2005/xpath-functions"
+	for _, fn := range []string{
+		"current-group",
+		"current-grouping-key",
+		"current-merge-key",
+		"current-merge-group",
+	} {
+		t.Run(fn, func(t *testing.T) {
+			t.Parallel()
+			src := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="a[Q{` + fnNS + `}` + fn + `()]"><out/></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+			require.Error(t, err, "EQName Q{...}%s() in a pattern must be forbidden", fn)
+		})
+	}
+}
+
 // TestPatternLexicalNamespaceSnapshot verifies that each match pattern resolves
 // prefixes against its OWN lexical namespace context (the xmlns declarations in
 // scope at the pattern's position), not against a mutable stylesheet-global map.

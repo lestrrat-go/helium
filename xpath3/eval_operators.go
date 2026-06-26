@@ -503,10 +503,13 @@ func filterPreservesOrder(e Expr) bool {
 	if !ok {
 		return false
 	}
-	if fc.Prefix != "" {
+	// Normalize the lexical (unprefixed/fn:) and EQName Q{uri}local spellings
+	// to a local name in the XPath functions namespace before matching.
+	local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix)
+	if !isFn {
 		return false
 	}
-	return fc.Name == "reverse" || fc.Name == "sort"
+	return local == "reverse" || local == "sort"
 }
 
 // evalPathStepExpr evaluates E1/E2 where E2 is a non-axis expression.
