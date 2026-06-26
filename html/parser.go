@@ -1639,9 +1639,13 @@ func (p *parser) emitCharacters(data []byte) error {
 		// Flush deferred leading whitespace into the now-significant run BEFORE
 		// emitting this non-whitespace data. The caller has already established the
 		// insertion target (htmlStartCharData / lone-'<'), so it lands correctly.
-		if err := p.flushPendingWS(); err != nil {
-			return err
-		}
+		// Route any SAX callback error through handleSAXErr exactly like the regular
+		// character-emit path (e.g. parseRawContent): an UNSET Characters handler
+		// returns ErrHandlerUnspecified and is filtered to a no-op, a real handler
+		// error is captured (strict) or warned (tolerant). Either way we must NOT
+		// short-circuit — the current non-whitespace chunk below (including the
+		// encoding-error check) still has to be emitted and processed.
+		p.handleSAXErr(p.flushPendingWS())
 	} else if !p.curTextRunSignificant && !p.inRawTextElement() {
 		// All-whitespace data whose run significance / insertion target may not yet
 		// be established.
