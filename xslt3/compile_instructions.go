@@ -822,7 +822,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 				// Static parameter-document: load at compile time
 				outDef := &OutputDef{}
 				baseURI := stylesheetBaseURI(elem, c.baseURI)
-				if err := c.loadParameterDocument(ctx, outDef, baseURI, pd); err != nil {
+				if _, err := c.loadParameterDocument(ctx, outDef, baseURI, pd, false); err != nil {
 					return nil, err
 				}
 				inst.ParameterDocOutputDef = outDef

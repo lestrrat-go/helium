@@ -492,7 +492,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 				// callers can observe it, and an over-cap read keeps
 				// [ErrResourceTooLarge] in the chain (matched via errors.Is)
 				// while errors.Is(err, ErrStaticError) stays false.
-				if loadErr := loadParameterDocumentFromFile(ctx, ec.injectedParser(), outDef, baseURI, pdHref, ec.retrieveDocumentBytes, true); loadErr != nil {
+				if _, loadErr := loadParameterDocumentFromFile(ctx, ec.injectedParser(), outDef, baseURI, pdHref, ec.retrieveDocumentBytes, true, false); loadErr != nil {
 					return loadErr
 				}
 				if ec.paramDocOutputDefs == nil {

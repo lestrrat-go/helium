@@ -352,26 +352,22 @@ type OutputDef struct {
 	// Version is the version emitted in the XML or HTML declaration.
 	Version string
 	// UndeclarePrefixes enables namespace-undeclaration in XML 1.1 output.
-	UndeclarePrefixes   bool
-	IncludeContentType  *bool           // include-content-type: nil=default(yes), true/false
-	ItemSeparator       *string         // item-separator serialization parameter; nil = not set
-	ItemSeparatorAbsent bool            // true when item-separator="#absent" was explicitly set
-	HTMLVersion         string          // html-version: "5", "4.0", etc.
-	NormalizationForm   string          // "NFC", "NFD", "NFKC", "NFKD", "fully-normalized", "none"
-	ByteOrderMark       bool            // byte-order-mark: emit BOM at start of output
-	EscapeURIAttributes *bool           // escape-uri-attributes: nil=default(true), true/false
-	UseCharacterMaps    []string        // names of character maps to use
-	ResolvedCharMap     map[rune]string // resolved character map (populated at runtime)
-	AllowDuplicateNames bool            // allow-duplicate-names for JSON output
-	// allowDuplicateNamesExplicit is true when allow-duplicate-names was
-	// supplied by either the xsl:output attribute or the parameter document.
-	// Internal merge bookkeeping; not part of the public API.
-	allowDuplicateNamesExplicit bool
-	JSONNodeOutputMethod        string   // json-node-output-method: "xml", "html", "xhtml", "text"
-	SuppressIndentation         []string // suppress-indentation element names
-	ParameterDocument           string   // parameter-document URI
-	BuildTree                   *bool    // build-tree: nil=default(true), true/false
-	ImportPrec                  int      // import precedence for XTSE1560 conflict detection
+	UndeclarePrefixes    bool
+	IncludeContentType   *bool           // include-content-type: nil=default(yes), true/false
+	ItemSeparator        *string         // item-separator serialization parameter; nil = not set
+	ItemSeparatorAbsent  bool            // true when item-separator="#absent" was explicitly set
+	HTMLVersion          string          // html-version: "5", "4.0", etc.
+	NormalizationForm    string          // "NFC", "NFD", "NFKC", "NFKD", "fully-normalized", "none"
+	ByteOrderMark        bool            // byte-order-mark: emit BOM at start of output
+	EscapeURIAttributes  *bool           // escape-uri-attributes: nil=default(true), true/false
+	UseCharacterMaps     []string        // names of character maps to use
+	ResolvedCharMap      map[rune]string // resolved character map (populated at runtime)
+	AllowDuplicateNames  bool            // allow-duplicate-names for JSON output
+	JSONNodeOutputMethod string          // json-node-output-method: "xml", "html", "xhtml", "text"
+	SuppressIndentation  []string        // suppress-indentation element names
+	ParameterDocument    string          // parameter-document URI
+	BuildTree            *bool           // build-tree: nil=default(true), true/false
+	ImportPrec           int             // import precedence for XTSE1560 conflict detection
 	// Raw attribute values for XTSE1560 conflict detection
 	MethodRaw     string
 	IndentRaw     string
