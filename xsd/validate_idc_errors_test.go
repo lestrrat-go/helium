@@ -94,6 +94,90 @@ func TestIDCMalformedXPath(t *testing.T) {
 	})
 }
 
+// TestIDCXPathSubset verifies that identity-constraint selector/field XPath
+// expressions are gated against the restricted XPath subset XSD permits
+// (Structures 3.11.6). The full XPath 1.0 grammar is broader than that subset,
+// so syntactically valid but out-of-subset constructs (string/number literals,
+// function calls, variable references, operators, predicates, the attribute
+// axis in a selector) must be rejected at schema-compile time, while genuine
+// subset expressions still compile clean.
+func TestIDCXPathSubset(t *testing.T) {
+	t.Parallel()
+
+	const (
+		okSelector = "item" // a valid in-subset selector
+		okField    = "@id"  // a valid in-subset field
+	)
+
+	schema := func(selector, field string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="id" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="itemKey">
+      <xs:selector xpath="` + selector + `"/>
+      <xs:field xpath="` + field + `"/>
+    </xs:unique>
+  </xs:element>
+</xs:schema>`
+	}
+
+	t.Run("selector rejected", func(t *testing.T) {
+		t.Parallel()
+		// String/number literals, function calls, predicates, the attribute
+		// axis, absolute paths and operators are all outside the subset.
+		for _, sel := range []string{"'literal'", "42", "foo()", "item[@id='x']", "@id", "/item", "item + 1"} {
+			t.Run(sel, func(t *testing.T) {
+				t.Parallel()
+				_, errs := compileXSD(t, schema(sel, okField))
+				require.NotEmpty(t, errs, "out-of-subset selector must be rejected")
+				require.Contains(t, errs, "is not a valid selector")
+			})
+		}
+	})
+
+	t.Run("field rejected", func(t *testing.T) {
+		t.Parallel()
+		// Like selectors, plus a non-final attribute step is out of subset.
+		for _, f := range []string{"'literal'", "string(@id)", "$x", "@id[1]", "@id/item"} {
+			t.Run(f, func(t *testing.T) {
+				t.Parallel()
+				_, errs := compileXSD(t, schema(okSelector, f))
+				require.NotEmpty(t, errs, "out-of-subset field must be rejected")
+				require.Contains(t, errs, "is not a valid field")
+			})
+		}
+	})
+
+	t.Run("accepted", func(t *testing.T) {
+		t.Parallel()
+		for name, tc := range map[string]struct {
+			selector, field string
+		}{
+			"child name test":    {okSelector, okField},
+			"self step":          {".", okField},
+			"descendant-or-self": {".//item", okField},
+			"wildcard name test": {"*", okField},
+			"union of paths":     {".//item | item", okField},
+			"field self":         {okSelector, "."},
+			"multi-step child":   {"item/item", okField},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				_, errs := compileXSD(t, schema(tc.selector, tc.field))
+				require.Empty(t, errs, "valid subset XPath must compile clean")
+			})
+		}
+	})
+}
+
 // TestIDCKeyRefUnresolvedRefer covers an xs:keyref whose @refer names a
 // key/unique constraint that does not exist. Previously such a keyref was
 // silently skipped at validation time, so referential integrity was not
