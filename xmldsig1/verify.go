@@ -273,7 +273,7 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 				return fmt.Errorf("%w: CanonicalizationMethod missing Algorithm", ErrInvalidSignature)
 			}
 			parsed.c14nMethod = alg
-			prefixes, err := parseCanonicalizationParameters(e)
+			prefixes, err := parseCanonicalizationParameters(e, alg)
 			if err != nil {
 				return err
 			}
@@ -397,7 +397,15 @@ func excInclusiveNamespacePrefixes(elem *helium.Element) ([]string, bool) {
 // element, which would be a canonicalization parameter we cannot honor. Silently
 // ignoring an unknown parameter would canonicalize SignedInfo differently from
 // what the signer intended, so it is rejected.
-func parseCanonicalizationParameters(elem *helium.Element) ([]string, error) {
+//
+// ec:InclusiveNamespaces is an Exclusive XML Canonicalization parameter and is
+// only meaningful for the exclusive c14n algorithms (ExcC14N10 /
+// ExcC14N10Comments); canonicalize() only honors the PrefixList for exclusive
+// modes. If it appeared under a non-exclusive method (C14N10/C14N11), the
+// verifier would silently ignore it, canonicalizing SignedInfo differently from
+// what the signer declared. To keep parameter handling fail-closed, reject an
+// ec:InclusiveNamespaces parameter on any non-exclusive c14n method.
+func parseCanonicalizationParameters(elem *helium.Element, alg string) ([]string, error) {
 	var prefixes []string
 	for c := elem.FirstChild(); c != nil; c = c.NextSibling() {
 		ce, ok := helium.AsNode[*helium.Element](c)
@@ -407,6 +415,9 @@ func parseCanonicalizationParameters(elem *helium.Element) ([]string, error) {
 		px, matched := excInclusiveNamespacePrefixes(ce)
 		if !matched {
 			return nil, fmt.Errorf("%w: unsupported CanonicalizationMethod parameter %s", ErrUnsupportedTransform, domutil.LocalName(ce))
+		}
+		if alg != ExcC14N10 && alg != ExcC14N10Comments {
+			return nil, fmt.Errorf("%w: ec:InclusiveNamespaces is only valid for exclusive c14n, not %s", ErrUnsupportedTransform, alg)
 		}
 		prefixes = px
 	}

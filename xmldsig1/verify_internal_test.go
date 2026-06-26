@@ -702,3 +702,55 @@ func TestVerifyRejectsCanonicalizationMethodParameter(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
 	require.Contains(t, err.Error(), "CanonicalizationMethod parameter")
 }
+
+// TestVerifyRejectsInclusiveNamespacesOnNonExclusiveC14N guards the fail-closed
+// parameter handling: ec:InclusiveNamespaces is an Exclusive XML Canonicalization
+// parameter and canonicalize() only honors its PrefixList for exclusive modes. A
+// non-exclusive CanonicalizationMethod (C14N 1.0 / C14N 1.1) declaring an
+// ec:InclusiveNamespaces parameter would have it silently ignored, so it must be
+// rejected rather than accepted.
+func TestVerifyRejectsInclusiveNamespacesOnNonExclusiveC14N(t *testing.T) {
+	for _, alg := range []string{C14N10, C14N10Comments, C14N11URI, C14N11Comments} {
+		t.Run(alg, func(t *testing.T) {
+			si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+				`<ds:CanonicalizationMethod Algorithm="` + alg + `">` +
+				`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="extra"/>` +
+				`</ds:CanonicalizationMethod>` +
+				`<ds:SignatureMethod Algorithm="` + AlgRSASHA256 + `"/>` +
+				`<ds:Reference URI="">` +
+				`<ds:DigestMethod Algorithm="` + DigestSHA256 + `"/>` +
+				`<ds:DigestValue>AA==</ds:DigestValue>` +
+				`</ds:Reference>` +
+				`</ds:SignedInfo>`
+			doc := mustParse(t, si)
+			var parsed parsedSignature
+			err := parseSignedInfo(doc.DocumentElement(), &parsed)
+			require.ErrorIs(t, err, ErrUnsupportedTransform)
+			require.Contains(t, err.Error(), "ec:InclusiveNamespaces")
+		})
+	}
+}
+
+// TestVerifyAcceptsInclusiveNamespacesOnExclusiveC14N is the accept arm: an
+// ec:InclusiveNamespaces PrefixList declared on an exclusive CanonicalizationMethod
+// is honored and its prefixes threaded through to canonicalization.
+func TestVerifyAcceptsInclusiveNamespacesOnExclusiveC14N(t *testing.T) {
+	for _, alg := range []string{ExcC14N10, ExcC14N10Comments} {
+		t.Run(alg, func(t *testing.T) {
+			si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+				`<ds:CanonicalizationMethod Algorithm="` + alg + `">` +
+				`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="extra ns2"/>` +
+				`</ds:CanonicalizationMethod>` +
+				`<ds:SignatureMethod Algorithm="` + AlgRSASHA256 + `"/>` +
+				`<ds:Reference URI="">` +
+				`<ds:DigestMethod Algorithm="` + DigestSHA256 + `"/>` +
+				`<ds:DigestValue>AA==</ds:DigestValue>` +
+				`</ds:Reference>` +
+				`</ds:SignedInfo>`
+			doc := mustParse(t, si)
+			var parsed parsedSignature
+			require.NoError(t, parseSignedInfo(doc.DocumentElement(), &parsed))
+			require.Equal(t, []string{"extra", "ns2"}, parsed.c14nPrefixes)
+		})
+	}
+}
