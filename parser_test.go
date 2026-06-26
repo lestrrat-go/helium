@@ -15,6 +15,7 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
@@ -3180,17 +3181,18 @@ func TestParserCharBufferSizeBoundsCharDataMemory(t *testing.T) {
 }
 
 // TestParserCharBufferSizeConsistentWhitespaceClassification pins the chunked
-// streaming-SAX path's whitespace classification. The single-shot path can look
-// over the whole run to decide ignorable-whitespace vs. character data, but the
-// chunked path delivers in bounded pieces and cannot. To keep the classification
-// consistent across a run it tracks blankness incrementally: a run is reported as
-// ignorable whitespace while every byte seen so far is blank, and the first
-// non-blank byte permanently downgrades the remainder to characters.
+// streaming-SAX path's whitespace classification against the single-shot path,
+// which classifies the WHOLE run as one unit. The single-shot path looks over
+// the whole run to decide ignorable-whitespace vs. character data; the chunked
+// path delivers in bounded pieces and cannot, so it must not emit any
+// IgnorableWhitespace event until the whole run is proven blank: a fully-blank
+// run is ignorable whitespace, but a run containing any text is character data
+// in its entirety, leading blanks included.
 //
-// This guards against the earlier per-chunk classification, where the same blank
-// run could arrive as Characters then IgnorableWhitespace under a tiny buffer
-// because the blank test peeked for the end-of-run delimiter only the final chunk
-// could see.
+// This guards against two earlier bugs: per-chunk classification, where a blank
+// run could arrive as Characters then IgnorableWhitespace under a tiny buffer;
+// and "sticky downgrade", where the leading blanks of <root>  text</root> were
+// emitted as an early IgnorableWhitespace chunk before the text was seen.
 func TestParserCharBufferSizeConsistentWhitespaceClassification(t *testing.T) {
 	t.Parallel()
 
@@ -3234,20 +3236,45 @@ func TestParserCharBufferSizeConsistentWhitespaceClassification(t *testing.T) {
 		}
 	})
 
-	t.Run("run that turns non-blank never reverts to ignorable", func(t *testing.T) {
+	t.Run("run containing text is all characters, no leading ignorable", func(t *testing.T) {
 		t.Parallel()
 		events := run("<root>      text</root>", 2)
 		require.Equal(t, "      text", concat(events), "every character byte is delivered")
-		seenChars := false
+		require.NotEmpty(t, events, "a run containing text must deliver characters")
 		for _, e := range events {
-			if !e.ignorable {
-				seenChars = true
-				continue
-			}
-			require.False(t, seenChars, "ignorable whitespace must not follow characters; classification only downgrades")
+			require.False(t, e.ignorable,
+				"a run containing text is character data in its entirety; leading blanks must not be emitted as ignorable whitespace")
 		}
-		require.True(t, seenChars, "a run containing text must deliver characters")
 	})
+}
+
+// TestParserCharBufferSizeNeverSplitsRune verifies the chunked streaming-SAX
+// path never splits a UTF-8 rune, even when CharBufferSize is smaller than a
+// single multi-byte rune. ScanCharDataSlice returns a lone over-budget rune
+// whole (to guarantee progress), and deliverCharacters must then deliver it
+// whole rather than slicing it into invalid UTF-8 fragments.
+func TestParserCharBufferSizeNeverSplitsRune(t *testing.T) {
+	t.Parallel()
+
+	// Mix 2-, 3-, and 4-byte runes so a 1-byte buffer is narrower than every
+	// rune in the run.
+	const content = "héllo—世界🌍ok"
+
+	var chunks []string
+	handler := sax.New()
+	collect := func(_ context.Context, ch []byte) error {
+		require.True(t, utf8.Valid(ch), "no chunk may contain a split (invalid) UTF-8 rune: %q", ch)
+		chunks = append(chunks, string(ch))
+		return nil
+	}
+	handler.SetOnCharacters(sax.CharactersFunc(collect))
+	handler.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(collect))
+
+	_, err := helium.NewParser().SAXHandler(handler).CharBufferSize(1).
+		Parse(context.Background(), []byte("<root>"+content+"</root>"))
+	require.NoError(t, err)
+
+	require.Equal(t, content, strings.Join(chunks, ""), "every byte is delivered intact")
 }
 
 // nopCatalog is a CatalogResolver that never resolves anything. It exists only

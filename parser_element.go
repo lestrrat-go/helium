@@ -140,29 +140,93 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 // chunks. Used only when charBufferSize > 0 and no DOM is being built (the DOM
 // path must classify blank-vs-text over the whole run to drive whitespace
 // stripping, so it stays single-shot).
+//
+// Whitespace classification must match the single-shot path, which classifies
+// the WHOLE run as one unit: <root>  text</root> is character data (the leading
+// blanks are not ignorable whitespace), while <root>   </root> is ignorable
+// whitespace. The chunked path therefore must NOT emit any IgnorableWhitespace
+// event until it has proven the whole run is blank — an early per-chunk
+// IgnorableWhitespace that a later non-blank byte contradicts cannot be taken
+// back. Two cases keep this bounded:
+//
+//   - When the context makes whitespace non-ignorable here (xml:space="preserve",
+//     mixed content, no open element), the run is character data regardless of
+//     its bytes, so it is streamed in fixed-size chunks directly. This covers the
+//     unbounded-text DoS in those contexts.
+//   - Otherwise the leading blank run is accumulated while every byte seen is
+//     whitespace. The first non-blank byte proves character data: the accumulated
+//     prefix plus the rest of the run is delivered as Characters and the tail is
+//     streamed in bounded chunks. A run that stays blank to its end is delivered
+//     as IgnorableWhitespace. The realistic huge run (non-blank text) commits to
+//     Characters on its first chunk and never accumulates; only a pathological
+//     multi-megabyte run of pure whitespace buffers (it cannot be classified
+//     without seeing its end), and that is whitespace, not the text DoS vector.
 func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcursor.UTF8Cursor) error {
 	s := pctx.sax
 	limit := pctx.charBufferSize
-	first := true
 
-	// Classifying the run as ignorable whitespace vs. character data must stay
-	// consistent across all of its chunks: otherwise <root>    </root> with a
-	// tiny buffer would deliver one whitespace chunk as Characters and the next
-	// identical chunk as IgnorableWhitespace, because areBlanksBytes peeks for
-	// the end-of-run delimiter that is only in view on the final chunk.
-	//
-	// Bounded memory rules out the whole-run lookahead the single-shot path
-	// uses, so instead the context-only eligibility is decided once and
-	// blankness is tracked incrementally: while every byte seen so far is
-	// whitespace the run is delivered as IgnorableWhitespace, and the first
-	// non-blank byte permanently downgrades the remainder to Characters. A
-	// fully-blank run is therefore delivered entirely as IgnorableWhitespace
-	// (one classification, matching the single-shot path); a run that turns out
-	// to contain text delivers its leading whitespace as IgnorableWhitespace
-	// and the rest as Characters. Already-delivered leading whitespace is not
-	// retroactively reclassified — that would require the unbounded lookahead
-	// this path exists to avoid.
+	// blank tracks whether the run could still be ignorable whitespace. When the
+	// context makes whitespace non-ignorable, it starts false so the first chunk
+	// commits to Characters immediately (no blank-prefix accumulation).
 	blank := pctx.whitespaceContextIgnorable()
+
+	acc := pctx.charBuf[:0]
+	first := true
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		prev := len(acc)
+		var i int
+		acc, i = u8.ScanCharDataSlice(acc, limit)
+		if i <= 0 {
+			if first {
+				if u8.Peek() == ']' && u8.PeekAt(1) == ']' && u8.PeekAt(2) == '>' {
+					return pctx.error(ctx, ErrMisplacedCDATAEnd)
+				}
+				return errors.New("invalid char data")
+			}
+			// The run ended; everything accumulated is blank (a non-blank byte
+			// would have returned via the Characters branch below). Deliver it
+			// as ignorable whitespace, chunked by deliverCharacters.
+			break
+		}
+		first = false
+
+		if err := u8.AdvanceFast(i); err != nil {
+			return err
+		}
+		pctx.charBuf = acc
+
+		if blank && !allBlankBytes(acc[prev:]) {
+			blank = false
+		}
+
+		if !blank {
+			// Proven to be character data: flush the accumulated prefix (which
+			// includes this chunk) as Characters, then stream the rest of the
+			// run in bounded chunks.
+			if err := pctx.deliverCharacters(ctx, s.Characters, acc); err != nil {
+				return err
+			}
+			return pctx.streamCharDataChunks(ctx, u8, limit, s.Characters)
+		}
+	}
+
+	pctx.charBuf = acc
+	if len(acc) == 0 {
+		return nil
+	}
+	return pctx.deliverCharacters(ctx, s.IgnorableWhitespace, acc)
+}
+
+// streamCharDataChunks scans the remainder of a character-data run and delivers
+// it via handler in chunks of at most limit bytes, with bounded memory. It is
+// called once the run's classification is known and at least one chunk has
+// already been consumed, so an empty scan means the run ended at a delimiter or
+// EOF (handled by the caller) rather than an error.
+func (pctx *parserCtx) streamCharDataChunks(ctx context.Context, u8 *strcursor.UTF8Cursor, limit int, handler func(context.Context, []byte) error) error {
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -170,35 +234,14 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 
 		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], limit)
 		if i <= 0 {
-			if !first {
-				// The run ended on the previous chunk; the next byte is a
-				// delimiter (<, &, ]]>) or EOF, handled by the caller.
-				return nil
-			}
-			if u8.Peek() == ']' && u8.PeekAt(1) == ']' && u8.PeekAt(2) == '>' {
-				return pctx.error(ctx, ErrMisplacedCDATAEnd)
-			}
-			return errors.New("invalid char data")
+			return nil
 		}
-		first = false
 
 		if err := u8.AdvanceFast(i); err != nil {
 			return err
 		}
-
-		// Keep the grown buffer for the next chunk/call.
 		pctx.charBuf = data
 
-		if blank && !allBlankBytes(data) {
-			blank = false
-		}
-
-		// Each chunk is at most charBufferSize bytes, so deliverCharacters
-		// emits it in a single callback.
-		handler := s.Characters
-		if blank {
-			handler = s.IgnorableWhitespace
-		}
 		if err := pctx.deliverCharacters(ctx, handler, data); err != nil {
 			return err
 		}
