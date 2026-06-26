@@ -37,7 +37,7 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// root key from doc.URL(), so a nested xs:include/xs:redefine that points back
 	// at this schema (main -> inc -> main) is recognized as already-loaded instead
 	// of being re-parsed into duplicate components.
-	doc, err := parseExternalXML(ctx, c.parser, data, uri, false, nil, nil)
+	doc, err := parseExternalXML(ctx, c.parser, data, uri, false, nil, nil, c.maxResourceBytes)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
 	}

@@ -79,7 +79,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 		// base, a local-path schema URI leaves doc.URL() empty and a nested
 		// xs:include/xs:redefine pointing back at this schema (main -> inc -> main)
 		// is re-parsed into duplicate components instead of being skipped.
-		schemaDoc, err := secureXMLParser(ec.injectedParser(), uri).Parse(ctx, data)
+		schemaDoc, err := secureXMLParser(ec.injectedParser(), uri, ec.resourceLimit()).Parse(ctx, data)
 		if err != nil {
 			return nil, fmt.Errorf("parse source schema %q: %w", uri, err)
 		}
