@@ -290,7 +290,7 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 		// The zero-arg form (e.g., string() inside a path like @nr/string())
 		// is NOT counted here because in that case the context is the
 		// navigated-to node, not the streaming context.
-		if isFnNamespacePrefix(e.Prefix) && isConsumingBuiltinFunc(e.Name) && len(e.Args) > 0 && isContextItemArg(e.Args[0]) {
+		if local, isFn := lexicon.StreamFnLocalName(e.Name, e.Prefix); isFn && isConsumingBuiltinFunc(local) && len(e.Args) > 0 && isContextItemArg(e.Args[0]) {
 			count++
 			break
 		}
@@ -422,12 +422,6 @@ func isConsumingBuiltinFunc(name string) bool {
 		return true
 	}
 	return false
-}
-
-// isFnNamespacePrefix delegates to lexicon.IsFnNamespacePrefix, the shared
-// streamability helper used across xpath3, xslt3 and internal/xpathstream.
-func isFnNamespacePrefix(prefix string) bool {
-	return lexicon.IsFnNamespacePrefix(prefix)
 }
 
 // isContextItemArg returns true if the expression is a simple context item

@@ -122,4 +122,59 @@ func TestEQNameFnStreamabilityXSLTLayer(t *testing.T) {
 			exprUsesFunctionOutsideGrounding(eqname, "position"),
 			"EQName Q{...}position() must classify same as unprefixed position()")
 	})
+
+	t.Run("string consuming context item", func(t *testing.T) {
+		plain := compile(t, "string(.)")
+		eqname := compile(t, "Q{"+fnNS+"}string(.)")
+		require.Positive(t, countStreamingDownwardSelections(nil, plain.AST()),
+			"unprefixed string(.) must count as a consuming selection")
+		require.Equal(t,
+			countStreamingDownwardSelections(nil, plain.AST()),
+			countStreamingDownwardSelections(nil, eqname.AST()),
+			"EQName Q{...}string(.) must count same as unprefixed string(.)")
+	})
+
+	t.Run("data consuming context item", func(t *testing.T) {
+		plain := compile(t, "data(.)")
+		eqname := compile(t, "Q{"+fnNS+"}data(.)")
+		require.Positive(t, countStreamingDownwardSelections(nil, plain.AST()),
+			"unprefixed data(.) must count as a consuming selection")
+		require.Equal(t,
+			countStreamingDownwardSelections(nil, plain.AST()),
+			countStreamingDownwardSelections(nil, eqname.AST()),
+			"EQName Q{...}data(.) must count same as unprefixed data(.)")
+	})
+
+	t.Run("current-group consuming", func(t *testing.T) {
+		plain := compile(t, "current-group()/child::b")
+		eqname := compile(t, "Q{"+fnNS+"}current-group()/child::b")
+		require.Positive(t, countCurrentGroupConsumingInExpr(plain.AST()),
+			"unprefixed current-group() must be counted as consuming")
+		require.Equal(t,
+			countCurrentGroupConsumingInExpr(plain.AST()),
+			countCurrentGroupConsumingInExpr(eqname.AST()),
+			"EQName Q{...}current-group() must count same as unprefixed current-group()")
+	})
+
+	t.Run("snapshot grounding", func(t *testing.T) {
+		plain := compile(t, "snapshot(child::a)")
+		eqname := compile(t, "Q{"+fnNS+"}snapshot(child::a)")
+		require.True(t, isGroundingExpr(plain.AST()),
+			"unprefixed snapshot() must be grounding")
+		require.Equal(t,
+			isGroundingExpr(plain.AST()),
+			isGroundingExpr(eqname.AST()),
+			"EQName Q{...}snapshot() must classify same as unprefixed snapshot()")
+	})
+
+	t.Run("copy-of grounding", func(t *testing.T) {
+		plain := compile(t, "copy-of(child::a)")
+		eqname := compile(t, "Q{"+fnNS+"}copy-of(child::a)")
+		require.True(t, isGroundingExpr(plain.AST()),
+			"unprefixed copy-of() must be grounding")
+		require.Equal(t,
+			isGroundingExpr(plain.AST()),
+			isGroundingExpr(eqname.AST()),
+			"EQName Q{...}copy-of() must classify same as unprefixed copy-of()")
+	})
 }
