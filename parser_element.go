@@ -47,7 +47,14 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		// bounded memory: scan and deliver the run in fixed-size chunks rather
 		// than buffering the whole delimiter-free run (which would also grow the
 		// cursor's internal buffer) before chunking only the delivery.
-		if pctx.charBufferSize > 0 && pctx.treeBuilder == nil &&
+		// pctx.doc == nil ensures no DOM is being built. A SAX wrapper that
+		// delegates to a TreeBuilder has pctx.treeBuilder == nil (it is not the
+		// concrete *TreeBuilder) yet pctx.doc is populated (TreeBuilder.StartDocument
+		// set it). Such wrappers must use the single-shot classification path so a
+		// large whitespace run is classified over the whole run and delivered via
+		// IgnorableWhitespace (which StripBlanks drops) rather than being downgraded
+		// to Characters by the chunked path's blankBudget cap.
+		if pctx.charBufferSize > 0 && pctx.treeBuilder == nil && pctx.doc == nil &&
 			pctx.sax != nil && !pctx.disableSAX {
 			return pctx.parseCharDataChunkedSAX(ctx, u8)
 		}
