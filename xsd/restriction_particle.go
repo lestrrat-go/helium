@@ -283,11 +283,20 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 		if rr != r || bb != b {
 			return particleValidRestriction(ctx, rr, bb)
 		}
-		// sequence:all is RecurseUnordered (a valid derivation). Implementing the
-		// full unordered mapping is out of scope here; conservatively accept it
-		// rather than risk a false rejection.
+		// sequence:all is RecurseUnordered (XSD §3.9.6): a derived SEQUENCE
+		// restricting a base ALL. Order is irrelevant in the base all, so each
+		// derived sequence particle must map to a DISTINCT base all particle it
+		// validly restricts, and every base particle left unmapped must be
+		// emptiable. This is exactly the all→all distinct-mapping (recurseAll) — the
+		// derived side being ordered does not further constrain the unordered base —
+		// so reuse it after checking the group occurrence range. A derived sequence
+		// that adds/renames a particle (no distinct base counterpart) or drops a
+		// required base member is rejected.
 		if rg.Compositor == CompositorSequence && bg.Compositor == CompositorAll {
-			return true
+			if !occurrenceValidRestriction(r.MinOccurs, r.MaxOccurs, b.MinOccurs, b.MaxOccurs) {
+				return false
+			}
+			return recurseAll(ctx, rg.Particles, bg.Particles)
 		}
 		// choice:sequence, choice:all, all:sequence, all:choice — no derivation
 		// rule, reject.
