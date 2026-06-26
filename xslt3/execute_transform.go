@@ -701,9 +701,16 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			// for the primary output method.
 			primaryMethod := ec.currentResultDocMethod
 			if primaryMethod == methodJSON {
+				// Derive allow-duplicate-names from the effective primary output
+				// definition: the default xsl:output, overridden by any primary
+				// xsl:result-document serialization params (which already fold in
+				// the default base via evalResultDocOutputDef).
 				allowDupes := false
 				if defOut := ss.outputs[""]; defOut != nil {
 					allowDupes = defOut.AllowDuplicateNames
+				}
+				if ec.primaryOutputOverrides != nil {
+					allowDupes = ec.primaryOutputOverrides.AllowDuplicateNames
 				}
 				if !allowDupes {
 					if err := validateJSONItems(out.pendingItems); err != nil {
@@ -821,6 +828,9 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if ov.BuildTree != nil {
 			outDef.BuildTree = ov.BuildTree
 		}
+		// ov folds in the default xsl:output base via evalResultDocOutputDef, so
+		// this is the effective allow-duplicate-names for the primary output.
+		outDef.AllowDuplicateNames = ov.AllowDuplicateNames
 	}
 
 	if cfg != nil {

@@ -429,3 +429,30 @@ func TestResultDocumentPrimaryOutputVersionAVTApplied(t *testing.T) {
 	require.Equal(t, "1.1", od.Version,
 		"the primary result-document's output-version AVT override must reach the effective output def")
 }
+
+// XSLT3-ADV-001: with a default method="json" output, a primary
+// xsl:result-document allow-duplicate-names="{...}" AVT that resolves to true
+// must reach the transform-level SERE0022 dup-key validation. Pre-fix the
+// final validation read ss.outputs[""] (default, no) and the override merge
+// never copied AllowDuplicateNames, so duplicate JSON keys were wrongly
+// rejected even though the result-document permitted them.
+func TestResultDocumentPrimaryJSONAllowDuplicateNamesAVT(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="json"/>
+  <xsl:template match="/">
+    <xsl:result-document allow-duplicate-names="{true()}">
+      <xsl:sequence select="map{1:'a','1':'b'}"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	_, err := inv.Do(t.Context())
+	require.NoError(t, err,
+		"duplicate JSON keys must be accepted when the primary result-document's allow-duplicate-names AVT resolves to true")
+	od := inv.ResolvedOutputDef()
+	require.NotNil(t, od)
+	require.True(t, od.AllowDuplicateNames,
+		"the primary result-document allow-duplicate-names override must reach the effective output def")
+}
