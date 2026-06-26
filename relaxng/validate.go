@@ -2043,6 +2043,12 @@ func facetOrderingOK(text, facetBound, typeName string, accept func(int) bool) b
 	if !value.Orderable(typeName) {
 		return false
 	}
+	// Normalize the bound per the datatype's XSD whitespace facet (float/double are
+	// collapse) BEFORE comparing it: a raw bound such as "<param>" NaN "</param>"
+	// carries surrounding whitespace that value.Compare trims away (so it reads NaN
+	// and returns indeterminate) but value.IsFloatNaN does not, so the unnormalized
+	// " NaN " bound would be seen as non-NaN below and let a finite instance through.
+	facetBound = value.Normalize(facetBound, typeName)
 	cmp, ok := value.Compare(text, facetBound, typeName)
 	if !ok {
 		// A NaN operand (instance value or bound) is incomparable for the bounding

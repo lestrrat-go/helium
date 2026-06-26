@@ -491,7 +491,17 @@ XSD builtin value validation and comparison, extracted from `xsd/`.
 - **ValidateBuiltin(value, builtinLocal string) error** — validate value against XSD builtin type lexical space
 - **Compare(a, b, builtinLocal string) (int, bool)** — type-aware comparison (-1/0/+1, ok)
 - **CompareDecimal(a, b string) int** — decimal comparison via math/big.Rat (-2 on error)
-- Files: `validate.go`, `compare.go`
+- **CompareFloatFacetBound(a, b, builtinLocal string) (int, bool)** — float/double bound comparison ordering NaN as equal-to-NaN and greater-than-finite (schema-consistency check)
+- **CanonicalKey(s, builtinLocal string) (string, bool)** — canonical value-space key (e.g. for enumeration de-dup)
+- **WhiteSpace(builtinLocal string) string** — the type's XSD whiteSpace facet ("preserve"/"replace"/"collapse")
+- **Normalize(s, builtinLocal string) string** — apply the type's whiteSpace facet to a lexical value
+- **IsFloatNaN(s string) bool** — reports whether a float/double lexical is NaN
+- **XSDFields(s string) []string** — split on XSD list whitespace
+- **Orderable(builtinLocal string) bool** — whether the primitive value space is ordered (range facets may apply)
+- **IsDecimalFamily(builtinLocal string) bool** — whether the type is xs:decimal or a derived integer (digit facets may apply)
+- **CountTotalDigits(value string) int** — significant total-digit count for the totalDigits facet
+- **CountFractionDigits(value string) int** — significant fraction-digit count for the fractionDigits facet
+- Files: `validate.go`, `compare.go`, `facets.go`
 - Imports: `internal/lexicon` (XSD builtin type-name constants)
 
 ## internal/stack/

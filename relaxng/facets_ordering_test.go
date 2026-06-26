@@ -170,6 +170,12 @@ func TestDataOrderingFacetsFloatNaN(t *testing.T) {
 			require.Error(t, err, "a NaN bound must not accept a finite value")
 		})
 
+		t.Run(typ+" finite instance rejected by whitespace-padded NaN bound", func(t *testing.T) {
+			t.Parallel()
+			err := validateWith(t, mk(typ, "minInclusive", " NaN "), `<r>1.5</r>`)
+			require.Error(t, err, "a whitespace-padded NaN bound must not accept a finite value")
+		})
+
 		t.Run(typ+" finite instance accepted by finite bound", func(t *testing.T) {
 			t.Parallel()
 			err := validateWith(t, mk(typ, "minInclusive", "0"), `<r>1.5</r>`)
