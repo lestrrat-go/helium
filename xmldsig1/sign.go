@@ -130,8 +130,16 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		if err != nil {
 			return nil, err
 		}
-		// Insert KeyInfo before Object.
+		// The XML-DSig schema content model is (SignedInfo, SignatureValue,
+		// KeyInfo?, Object*), so KeyInfo must precede the Object. Append KeyInfo
+		// (landing it after SignatureValue, before Object), then re-append the
+		// Object so it moves to the end after KeyInfo. AddChild auto-unlinks the
+		// already-linked Object before relinking it, so this is a move, not a
+		// duplicate.
 		if err := sigElem.AddChild(keyInfoElem); err != nil {
+			return nil, err
+		}
+		if err := sigElem.AddChild(objElem); err != nil {
 			return nil, err
 		}
 	}

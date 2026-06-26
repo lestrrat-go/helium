@@ -49,6 +49,42 @@ func TestSign(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	// enveloping with KeyInfo must place KeyInfo before the Object element so the
+	// Signature child order matches the XML-DSig schema content model
+	// (SignedInfo, SignatureValue, KeyInfo?, Object*).
+	t.Run("enveloping keyinfo precedes object", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+
+		payload := doc.CreateElement("Payload")
+		require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
+
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "#d1",
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
+
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
+		require.NoError(t, err)
+
+		var order []string
+		for c := sigElem.FirstChild(); c != nil; c = c.NextSibling() {
+			if e, ok := c.(*helium.Element); ok {
+				order = append(order, e.LocalName())
+			}
+		}
+		require.Equal(t, []string{"SignedInfo", "SignatureValue", "KeyInfo", "Object"}, order)
+
+		require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err = verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
 	// detached with KeyInfo and ID drives the full signDetached path including
 	// the KeyInfo builder branch and Id/Type attributes.
 	t.Run("detached with keyinfo and id", func(t *testing.T) {
