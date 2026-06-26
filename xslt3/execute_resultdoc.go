@@ -968,6 +968,90 @@ func (ec *execContext) evalBoolSerializationAVT(ctx context.Context, a *avt, par
 	return b, nil
 }
 
+// foldParamDocOverrides overlays the serialization parameters supplied by a
+// result-document's parameter-document (pd, loaded as a delta from an empty
+// OutputDef) onto base, which already holds the inherited named-format or
+// unnamed-default xsl:output values. A parameter-document outranks the format it
+// layers on, so any value it specifies wins; values it OMITS leave base intact.
+// String/pointer/slice fields are absent when zero/nil/empty; the plain-boolean
+// parameters carry explicit *Set companion flags because a false bool cannot
+// otherwise be distinguished from an omitted one.
+func foldParamDocOverrides(base, pd *OutputDef) {
+	if pd.Method != "" {
+		base.Method = pd.Method
+		base.MethodExplicit = pd.MethodExplicit
+	}
+	if pd.Encoding != "" {
+		base.Encoding = pd.Encoding
+	}
+	if pd.Standalone != "" {
+		base.Standalone = pd.Standalone
+	}
+	if len(pd.CDATASections) > 0 {
+		base.CDATASections = append([]string(nil), pd.CDATASections...)
+	}
+	if pd.DoctypePublic != "" {
+		base.DoctypePublic = pd.DoctypePublic
+	}
+	if pd.DoctypeSystem != "" {
+		base.DoctypeSystem = pd.DoctypeSystem
+	}
+	if pd.MediaType != "" {
+		base.MediaType = pd.MediaType
+	}
+	if pd.Version != "" {
+		base.Version = pd.Version
+	}
+	if pd.NormalizationForm != "" {
+		base.NormalizationForm = pd.NormalizationForm
+	}
+	if pd.HTMLVersion != "" {
+		base.HTMLVersion = pd.HTMLVersion
+	}
+	if pd.JSONNodeOutputMethod != "" {
+		base.JSONNodeOutputMethod = pd.JSONNodeOutputMethod
+	}
+	if len(pd.SuppressIndentation) > 0 {
+		base.SuppressIndentation = append([]string(nil), pd.SuppressIndentation...)
+	}
+	if pd.IncludeContentType != nil {
+		v := *pd.IncludeContentType
+		base.IncludeContentType = &v
+	}
+	if pd.EscapeURIAttributes != nil {
+		v := *pd.EscapeURIAttributes
+		base.EscapeURIAttributes = &v
+	}
+	if pd.BuildTree != nil {
+		v := *pd.BuildTree
+		base.BuildTree = &v
+	}
+	if pd.ItemSeparator != nil {
+		v := *pd.ItemSeparator
+		base.ItemSeparator = &v
+	}
+	if len(pd.ResolvedCharMap) > 0 {
+		base.ResolvedCharMap = make(map[rune]string, len(pd.ResolvedCharMap))
+		maps.Copy(base.ResolvedCharMap, pd.ResolvedCharMap)
+	}
+	if pd.OmitDeclarationExplicit {
+		base.OmitDeclaration = pd.OmitDeclaration
+		base.OmitDeclarationExplicit = true
+	}
+	if pd.indentSet {
+		base.Indent = pd.Indent
+	}
+	if pd.byteOrderMarkSet {
+		base.ByteOrderMark = pd.ByteOrderMark
+	}
+	if pd.allowDuplicateNamesSet {
+		base.AllowDuplicateNames = pd.AllowDuplicateNames
+	}
+	if pd.undeclarePrefixesSet {
+		base.UndeclarePrefixes = pd.UndeclarePrefixes
+	}
+}
+
 // evalResultDocOutputDef evaluates serialization parameter AVTs on
 // xsl:result-document and returns an OutputDef with the overrides.
 // Returns nil if no serialization parameters are specified.
@@ -990,21 +1074,30 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		return nil, nil //nolint:nilnil
 	}
 
-	// Start with parameter-document defaults (lowest priority).
+	// Build the effective base in serialization-parameter priority order
+	// (low -> high): the named format (or the unnamed default xsl:output when no
+	// format), then the parameter-document. A parameter-document has HIGHER
+	// priority than the format it layers on, so its values win; values it omits
+	// must leave the inherited format/default intact. The earlier implementation
+	// took the parameter-document OutputDef as the whole base, which dropped the
+	// unnamed-default xsl:output entirely: a parameter-document that omitted a
+	// plain boolean (indent, byte-order-mark, allow-duplicate-names,
+	// undeclare-prefixes) then overwrote an inherited true with the Go zero value
+	// (wrongly disabling inherited indent/BOM, or rejecting duplicate JSON keys a
+	// default allow-duplicate-names="yes" permits). Folding the default base first
+	// and overlaying only the parameter-document's set values fixes that and keeps
+	// the primary-output direct-assign in execute_transform.go correct.
 	var base OutputDef
 	paramDocOD := ec.getParamDocOutputDef(inst)
-	if paramDocOD != nil {
-		base = *cloneOutputDef(paramDocOD)
-	}
-	// Named format overrides parameter-document.
 	if effectiveFormat != "" {
 		if fmtDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok {
 			base = *cloneOutputDef(fmtDef)
 		}
-	} else if paramDocOD == nil {
-		if defDef, ok := ec.effectiveOutputs()[""]; ok {
-			base = *cloneOutputDef(defDef)
-		}
+	} else if defDef, ok := ec.effectiveOutputs()[""]; ok {
+		base = *cloneOutputDef(defDef)
+	}
+	if paramDocOD != nil {
+		foldParamDocOverrides(&base, paramDocOD)
 	}
 
 	evalAVT := func(avt *avt) (string, error) {
@@ -1194,31 +1287,29 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 // buildEffectiveOutputDef builds the effective output definition for a secondary
 // result document, combining the named format with result-document overrides.
 func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *resultDocumentInst, formatName, method string) (*OutputDef, error) {
+	// Build the base in priority order (low -> high): named format (or the
+	// unnamed default xsl:output when no format), then the parameter-document.
+	// This mirrors evalResultDocOutputDef's default-folding; without the default
+	// fold a secondary result-document with no local serialization attributes
+	// would not inherit stylesheet defaults (e.g. method="json"
+	// allow-duplicate-names="yes"), and the SERE0022 dup-key check below would see
+	// a hard-false allow-duplicate-names and wrongly reject duplicate JSON keys
+	// the default output permits. When evalResultDocOutputDef returns a non-nil
+	// overrides def (hasAny or a named format), it already folded the default and
+	// the parameter-document in and base is replaced below; this construction only
+	// matters when overrides is nil (no serialization params and no
+	// parameter-document, hence paramDocOD is nil here too).
 	var base OutputDef
-	// Start with parameter-document defaults (lowest priority).
 	paramDocOD := ec.getParamDocOutputDef(inst)
-	if paramDocOD != nil {
-		base = *cloneOutputDef(paramDocOD)
-	}
-	// Named format overrides parameter-document.
 	if formatName != "" {
 		if fmtDef, ok := ec.effectiveOutputs()[formatName]; ok {
 			base = *cloneOutputDef(fmtDef)
 		}
-	} else if paramDocOD == nil {
-		// No named format and no parameter-document: fold in the unnamed default
-		// xsl:output so a secondary result-document with no local serialization
-		// attributes still inherits the stylesheet defaults (e.g.
-		// method="json" allow-duplicate-names="yes"). This mirrors
-		// evalResultDocOutputDef's default-folding; without it the SERE0022
-		// dup-key check below would see a hard-false allow-duplicate-names and
-		// wrongly reject duplicate JSON keys the default output permits. When
-		// evalResultDocOutputDef returns a non-nil overrides def (hasAny or a
-		// named format), it already folded the default in and base is replaced
-		// below; this branch only matters when overrides is nil.
-		if defDef, ok := ec.effectiveOutputs()[""]; ok {
-			base = *cloneOutputDef(defDef)
-		}
+	} else if defDef, ok := ec.effectiveOutputs()[""]; ok {
+		base = *cloneOutputDef(defDef)
+	}
+	if paramDocOD != nil {
+		foldParamDocOverrides(&base, paramDocOD)
 	}
 	if base.Method == "" && method != "" {
 		base.Method = method

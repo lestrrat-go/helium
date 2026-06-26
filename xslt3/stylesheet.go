@@ -374,6 +374,18 @@ type OutputDef struct {
 	EncodingRaw   string
 	VersionRaw    string
 	StandaloneRaw string
+
+	// Explicit-presence flags for the plain-boolean serialization parameters,
+	// set only when a parameter-document supplies the corresponding value. A
+	// plain bool cannot otherwise distinguish "omitted" from "explicit false",
+	// which foldParamDocOverrides needs so an omitted parameter-document value
+	// leaves an inherited xsl:output default intact instead of clobbering it with
+	// the Go zero value. (The tri-state pointer params already encode this via
+	// nil, and method/omit-xml-declaration via their *Explicit fields.)
+	indentSet              bool
+	byteOrderMarkSet       bool
+	allowDuplicateNamesSet bool
+	undeclarePrefixesSet   bool
 }
 
 // GetUseCharacterMaps returns the use-character-maps list, nil-safe.

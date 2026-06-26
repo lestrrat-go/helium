@@ -626,6 +626,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 			if outDef.IndentRaw == "" && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.Indent = b
+					outDef.indentSet = true
 				}
 			}
 		case paramOmitXMLDeclaration:
@@ -671,6 +672,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 			if val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.UndeclarePrefixes = b
+					outDef.undeclarePrefixesSet = true
 				}
 			}
 		case paramUseCharacterMaps:
@@ -700,6 +702,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 			if !adnExplicit && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.AllowDuplicateNames = b
+					outDef.allowDuplicateNamesSet = true
 					adnExplicit = true
 				}
 			}
@@ -711,6 +714,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 			if val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.ByteOrderMark = b
+					outDef.byteOrderMarkSet = true
 				}
 			}
 		case paramEscapeURIAttributes:
