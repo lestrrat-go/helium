@@ -119,3 +119,49 @@ func TestPerformSortEmptyValidatesCollation(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "XTDE1035")
 }
+
+// XSLT3-ADV-003: an xsl:sort data-type that is neither "text"/"number" nor a
+// valid QName must raise XTDE0030 even when the input sequence is empty (the
+// validation must not be skipped just because there is nothing to sort).
+func TestSortInvalidDataTypeEmptyRaisesXTDE0030(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out>
+      <xsl:perform-sort select="()">
+        <xsl:sort select="." data-type="bogus"/>
+      </xsl:perform-sort>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(doc).Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "XTDE0030")
+}
+
+// XSLT3-ADV-003: an invalid evaluated data-type with non-empty input must also
+// raise XTDE0030 rather than silently falling back to text sorting.
+func TestSortInvalidDataTypeRaisesXTDE0030(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each select="root/item">
+        <xsl:sort select="." data-type="{'bogus'}"/>
+        <xsl:value-of select="."/>
+      </xsl:for-each>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item>b</item><item>a</item></root>`))
+	require.NoError(t, err)
+
+	_, err = ss.Transform(doc).Serialize(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "XTDE0030")
+}
