@@ -263,6 +263,80 @@ func TestRawTextContentChunkedUnderCap(t *testing.T) {
 	}
 }
 
+// TestNormalTextContentChunkedUnderCap verifies that a long delimiter-free
+// run of NORMAL (data-state) character data — the lone unbounded text path
+// alongside the already-chunked raw-text/RCDATA/plaintext sections — is
+// delivered to SAX in bounded chunks rather than buffered whole, and that the
+// full content is still produced intact. Regression for HTML-001.
+func TestNormalTextContentChunkedUnderCap(t *testing.T) {
+	const limit = 1 << 10 // 1 KiB cap
+	const total = 10 * limit
+
+	body := strings.Repeat("x", total)
+	input := "<p>" + body + "</p>"
+
+	var chunks [][]byte
+	record := html.CharactersFunc(func(data []byte) error {
+		chunks = append(chunks, append([]byte(nil), data...))
+		return nil
+	})
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(record)
+
+	err := html.NewParser().MaxContentSize(limit).
+		ParseWithSAX(t.Context(), []byte(input), sax)
+	require.NoError(t, err)
+
+	var got strings.Builder
+	maxChunk := 0
+	for _, c := range chunks {
+		got.Write(c)
+		if len(c) > maxChunk {
+			maxChunk = len(c)
+		}
+	}
+	require.Equal(t, body, got.String(), "reassembled content must match input")
+	require.LessOrEqual(t, maxChunk, limit+16,
+		"normal-text chunks must be bounded by the configured cap")
+	require.Greater(t, len(chunks), 1,
+		"over-cap normal text must be split into multiple chunks")
+}
+
+// TestNormalTextChunksAreValidUTF8 verifies that with a tiny MaxContentSize and
+// multibyte normal (data-state) text, every emitted chunk is a whole-rune
+// (valid UTF-8) slice: the cap-aware split must never break a multi-byte UTF-8
+// sequence across two chunks. Mirrors TestRawTextChunksAreValidUTF8 for the
+// normal data state. Regression for HTML-001.
+func TestNormalTextChunksAreValidUTF8(t *testing.T) {
+	body := strings.Repeat("aé→𝄞z", 50)
+	input := "<p>" + body + "</p>"
+
+	for _, limit := range []int{1, 2, 3, 4, 7} {
+		t.Run(fmt.Sprintf("cap%d", limit), func(t *testing.T) {
+			var chunks [][]byte
+			record := html.CharactersFunc(func(data []byte) error {
+				chunks = append(chunks, append([]byte(nil), data...))
+				return nil
+			})
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(record)
+
+			err := html.NewParser().MaxContentSize(limit).
+				ParseWithSAX(t.Context(), []byte(input), sax)
+			require.NoError(t, err)
+
+			var got strings.Builder
+			for i, c := range chunks {
+				require.True(t, utf8.Valid(c),
+					"chunk %d must be valid UTF-8 (limit=%d): %q", i, limit, c)
+				got.Write(c)
+			}
+			require.Equal(t, body, got.String(),
+				"reassembled content must match input (limit=%d)", limit)
+		})
+	}
+}
+
 // TestCommentLikeOverCapHardErrors verifies that a comment, bogus comment, or
 // processing instruction that exceeds MaxContentSize before its terminator
 // fails the parse with ErrContentSizeExceeded instead of being chunked. These

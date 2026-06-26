@@ -175,6 +175,338 @@ func TestOptionsNoBlanks(t *testing.T) {
 		"non-whitespace text should be preserved")
 }
 
+func TestOptionsNoBlanksTinyChunkPreservesLeadingSpace(t *testing.T) {
+	// Regression: chunking normal data-state text at MaxContentSize must not
+	// suppress significant leading whitespace under StripBlanks. With a tiny
+	// cap, " a" would otherwise split into a whitespace-only chunk (wrongly
+	// stripped) and "a". The run as a whole is not all-whitespace, so the
+	// leading space must be preserved.
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+
+	input := `<p> a</p>`
+	err := html.NewParser().
+		StripBlanks(true).
+		MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax)
+	require.NoError(t, err)
+	require.Equal(t, " a", string(collected),
+		"significant leading whitespace must survive tiny-chunk StripBlanks")
+}
+
+func TestOptionsNoBlanksOverCapHardErrors(t *testing.T) {
+	// Under StripBlanks a text run's whitespace-significance can only be decided
+	// after the whole run is known, so the cap may not split it early. But a run
+	// whose leading whitespace prefix alone overruns the cap (with yet more
+	// whitespace beyond it) cannot be decided without unbounded buffering, so it
+	// must HARD-FAIL with ErrContentSizeExceeded rather than buffer the run whole.
+	input := `<p>  a</p>`
+	_, err := html.NewParser().
+		StripBlanks(true).
+		MaxContentSize(1).
+		Parse(t.Context(), []byte(input))
+	require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+		"over-cap whitespace prefix under StripBlanks must fail, not buffer unbounded")
+}
+
+func TestOptionsNoBlanksTinyChunkWhitespaceAcrossChunks(t *testing.T) {
+	// Whitespace-significance must persist across the capped chunks of ONE text
+	// run. With MaxContentSize(1) the parser re-enters parseCharacters per byte,
+	// so it must remember a run is already significant once its first
+	// non-whitespace byte has been emitted. Otherwise a TRAILING whitespace chunk
+	// would be wrongly suppressed and an INTERIOR whitespace chunk would wrongly
+	// hard-fail.
+	for _, tc := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "trailing", input: `<p>a </p>`, want: "a "},
+		{name: "interior", input: `<p>a  b</p>`, want: "a  b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var collected []byte
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+				collected = append(collected, ch...)
+				return nil
+			}))
+
+			err := html.NewParser().
+				StripBlanks(true).
+				MaxContentSize(1).
+				ParseWithSAX(t.Context(), []byte(tc.input), sax)
+			require.NoError(t, err,
+				"a significant run must not hard-fail on a later whitespace chunk")
+			require.Equal(t, tc.want, string(collected),
+				"whitespace of a known-significant run must survive across chunks")
+		})
+	}
+}
+
+func TestOptionsNoBlanksTinyChunkSignificanceAcrossEmbeds(t *testing.T) {
+	// Run significance must be remembered across EVERY non-whitespace emit path,
+	// not just plain text chunks. A char-ref (entity output) and a lone literal
+	// '<' are part of the SAME normal-data text run; once any of them has emitted
+	// non-whitespace, a later over-cap whitespace chunk must NOT hard-fail and
+	// must NOT be suppressed. Under StripBlanks+MaxContentSize(1) these inputs
+	// previously hard-failed with ErrContentSizeExceeded because the flag was
+	// cleared before char-ref / lone-'<' resolution and never re-marked.
+	for _, tc := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "entity-then-ws-text", input: `<p>a&amp;  b</p>`, want: "a&  b"},
+		{name: "entity-only-then-ws-text", input: `<p>&amp;  b</p>`, want: "&  b"},
+		{name: "lone-lt-then-ws-text", input: `<p>a<  b</p>`, want: "a<  b"},
+		{name: "lone-lt-only-then-ws-text", input: `<p><  b</p>`, want: "<  b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var collected []byte
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+				collected = append(collected, ch...)
+				return nil
+			}))
+
+			err := html.NewParser().
+				StripBlanks(true).
+				MaxContentSize(1).
+				ParseWithSAX(t.Context(), []byte(tc.input), sax)
+			require.NoError(t, err,
+				"a run made significant by entity/lone-'<' output must not hard-fail on later whitespace")
+			require.Equal(t, tc.want, string(collected),
+				"whitespace following entity/lone-'<' output must survive across chunks")
+		})
+	}
+}
+
+func TestTinyChunkLeadingSpaceImpliedBody(t *testing.T) {
+	// Regression: chunking a normal data-state run at MaxContentSize must not flush
+	// a leading whitespace-only chunk before htmlStartCharData has established the
+	// insertion target. For `<html> a</html>` under MaxContentSize(1) the leading
+	// space and the "a" form ONE logical run; both must land under the implied
+	// <body>. Previously the space was emitted while <html> was current (before "a"
+	// opened <body>), splitting the run: " " under <html>, "a" under <body>.
+	const input = `<html> a</html>`
+
+	// SAX: the full run is delivered (order/chunking aside, concatenation is " a").
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	require.NoError(t, html.NewParser().MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax))
+	require.Equal(t, " a", string(collected))
+
+	// DOM: the implied <body> is the first child of <html> (NOT a stray text node),
+	// and it carries the whole run " a".
+	doc, err := html.NewParser().MaxContentSize(1).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	htmlEl := doc.FirstChild()
+	require.NotNil(t, htmlEl)
+	require.Equal(t, "html", htmlEl.Name())
+	first := htmlEl.FirstChild()
+	require.NotNil(t, first)
+	require.Equal(t, "body", first.Name(),
+		"the leading space must not be emitted under <html> before <body> is implied")
+	require.Equal(t, " a", string(first.Content()),
+		"the space and 'a' must form one run under the implied <body>")
+}
+
+func TestTinyChunkLoneLtImpliedBody(t *testing.T) {
+	// Regression: a lone '<' (non-markup character data) must establish the
+	// insertion target via htmlStartCharData BEFORE it is emitted. For
+	// `<html> < b</html>` under MaxContentSize(1) the leading space, the '<', and
+	// " b" form ONE logical run; all must land under the implied <body>. Previously
+	// the lone '<' emit path skipped htmlStartCharData, so the deferred leading
+	// space and the '<' were flushed under <html> while " b" opened <body> and
+	// landed there — splitting one run across parents.
+	const input = `<html> < b</html>`
+
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	require.NoError(t, html.NewParser().MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax))
+	require.Equal(t, " < b", string(collected))
+
+	doc, err := html.NewParser().MaxContentSize(1).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	htmlEl := doc.FirstChild()
+	require.NotNil(t, htmlEl)
+	require.Equal(t, "html", htmlEl.Name())
+	first := htmlEl.FirstChild()
+	require.NotNil(t, first)
+	require.Equal(t, "body", first.Name(),
+		"the leading space and '<' must not be emitted under <html> before <body> is implied")
+	require.Equal(t, " < b", string(first.Content()),
+		"the space, '<', and ' b' must form one run under the implied <body>")
+}
+
+func TestTinyChunkLeadingSpaceWhitespaceCharRefImpliedBody(t *testing.T) {
+	// Regression: a deferred leading space followed by a WHITESPACE-producing
+	// character reference (which opens the implied <body> via htmlStartCharData and
+	// thereby fixes the insertion target) must flush the pending space BEFORE the
+	// char-ref's whitespace chunk. For `<html> &#9;a</html>` under MaxContentSize(1)
+	// the run is " \ta": the leading space, then the tab from the char-ref, then "a".
+	// Previously the all-whitespace fall-through emitted the tab first and only
+	// flushed the pending space when "a" arrived, producing "\t a" — reordered.
+	for _, tc := range []struct {
+		name  string
+		input string
+	}{
+		{name: "numeric", input: `<html> &#9;a</html>`},
+		{name: "named", input: `<html> &Tab;a</html>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var collected []byte
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+				collected = append(collected, ch...)
+				return nil
+			}))
+			require.NoError(t, html.NewParser().MaxContentSize(1).
+				ParseWithSAX(t.Context(), []byte(tc.input), sax))
+			require.Equal(t, " \ta", string(collected),
+				"the deferred leading space must precede the whitespace char-ref output")
+
+			doc, err := html.NewParser().MaxContentSize(1).Parse(t.Context(), []byte(tc.input))
+			require.NoError(t, err)
+			htmlEl := doc.FirstChild()
+			require.NotNil(t, htmlEl)
+			require.Equal(t, "html", htmlEl.Name())
+			first := htmlEl.FirstChild()
+			require.NotNil(t, first)
+			require.Equal(t, "body", first.Name(),
+				"the run must land under the implied <body>")
+			require.Equal(t, " \ta", string(first.Content()),
+				"DOM text must preserve the leading-space-before-tab order")
+		})
+	}
+}
+
+func TestDefaultModeOverCapSpacesSoftCap(t *testing.T) {
+	// Regression: with StripBlanks OFF and the insertion target already established
+	// (inside <p>), ordinary data-state whitespace must stream in MaxContentSize
+	// chunks under the SOFT cap — never deferred and never hard-failed. Previously
+	// the pendingWS chokepoint deferred ALL non-head leading whitespace, so an
+	// over-cap run of spaces wrongly tripped ErrContentSizeExceeded.
+	spaces := strings.Repeat(" ", 50)
+	input := `<p>` + spaces + `</p>`
+
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	err := html.NewParser().
+		MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax)
+	require.NoError(t, err,
+		"default-mode over-cap whitespace must stream under the soft cap, not hard-fail")
+	require.Equal(t, spaces, string(collected),
+		"all whitespace must be delivered as chunked Characters")
+}
+
+func TestSuppressImpliedTinyChunkPreservesLeadingSpace(t *testing.T) {
+	// Regression: under SuppressImplied no implied <html>/<body> is ever created,
+	// so mode never reaches insertInBody. The whitespace-deferral/drop decision
+	// must therefore key off whether an element is OPEN, not off whether an <html>
+	// root exists. For `<p> a</p>` under MaxContentSize(1) the leading space lands
+	// while <p> is already open: the insertion target is fixed (implied insertion
+	// is disabled), so the space must be emitted immediately, not dropped as if it
+	// were pre-root whitespace. Previously it was discarded, losing " a" -> "a".
+	const input = `<p> a</p>`
+
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	require.NoError(t, html.NewParser().
+		SuppressImplied(true).
+		MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax))
+	require.Equal(t, " a", string(collected),
+		"leading whitespace inside an open element must survive under SuppressImplied")
+}
+
+func TestSuppressImpliedOverCapWhitespaceSoftCap(t *testing.T) {
+	// Under SuppressImplied with an element already open the insertion target is
+	// fixed and there is nothing to defer, so an over-cap all-whitespace run must
+	// STREAM under the soft cap rather than hard-fail on the undecidable-prefix
+	// path (that path only applies while a parent/significance is genuinely
+	// undecided). `<p>   </p>` must deliver all whitespace and never error.
+	spaces := strings.Repeat(" ", 50)
+	input := `<p>` + spaces + `</p>`
+
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	err := html.NewParser().
+		SuppressImplied(true).
+		MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax)
+	require.NoError(t, err,
+		"over-cap whitespace in an open element under SuppressImplied must stream, not hard-fail")
+	require.Equal(t, spaces, string(collected),
+		"all whitespace must be delivered as chunked Characters")
+}
+
+func TestStripBlanksTinyChunkLeadingSpaceBeforeCharData(t *testing.T) {
+	// Regression: a leading whitespace prefix followed by a char-data token (an
+	// entity, or a non-markup lone '<') must NOT be flushed/stripped before the
+	// token's significance is known. Under StripBlanks the run is stripped only if
+	// it is ENTIRELY whitespace; `<p> &amp;</p>` and `<p> < b</p>` both resolve to
+	// significant runs, so the leading space must survive. Previously the space was
+	// suppressed (the char-data token wrongly ended the still-undecided run).
+	for _, tc := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "entity", input: `<p> &amp;</p>`, want: " &"},
+		{name: "lone_lt", input: `<p> < b</p>`, want: " < b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var collected []byte
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+				collected = append(collected, ch...)
+				return nil
+			}))
+			require.NoError(t, html.NewParser().
+				StripBlanks(true).MaxContentSize(1).
+				ParseWithSAX(t.Context(), []byte(tc.input), sax))
+			require.Equal(t, tc.want, string(collected),
+				"leading whitespace of a significant run must survive across a char-data token")
+
+			doc, err := html.NewParser().
+				StripBlanks(true).MaxContentSize(1).
+				Parse(t.Context(), []byte(tc.input))
+			require.NoError(t, err)
+			require.Contains(t, string(doc.FirstChild().Content()), tc.want,
+				"DOM text must preserve the leading whitespace")
+		})
+	}
+}
+
 func TestOptionsNoError(t *testing.T) {
 	var errorCalled bool
 	sax := &html.SAXCallbacks{}
