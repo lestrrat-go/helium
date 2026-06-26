@@ -12,6 +12,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -247,11 +248,22 @@ func buildImplicitCollationURI(ctx context.Context, ec *execContext, sk *sortKey
 	return "http://www.w3.org/2013/collation/UCA?" + strings.Join(params, ";"), nil
 }
 
-// validateSortKeyAttrs validates sort key attribute values (order, case-order,
-// lang, collation, stable) regardless of whether there are nodes to sort.
+// validateSortKeyAttrs validates sort key attribute values (order, data-type,
+// case-order, lang, collation, stable) regardless of whether there are nodes
+// to sort.
 func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) error {
 	if _, err := resolveSortOrder(ctx, ec, sk); err != nil {
 		return err
+	}
+	if sk.DataType != nil {
+		dt, err := sk.DataType.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		if !isValidSortDataType(dt) {
+			return dynamicError(errCodeXTDE0030,
+				"invalid data-type %q in xsl:sort; must be \"text\", \"number\", or a QName", dt)
+		}
 	}
 	if sk.CaseOrder != nil {
 		co, err := sk.CaseOrder.evaluate(ctx, ec.contextNode)
@@ -350,6 +362,26 @@ func checkSortKeyTypeConsistency[T interface{ keyType() string }](entries []T) e
 		}
 	}
 	return nil
+}
+
+// isValidSortDataType reports whether s is a permitted xsl:sort data-type
+// value: "text", "number", or a QName denoting a non-absent namespace
+// (a prefixed lexical QName or an EQName Q{uri}local). The effect of a QName
+// data-type is implementation-defined; helium treats it as "text".
+func isValidSortDataType(s string) bool {
+	switch s {
+	case "text", lexicon.TypeNumber:
+		return true
+	}
+	if isValidEQName(s) {
+		return true
+	}
+	// A bare NCName has an absent namespace and is not permitted; require a
+	// prefix so the QName denotes a non-absent namespace.
+	if strings.IndexByte(s, ':') > 0 && xmlchar.IsValidQName(s) {
+		return true
+	}
+	return false
 }
 
 // isValidLanguageTag checks if s is a plausible BCP47 language tag.
