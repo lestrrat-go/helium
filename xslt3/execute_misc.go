@@ -84,13 +84,38 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 	// Zero-length matches are handled by advancing past each one to avoid
 	// infinite loops (see below).
 
-	// Find all matches.
-	// In XSLT 3.0, zero-length matches are allowed (unlike XSLT 2.0
-	// which raised XTDE1150). We handle them by advancing past each
-	// zero-length match to avoid infinite loops.
-	matches, err := re.FindAllSubmatchIndex(input, -1)
+	// Bound the number of matches against the execution resource budget. An
+	// empty- or near-empty-matching regex matches at every character boundary,
+	// so an N-byte input yields ~N matches; an unbounded FindAllSubmatchIndex
+	// would amplify a bounded input string into millions of match/segment
+	// allocations and exhaust memory before a cancelled context can intervene.
+	// The per-resource byte cap (MaxResourceBytes; <0 selects unbounded)
+	// doubles as a match-count ceiling. The default cap is far above any
+	// legitimate match count, so valid inputs are unaffected.
+	maxMatches := -1
+	if limit := resolveResourceLimit(ec.resourceLimit()); limit >= 0 {
+		maxMatches = max(clampInt64ToInt(limit), 1)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// In XSLT 3.0, zero-length matches are allowed (unlike XSLT 2.0 which
+	// raised XTDE1150); FindAllSubmatchIndex advances past each one. Request
+	// one match over the cap so an over-budget input is detected rather than
+	// silently truncated.
+	findN := maxMatches
+	if maxMatches >= 0 {
+		findN = maxMatches + 1
+	}
+	matches, err := re.FindAllSubmatchIndex(input, findN)
 	if err != nil {
 		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", err)
+	}
+	if maxMatches >= 0 && len(matches) > maxMatches {
+		return dynamicErrorCause("", ErrResourceTooLarge,
+			"xsl:analyze-string produced more than %d matches, exceeding the configured resource limit", maxMatches)
 	}
 
 	// Save and restore context state
@@ -109,62 +134,73 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStrin
 		ec.regexGroups = savedGroups
 	}()
 
-	// Build segments: alternating non-match/match segments
-	type segment struct {
-		text    string
-		isMatch bool
-		groups  []string // captured groups (only for matches)
-	}
-	var segments []segment
+	// Count the alternating non-match/match segments without materializing
+	// them, so position()/last() inside the bodies see the same focus as
+	// before, then execute each body as its span is discovered.
+	totalSegments := 0
 	pos := 0
 	for _, m := range matches {
+		if m[0] > pos {
+			totalSegments++
+		}
+		totalSegments++
+		pos = m[1]
+	}
+	if pos < len(input) {
+		totalSegments++
+	}
+
+	segIdx := 0
+	// runSegment sets the focus for one segment and executes its body.
+	runSegment := func(text string, body []instruction, groups []string) error {
+		segIdx++
+		ec.position = segIdx
+		ec.size = totalSegments
+		ec.contextItem = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: text}
+		ec.contextNode = nil
+		ec.currentNode = nil
+		ec.regexGroups = groups
+		for _, bodyInst := range body {
+			if err := ec.executeInstruction(ctx, bodyInst); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	pos = 0
+	for _, m := range matches {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		start, end := m[0], m[1]
 		if start > pos {
-			segments = append(segments, segment{text: input[pos:start], isMatch: false})
+			if err := runSegment(input[pos:start], inst.NonMatchingBody, nil); err != nil {
+				return err
+			}
 		}
-		// Collect captured groups
-		var groups []string
-		groups = append(groups, input[start:end]) // group 0 = full match
+		// Collect captured groups (group 0 = full match).
+		groups := make([]string, 0, len(m)/2)
+		groups = append(groups, input[start:end])
 		for g := 1; g < len(m)/2; g++ {
 			gs, ge := m[2*g], m[2*g+1]
 			if gs < 0 || ge < 0 {
 				groups = append(groups, "")
-			} else {
-				groups = append(groups, input[gs:ge])
+				continue
 			}
+			groups = append(groups, input[gs:ge])
 		}
-		segments = append(segments, segment{text: input[start:end], isMatch: true, groups: groups})
+		if err := runSegment(input[start:end], inst.MatchingBody, groups); err != nil {
+			return err
+		}
 		pos = end
 	}
 	if pos < len(input) {
-		segments = append(segments, segment{text: input[pos:], isMatch: false})
-	}
-
-	// Set size = total number of segments
-	totalSegments := len(segments)
-
-	// Execute appropriate body for each segment
-	for i, seg := range segments {
-		ec.position = i + 1
-		ec.size = totalSegments
-		ec.contextItem = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: seg.text}
-		ec.contextNode = nil
-		ec.currentNode = nil
-
-		if seg.isMatch {
-			ec.regexGroups = seg.groups
-			for _, bodyInst := range inst.MatchingBody {
-				if err := ec.executeInstruction(ctx, bodyInst); err != nil {
-					return err
-				}
-			}
-		} else {
-			ec.regexGroups = nil
-			for _, bodyInst := range inst.NonMatchingBody {
-				if err := ec.executeInstruction(ctx, bodyInst); err != nil {
-					return err
-				}
-			}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := runSegment(input[pos:], inst.NonMatchingBody, nil); err != nil {
+			return err
 		}
 	}
 
