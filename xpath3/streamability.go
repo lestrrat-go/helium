@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"maps"
 	"math/big"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -514,7 +515,7 @@ func (e *Expression) StreamInfo() StreamInfo {
 		HasDescOrSelf:        s.hasDescOrSelf,
 		HasNonMotionlessPred: s.hasNonMotionlessPred,
 		DownwardSelections:   s.downwardSelections,
-		UsedFunctions:        s.usedFunctions,
+		UsedFunctions:        maps.Clone(s.usedFunctions),
 		IsContextItem:        s.isContextItem,
 	}
 }

@@ -1748,3 +1748,19 @@ func TestExpression_AST_StreamInfo(t *testing.T) {
 	var nilExpr *xpath3.Expression
 	require.Equal(t, xpath3.StreamInfo{}, nilExpr.StreamInfo())
 }
+
+func TestExpression_StreamInfo_SnapshotIsolation(t *testing.T) {
+	expr, err := xpath3.NewCompiler().Compile(`count(child::a)`)
+	require.NoError(t, err)
+
+	si := expr.StreamInfo()
+	require.NotEmpty(t, si.UsedFunctions)
+
+	// Mutating the returned snapshot must not corrupt internal state.
+	si.UsedFunctions["bogus"] = true
+	delete(si.UsedFunctions, "count")
+
+	fresh := expr.StreamInfo()
+	require.True(t, fresh.UsedFunctions["count"])
+	require.NotContains(t, fresh.UsedFunctions, "bogus")
+}
