@@ -7,15 +7,14 @@ import (
 
 // joinURIReference combines an outer (ancestor) base xml:base value with an
 // inner (descendant) reference xml:base value, following the modified RFC 3986
-// "join-URI-References" procedure defined by Canonical XML 1.1 (W3C xml-c14n11
-// §2.4) and implemented by libxml2's xmlC14NFixupBaseAttr → xmlBuildURI.
+// "join-URI-References" procedure of Canonical XML 1.1 (W3C xml-c14n11 §2.4) as
+// implemented by libxml2's xmlC14NFixupBaseAttr → xmlBuildURI.
 //
-// It is a faithful port of libxml2's xmlBuildURI component algorithm: the
-// reference is resolved against the base by RFC 3986 §5.3 rules (empty-path
+// It is a port of xmlBuildURI's component algorithm (RFC 2396 §5.2): empty-path
 // references keep the base path, network-path references keep their authority,
-// absolute-path references replace the path), and the merged relative path is
-// normalized by normalizeURIPath. Relative references stay relative, leading
-// "../" segments survive, and consecutive slashes collapse.
+// absolute-path references replace the path, and a merged relative path is
+// normalized by normalizeURIPath. All work is done on the raw (percent-encoded)
+// path so encoding is preserved byte-for-byte.
 func joinURIReference(base, ref string) string {
 	// libxml2 appends "/" when the base's second-to-last character is '.', i.e.
 	// the base ends with ".." (or "x."), forcing the join to traverse upward.
@@ -32,72 +31,123 @@ func joinURIReference(base, ref string) string {
 	if refURL.Scheme != "" {
 		return ref
 	}
+	// Opaque references aren't hierarchical; emit as-is.
+	if refURL.Opaque != "" {
+		return ref
+	}
 
 	baseURL, err := url.Parse(base)
 	if err != nil {
 		return ref
 	}
 
-	refHasAuthority := refURL.Host != "" || refURL.User != nil || strings.HasPrefix(ref, "//")
-	refHasQuery := refURL.RawQuery != "" || refURL.ForceQuery
+	refPath := refURL.EscapedPath()
+	refHasAuthority := uriHasAuthority(ref)
+	refQuery, refHasQuery := refURL.RawQuery, refURL.RawQuery != "" || refURL.ForceQuery
+	refFrag, refHasFrag := refURL.EscapedFragment(), strings.Contains(ref, "#")
 
-	res := &url.URL{}
-
+	var r resolvedURI
 	switch {
-	case refURL.Opaque != "":
-		// Opaque references aren't hierarchical; emit as-is.
-		return ref
-
-	case refURL.Path == "" && !refHasAuthority:
+	case refPath == "" && !refHasAuthority:
 		// Step 2: empty path and no authority → reference to the base document.
 		// Inherit the base scheme, authority and path; take the reference's
 		// query/fragment when present, else the base's query.
-		res.Scheme = baseURL.Scheme
-		res.Host = baseURL.Host
-		res.User = baseURL.User
-		res.Path = baseURL.Path
+		r.scheme = baseURL.Scheme
+		r.hasAuthority = uriHasAuthority(base)
+		r.authority = authorityOf(baseURL)
+		r.path = baseURL.EscapedPath()
 		if refHasQuery {
-			res.RawQuery = refURL.RawQuery
-			res.ForceQuery = refURL.ForceQuery
+			r.query, r.hasQuery = refQuery, true
 		} else {
-			res.RawQuery = baseURL.RawQuery
-			res.ForceQuery = baseURL.ForceQuery
+			r.query, r.hasQuery = baseURL.RawQuery, baseURL.RawQuery != "" || baseURL.ForceQuery
 		}
-		res.Fragment = refURL.Fragment
+		r.fragment, r.hasFragment = refFrag, refHasFrag
 
 	case refHasAuthority:
 		// Step 4: network-path reference → keep its authority and path verbatim.
-		res.Scheme = baseURL.Scheme
-		res.Host = refURL.Host
-		res.User = refURL.User
-		res.Path = refURL.Path
-		res.RawQuery = refURL.RawQuery
-		res.ForceQuery = refURL.ForceQuery
-		res.Fragment = refURL.Fragment
+		r.scheme = baseURL.Scheme
+		r.hasAuthority = true
+		r.authority = authorityOf(refURL)
+		r.path = refPath
+		r.query, r.hasQuery = refQuery, refHasQuery
+		r.fragment, r.hasFragment = refFrag, refHasFrag
 
-	case strings.HasPrefix(refURL.Path, "/"):
+	case strings.HasPrefix(refPath, "/"):
 		// Step 5: absolute-path reference → replace the path, keep base authority.
-		res.Scheme = baseURL.Scheme
-		res.Host = baseURL.Host
-		res.User = baseURL.User
-		res.Path = refURL.Path
-		res.RawQuery = refURL.RawQuery
-		res.ForceQuery = refURL.ForceQuery
-		res.Fragment = refURL.Fragment
+		r.scheme = baseURL.Scheme
+		r.hasAuthority = uriHasAuthority(base)
+		r.authority = authorityOf(baseURL)
+		r.path = refPath
+		r.query, r.hasQuery = refQuery, refHasQuery
+		r.fragment, r.hasFragment = refFrag, refHasFrag
 
 	default:
 		// Step 6: relative-path reference → merge with the base path, then
-		// normalize away dot segments (keeping leading "..").
-		res.Scheme = baseURL.Scheme
-		res.Host = baseURL.Host
-		res.User = baseURL.User
-		res.Path = normalizeURIPath(mergePaths(baseURL.Path, refURL.Path, baseURL.Host != ""))
-		res.RawQuery = refURL.RawQuery
-		res.ForceQuery = refURL.ForceQuery
-		res.Fragment = refURL.Fragment
+		// normalize away dot segments.
+		baseHasAuthority := uriHasAuthority(base)
+		r.scheme = baseURL.Scheme
+		r.hasAuthority = baseHasAuthority
+		r.authority = authorityOf(baseURL)
+		r.path = normalizeURIPath(mergePaths(baseURL.EscapedPath(), refPath, baseHasAuthority))
+		r.query, r.hasQuery = refQuery, refHasQuery
+		r.fragment, r.hasFragment = refFrag, refHasFrag
 	}
 
-	return recombineURI(res)
+	return r.String()
+}
+
+// resolvedURI holds the components produced by joinURIReference. Presence flags
+// distinguish an empty-but-present authority/query (e.g. "file:///") from an
+// absent one.
+type resolvedURI struct {
+	scheme       string
+	hasAuthority bool
+	authority    string
+	path         string
+	hasQuery     bool
+	query        string
+	hasFragment  bool
+	fragment     string
+}
+
+func (r resolvedURI) String() string {
+	var b strings.Builder
+	if r.scheme != "" {
+		b.WriteString(r.scheme)
+		b.WriteString(":")
+	}
+	if r.hasAuthority {
+		b.WriteString("//")
+		b.WriteString(r.authority)
+	}
+	b.WriteString(r.path)
+	if r.hasQuery {
+		b.WriteString("?")
+		b.WriteString(r.query)
+	}
+	if r.hasFragment {
+		b.WriteString("#")
+		b.WriteString(r.fragment)
+	}
+	return b.String()
+}
+
+// uriHasAuthority reports whether a URI reference carries an authority ("//…"),
+// looking past an optional scheme. An empty authority ("file:///x") still
+// counts.
+func uriHasAuthority(raw string) bool {
+	if i := strings.IndexByte(raw, ':'); i >= 0 && !strings.ContainsAny(raw[:i], "/?#") {
+		raw = raw[i+1:]
+	}
+	return strings.HasPrefix(raw, "//")
+}
+
+// authorityOf returns the userinfo+host authority string of a parsed URL.
+func authorityOf(u *url.URL) string {
+	if u.User != nil {
+		return u.User.String() + "@" + u.Host
+	}
+	return u.Host
 }
 
 // mergePaths merges a relative reference path onto a base path per RFC 3986
@@ -113,83 +163,110 @@ func mergePaths(basePath, refPath string, baseHasAuthority bool) string {
 	return refPath
 }
 
-// normalizeURIPath removes "." and ".." path segments, faithfully matching
-// libxml2's xmlNormalizeURIPath (RFC 2396 §5.2 step 6 c–f): leading ".."
-// segments are kept, consecutive slashes collapse to one, and a relative path
-// that fully cancels becomes "" (not "/").
+// normalizeURIPath removes "." and ".." path segments, a faithful port of
+// libxml2's xmlNormalizeURIPath (RFC 2396 §5.2 step 6 c–g). Of note: a leading
+// path segment is never consumed by a trailing ".." (so "a/b/../.." → "a/.."),
+// leading ".." segments survive on a relative path, "//" collapses to "/", and
+// leading "/../" is discarded only on an absolute path.
 func normalizeURIPath(path string) string {
-	if path == "" {
-		return ""
+	b := []byte(path)
+	n := len(b)
+
+	first := 0
+	for first < n && b[first] == '/' {
+		first++
+	}
+	if first >= n {
+		return path
 	}
 
-	leading := strings.HasPrefix(path, "/")
-	segs := strings.Split(path, "/")
-	out := make([]string, 0, len(segs))
-	trailingDir := false
-	for i, seg := range segs {
-		last := i == len(segs)-1
-		switch seg {
-		case "":
-			// Empty segment: a leading, trailing or doubled slash. Only a
-			// trailing one denotes a directory; interior ones collapse away.
-			trailingDir = last
-		case ".":
-			// "." is dropped; as the final segment it still denotes a directory.
-			trailingDir = last
-		case "..":
-			if n := len(out); n > 0 && out[n-1] != ".." {
-				out = out[:n-1]
-			} else {
-				// No parent to pop (or it is itself ".."): keep so leading
-				// "../" survives.
-				out = append(out, "..")
+	// Pass 1: (c) drop "./"; (d) drop a trailing "."; collapse "//".
+	out, cur := first, first
+	for cur < n {
+		if b[cur] == '.' && cur+1 < n && b[cur+1] == '/' {
+			cur += 2
+			for cur < n && b[cur] == '/' {
+				cur++
 			}
-			trailingDir = true
-		default:
-			out = append(out, seg)
-			trailingDir = false
+			continue
+		}
+		if b[cur] == '.' && cur+1 == n {
+			break
+		}
+		for cur < n && b[cur] != '/' {
+			b[out] = b[cur]
+			out++
+			cur++
+		}
+		if cur >= n {
+			break
+		}
+		for cur+1 < n && b[cur+1] == '/' {
+			cur++
+		}
+		b[out] = b[cur]
+		out++
+		cur++
+	}
+	n = out
+
+	// Pass 2: (e)(f) remove "<segment>/.." where <segment> != "..".
+	start := 0
+	for start < n && b[start] == '/' {
+		start++
+	}
+	cur = start
+	for cur < n {
+		segp := cur
+		for segp < n && b[segp] != '/' {
+			segp++
+		}
+		if segp >= n {
+			break
+		}
+		segp++ // past '/'
+		curIsDotDot := b[cur] == '.' && cur+1 < n && b[cur+1] == '.' && segp == cur+3
+		nextIsDotDot := segp+1 < n && b[segp] == '.' && b[segp+1] == '.' && (segp+2 >= n || b[segp+2] == '/')
+		if curIsDotDot || !nextIsDotDot {
+			cur = segp
+			continue
+		}
+		if segp+2 >= n {
+			n = cur // the trailing ".." ends the buffer
+			break
+		}
+		copy(b[cur:], b[segp+3:n])
+		n -= segp + 3 - cur
+		// Back up to the previous segment; if it is the first one, stop here.
+		sp := cur
+		for sp > 0 {
+			sp--
+			if b[sp] != '/' {
+				break
+			}
+		}
+		if sp == 0 {
+			continue
+		}
+		cur = sp
+		for cur > 0 && b[cur-1] != '/' {
+			cur--
+		}
+	}
+	b = b[:n]
+
+	// Pass 3: (g) discard leading "/../" segments — absolute paths only.
+	if len(b) > 0 && b[0] == '/' {
+		c := 0
+		for c+2 < len(b) && b[c] == '/' && b[c+1] == '.' && b[c+2] == '.' && (c+3 >= len(b) || b[c+3] == '/') {
+			c += 3
+		}
+		if c != 0 {
+			b = b[c:]
 		}
 	}
 
-	res := strings.Join(out, "/")
-	if leading {
-		res = "/" + res
-	}
-	if trailingDir && res != "" && !strings.HasSuffix(res, "/") {
-		res += "/"
-	}
-	if res == "" && leading {
-		res = "/"
-	}
-	return res
-}
-
-// recombineURI reassembles a resolved URL into its string form, mirroring
-// libxml2's xmlSaveUri for the components C14N xml:base fixup produces.
-func recombineURI(u *url.URL) string {
-	var b strings.Builder
-	if u.Scheme != "" {
-		b.WriteString(u.Scheme)
-		b.WriteString(":")
-	}
-	if u.Host != "" || u.User != nil {
-		b.WriteString("//")
-		if u.User != nil {
-			b.WriteString(u.User.String())
-			b.WriteString("@")
-		}
-		b.WriteString(u.Host)
-	}
-	b.WriteString(u.Path)
-	if u.RawQuery != "" || u.ForceQuery {
-		b.WriteString("?")
-		b.WriteString(u.RawQuery)
-	}
-	if u.Fragment != "" {
-		b.WriteString("#")
-		b.WriteString(u.EscapedFragment())
-	}
-	return b.String()
+	return string(b)
 }
 
 // reduceXMLBase folds a chain of xml:base values, ordered outermost to

@@ -6,7 +6,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	pathUpX   = "../x"
+	pathUpUpX = "../../x"
+)
+
 func TestJoinURIReference(t *testing.T) {
+	// Every `want` below was produced by the real libxml2 xmlBuildURI (v2.9.14),
+	// invoked exactly as xmlC14NFixupBaseAttr does (with the trailing-"." → "/"
+	// append on the base), so this is a byte-for-byte conformance check.
 	tests := []struct {
 		name string
 		base string
@@ -15,8 +23,8 @@ func TestJoinURIReference(t *testing.T) {
 	}{
 		// W3C xml-c14n11 §2.4 / libxml2 spec vectors.
 		{"spec-102-e3", "../bar/", "foo", "../bar/foo"},
-		{"spec3-d-inner", "..", "x", "../x"},
-		{"spec3-d-outer", "..", "../x", "../../x"},
+		{"spec3-d-inner", "..", "x", pathUpX},
+		{"spec3-d-outer", "..", pathUpX, pathUpUpX},
 		{"spec2-102", "bar/", "foo", "bar/foo"},
 		// Absolute base resolves abs-path reference (xmlbase-prop-2).
 		{"prop2-e1", "http://xmlbase.example.org/xmlbase0/", "/xmlbase1/", "http://xmlbase.example.org/xmlbase1/"},
@@ -25,15 +33,23 @@ func TestJoinURIReference(t *testing.T) {
 		{"urn-ref-wins", "../bar/", "urn:foo", "urn:foo"},
 		// Trailing-dot append (libxml2 forces upward traversal).
 		{"dotdot-base-keeps-slash", "..", "y/", "../y/"},
-		// Empty-path (query/fragment-only) reference keeps the base path (BASE-001).
+		// Empty-path (query/fragment-only) reference keeps the base path.
 		{"query-only-ref", "a/b", "?q=1", "a/b?q=1"},
 		{"fragment-only-ref", "a/b", "#f", "a/b#f"},
-		// Relative path that fully cancels yields empty, not "/" (BASE-002).
+		// Relative path that fully cancels yields empty, not "/".
 		{"relative-cancels-to-empty", "abc/", "../", ""},
-		// Network-path reference keeps its authority (BASE-003).
+		// Network-path reference keeps its authority.
 		{"network-path-ref", "a/", "//h/x", "//h/x"},
-		// Absolute base merge collapses consecutive slashes (BASE-004).
+		// Absolute base merge collapses consecutive slashes.
 		{"absolute-base-double-slash", "http://h/a//b/", "c", "http://h/a/b/c"},
+		// The first path segment survives a trailing ".." (libxml2 quirk).
+		{"first-segment-survives-trailing-dotdot", "a/b/", "../..", "a/.."},
+		{"foo-bar-up-up", "foo/bar", pathUpUpX, pathUpX},
+		{"abc-up-up-d", "a/b/c/", "../../d", "a/d"},
+		// Percent-encoding is preserved (no decode round-trip).
+		{"percent-encoded-path", "a%20b/", "c", "a%20b/c"},
+		// Empty-but-present authority (file:///) is preserved.
+		{"file-empty-authority", "file:///a/b", "c", "file:///a/c"},
 	}
 
 	for _, tt := range tests {
@@ -52,7 +68,7 @@ func TestReduceXMLBase(t *testing.T) {
 		{"single-absolute-path", []string{"/c/"}, "/c/"},
 		{"single-relative", []string{"foo/bar"}, "foo/bar"},
 		{"spec-102-e3", []string{"../bar/", "foo"}, "../bar/foo"},
-		{"spec3-d", []string{"..", "..", "x"}, "../../x"},
+		{"spec3-d", []string{"..", "..", "x"}, pathUpUpX},
 		{"prop2-e1", []string{"http://xmlbase.example.org/xmlbase0/", "/xmlbase1/"}, "http://xmlbase.example.org/xmlbase1/"},
 	}
 
@@ -69,8 +85,8 @@ func TestNormalizeURIPath(t *testing.T) {
 		want string
 	}{
 		{"../bar/foo", "../bar/foo"},
-		{"../../x", "../../x"},
-		{"../x", "../x"},
+		{pathUpUpX, pathUpUpX},
+		{pathUpX, pathUpX},
 		{"/c/", "/c/"},
 		{"a/b/../c", "a/c"},
 		{"foo/./bar", "foo/bar"},
@@ -80,6 +96,10 @@ func TestNormalizeURIPath(t *testing.T) {
 		{"foo/..", ""},
 		{"a/b/..", "a/"},
 		{"abc/", "abc/"},
+		{"a/b/../..", "a/.."}, // first segment survives trailing ".."
+		{"a/../..", ".."},
+		{"foo/../../x", pathUpX},
+		{"/../x", "/x"}, // leading "/../" discarded on absolute path
 	}
 
 	for _, tt := range tests {
