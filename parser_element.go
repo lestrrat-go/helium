@@ -216,6 +216,17 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 		// Bounded-whitespace policy: an unclassified blank prefix that grows
 		// past the budget is downgraded to character data so memory stays
 		// bounded for a pathological pure-whitespace run.
+		//
+		// DOCUMENTED POLICY (intentional reclassification, not a silent quirk):
+		// an all-whitespace run can only be classified as IgnorableWhitespace
+		// once its end-of-run delimiter is in view, so a still-blank prefix must
+		// be buffered until then. To bound memory against a pathological multi-MiB
+		// run of pure whitespace, once the buffered blank prefix grows past
+		// blankBudget we stop treating it as ignorable and deliver it (and the
+		// rest of the run) as Characters rather than IgnorableWhitespace. Only
+		// abnormally large pure-blank runs are affected — realistic indentation /
+		// pretty-printing whitespace is far below blankBudget (see
+		// minPendingBlankBytes) and is still delivered as IgnorableWhitespace.
 		if blank && len(acc) > blankBudget {
 			blank = false
 		}

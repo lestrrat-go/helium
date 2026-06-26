@@ -512,11 +512,18 @@ func (p Parser) BaseURI(uri string) Parser {
 	return p
 }
 
-// CharBufferSize sets the maximum number of bytes delivered in a single
+// CharBufferSize sets a TARGET maximum number of bytes delivered in a single
 // Characters or IgnorableWhitespace SAX callback. When size <= 0 (the
 // default), all character data is delivered in one call. When size > 0,
 // data longer than size bytes is split into chunks of at most size bytes,
 // always respecting UTF-8 character boundaries.
+//
+// size is a target, not a hard cap, in two documented cases:
+//   - A single UTF-8 rune wider than size is delivered whole rather than split
+//     into invalid fragments, so that one callback may exceed size.
+//   - To keep memory bounded, an all-whitespace run that exceeds the internal
+//     pending-whitespace budget is delivered as Characters (not as
+//     IgnorableWhitespace); only abnormally large pure-blank runs are affected.
 func (p Parser) CharBufferSize(size int) Parser {
 	p = p.clone()
 	p.cfg.charBufferSize = size
