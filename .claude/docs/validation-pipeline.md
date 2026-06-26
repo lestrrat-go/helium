@@ -451,11 +451,20 @@ for binary (`hexBinary`/`base64Binary`).
 `value.Compare`) and the digit facets (`totalDigits`/`fractionDigits`) via
 `value.CountTotalDigits`/`CountFractionDigits` on the `value.IsDecimalFamily`
 types. `facetOrderingOK` returns SATISFIED when `value.Compare` reports `ok=false`
-for two valid ORDERED operands (an indeterminate comparison, e.g. mixed-timezone
-`xs:dateTime`), matching XSD semantics. Facet APPLICABILITY is enforced at COMPILE
-time by `checkDataFacets` (`parse_check.go`, run from the `patternData` case of
+for two valid ORDERED operands that are genuinely indeterminate (e.g. mixed-timezone
+`xs:dateTime`), matching XSD semantics — but a NaN operand is the exception: an
+`xs:float`/`xs:double` NaN instance value OR NaN bound is excluded by the bounding
+facets (`value.IsFloatNaN`), so the facet FAILS rather than slipping through. The
+digit-facet bounds are parsed with `math/big` (`parseDigitFacetBound`, normalizing
+via the XSD collapse whiteSpace facet — NOT Go's `strconv.Atoi`+`strings.TrimSpace`,
+which trims NBSP and overflows large bounds into a reject-all). Facet APPLICABILITY
+and bound LEXICAL VALIDITY are enforced at COMPILE time by `checkDataFacets`
+(`parse_check.go`, run from the `patternData` case of
 `checkPattern`): an ordering facet on a non-ordered datatype (`!value.Orderable`)
-or with an invalid bound, and a digit facet on a non-decimal datatype, are fatal
+or with an invalid bound, a digit facet on a non-decimal datatype, and a digit-facet
+bound that is not a valid `xs:positiveInteger` (`totalDigits`) /
+`xs:nonNegativeInteger` (`fractionDigits`) — including an NBSP-padded or
+out-of-range bound — are fatal
 schema errors — which makes the whole grammar unmatchable (`compileSchema`
 replaces `start` with `notAllowed`). `effectiveXSDDatatype` resolves the `<data>`
 datatype the same way `matchData` does (explicit XSD library, or a bare recognized

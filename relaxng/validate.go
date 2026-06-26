@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"regexp"
 	"slices"
 	"strconv"
@@ -1982,22 +1983,24 @@ func validateWithParams(text, typeName string, params []*param) int {
 			}
 		case "totalDigits":
 			// totalDigits applies only to the xs:decimal family (an inapplicable
-			// facet is rejected at compile time). The instance value has already
-			// passed lexical validation, so count its significant digits and reject
-			// when they exceed the bound.
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil || !value.IsDecimalFamily(typeName) {
+			// facet, and a bound that is not a valid xs:positiveInteger, are rejected
+			// at compile time). The instance value has already passed lexical
+			// validation, so count its significant digits and reject when they exceed
+			// the bound. The bound is parsed with big.Int so an arbitrarily large
+			// xs:positiveInteger does not overflow into a reject-all.
+			n, ok := parseDigitFacetBound(p.value)
+			if !ok || !value.IsDecimalFamily(typeName) {
 				return -1
 			}
-			if value.CountTotalDigits(text) > n {
+			if big.NewInt(int64(value.CountTotalDigits(text))).Cmp(n) > 0 {
 				return -1
 			}
 		case "fractionDigits":
-			n, err := strconv.Atoi(strings.TrimSpace(p.value))
-			if err != nil || !value.IsDecimalFamily(typeName) {
+			n, ok := parseDigitFacetBound(p.value)
+			if !ok || !value.IsDecimalFamily(typeName) {
 				return -1
 			}
-			if value.CountFractionDigits(text) > n {
+			if big.NewInt(int64(value.CountFractionDigits(text))).Cmp(n) > 0 {
 				return -1
 			}
 		default:
@@ -2024,18 +2027,46 @@ func validateWithParams(text, typeName string, params []*param) int {
 // belt-and-suspenders — a non-ordered type fails closed if ever reached.
 //
 // For an ordered type, value.Compare can still return ok=false when two VALID
-// operands are indeterminate (e.g. a mixed-timezone xs:dateTime comparison). XSD
-// treats an indeterminate ordered comparison as SATISFYING the range facet, so the
-// value is accepted rather than rejected — matching the XSD layer's semantics.
+// operands are indeterminate. There are two distinct cases, and XSD treats them
+// oppositely:
+//
+//   - An xs:float/xs:double NaN operand (a NaN instance value OR a NaN bound):
+//     NaN does not participate in the order, and XSD bounding facets EXCLUDE
+//     incomparable values, so the facet is NOT satisfied. This must reject — a
+//     minInclusive=0 must not accept a NaN instance, and a NaN bound must not
+//     accept finite values.
+//   - A genuinely-indeterminate comparison between two non-NaN ordered values
+//     (e.g. a mixed-timezone xs:dateTime comparison): XSD treats this as
+//     SATISFYING the range facet, so the value is accepted — matching the XSD
+//     layer's semantics.
 func facetOrderingOK(text, facetBound, typeName string, accept func(int) bool) bool {
 	if !value.Orderable(typeName) {
 		return false
 	}
 	cmp, ok := value.Compare(text, facetBound, typeName)
 	if !ok {
+		// A NaN operand (instance value or bound) is incomparable for the bounding
+		// facets, so the value fails the facet rather than slipping through. Other
+		// indeterminate ordered comparisons remain treated as satisfied.
+		if value.IsFloatNaN(text) || value.IsFloatNaN(facetBound) {
+			return false
+		}
 		return true
 	}
 	return accept(cmp)
+}
+
+// parseDigitFacetBound parses a totalDigits/fractionDigits facet bound into a
+// big.Int. The bound is compile-time validated (checkDataFacets) as a valid
+// xs:positiveInteger (totalDigits) or xs:nonNegativeInteger (fractionDigits),
+// so by the time validation runs it is a well-formed integer lexical with only
+// XSD whitespace; it is normalized (XSD collapse — NOT Go's unicode-space
+// trimming, which would accept NBSP) before parsing. A big.Int is used rather
+// than strconv.Atoi so an arbitrarily large bound is compared faithfully instead
+// of overflowing int and collapsing into a reject-all.
+func parseDigitFacetBound(s string) (*big.Int, bool) {
+	n, ok := new(big.Int).SetString(value.Normalize(s, "nonNegativeInteger"), 10)
+	return n, ok
 }
 
 // facetLength returns the value's length in the units the length/minLength/

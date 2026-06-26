@@ -227,6 +227,19 @@ func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
 		case "totalDigits", "fractionDigits":
 			if !value.IsDecimalFamily(typeName) {
 				c.addPatternError(ctx, pat, fmt.Sprintf("facet '%s' is not allowed on the datatype '%s'", p.name, typeName))
+				continue
+			}
+			// The digit-facet bound must itself be a valid integer in its XSD value
+			// space: totalDigits is an xs:positiveInteger, fractionDigits an
+			// xs:nonNegativeInteger. Validating here (with XSD whitespace/lexical
+			// rules — so e.g. an NBSP-padded bound is rejected, not silently trimmed)
+			// keeps an out-of-space bound from being parsed leniently at validation.
+			boundType := "positiveInteger"
+			if p.name == "fractionDigits" {
+				boundType = "nonNegativeInteger"
+			}
+			if value.ValidateBuiltin(value.Normalize(p.value, boundType), boundType) != nil {
+				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet '%s' is not a valid '%s'", p.value, p.name, boundType))
 			}
 		}
 	}
