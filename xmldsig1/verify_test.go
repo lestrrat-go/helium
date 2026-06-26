@@ -11,34 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// unsupportedTransform is a Transform whose URI is one the verifier does not
-// recognize. The signer treats an unrecognized Transform as the default
-// Exclusive C14N for canonicalization but still writes the URI into the
-// document, so the resulting (self-consistent) signature triggers
-// verifyReference's fail-closed unsupported-transform rejection.
-type unsupportedTransform struct{}
-
-func (unsupportedTransform) URI() string { return xmldsig1.TransformXPath }
-
-// TestVerifyUnsupportedTransform drives verifyReference's fail-closed
-// unsupported-transform branch.
-func TestVerifyUnsupportedTransform(t *testing.T) {
-	key := generateRSAKey(t)
-	doc := mustParseXML(t, samlAssertion)
-	signer := xmldsig1.NewSigner().
-		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
-		Reference(xmldsig1.ReferenceConfig{
-			URI:             "",
-			DigestAlgorithm: xmldsig1.DigestSHA256,
-			Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), unsupportedTransform{}},
-		})
-	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
-
-	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
-	_, err := verifier.Verify(t.Context(), doc)
-	require.ErrorIs(t, err, xmldsig1.ErrUnsupportedTransform)
-}
-
 // wrapElementBase64 line-wraps the text content of the named element at the
 // given column using the full set of XML whitespace separators (CR, LF, tab,
 // space), mimicking real-world signers that pretty-print/indent base64. XSD

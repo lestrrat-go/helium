@@ -233,26 +233,22 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		return err
 	}
 
-	// Apply transforms to get canonical bytes.
-	hasEnveloped := false
-	for _, t := range ref.Transforms {
-		if _, ok := t.(envelopedTransform); ok {
-			hasEnveloped = true
-			break
+	// Interpret the configured transforms as an ordered pipeline so the digest
+	// is computed exactly as a verifier reading these same Transform elements
+	// would. The output begins as a node-set; an octet-producing c14n transform
+	// ends the pipeline, and when no c14n transform is configured the default
+	// node-set->octet conversion is inclusive Canonical XML 1.0.
+	steps := make([]transformStep, len(ref.Transforms))
+	for i, t := range ref.Transforms {
+		step := transformStep{algorithm: t.URI()}
+		if exc, ok := t.(excC14NTransform); ok {
+			step.prefixes = exc.prefixes
 		}
+		steps[i] = step
 	}
-
-	// Find the last c14n transform to determine the canonicalization method.
-	c14nMethod := ExcC14N10 // default
-	var prefixes []string
-	for _, t := range ref.Transforms {
-		switch tt := t.(type) {
-		case c14nTransform:
-			c14nMethod = tt.method
-		case excC14NTransform:
-			c14nMethod = ExcC14N10
-			prefixes = tt.prefixes
-		}
+	c14nMethod, prefixes, hasEnveloped, err := resolveTransformPipeline(steps)
+	if err != nil {
+		return err
 	}
 
 	// For enveloped signatures the Signature element and its descendants must

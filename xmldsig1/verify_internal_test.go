@@ -230,7 +230,7 @@ func TestEmptyReferencesRejected(t *testing.T) {
 	sigElem, err := NewSigner().
 		SignatureAlgorithm(AlgRSASHA256).
 		Reference(ReferenceConfig{
-			URI:             "#payload",
+			URI:             payloadFragment,
 			DigestAlgorithm: DigestSHA256,
 			Transforms:      []Transform{ExcC14NTransform()},
 		}).
@@ -336,7 +336,7 @@ func TestReferenceNamespace(t *testing.T) {
 		sigElem, err := NewSigner().
 			SignatureAlgorithm(AlgRSASHA256).
 			Reference(ReferenceConfig{
-				URI:             "#payload",
+				URI:             payloadFragment,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{ExcC14NTransform()},
 			}).
@@ -396,7 +396,7 @@ func TestReferenceNamespace(t *testing.T) {
 		sigElem, err := NewSigner().
 			SignatureAlgorithm(AlgRSASHA256).
 			Reference(ReferenceConfig{
-				URI:             "#payload",
+				URI:             payloadFragment,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{ExcC14NTransform()},
 			}).
@@ -452,7 +452,7 @@ func TestReferenceNamespace(t *testing.T) {
 		sigElem, err := NewSigner().
 			SignatureAlgorithm(AlgRSASHA256).
 			Reference(ReferenceConfig{
-				URI:             "#payload",
+				URI:             payloadFragment,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{ExcC14NTransform()},
 			}).
@@ -485,4 +485,220 @@ func TestCloneNilConfig(t *testing.T) {
 		require.NotNil(t, v2.cfg)
 		require.True(t, v2.cfg.allowSHA1)
 	})
+}
+
+// reSignSignedInfo recomputes a valid SignatureValue over the (possibly
+// tampered) SignedInfo using Exclusive C14N (the signer's SignedInfo default)
+// and the given inclusive prefixes, replacing the existing SignatureValue text.
+// Tests use this after mutating SignedInfo so that verification reaches the
+// per-Reference transform handling rather than failing earlier on the
+// SignatureValue check.
+func reSignSignedInfo(t *testing.T, doc *helium.Document, sigElem, signedInfo *helium.Element, prefixes []string, key *rsa.PrivateKey) {
+	t.Helper()
+	canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, prefixes)
+	require.NoError(t, err)
+	sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
+	require.NoError(t, err)
+
+	sigValueElem := findChild(t, sigElem, "SignatureValue")
+	for c := sigValueElem.FirstChild(); c != nil; c = sigValueElem.FirstChild() {
+		mc, ok := c.(helium.MutableNode)
+		require.True(t, ok)
+		helium.UnlinkNode(mc)
+	}
+	require.NoError(t, sigValueElem.AddChild(
+		doc.CreateText([]byte(base64.StdEncoding.EncodeToString(sigBytes)))))
+}
+
+// TestVerifyUnsupportedTransform drives verifyReference's fail-closed rejection
+// of an unsupported transform URI. The signer now refuses to emit an unknown
+// transform, so the malicious SignedInfo is built by signing a valid
+// Enveloped+ExcC14N reference, rewriting the c14n Transform's Algorithm to an
+// unsupported URI, and recomputing a valid SignatureValue over the tampered
+// SignedInfo. The verifier must reject the unknown transform before digesting.
+func TestVerifyUnsupportedTransform(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><data Id="payload">secret</data></root>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{Enveloped(), ExcC14NTransform()},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Rewrite the Exclusive C14N Transform to an unsupported transform URI,
+	// leaving the pipeline as [enveloped, xpath].
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	excTransform := findTransformByAlgorithm(t, signedInfo, ExcC14N10)
+	require.NoError(t, excTransform.SetLiteralAttribute("Algorithm", TransformXPath))
+
+	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+}
+
+// TestVerifyTransformAfterCanonicalization guards DSIG-001's ordered-pipeline
+// rule: an octet-producing c14n transform ends the pipeline, so any transform
+// ordered after it (here a second, enveloped transform) cannot be applied and
+// the Reference must be rejected fail-closed.
+func TestVerifyTransformAfterCanonicalization(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><data Id="payload">secret</data></root>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{ExcC14NTransform()},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Append an enveloped-signature Transform AFTER the c14n transform.
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	refElem := findChild(t, signedInfo, "Reference")
+	transforms := findChild(t, refElem, "Transforms")
+	extra := doc.CreateElement("Transform")
+	require.NoError(t, extra.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, extra.SetLiteralAttribute("Algorithm", TransformEnvelopedSignature))
+	require.NoError(t, transforms.AddChild(extra))
+
+	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	require.Contains(t, err.Error(), "ordered after canonicalization")
+}
+
+// TestVerifyOmittedTransformDefaultsToC14N10 guards DSIG-001's default: a
+// Reference with no transform must convert the node-set to octets with inclusive
+// Canonical XML 1.0, NOT Exclusive C14N. The document carries an unused ancestor
+// namespace, which inclusive C14N carries into the #payload subtree but
+// Exclusive C14N drops, so the digest matches only under the correct default.
+func TestVerifyOmittedTransformDefaultsToC14N10(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(),
+		[]byte(`<doc xmlns:unused="urn:unused"><data Id="payload"><child>v</child></data></doc>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{C14NTransform(C14N10)},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Drop the Transforms element so the Reference declares no transform; its
+	// DigestValue was computed with inclusive Canonical XML 1.0.
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	refElem := findChild(t, signedInfo, "Reference")
+	helium.UnlinkNode(findChild(t, refElem, "Transforms"))
+
+	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.NoError(t, err, "omitted transform must default to inclusive Canonical XML 1.0")
+}
+
+// TestVerifySignedInfoInclusiveNamespaces guards DSIG-002: an
+// ec:InclusiveNamespaces PrefixList declared on SignedInfo's
+// CanonicalizationMethod must be honored when canonicalizing SignedInfo. The
+// root declares an unused namespace prefix; Exclusive C14N drops it unless the
+// PrefixList forces its inclusion, so the SignatureValue (computed WITH the
+// prefix list) verifies only when the verifier threads that PrefixList through.
+func TestVerifySignedInfoInclusiveNamespaces(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(context.Background(),
+		[]byte(`<doc xmlns:extra="urn:extra"><data Id="payload">v</data></doc>`))
+	require.NoError(t, err)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             payloadFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{ExcC14NTransform()},
+		}).
+		SignDetached(context.Background(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	// Declare an ec:InclusiveNamespaces PrefixList on the CanonicalizationMethod.
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	c14nMethodElem := findChild(t, signedInfo, "CanonicalizationMethod")
+	inc := doc.CreateElement("InclusiveNamespaces")
+	require.NoError(t, inc.DeclareNamespace("ec", ExcC14N10))
+	require.NoError(t, inc.SetActiveNamespace("ec", ExcC14N10))
+	require.NoError(t, inc.SetLiteralAttribute("PrefixList", "extra"))
+	require.NoError(t, c14nMethodElem.AddChild(inc))
+
+	// Recompute the SignatureValue using the declared exclusive c14n + PrefixList.
+	reSignSignedInfo(t, doc, sigElem, signedInfo, []string{"extra"}, key)
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
+	require.NoError(t, err, "SignedInfo ec:InclusiveNamespaces PrefixList must be honored")
+}
+
+// TestVerifyRejectsSignatureMethodParameter guards DSIG-003: any child parameter
+// of SignatureMethod (e.g. ds:HMACOutputLength, which requests a truncated HMAC)
+// is unsupported and must be rejected fail-closed rather than silently ignored.
+func TestVerifyRejectsSignatureMethodParameter(t *testing.T) {
+	si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+		`<ds:CanonicalizationMethod Algorithm="` + ExcC14N10 + `"/>` +
+		`<ds:SignatureMethod Algorithm="` + AlgHMACSHA256 + `">` +
+		`<ds:HMACOutputLength>128</ds:HMACOutputLength>` +
+		`</ds:SignatureMethod>` +
+		`<ds:Reference URI="">` +
+		`<ds:DigestMethod Algorithm="` + DigestSHA256 + `"/>` +
+		`<ds:DigestValue>AA==</ds:DigestValue>` +
+		`</ds:Reference>` +
+		`</ds:SignedInfo>`
+	doc := mustParse(t, si)
+	var parsed parsedSignature
+	err := parseSignedInfo(doc.DocumentElement(), &parsed)
+	require.ErrorIs(t, err, ErrUnsupportedAlgorithm)
+	require.Contains(t, err.Error(), "SignatureMethod parameter")
+}
+
+// TestVerifyRejectsCanonicalizationMethodParameter guards DSIG-002's
+// fail-closed arm: an unrecognized child parameter of CanonicalizationMethod
+// must be rejected rather than silently ignored.
+func TestVerifyRejectsCanonicalizationMethodParameter(t *testing.T) {
+	si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
+		`<ds:CanonicalizationMethod Algorithm="` + ExcC14N10 + `">` +
+		`<ds:BogusParameter/>` +
+		`</ds:CanonicalizationMethod>` +
+		`<ds:SignatureMethod Algorithm="` + AlgRSASHA256 + `"/>` +
+		`<ds:Reference URI="">` +
+		`<ds:DigestMethod Algorithm="` + DigestSHA256 + `"/>` +
+		`<ds:DigestValue>AA==</ds:DigestValue>` +
+		`</ds:Reference>` +
+		`</ds:SignedInfo>`
+	doc := mustParse(t, si)
+	var parsed parsedSignature
+	err := parseSignedInfo(doc.DocumentElement(), &parsed)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	require.Contains(t, err.Error(), "CanonicalizationMethod parameter")
 }

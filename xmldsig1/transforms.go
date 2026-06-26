@@ -56,6 +56,54 @@ func ExcC14NTransform(prefixes ...string) Transform {
 	return excC14NTransform{prefixes: prefixes}
 }
 
+// transformStep is the algorithm-agnostic view of a single Reference transform,
+// shared by the signing (typed Transform) and verification (parsedTransform)
+// paths so both interpret a transform list identically.
+type transformStep struct {
+	algorithm string
+	prefixes  []string
+}
+
+// resolveTransformPipeline interprets an ordered XMLDSig Reference transform
+// list and returns the effective canonicalization method, its
+// inclusive-namespace prefixes, and whether an enveloped-signature transform is
+// present.
+//
+// A Reference's transform output begins as a node-set. The enveloped-signature
+// transform maps a node-set to a node-set; a canonicalization (c14n) transform
+// converts the node-set to an octet stream. helium supports no
+// octet-stream-consuming transform, so once a c14n transform has produced octets
+// no further transform — including a second c14n — may run; such a list is
+// rejected fail-closed rather than silently honoring only the last c14n.
+//
+// When no c14n transform is declared, the XMLDSig default node-set->octet
+// conversion applies, which is inclusive Canonical XML 1.0 (NOT Exclusive C14N).
+func resolveTransformPipeline(steps []transformStep) (string, []string, bool, error) {
+	c14nMethod := ""
+	var prefixes []string
+	hasEnveloped := false
+	producedOctets := false
+	for _, t := range steps {
+		if producedOctets {
+			return "", nil, false, fmt.Errorf("%w: transform %s ordered after canonicalization", ErrUnsupportedTransform, t.algorithm)
+		}
+		switch t.algorithm {
+		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
+			c14nMethod = t.algorithm
+			prefixes = t.prefixes
+			producedOctets = true
+		case TransformEnvelopedSignature:
+			hasEnveloped = true
+		default:
+			return "", nil, false, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
+		}
+	}
+	if c14nMethod == "" {
+		c14nMethod = C14N10
+	}
+	return c14nMethod, prefixes, hasEnveloped, nil
+}
+
 // canonicalize applies the appropriate c14n mode for the given method URI
 // to the document, returning the canonical bytes.
 func canonicalize(method string, doc *helium.Document, prefixes []string) ([]byte, error) {
