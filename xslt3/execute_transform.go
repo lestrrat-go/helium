@@ -783,8 +783,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if ov.Encoding != "" {
 			outDef.Encoding = ov.Encoding
 		}
-		outDef.Indent = ov.Indent || outDef.Indent
-		outDef.OmitDeclaration = ov.OmitDeclaration || outDef.OmitDeclaration
+		// ov folds in the default xsl:output base via evalResultDocOutputDef, so
+		// it is the effective output definition. Assign the boolean serialization
+		// fields directly rather than OR-ing with outDef: an explicit false on
+		// the result-document (e.g. indent="{false()}") must override an inherited
+		// true. OR-ing would wrongly keep the inherited true on.
+		outDef.Indent = ov.Indent
+		outDef.OmitDeclaration = ov.OmitDeclaration
 		if ov.DoctypeSystem != "" {
 			outDef.DoctypeSystem = ov.DoctypeSystem
 		}
@@ -797,12 +802,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if ov.HTMLVersion != "" {
 			outDef.HTMLVersion = ov.HTMLVersion
 		}
-		if ov.IncludeContentType != nil {
-			outDef.IncludeContentType = ov.IncludeContentType
-		}
-		if ov.ByteOrderMark {
-			outDef.ByteOrderMark = true
-		}
+		// Effective (base-folded) values; assign directly so an explicit false
+		// overrides an inherited true.
+		outDef.IncludeContentType = ov.IncludeContentType
+		outDef.ByteOrderMark = ov.ByteOrderMark
 		if len(ov.CDATASections) > 0 {
 			outDef.CDATASections = ov.CDATASections
 		}
@@ -812,9 +815,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if ov.Version != "" {
 			outDef.Version = ov.Version
 		}
-		if ov.EscapeURIAttributes != nil {
-			outDef.EscapeURIAttributes = ov.EscapeURIAttributes
-		}
+		outDef.EscapeURIAttributes = ov.EscapeURIAttributes
 		if len(ov.SuppressIndentation) > 0 {
 			outDef.SuppressIndentation = ov.SuppressIndentation
 		}

@@ -372,7 +372,7 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		return err
 	} else if present {
 		outDef.AllowDuplicateNames = b
-		outDef.AllowDuplicateNamesExplicit = true
+		outDef.allowDuplicateNamesExplicit = true
 	}
 
 	if v := getAttr(elem, paramSuppressIndentation); v != "" {
@@ -487,10 +487,10 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		// Preserve the earlier declaration's value only when neither the
 		// attribute nor the parameter document of this declaration supplied
 		// allow-duplicate-names; a parameter-document supplied value sets
-		// AllowDuplicateNamesExplicit and must not be clobbered.
-		if !outDef.AllowDuplicateNamesExplicit {
+		// allowDuplicateNamesExplicit and must not be clobbered.
+		if !outDef.allowDuplicateNamesExplicit {
 			outDef.AllowDuplicateNames = existing.AllowDuplicateNames
-			outDef.AllowDuplicateNamesExplicit = existing.AllowDuplicateNamesExplicit
+			outDef.allowDuplicateNamesExplicit = existing.allowDuplicateNamesExplicit
 		}
 	}
 
@@ -679,10 +679,10 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 				}
 			}
 		case paramAllowDuplicateNames:
-			if !outDef.AllowDuplicateNamesExplicit && val != "" {
+			if !outDef.allowDuplicateNamesExplicit && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.AllowDuplicateNames = b
-					outDef.AllowDuplicateNamesExplicit = true
+					outDef.allowDuplicateNamesExplicit = true
 				}
 			}
 		case paramItemSeparator:

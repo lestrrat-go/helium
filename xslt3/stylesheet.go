@@ -363,9 +363,10 @@ type OutputDef struct {
 	UseCharacterMaps    []string        // names of character maps to use
 	ResolvedCharMap     map[rune]string // resolved character map (populated at runtime)
 	AllowDuplicateNames bool            // allow-duplicate-names for JSON output
-	// AllowDuplicateNamesExplicit is true when allow-duplicate-names was
+	// allowDuplicateNamesExplicit is true when allow-duplicate-names was
 	// supplied by either the xsl:output attribute or the parameter document.
-	AllowDuplicateNamesExplicit bool
+	// Internal merge bookkeeping; not part of the public API.
+	allowDuplicateNamesExplicit bool
 	JSONNodeOutputMethod        string   // json-node-output-method: "xml", "html", "xhtml", "text"
 	SuppressIndentation         []string // suppress-indentation element names
 	ParameterDocument           string   // parameter-document URI
