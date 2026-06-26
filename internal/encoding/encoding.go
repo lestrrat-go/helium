@@ -36,7 +36,7 @@ func Load(name string) enc.Encoding {
 	case "utf8", "unicode11utf8", "unicode20utf8", "xunicode20utf8":
 		return unicode.UTF8
 	case "usascii", "ascii", "ansix341968", "csascii":
-		return unicode.UTF8
+		return asciiEncoding{}
 	case "utf16le", "unicodefeff":
 		return withStrictDecode(unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM), 2, orderLE2, false)
 	case "utf16be", "unicodefffe":

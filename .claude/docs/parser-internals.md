@@ -114,6 +114,13 @@ remembered by `UTF8Cursor` as a sticky `Err()` (a clean `Done()` would otherwise
 mask it as EOF); `parseDocument` surfaces it via `cursorDecodeErr()` at the
 document-end gate.
 
+**Strict US-ASCII decode**: US-ASCII is a 7-bit encoding. It is deliberately
+excluded from `IsUTF8`'s direct-byte-cursor fast path and routed through `Load`,
+whose `asciiEncoding` decoder (`ascii.go`) rejects any byte >= 0x80 with
+`ErrInvalidASCII`. A document declaring `encoding="US-ASCII"` that contains a
+byte >= 0x80 (even a valid UTF-8 multibyte sequence) is therefore a fatal decode
+error rather than being silently passed through.
+
 ## File Responsibilities
 
 - `parserctx.go` owns the parser context, input/cursor stack, SAX callback dispatch, location/error reporting, and other shared parser state.

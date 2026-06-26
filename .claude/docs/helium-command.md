@@ -113,7 +113,7 @@ File output (`--output`/`-o`, not stdout and not `--noout`) is written through a
 ### `--encode ENC`
 
 - Validated at parse time against `internal/encoding.Load`; an unrecognized encoding name is rejected with `--encode: unsupported encoding` and `ExitErr` (no silent fallback).
-- US-ASCII and its aliases (`ascii`, `ANSI_X3.4-1968`, `csASCII`, detected via `internal/encoding.IsASCII`) are rejected with the same `--encode: unsupported encoding` message: `Load` maps them to the UTF-8 encoder, which would emit raw UTF-8 bytes for non-ASCII characters while declaring US-ASCII.
+- US-ASCII and its aliases (`ascii`, `ANSI_X3.4-1968`, `csASCII`, detected via `internal/encoding.IsASCII`) are rejected with the same `--encode: unsupported encoding` message: `Load`'s strict ASCII encoder delegates to UTF-8, which would emit raw UTF-8 bytes for non-ASCII characters while declaring US-ASCII.
 - Cannot be combined with `--xpath`: the XPath path serializes node values without re-encoding, so the combination is rejected at parse time with `--encode cannot be combined with --xpath` and `ExitErr`.
 - Applied to the standard dump path via `doc.SetEncoding`, so the serializer loads the matching encoder and emits the matching encoding declaration.
 - Ignored for C14N modes, which are always UTF-8 per the C14N spec.

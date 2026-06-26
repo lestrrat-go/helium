@@ -271,3 +271,25 @@ func requireEquivalentEncoding(t *testing.T, canonical, alias string) {
 		require.Equal(t, gotCanonical, gotAlias, "decoded output mismatch: canonical=%q alias=%q sample=%#v", canonical, alias, sample)
 	}
 }
+
+func TestUSASCIIStrictDecode(t *testing.T) {
+	t.Parallel()
+
+	for _, alias := range []string{"US-ASCII", "ascii", "ANSI_X3.4-1968", "csASCII"} {
+		e := xmlenc.Load(alias)
+		require.NotNil(t, e, "alias %q must be loadable", alias)
+
+		// Valid 7-bit input decodes unchanged.
+		got, err := e.NewDecoder().String("hello world")
+		require.NoError(t, err, "alias %q: 7-bit input must decode", alias)
+		require.Equal(t, "hello world", got)
+
+		// A byte >= 0x80 is malformed for US-ASCII and must error, even when
+		// it would form a valid UTF-8 multibyte sequence.
+		_, err = e.NewDecoder().String(string([]byte{0xc3, 0xa9}))
+		require.Error(t, err, "alias %q: high byte must be rejected", alias)
+
+		_, err = e.NewDecoder().String(string([]byte{0x80}))
+		require.Error(t, err, "alias %q: 0x80 must be rejected", alias)
+	}
+}
