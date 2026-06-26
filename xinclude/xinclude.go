@@ -623,10 +623,19 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 		}
 	}
 
-	// Deep-copy result nodes into the target document
+	// Deep-copy result nodes into the target document. Each selected node is
+	// deep-copied, and an xpointer can select up to the xpath node-set limit,
+	// so over a source with many nested same-name elements (e.g. xpointer(//a))
+	// the copies are O(n^2) the source size — far larger than the bytes READ
+	// from the source. Charge the estimated copy footprint against the aggregate
+	// bound BEFORE each copy so the same guard that bounds bytes read also bounds
+	// nodes copied, failing fast instead of materializing unboundedly.
 	targetDoc := inc.OwnerDocument()
 	var copies []helium.Node
 	for _, n := range nodes {
+		if err := p.accountIncludedBytes(uri, subtreeCopyCost(n)); err != nil {
+			return err
+		}
 		c, copyErr := helium.CopyNode(n, targetDoc)
 		if copyErr != nil {
 			return fmt.Errorf("xi:include: copy failed: %w", copyErr)
@@ -841,6 +850,41 @@ func (p *processor) accountIncludedBytes(uri string, n int) error {
 		return fmt.Errorf("xi:include: aggregate size including %q exceeds maximum: %w", uri, ErrIncludeTooLarge)
 	}
 	return nil
+}
+
+// copiedNodeOverhead is a conservative per-node byte estimate of a DOM node's
+// in-memory footprint (struct fields and pointers), added on top of its textual
+// content so that the byte-denominated aggregate bound also meaningfully limits
+// the number of nodes a deep copy materializes.
+const copiedNodeOverhead = 64
+
+// subtreeCopyCost estimates, in bytes, the memory a deep copy of n materializes:
+// copiedNodeOverhead plus the textual length of every node in the subtree
+// (descendants and an element's attributes). It walks the SOURCE subtree —
+// reading already-resident memory — so the estimate is charged BEFORE the copy
+// is allocated. Container nodes' Content() is NOT used (it aggregates all
+// descendants, which would make the walk itself O(n^2)); only the leaf
+// text-bearing nodes contribute content length.
+func subtreeCopyCost(n helium.Node) int {
+	var total int
+	_ = helium.Walk(n, helium.NodeWalkerFunc(func(node helium.Node) error {
+		total += copiedNodeOverhead
+		switch node.Type() {
+		case helium.ElementNode:
+			elem, ok := node.(*helium.Element)
+			if !ok {
+				return nil
+			}
+			total += len(elem.Name())
+			for _, a := range elem.Attributes() {
+				total += copiedNodeOverhead + len(a.Name()) + len(a.Value())
+			}
+		case helium.TextNode, helium.CDATASectionNode, helium.CommentNode, helium.ProcessingInstructionNode:
+			total += len(node.Content())
+		}
+		return nil
+	}))
+	return total
 }
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {

@@ -1818,6 +1818,61 @@ func TestXIncludeAggregateCap(t *testing.T) {
 	})
 }
 
+func TestXIncludeXPointerCopyCap(t *testing.T) {
+	t.Parallel()
+
+	// nestedDoc builds a tiny source whose only content is depth self-nested
+	// <a> elements: <r><a><a>...<a/>...</a></a></r>. An xpointer(//a) selects
+	// all depth of them, and deep-copying each selected subtree materializes
+	// O(depth^2) nodes from a sub-cap source — the amplification this cap guards.
+	nestedDoc := func(depth int) string {
+		var b strings.Builder
+		b.WriteString(`<r>`)
+		for range depth {
+			b.WriteString(`<a>`)
+		}
+		for range depth {
+			b.WriteString(`</a>`)
+		}
+		b.WriteString(`</r>`)
+		return b.String()
+	}
+
+	t.Run("xpointer copy amplification bounded by aggregate", func(t *testing.T) {
+		t.Parallel()
+		// MaxIncludeSize(1024) -> aggregate 100*1024 = 102400 bytes. The 80-deep
+		// source is well under the per-resource cap (~560 bytes), but the
+		// O(80^2) copied subtrees the xpointer selects exceed the aggregate.
+		resolver := &stringResolver{files: map[string]string{"nested.xml": nestedDoc(80)}}
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="nested.xml" xpointer="xpointer(//a)"/>
+		</root>`)
+
+		_, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.ErrorIs(t, err, xinclude.ErrIncludeTooLarge)
+	})
+
+	t.Run("normal xpointer include under aggregate succeeds", func(t *testing.T) {
+		t.Parallel()
+		resolver := &stringResolver{files: map[string]string{"nested.xml": nestedDoc(3)}}
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<xi:include href="nested.xml" xpointer="xpointer(//a)"/>
+		</root>`)
+
+		count, err := xinclude.NewProcessor().
+			Resolver(resolver).
+			MaxIncludeSize(1024).
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+}
+
 func TestXIncludeFileURIHref(t *testing.T) {
 	t.Parallel()
 
