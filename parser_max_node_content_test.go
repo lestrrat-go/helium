@@ -183,6 +183,24 @@ func TestMaxNodeContentSizeAttrValue(t *testing.T) {
 		}
 	})
 
+	t.Run("cap boundary is strict-greater for the fast path", func(t *testing.T) {
+		t.Parallel()
+		// The fast path's scan budget is cap+utf8.UTFMax, so a value of
+		// cap+1..cap+UTFMax bytes is still settled by ScanSimpleAttrValue;
+		// the explicit post-scan re-check must reject it. Exactly cap bytes
+		// is accepted; one more fails.
+		atCap, err := helium.NewParser().
+			MaxNodeContentSize(64).
+			Parse(t.Context(), []byte(bodies["fast"](64)))
+		require.NoError(t, err)
+		require.NotNil(t, atCap)
+
+		_, err = helium.NewParser().
+			MaxNodeContentSize(64).
+			Parse(t.Context(), []byte(bodies["fast"](65)))
+		require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
+	})
+
 	t.Run("negative limit disables the cap", func(t *testing.T) {
 		t.Parallel()
 		// A value far past the 10 MiB default still parses when the cap is

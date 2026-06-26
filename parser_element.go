@@ -822,6 +822,14 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	if !normalize {
 		if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
 			if v, nBytes := u8.ScanSimpleAttrValue(qch, pctx.nodeContentScanBudget()); nBytes > 0 {
+				// The scan budget is cap+utf8.UTFMax, so a successful scan can
+				// run slightly over the cap; re-check the exact byte count here
+				// (before advancing) so a value of cap+1..cap+UTFMax bytes is
+				// rejected, matching the slow path's per-iteration check.
+				if pctx.nodeContentTooLong(nBytes) {
+					err = pctx.error(ctx, ErrNodeContentTooLarge)
+					return
+				}
 				if err = u8.AdvanceFast(nBytes); err != nil {
 					return
 				}

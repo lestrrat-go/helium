@@ -265,10 +265,16 @@ hard content cap:
   budget) across all three cursor implementations and the interface.
 - `parseAttributeValueInternal` (`parser_element.go`) caps attribute values
   both ways: the slow accumulating path checks `nodeContentTooLong(b.Len())` at
-  the top of its scan loop (strict-greater), and the `ScanSimpleAttrValue` fast
-  path takes `nodeContentScanBudget()` as a `maxBytes` argument and bails
-  (falling back to the slow path, which reports the error) once it exceeds the
-  budget, bounding the cursor buffer instead of materializing the whole value.
+  the top of its scan loop (strict-greater). The `ScanSimpleAttrValue` fast path
+  takes `nodeContentScanBudget()` (= `maxNodeContent + utf8.UTFMax`) as a
+  `maxBytes` argument, bounding the cursor buffer instead of materializing the
+  whole value. Because the budget runs `utf8.UTFMax` past the cap, a successful
+  scan can return a `nBytes` slightly over the cap; the fast path therefore
+  re-checks `nodeContentTooLong(nBytes)` (strict-greater) BEFORE `AdvanceFast`
+  and returns `ErrNodeContentTooLarge` directly, so a `cap+1..cap+UTFMax`-byte
+  value is rejected and not accepted by the fast path. A value the scan cannot
+  settle within the budget returns `nBytes == 0` and falls back to the slow
+  accumulating path.
 - Entity-expansion sub-parses inherit the cap via `inheritNestedParserState`.
 - The bounded streaming SAX char-data path (`parseCharDataChunkedSAX`, used when
   `CharBufferSize > 0` and no DOM is built) is EXEMPT from the char-data cap: it
