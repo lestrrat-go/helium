@@ -416,7 +416,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, fmt.Errorf("xsd: root element is not xs:schema")
 	}
 
-	fsys := fs.FS(iofs.PermissiveRoot{})
+	// Default to a deny-all FS so an untrusted schema cannot reach the host
+	// filesystem via xs:include/xs:import/xs:redefine (local-file disclosure /
+	// resource exhaustion). Callers opt into host access explicitly via
+	// [Compiler.FS] (e.g. helium.PermissiveFS or a confined fs.FS). This mirrors
+	// the secure-by-default flip applied to helium.NewParser.
+	fsys := fs.FS(iofs.DenyAll{})
 	if cfg != nil && cfg.fsys != nil {
 		fsys = cfg.fsys
 	}
@@ -569,6 +574,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// models must be fully resolved and structurally sound.
 	c.checkElementConsistent(ctx)
 
+	// Identity-constraints (xs:key/xs:unique/xs:keyref) share one symbol space and
+	// must be unique by {targetNamespace}name across the whole schema. Reject any
+	// repeated name before the keyref resolution below, which would otherwise
+	// silently collapse the colliding constraints into one registry entry.
+	c.checkDuplicateIDCs(ctx)
+
 	// Resolve every xs:keyref/@refer against the schema-wide registry of
 	// key/unique constraints. An unresolved refer must be a fatal schema error:
 	// otherwise the keyref is silently skipped at validation time and referential
@@ -647,6 +658,68 @@ func (c *compiler) checkKeyRefRefers(ctx context.Context) {
 		c.schemaError(ctx,
 			schemaParserErrorAttr(source, idc.Line, elemKeyRef, elemKeyRef, attrRefer, msg))
 	}
+}
+
+// checkDuplicateIDCs enforces the XSD constraint that identity-constraint
+// definitions (xs:key, xs:unique, xs:keyref) all share a single symbol space:
+// each {targetNamespace}name must be unique across the entire schema, regardless
+// of which element declaration hosts the constraint. Two constraints sharing one
+// name silently collapsed into a single registry entry before — corrupting
+// keyref resolution and IDC validation — so a collision is now a fatal schema
+// parser error, matching reportDuplicateComponent's style and wording.
+func (c *compiler) checkDuplicateIDCs(ctx context.Context) {
+	if c.filename == "" {
+		return
+	}
+
+	idcs := c.collectAllIDCs()
+
+	// Sort by source location so the reported collision is deterministic (the
+	// later declaration is flagged) regardless of the map-iteration order in
+	// collectAllIDCs.
+	sort.SliceStable(idcs, func(i, j int) bool {
+		if idcs[i].Source != idcs[j].Source {
+			return idcs[i].Source < idcs[j].Source
+		}
+		return idcs[i].Line < idcs[j].Line
+	})
+
+	seen := make(map[QName]struct{}, len(idcs))
+	for _, idc := range idcs {
+		if _, dup := seen[idc.QName]; !dup {
+			seen[idc.QName] = struct{}{}
+			continue
+		}
+		c.reportDuplicateIDC(ctx, idc)
+	}
+}
+
+// reportDuplicateIDC emits the fatal schema-parser error for a redeclared
+// identity-constraint, mirroring reportDuplicateComponent. The XSD element name
+// (key/unique/keyref) is derived from the constraint kind and the constraint's
+// own declaring file/line is used so an imported or included collision cites the
+// declaring document.
+func (c *compiler) reportDuplicateIDC(ctx context.Context, idc *IDConstraint) {
+	xsdElem := elemKey
+	switch idc.Kind {
+	case IDCUnique:
+		xsdElem = elemUnique
+	case IDCKeyRef:
+		xsdElem = elemKeyRef
+	}
+
+	qnDisplay := "'" + idc.QName.NS + "'" + idc.QName.Local
+	if idc.QName.NS != "" {
+		qnDisplay = "'{" + idc.QName.NS + "}" + idc.QName.Local + "'"
+	}
+
+	source := idc.Source
+	if source == "" {
+		source = c.filename
+	}
+
+	c.schemaError(ctx, schemaParserError(source, idc.Line, xsdElem, xsdElem,
+		"An identity-constraint definition "+qnDisplay+" does already exist."))
 }
 
 // collectAllIDCs returns every identity-constraint declared anywhere in the

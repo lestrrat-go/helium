@@ -52,7 +52,7 @@ func TestCompileFile_CircularInclude(t *testing.T) {
   </xs:complexType>
 </xs:schema>`), 0o600))
 
-	schema, err := xsd.NewCompiler().CompileFile(t.Context(), mainPath)
+	schema, err := xsd.NewCompiler().FS(helium.PermissiveFS()).CompileFile(t.Context(), mainPath)
 	require.NoError(t, err, "circular include back to the root schema must compile without duplicate-component errors")
 	require.NotNil(t, schema)
 }

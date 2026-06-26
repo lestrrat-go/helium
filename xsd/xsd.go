@@ -99,9 +99,16 @@ func (c Compiler) BaseDir(dir string) Compiler {
 }
 
 // FS sets the [fs.FS] used to load schemas referenced by xs:include,
-// xs:import, and xs:redefine during compilation. A nil value restores
-// the default, which opens any path supplied to the compiler via
-// [os.Open].
+// xs:import, and xs:redefine during compilation.
+//
+// The default (and what a nil value restores) is a deny-all FS that refuses
+// every open: a compiler from [NewCompiler] loads no nested schema from the
+// host filesystem, so an untrusted schema cannot disclose local files or
+// exhaust resources via a hostile schemaLocation. To opt into host access,
+// pass [helium.PermissiveFS] (any os.Open path) or — preferably — a confined
+// [fs.FS] rooted at a trusted directory. Each nested schema is read through a
+// fixed byte cap regardless of the FS, so an endless source (e.g. a
+// schemaLocation pointing at /dev/zero) cannot exhaust memory.
 //
 // Note: schema-location resolution is URI-aware. When [Compiler.BaseDir]
 // is a URI (e.g. "https://example.com/s/main.xsd" or "file:///s/main.xsd"),
@@ -117,7 +124,7 @@ func (c Compiler) BaseDir(dir string) Compiler {
 func (c Compiler) FS(fsys fs.FS) Compiler {
 	c = c.clone()
 	if fsys == nil {
-		fsys = iofs.PermissiveRoot{}
+		fsys = iofs.DenyAll{}
 	}
 	c.cfg.fsys = fsys
 	return c

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +46,7 @@ func TestCompileFile_ImportCircularInclude(t *testing.T) {
   </xs:complexType>
 </xs:schema>`), 0o600))
 
-	schema, err := xsd.NewCompiler().CompileFile(t.Context(), mainPath)
+	schema, err := xsd.NewCompiler().FS(helium.PermissiveFS()).CompileFile(t.Context(), mainPath)
 	require.NoError(t, err, "an imported schema that circularly includes back to its own root must compile without duplicate-component errors")
 	require.NotNil(t, schema)
 }

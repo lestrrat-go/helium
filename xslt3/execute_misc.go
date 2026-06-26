@@ -830,8 +830,14 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 					if key.TypeName != xpath3.TypeQName {
 						return dynamicError(errCodeXTTE3165, "xsl:evaluate: with-params map key must be xs:QName, got %s", key.TypeName)
 					}
-					qn := key.QNameVal()
-					vars[qn.Local] = value
+					// Store under the Clark-name representation used by XPath
+					// variable lookup so namespaced keys (e.g. {urn:p}x) resolve
+					// as $p:x and don't collide with no-namespace variables.
+					clark, clarkErr := paramKeyToClark(key)
+					if clarkErr != nil {
+						return clarkErr
+					}
+					vars[clark] = value
 					return nil
 				})
 				if forEachErr != nil {

@@ -972,6 +972,16 @@ func (c *compiler) parseAttribute(ctx context.Context, node *helium.Element) *pa
 		}
 	}
 
+	// An <attribute> must carry a name, either via the "name" attribute or a
+	// name-class child. Without one, nameClass stays nil and name/ns stay empty,
+	// which would make attributeMatches fall through to true and match any name
+	// (fail-open). Report a schema error and install a no-match name class so
+	// validation fails closed.
+	if p.nameClass == nil && p.name == "" && p.ns == "" {
+		c.addSchemaError(ctx, node, "xmlRelaxNGParseAttribute: attribute has no name")
+		p.nameClass = &nameClass{kind: ncNoMatch}
+	}
+
 	// If no content specified, attribute has <text/> content by default
 	if len(p.children) == 0 {
 		p.children = []*pattern{{kind: patternText}}
