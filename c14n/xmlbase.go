@@ -69,7 +69,10 @@ func joinURIReference(base, ref string) (string, bool) {
 	refPath := refURL.Path
 	refHasAuthority := uriHasAuthority(ref)
 	refQuery, refHasQuery := refURL.RawQuery, refURL.RawQuery != "" || refURL.ForceQuery
-	refFrag, refHasFrag := refURL.EscapedFragment(), strings.Contains(ref, "#")
+	// The query is carried raw (libxml2 keeps query_raw verbatim), but the
+	// fragment is decoded on parse and re-escaped on save, so derive it from the
+	// decoded Fragment rather than EscapedFragment().
+	refFrag, refHasFrag := escapeURIFragment(refURL.Fragment), strings.Contains(ref, "#")
 
 	// A "//" authority marker with no host is degenerate. On the reference it is
 	// always unfaithful; on the base it is unfaithful unless a scheme and a
@@ -186,6 +189,43 @@ func escapeURIPath(path string) string {
 		b.WriteByte(uriHexUpper[c&0x0f])
 	}
 	return b.String()
+}
+
+// escapeURIFragment re-escapes a decoded fragment with libxml2's xmlSaveUri
+// fragment set: unreserved + reserved kept, everything else %XX. The reserved
+// set is wider than a path's (it also keeps "?:[]"), e.g. "f/g" and "a/b?c" stay
+// literal while a space becomes %20.
+func escapeURIFragment(frag string) string {
+	if !strings.ContainsFunc(frag, func(r rune) bool { return r > 127 || !isFragmentSafe(byte(r)) }) {
+		return frag
+	}
+	var b strings.Builder
+	b.Grow(len(frag))
+	for i := range len(frag) {
+		c := frag[i]
+		if isFragmentSafe(c) {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(uriHexUpper[c>>4])
+		b.WriteByte(uriHexUpper[c&0x0f])
+	}
+	return b.String()
+}
+
+func isFragmentSafe(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return true
+	}
+	switch c {
+	case '-', '_', '.', '!', '~', '*', '\'', '(', ')': // unreserved marks
+		return true
+	case ';', '/', '?', ':', '@', '&', '=', '+', '$', ',', '[', ']': // reserved
+		return true
+	}
+	return false
 }
 
 func isPathSafe(c byte) bool {

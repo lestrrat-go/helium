@@ -59,6 +59,10 @@ func TestJoinURIReference(t *testing.T) {
 		{"opaque-base-empty-ref", urnBase, "", urnBase},
 		{"opaque-base-query", urnBase, "?q=1", "urn:base?q=1"},
 		{"opaque-base-relative", urnBase, "x", "urn:x"},
+		// Fragment is decoded then re-escaped (query stays raw).
+		{"fragment-decoded-reescaped", "http://h/a/", "?q=a%2Fb#f%2Fg", "http://h/a/?q=a%2Fb#f/g"},
+		{"fragment-space-reescaped", "http://h/a/", "#a%20b", "http://h/a/#a%20b"},
+		{"fragment-keeps-slash-query", "http://h/a/", "#a/b?c", "http://h/a/#a/b?c"},
 		// Scheme case is preserved (url.Parse lowercases it; libxml2 keeps it).
 		{"uppercase-scheme", "HTTP://H/a/", "b", "HTTP://H/a/b"},
 		{"mixed-case-scheme", "Http://Host/a/", "b", "Http://Host/a/b"},
