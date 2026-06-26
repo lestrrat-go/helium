@@ -185,7 +185,9 @@ To grant filesystem access, supply a resolver explicitly:
 // refuses symlink escapes. os.DirFS rejects "../" but does NOT stop symlink
 // escapes, so it is not a security boundary.
 proc := xinclude.NewProcessor().Resolver(xinclude.NewFSResolver(fsys))
+```
 
+```go
 // Historical behavior — opens any OS path verbatim. Use only for trusted input.
 proc := xinclude.NewProcessor().Resolver(xinclude.NewFSResolver(helium.PermissiveFS()))
 ```

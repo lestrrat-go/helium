@@ -238,6 +238,8 @@ type processor struct {
 	maxIncludeSize  int
 	maxIncludeDepth int
 	parser          *helium.Parser
+	snapshot        *helium.Document // in-memory copy of the entry document for same-document XPointers
+	snapshotURI     string           // base URI the snapshot corresponds to
 	depth           int
 	count           int
 }
@@ -286,6 +288,18 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		// opt back into host access with Resolver(NewFSResolver(helium.PermissiveFS()))
 		// or, preferably, a confined fs.FS (os.Root.FS).
 		p.resolver = NewFSResolver(iofs.DenyAll{})
+	}
+
+	// Capture a resolver-free snapshot of the entry document so top-level
+	// same-document XPointer references can be evaluated against the original
+	// infoset (before inclusions mutate the tree) without re-reading the base
+	// URI through the resolver. Only taken when such a reference is actually
+	// present, so documents without same-document XPointers pay no copy cost.
+	if doc := ownerDocument(node); doc != nil && hasSameDocumentXPointer(node) {
+		if snap, err := helium.CopyDoc(doc); err == nil {
+			p.snapshot = snap
+			p.snapshotURI = p.baseURI
+		}
 	}
 
 	if err := p.processNode(ctx, node); err != nil {
@@ -516,15 +530,27 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 	var err error
 
 	if uri == "" {
-		// Same-document reference: evaluate against a fresh parse of the
-		// current document (via base URI) to avoid seeing nodes that were
-		// inserted by previous XInclude processing in this pass.
-		if p.baseURI != "" {
+		// Same-document reference. It must be evaluated against the original
+		// document infoset (before any nodes were inserted by earlier XInclude
+		// processing in this pass), but it needs no filesystem access, so it
+		// must NOT go through the resolver — doing so would re-load the base
+		// URI and fail under the deny-all default resolver.
+		//
+		// For a top-level same-document reference we use the in-memory snapshot
+		// of the entry document taken before processing began. Inside an
+		// included document (p.baseURI has been switched to that document's URI
+		// during recursion) the original bytes are available via loadXMLDoc's
+		// cache, so re-parse from there; this only reaches the resolver when an
+		// FS-backed resolver was already used to load that included document.
+		switch {
+		case p.snapshot != nil && p.baseURI == p.snapshotURI:
+			doc = p.snapshot
+		case p.baseURI != "":
 			doc, err = p.loadXMLDoc(ctx, p.baseURI, p.baseURI, true)
 			if err != nil {
 				return err
 			}
-		} else {
+		default:
 			doc = inc.OwnerDocument()
 		}
 	} else {
@@ -983,6 +1009,49 @@ func checkMultiRootInclusion(inc *helium.Element, nodes []helium.Node) error {
 		return fmt.Errorf("xi:include: would result in no root node")
 	}
 	return nil
+}
+
+// ownerDocument returns the document owning n, or n itself when n is a Document.
+func ownerDocument(n helium.Node) *helium.Document {
+	if doc, ok := helium.AsNode[*helium.Document](n); ok {
+		return doc
+	}
+	return n.OwnerDocument()
+}
+
+// hasSameDocumentXPointer reports whether n or any descendant is an xi:include
+// that references the current document via an XPointer (no href, or an href
+// that is only a fragment). Used to decide whether a snapshot of the entry
+// document is needed before processing begins.
+func hasSameDocumentXPointer(n helium.Node) bool {
+	if isXInclude(n) {
+		if elem, ok := helium.AsNode[*helium.Element](n); ok && isSameDocumentInclude(elem) {
+			return true
+		}
+	}
+	for c := range helium.Children(n) {
+		if hasSameDocumentXPointer(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSameDocumentInclude reports whether elem is an xi:include whose target is
+// the current document: it has an XPointer (via the xpointer attribute or an
+// href fragment) and no document-selecting href.
+func isSameDocumentInclude(elem *helium.Element) bool {
+	href := getAttr(elem, "href")
+	xptr := getAttr(elem, "xpointer")
+	var fragment string
+	if idx := strings.IndexByte(href, '#'); idx >= 0 {
+		fragment = href[idx+1:]
+		href = href[:idx]
+	}
+	if href != "" {
+		return false
+	}
+	return xptr != "" || fragment != ""
 }
 
 func isXInclude(n helium.Node) bool {

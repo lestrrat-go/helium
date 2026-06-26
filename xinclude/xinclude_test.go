@@ -1855,6 +1855,31 @@ func TestXIncludeDenyAllDefault(t *testing.T) {
 	})
 }
 
+// TestXIncludeSameDocumentXPointerNoResolver verifies that a same-document
+// XPointer reference (no href) succeeds under the deny-all default resolver
+// even when a BaseURI is configured: it needs no filesystem access and must
+// not be re-loaded through the resolver.
+func TestXIncludeSameDocumentXPointerNoResolver(t *testing.T) {
+	t.Parallel()
+
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<source><item>hello</item></source>
+		<target><xi:include xpointer="xpointer(//item)"/></target>
+	</root>`)
+
+	count, err := xinclude.NewProcessor().
+		BaseURI("main.xml").
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, err, "same-document XPointer must not require the resolver")
+	require.Equal(t, 1, count)
+
+	s, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.Contains(t, s, "<target><item>hello</item></target>",
+		"same-document XPointer must copy the referenced node")
+}
+
 // TestXIncludeParserInjection verifies that a parser injected via
 // Processor.Parser governs the resource limits used to parse included
 // documents (here, the element-name-length cap), while XInclude continues to
