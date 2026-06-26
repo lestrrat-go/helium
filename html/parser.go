@@ -33,27 +33,47 @@ type parser struct {
 	mode      insertMode
 	sawRoot   bool // true once the root <html> element has been opened
 
-	// curTextRunSignificant carries whitespace-significance across the capped
-	// chunks of a SINGLE normal data-state text run under StripBlanks/noBlanks.
-	// A run is the maximal sequence of character data — plain text, entity /
-	// numeric char-ref output, and lone literal '<' — between two real markup
-	// tags. Because MaxContentSize makes the parser re-enter parseCharacters once
-	// per chunk, run-local scan state (sawNonWS) is lost between chunks; this
-	// persistent flag remembers that a non-whitespace byte has already been
-	// emitted somewhere in the current run. Once set it BYPASSES whitespace
-	// suppression (so a trailing/interior whitespace chunk of a known-significant
-	// run still emits) and the undecidable-whitespace hard-fail (so a later
-	// whitespace chunk never aborts).
+	// curTextRunSignificant records that the current normal data-state text run
+	// has already emitted a non-whitespace byte and is therefore significant. A
+	// run is the maximal sequence of character data — plain text, entity /
+	// numeric char-ref output, U+FFFD, and lone literal '<' — between two real
+	// markup tags. Once set it BYPASSES whitespace suppression so a
+	// trailing/interior whitespace chunk of a known-significant run still emits.
 	//
 	// It is SET in exactly one place — emitCharacters, on any non-whitespace emit
-	// — so EVERY emit path (text chunks, resolved/unresolved char-refs, U+FFFD,
-	// lone '<') marks the run uniformly. It is RESET in exactly one place: the
-	// main parse loop, immediately before dispatching to a real markup tag
-	// (start/end tag, comment, DOCTYPE, bogus comment, PI). A char-ref and a lone
-	// '<' are part of the same run and never reset it. The hard-fail therefore
-	// only fires for a run whose leading whitespace prefix overruns the cap BEFORE
-	// any non-whitespace byte — text or entity output — is seen.
+	// — so EVERY emit path marks the run uniformly. It is RESET in exactly one
+	// place: the main parse loop, immediately before dispatching to a real markup
+	// tag (start/end tag, comment, DOCTYPE, bogus comment, PI). A char-ref and a
+	// lone '<' are part of the same run and never reset it.
 	curTextRunSignificant bool
+
+	// pendingWS holds the LEADING whitespace of the current normal data-state run
+	// that has NOT yet been committed, because two decisions can only be made once
+	// the run's first non-whitespace byte is seen:
+	//
+	//   1. Significance (StripBlanks/noBlanks): a run is stripped only when EVERY
+	//      byte is whitespace. A leading whitespace prefix must therefore not be
+	//      suppressed on its own — a following non-whitespace byte (plain text,
+	//      char-ref output, U+FFFD, lone '<') makes the whole run significant and
+	//      the leading whitespace part of it.
+	//   2. Insertion target (implied <body>): a run containing non-whitespace
+	//      triggers htmlStartCharData, which opens the implied <body>. Emitting the
+	//      leading whitespace BEFORE that runs would land it under <html> while the
+	//      following text lands under <body>, splitting one logical run across two
+	//      parents.
+	//
+	// So a still-undecided leading whitespace prefix is accumulated here instead of
+	// being emitted. When the first non-whitespace byte arrives, emitCharacters
+	// flushes it into the now-significant run (after the caller has established the
+	// insertion target); when the run ends all-whitespace, flushPendingWSRunEnd
+	// strips it (noBlanks) or emits it under the current element. char-data tokens
+	// ('&', NUL, lone '<') do NOT flush it — they are folded into the same run. The
+	// buffer is bounded by the content cap: a whitespace prefix that overruns the
+	// cap before any significance is known hard-fails with ErrContentSizeExceeded
+	// rather than buffering unbounded. In <head> and before the root element, and
+	// inside raw-text/RCDATA elements, whitespace is committed directly (its target
+	// is already fixed or it is ignorable), so it never enters this buffer.
+	pendingWS []byte
 
 	// locator for SetDocumentLocator
 	locator *parserLocator
@@ -543,29 +563,35 @@ func (p *parser) parse(ctx context.Context) error {
 		}
 		if p.cur.Peek() == '<' {
 			// Only an actual markup-tag dispatch ends the current normal-data text
-			// run and forgets its significance. A lone '<' that is not markup is
-			// ordinary character data belonging to the SAME run, so it must NOT
-			// reset the flag (emitCharacters re-marks the run via the '<' byte).
-			if p.cur.PeekAt(1) == '/' {
+			// run. A lone '<' that is not markup is ordinary character data
+			// belonging to the SAME run, so it must NOT end the run (emitCharacters
+			// marks the run significant via the '<' byte).
+			next := p.cur.PeekAt(1)
+			if next == '/' || next == '!' || next == '?' || isASCIIAlpha(next) {
+				// A real markup tag ends the current normal-data text run: flush any
+				// deferred all-whitespace leading run (it never became significant)
+				// and forget the run's significance before dispatching.
+				_ = p.flushPendingWSRunEnd()
 				p.curTextRunSignificant = false
-				p.parseEndTag()
-			} else if p.cur.PeekAt(1) == '!' {
-				p.curTextRunSignificant = false
-				if p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
-					p.parseComment(ctx)
-				} else if p.hasPrefixFold("<!DOCTYPE") {
-					p.parseDoctype()
-				} else {
-					// Bogus comment or similar — treat as comment
-					p.parseBogusComment(ctx)
+				switch next {
+				case '/':
+					p.parseEndTag()
+				case '!':
+					if p.cur.PeekAt(2) == '-' && p.cur.PeekAt(3) == '-' {
+						p.parseComment(ctx)
+					} else if p.hasPrefixFold("<!DOCTYPE") {
+						p.parseDoctype()
+					} else {
+						// Bogus comment or similar — treat as comment
+						p.parseBogusComment(ctx)
+					}
+				case '?':
+					// Processing instruction — in HTML mode, treated as comment
+					p.parsePI(ctx)
+				default:
+					// isASCIIAlpha(next): a start tag.
+					p.parseStartTag(ctx)
 				}
-			} else if p.cur.PeekAt(1) == '?' {
-				// Processing instruction — in HTML mode, treated as comment
-				p.curTextRunSignificant = false
-				p.parsePI(ctx)
-			} else if isASCIIAlpha(p.cur.PeekAt(1)) {
-				p.curTextRunSignificant = false
-				p.parseStartTag(ctx)
 			} else {
 				// Lone '<' — emit as character data; part of the current text run.
 				_ = p.emitCharacters([]byte("<"))
@@ -587,6 +613,10 @@ func (p *parser) parse(ctx context.Context) error {
 	if err := p.cur.Err(); err != nil {
 		return err
 	}
+
+	// A normal-data run that ended at EOF still all-whitespace has its leading
+	// whitespace deferred in pendingWS; resolve it before closing open elements.
+	_ = p.flushPendingWSRunEnd()
 
 	p.htmlAutoCloseOnEnd()
 	p.handleSAXErr(p.sax.EndDocument())
@@ -912,64 +942,43 @@ func (p *parser) parseDoctype() {
 }
 
 // parseCharacters parses character data (text content).
+//
+// Each call consumes one bounded chunk of a normal data-state text run and hands
+// it to emitCharacters; the main parse loop re-enters once per chunk so one huge
+// delimiter-free span is delivered to SAX in MaxContentSize-bounded pieces rather
+// than buffered whole. The whitespace-significance and implied-<body> insertion
+// decisions are NOT made here — they are centralized in emitCharacters, which
+// defers a still-undecided leading whitespace prefix into pendingWS until the
+// run's first non-whitespace byte is seen. parseCharacters therefore just scans
+// and emits; it does not try to keep a leading whitespace prefix together with
+// the following text.
 func (p *parser) parseCharacters(ctx context.Context) {
-	// Collect text up to the next '<' or '&'.
-	// We need to split at whitespace→non-whitespace boundaries when inside
-	// <head> so that whitespace is emitted in <head> and non-whitespace
-	// triggers head-close + body-open.
+	// Inside <head>, stop the scan at the first non-whitespace byte so leading
+	// whitespace is emitted in <head> (its insertion target is already correct)
+	// and the following non-whitespace re-enters and triggers head-close +
+	// body-open via htmlStartCharData.
 	inHead := p.currentName() == elemHead
 
 	// A real U+0000 (NUL) byte is indistinguishable from EOF via Peek/PeekAt
-	// (both return 0), so the scan loops below would break with no progress and
+	// (both return 0), so the scan loop below would break with no progress and
 	// the outer parse loop would spin forever. Per HTML5 the data state treats
 	// U+0000 as a parse error and replaces it with U+FFFD. Consume the NUL and
 	// emit the replacement character, guaranteeing forward progress. EOF is
 	// distinguished by Done().
 	if !p.cur.Done() && p.cur.Peek() == 0 {
 		_ = p.cur.Advance(1)
+		// U+FFFD is non-whitespace: establish the insertion target, then emit. The
+		// preceding leading whitespace (if any) is held in pendingWS and flushed by
+		// emitCharacters into this now-significant run.
 		p.htmlStartCharData()
-		// U+FFFD is non-whitespace; emitCharacters marks the run significant.
 		_ = p.emitCharacters([]byte("�"))
 		return
 	}
 
-	// Cap the run at the content limit so one huge delimiter-free text span is
-	// emitted in bounded chunks instead of being buffered whole; the main parse
-	// loop re-enters parseCharacters for the remainder. Comments/PIs and
-	// raw-text/RCDATA/plaintext already bound memory this way; the normal data
-	// state was the lone unbounded path.
 	limit := p.cfg.contentLimit()
-	// Blank-stripping (StripBlanks/noBlanks) decides whether a text node is
-	// significant by inspecting the WHOLE logical run: a run is suppressed only
-	// when every byte is whitespace. Capping the run at MaxContentSize naively
-	// would split a run like " a" into a leading whitespace-only chunk and "a";
-	// the whitespace chunk would then be suppressed independently by
-	// emitCharacters, dropping significant leading whitespace. So under noBlanks
-	// the cap must not split a run before its significance is known. It must still
-	// stay bounded, though: once a non-whitespace byte appears the run is known
-	// significant and is chunked normally (the leading whitespace rides along in
-	// the first chunk, so it is never emitted — and suppressed — on its own); but
-	// a run whose whitespace prefix alone reaches the cap with yet more
-	// whitespace beyond it HARD-FAILS with ErrContentSizeExceeded rather than
-	// buffer unbounded, matching how the cap behaves for indivisible constructs
-	// elsewhere.
-	//
-	// Significance must persist ACROSS chunks. MaxContentSize re-enters
-	// parseCharacters once per chunk, so the local sawNonWS below only sees the
-	// CURRENT chunk; a run like "a " or "a  b" at MaxContentSize(1) would emit "a"
-	// in one call and then re-enter with nothing but whitespace, losing the fact
-	// that the run is already significant. The parser-level curTextRunSignificant
-	// flag remembers this for the rest of the run: it is SET by emitCharacters on
-	// any non-whitespace emit (plain text, resolved/unresolved char-ref output,
-	// U+FFFD, lone '<') and, once set, lets later whitespace chunks emit (instead
-	// of being suppressed) and disarms the hard-fail. A char-ref does NOT end the
-	// run; only a real markup tag does, and only that RESETS the flag (in the main
-	// parse loop). The hard-fail therefore still fires for a run whose leading
-	// whitespace prefix overruns the cap before ANY non-whitespace byte — text or
-	// entity output — has appeared anywhere in the run.
-	noBlanks := p.cfg.noBlanks
-	sawNonWS := false
-	firstNWS := -1
+
+	// Scan a run of ordinary character data up to the next char-data token
+	// ('&', a real NUL, lone '<') or markup, bounded by the content cap.
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
@@ -977,90 +986,40 @@ func (p *parser) parseCharacters(ctx context.Context) {
 			break
 		}
 		if inHead && !isWhitespaceByte(b) {
-			// Non-whitespace while inside head — break here to emit
-			// the preceding whitespace in head, then handle the rest
 			break
-		}
-		if !isWhitespaceByte(b) {
-			sawNonWS = true
-			if firstNWS < 0 {
-				firstNWS = n
-			}
 		}
 		n++
-		if n < limit {
-			continue
-		}
-		if !noBlanks {
+		if n >= limit {
 			break
 		}
-		// The run has reached the cap. Under noBlanks the cap may not split a
-		// run before its whitespace-significance is decided.
-		if sawNonWS || p.curTextRunSignificant {
-			// Already known significant — either a non-whitespace byte appears in
-			// THIS chunk (plus any leading whitespace), or an EARLIER chunk of the
-			// same run already emitted one (curTextRunSignificant). emitCharacters
-			// will not suppress this chunk, so chunk here; the main loop re-enters
-			// for the remainder. This is also what disarms the hard-fail below for
-			// every whitespace chunk after the run is known significant.
-			break
-		}
-		// Still all-whitespace at the cap. Peek the next byte to decide.
-		nb := p.cur.PeekAt(n)
-		if nb == 0 || nb == '<' || nb == '&' || (inHead && !isWhitespaceByte(nb)) {
-			// The run ends at the cap and was entirely whitespace; emit
-			// suppresses it.
-			break
-		}
-		if isWhitespaceByte(nb) {
-			// More whitespace beyond the cap: the run's significance cannot be
-			// decided without unbounded buffering. Fail rather than buffer.
-			p.fatalErr = fmt.Errorf("character data exceeds %d bytes before its whitespace significance can be determined: %w", limit, ErrContentSizeExceeded)
-			return
-		}
-		// nb is non-whitespace: the run IS significant but its leading whitespace
-		// prefix has filled the cap. Continue so the first non-whitespace byte
-		// joins this chunk, keeping the leading whitespace from being emitted (and
-		// suppressed) on its own. The next cap check sees sawNonWS and chunks.
 	}
-	// A cap-truncated run may land mid-rune; back off to a whole-rune boundary
-	// so the emitted chunk is valid UTF-8.
+	// A cap-truncated run may land mid-rune; back off (or, for a single rune
+	// larger than the cap, extend) to a whole-rune boundary so the emitted chunk
+	// is valid UTF-8.
 	n = p.clampTextChunkToRune(n, limit)
-
-	// Under noBlanks, clamping must not reduce a run already known significant
-	// to a whitespace-only prefix. When the cap falls inside the FIRST
-	// non-whitespace rune (e.g. " é" under MaxContentSize(1)), clampTextChunkToRune
-	// backs n off to the whitespace boundary before that rune, leaving an
-	// all-whitespace chunk that emitCharacters then suppresses — dropping the
-	// significant leading whitespace. Extend the chunk to cover that whole first
-	// non-whitespace rune so the leading whitespace rides along with it and the
-	// chunk is no longer all-whitespace.
-	if noBlanks && firstNWS >= 0 && n <= firstNWS {
-		n = firstNWS + 1
-		for p.cur.HasByteAt(n) && isUTF8Continuation(p.cur.PeekAt(n)) {
-			n++
-		}
-	}
 
 	if n > 0 {
 		text := p.cur.PeekString(n)
 		_ = p.cur.Advance(n)
 		textBytes := []byte(text)
+		// Non-whitespace establishes the run's insertion target before any byte is
+		// emitted; emitCharacters then flushes any deferred leading whitespace into
+		// the now-significant run. An all-whitespace chunk is deferred/suppressed by
+		// emitCharacters without opening an implied <body>.
 		if !isAllWhitespace(textBytes) {
 			p.htmlStartCharData()
 		}
-		// Suppress whitespace before the root element has been seen
-		if !p.sawRoot && isAllWhitespace(textBytes) {
-			return
-		}
 		_ = p.emitCharacters(textBytes)
-
-		// After emitting whitespace in head, continue to collect the
-		// non-whitespace part (which will trigger head close on next call)
 		return
 	}
 
-	// If we're at a non-whitespace char (after whitespace in head), collect it
+	// n == 0. Inside <head>, the scan above stops at the FIRST non-whitespace byte
+	// (so leading whitespace is emitted in <head> first), which leaves nothing to
+	// emit on the call that begins at that non-whitespace byte. Consume the
+	// non-whitespace run here — without the in-head break — so the parse makes
+	// forward progress; htmlStartCharData closes <head> and opens <body>. Outside
+	// <head> the first scan already consumed any non-whitespace, so this only
+	// triggers for the in-head case.
 	if !p.cur.Done() && p.cur.Peek() != '<' && p.cur.Peek() != '&' {
 		n = 0
 		for {
@@ -1086,18 +1045,16 @@ func (p *parser) parseCharacters(ctx context.Context) {
 		return
 	}
 
-	// Handle entity references in character data. Use the cap-aware variant so a
-	// long unresolved named/numeric reference is bounded (named via a fixed
-	// lookahead, numeric via chunked digit consumption) exactly like the
-	// RCDATA path, instead of buffering the whole run through unbounded
-	// parseWhile scans.
+	// At a char-data token. '&' starts a character reference. Use the cap-aware
+	// variant so a long unresolved named/numeric reference is bounded (named via a
+	// fixed lookahead, numeric via chunked digit consumption) exactly like the
+	// RCDATA path, instead of buffering the whole run through unbounded parseWhile
+	// scans. A char-ref is part of the SAME normal-data run, not a boundary: if it
+	// emits non-whitespace, emitCharacters marks the run significant and flushes
+	// any deferred leading whitespace; an all-whitespace resolution folds into
+	// pendingWS. Only a real markup tag (handled in the main parse loop) ends it.
 	if !p.cur.Done() && p.cur.Peek() == '&' {
-		// A char-ref is part of the SAME normal-data text run, not a boundary:
-		// significance must NOT be reset here. If the reference resolves to (or
-		// emits a literal containing) non-whitespace, emitCharacters re-marks the
-		// run significant; an all-whitespace resolution leaves it unchanged. Only a
-		// real markup tag (handled in the main parse loop) ends the run.
-		p.parseCharRefBounded(ctx, p.cfg.contentLimit())
+		p.parseCharRefBounded(ctx, limit)
 	}
 }
 
@@ -1636,26 +1593,52 @@ func (p *parser) emitError(msg string, args ...any) error {
 	return p.sax.Error(fmt.Errorf(msg, args...))
 }
 
-// emitCharacters fires the appropriate SAX Characters event.
-// When noBlanks is set, whitespace-only data is suppressed unless
-// inside a raw-text element (script, style, etc.).
+// emitCharacters fires the appropriate SAX Characters event for normal
+// data-state character data, and is the single chokepoint for the two text-run
+// decisions that can only be made once the run's first non-whitespace byte is
+// known: whitespace-significance (StripBlanks/noBlanks) and implied-<body>
+// insertion (see the pendingWS field doc).
+//
+//   - Non-whitespace data marks the current run significant (curTextRunSignificant)
+//     and FLUSHES any deferred leading whitespace into it. ANY non-whitespace emit
+//     path — a plain text chunk, a resolved entity / numeric char-ref, an
+//     unresolved char-ref literal, a U+FFFD replacement, or a lone literal '<' —
+//     flows through here, so the run is marked uniformly.
+//   - All-whitespace data whose run is not yet significant is, when its insertion
+//     target is still undecided, DEFERRED into pendingWS rather than emitted: in
+//     <head> (target already correct) it is emitted there or dropped under
+//     noBlanks; before the root element it is ignorable and dropped; inside
+//     raw-text/RCDATA elements it is always kept.
+//
+// curTextRunSignificant is RESET only when a real markup tag is dispatched in the
+// main parse loop; a char-ref and a lone '<' are part of the same run and never
+// reset it.
 func (p *parser) emitCharacters(data []byte) error {
-	// Single chokepoint for normal-data-state run significance: ANY non-whitespace
-	// character data — a plain text chunk, a resolved entity / numeric char-ref,
-	// an unresolved char-ref literal, a U+FFFD replacement, or a lone literal '<'
-	// — marks the current text run significant. Every emit path flows through here,
-	// so later all-whitespace chunks of the same run are not suppressed and the
-	// over-cap undecidable-whitespace hard-fail in parseCharacters is disarmed.
-	// The flag is RESET only when a real markup tag is dispatched in the main
-	// parse loop (start/end tag, comment, DOCTYPE, bogus comment, PI); it is never
-	// cleared by a char-ref or a lone '<', which are part of the same run.
 	if !isAllWhitespace(data) {
 		p.curTextRunSignificant = true
-	}
-	if p.cfg.noBlanks && isAllWhitespace(data) && !p.curTextRunSignificant {
-		if !p.inRawTextElement() {
+		// Flush deferred leading whitespace into the now-significant run BEFORE
+		// emitting this non-whitespace data. The caller has already established the
+		// insertion target (htmlStartCharData / lone-'<'), so it lands correctly.
+		if err := p.flushPendingWS(); err != nil {
+			return err
+		}
+	} else if !p.curTextRunSignificant && !p.inRawTextElement() {
+		// All-whitespace data whose run significance / insertion target is not yet
+		// established.
+		switch {
+		case !p.sawRoot:
+			// Whitespace before the root element is ignorable; drop it.
+			return nil
+		case p.currentName() != elemHead:
+			// Defer until the first non-whitespace byte fixes significance and the
+			// implied-<body> insertion target.
+			return p.deferPendingWS(data)
+		case p.cfg.noBlanks:
+			// Inside <head>: the target is already correct, but StripBlanks still
+			// strips a whitespace-only run.
 			return nil
 		}
+		// Inside <head> without StripBlanks: fall through and emit under <head>.
 	}
 	if bytes.ContainsRune(data, '\uFFFD') {
 		if p.encodingError {
@@ -1679,6 +1662,67 @@ func (p *parser) emitCharacters(data []byte) error {
 		}
 	}
 	return p.sax.Characters(data)
+}
+
+// deferPendingWS appends still-undecided leading whitespace to the bounded
+// pendingWS buffer. The buffer is bounded by the content cap: if the whitespace
+// prefix alone reaches the cap before any non-whitespace byte establishes the
+// run's significance, the parse hard-fails with ErrContentSizeExceeded rather
+// than buffering unbounded — the same over-cap policy indivisible constructs use
+// elsewhere.
+func (p *parser) deferPendingWS(data []byte) error {
+	limit := p.cfg.contentLimit()
+	if len(p.pendingWS)+len(data) > limit {
+		p.fatalErr = fmt.Errorf("character data exceeds %d bytes before its whitespace significance can be determined: %w", limit, ErrContentSizeExceeded)
+		return p.fatalErr
+	}
+	p.pendingWS = append(p.pendingWS, data...)
+	return nil
+}
+
+// flushPendingWS emits deferred leading whitespace as part of a run now known
+// significant. The caller (about to emit non-whitespace) has already established
+// the insertion target, so the whitespace lands in the correct element. It is
+// emitted in cap-sized chunks (whitespace is ASCII, so splitting on byte
+// boundaries never breaks a rune).
+func (p *parser) flushPendingWS() error {
+	if len(p.pendingWS) == 0 {
+		return nil
+	}
+	ws := p.pendingWS
+	p.pendingWS = nil
+	return p.emitWSChunked(ws)
+}
+
+// flushPendingWSRunEnd resolves deferred leading whitespace when the run ends
+// without ever becoming significant — a real markup tag or EOF closes it. The
+// run is therefore entirely whitespace: StripBlanks (noBlanks) drops it,
+// pre-root whitespace drops it, and otherwise it is emitted under the current
+// element. It is a no-op when nothing was deferred.
+func (p *parser) flushPendingWSRunEnd() error {
+	if len(p.pendingWS) == 0 {
+		return nil
+	}
+	ws := p.pendingWS
+	p.pendingWS = nil
+	if p.cfg.noBlanks || !p.sawRoot {
+		return nil
+	}
+	return p.emitWSChunked(ws)
+}
+
+// emitWSChunked writes whitespace directly to SAX in cap-sized chunks, bypassing
+// the emitCharacters significance/deferral logic (the caller has already decided
+// the whitespace is to be emitted).
+func (p *parser) emitWSChunked(ws []byte) error {
+	limit := p.cfg.contentLimit()
+	for len(ws) > limit {
+		if err := p.sax.Characters(ws[:limit]); err != nil {
+			return err
+		}
+		ws = ws[limit:]
+	}
+	return p.sax.Characters(ws)
 }
 
 // inRawTextElement reports whether the parser is currently inside a raw-text

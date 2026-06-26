@@ -286,6 +286,79 @@ func TestOptionsNoBlanksTinyChunkSignificanceAcrossEmbeds(t *testing.T) {
 	}
 }
 
+func TestTinyChunkLeadingSpaceImpliedBody(t *testing.T) {
+	// Regression: chunking a normal data-state run at MaxContentSize must not flush
+	// a leading whitespace-only chunk before htmlStartCharData has established the
+	// insertion target. For `<html> a</html>` under MaxContentSize(1) the leading
+	// space and the "a" form ONE logical run; both must land under the implied
+	// <body>. Previously the space was emitted while <html> was current (before "a"
+	// opened <body>), splitting the run: " " under <html>, "a" under <body>.
+	const input = `<html> a</html>`
+
+	// SAX: the full run is delivered (order/chunking aside, concatenation is " a").
+	var collected []byte
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+		collected = append(collected, ch...)
+		return nil
+	}))
+	require.NoError(t, html.NewParser().MaxContentSize(1).
+		ParseWithSAX(t.Context(), []byte(input), sax))
+	require.Equal(t, " a", string(collected))
+
+	// DOM: the implied <body> is the first child of <html> (NOT a stray text node),
+	// and it carries the whole run " a".
+	doc, err := html.NewParser().MaxContentSize(1).Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	htmlEl := doc.FirstChild()
+	require.NotNil(t, htmlEl)
+	require.Equal(t, "html", htmlEl.Name())
+	first := htmlEl.FirstChild()
+	require.NotNil(t, first)
+	require.Equal(t, "body", first.Name(),
+		"the leading space must not be emitted under <html> before <body> is implied")
+	require.Equal(t, " a", string(first.Content()),
+		"the space and 'a' must form one run under the implied <body>")
+}
+
+func TestStripBlanksTinyChunkLeadingSpaceBeforeCharData(t *testing.T) {
+	// Regression: a leading whitespace prefix followed by a char-data token (an
+	// entity, or a non-markup lone '<') must NOT be flushed/stripped before the
+	// token's significance is known. Under StripBlanks the run is stripped only if
+	// it is ENTIRELY whitespace; `<p> &amp;</p>` and `<p> < b</p>` both resolve to
+	// significant runs, so the leading space must survive. Previously the space was
+	// suppressed (the char-data token wrongly ended the still-undecided run).
+	for _, tc := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "entity", input: `<p> &amp;</p>`, want: " &"},
+		{name: "lone_lt", input: `<p> < b</p>`, want: " < b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var collected []byte
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+				collected = append(collected, ch...)
+				return nil
+			}))
+			require.NoError(t, html.NewParser().
+				StripBlanks(true).MaxContentSize(1).
+				ParseWithSAX(t.Context(), []byte(tc.input), sax))
+			require.Equal(t, tc.want, string(collected),
+				"leading whitespace of a significant run must survive across a char-data token")
+
+			doc, err := html.NewParser().
+				StripBlanks(true).MaxContentSize(1).
+				Parse(t.Context(), []byte(tc.input))
+			require.NoError(t, err)
+			require.Contains(t, string(doc.FirstChild().Content()), tc.want,
+				"DOM text must preserve the leading whitespace")
+		})
+	}
+}
+
 func TestOptionsNoError(t *testing.T) {
 	var errorCalled bool
 	sax := &html.SAXCallbacks{}
