@@ -49,6 +49,20 @@ func canonicalResultURIKey(href, base string) string {
 	return baseURL.ResolveReference(ref).String()
 }
 
+// paramDocPresence records which plain-boolean serialization parameters a
+// parameter-document explicitly supplied. These flags are deliberately kept off
+// the public OutputDef: a plain bool cannot distinguish "omitted" from "explicit
+// false", and foldParamDocOverrides consults them so an omitted parameter-document
+// value leaves an inherited xsl:output default intact instead of clobbering it
+// with the Go zero value. They travel alongside the parameter-document delta
+// OutputDef (on the compiled instruction or the per-invocation cache).
+type paramDocPresence struct {
+	indent              bool
+	byteOrderMark       bool
+	allowDuplicateNames bool
+	undeclarePrefixes   bool
+}
+
 // getParamDocOutputDef returns the effective parameter-document OutputDef for
 // a result-document instruction, checking the per-invocation cache on
 // execContext first, then falling back to the compiled instruction's field.
@@ -57,6 +71,17 @@ func (ec *execContext) getParamDocOutputDef(inst *resultDocumentInst) *OutputDef
 		return od
 	}
 	return inst.ParameterDocOutputDef
+}
+
+// getParamDocPresence returns the plain-boolean presence flags that accompany
+// the effective parameter-document delta, mirroring getParamDocOutputDef's
+// cache-then-instruction lookup so the runtime AVT and compile-time static
+// parameter-document paths stay in sync.
+func (ec *execContext) getParamDocPresence(inst *resultDocumentInst) paramDocPresence {
+	if p, ok := ec.paramDocPresences[inst]; ok {
+		return p
+	}
+	return inst.ParameterDocPresence
 }
 
 // validateDocumentStructure checks that a document node has exactly one element
@@ -492,13 +517,18 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 				// callers can observe it, and an over-cap read keeps
 				// [ErrResourceTooLarge] in the chain (matched via errors.Is)
 				// while errors.Is(err, ErrStaticError) stays false.
-				if _, loadErr := loadParameterDocumentFromFile(ctx, ec.injectedParser(), outDef, baseURI, pdHref, ec.retrieveDocumentBytes, true, false); loadErr != nil {
+				_, presence, loadErr := loadParameterDocumentFromFile(ctx, ec.injectedParser(), outDef, baseURI, pdHref, ec.retrieveDocumentBytes, true, false)
+				if loadErr != nil {
 					return loadErr
 				}
 				if ec.paramDocOutputDefs == nil {
 					ec.paramDocOutputDefs = make(map[*resultDocumentInst]*OutputDef)
 				}
 				ec.paramDocOutputDefs[inst] = outDef
+				if ec.paramDocPresences == nil {
+					ec.paramDocPresences = make(map[*resultDocumentInst]paramDocPresence)
+				}
+				ec.paramDocPresences[inst] = presence
 			}
 		}
 	}
@@ -974,9 +1004,9 @@ func (ec *execContext) evalBoolSerializationAVT(ctx context.Context, a *avt, par
 // unnamed-default xsl:output values. A parameter-document outranks the format it
 // layers on, so any value it specifies wins; values it OMITS leave base intact.
 // String/pointer/slice fields are absent when zero/nil/empty; the plain-boolean
-// parameters carry explicit *Set companion flags because a false bool cannot
-// otherwise be distinguished from an omitted one.
-func foldParamDocOverrides(base, pd *OutputDef) {
+// parameters rely on the companion paramDocPresence flags because a false bool
+// cannot otherwise be distinguished from an omitted one.
+func foldParamDocOverrides(base, pd *OutputDef, pres paramDocPresence) {
 	if pd.Method != "" {
 		base.Method = pd.Method
 		base.MethodExplicit = pd.MethodExplicit
@@ -1038,16 +1068,16 @@ func foldParamDocOverrides(base, pd *OutputDef) {
 		base.OmitDeclaration = pd.OmitDeclaration
 		base.OmitDeclarationExplicit = true
 	}
-	if pd.indentSet {
+	if pres.indent {
 		base.Indent = pd.Indent
 	}
-	if pd.byteOrderMarkSet {
+	if pres.byteOrderMark {
 		base.ByteOrderMark = pd.ByteOrderMark
 	}
-	if pd.allowDuplicateNamesSet {
+	if pres.allowDuplicateNames {
 		base.AllowDuplicateNames = pd.AllowDuplicateNames
 	}
-	if pd.undeclarePrefixesSet {
+	if pres.undeclarePrefixes {
 		base.UndeclarePrefixes = pd.UndeclarePrefixes
 	}
 }
@@ -1097,7 +1127,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		base = *cloneOutputDef(defDef)
 	}
 	if paramDocOD != nil {
-		foldParamDocOverrides(&base, paramDocOD)
+		foldParamDocOverrides(&base, paramDocOD, ec.getParamDocPresence(inst))
 	}
 
 	evalAVT := func(avt *avt) (string, error) {
@@ -1309,7 +1339,7 @@ func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *result
 		base = *cloneOutputDef(defDef)
 	}
 	if paramDocOD != nil {
-		foldParamDocOverrides(&base, paramDocOD)
+		foldParamDocOverrides(&base, paramDocOD, ec.getParamDocPresence(inst))
 	}
 	if base.Method == "" && method != "" {
 		base.Method = method

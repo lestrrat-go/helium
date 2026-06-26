@@ -823,10 +823,12 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 				// Static parameter-document: load at compile time
 				outDef := &OutputDef{}
 				baseURI := stylesheetBaseURI(elem, c.baseURI)
-				if _, err := c.loadParameterDocument(ctx, outDef, baseURI, pd, false); err != nil {
+				_, presence, err := c.loadParameterDocument(ctx, outDef, baseURI, pd, false)
+				if err != nil {
 					return nil, err
 				}
 				inst.ParameterDocOutputDef = outDef
+				inst.ParameterDocPresence = presence
 				// If the parameter-document sets the method, use it as the
 				// compile-time method so isItemOutputMethod works.
 				if outDef.Method != "" && inst.Method == "" {
