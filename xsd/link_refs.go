@@ -1053,11 +1053,13 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 	baseTypeNS := td.BaseType.Name.NS
 	baseQualified := fmt.Sprintf("'{%s}%s'", baseTypeNS, baseTypeName)
 
-	// Build map of base type's non-prohibited attributes.
-	baseAttrs := make(map[string]*AttrUse, len(td.BaseType.Attributes))
+	// Build map of base type's non-prohibited attributes, keyed by the full
+	// QName so an unqualified derived attribute does not collide with a
+	// namespaced base attribute that shares its local name.
+	baseAttrs := make(map[QName]*AttrUse, len(td.BaseType.Attributes))
 	for _, au := range td.BaseType.Attributes {
 		if !au.Prohibited {
-			baseAttrs[au.Name.Local] = au
+			baseAttrs[au.Name] = au
 		}
 	}
 
@@ -1066,7 +1068,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 		if au.Prohibited {
 			continue
 		}
-		baseAU, found := baseAttrs[au.Name.Local]
+		baseAU, found := baseAttrs[au.Name]
 		if found {
 			// Check use consistency: optional cannot restrict required.
 			if baseAU.Required && !au.Required {
@@ -1074,8 +1076,9 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
 			}
-		} else if td.BaseType.AnyAttribute == nil {
-			// No matching attribute and no wildcard in base.
+		} else if td.BaseType.AnyAttribute == nil || !wildcardMatches(td.BaseType.AnyAttribute, au.Name.NS) {
+			// No matching attribute, and no base wildcard whose namespace
+			// constraint admits this derived attribute's namespace.
 			msg := fmt.Sprintf("Neither a matching attribute use, nor a matching wildcard exists in the base complex type definition %s.", baseQualified)
 			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
 				component+", attribute use '"+au.Name.Local+"'", msg))
@@ -1083,15 +1086,15 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 	}
 
 	// Check that all required base attributes have a matching non-prohibited derived attribute.
-	derivedAttrs := make(map[string]*AttrUse, len(td.Attributes))
+	derivedAttrs := make(map[QName]*AttrUse, len(td.Attributes))
 	for _, au := range td.Attributes {
-		derivedAttrs[au.Name.Local] = au
+		derivedAttrs[au.Name] = au
 	}
 	for _, baseAU := range td.BaseType.Attributes {
 		if !baseAU.Required {
 			continue
 		}
-		derived, found := derivedAttrs[baseAU.Name.Local]
+		derived, found := derivedAttrs[baseAU.Name]
 		if !found || derived.Prohibited {
 			msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
 			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
