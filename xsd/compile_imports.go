@@ -261,24 +261,24 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// The included schema's elementFormDefault/attributeFormDefault are
 	// applied within the included declarations.
 
-	// Save current form-qualified and default settings, then apply included schema's settings.
+	// Save current form-qualified and default settings, then apply the included
+	// schema's OWN settings. The elementFormDefault/attributeFormDefault/
+	// blockDefault/finalDefault attributes are PER schema document, not inherited
+	// from the including schema: a chain main -> inc1(elementFormDefault=
+	// "qualified") -> inc2(omitted) must parse inc2's declarations as UNQUALIFIED
+	// (the spec default), so each document is read against the spec defaults plus
+	// only its own declared values. Reset to the spec defaults (unqualified / no
+	// flags) before applying this document's attributes; the parent's defaults are
+	// restored after processing so siblings are unaffected.
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
-	if v := getAttr(incRoot, attrElementFormDefault); v != "" {
-		c.schema.elemFormQualified = v == attrValQualified
-	}
-	if v := getAttr(incRoot, attrAttributeFormDefault); v != "" {
-		c.schema.attrFormQualified = v == attrValQualified
-	}
-	if v := getAttr(incRoot, attrBlockDefault); v != "" {
-		c.schema.blockDefault = parseBlockFlags(v)
-	}
-	if v := getAttr(incRoot, attrFinalDefault); v != "" {
-		c.schema.finalDefault = parseFinalFlags(v)
-	}
+	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
+	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
+	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
+	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
 
 	// Set the include file path for duplicate element error reporting.
 	if c.filename != "" {
@@ -388,23 +388,21 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	}
 
 	// Save/restore form-qualified settings and defaults (chameleon support).
+	// As with xs:include, the elementFormDefault/attributeFormDefault/
+	// blockDefault/finalDefault attributes are PER schema document and are NOT
+	// inherited from the redefining schema: reset to the spec defaults
+	// (unqualified / no flags) before applying this document's own declared
+	// values, so a redefined schema that omits them parses its declarations
+	// against the spec defaults rather than the parent's settings.
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
-	if v := getAttr(incRoot, attrElementFormDefault); v != "" {
-		c.schema.elemFormQualified = v == attrValQualified
-	}
-	if v := getAttr(incRoot, attrAttributeFormDefault); v != "" {
-		c.schema.attrFormQualified = v == attrValQualified
-	}
-	if v := getAttr(incRoot, attrBlockDefault); v != "" {
-		c.schema.blockDefault = parseBlockFlags(v)
-	}
-	if v := getAttr(incRoot, attrFinalDefault); v != "" {
-		c.schema.finalDefault = parseFinalFlags(v)
-	}
+	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
+	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
+	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
+	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
