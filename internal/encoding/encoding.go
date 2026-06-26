@@ -104,7 +104,13 @@ func Load(name string) enc.Encoding {
 		return withC1Fallback(charmap.Windows1250)
 	case "windows1251", "cp1251":
 		return withC1Fallback(charmap.Windows1251)
-	case "iso88591", "iso885911987", "isoir100", "latin1", "l1", "ibm819", "cp819", "csisolatin1", "windows1252", "cp1252", "isolatin1", "xcp1252":
+	case "iso88591", "iso885911987", "isoir100", "latin1", "l1", "ibm819", "cp819", "csisolatin1", "isolatin1":
+		// True ISO-8859-1: bytes 0x80-0x9F map to the C1 controls
+		// U+0080-U+009F, consistent with iso-8859-2..16 above. libxml2's XML
+		// path uses the IANA/ISO codec here, not the Windows-1252 alias the
+		// WHATWG HTML spec mandates (that leniency stays in the html/ package).
+		return withC1Fallback(charmap.ISO8859_1)
+	case "windows1252", "cp1252", "xcp1252":
 		return withC1Fallback(charmap.Windows1252)
 	case "windows1253", "cp1253":
 		return withC1Fallback(charmap.Windows1253)

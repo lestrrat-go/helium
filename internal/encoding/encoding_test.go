@@ -21,9 +21,12 @@ func TestISO88591(t *testing.T) {
 		s, err := dec.String(v)
 		require.NoError(t, err)
 
-		if i >= 0x80 && i <= 0x9f {
-			continue
-		}
+		// True ISO-8859-1 is the identity mapping: byte i decodes to U+00xx.
+		// In particular bytes 0x80-0x9F must decode to the C1 controls
+		// U+0080-U+009F, not the Windows-1252 glyphs (e.g. 0x80 must stay
+		// U+0080, not become U+20AC €).
+		require.Equal(t, []rune{rune(i)}, []rune(s))
+
 		v1, err := enc.String(s)
 		require.NoError(t, err)
 		require.Equal(t, v, v1)
