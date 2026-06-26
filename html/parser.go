@@ -659,6 +659,12 @@ func (p *parser) parseStartTag(ctx context.Context) {
 	// Parse attributes
 	attrs := p.parseAttributes()
 
+	// An over-cap attribute value is unrecoverable; abort without emitting a
+	// truncated start element. The main loop surfaces fatalErr.
+	if p.fatalErr != nil {
+		return
+	}
+
 	// Skip whitespace and close
 	p.skipWhitespace()
 	if p.cur.Peek() == '/' {
@@ -1180,12 +1186,16 @@ func resolveNamedEntity(name string, hasSemicolon bool) (val, remainder string, 
 // digits were present. Callers handle post-scan emission/normalization.
 func (p *parser) scanNumericCharRef() (codepoint int, haveDigits bool) {
 	_ = p.cur.Advance(1) // skip '#'
+	// Bound the digit scan to maxEntityNameLen so a runaway '&#'-led digit run
+	// cannot slurp unbounded into one allocation, bypassing the caller's per-byte
+	// hard cap. Any over-cap tail falls through to the caller's capped loop; no
+	// valid numeric reference needs this many digits.
 	if p.cur.Peek() == 'x' || p.cur.Peek() == 'X' {
 		_ = p.cur.Advance(1) // skip 'x'
-		hexStr := p.parseWhile(xmlchar.IsHexDigit)
+		hexStr, _ := p.parseWhileMaxErr(xmlchar.IsHexDigit, maxEntityNameLen)
 		codepoint, haveDigits = parseNumericCharRef(hexStr, 16)
 	} else {
-		numStr := p.parseWhile(xmlchar.IsASCIIDigit)
+		numStr, _ := p.parseWhileMaxErr(xmlchar.IsASCIIDigit, maxEntityNameLen)
 		codepoint, haveDigits = parseNumericCharRef(numStr, 10)
 	}
 	if p.cur.Peek() == ';' {
@@ -2239,7 +2249,9 @@ func (p *parser) parseAttributes() []Attribute {
 	var attrs []Attribute
 	var seen map[string]struct{}
 
-	for {
+	// An over-cap attribute value sets fatalErr; stop scanning immediately so the
+	// main loop surfaces it rather than buffering further attributes.
+	for p.fatalErr == nil {
 		p.skipWhitespace()
 		if p.cur.Done() || p.cur.Peek() == '>' || p.cur.Peek() == '/' {
 			break
@@ -2315,9 +2327,18 @@ func (p *parser) parseAttrValue() string {
 // parseQuotedAttrValue parses a quoted attribute value with entity expansion.
 func (p *parser) parseQuotedAttrValue(quote byte) string {
 	_ = p.cur.Advance(1) // skip opening quote
+	limit := p.cfg.contentLimit()
 	var buf bytes.Buffer
 
 	for !p.cur.Done() && p.cur.Peek() != quote {
+		// An attribute value is part of an indivisible start-tag event and cannot
+		// be chunked, so enforce the content limit as a HARD cap: an unbounded
+		// (e.g. unterminated) value must not buffer without limit. Fail before
+		// accepting a byte that would push the accumulated value past the cap.
+		if buf.Len() >= limit {
+			p.fatalErr = fmt.Errorf("attribute value exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return ""
+		}
 		if p.cur.Peek() == '&' {
 			buf.WriteString(p.resolveEntityInAttr())
 		} else {
@@ -2333,12 +2354,19 @@ func (p *parser) parseQuotedAttrValue(quote byte) string {
 
 // parseUnquotedAttrValue parses an unquoted attribute value.
 func (p *parser) parseUnquotedAttrValue() string {
+	limit := p.cfg.contentLimit()
 	var buf bytes.Buffer
 
 	for !p.cur.Done() {
 		b := p.cur.Peek()
 		if b == '>' || b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' {
 			break
+		}
+		// Hard-cap the accumulated value the same way as the quoted form so an
+		// unbounded unquoted value cannot buffer without limit.
+		if buf.Len() >= limit {
+			p.fatalErr = fmt.Errorf("attribute value exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		if b == '&' {
 			buf.WriteString(p.resolveEntityInAttr())
@@ -2366,7 +2394,12 @@ func (p *parser) resolveEntityInAttr() string {
 		return ""
 	}
 
-	name := p.parseWhile(isAlphanumeric)
+	// Bound the entity-name scan to maxEntityNameLen so a runaway '&'-led
+	// alphanumeric run cannot slurp unbounded into one allocation, bypassing the
+	// caller's per-byte hard cap. No real entity name reaches this length, so any
+	// over-cap tail falls through to the caller's capped loop and output for valid
+	// entities is unchanged.
+	name, _ := p.parseWhileMaxErr(isAlphanumeric, maxEntityNameLen)
 	hasSemicolon := false
 	if p.cur.Peek() == ';' {
 		hasSemicolon = true
@@ -2419,25 +2452,7 @@ func (p *parser) parseQuotedString() string {
 	return s
 }
 
-// parseWhile collects characters while pred returns true.
-func (p *parser) parseWhile(pred func(byte) bool) string {
-	n := 0
-	for {
-		b := p.cur.PeekAt(n)
-		if b == 0 || !pred(b) {
-			break
-		}
-		n++
-	}
-	if n == 0 {
-		return ""
-	}
-	s := p.cur.PeekString(n)
-	_ = p.cur.Advance(n)
-	return s
-}
-
-// parseWhileMaxErr is parseWhile with an upper bound: it consumes at most limit
+// parseWhileMaxErr collects characters while pred returns true, with an upper bound: it consumes at most limit
 // matching bytes, leaving any further matching bytes for the next call. It lets
 // a caller bound an otherwise unbounded scan (e.g. a runaway entity name) and
 // drain it in fixed-size pieces. A limit <= 0 is treated as unbounded.
