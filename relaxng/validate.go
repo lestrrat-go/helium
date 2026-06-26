@@ -691,7 +691,15 @@ func (b *groupBound) restore(state *validState, attrUsed []bool, v *validator) {
 // we try reducing the flexible child's consumption.
 func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
-	children := pat.children
+	return v.validateGroupChildren(pat.children, elem, attrs, attrUsed, state)
+}
+
+// validateGroupChildren validates a sequence of group children with backtracking
+// support. It is shared by validateGroupContent and by the recursive retry inside
+// backtrackGroupFlexible, so a backtracked sub-range that contains its own
+// flexible members can itself backtrack.
+func (v *validator) validateGroupChildren(children []*pattern, elem *helium.Element,
+	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
 	if len(children) == 0 {
 		return 0
 	}
@@ -829,13 +837,11 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 			// Save error state so failed retries don't leave stale errors.
 			retryLen := len(v.pendingErrors)
 			retryValid := v.valid
-			allOK := true
-			for k := j + 1; k <= failIdx; k++ {
-				if v.validateContentPat(children[k], elem, attrs, attrUsed, state) != 0 {
-					allOK = false
-					break
-				}
-			}
+			// Validate the remaining children as a group so that any flexible
+			// members in [j+1..failIdx] can themselves backtrack. A flat greedy
+			// retry would let a second flexible member re-grab content that a
+			// later mandatory member needs.
+			allOK := v.validateGroupChildren(children[j+1:failIdx+1], elem, attrs, attrUsed, state) == 0
 			if allOK {
 				best = &btSuccess{
 					state:    state.clone(),
@@ -1350,7 +1356,14 @@ func sortDescending(counts []int) {
 }
 
 func (v *validator) validateGroup(pat *pattern, state *validState) int {
-	children := pat.children
+	return v.validateGroupSeq(pat.children, state)
+}
+
+// validateGroupSeq validates a sequence of naive-group children with
+// backtracking support. It is shared by validateGroup and by the recursive
+// retry inside backtrackGroupNaive, so a backtracked sub-range with its own
+// flexible members can itself backtrack.
+func (v *validator) validateGroupSeq(children []*pattern, state *validState) int {
 	if len(children) == 0 {
 		return 0
 	}
@@ -1388,12 +1401,11 @@ func (v *validator) validateGroup(pat *pattern, state *validState) int {
 //     validateGroupContent. So `bounds[failIdx]` is always the freshly-appended
 //     boundary and there is no multi-node cascade across separate backtrack calls
 //     that could observe a stale intermediate `bounds` entry.
-//   - Recovery reduces exactly one flexible child and greedily re-validates the
-//     rest; it does not cascade yields across several competing flexible members.
-//     A group with two or more flexible members that must each yield (e.g.
-//     group(zeroOrMore(x), zeroOrMore(x), x)) is therefore not fully recovered.
-//     This is a deliberate, pre-existing limitation shared with the element-
-//     content path (backtrackGroupFlexible), not specific to this function.
+//   - Recovery reduces one flexible child and re-validates the rest via
+//     validateGroupSeq, which itself backtracks. So a group with two or more
+//     flexible members that must each yield (e.g. group(zeroOrMore(x),
+//     zeroOrMore(x), x)) is recovered by cascading the reductions recursively.
+//     The element-content path (backtrackGroupFlexible) mirrors this.
 func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 	state *validState, bounds []groupBound) bool {
 	for j := failIdx - 1; j >= 0; j-- {
@@ -1445,13 +1457,11 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 
 			retryLen := len(v.pendingErrors)
 			retryValid := v.valid
-			allOK := true
-			for k := j + 1; k <= failIdx; k++ {
-				if v.validatePattern(children[k], state) != 0 {
-					allOK = false
-					break
-				}
-			}
+			// Validate the remaining children as a group so that any flexible
+			// members in [j+1..failIdx] can themselves backtrack. A flat greedy
+			// retry would let a second flexible member re-grab content that a
+			// later mandatory member needs.
+			allOK := v.validateGroupSeq(children[j+1:failIdx+1], state) == 0
 			if allOK {
 				bestState = state.clone()
 				bestErrLen = len(v.pendingErrors)

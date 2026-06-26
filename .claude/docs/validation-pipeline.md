@@ -383,7 +383,10 @@ When mandatory group child fails:
 1. Check if element was consumed (structural vs content error)
 2. For each previous flexible child (zeroOrMore/oneOrMore/optional) from nearest to furthest:
    - Try iteration counts from minimum upward to greedy count
-   - Re-validate remaining children at each count
+   - Re-validate remaining children via the group routine (`validateGroupChildren` /
+     `validateGroupSeq`) so flexible members in the retry range can themselves
+     backtrack — this recovers groups with 2+ flexible members that must each
+     yield (e.g. `group(zeroOrMore(x), zeroOrMore(x), x)`)
    - Keep highest successful count (maximizes consumption — libxml2 semantics)
 
 Two parallel implementations share this strategy. `validateGroupContent` +
