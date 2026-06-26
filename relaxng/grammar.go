@@ -139,20 +139,19 @@ func nameClassesOverlap(a, b *nameClass) bool {
 		return nameClassesOverlap(a, b.left) || nameClassesOverlap(a, b.right)
 	}
 
-	// anyName: check if except clause excludes the other name class
+	// anyName: anyName-except-E matches every name NOT in E, so it is disjoint
+	// from the other class b exactly when E fully CONTAINS b (every name b can
+	// match is excluded). This generalises the single-ncName case to nsName and
+	// choice — e.g. anyName except nsName(X) does not overlap nsName(X).
 	if a.kind == ncAnyName {
-		if a.except != nil && b.kind == ncName {
-			if nameClassMatches(a.except, b.name, b.ns) {
-				return false
-			}
+		if a.except != nil && nameClassContains(a.except, b) {
+			return false
 		}
 		return true
 	}
 	if b.kind == ncAnyName {
-		if b.except != nil && a.kind == ncName {
-			if nameClassMatches(b.except, a.name, a.ns) {
-				return false
-			}
+		if b.except != nil && nameClassContains(b.except, a) {
+			return false
 		}
 		return true
 	}
@@ -187,6 +186,62 @@ func nameClassesOverlap(a, b *nameClass) bool {
 		return a.name == b.name && a.ns == b.ns
 	}
 
+	return false
+}
+
+// nameClassContains reports whether outer definitely matches every name that
+// inner can match (outer ⊇ inner). It is CONSERVATIVE: it returns true only
+// when containment is certain, so a caller subtracting an <except> never
+// concludes "disjoint" for a pair that might actually overlap. Any inner
+// <except> only shrinks inner, so it is safe to ignore for containment.
+func nameClassContains(outer, inner *nameClass) bool {
+	if outer == nil || inner == nil {
+		return false
+	}
+	switch inner.kind {
+	case ncChoice:
+		return nameClassContains(outer, inner.left) && nameClassContains(outer, inner.right)
+	case ncName:
+		return nameClassMatches(outer, inner.name, inner.ns)
+	case ncNsName:
+		return nameClassCoversNS(outer, inner.ns)
+	case ncAnyName:
+		return nameClassCoversAll(outer)
+	}
+	return false
+}
+
+// nameClassCoversNS reports whether outer certainly matches every name in
+// namespace ns. A finite set of ncName leaves can never cover an infinite
+// namespace, so only an except-free anyName, a matching except-free nsName, or
+// a choice containing one of those qualifies.
+func nameClassCoversNS(outer *nameClass, ns string) bool {
+	if outer == nil {
+		return false
+	}
+	switch outer.kind {
+	case ncAnyName:
+		return outer.except == nil
+	case ncNsName:
+		return outer.ns == ns && outer.except == nil
+	case ncChoice:
+		return nameClassCoversNS(outer.left, ns) || nameClassCoversNS(outer.right, ns)
+	}
+	return false
+}
+
+// nameClassCoversAll reports whether outer certainly matches every possible
+// name (only an except-free anyName, or a choice containing one).
+func nameClassCoversAll(outer *nameClass) bool {
+	if outer == nil {
+		return false
+	}
+	switch outer.kind {
+	case ncAnyName:
+		return outer.except == nil
+	case ncChoice:
+		return nameClassCoversAll(outer.left) || nameClassCoversAll(outer.right)
+	}
 	return false
 }
 

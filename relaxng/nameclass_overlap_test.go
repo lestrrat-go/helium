@@ -66,4 +66,42 @@ func TestNameClassOverlapExceptChoice(t *testing.T) {
 		require.NotEmpty(t, compile(t, schema),
 			"anyName-except{foo} overlaps choice(foo,bar) on bar and must conflict")
 	})
+
+	t.Run("disjoint anyName-except-nsName vs nsName compiles", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <attribute>
+        <anyName>
+          <except><nsName ns="http://example.com/X"/></except>
+        </anyName>
+      </attribute>
+      <attribute>
+        <nsName ns="http://example.com/X"/>
+      </attribute>
+    </element>
+  </start>
+</grammar>`
+		require.Empty(t, compile(t, schema),
+			"anyName-except-nsName(X) and nsName(X) are disjoint and must not conflict")
+	})
+
+	t.Run("genuinely overlapping anyName-except-name vs nsName errors", func(t *testing.T) {
+		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="root">
+      <attribute>
+        <anyName>
+          <except><name ns="http://example.com/X">foo</name></except>
+        </anyName>
+      </attribute>
+      <attribute>
+        <nsName ns="http://example.com/X"/>
+      </attribute>
+    </element>
+  </start>
+</grammar>`
+		require.NotEmpty(t, compile(t, schema),
+			"anyName-except{foo} still overlaps nsName(X) on every other name in X and must conflict")
+	})
 }
