@@ -32,6 +32,15 @@ type parser struct {
 	nameStack []string // open element name stack
 	mode      insertMode
 
+	// sawRoot records that the root <html> element has been opened at least once.
+	// It distinguishes genuine PRE-root whitespace (empty stack, root never
+	// opened — drop as ignorable) from TRAILING whitespace AFTER the root has
+	// closed (empty stack, but root was opened — still emit). The insertion mode
+	// alone cannot make this distinction: opening a bare <html> does not advance
+	// mode past insertInitial, so `<html></html> \n` would otherwise mis-classify
+	// the trailing run as pre-root and drop it. Set once in pushName(elemHTML).
+	sawRoot bool
+
 	// curTextRunSignificant records that the current normal data-state text run
 	// has already emitted a non-whitespace byte and is therefore significant. A
 	// run is the maximal sequence of character data — plain text, entity /
@@ -393,6 +402,9 @@ func (p *parser) currentName() string {
 
 // pushName pushes an element name onto the stack and tracks insert mode.
 func (p *parser) pushName(name string) {
+	if name == elemHTML {
+		p.sawRoot = true
+	}
 	if p.mode < insertInHead && name == elemHead {
 		p.mode = insertInHead
 	}
@@ -1634,16 +1646,17 @@ func (p *parser) emitCharacters(data []byte) error {
 		// All-whitespace data whose run significance / insertion target may not yet
 		// be established.
 		switch {
-		case len(p.nameStack) == 0 && p.mode == insertInitial:
-			// No element is open yet AND none has ever been opened (insertion mode is
-			// still initial), so this whitespace precedes the document content and is
-			// ignorable; drop it. This is "before the root" regardless of whether an
-			// <html> root will ever be created — under SuppressImplied none is, yet
-			// pre-root whitespace is still ignorable. The mode guard distinguishes
-			// genuine pre-root whitespace from trailing whitespace AFTER the root
-			// closes (stack also empty, but mode has advanced to insertInBody), which
-			// must still be emitted. (Both differ from "no <html> root": an element
-			// other than <html> may already be open, as under SuppressImplied.)
+		case len(p.nameStack) == 0 && !p.sawRoot:
+			// No element is open yet AND the root <html> has never been opened, so this
+			// whitespace precedes the document content and is ignorable; drop it. The
+			// sawRoot guard distinguishes genuine pre-root whitespace from TRAILING
+			// whitespace AFTER the root has closed (stack also empty, but sawRoot is
+			// true) which must still be emitted: opening a bare <html> does not advance
+			// the insertion mode past insertInitial, so a mode-based guard would
+			// mis-drop the trailing run of `<html></html> \n`. Under SuppressImplied no
+			// <html> root is ever created, so sawRoot stays false and pre-root
+			// whitespace remains ignorable; once a non-html element is open the stack is
+			// non-empty and this path is not reached.
 			return nil
 		case p.currentName() == elemHead:
 			// Inside <head> the insertion target is already correct. StripBlanks still
@@ -1731,16 +1744,16 @@ func (p *parser) flushPendingWS() error {
 // flushPendingWSRunEnd resolves deferred leading whitespace when the run ends
 // without ever becoming significant — a real markup tag or EOF closes it. The
 // run is therefore entirely whitespace: StripBlanks (noBlanks) drops it,
-// pre-root whitespace (empty stack, insertion mode still initial) drops it, and
-// otherwise it is emitted under the current element. It is a no-op when nothing
-// was deferred.
+// pre-root whitespace (empty stack, root never opened) drops it, and otherwise
+// it is emitted under the current element. It is a no-op when nothing was
+// deferred.
 func (p *parser) flushPendingWSRunEnd() error {
 	if len(p.pendingWS) == 0 {
 		return nil
 	}
 	ws := p.pendingWS
 	p.pendingWS = nil
-	if p.cfg.noBlanks || (len(p.nameStack) == 0 && p.mode == insertInitial) {
+	if p.cfg.noBlanks || (len(p.nameStack) == 0 && !p.sawRoot) {
 		return nil
 	}
 	return p.emitWSChunked(ws)
