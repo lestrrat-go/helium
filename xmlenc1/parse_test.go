@@ -157,14 +157,16 @@ func TestMarshalParseRoundTrip(t *testing.T) {
 			MGFAlgorithm: xmlenc1.MGFSHA256,
 			OAEPParams:   []byte("params-bytes"),
 		},
-		EncryptedKey: &xmlenc1.EncryptedKey{
-			ID: "EK-1",
-			EncryptionMethod: &xmlenc1.EncryptionMethod{
-				Algorithm:    xmlenc1.RSAOAEP11,
-				DigestMethod: xmlenc1.DigestSHA256,
-				MGFAlgorithm: xmlenc1.MGFSHA256,
+		EncryptedKeys: []*xmlenc1.EncryptedKey{
+			{
+				ID: "EK-1",
+				EncryptionMethod: &xmlenc1.EncryptionMethod{
+					Algorithm:    xmlenc1.RSAOAEP11,
+					DigestMethod: xmlenc1.DigestSHA256,
+					MGFAlgorithm: xmlenc1.MGFSHA256,
+				},
+				CipherValue: []byte("wrapped-key-bytes"),
 			},
-			CipherValue: []byte("wrapped-key-bytes"),
 		},
 		CipherValue: []byte("cipher-bytes"),
 	}
@@ -186,10 +188,10 @@ func TestMarshalParseRoundTrip(t *testing.T) {
 	require.Equal(t, xmlenc1.MGFSHA256, parsed.EncryptionMethod.MGFAlgorithm)
 	require.Equal(t, []byte("params-bytes"), parsed.EncryptionMethod.OAEPParams)
 
-	require.NotNil(t, parsed.EncryptedKey)
-	require.Equal(t, "EK-1", parsed.EncryptedKey.ID)
-	require.NotNil(t, parsed.EncryptedKey.EncryptionMethod)
-	require.Equal(t, xmlenc1.RSAOAEP11, parsed.EncryptedKey.EncryptionMethod.Algorithm)
-	require.Equal(t, []byte("wrapped-key-bytes"), parsed.EncryptedKey.CipherValue)
+	require.Len(t, parsed.EncryptedKeys, 1)
+	require.Equal(t, "EK-1", parsed.EncryptedKeys[0].ID)
+	require.NotNil(t, parsed.EncryptedKeys[0].EncryptionMethod)
+	require.Equal(t, xmlenc1.RSAOAEP11, parsed.EncryptedKeys[0].EncryptionMethod.Algorithm)
+	require.Equal(t, []byte("wrapped-key-bytes"), parsed.EncryptedKeys[0].CipherValue)
 	require.Equal(t, []byte("cipher-bytes"), parsed.CipherValue)
 }

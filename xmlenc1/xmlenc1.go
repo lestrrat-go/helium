@@ -246,10 +246,14 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 	}
 
 	// Build EncryptedData.
+	var encKeys []*EncryptedKey
+	if encKey != nil {
+		encKeys = []*EncryptedKey{encKey}
+	}
 	ed := &EncryptedData{
 		Type:             encType,
 		EncryptionMethod: &EncryptionMethod{Algorithm: blockAlgorithm},
-		EncryptedKey:     encKey,
+		EncryptedKeys:    encKeys,
 		CipherValue:      cipherValue,
 	}
 
@@ -375,6 +379,20 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		return nil, err
 	}
 
+	// Validate the declared content Type up front. An omitted Type defaults
+	// to Element (preserving prior behavior); any other non-empty value,
+	// including unknown URIs, is rejected rather than silently treated as
+	// Element.
+	var isContent bool
+	switch ed.Type {
+	case "", TypeElement:
+		isContent = false
+	case TypeContent:
+		isContent = true
+	default:
+		return nil, fmt.Errorf("%w: unsupported EncryptedData Type %q", ErrMalformedEncrypted, ed.Type)
+	}
+
 	// Obtain session key.
 	sessionKey, err := resolveSessionKey(cfg, ed)
 	if err != nil {
@@ -413,7 +431,6 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	// the recipient's key) and must not be allowed to fetch external
 	// resources.
 	parser := newHardenedInnerParser()
-	isContent := ed.Type == TypeContent
 
 	// Both Element and Content replace EncryptedData at its position in the
 	// tree, so the decrypted fragment must be parsed in the in-scope-namespace
@@ -493,11 +510,29 @@ func resolveSessionKey(cfg *decryptConfig, ed *EncryptedData) ([]byte, error) {
 		return cfg.sessionKey, nil
 	}
 
-	if ed.EncryptedKey == nil {
+	if len(ed.EncryptedKeys) == 0 {
 		return nil, ErrMissingKey
 	}
 
-	ek := ed.EncryptedKey
+	// A document may carry several EncryptedKey candidates (one per
+	// recipient), and an attacker can prepend a junk EncryptedKey to a
+	// legitimate one. Try every candidate and accept the first that
+	// yields a session key, instead of committing to the first element.
+	// This both supports multi-recipient documents and stops a single
+	// bogus key from denying service to the legitimate recipient.
+	var lastErr error
+	for _, ek := range ed.EncryptedKeys {
+		key, err := resolveSessionKeyFromEncryptedKey(cfg, ek)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return key, nil
+	}
+	return nil, lastErr
+}
+
+func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]byte, error) {
 	if ek.EncryptionMethod == nil {
 		return nil, fmt.Errorf("%w: EncryptedKey missing EncryptionMethod", ErrMalformedEncrypted)
 	}

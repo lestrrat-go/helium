@@ -13,8 +13,12 @@ type EncryptedData struct {
 	ID               string
 	Type             string // TypeElement or TypeContent
 	EncryptionMethod *EncryptionMethod
-	EncryptedKey     *EncryptedKey // from KeyInfo
-	CipherValue      []byte        // base64-decoded cipher bytes
+	// EncryptedKeys holds every EncryptedKey candidate found in KeyInfo
+	// (one per recipient). Decryption tries each in turn, so a
+	// multi-recipient document, or one with a bogus EncryptedKey
+	// prepended to a legitimate one, still resolves.
+	EncryptedKeys []*EncryptedKey
+	CipherValue   []byte // base64-decoded cipher bytes
 }
 
 // EncryptedKey represents the <EncryptedKey> element.
