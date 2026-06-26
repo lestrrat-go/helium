@@ -5,8 +5,21 @@ import (
 	stdxml "encoding/xml"
 	"io"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
+
+// maxPrologSize bounds the number of bytes the prolog scanner will buffer
+// before reaching the first element start tag. Without it, a document with a
+// huge prolog (megabytes of comments or a giant internal DTD subset) ahead of
+// the root element forces unbounded buffering — a memory-amplification DoS on
+// untrusted input. The cap mirrors helium.MaxExternalDTDSize (10 MiB), the
+// parser's existing content-size bound.
+const maxPrologSize = helium.MaxExternalDTDSize
+
+// errPrologTooLarge is returned when the prolog exceeds maxPrologSize before
+// the first element start tag is reached.
+var errPrologTooLarge = &stdxml.SyntaxError{Msg: "prolog exceeds maximum size before root element"}
 
 // scanProlog reads from r until the first element start tag, tokenizing
 // the XML prolog. It extracts CharData (whitespace), ProcInst, Comment,
@@ -22,6 +35,13 @@ import (
 func scanProlog(r io.Reader) ([]Token, io.Reader, bool, error) {
 	s := &prologScanner{r: r}
 	tokens, err := s.scan()
+
+	// A prolog-size overflow is reported via s.sizeErr regardless of how the
+	// inner sub-scanners (PI/comment/directive) rewrote the read error, so
+	// surface it first.
+	if s.sizeErr != nil {
+		return nil, nil, false, s.sizeErr
+	}
 
 	if err != nil && err != io.EOF {
 		// Syntax error from prolog validation
@@ -51,6 +71,7 @@ type prologScanner struct {
 	peek         []byte       // ungotten bytes
 	xmlDeclStart int          // byte offset of '<' in <?xml ...?>
 	xmlDeclEnd   int          // byte offset after '>' in <?xml ...?>
+	sizeErr      error        // set when the prolog exceeds maxPrologSize
 }
 
 func (s *prologScanner) readByte() (byte, error) {
@@ -66,6 +87,10 @@ func (s *prologScanner) readByte() (byte, error) {
 		return 0, err
 	}
 	s.buf.WriteByte(tmp[0])
+	if s.buf.Len() > maxPrologSize {
+		s.sizeErr = errPrologTooLarge
+		return 0, errPrologTooLarge
+	}
 	return tmp[0], nil
 }
 
