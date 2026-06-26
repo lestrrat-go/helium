@@ -794,7 +794,24 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 	// When the prefix matches, route through the byte-slice path (Parse) so
 	// behavior matches Parse exactly.
 	if hn >= len(patEBCDIC) && bytes.Equal(head[:len(patEBCDIC)], patEBCDIC) {
+		// EBCDIC is not ASCII-compatible and cannot be streamed: its decode needs
+		// the whole raw input up front, so the input is buffered here before being
+		// handed to Parse. Unlike the streaming (non-EBCDIC) path — where the
+		// parser's incremental node-content cap bounds resident memory as it goes —
+		// this buffering would otherwise grow without bound on a hostile,
+		// never-ending stream and OOM the process before parsing even starts.
+		// Bound the buffer by the same configured cap that limits a single
+		// indivisible content run on the streaming path so the total buffered
+		// EBCDIC input cannot exceed that ceiling; over-cap fails with
+		// ErrNodeContentTooLarge (strict-greater: exactly the cap is accepted). A
+		// resolved cap of 0 means the user disabled the content limit
+		// (MaxNodeContentSize with a negative value), opting into unbounded
+		// buffering exactly as everywhere else the cap is disabled.
+		maxBuf := resolveLimit(p.cfg.maxNodeContent, DefaultMaxNodeContentSize)
 		buf := append([]byte(nil), head...)
+		if maxBuf > 0 && len(buf) > maxBuf {
+			return nil, ErrNodeContentTooLarge
+		}
 		if perr == nil {
 			// The head read neither hit EOF nor errored, so a tail remains in r.
 			// Drain it with a manual loop (not io.ReadAll) that re-checks ctx
@@ -809,6 +826,12 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 				}
 				n, rerr := r.Read(chunk[:])
 				buf = append(buf, chunk[:n]...)
+				if maxBuf > 0 && len(buf) > maxBuf {
+					// The buffered EBCDIC input exceeded the configured ceiling.
+					// Reject before reading (or parsing) any further so a hostile
+					// unbounded stream cannot exhaust memory.
+					return nil, ErrNodeContentTooLarge
+				}
 				if rerr != nil {
 					// io.EOF is the normal terminator; any other non-EOF error
 					// arrives with the bytes that precede it, so the buffered

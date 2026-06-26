@@ -2833,6 +2833,80 @@ func TestParseReaderEBCDICDataWithEOFInFirstRead(t *testing.T) {
 		"ParseReader output must match Parse([]byte) when EBCDIC arrives with io.EOF in one read")
 }
 
+// infiniteEBCDICReader serves a finite EBCDIC head (whose invariant prefix
+// triggers EBCDIC detection) on the first Read, then an endless run of EBCDIC
+// filler bytes that never reaches EOF. It models a hostile stream whose tail
+// would, without an ingestion cap, buffer unboundedly into memory before
+// parsing even begins.
+type infiniteEBCDICReader struct {
+	head []byte
+	pos  int
+}
+
+func (r *infiniteEBCDICReader) Read(p []byte) (int, error) {
+	if r.pos < len(r.head) {
+		n := copy(p, r.head[r.pos:])
+		r.pos += n
+		return n, nil
+	}
+	for i := range p {
+		p[i] = 0x40 // EBCDIC space, valid filler that never terminates
+	}
+	return len(p), nil
+}
+
+// TestParseReaderEBCDICInputCapped guards against the unbounded pre-parse
+// buffering on the EBCDIC reader path: EBCDIC cannot stream (its decode needs
+// the whole raw input up front), so the input is buffered before Parse. That
+// buffering must be bounded by the parser's node-content cap so a hostile,
+// never-ending EBCDIC stream fails with ErrNodeContentTooLarge instead of being
+// read into memory until the process OOMs. Without the cap this test would hang
+// forever on the infinite reader.
+func TestParseReaderEBCDICInputCapped(t *testing.T) {
+	t.Parallel()
+
+	const decl = `<?xml version="1.0" encoding="IBM037"?><root>`
+	head, err := charmap.CodePage037.NewEncoder().Bytes([]byte(decl))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, head[:4],
+		"encoded head must start with the EBCDIC invariant prefix")
+
+	r := &infiniteEBCDICReader{head: head}
+	// A small cap keeps the test fast: the buffering guard must fire well before
+	// the infinite tail exhausts memory.
+	_, err = helium.NewParser().MaxNodeContentSize(4096).ParseReader(t.Context(), r)
+	require.ErrorIs(t, err, helium.ErrNodeContentTooLarge,
+		"an unbounded EBCDIC stream must be rejected by the ingestion cap, not buffered to OOM")
+}
+
+// TestParseReaderEBCDICSmallDocUnderCap confirms the ingestion cap added for the
+// unbounded-buffering guard does not regress a normal, small EBCDIC document: it
+// still parses identically to Parse([]byte).
+func TestParseReaderEBCDICSmallDocUnderCap(t *testing.T) {
+	t.Parallel()
+
+	const xml = `<?xml version="1.0" encoding="IBM037"?><root><child>hi</child></root>`
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	bytesDoc, err := helium.NewParser().Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must handle EBCDIC")
+	want := serialize(bytesDoc)
+
+	readerDoc, err := helium.NewParser().ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err, "a small EBCDIC doc must parse under the default ingestion cap")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for a small EBCDIC doc")
+}
+
 // ebcdicSlowTailReader returns the EBCDIC invariant prefix on its first Read (so
 // detection succeeds), signals when its tail is first read, then drips the tail
 // one byte at a time. The first tail byte is served immediately so the parser
