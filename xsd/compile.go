@@ -105,11 +105,42 @@ type compiler struct {
 	// so the per-compiler importedNS map does not detect the cycle.
 	importDepth    int
 	maxImportDepth int
+	// includeVisited records the resolved fs paths of schema documents already
+	// pulled in via xs:include/xs:redefine on this compiler, so a transitive or
+	// diamond chain loads each included document at most once. It is the cycle
+	// guard for circular includes: a re-include of an already-loaded document is
+	// skipped rather than re-parsed (which would re-register its declarations and
+	// recurse forever).
+	includeVisited map[string]struct{}
+	// includeDepth and maxIncludeDepth bound xs:include/xs:redefine nesting as a
+	// secondary safety net behind includeVisited. includeDepth is incremented
+	// while processing a nested included schema's own includes and restored after.
+	includeDepth    int
+	maxIncludeDepth int
 	// redefine is non-nil while processing the override children of an
 	// xs:redefine. It scopes the duplicate-name suppression to the specific
 	// (kind, name) components actually loaded by the redefined schema, each
 	// consumable exactly once, instead of suppressing the check globally.
 	redefine *redefineState
+	// loadedRedefinable caches, per resolved schema-document path, the set of
+	// redefinable component names a document contributed when first loaded via
+	// xs:include or xs:redefine. XSD permits multiple xs:redefine elements
+	// targeting the same document (e.g. redefining disjoint components, or a
+	// no-op repeat); a later xs:redefine of an already-loaded document cannot
+	// recompute its Phase-A delta (the components are already merged), so it
+	// validates and consumes its overrides against this cached set instead.
+	loadedRedefinable map[string]*redefinableSet
+}
+
+// redefinableSet caches the redefinable component names a schema document
+// contributed (keys, split by kind) plus the names already consumed by
+// xs:redefine overrides across every xs:redefine of that document (consumed).
+// The consumed set lets a second xs:redefine of the same document reject a
+// component that an earlier xs:redefine already redefined as a duplicate, while
+// still accepting redefinitions of disjoint components.
+type redefinableSet struct {
+	keys     map[redefineKind]map[QName]struct{}
+	consumed map[redefineKind]map[QName]struct{}
 }
 
 // redefineKind identifies the component category a redefine override targets.
@@ -134,6 +165,12 @@ const (
 type redefineState struct {
 	phaseAKeys map[redefineKind]map[QName]struct{}
 	seen       map[redefineKind]map[QName]struct{}
+	// consumed, when non-nil, is the cross-redefine consumption set shared with
+	// the per-document redefinableSet cache. A component already redefined by an
+	// EARLIER xs:redefine of the same document is rejected as a duplicate even
+	// though this redefine's own seen map is empty; an accepted override is also
+	// recorded here so a later xs:redefine of the document sees it.
+	consumed map[redefineKind]map[QName]struct{}
 }
 
 // allowsRedefine reports whether an override of the given (kind, name) may
@@ -150,10 +187,24 @@ func (c *compiler) allowsRedefine(kind redefineKind, qn QName) bool {
 	if _, seen := c.redefine.seen[kind][qn]; seen {
 		return false
 	}
+	// A component already redefined by an earlier xs:redefine of the same
+	// document is a duplicate redefinition even though THIS redefine has not
+	// consumed it yet.
+	if c.redefine.consumed != nil {
+		if _, done := c.redefine.consumed[kind][qn]; done {
+			return false
+		}
+	}
 	if c.redefine.seen[kind] == nil {
 		c.redefine.seen[kind] = make(map[QName]struct{})
 	}
 	c.redefine.seen[kind][qn] = struct{}{}
+	if c.redefine.consumed != nil {
+		if c.redefine.consumed[kind] == nil {
+			c.redefine.consumed[kind] = make(map[QName]struct{})
+		}
+		c.redefine.consumed[kind][qn] = struct{}{}
+	}
 	return true
 }
 
@@ -194,6 +245,13 @@ func (c *compiler) redefineConsumed(kind redefineKind, qn QName) bool {
 // hardcoded defensive caps used by relaxng (include limit), catalog
 // (resolution depth), and xpath/xslt (recursion depth).
 const defaultMaxImportDepth = 40
+
+// defaultMaxIncludeDepth bounds xs:include/xs:redefine nesting depth. It is a
+// secondary safety net behind the includeVisited loaded-set (which already
+// guarantees termination by loading each included document at most once); the
+// depth bound also caps pathological deep but acyclic chains. The same modest
+// value as defaultMaxImportDepth leaves generous headroom for real schemas.
+const defaultMaxIncludeDepth = 40
 
 // elemRefSource tracks source location for error reporting.
 type elemRefSource struct {
@@ -403,9 +461,19 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrUseSources:           make(map[*AttrUse]attrConstraintSource),
 		importedNS:               make(map[string]string),
 		maxImportDepth:           defaultMaxImportDepth,
+		includeVisited:           make(map[string]struct{}),
+		maxIncludeDepth:          defaultMaxIncludeDepth,
+		loadedRedefinable:        make(map[string]*redefinableSet),
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
+		// Seed the circular-include guard with the root schema's resolved key (set
+		// by CompileFile) so a cycle pointing back at the top-level schema
+		// (main -> inc -> main) treats the root as already-loaded instead of
+		// re-parsing it and emitting spurious duplicate-component errors.
+		if cfg.rootKey != "" {
+			c.includeVisited[cfg.rootKey] = struct{}{}
+		}
 		c.filename = cfg.label
 		if c.filename == "" {
 			c.filename = doc.URL()

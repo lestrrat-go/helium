@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"path"
 
@@ -16,6 +17,11 @@ import (
 // configured limit. processIncludes propagates this error rather than
 // treating it as a warning the way it treats ordinary I/O failures.
 var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
+
+// errIncludeDepthExceeded signals that xs:include/xs:redefine nesting reached
+// the configured limit. It is a secondary guard behind the includeVisited
+// loaded-set; processNestedIncludes returns it as a fatal compilation error.
+var errIncludeDepthExceeded = errors.New("xsd: max include depth exceeded")
 
 // errSchemaPathEscape signals that a schemaLocation joined onto baseDir
 // would escape upward via ".." segments. processIncludes surfaces this
@@ -37,23 +43,35 @@ var errSchemaTooLarge = errors.New("xsd: schema resource exceeds size limit")
 // cap (10 MiB).
 const maxNestedSchemaSize = 10 << 20 // 10 MiB
 
-// readNestedSchema opens path through the configured fs.FS and reads it under a
-// strict [maxNestedSchemaSize] byte cap (allowing one extra byte so a source
-// that under-reports its size is still caught). It returns [errSchemaTooLarge]
-// when the cap is crossed so an endless source cannot exhaust memory, replacing
-// the unbounded fs.ReadFile used by every nested-schema loader.
+// readNestedSchema reads path through the configured fs.FS under a strict
+// [maxNestedSchemaSize] byte cap, so an endless or oversized source
+// (xs:include/xs:import/xs:redefine target) cannot exhaust memory; it replaces
+// the unbounded fs.ReadFile every nested-schema loader used to call. It prefers
+// the streaming [fs.File] from Open so an endless device (e.g. /dev/zero) is
+// bounded while reading (iolimit reads one extra byte so a source that
+// under-reports its size is still caught). When the FS does not support Open
+// (e.g. a ReadFileFS-only in-memory FS whose Open returns an error), it falls
+// back to fs.ReadFile and enforces the same cap on the fully-read result. The
+// cap breach is reported as [errSchemaTooLarge], classified fatal by
+// [IsFatalSchemaLoad].
 func (c *compiler) readNestedSchema(path string) ([]byte, error) {
-	f, err := c.fsys.Open(path)
+	if f, err := c.fsys.Open(path); err == nil {
+		data, exceeded, readErr := iolimit.ReadAll(f, maxNestedSchemaSize)
+		_ = f.Close()
+		if exceeded {
+			return nil, errSchemaTooLarge
+		}
+		if readErr != nil {
+			return nil, readErr //nolint:wrapcheck // callers wrap with the schemaLocation for context
+		}
+		return data, nil
+	}
+	data, err := fs.ReadFile(c.fsys, path)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // callers wrap with the schemaLocation for context
 	}
-	data, exceeded, readErr := iolimit.ReadAll(f, maxNestedSchemaSize)
-	_ = f.Close()
-	if exceeded {
+	if int64(len(data)) > maxNestedSchemaSize {
 		return nil, errSchemaTooLarge
-	}
-	if readErr != nil {
-		return nil, readErr //nolint:wrapcheck // callers wrap with the schemaLocation for context
 	}
 	return data, nil
 }
@@ -83,6 +101,10 @@ type FatalSchemaLoader interface {
 //
 //   - the schemaLocation escaped its base directory via ".." ([errSchemaPathEscape]);
 //   - xs:import recursion exceeded the configured depth ([errImportDepthExceeded]);
+//   - xs:include/xs:redefine nesting exceeded the configured depth
+//     ([errIncludeDepthExceeded]) — otherwise an over-deep include/redefine chain
+//     inside an IMPORTED schema would be demoted to a warning and silently ignored
+//     by loadImport's nested-processing fallback;
 //   - a nested schema exceeded the byte cap while being read ([errSchemaTooLarge]);
 //   - the configured [fs.FS] returned an error satisfying [FatalSchemaLoader]
 //     (e.g. a resource-limit breach such as a too-large external resource).
@@ -92,7 +114,7 @@ type FatalSchemaLoader interface {
 // matched via errors.Is / errors.As, so they remain unexported; this helper is
 // the public surface.
 func IsFatalSchemaLoad(err error) bool {
-	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) || errors.Is(err, errSchemaTooLarge) {
+	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) || errors.Is(err, errIncludeDepthExceeded) || errors.Is(err, errSchemaTooLarge) {
 		return true
 	}
 	var f FatalSchemaLoader
@@ -213,12 +235,47 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 	return nil
 }
 
+// processNestedIncludes processes the xs:include/xs:import/xs:redefine declared
+// by an already-parsed included or redefined schema (incRoot), so a transitive
+// chain (main -> inc1 -> inc2) resolves rather than failing on declarations that
+// only inc2 defines. The nested references in incRoot are relative to the
+// included schema, so baseDir/filename are temporarily switched to it (path is
+// its resolved fs key, location its raw schemaLocation). Recursion is bounded by
+// the includeVisited loaded-set (registered by the caller) plus a depth cap.
+func (c *compiler) processNestedIncludes(ctx context.Context, incRoot *helium.Element, path, location string) error {
+	if c.includeDepth >= c.maxIncludeDepth {
+		return fmt.Errorf("%w (limit=%d, location=%q)", errIncludeDepthExceeded, c.maxIncludeDepth, location)
+	}
+	savedBaseDir := c.baseDir
+	savedFilename := c.filename
+	c.baseDir = schemaBaseDir(path)
+	if savedFilename != "" {
+		c.filename = schemaDisplayLoc(savedFilename, location)
+	}
+	c.includeDepth++
+
+	err := c.processIncludes(ctx, incRoot)
+
+	c.includeDepth--
+	c.baseDir = savedBaseDir
+	c.filename = savedFilename
+	return err
+}
+
 // loadInclude loads and merges an included schema file.
 func (c *compiler) loadInclude(ctx context.Context, location string, includeElem *helium.Element) error {
 	path, err := validateSchemaPath(c.baseDir, location)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
+
+	// Load each included document at most once: a transitive/diamond re-include
+	// of an already-loaded document is skipped so its declarations are not
+	// re-registered and a circular include cannot recurse forever.
+	if _, seen := c.includeVisited[path]; seen {
+		return nil
+	}
+	c.includeVisited[path] = struct{}{}
 
 	data, err := c.readNestedSchema(path)
 	if err != nil {
@@ -253,32 +310,55 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// The included schema's elementFormDefault/attributeFormDefault are
 	// applied within the included declarations.
 
-	// Save current form-qualified and default settings, then apply included schema's settings.
+	// Save current form-qualified and default settings, then apply the included
+	// schema's OWN settings. The elementFormDefault/attributeFormDefault/
+	// blockDefault/finalDefault attributes are PER schema document, not inherited
+	// from the including schema: a chain main -> inc1(elementFormDefault=
+	// "qualified") -> inc2(omitted) must parse inc2's declarations as UNQUALIFIED
+	// (the spec default), so each document is read against the spec defaults plus
+	// only its own declared values. Reset to the spec defaults (unqualified / no
+	// flags) before applying this document's attributes; the parent's defaults are
+	// restored after processing so siblings are unaffected.
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
-	if v := getAttr(incRoot, attrElementFormDefault); v != "" {
-		c.schema.elemFormQualified = v == attrValQualified
-	}
-	if v := getAttr(incRoot, attrAttributeFormDefault); v != "" {
-		c.schema.attrFormQualified = v == attrValQualified
-	}
-	if v := getAttr(incRoot, attrBlockDefault); v != "" {
-		c.schema.blockDefault = parseBlockFlags(v)
-	}
-	if v := getAttr(incRoot, attrFinalDefault); v != "" {
-		c.schema.finalDefault = parseFinalFlags(v)
-	}
+	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
+	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
+	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
+	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
 
 	// Set the include file path for duplicate element error reporting.
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
 
+	// Snapshot the component-name sets BEFORE parsing so the delta records which
+	// components this included document contributes. A later xs:redefine of the
+	// same (already-loaded) document needs that set to know which components it
+	// may legally override.
+	beforeTypes := snapshotKeys(c.schema.types)
+	beforeGroups := snapshotKeys(c.schema.groups)
+	beforeAttrGroups := snapshotKeys(c.schema.attrGroups)
+
 	// Parse the included schema's declarations into the current compiler.
 	err = c.parseSchemaChildren(ctx, incRoot)
+
+	// Process the included schema's OWN xs:include/xs:import/xs:redefine so a
+	// transitive chain resolves (resolved relative to the included schema).
+	if err == nil {
+		err = c.processNestedIncludes(ctx, incRoot, path, location)
+	}
+
+	// Cache the redefinable component set this document contributed so a later
+	// xs:redefine of the same already-loaded document can validate its overrides.
+	if err == nil {
+		c.loadedRedefinable[path] = &redefinableSet{
+			keys:     c.computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups),
+			consumed: make(map[redefineKind]map[QName]struct{}),
+		}
+	}
 
 	// Restore form-qualified settings, defaults, and include file.
 	c.schema.elemFormQualified = savedElemForm
@@ -313,6 +393,35 @@ func newKeysSince[V any](m map[QName]V, before map[QName]struct{}) map[QName]str
 	return added
 }
 
+// computeRedefinableKeys builds the per-kind set of component names newly
+// registered (afterKeys - beforeKeys) by loading a schema document, splitting
+// the type names into simpleType/complexType via c.typeKinds. These are exactly
+// the components an xs:redefine of that document may override. It is computed
+// once when the document is first loaded (xs:include or xs:redefine) and cached
+// in c.loadedRedefinable, since the delta cannot be reconstructed once the
+// document's components are merged into the schema.
+func (c *compiler) computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups map[QName]struct{}) map[redefineKind]map[QName]struct{} {
+	newTypes := newKeysSince(c.schema.types, beforeTypes)
+	phaseASimpleTypes := make(map[QName]struct{})
+	phaseAComplexTypes := make(map[QName]struct{})
+	for qn := range newTypes {
+		switch c.typeKinds[qn] {
+		case redefineKindComplexType:
+			phaseAComplexTypes[qn] = struct{}{}
+		default:
+			// simpleType (and builtin/anySimpleType fallbacks) are treated as
+			// simple; only an xs:simpleType override may consume them.
+			phaseASimpleTypes[qn] = struct{}{}
+		}
+	}
+	return map[redefineKind]map[QName]struct{}{
+		redefineKindSimpleType:  phaseASimpleTypes,
+		redefineKindComplexType: phaseAComplexTypes,
+		redefineKindGroup:       newKeysSince(c.schema.groups, beforeGroups),
+		redefineKindAttrGroup:   newKeysSince(c.schema.attrGroups, beforeAttrGroups),
+	}
+}
+
 // loadRedefine loads a schema via xs:redefine and processes override children.
 // It works like xs:include (merging original declarations) but then applies
 // redefinitions for complexType, simpleType, group, and attributeGroup children.
@@ -322,6 +431,38 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
+
+	// A redefine whose target document is ALREADY loaded — via a prior xs:include
+	// or an earlier xs:redefine of the same schema — must not silently drop its
+	// override children. Re-running Phase A would re-register the redefined
+	// schema's declarations (duplicate components) or recurse forever, so loading
+	// is correctly skipped; but XSD permits multiple xs:redefine of the same
+	// document (redefining disjoint components, or a no-op repeat), so the
+	// document path repeating is NOT itself an error. Process this redefine's
+	// override children against the cached Phase-A component set instead. The
+	// shared consumed set rejects only a TRUE duplicate — a component an earlier
+	// xs:redefine of the same document already redefined.
+	if _, seen := c.includeVisited[path]; seen {
+		rs := c.loadedRedefinable[path]
+		var phaseAKeys, consumed map[redefineKind]map[QName]struct{}
+		if rs != nil {
+			phaseAKeys = rs.keys
+			consumed = rs.consumed
+		} else {
+			// The document was registered without a recorded redefinable set
+			// (e.g. the root schema seeded into includeVisited by CompileFile, or
+			// an imported schema's own seed). Nothing from it is overridable, so
+			// every override is reported as a duplicate by the override loop.
+			phaseAKeys = map[redefineKind]map[QName]struct{}{
+				redefineKindSimpleType:  {},
+				redefineKindComplexType: {},
+				redefineKindGroup:       {},
+				redefineKindAttrGroup:   {},
+			}
+		}
+		return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, consumed)
+	}
+	c.includeVisited[path] = struct{}{}
 
 	data, err := c.readNestedSchema(path)
 	if err != nil {
@@ -352,23 +493,21 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	}
 
 	// Save/restore form-qualified settings and defaults (chameleon support).
+	// As with xs:include, the elementFormDefault/attributeFormDefault/
+	// blockDefault/finalDefault attributes are PER schema document and are NOT
+	// inherited from the redefining schema: reset to the spec defaults
+	// (unqualified / no flags) before applying this document's own declared
+	// values, so a redefined schema that omits them parses its declarations
+	// against the spec defaults rather than the parent's settings.
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
-	if v := getAttr(incRoot, attrElementFormDefault); v != "" {
-		c.schema.elemFormQualified = v == attrValQualified
-	}
-	if v := getAttr(incRoot, attrAttributeFormDefault); v != "" {
-		c.schema.attrFormQualified = v == attrValQualified
-	}
-	if v := getAttr(incRoot, attrBlockDefault); v != "" {
-		c.schema.blockDefault = parseBlockFlags(v)
-	}
-	if v := getAttr(incRoot, attrFinalDefault); v != "" {
-		c.schema.finalDefault = parseFinalFlags(v)
-	}
+	c.schema.elemFormQualified = getAttr(incRoot, attrElementFormDefault) == attrValQualified
+	c.schema.attrFormQualified = getAttr(incRoot, attrAttributeFormDefault) == attrValQualified
+	c.schema.blockDefault = parseBlockFlags(getAttr(incRoot, attrBlockDefault))
+	c.schema.finalDefault = parseFinalFlags(getAttr(incRoot, attrFinalDefault))
 	if c.filename != "" {
 		c.includeFile = schemaDisplayLoc(c.filename, location)
 	}
@@ -392,45 +531,69 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		return err
 	}
 
-	// Phase B: Process redefine children (overrides). Each override may replace
-	// the same-named component loaded in Phase A exactly once. Compute the
-	// Phase-A keys per kind as (afterKeys - beforeKeys) so the duplicate-name
-	// checks are suppressed only for the components actually loaded by the
-	// redefined schema, consumed once each — not globally and not for
-	// pre-existing main-schema components. An override that targets a name not
-	// loaded in Phase A, or repeats a name, is reported as a duplicate.
-	// Split the newly-loaded type keys by declared kind so a Phase-A simpleType
-	// is only redefinable by a simpleType override (and likewise for complex).
-	newTypes := newKeysSince(c.schema.types, beforeTypes)
-	phaseASimpleTypes := make(map[QName]struct{})
-	phaseAComplexTypes := make(map[QName]struct{})
-	for qn := range newTypes {
-		switch c.typeKinds[qn] {
-		case redefineKindComplexType:
-			phaseAComplexTypes[qn] = struct{}{}
-		default:
-			// simpleType (and builtin/anySimpleType fallbacks) are treated as
-			// simple; only an xs:simpleType override may consume them.
-			phaseASimpleTypes[qn] = struct{}{}
-		}
+	// Process the redefined schema's OWN xs:include/xs:import/xs:redefine so a
+	// transitive chain resolves (resolved relative to the redefined schema).
+	if err := c.processNestedIncludes(ctx, incRoot, path, location); err != nil {
+		c.schema.elemFormQualified = savedElemForm
+		c.schema.attrFormQualified = savedAttrForm
+		c.schema.blockDefault = savedBlockDefault
+		c.schema.finalDefault = savedFinalDefault
+		c.includeFile = savedIncludeFile
+		return err
 	}
-	phaseAKeys := map[redefineKind]map[QName]struct{}{
-		redefineKindSimpleType:  phaseASimpleTypes,
-		redefineKindComplexType: phaseAComplexTypes,
-		redefineKindGroup:       newKeysSince(c.schema.groups, beforeGroups),
-		redefineKindAttrGroup:   newKeysSince(c.schema.attrGroups, beforeAttrGroups),
+
+	// Phase B: compute the redefinable component set as (afterKeys - beforeKeys)
+	// per kind — only the names ACTUALLY loaded by the redefined schema (not
+	// pre-existing main-schema components) may be overridden. Cache it keyed by
+	// the resolved document path so a later xs:redefine of this same document can
+	// validate its overrides against it (the delta cannot be recomputed once the
+	// components are merged), then process this redefine's overrides against it.
+	phaseAKeys := c.computeRedefinableKeys(beforeTypes, beforeGroups, beforeAttrGroups)
+	rs := &redefinableSet{
+		keys:     phaseAKeys,
+		consumed: make(map[redefineKind]map[QName]struct{}),
 	}
+	c.loadedRedefinable[path] = rs
+
+	// The override children come from the REDEFINING (main) schema, not the
+	// redefined (base) schema loaded in Phase A. Restore c.includeFile to the
+	// redefining file's label so duplicate-override diagnostics report the
+	// correct source file and line; Phase A above needed the base label.
+	// Likewise restore the per-document defaults to the REDEFINING schema's
+	// values: override-local declarations must use the redefining schema's
+	// elementFormDefault/attributeFormDefault/blockDefault/finalDefault (per
+	// XSD), not the redefined document's values applied for Phase A above.
+	c.schema.elemFormQualified = savedElemForm
+	c.schema.attrFormQualified = savedAttrForm
+	c.schema.blockDefault = savedBlockDefault
+	c.schema.finalDefault = savedFinalDefault
+	c.includeFile = savedIncludeFile
+
+	return c.processRedefineOverrides(ctx, redefineElem, phaseAKeys, rs.consumed)
+}
+
+// processRedefineOverrides applies the override children of an xs:redefine
+// element against phaseAKeys, the component set loaded from the redefined
+// document. consumed, when non-nil, is the cross-redefine consumption set shared
+// with the document's redefinableSet cache, so a component already redefined by
+// an EARLIER xs:redefine of the same document is rejected as a duplicate. Each
+// accepted override replaces its same-named Phase-A component exactly once; an
+// override targeting a name absent from Phase A, repeated within this element,
+// or already consumed by an earlier redefine is reported as a duplicate. The
+// override children belong to the REDEFINING schema, so the caller must have
+// restored that schema's per-document defaults and include-file label first.
+func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *helium.Element, phaseAKeys, consumed map[redefineKind]map[QName]struct{}) error {
+	savedElemForm := c.schema.elemFormQualified
+	savedAttrForm := c.schema.attrFormQualified
+	savedBlockDefault := c.schema.blockDefault
+	savedFinalDefault := c.schema.finalDefault
+	savedIncludeFile := c.includeFile
 	c.redefine = &redefineState{
 		phaseAKeys: phaseAKeys,
 		seen:       make(map[redefineKind]map[QName]struct{}),
+		consumed:   consumed,
 	}
 	defer func() { c.redefine = nil }()
-
-	// The override children below come from the REDEFINING (main) schema, not
-	// the redefined (base) schema loaded in Phase A. Restore c.includeFile to
-	// the redefining file's label so duplicate-override diagnostics report the
-	// correct source file and line; Phase A above needed the base label.
-	c.includeFile = savedIncludeFile
 	for child := range helium.Children(redefineElem) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -737,12 +900,28 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		importedNS:               make(map[string]string),
 		importDepth:              c.importDepth + 1,
 		maxImportDepth:           c.maxImportDepth,
+		includeVisited:           make(map[string]struct{}),
+		maxIncludeDepth:          c.maxIncludeDepth,
+		loadedRedefinable:        make(map[string]*redefinableSet),
 	}
+
+	// Seed the imported sub-compiler's circular-include guard with the imported
+	// schema's own resolved key, mirroring CompileFile's seeding of the top-level
+	// root. Without this, an imported schema that circularly includes back to its
+	// own root (import imp.xsd -> include inc.xsd -> include imp.xsd) re-parses
+	// imp.xsd and emits spurious duplicate-component errors.
+	impC.includeVisited[path] = struct{}{}
 
 	// Sub-compiler collects errors into its own collector so we can
 	// conditionally forward them. This matches libxml2's behavior of
 	// stopping error reporting after the first import failure.
 	subCollector := helium.NewErrorCollector(ctx, helium.ErrorLevelNone)
+	// Guarantee the sub-collector's backing sink is drained on every exit path,
+	// including the fatal early returns below (parseSchemaChildren failure and the
+	// include-depth/path-escape/resource-limit fatal nested-load). Close is
+	// idempotent, so the explicit Close before the Errors() read below still runs
+	// and the collected diagnostics remain available for forwarding.
+	defer func() { _ = subCollector.Close() }()
 	impC.errorHandler = subCollector
 
 	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
