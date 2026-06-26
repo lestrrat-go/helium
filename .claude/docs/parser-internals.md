@@ -250,9 +250,15 @@ When a UTF-8 fast path has already proven the consumed bytes contain no newlines
 
 After parsing start tag:
 1. Look up DTD defaults for element
-2. Apply default `xmlns="..."` first (namespace in scope)
-3. Apply default `xmlns:prefix="..."` next
+2. Apply default `xmlns="..."` first (namespace in scope) — only if the default
+   namespace was NOT explicitly declared on the same start tag
+3. Apply default `xmlns:prefix="..."` next — only if that prefix (including the
+   reserved `xml` prefix) was NOT explicitly declared on the same start tag
 4. Apply remaining defaults (skip if explicit attr exists)
+
+Explicit namespace declarations on the start tag always win over DTD ATTLIST
+defaults; a defaulted `xmlns`/`xmlns:prefix` is applied only when the prefix is
+otherwise undeclared on that element.
 
 ## Recovery Mode (RecoverOnError)
 
