@@ -370,7 +370,7 @@ Pattern-matching engine with backtracking:
    - **Attribute**: match against instance attrs
    - **Group**: sequential with backtracking
    - **Choice**: try alternatives, prefer branches making progress
-   - **Interleave**: unordered member-by-member matching
+   - **Interleave**: unordered member-by-member matching; a repeatable member-group (zeroOrMore/oneOrMore of group) restarts its members each iteration so a sibling branch can consume elements between group members across iterations
    - **ZeroOrMore/OneOrMore/Optional**: repetition with suppressed errors
    - **Ref/ParentRef**: follow the compile-time-resolved `pattern.resolved` scoped pointer and recurse (no by-name lookup)
    - **Data/Value**: type checking
