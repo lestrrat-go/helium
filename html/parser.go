@@ -33,6 +33,22 @@ type parser struct {
 	mode      insertMode
 	sawRoot   bool // true once the root <html> element has been opened
 
+	// curTextRunSignificant carries whitespace-significance across the capped
+	// chunks of a SINGLE normal data-state text run under StripBlanks/noBlanks.
+	// A run is the maximal sequence of normal-text chunks parseCharacters emits
+	// between markup and entities. Because MaxContentSize makes the parser
+	// re-enter parseCharacters once per chunk, run-local scan state (sawNonWS)
+	// is lost between chunks; this persistent flag remembers that a
+	// non-whitespace byte has already been emitted in the current run. Once set
+	// it BYPASSES whitespace suppression (so a trailing/interior whitespace
+	// chunk of a known-significant run still emits) and the undecidable-
+	// whitespace hard-fail (so a later whitespace chunk never aborts). It is
+	// RESET when the run ends: the main loop clears it before dispatching to
+	// markup, and parseCharacters clears it before resolving an entity. The
+	// hard-fail therefore only fires for a run whose leading whitespace prefix
+	// overruns the cap BEFORE any non-whitespace byte is seen.
+	curTextRunSignificant bool
+
 	// locator for SetDocumentLocator
 	locator *parserLocator
 
@@ -520,6 +536,8 @@ func (p *parser) parse(ctx context.Context) error {
 			break
 		}
 		if p.cur.Peek() == '<' {
+			// Markup ends the current normal-text run; forget its significance.
+			p.curTextRunSignificant = false
 			if p.cur.PeekAt(1) == '/' {
 				p.parseEndTag()
 			} else if p.cur.PeekAt(1) == '!' {
@@ -898,6 +916,8 @@ func (p *parser) parseCharacters(ctx context.Context) {
 	if !p.cur.Done() && p.cur.Peek() == 0 {
 		_ = p.cur.Advance(1)
 		p.htmlStartCharData()
+		// U+FFFD is non-whitespace: the run is now known significant.
+		p.curTextRunSignificant = true
 		_ = p.emitCharacters([]byte("�"))
 		return
 	}
@@ -922,6 +942,17 @@ func (p *parser) parseCharacters(ctx context.Context) {
 	// whitespace beyond it HARD-FAILS with ErrContentSizeExceeded rather than
 	// buffer unbounded, matching how the cap behaves for indivisible constructs
 	// elsewhere.
+	//
+	// Significance must persist ACROSS chunks. MaxContentSize re-enters
+	// parseCharacters once per chunk, so the local sawNonWS below only sees the
+	// CURRENT chunk; a run like "a " or "a  b" at MaxContentSize(1) would emit "a"
+	// in one call and then re-enter with nothing but whitespace, losing the fact
+	// that the run is already significant. The parser-level curTextRunSignificant
+	// flag remembers this for the rest of the run: when set it lets later
+	// whitespace chunks emit (instead of being suppressed) and disarms the
+	// hard-fail. It is reset when the run ends (markup or entity), so the hard-fail
+	// still fires for a run whose leading whitespace prefix overruns the cap before
+	// any non-whitespace byte has been seen anywhere in the run.
 	noBlanks := p.cfg.noBlanks
 	sawNonWS := false
 	firstNWS := -1
@@ -951,10 +982,13 @@ func (p *parser) parseCharacters(ctx context.Context) {
 		}
 		// The run has reached the cap. Under noBlanks the cap may not split a
 		// run before its whitespace-significance is decided.
-		if sawNonWS {
-			// Already known significant: this chunk holds a non-whitespace byte
-			// (plus any leading whitespace) so emitCharacters will not suppress
-			// it. Chunk here; the main loop re-enters for the remainder.
+		if sawNonWS || p.curTextRunSignificant {
+			// Already known significant — either a non-whitespace byte appears in
+			// THIS chunk (plus any leading whitespace), or an EARLIER chunk of the
+			// same run already emitted one (curTextRunSignificant). emitCharacters
+			// will not suppress this chunk, so chunk here; the main loop re-enters
+			// for the remainder. This is also what disarms the hard-fail below for
+			// every whitespace chunk after the run is known significant.
 			break
 		}
 		// Still all-whitespace at the cap. Peek the next byte to decide.
@@ -1000,6 +1034,9 @@ func (p *parser) parseCharacters(ctx context.Context) {
 		textBytes := []byte(text)
 		if !isAllWhitespace(textBytes) {
 			p.htmlStartCharData()
+			// This chunk carries a non-whitespace byte: mark the whole run
+			// significant so its later all-whitespace chunks are not suppressed.
+			p.curTextRunSignificant = true
 		}
 		// Suppress whitespace before the root element has been seen
 		if !p.sawRoot && isAllWhitespace(textBytes) {
@@ -1032,6 +1069,7 @@ func (p *parser) parseCharacters(ctx context.Context) {
 			textBytes := []byte(text)
 			if !isAllWhitespace(textBytes) {
 				p.htmlStartCharData()
+				p.curTextRunSignificant = true
 			}
 			_ = p.emitCharacters(textBytes)
 		}
@@ -1044,6 +1082,9 @@ func (p *parser) parseCharacters(ctx context.Context) {
 	// RCDATA path, instead of buffering the whole run through unbounded
 	// parseWhile scans.
 	if !p.cur.Done() && p.cur.Peek() == '&' {
+		// An entity ends the current normal-text run; forget its significance so
+		// the run that follows the reference is judged on its own bytes.
+		p.curTextRunSignificant = false
 		p.parseCharRefBounded(ctx, p.cfg.contentLimit())
 	}
 }
@@ -1587,7 +1628,7 @@ func (p *parser) emitError(msg string, args ...any) error {
 // When noBlanks is set, whitespace-only data is suppressed unless
 // inside a raw-text element (script, style, etc.).
 func (p *parser) emitCharacters(data []byte) error {
-	if p.cfg.noBlanks && isAllWhitespace(data) {
+	if p.cfg.noBlanks && isAllWhitespace(data) && !p.curTextRunSignificant {
 		if !p.inRawTextElement() {
 			return nil
 		}

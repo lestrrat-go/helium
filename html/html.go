@@ -99,8 +99,9 @@ func (p Parser) Strict(v bool) Parser {
 // which still parses successfully. A chunk may slightly exceed the cap because
 // an indivisible token is never split: a whole multi-byte UTF-8 rune (or a
 // resolved character reference) is always emitted intact, so a single rune
-// larger than the cap is emitted whole. An unresolved RCDATA named-reference
-// literal hard-fails with [ErrContentSizeExceeded] when the bytes it would emit
+// larger than the cap is emitted whole. An unresolved named-reference literal —
+// in normal data-state text as well as RCDATA — hard-fails with
+// [ErrContentSizeExceeded] when the bytes it would emit
 // ("&" + name + optional ";") exceed the cap — this applies to ANY unresolved
 // literal, whether short, semicolon-terminated, or unbounded. A known-entity
 // (';'-terminated) reference is exempt: it is resolved within a fixed lookahead

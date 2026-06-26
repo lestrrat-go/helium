@@ -213,6 +213,41 @@ func TestOptionsNoBlanksOverCapHardErrors(t *testing.T) {
 		"over-cap whitespace prefix under StripBlanks must fail, not buffer unbounded")
 }
 
+func TestOptionsNoBlanksTinyChunkWhitespaceAcrossChunks(t *testing.T) {
+	// Whitespace-significance must persist across the capped chunks of ONE text
+	// run. With MaxContentSize(1) the parser re-enters parseCharacters per byte,
+	// so it must remember a run is already significant once its first
+	// non-whitespace byte has been emitted. Otherwise a TRAILING whitespace chunk
+	// would be wrongly suppressed and an INTERIOR whitespace chunk would wrongly
+	// hard-fail.
+	for _, tc := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "trailing", input: `<p>a </p>`, want: "a "},
+		{name: "interior", input: `<p>a  b</p>`, want: "a  b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var collected []byte
+			sax := &html.SAXCallbacks{}
+			sax.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
+				collected = append(collected, ch...)
+				return nil
+			}))
+
+			err := html.NewParser().
+				StripBlanks(true).
+				MaxContentSize(1).
+				ParseWithSAX(t.Context(), []byte(tc.input), sax)
+			require.NoError(t, err,
+				"a significant run must not hard-fail on a later whitespace chunk")
+			require.Equal(t, tc.want, string(collected),
+				"whitespace of a known-significant run must survive across chunks")
+		})
+	}
+}
+
 func TestOptionsNoError(t *testing.T) {
 	var errorCalled bool
 	sax := &html.SAXCallbacks{}
