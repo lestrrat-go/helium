@@ -69,7 +69,12 @@ func (c *relaxNGValidateCommand) runContext(ctx context.Context, args []string) 
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	grammar, err := relaxng.NewCompiler().CompileFile(ctx, cfg.schemaFile)
+	// The schema path is supplied explicitly on the command line by the user,
+	// so host-filesystem access for include/externalRef is expected (like
+	// xmllint). The compiler's FS now defaults to deny-all, so opt into
+	// permissive loading here to preserve CLI behavior. This mirrors the lint
+	// and xslt subcommands, which also opt into a permissive FS.
+	grammar, err := relaxng.NewCompiler().FS(helium.PermissiveFS()).CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}

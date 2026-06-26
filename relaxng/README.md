@@ -59,3 +59,21 @@ func Example_relaxng_validate() {
 ```
 source: [examples/relaxng_validate_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/relaxng_validate_example_test.go)
 <!-- END INCLUDE -->
+
+## Loading external schemas (`include` / `externalRef`)
+
+The compiler is **secure by default**: schemas referenced by `include` and
+`externalRef` are loaded through a deny-all filesystem, so an untrusted grammar
+cannot read host files. To allow loading, supply a filesystem explicitly —
+either a confined `fs.FS` rooted at a trusted directory, or
+`helium.PermissiveFS()` to restore the historical `os.Open` behavior:
+
+```go
+grammar, err := relaxng.NewCompiler().
+    FS(helium.PermissiveFS()). // or a confined fs.FS
+    CompileFile(ctx, "schema.rng")
+```
+
+Each `include`/`externalRef` target is also read under a per-resource byte cap
+(10 MiB by default, configurable via `Compiler.MaxResourceBytes`); a target that
+exceeds the cap fails to load instead of being read in full.
