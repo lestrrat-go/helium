@@ -393,17 +393,12 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		return nil, fmt.Errorf("%w: unsupported EncryptedData Type %q", ErrMalformedEncrypted, ed.Type)
 	}
 
-	// Obtain session key.
-	sessionKey, err := resolveSessionKey(cfg, ed)
-	if err != nil {
-		return nil, err
-	}
-
-	// Block decrypt.
+	// Validate the EncryptionMethod and CBC opt-in once, up front: these
+	// describe the block cipher and are independent of which session-key
+	// candidate ultimately succeeds.
 	if ed.EncryptionMethod == nil {
 		return nil, fmt.Errorf("%w: missing EncryptionMethod", ErrMalformedEncrypted)
 	}
-
 	alg := ed.EncryptionMethod.Algorithm
 	switch alg {
 	case AES128CBC, AES256CBC:
@@ -412,6 +407,47 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		}
 	}
 
+	// A pre-shared session key, when configured, is the sole candidate.
+	if len(cfg.sessionKey) > 0 {
+		return finishDecrypt(ctx, ed, elem, alg, isContent, cfg.sessionKey)
+	}
+
+	keys := ed.effectiveEncryptedKeys()
+	if len(keys) == 0 {
+		return nil, ErrMissingKey
+	}
+
+	// A document may carry several EncryptedKey candidates (one per
+	// recipient), and an attacker can prepend a junk EncryptedKey that
+	// unwraps cleanly under the recipient's key while wrapping the WRONG
+	// session key. Carry each candidate all the way through block
+	// decryption AND plaintext parse/shape validation, accepting only a
+	// candidate that fully succeeds — never stop at one that merely
+	// unwraps/transports. This supports multi-recipient documents and
+	// stops a bogus-but-valid EncryptedKey from masking the real one.
+	var lastErr error
+	for _, ek := range keys {
+		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		nodes, err := finishDecrypt(ctx, ed, elem, alg, isContent, sessionKey)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return nodes, nil
+	}
+	return nil, lastErr
+}
+
+// finishDecrypt block-decrypts the CipherValue under a candidate session
+// key, parses the recovered plaintext through a hardened parser, and
+// validates its shape. It returns the decrypted nodes only when the entire
+// pipeline succeeds, so a caller iterating session-key candidates can
+// safely fall through to the next candidate on any error.
+func finishDecrypt(ctx context.Context, ed *EncryptedData, elem *helium.Element, alg string, isContent bool, sessionKey []byte) ([]helium.Node, error) {
 	plaintext, err := blockDecrypt(alg, sessionKey, ed.CipherValue)
 	if err != nil {
 		// Squash all decryption errors to the same sentinel — and
@@ -503,33 +539,6 @@ func newHardenedInnerParser() helium.Parser {
 		BlockXXE(true).
 		LoadExternalDTD(false).
 		AllowNetwork(false)
-}
-
-func resolveSessionKey(cfg *decryptConfig, ed *EncryptedData) ([]byte, error) {
-	if len(cfg.sessionKey) > 0 {
-		return cfg.sessionKey, nil
-	}
-
-	if len(ed.EncryptedKeys) == 0 {
-		return nil, ErrMissingKey
-	}
-
-	// A document may carry several EncryptedKey candidates (one per
-	// recipient), and an attacker can prepend a junk EncryptedKey to a
-	// legitimate one. Try every candidate and accept the first that
-	// yields a session key, instead of committing to the first element.
-	// This both supports multi-recipient documents and stops a single
-	// bogus key from denying service to the legitimate recipient.
-	var lastErr error
-	for _, ek := range ed.EncryptedKeys {
-		key, err := resolveSessionKeyFromEncryptedKey(cfg, ek)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		return key, nil
-	}
-	return nil, lastErr
 }
 
 func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]byte, error) {

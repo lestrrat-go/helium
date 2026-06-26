@@ -1,12 +1,72 @@
 package xmlenc1_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha1"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xmlenc1"
 	"github.com/stretchr/testify/require"
 )
+
+// TestDecryptBogusFirstKeyTriesNext covers XENC-005: a candidate
+// EncryptedKey that UNWRAPS/transports successfully but wraps the WRONG
+// session key must not short-circuit the search. The decryptor must carry
+// each candidate through block decryption (and plaintext validation),
+// falling through to the next candidate on failure. Otherwise an attacker
+// who prepends a valid RSA-OAEP EncryptedKey (for the recipient's public
+// key) wrapping a random session key denies service to the legitimate key.
+func TestDecryptBogusFirstKeyTriesNext(t *testing.T) {
+	const blockAlg = xmlenc1.AES256GCM
+
+	priv := generateRSAKey(t)
+	pub := &priv.PublicKey
+
+	wrapOAEP := func(t *testing.T, sessionKey []byte) []byte {
+		t.Helper()
+		// RSA-OAEP-MGF1P uses SHA-1 for both digest and MGF1.
+		ct, err := rsa.EncryptOAEP(sha1.New(), rand.Reader, pub, sessionKey, nil)
+		require.NoError(t, err)
+		return ct
+	}
+
+	realSessionKey := randKey(t, 32)
+	cipher, err := xmlenc1.EncryptBytesForTest(blockAlg, realSessionKey, []byte("<x>secret</x>"))
+	require.NoError(t, err)
+
+	// First key is a perfectly valid RSA-OAEP transport of a RANDOM session
+	// key: it unwraps cleanly under priv but cannot decrypt the ciphertext.
+	// Second key transports the real session key.
+	bogusSessionKey := randKey(t, 32)
+
+	doc := mustParseXML(t, `<root/>`)
+	ed := &xmlenc1.EncryptedData{
+		Type:             xmlenc1.TypeElement,
+		EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: blockAlg},
+		EncryptedKeys: []*xmlenc1.EncryptedKey{
+			{
+				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+				CipherValue:      wrapOAEP(t, bogusSessionKey),
+			},
+			{
+				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+				CipherValue:      wrapOAEP(t, realSessionKey),
+			},
+		},
+		CipherValue: cipher,
+	}
+	elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+	require.NoError(t, err)
+
+	nodes, err := xmlenc1.NewDecryptor().PrivateKey(priv).Decrypt(t.Context(), elem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	s, err := helium.WriteString(nodes[0])
+	require.NoError(t, err)
+	require.Contains(t, s, "secret")
+}
 
 // TestMultiRecipientDecrypt covers XENC-002: an EncryptedData may carry
 // several EncryptedKey candidates (one per recipient), and decryption must
