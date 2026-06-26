@@ -119,6 +119,12 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 				// pctx.valid and returns a nil entity with no error. It is not
 				// expanded. Skip it without dereferencing the nil entity,
 				// mirroring the '&' branch above and expandEntityValueForRefCheck.
+				// Still charge the reference against entity-expansion accounting
+				// (entityCheck tolerates a nil ent) so an unresolved PE ref can't
+				// be used to dodge the amplification/ceiling limits.
+				if err := pctx.entityCheck(ent, width); err != nil {
+					return "", err
+				}
 				s = s[width:]
 				continue
 			}

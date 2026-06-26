@@ -58,4 +58,9 @@ func TestDecodeEntitiesUndeclaredPEReturnsEmpty(t *testing.T) {
 	})
 	require.NoError(t, err, "an undeclared PE in an external-subset context is a validity error, not fatal")
 	require.Equal(t, "ab", out, "the undeclared PE must expand to nothing")
+	// The unresolved PE reference must still be charged against entity-expansion
+	// accounting (reference width + per-reference fixed cost), otherwise an
+	// undeclared PE becomes a free way to dodge the amplification/ceiling limits.
+	require.Equal(t, int64(len("%missing;"))+entityFixedCost, pctx.sizeentcopy,
+		"unresolved PE reference must be charged against sizeentcopy")
 }
