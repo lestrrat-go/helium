@@ -389,6 +389,17 @@ When mandatory group child fails:
      yield (e.g. `group(zeroOrMore(x), zeroOrMore(x), x)`)
    - Keep highest successful count (maximizes consumption — libxml2 semantics)
 
+The recursive retry would be exponential (`O(M^N)` for `N` flexible members over
+`M` elements) without memoization, since the cascading reductions re-explore
+overlapping subproblems. `validateGroupChildren`/`validateGroupSeq` therefore
+cache each call in `validator.groupMemo`, keyed by the inputs that fully determine
+the result (child-range start pattern + length, owning element, first remaining
+node + sequence length, packed `attrUsed`, `suppressDepth>0`, content-vs-naive
+discriminator). A hit reproduces the original call's effect exactly — resulting
+position, attribute usage, appended errors, return value — so memoization is sound
+(no valid document rejected) while collapsing the fan-out to polynomial. Regression
+guard: `TestMultiFlexibleGroupBacktrackingNotExponential`.
+
 Two parallel implementations share this strategy. `validateGroupContent` +
 `backtrackGroupFlexible` runs inside element bodies (threads attrs/attrUsed and
 emits content-failure diagnostics). `validateGroup` + `backtrackGroupNaive` runs

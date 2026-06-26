@@ -27,6 +27,84 @@ type validator struct {
 	valid         bool
 	suppressDepth int // when > 0, errors are suppressed (inside choice branches)
 	depth         int // recursion depth guard
+
+	// groupMemo caches results of validateGroupChildren/validateGroupSeq so the
+	// recursive group backtracker (backtrackGroupFlexible/backtrackGroupNaive)
+	// does not re-explore overlapping (child-range, input-position) subproblems.
+	// Without it the cascading retry is exponential in the number of flexible
+	// members. Keyed by the full input that determines the result; a hit
+	// reproduces the original call's effect byte-for-byte.
+	groupMemo map[groupMemoKey]*groupMemoEntry
+}
+
+// groupMemoKey identifies a group-validation subproblem. Two calls with an equal
+// key are guaranteed to produce identical results and side effects.
+type groupMemoKey struct {
+	first *pattern        // children[0] — uniquely identifies the child sub-range start
+	n     int             // len(children) — sub-range length
+	elem  *helium.Element // owning element (content path); pins the element's attrs,
+	// which group content may consult even when the child sequence is empty
+	pos      helium.Node // first remaining node (nil when the input sequence is empty)
+	seqLen   int         // len(state.seq); with pos, fully identifies the sibling run
+	attrKey  string      // packed attrUsed bits ("" for the naive path)
+	suppress bool        // v.suppressDepth > 0 (governs whether errors are emitted)
+	content  bool        // element-content path vs naive path discriminator
+}
+
+// groupMemoEntry records the full effect of a memoized group-validation call so a
+// cache hit can reproduce it exactly: the resulting input position, attribute
+// usage, any errors the call appended, and its return value.
+type groupMemoEntry struct {
+	result   int
+	seq      []helium.Node
+	attrUsed []bool
+	errs     []error
+}
+
+func (e *groupMemoEntry) apply(state *validState, attrUsed []bool, v *validator) int {
+	state.seq = append([]helium.Node(nil), e.seq...)
+	if attrUsed != nil {
+		copy(attrUsed, e.attrUsed)
+	}
+	if len(e.errs) > 0 {
+		v.pendingErrors = append(v.pendingErrors, e.errs...)
+		v.valid = false
+	}
+	return e.result
+}
+
+// groupMemoLookupKey builds the cache key for a group-validation call, or reports
+// false when the sub-range is empty (trivially handled by the callers).
+func (v *validator) groupMemoLookupKey(children []*pattern, elem *helium.Element, attrUsed []bool, state *validState, content bool) (groupMemoKey, bool) {
+	if len(children) == 0 {
+		return groupMemoKey{}, false
+	}
+	var pos helium.Node
+	if len(state.seq) > 0 {
+		pos = state.seq[0]
+	}
+	var attrKey string
+	if len(attrUsed) > 0 {
+		buf := make([]byte, len(attrUsed))
+		for i, used := range attrUsed {
+			if used {
+				buf[i] = '1'
+			} else {
+				buf[i] = '0'
+			}
+		}
+		attrKey = string(buf)
+	}
+	return groupMemoKey{
+		first:    children[0],
+		n:        len(children),
+		elem:     elem,
+		pos:      pos,
+		seqLen:   len(state.seq),
+		attrKey:  attrKey,
+		suppress: v.suppressDepth > 0,
+		content:  content,
+	}, true
 }
 
 const maxValidationDepth = 500
@@ -697,8 +775,33 @@ func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 // validateGroupChildren validates a sequence of group children with backtracking
 // support. It is shared by validateGroupContent and by the recursive retry inside
 // backtrackGroupFlexible, so a backtracked sub-range that contains its own
-// flexible members can itself backtrack.
+// flexible members can itself backtrack. Results are memoized so the cascading
+// retry stays polynomial instead of exponential in the flexible-member count.
 func (v *validator) validateGroupChildren(children []*pattern, elem *helium.Element,
+	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
+	key, ok := v.groupMemoLookupKey(children, elem, attrUsed, state, true)
+	if ok {
+		if e, hit := v.groupMemo[key]; hit {
+			return e.apply(state, attrUsed, v)
+		}
+	}
+	errBase := len(v.pendingErrors)
+	result := v.validateGroupChildrenUncached(children, elem, attrs, attrUsed, state)
+	if ok {
+		if v.groupMemo == nil {
+			v.groupMemo = make(map[groupMemoKey]*groupMemoEntry)
+		}
+		v.groupMemo[key] = &groupMemoEntry{
+			result:   result,
+			seq:      append([]helium.Node(nil), state.seq...),
+			attrUsed: append([]bool(nil), attrUsed...),
+			errs:     append([]error(nil), v.pendingErrors[errBase:]...),
+		}
+	}
+	return result
+}
+
+func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
 	if len(children) == 0 {
 		return 0
@@ -1362,8 +1465,31 @@ func (v *validator) validateGroup(pat *pattern, state *validState) int {
 // validateGroupSeq validates a sequence of naive-group children with
 // backtracking support. It is shared by validateGroup and by the recursive
 // retry inside backtrackGroupNaive, so a backtracked sub-range with its own
-// flexible members can itself backtrack.
+// flexible members can itself backtrack. Results are memoized (see
+// validateGroupChildren) to keep the cascading retry polynomial.
 func (v *validator) validateGroupSeq(children []*pattern, state *validState) int {
+	key, ok := v.groupMemoLookupKey(children, nil, nil, state, false)
+	if ok {
+		if e, hit := v.groupMemo[key]; hit {
+			return e.apply(state, nil, v)
+		}
+	}
+	errBase := len(v.pendingErrors)
+	result := v.validateGroupSeqUncached(children, state)
+	if ok {
+		if v.groupMemo == nil {
+			v.groupMemo = make(map[groupMemoKey]*groupMemoEntry)
+		}
+		v.groupMemo[key] = &groupMemoEntry{
+			result: result,
+			seq:    append([]helium.Node(nil), state.seq...),
+			errs:   append([]error(nil), v.pendingErrors[errBase:]...),
+		}
+	}
+	return result
+}
+
+func (v *validator) validateGroupSeqUncached(children []*pattern, state *validState) int {
 	if len(children) == 0 {
 		return 0
 	}
