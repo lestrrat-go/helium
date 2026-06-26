@@ -663,6 +663,25 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
 			out := ec.outputStack[0]
+			// SERE0022: validate JSON duplicate keys when allow-duplicate-names
+			// is not "yes". This branch selects JSON purely from the
+			// result-document's effective method, so currentResultDocMethod has
+			// already been restored by the time the final primary validation runs
+			// in execute_transform.go; validate here against the preflighted
+			// overrides instead. Mirrors the buffered direct-write path.
+			if effectiveMethod == methodJSON {
+				allowDupes := false
+				if primaryOverrides != nil {
+					allowDupes = primaryOverrides.AllowDuplicateNames
+				} else if defDef, ok := ec.effectiveOutputs()[""]; ok {
+					allowDupes = defDef.AllowDuplicateNames
+				}
+				if !allowDupes {
+					if err := validateJSONItems(frame.pendingItems); err != nil {
+						return err
+					}
+				}
+			}
 			out.pendingItems = append(out.pendingItems, frame.pendingItems...)
 
 			ec.commitPrimaryOutputState(inst, effectiveFormat, primaryOverrides)

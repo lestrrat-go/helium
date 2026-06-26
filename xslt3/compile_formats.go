@@ -483,6 +483,9 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		if getAttr(elem, paramJSONNodeOutputMethod) == "" {
 			outDef.JSONNodeOutputMethod = existing.JSONNodeOutputMethod
 		}
+		if getAttr(elem, paramAllowDuplicateNames) == "" {
+			outDef.AllowDuplicateNames = existing.AllowDuplicateNames
+		}
 	}
 
 	c.stylesheet.outputs[name] = outDef
