@@ -17,6 +17,11 @@ import (
 // treating it as a warning the way it treats ordinary I/O failures.
 var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
 
+// errIncludeDepthExceeded signals that xs:include/xs:redefine nesting reached
+// the configured limit. It is a secondary guard behind the includeVisited
+// loaded-set; processNestedIncludes returns it as a fatal compilation error.
+var errIncludeDepthExceeded = errors.New("xsd: max include depth exceeded")
+
 // errSchemaPathEscape signals that a schemaLocation joined onto baseDir
 // would escape upward via ".." segments. processIncludes surfaces this
 // as a fatal error rather than swallowing it as a generic I/O warning,
@@ -177,12 +182,47 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 	return nil
 }
 
+// processNestedIncludes processes the xs:include/xs:import/xs:redefine declared
+// by an already-parsed included or redefined schema (incRoot), so a transitive
+// chain (main -> inc1 -> inc2) resolves rather than failing on declarations that
+// only inc2 defines. The nested references in incRoot are relative to the
+// included schema, so baseDir/filename are temporarily switched to it (path is
+// its resolved fs key, location its raw schemaLocation). Recursion is bounded by
+// the includeVisited loaded-set (registered by the caller) plus a depth cap.
+func (c *compiler) processNestedIncludes(ctx context.Context, incRoot *helium.Element, path, location string) error {
+	if c.includeDepth >= c.maxIncludeDepth {
+		return fmt.Errorf("%w (limit=%d, location=%q)", errIncludeDepthExceeded, c.maxIncludeDepth, location)
+	}
+	savedBaseDir := c.baseDir
+	savedFilename := c.filename
+	c.baseDir = schemaBaseDir(path)
+	if savedFilename != "" {
+		c.filename = schemaDisplayLoc(savedFilename, location)
+	}
+	c.includeDepth++
+
+	err := c.processIncludes(ctx, incRoot)
+
+	c.includeDepth--
+	c.baseDir = savedBaseDir
+	c.filename = savedFilename
+	return err
+}
+
 // loadInclude loads and merges an included schema file.
 func (c *compiler) loadInclude(ctx context.Context, location string, includeElem *helium.Element) error {
 	path, err := validateSchemaPath(c.baseDir, location)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
+
+	// Load each included document at most once: a transitive/diamond re-include
+	// of an already-loaded document is skipped so its declarations are not
+	// re-registered and a circular include cannot recurse forever.
+	if _, seen := c.includeVisited[path]; seen {
+		return nil
+	}
+	c.includeVisited[path] = struct{}{}
 
 	data, err := fs.ReadFile(c.fsys, path)
 	if err != nil {
@@ -244,6 +284,12 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 	// Parse the included schema's declarations into the current compiler.
 	err = c.parseSchemaChildren(ctx, incRoot)
 
+	// Process the included schema's OWN xs:include/xs:import/xs:redefine so a
+	// transitive chain resolves (resolved relative to the included schema).
+	if err == nil {
+		err = c.processNestedIncludes(ctx, incRoot, path, location)
+	}
+
 	// Restore form-qualified settings, defaults, and include file.
 	c.schema.elemFormQualified = savedElemForm
 	c.schema.attrFormQualified = savedAttrForm
@@ -286,6 +332,13 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
+
+	// Load each redefined document at most once (shared with xs:include), so a
+	// re-redefine cannot re-register declarations or recurse forever.
+	if _, seen := c.includeVisited[path]; seen {
+		return nil
+	}
+	c.includeVisited[path] = struct{}{}
 
 	data, err := fs.ReadFile(c.fsys, path)
 	if err != nil {
@@ -348,6 +401,17 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 
 	// Parse the included schema's declarations into the current compiler.
 	if err := c.parseSchemaChildren(ctx, incRoot); err != nil {
+		c.schema.elemFormQualified = savedElemForm
+		c.schema.attrFormQualified = savedAttrForm
+		c.schema.blockDefault = savedBlockDefault
+		c.schema.finalDefault = savedFinalDefault
+		c.includeFile = savedIncludeFile
+		return err
+	}
+
+	// Process the redefined schema's OWN xs:include/xs:import/xs:redefine so a
+	// transitive chain resolves (resolved relative to the redefined schema).
+	if err := c.processNestedIncludes(ctx, incRoot, path, location); err != nil {
 		c.schema.elemFormQualified = savedElemForm
 		c.schema.attrFormQualified = savedAttrForm
 		c.schema.blockDefault = savedBlockDefault
@@ -701,6 +765,8 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		importedNS:               make(map[string]string),
 		importDepth:              c.importDepth + 1,
 		maxImportDepth:           c.maxImportDepth,
+		includeVisited:           make(map[string]struct{}),
+		maxIncludeDepth:          c.maxIncludeDepth,
 	}
 
 	// Sub-compiler collects errors into its own collector so we can

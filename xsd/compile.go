@@ -105,6 +105,18 @@ type compiler struct {
 	// so the per-compiler importedNS map does not detect the cycle.
 	importDepth    int
 	maxImportDepth int
+	// includeVisited records the resolved fs paths of schema documents already
+	// pulled in via xs:include/xs:redefine on this compiler, so a transitive or
+	// diamond chain loads each included document at most once. It is the cycle
+	// guard for circular includes: a re-include of an already-loaded document is
+	// skipped rather than re-parsed (which would re-register its declarations and
+	// recurse forever).
+	includeVisited map[string]struct{}
+	// includeDepth and maxIncludeDepth bound xs:include/xs:redefine nesting as a
+	// secondary safety net behind includeVisited. includeDepth is incremented
+	// while processing a nested included schema's own includes and restored after.
+	includeDepth    int
+	maxIncludeDepth int
 	// redefine is non-nil while processing the override children of an
 	// xs:redefine. It scopes the duplicate-name suppression to the specific
 	// (kind, name) components actually loaded by the redefined schema, each
@@ -194,6 +206,13 @@ func (c *compiler) redefineConsumed(kind redefineKind, qn QName) bool {
 // hardcoded defensive caps used by relaxng (include limit), catalog
 // (resolution depth), and xpath/xslt (recursion depth).
 const defaultMaxImportDepth = 40
+
+// defaultMaxIncludeDepth bounds xs:include/xs:redefine nesting depth. It is a
+// secondary safety net behind the includeVisited loaded-set (which already
+// guarantees termination by loading each included document at most once); the
+// depth bound also caps pathological deep but acyclic chains. The same modest
+// value as defaultMaxImportDepth leaves generous headroom for real schemas.
+const defaultMaxIncludeDepth = 40
 
 // elemRefSource tracks source location for error reporting.
 type elemRefSource struct {
@@ -398,6 +417,8 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrUseSources:           make(map[*AttrUse]attrConstraintSource),
 		importedNS:               make(map[string]string),
 		maxImportDepth:           defaultMaxImportDepth,
+		includeVisited:           make(map[string]struct{}),
+		maxIncludeDepth:          defaultMaxIncludeDepth,
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
