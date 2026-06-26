@@ -34,6 +34,18 @@ func URIScheme(s string) string {
 // uriScheme is the unexported spelling used throughout the xsd package.
 func uriScheme(s string) string { return URIScheme(s) }
 
+// schemaURIIsAbsolute reports whether s already addresses its own location and
+// must NOT be re-resolved against a base directory: it has a URI scheme, or it
+// is an absolute filesystem path. A relative reference (the common doc.URL()
+// when a Compiler.BaseDir is configured) returns false so the caller resolves
+// it against that base, matching the key a nested back-reference computes.
+func schemaURIIsAbsolute(s string) bool {
+	if uriScheme(s) != "" {
+		return true
+	}
+	return path.IsAbs(uripath.ToSlash(s)) || filepath.IsAbs(s)
+}
+
 // ResolveSchemaURI resolves a schema-location reference ref against a base
 // (the FULL location of the schema that contains the reference) and returns
 // the canonical name to hand to the configured loader.

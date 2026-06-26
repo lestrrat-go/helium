@@ -97,3 +97,43 @@ func TestCompile_CircularInclude_URIBase(t *testing.T) {
 	require.NoError(t, err, "circular include back to the root schema must compile cleanly via Compile")
 	require.NotNil(t, schema)
 }
+
+// The resolver/in-memory Compile path with a RELATIVE doc.URL() and a local
+// (non-URI) BaseDir must also close the cycle. A nested back-reference resolves
+// its relative schemaLocation against the including schema's base dir, so the
+// root's key is BaseDir+doc.URL() ("schemas/main.xsd"), not the bare relative
+// URL ("main.xsd"). Seeding the guard from the bare URL would miss the cycle and
+// re-parse the root into duplicate components.
+func TestCompile_CircularInclude_RelativeURLLocalBase(t *testing.T) {
+	const ns = "urn:c"
+
+	mainBytes := []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="` + ns + `" targetNamespace="` + ns + `">
+  <xs:include schemaLocation="inc.xsd"/>
+  <xs:element name="root" type="t:LeafType"/>
+</xs:schema>`)
+	incBytes := []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="` + ns + `">
+  <xs:include schemaLocation="main.xsd"/>
+  <xs:complexType name="LeafType">
+    <xs:sequence>
+      <xs:element name="x" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`)
+
+	fsys := uriReadFS{
+		"schemas/main.xsd": mainBytes,
+		"schemas/inc.xsd":  incBytes,
+	}
+
+	// doc.URL() is the relative "main.xsd"; BaseDir is the local "schemas" dir.
+	doc, err := helium.NewParser().BaseURI("main.xsd").Parse(t.Context(), mainBytes)
+	require.NoError(t, err)
+	require.Equal(t, "main.xsd", doc.URL())
+
+	schema, err := xsd.NewCompiler().
+		BaseDir("schemas").
+		FS(fsys).
+		Compile(t.Context(), doc)
+	require.NoError(t, err, "circular include with relative URL + local BaseDir must compile cleanly")
+	require.NotNil(t, schema)
+}

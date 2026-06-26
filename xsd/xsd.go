@@ -171,11 +171,24 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, e
 	// the key from, so it is taken from the document's own URL (the canonical
 	// key a nested back-reference computes) or, lacking that, from a full-URI
 	// BaseDir (which by the URI-aware convention IS the root schema's location).
+	//
+	// A nested back-reference resolves its (relative) schemaLocation against the
+	// including schema's base directory, which for the root is cfg.baseDir. So a
+	// RELATIVE doc.URL() must likewise be resolved against cfg.baseDir, or the
+	// seeded key ("main.xsd") would not match the key the cycle computes
+	// ("schemas/main.xsd") and the guard would miss, re-parsing the root. A URI
+	// or absolute-local doc.URL() already addresses its own location, so it is
+	// resolved with an empty base (ResolveSchemaURI returns it unchanged).
+	//
 	// A clone of cfg keeps the shared config (clone-on-write contract) intact.
 	cfgWithRoot := *cfg
 	switch {
 	case doc.URL() != "":
-		if rootKey, rkErr := ResolveSchemaURI(doc.URL(), ""); rkErr == nil {
+		base := cfg.baseDir
+		if schemaURIIsAbsolute(doc.URL()) {
+			base = ""
+		}
+		if rootKey, rkErr := ResolveSchemaURI(doc.URL(), base); rkErr == nil {
 			cfgWithRoot.rootKey = rootKey
 		}
 	case uriScheme(cfg.baseDir) != "":
