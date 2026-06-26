@@ -53,6 +53,10 @@ type FatalSchemaLoader interface {
 //
 //   - the schemaLocation escaped its base directory via ".." ([errSchemaPathEscape]);
 //   - xs:import recursion exceeded the configured depth ([errImportDepthExceeded]);
+//   - xs:include/xs:redefine nesting exceeded the configured depth
+//     ([errIncludeDepthExceeded]) — otherwise an over-deep include/redefine chain
+//     inside an IMPORTED schema would be demoted to a warning and silently ignored
+//     by loadImport's nested-processing fallback;
 //   - the configured [fs.FS] returned an error satisfying [FatalSchemaLoader]
 //     (e.g. a resource-limit breach such as a too-large external resource).
 //
@@ -61,7 +65,7 @@ type FatalSchemaLoader interface {
 // matched via errors.Is / errors.As, so they remain unexported; this helper is
 // the public surface.
 func IsFatalSchemaLoad(err error) bool {
-	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) {
+	if errors.Is(err, errSchemaPathEscape) || errors.Is(err, errImportDepthExceeded) || errors.Is(err, errIncludeDepthExceeded) {
 		return true
 	}
 	var f FatalSchemaLoader

@@ -32,8 +32,14 @@ var ErrNilSchema = errors.New("xsd: nil schema")
 var ErrNilDocument = errors.New("xsd: nil document")
 
 type compileConfig struct {
-	label        string         // label for error messages (e.g. source filename)
-	baseDir      string         // base directory for resolving relative includes
+	label   string // label for error messages (e.g. source filename)
+	baseDir string // base directory for resolving relative includes
+	// rootKey is the resolved fs.FS key of the TOP-LEVEL schema document, when
+	// known (set by CompileFile). compileSchema seeds includeVisited with it so a
+	// circular include/redefine that points back at the root (main -> inc -> main)
+	// treats the root as already-loaded instead of re-parsing it and emitting
+	// spurious duplicate-component errors.
+	rootKey      string
 	fsys         fs.FS          // filesystem for loading xs:include/xs:import/xs:redefine targets
 	parser       *helium.Parser // parser governing schema-document parse policy
 	errorHandler helium.ErrorHandler
@@ -184,7 +190,17 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 		return nil, fmt.Errorf("xsd: failed to parse %q: %w", path, err)
 	}
 	baseDir := filepath.Dir(path)
-	schema, compileErr := compileSchema(ctx, doc, baseDir, cfg)
+	// Seed the circular-include guard with the root schema's own resolved key, in
+	// the same canonical form a nested xs:include/xs:redefine would compute when it
+	// points back at the root (main -> inc -> main). Without this, includeVisited
+	// only contains documents loaded via loadInclude/loadRedefine, so a cycle back
+	// to the top-level schema re-parses it and emits spurious duplicates. A clone
+	// of cfg keeps the shared config (and clone-on-write Compiler contract) intact.
+	cfgWithRoot := *cfg
+	if rootKey, rkErr := ResolveSchemaURI(filepath.Base(path), baseDir); rkErr == nil {
+		cfgWithRoot.rootKey = rootKey
+	}
+	schema, compileErr := compileSchema(ctx, doc, baseDir, &cfgWithRoot)
 	c.closeHandler()
 	return schema, compileErr
 }

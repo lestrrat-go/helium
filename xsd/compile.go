@@ -422,6 +422,13 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
+		// Seed the circular-include guard with the root schema's resolved key (set
+		// by CompileFile) so a cycle pointing back at the top-level schema
+		// (main -> inc -> main) treats the root as already-loaded instead of
+		// re-parsing it and emitting spurious duplicate-component errors.
+		if cfg.rootKey != "" {
+			c.includeVisited[cfg.rootKey] = struct{}{}
+		}
 		c.filename = cfg.label
 		if c.filename == "" {
 			c.filename = doc.URL()
