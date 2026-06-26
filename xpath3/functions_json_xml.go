@@ -42,7 +42,7 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.UseNumber()
-	item, err := parseJSONValue(ctx, dec, opts)
+	item, err := parseJSONValue(ctx, dec, opts, newJSONBudget(ctx), 0)
 	if err != nil {
 		return nil, err
 	}

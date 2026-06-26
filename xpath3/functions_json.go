@@ -51,7 +51,7 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.UseNumber()
-	item, err := parseJSONValue(ctx, dec, opts)
+	item, err := parseJSONValue(ctx, dec, opts, newJSONBudget(ctx), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -167,22 +167,73 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	return opts, nil
 }
 
-func parseJSONValue(ctx context.Context, dec *json.Decoder, opts jsonOptions) (Item, error) {
+// jsonBudget threads the evaluator's DoS bounds into the streaming JSON parser
+// shared by fn:parse-json and fn:json-to-xml. Without it, a large or deeply
+// nested JSON string would build an unbounded in-memory map/array structure
+// with no op-limit, node-set, depth, or cancellation accounting, bypassing the
+// engine's evaluation budget. ec may be nil when the functions run outside an
+// evaluation, in which case the package defaults still apply so the constructed
+// structure stays bounded.
+type jsonBudget struct {
+	ec       *evalContext
+	maxNodes int
+	maxDepth int
+}
+
+func newJSONBudget(ctx context.Context) *jsonBudget {
+	ec := getFnContext(ctx)
+	maxDepth := DefaultMaxRecursionDepth
+	if ec != nil && ec.maxRecursionDepth > 0 {
+		maxDepth = ec.maxRecursionDepth
+	}
+	return &jsonBudget{ec: ec, maxNodes: fnMaxNodes(ec), maxDepth: maxDepth}
+}
+
+// enter accounts for one level of object/array nesting and rejects input that
+// nests deeper than the recursion limit, so adversarial JSON cannot exhaust the
+// goroutine stack. It returns the incremented depth for nested calls.
+func (b *jsonBudget) enter(depth int) (int, error) {
+	depth++
+	if b.maxDepth > 0 && depth > b.maxDepth {
+		return depth, ErrRecursionLimit
+	}
+	return depth, nil
+}
+
+// charge accounts for one constructed map entry or array member: it bounds the
+// running member count against maxNodes and charges one op (which also honors
+// context cancellation), so a wide JSON container respects OpLimit and stays
+// cancellable.
+func (b *jsonBudget) charge(ctx context.Context, count int) error {
+	if b.maxNodes > 0 && count+1 > b.maxNodes {
+		return ErrNodeSetLimit
+	}
+	return fnCountOp(ctx, b.ec)
+}
+
+func parseJSONValue(ctx context.Context, dec *json.Decoder, opts jsonOptions, b *jsonBudget, depth int) (Item, error) {
 	tok, err := dec.Token()
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
 	}
-	return parseJSONToken(ctx, tok, dec, opts)
+	return parseJSONToken(ctx, tok, dec, opts, b, depth)
 }
 
-func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts jsonOptions) (Item, error) {
+func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts jsonOptions, b *jsonBudget, depth int) (Item, error) {
 	switch v := tok.(type) {
 	case json.Delim:
 		switch v {
 		case '{':
+			depth, err := b.enter(depth)
+			if err != nil {
+				return nil, err
+			}
 			entries := make([]MapEntry, 0)
 			index := make(map[string]int)
 			for dec.More() {
+				if err := b.charge(ctx, len(entries)); err != nil {
+					return nil, err
+				}
 				keyTok, err := dec.Token()
 				if err != nil {
 					return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
@@ -196,7 +247,7 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 					return nil, err
 				}
 
-				valueItem, err := parseJSONValue(ctx, dec, opts)
+				valueItem, err := parseJSONValue(ctx, dec, opts, b, depth)
 				if err != nil {
 					return nil, err
 				}
@@ -232,9 +283,16 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 			}
 			return NewMap(entries), nil
 		case '[':
+			depth, err := b.enter(depth)
+			if err != nil {
+				return nil, err
+			}
 			members := make([]Sequence, 0)
 			for dec.More() {
-				item, err := parseJSONValue(ctx, dec, opts)
+				if err := b.charge(ctx, len(members)); err != nil {
+					return nil, err
+				}
+				item, err := parseJSONValue(ctx, dec, opts, b, depth)
 				if err != nil {
 					return nil, err
 				}

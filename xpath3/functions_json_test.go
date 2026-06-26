@@ -1,8 +1,12 @@
 package xpath3_test
 
 import (
+	"context"
+	"errors"
+	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,4 +68,63 @@ func TestParseJSON_NestedStructures(t *testing.T) {
 		`xml-to-json(json-to-xml('{"a": [1, true, null, "s"]}'))`)
 	require.NoError(t, err)
 	require.Contains(t, r.StringValue(), "\"a\"")
+}
+
+// fn:parse-json must thread the evaluator's DoS budget into the streaming JSON
+// parser so an oversized or deeply nested JSON string cannot build an unbounded
+// in-memory map/array structure that bypasses the engine's limits. Each case
+// fails (returns a value, no error) before the budget is threaded through
+// parseJSONToken and passes after.
+func TestParseJSON_Bounded(t *testing.T) {
+	// Deeply nested arrays beyond the recursion limit must be rejected rather
+	// than recursing unbounded over the goroutine stack.
+	t.Run("deep nesting", func(t *testing.T) {
+		depth := xpath3.DefaultMaxRecursionDepth + 1
+		nested := strings.Repeat("[", depth) + strings.Repeat("]", depth)
+		expr := `parse-json('` + nested + `')`
+		_, err := evaluate(t.Context(), nil, expr)
+		require.Error(t, err, "deeply nested JSON must be rejected")
+		require.True(t, errors.Is(err, xpath3.ErrRecursionLimit),
+			"expected ErrRecursionLimit, got %v", err)
+	})
+
+	// A wide array exceeding the configured node-set limit must be rejected.
+	t.Run("wide array", func(t *testing.T) {
+		var b strings.Builder
+		b.WriteByte('[')
+		for i := range 50 {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteByte('0')
+		}
+		b.WriteByte(']')
+		compiled, err := xpath3.NewCompiler().Compile(`parse-json('` + b.String() + `')`)
+		require.NoError(t, err)
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).MaxNodesForTesting(10)
+		_, err = eval.Evaluate(t.Context(), compiled, nil)
+		require.Error(t, err, "wide JSON array must be rejected")
+		require.True(t, errors.Is(err, xpath3.ErrNodeSetLimit),
+			"expected ErrNodeSetLimit, got %v", err)
+	})
+
+	// Construction must honor context cancellation.
+	t.Run("cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := evaluate(ctx, nil, `parse-json('[1, 2, 3, 4, 5]')`)
+		require.Error(t, err, "cancelled context must abort JSON construction")
+		require.True(t, errors.Is(err, context.Canceled),
+			"expected context.Canceled, got %v", err)
+	})
+}
+
+// fn:json-to-xml shares the same streaming parser and must be bounded too.
+func TestJSONToXML_DeepNestingBounded(t *testing.T) {
+	depth := xpath3.DefaultMaxRecursionDepth + 1
+	nested := strings.Repeat("[", depth) + strings.Repeat("]", depth)
+	_, err := evaluate(t.Context(), nil, `json-to-xml('`+nested+`')`)
+	require.Error(t, err, "deeply nested JSON must be rejected by json-to-xml")
+	require.True(t, errors.Is(err, xpath3.ErrRecursionLimit),
+		"expected ErrRecursionLimit, got %v", err)
 }
