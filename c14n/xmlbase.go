@@ -19,17 +19,29 @@ import (
 //
 // This matches libxml2 byte-for-byte for every well-formed xml:base value
 // (relative/absolute paths, http(s)/file/urn URIs, and protocol-relative
-// //host/path). It does not reproduce libxml2's behavior on degenerate inputs
-// that are not valid xml:base values — an empty-authority base ("//", "///",
-// "urn://"), a percent-encoded delimiter inside an authority, or a bare "//"
-// reference — where libxml2 itself is inconsistent. Such values never occur in
-// canonical signature input.
-// The returned bool reports whether the join could be performed faithfully. It
-// is false for inputs this port cannot reproduce libxml2 byte-for-byte — a
-// malformed URI reference, or a degenerate empty-authority form ("//", "///",
+// //host/path), validated by differential testing against libxml2 2.9.14's
+// xmlBuildURI across thousands of cases.
+//
+// The returned bool reports whether the join was performed faithfully. It is
+// false for inputs this code cannot reproduce libxml2 byte-for-byte — a
+// malformed URI reference or a degenerate empty-authority form ("//", "///",
 // "urn://") — which never occur in a well-formed xml:base. Callers in
 // libxml2-compat mode ignore it (best-effort result); strict mode turns it into
 // an operation failure.
+//
+// Component parsing uses net/url rather than a full port of libxml2's RFC 3986
+// URI parser. This is a deliberate, accepted trade-off: net/url has a few
+// micro-discrepancies from libxml2 on pathological URI forms that do not occur
+// in real xml:base values, and we do not paper over them:
+//   - IPvFuture authorities ("http://[v7.x]/…"): net/url rejects them, so the
+//     join falls back to returning the reference unchanged. libxml2 accepts them.
+//   - Strict-mode lexical validation (validURIReference) rejects "[" / "]"
+//     outside an authority, so it also rejects a bracket inside a *fragment*
+//     ("a#x[y]"), which libxml2 accepts (it still correctly rejects brackets in
+//     a path or query, matching libxml2).
+//
+// Closing these would require porting libxml2's URI grammar wholesale for no
+// real-world benefit, so we keep net/url and document the gaps instead.
 func joinURIReference(base, ref string) (string, bool) {
 	// libxml2 appends "/" when the base's second-to-last character is '.', i.e.
 	// the base ends with ".." (or "x."), forcing the join to traverse upward.
