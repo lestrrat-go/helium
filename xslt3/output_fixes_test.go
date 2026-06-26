@@ -203,6 +203,66 @@ func TestPrimaryResultDocumentResolvedOutputDefIsIsolated(t *testing.T) {
 	require.Equal(t, ";", *second.ItemSeparator, "compiled/override state must be unaffected across runs")
 }
 
+// A primary xsl:result-document with an explicit false boolean serialization
+// AVT must override an inherited true from xsl:output. Before the fix the merge
+// OR-ed the override with the inherited value, so an explicit false could never
+// turn an inherited true back off.
+func TestPrimaryResultDocBooleanFalseOverridesInheritedTrue(t *testing.T) {
+	resolve := func(t *testing.T, output, resultDocAttrs string) *xslt3.OutputDef {
+		t.Helper()
+		ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  `+output+`
+  <xsl:template match="/">
+    <xsl:result-document `+resultDocAttrs+`><out/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+		inv := ss.Transform(parseTransformSource(t))
+		_, err := inv.Do(t.Context())
+		require.NoError(t, err)
+		r := inv.ResolvedOutputDef()
+		require.NotNil(t, r)
+		return r
+	}
+
+	t.Run("indent false overrides inherited yes", func(t *testing.T) {
+		r := resolve(t, `<xsl:output method="xml" indent="yes"/>`, `indent="{false()}"`)
+		require.False(t, r.Indent, "explicit indent=false must override inherited indent=yes")
+	})
+
+	t.Run("indent inherited yes stays on when not overridden", func(t *testing.T) {
+		r := resolve(t, `<xsl:output method="xml" indent="yes"/>`, `method="xml"`)
+		require.True(t, r.Indent, "inherited indent=yes must remain on when not overridden")
+	})
+
+	t.Run("omit-xml-declaration false overrides inherited yes", func(t *testing.T) {
+		r := resolve(t, `<xsl:output method="xml" omit-xml-declaration="yes"/>`, `omit-xml-declaration="{false()}"`)
+		require.False(t, r.OmitDeclaration, "explicit omit-xml-declaration=false must override inherited yes")
+	})
+
+	t.Run("byte-order-mark false overrides inherited yes", func(t *testing.T) {
+		r := resolve(t, `<xsl:output method="xml" byte-order-mark="yes"/>`, `byte-order-mark="{false()}"`)
+		require.False(t, r.ByteOrderMark, "explicit byte-order-mark=false must override inherited yes")
+	})
+
+	t.Run("escape-uri-attributes false overrides inherited yes", func(t *testing.T) {
+		r := resolve(t, `<xsl:output method="html" escape-uri-attributes="yes"/>`, `escape-uri-attributes="{false()}"`)
+		require.NotNil(t, r.EscapeURIAttributes)
+		require.False(t, *r.EscapeURIAttributes, "explicit escape-uri-attributes=false must override inherited yes")
+	})
+
+	t.Run("include-content-type false overrides inherited yes", func(t *testing.T) {
+		r := resolve(t, `<xsl:output method="html" include-content-type="yes"/>`, `include-content-type="{false()}"`)
+		require.NotNil(t, r.IncludeContentType)
+		require.False(t, *r.IncludeContentType, "explicit include-content-type=false must override inherited yes")
+	})
+
+	t.Run("undeclare-prefixes false overrides inherited yes", func(t *testing.T) {
+		r := resolve(t, `<xsl:output method="xml" version="1.1" undeclare-prefixes="yes"/>`, `undeclare-prefixes="{false()}"`)
+		require.False(t, r.UndeclarePrefixes, "explicit undeclare-prefixes=false must override inherited yes")
+	})
+}
+
 // A-006 race: concurrent Serialize/ResolvedOutputDef on the SAME Invocation
 // value must be safe. Run under -race to catch data races on the shared config.
 func TestConcurrentSerializeAndResolvedOutputDef(t *testing.T) {

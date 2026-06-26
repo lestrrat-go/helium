@@ -214,6 +214,9 @@ func elementDefs() map[string]ElementInfo {
 				"include-content-type", "normalization-form",
 				"undeclare-prefixes", "use-character-maps",
 				"output-version", "type", "validation",
+				"allow-duplicate-names", "item-separator",
+				"json-node-output-method", "parameter-document",
+				"build-tree", "html-version", "suppress-indentation",
 			),
 		},
 		lexicon.XSLTElementWherePopulated: {
