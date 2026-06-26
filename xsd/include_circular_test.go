@@ -137,3 +137,45 @@ func TestCompile_CircularInclude_RelativeURLLocalBase(t *testing.T) {
 	require.NoError(t, err, "circular include with relative URL + local BaseDir must compile cleanly")
 	require.NotNil(t, schema)
 }
+
+// The Compile path must also close the cycle when doc.URL() ALREADY carries the
+// BaseDir prefix (an already-resolved fs key like "schemas/main.xsd" under
+// BaseDir("schemas")). Seeding the guard by blindly resolving doc.URL() against
+// BaseDir would double the prefix ("schemas/schemas/main.xsd"), miss the cycle,
+// and re-parse the root into spurious duplicate components. The seed must equal
+// the key the nested back-reference computes ("schemas/main.xsd"), which it does
+// because rootSchemaKey joins only the basename of doc.URL() onto BaseDir.
+func TestCompile_CircularInclude_AlreadyResolvedURLLocalBase(t *testing.T) {
+	const ns = "urn:c"
+
+	mainBytes := []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="` + ns + `" targetNamespace="` + ns + `">
+  <xs:include schemaLocation="inc.xsd"/>
+  <xs:element name="root" type="t:LeafType"/>
+</xs:schema>`)
+	incBytes := []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="` + ns + `">
+  <xs:include schemaLocation="main.xsd"/>
+  <xs:complexType name="LeafType">
+    <xs:sequence>
+      <xs:element name="x" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`)
+
+	fsys := uriReadFS{
+		"schemas/main.xsd": mainBytes,
+		"schemas/inc.xsd":  incBytes,
+	}
+
+	// doc.URL() is the already-resolved fs key "schemas/main.xsd"; BaseDir is the
+	// same "schemas" dir, so the URL already includes the BaseDir prefix.
+	doc, err := helium.NewParser().BaseURI("schemas/main.xsd").Parse(t.Context(), mainBytes)
+	require.NoError(t, err)
+	require.Equal(t, "schemas/main.xsd", doc.URL())
+
+	schema, err := xsd.NewCompiler().
+		BaseDir("schemas").
+		FS(fsys).
+		Compile(t.Context(), doc)
+	require.NoError(t, err, "circular include with an already-BaseDir-relative URL must not double-resolve and must compile cleanly")
+	require.NotNil(t, schema)
+}

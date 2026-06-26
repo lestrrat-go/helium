@@ -168,31 +168,15 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, e
 	// (main -> inc -> main) treats the root as already-loaded instead of
 	// re-parsing it and emitting spurious duplicate-component errors. Unlike
 	// CompileFile, the in-memory/resolver path has no filesystem path to derive
-	// the key from, so it is taken from the document's own URL (the canonical
-	// key a nested back-reference computes) or, lacking that, from a full-URI
-	// BaseDir (which by the URI-aware convention IS the root schema's location).
-	//
-	// A nested back-reference resolves its (relative) schemaLocation against the
-	// including schema's base directory, which for the root is cfg.baseDir. So a
-	// RELATIVE doc.URL() must likewise be resolved against cfg.baseDir, or the
-	// seeded key ("main.xsd") would not match the key the cycle computes
-	// ("schemas/main.xsd") and the guard would miss, re-parsing the root. A URI
-	// or absolute-local doc.URL() already addresses its own location, so it is
-	// resolved with an empty base (ResolveSchemaURI returns it unchanged).
+	// the key from, so it is taken from the document's own URL (or, lacking that,
+	// a full-URI BaseDir). rootSchemaKey is the single shared helper both compile
+	// entry points use, so the seeded key cannot diverge from the key a nested
+	// back-reference to the root computes.
 	//
 	// A clone of cfg keeps the shared config (clone-on-write contract) intact.
 	cfgWithRoot := *cfg
-	switch {
-	case doc.URL() != "":
-		base := cfg.baseDir
-		if schemaURIIsAbsolute(doc.URL()) {
-			base = ""
-		}
-		if rootKey, rkErr := ResolveSchemaURI(doc.URL(), base); rkErr == nil {
-			cfgWithRoot.rootKey = rootKey
-		}
-	case uriScheme(cfg.baseDir) != "":
-		cfgWithRoot.rootKey = cfg.baseDir
+	if rootKey, ok := rootSchemaKey(doc.URL(), cfg.baseDir); ok {
+		cfgWithRoot.rootKey = rootKey
 	}
 	schema, err := compileSchema(ctx, doc, cfgWithRoot.baseDir, &cfgWithRoot)
 	c.closeHandler()
@@ -225,10 +209,13 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	// the same canonical form a nested xs:include/xs:redefine would compute when it
 	// points back at the root (main -> inc -> main). Without this, includeVisited
 	// only contains documents loaded via loadInclude/loadRedefine, so a cycle back
-	// to the top-level schema re-parses it and emits spurious duplicates. A clone
-	// of cfg keeps the shared config (and clone-on-write Compiler contract) intact.
+	// to the top-level schema re-parses it and emits spurious duplicates.
+	// rootSchemaKey is the single shared helper both compile entry points use, so
+	// the seeded key cannot diverge from the key a nested back-reference computes.
+	// A clone of cfg keeps the shared config (and clone-on-write Compiler
+	// contract) intact.
 	cfgWithRoot := *cfg
-	if rootKey, rkErr := ResolveSchemaURI(filepath.Base(path), baseDir); rkErr == nil {
+	if rootKey, ok := rootSchemaKey(path, baseDir); ok {
 		cfgWithRoot.rootKey = rootKey
 	}
 	schema, compileErr := compileSchema(ctx, doc, baseDir, &cfgWithRoot)
