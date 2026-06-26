@@ -231,3 +231,69 @@ func TestGlobalContextItemXMLPrefixPredeclared(t *testing.T) {
 </xsl:stylesheet>`)
 	require.NotNil(t, ss)
 }
+
+// TestGlobalContextItemXTSE3087CrossModuleEquivalentAs verifies that the XTSE3087
+// cross-module agreement check compares the *meaning* of two @as sequence types,
+// not their lexical text. Two modules declaring xsl:global-context-item with
+// lexically different but namespace-equivalent @as values (xs:integer vs a user
+// prefix bound to the XSD namespace) must agree and compile cleanly.
+func TestGlobalContextItemXTSE3087CrossModuleEquivalentAs(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const includeURI = "mem:/stylesheets/inc.xsl"
+
+	included := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:my="http://www.w3.org/2001/XMLSchema">
+  <xsl:global-context-item as="my:integer" use="required"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:include href="inc.xsl"/>
+  <xsl:global-context-item as="xs:integer" use="required"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.NoError(t, err, "lexically different but equivalent @as (xs:integer vs my:integer bound to XSD) must agree, not raise XTSE3087")
+}
+
+// TestGlobalContextItemXTSE3087CrossModuleDivergentNS verifies the converse: two
+// modules whose @as values are lexically identical but resolve a shared prefix to
+// different namespaces denote different types and must raise XTSE3087. A raw text
+// compare would wrongly accept them.
+func TestGlobalContextItemXTSE3087CrossModuleDivergentNS(t *testing.T) {
+	const baseURI = "mem://stylesheets/main.xsl"
+	const includeURI = "mem:/stylesheets/inc.xsl"
+
+	included := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:p="urn:b">
+  <xsl:global-context-item as="element(p:foo)" use="required"/>
+</xsl:stylesheet>`
+
+	main := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:p="urn:a">
+  <xsl:include href="inc.xsl"/>
+  <xsl:global-context-item as="element(p:foo)" use="required"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	ctx := t.Context()
+	resolver := fileMapResolver{files: map[string]string{includeURI: included}}
+	doc, err := helium.NewParser().Parse(ctx, []byte(main))
+	require.NoError(t, err)
+	_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
+	require.Error(t, err, "element(p:foo) with p bound to urn:a vs urn:b denote different types and must raise XTSE3087")
+	require.Contains(t, err.Error(), "XTSE3087")
+}
