@@ -429,17 +429,34 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	for _, ek := range keys {
 		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek)
 		if err != nil {
-			lastErr = err
+			lastErr = preferInformativeErr(lastErr, err)
 			continue
 		}
 		nodes, err := finishDecrypt(ctx, ed, elem, alg, isContent, sessionKey)
 		if err != nil {
-			lastErr = err
+			lastErr = preferInformativeErr(lastErr, err)
 			continue
 		}
 		return nodes, nil
 	}
 	return nil, lastErr
+}
+
+// preferInformativeErr keeps the most informative error across EncryptedKey
+// candidates. A non-applicable candidate (one whose algorithm needs a key the
+// caller did not supply) yields ErrMissingKey, which carries no signal about
+// why decryption truly failed. A real failure from an applicable candidate
+// (bad unwrap, wrong session key, malformed plaintext) must not be masked by
+// a later ErrMissingKey. So: the first non-ErrMissingKey error wins and is
+// never overwritten by a subsequent ErrMissingKey.
+func preferInformativeErr(existing, candidate error) error {
+	if existing == nil {
+		return candidate
+	}
+	if errors.Is(existing, ErrMissingKey) && !errors.Is(candidate, ErrMissingKey) {
+		return candidate
+	}
+	return existing
 }
 
 // finishDecrypt block-decrypts the CipherValue under a candidate session

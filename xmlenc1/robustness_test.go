@@ -152,6 +152,35 @@ func TestMultiRecipientDecrypt(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, s, "secret")
 	})
+
+	t.Run("applicable failure not masked by later missing key", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, []byte("<x>secret</x>"))
+		require.NoError(t, err)
+
+		kekMine := randKey(t, 32)
+		wrongSessionKey := randKey(t, 32)
+
+		// First key is APPLICABLE (AES key-wrap, our KEK) but transports the
+		// WRONG session key, so block decryption fails with a real error.
+		// Second key is NON-APPLICABLE (RSA-OAEP, no private key supplied) and
+		// only yields ErrMissingKey. The informative ErrDecryptionFailed must
+		// surface rather than being overwritten by the trailing ErrMissingKey.
+		elem := newEncryptedData(t, []*xmlenc1.EncryptedKey{
+			{
+				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256KeyWrap},
+				CipherValue:      wrap(t, kekMine, wrongSessionKey),
+			},
+			{
+				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+				CipherValue:      randKey(t, 256),
+			},
+		}, cipher)
+
+		_, err = xmlenc1.NewDecryptor().KeyEncryptionKey(kekMine).Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+		require.NotErrorIs(t, err, xmlenc1.ErrMissingKey)
+	})
 }
 
 // TestParseRejectsDuplicateCardinality covers XENC-003: XML Encryption
@@ -190,6 +219,18 @@ func TestParseRejectsDuplicateCardinality(t *testing.T) {
 				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.RSAOAEP + `"/>` +
 				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.RSAOAEP11 + `"/>` +
 				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+				`</xenc:EncryptedKey></ds:KeyInfo>` +
+				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+				`</xenc:EncryptedData>`,
+		},
+		{
+			name: "duplicate CipherData in EncryptedKey",
+			xml: `<xenc:EncryptedData ` + xenc + ` ` + ds + `>` +
+				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"/>` +
+				`<ds:KeyInfo><xenc:EncryptedKey>` +
+				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.RSAOAEP + `"/>` +
+				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+				`<xenc:CipherData><xenc:CipherValue>BBBB</xenc:CipherValue></xenc:CipherData>` +
 				`</xenc:EncryptedKey></ds:KeyInfo>` +
 				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
 				`</xenc:EncryptedData>`,
@@ -242,5 +283,65 @@ func TestDecryptType(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, helium.ElementNode, nodes[0].Type())
+	})
+}
+
+// TestDeprecatedEncryptedKeyField exercises the backward-compatible single
+// EncryptedKey field: a caller that sets only the deprecated field (with
+// EncryptedKeys left nil) must still marshal and decrypt, and parsing a
+// single-EncryptedKey document must populate BOTH EncryptedKey and
+// EncryptedKeys[0] so old and new readers agree.
+func TestDeprecatedEncryptedKeyField(t *testing.T) {
+	const algorithm = xmlenc1.AES256GCM
+
+	t.Run("marshal and decrypt via deprecated field only", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, []byte("<x>secret</x>"))
+		require.NoError(t, err)
+
+		kek := randKey(t, 32)
+		wrapped, err := xmlenc1.AESKeyWrapForTest(kek, sessionKey)
+		require.NoError(t, err)
+
+		doc := mustParseXML(t, `<root/>`)
+		ed := &xmlenc1.EncryptedData{
+			Type:             xmlenc1.TypeElement,
+			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: algorithm},
+			// Only the deprecated single field is set; EncryptedKeys is nil.
+			EncryptedKey: &xmlenc1.EncryptedKey{
+				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256KeyWrap},
+				CipherValue:      wrapped,
+			},
+			CipherValue: cipher,
+		}
+		elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		s, err := helium.WriteString(nodes[0])
+		require.NoError(t, err)
+		require.Contains(t, s, "secret")
+	})
+
+	t.Run("parse populates both deprecated and slice fields", func(t *testing.T) {
+		const xenc = `xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"`
+		const ds = `xmlns:ds="http://www.w3.org/2000/09/xmldsig#"`
+		xml := `<xenc:EncryptedData ` + xenc + ` ` + ds + `>` +
+			`<xenc:EncryptionMethod Algorithm="` + algorithm + `"/>` +
+			`<ds:KeyInfo><xenc:EncryptedKey>` +
+			`<xenc:EncryptionMethod Algorithm="` + xmlenc1.RSAOAEP + `"/>` +
+			`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+			`</xenc:EncryptedKey></ds:KeyInfo>` +
+			`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+			`</xenc:EncryptedData>`
+
+		doc := mustParseXML(t, xml)
+		ed, err := xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+		require.NoError(t, err)
+		require.NotNil(t, ed.EncryptedKey)
+		require.Len(t, ed.EncryptedKeys, 1)
+		require.Same(t, ed.EncryptedKeys[0], ed.EncryptedKey)
 	})
 }
