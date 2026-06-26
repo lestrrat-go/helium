@@ -533,6 +533,67 @@ func TestResultDocumentPrimaryUndeclarePrefixesAVT(t *testing.T) {
 		"the primary result-document undeclare-prefixes override must reach the effective output def")
 }
 
+// XSLT3-101: a SECONDARY xsl:result-document whose href resolves to the PRINCIPAL
+// (base) output URI denotes the same final result tree as the principal output and
+// must collide with XTDE1490. The principal output URI is seeded into the used-URI
+// set so a secondary href resolving to it (here href="main.xml" against
+// BaseOutputURI="file:///base/dir/main.xml") is detected. (Regression: the primary
+// output keyed only on the "" sentinel and nothing reserved the canonical principal
+// URI, so a secondary resolving to it evaded the duplicate-URI check and silently
+// produced two final results for the same URI.)
+func TestResultDocumentSecondaryResolvingToPrincipalURICollides(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="main.xml"><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).
+		BaseOutputURI("file:///base/dir/main.xml").
+		Do(t.Context())
+	require.Error(t, err, "a secondary href resolving to the principal output URI must collide")
+	require.Contains(t, err.Error(), "XTDE1490")
+}
+
+// XSLT3-101: an absolute secondary href equal to the principal (base) output URI
+// must collide with XTDE1490, exactly like the relative form above.
+func TestResultDocumentSecondaryAbsoluteEqualToPrincipalURICollides(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="file:///base/dir/main.xml"><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).
+		BaseOutputURI("file:///base/dir/main.xml").
+		Do(t.Context())
+	require.Error(t, err, "an absolute secondary href equal to the principal output URI must collide")
+	require.Contains(t, err.Error(), "XTDE1490")
+}
+
+// XSLT3-101: a secondary xsl:result-document whose href resolves to a DIFFERENT URI
+// than the principal (base) output URI must still succeed — seeding the principal
+// URI must not reject distinct secondary destinations.
+func TestResultDocumentSecondaryDistinctFromPrincipalURISucceeds(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="other.xml"><a/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	collector := &resultDocCollect{docs: map[string]*helium.Document{}}
+	_, err := ss.Transform(parseTransformSource(t)).
+		BaseOutputURI("file:///base/dir/main.xml").
+		ResultDocumentHandler(collector).
+		Do(t.Context())
+	require.NoError(t, err, "a secondary href distinct from the principal output URI must succeed")
+	_, ok := collector.docs["other.xml"]
+	require.True(t, ok, "the distinct secondary result document must be delivered")
+}
+
 // An xsl:result-document with a CONSTANT (non-AVT) invalid allow-duplicate-names
 // value must be rejected at compile time with SEPM0016, like every other boolean
 // serialization attribute. (Regression: allow-duplicate-names was missing from
