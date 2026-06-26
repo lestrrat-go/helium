@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -2833,36 +2834,46 @@ func TestParseReaderEBCDICDataWithEOFInFirstRead(t *testing.T) {
 		"ParseReader output must match Parse([]byte) when EBCDIC arrives with io.EOF in one read")
 }
 
-// infiniteEBCDICReader serves a finite EBCDIC head (whose invariant prefix
-// triggers EBCDIC detection) on the first Read, then an endless run of EBCDIC
-// filler bytes that never reaches EOF. It models a hostile stream whose tail
-// would, without an ingestion cap, buffer unboundedly into memory before
-// parsing even begins.
-type infiniteEBCDICReader struct {
-	head []byte
-	pos  int
+// stoppableEBCDICReader serves a finite EBCDIC head (whose invariant prefix
+// triggers EBCDIC detection) on the first Reads, then an endless run of EBCDIC
+// space bytes — an unterminated whitespace character-data run inside <root> —
+// that never reaches EOF, until Stop is called (after which Read returns
+// io.EOF). It models a hostile, never-ending stream. The parser must terminate
+// it via its incremental per-node content cap WITHOUT buffering the tail; Stop
+// plus a test timeout guarantee that even a regression cannot hang or OOM the
+// test process.
+type stoppableEBCDICReader struct {
+	head    []byte
+	pos     int
+	stopped atomic.Bool
 }
 
-func (r *infiniteEBCDICReader) Read(p []byte) (int, error) {
+func (r *stoppableEBCDICReader) Stop() { r.stopped.Store(true) }
+
+func (r *stoppableEBCDICReader) Read(p []byte) (int, error) {
+	if r.stopped.Load() {
+		return 0, io.EOF
+	}
 	if r.pos < len(r.head) {
 		n := copy(p, r.head[r.pos:])
 		r.pos += n
 		return n, nil
 	}
 	for i := range p {
-		p[i] = 0x40 // EBCDIC space, valid filler that never terminates
+		p[i] = 0x40 // EBCDIC space: an unterminated whitespace run, never EOF
 	}
 	return len(p), nil
 }
 
-// TestParseReaderEBCDICInputCapped guards against the unbounded pre-parse
-// buffering on the EBCDIC reader path: EBCDIC cannot stream (its decode needs
-// the whole raw input up front), so the input is buffered before Parse. That
-// buffering must be bounded by the parser's node-content cap so a hostile,
-// never-ending EBCDIC stream fails with ErrNodeContentTooLarge instead of being
-// read into memory until the process OOMs. Without the cap this test would hang
-// forever on the infinite reader.
-func TestParseReaderEBCDICInputCapped(t *testing.T) {
+// TestParseReaderEBCDICUnboundedStreamBoundedByNodeCap guards the streaming
+// EBCDIC reader path against unbounded memory growth: EBCDIC now streams through
+// the normal cursor pipeline, so a hostile never-ending stream is bounded by the
+// parser's incremental per-node content cap (the single whitespace run inside
+// <root> exceeds MaxNodeContentSize) and fails with ErrNodeContentTooLarge —
+// never buffered whole into memory. The reader runs in a goroutine with a
+// timeout and a Stop so a regression that reintroduced whole-stream buffering
+// cannot hang or OOM the test.
+func TestParseReaderEBCDICUnboundedStreamBoundedByNodeCap(t *testing.T) {
 	t.Parallel()
 
 	const decl = `<?xml version="1.0" encoding="IBM037"?><root>`
@@ -2871,17 +2882,71 @@ func TestParseReaderEBCDICInputCapped(t *testing.T) {
 	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, head[:4],
 		"encoded head must start with the EBCDIC invariant prefix")
 
-	r := &infiniteEBCDICReader{head: head}
-	// A small cap keeps the test fast: the buffering guard must fire well before
-	// the infinite tail exhausts memory.
-	_, err = helium.NewParser().MaxNodeContentSize(4096).ParseReader(t.Context(), r)
-	require.ErrorIs(t, err, helium.ErrNodeContentTooLarge,
-		"an unbounded EBCDIC stream must be rejected by the ingestion cap, not buffered to OOM")
+	r := &stoppableEBCDICReader{head: head}
+	defer r.Stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		// A small cap keeps the test fast: the per-node cap must fire well before
+		// the infinite tail could exhaust memory.
+		_, perr := helium.NewParser().MaxNodeContentSize(4096).ParseReader(t.Context(), r)
+		errCh <- perr
+	}()
+
+	select {
+	case perr := <-errCh:
+		require.ErrorIs(t, perr, helium.ErrNodeContentTooLarge,
+			"an unbounded EBCDIC stream must be bounded by the per-node content cap")
+	case <-time.After(5 * time.Second):
+		r.Stop() // unblock the parser so the leaked goroutine can exit
+		t.Fatal("ParseReader did not terminate an unbounded EBCDIC stream within the timeout")
+	}
 }
 
-// TestParseReaderEBCDICSmallDocUnderCap confirms the ingestion cap added for the
-// unbounded-buffering guard does not regress a normal, small EBCDIC document: it
-// still parses identically to Parse([]byte).
+// TestParseReaderEBCDICLargeFiniteDocUnderNodeCap guards the key property of the
+// streaming EBCDIC path: a finite document whose TOTAL size exceeds
+// MaxNodeContentSize but whose every individual node is well under the cap must
+// parse successfully and identically to Parse([]byte). A total-input cap (the
+// earlier, wrong approach) would have wrongly rejected this document and
+// diverged from Parse([]byte); the per-node cap accepts it.
+func TestParseReaderEBCDICLargeFiniteDocUnderNodeCap(t *testing.T) {
+	t.Parallel()
+
+	var sb strings.Builder
+	sb.WriteString(`<?xml version="1.0" encoding="IBM037"?><root>`)
+	for range 500 {
+		sb.WriteString(`<c>x</c>`)
+	}
+	sb.WriteString(`</root>`)
+	xml := sb.String()
+
+	ebcdic, err := charmap.CodePage037.NewEncoder().Bytes([]byte(xml))
+	require.NoError(t, err)
+	require.Greater(t, len(ebcdic), 1024,
+		"the document must be larger than the per-node cap used below")
+	require.Equal(t, []byte{0x4C, 0x6F, 0xA7, 0x94}, ebcdic[:4],
+		"encoded bytes must start with the EBCDIC invariant prefix")
+
+	serialize := func(doc *helium.Document) string {
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		return buf.String()
+	}
+
+	// A cap smaller than the total document but larger than any single node.
+	bytesDoc, err := helium.NewParser().MaxNodeContentSize(1024).Parse(t.Context(), ebcdic)
+	require.NoError(t, err, "Parse([]byte) must accept a large finite EBCDIC doc with small nodes")
+	want := serialize(bytesDoc)
+
+	readerDoc, err := helium.NewParser().MaxNodeContentSize(1024).ParseReader(t.Context(), bytes.NewReader(ebcdic))
+	require.NoError(t, err,
+		"ParseReader must accept a large finite EBCDIC doc whose nodes are under the per-node cap")
+	require.Equal(t, want, serialize(readerDoc),
+		"ParseReader output must match Parse([]byte) for a large finite EBCDIC doc")
+}
+
+// TestParseReaderEBCDICSmallDocUnderCap confirms the streaming EBCDIC reader
+// path parses a normal, small EBCDIC document identically to Parse([]byte).
 func TestParseReaderEBCDICSmallDocUnderCap(t *testing.T) {
 	t.Parallel()
 

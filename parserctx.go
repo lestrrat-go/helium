@@ -82,9 +82,15 @@ type parserCtx struct {
 	detectedEncoding string
 	in               io.Reader
 	rawInput         []byte // original bytes, used for EBCDIC encoding detection
-	nbread           int
-	instate          parserState
-	keepBlanks       bool
+	// ebcdicStream marks an EBCDIC document read from a streaming io.Reader: in
+	// that mode rawInput holds only a bounded sniff prefix (enough for
+	// ExtractEBCDICEncoding), and the live cursor over the prefix+remainder
+	// stream is decoded in place rather than being reset from rawInput (which
+	// would otherwise require buffering the whole — possibly unbounded — input).
+	ebcdicStream bool
+	nbread       int
+	instate      parserState
+	keepBlanks   bool
 	// remain            int
 	replaceEntities   bool
 	sax               sax.SAX2Handler

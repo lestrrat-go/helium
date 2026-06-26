@@ -705,10 +705,13 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 // This is identical to [Parse] but reads from a stream instead of a byte slice.
 // See [Parse] for DTD validation error handling.
 //
-// EBCDIC encoding detection requires the full input up front: when the leading
-// bytes carry the EBCDIC invariant prefix the reader is buffered into memory and
-// parsed through the same path as [Parse], so an EBCDIC document parses
-// identically via ParseReader/ParseFile as via Parse. All other inputs stream.
+// EBCDIC encoding detection buffers only a bounded leading prefix (enough to
+// recover the encoding name from the XML declaration) and then streams and
+// decodes the remainder through the normal cursor pipeline, exactly like the
+// non-EBCDIC path. Resident memory is bounded by the parser's incremental
+// per-node content caps rather than by buffering the whole document, so a large
+// finite EBCDIC document parses (under the same per-node limits [Parse] applies)
+// while an unbounded stream is bounded by those caps. All inputs stream.
 //
 // Cancellation: context cancellation and deadlines are observed BETWEEN read
 // operations and parse steps. The parser checks ctx before each cursor refill
@@ -780,7 +783,10 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 			break
 		}
 	}
-	head := scratch[:hn]
+	// Copy the sniffed bytes off the stack scratch buffer so head may be grown
+	// (EBCDIC prefix extension below) and safely referenced for the lifetime of
+	// the parse.
+	head := append([]byte(nil), scratch[:hn]...)
 
 	// Unifying invariant for both sniff paths: bytes returned alongside a
 	// non-EOF read error MUST be parsed before the error is surfaced (the
@@ -790,71 +796,40 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 
 	// Detect EBCDIC regardless of whether the head read ended with io.EOF: an
 	// io.Reader may legally return all of its bytes together with io.EOF in a
-	// single Read, and EBCDIC decoding requires the full raw input up front.
-	// When the prefix matches, route through the byte-slice path (Parse) so
-	// behavior matches Parse exactly.
-	if hn >= len(patEBCDIC) && bytes.Equal(head[:len(patEBCDIC)], patEBCDIC) {
-		// EBCDIC is not ASCII-compatible and cannot be streamed: its decode needs
-		// the whole raw input up front, so the input is buffered here before being
-		// handed to Parse. Unlike the streaming (non-EBCDIC) path — where the
-		// parser's incremental node-content cap bounds resident memory as it goes —
-		// this buffering would otherwise grow without bound on a hostile,
-		// never-ending stream and OOM the process before parsing even starts.
-		// Bound the buffer by the same configured cap that limits a single
-		// indivisible content run on the streaming path so the total buffered
-		// EBCDIC input cannot exceed that ceiling; over-cap fails with
-		// ErrNodeContentTooLarge (strict-greater: exactly the cap is accepted). A
-		// resolved cap of 0 means the user disabled the content limit
-		// (MaxNodeContentSize with a negative value), opting into unbounded
-		// buffering exactly as everywhere else the cap is disabled.
-		maxBuf := resolveLimit(p.cfg.maxNodeContent, DefaultMaxNodeContentSize)
-		buf := append([]byte(nil), head...)
-		if maxBuf > 0 && len(buf) > maxBuf {
-			return nil, ErrNodeContentTooLarge
-		}
-		if perr == nil {
-			// The head read neither hit EOF nor errored, so a tail remains in r.
-			// Drain it with a manual loop (not io.ReadAll) that re-checks ctx
-			// BEFORE each Read: a cancellation observed after the prefix arrived
-			// must abort promptly without consuming a large or slow tail,
-			// mirroring the ctx-checking prefix-read loop above and honoring the
-			// cancellation contract this entry point establishes.
-			var chunk [4096]byte
-			for {
-				if err := ctx.Err(); err != nil {
-					return nil, err
-				}
-				n, rerr := r.Read(chunk[:])
-				buf = append(buf, chunk[:n]...)
-				if maxBuf > 0 && len(buf) > maxBuf {
-					// The buffered EBCDIC input exceeded the configured ceiling.
-					// Reject before reading (or parsing) any further so a hostile
-					// unbounded stream cannot exhaust memory.
-					return nil, ErrNodeContentTooLarge
-				}
-				if rerr != nil {
-					// io.EOF is the normal terminator; any other non-EOF error
-					// arrives with the bytes that precede it, so the buffered
-					// bytes are parsed first and the error surfaced afterward.
-					if rerr == io.EOF {
-						break
-					}
-					perr = rerr
-					break
-				}
+	// single Read. EBCDIC is not ASCII-compatible, so its XML declaration cannot
+	// be parsed at byte level; the encoding name is instead recovered by
+	// ExtractEBCDICEncoding, which scans the invariant-translated XML
+	// declaration in the first ~200 bytes. We therefore buffer ONLY a bounded
+	// prefix (ebcdicEncodingSniffMax) here — enough for that scan — and then
+	// STREAM-decode the remainder through the normal cursor pipeline. The
+	// parser's incremental per-node content caps bound resident memory exactly
+	// as on the non-EBCDIC path, so a large finite EBCDIC document parses (with
+	// the same per-node limits Parse([]byte) applies) while a hostile,
+	// never-ending stream is bounded by those caps instead of being buffered
+	// whole into memory before parsing begins.
+	ebcdic := hn >= len(patEBCDIC) && bytes.Equal(head[:len(patEBCDIC)], patEBCDIC)
+	if ebcdic && perr == nil {
+		// Extend the buffered prefix to ebcdicEncodingSniffMax so the encoding
+		// declaration is available, re-checking ctx BEFORE each Read so a
+		// cancellation observed after detection aborts promptly without waiting
+		// on a slow or stalled stream. A short read / EOF before the cap is fine:
+		// ExtractEBCDICEncoding works with whatever prefix arrived, falling back
+		// to IBM-037 when no declaration is present.
+		var chunk [ebcdicEncodingSniffMax]byte
+		for len(head) < ebcdicEncodingSniffMax {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			n, rerr := r.Read(chunk[:ebcdicEncodingSniffMax-len(head)])
+			head = append(head, chunk[:n]...)
+			if rerr != nil {
+				perr = rerr
+				break
+			}
+			if n == 0 {
+				break
 			}
 		}
-		// Parse the buffered/converted bytes FIRST, then surface any sticky
-		// non-EOF read error after they drain. A successful parse over bytes
-		// that arrived alongside a read error must still report that error.
-		doc, parseErr := p.Parse(ctx, buf)
-		if parseErr != nil {
-			return doc, parseErr
-		}
-		if perr != nil && perr != io.EOF {
-			return doc, perr
-		}
-		return doc, nil
 	}
 
 	// Reconstruct the stream: head bytes + remainder. io.EOF means the whole
@@ -865,18 +840,26 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 	switch {
 	case perr != nil && perr != io.EOF:
 		// Replay the head bytes, then re-deliver the sticky read error. For
-		// hn == 0 the head reader yields nothing, so only the error surfaces.
+		// len(head) == 0 the head reader yields nothing, so only the error surfaces.
 		stream = io.MultiReader(bytes.NewReader(head), readerReturningErr{err: perr})
 	case perr == io.EOF:
 		// No tail remains in r; replay only the buffered head.
 		stream = bytes.NewReader(head)
-	case hn > 0:
+	case len(head) > 0:
 		stream = io.MultiReader(bytes.NewReader(head), r)
 	default:
 		stream = r
 	}
 
 	pctx := &parserCtx{baseURI: p.cfg.baseURI}
+	if ebcdic {
+		// EBCDIC: rawInput is the bounded sniff prefix used by
+		// ExtractEBCDICEncoding; ebcdicStream tells parseDocument to decode the
+		// live prefix+remainder cursor in place rather than reset it from
+		// rawInput (which is only a prefix here, not the whole document).
+		pctx.rawInput = head
+		pctx.ebcdicStream = true
+	}
 	if err := pctx.init(p.cfg, stream); err != nil {
 		return nil, err
 	}

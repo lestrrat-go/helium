@@ -18,6 +18,12 @@ const (
 	encUTF8     = "utf8"
 	encUTF16LE  = "utf16le"
 	encUTF16BE  = "utf16be"
+
+	// ebcdicEncodingSniffMax bounds the EBCDIC prefix buffered on the streaming
+	// reader path before parsing. ExtractEBCDICEncoding only scans the first 200
+	// bytes for the XML declaration's encoding name; 256 gives a small margin
+	// while keeping the pre-parse buffer bounded so the remainder can stream.
+	ebcdicEncodingSniffMax = 256
 )
 
 var (
