@@ -87,3 +87,39 @@ func TestPrefixedFnStreamabilityXSLTLayer(t *testing.T) {
 			"fn:current-group() must be forbidden in pattern, same as unprefixed")
 	})
 }
+
+// TestEQNameFnStreamabilityXSLTLayer verifies that EQName-spelled (Q{...}local)
+// calls to special-cased built-ins classify the same as their unprefixed forms.
+// The parser keeps the whole braced spelling in FunctionCall.Name with an empty
+// Prefix, so the XSLT streamability gates must normalize it via the shared
+// lexicon.StreamFnLocalName helper rather than comparing raw names.
+func TestEQNameFnStreamabilityXSLTLayer(t *testing.T) {
+	const fnNS = "http://www.w3.org/2005/xpath-functions"
+	compile := func(t *testing.T, src string) *xpath3.Expression {
+		t.Helper()
+		expr, err := xpath3.NewCompiler().Compile(src)
+		require.NoError(t, err, "compile %q", src)
+		return expr
+	}
+
+	t.Run("last outside grounding", func(t *testing.T) {
+		plain := compile(t, "child::a[last()]")
+		eqname := compile(t, "child::a[Q{"+fnNS+"}last()]")
+		require.True(t, exprUsesLastOutsideGrounding(plain), "unprefixed last() must be detected")
+		require.Equal(t,
+			exprUsesLastOutsideGrounding(plain),
+			exprUsesLastOutsideGrounding(eqname),
+			"EQName Q{...}last() must classify same as unprefixed last()")
+	})
+
+	t.Run("position outside grounding", func(t *testing.T) {
+		plain := compile(t, "child::a[position() = 1]")
+		eqname := compile(t, "child::a[Q{"+fnNS+"}position() = 1]")
+		require.True(t, exprUsesFunctionOutsideGrounding(plain, "position"),
+			"unprefixed position() must be detected")
+		require.Equal(t,
+			exprUsesFunctionOutsideGrounding(plain, "position"),
+			exprUsesFunctionOutsideGrounding(eqname, "position"),
+			"EQName Q{...}position() must classify same as unprefixed position()")
+	})
+}

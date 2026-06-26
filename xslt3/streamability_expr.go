@@ -514,7 +514,7 @@ func exprCallsFunction(expr xpath3.Expr, name string) bool {
 			return false
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && fc.Name == name {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && local == name {
 				found = true
 				return false
 			}
@@ -773,7 +773,7 @@ func exprUsesLastOutsideGrounding(expr *xpath3.Expression) bool {
 			return true
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && fc.Name == "last" {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && local == "last" {
 				found = true
 				return false
 			}
@@ -798,7 +798,7 @@ func exprUsesFunctionOutsideGrounding(expr *xpath3.Expression, name string) bool
 			return true
 		}
 		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if isFnNamespacePrefix(fc.Prefix) && fc.Name == name {
+			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && local == name {
 				found = true
 				return false
 			}
@@ -997,19 +997,20 @@ func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr, step *xpath3.S
 				walkPred(lp, underNonContext || filterIsNonContext)
 			}
 		case xpath3.FunctionCall:
-			if isFnNamespacePrefix(v.Prefix) && v.Name == "last" {
+			local, isFn := lexicon.StreamFnLocalName(v.Name, v.Prefix)
+			if isFn && local == "last" {
 				nonMotionless = true
 				return
 			}
 			// current-group() and current-grouping-key() always return
 			// materialized (grounded) data.  Navigation into them (e.g.
 			// current-group()[1]/Date) is motionless w.r.t. the stream.
-			if isFnNamespacePrefix(v.Prefix) && (v.Name == fnNameCurrentGroup || v.Name == fnNameCurrentGroupingKey) {
+			if isFn && (local == fnNameCurrentGroup || local == fnNameCurrentGroupingKey) {
 				return // skip children — result is grounded
 			}
 			// Property-access functions are motionless.
-			if isFnNamespacePrefix(v.Prefix) {
-				switch v.Name {
+			if isFn {
+				switch local {
 				case lexicon.FnName, "local-name", "namespace-uri", "node-name",
 					"self", "generate-id", "base-uri", "document-uri",
 					"nilled", "has-children", "string-length":

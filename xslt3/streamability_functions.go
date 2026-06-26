@@ -424,24 +424,10 @@ func isConsumingBuiltinFunc(name string) bool {
 	return false
 }
 
-// isFnNamespacePrefix reports whether a FunctionCall prefix names the XPath
-// functions namespace (http://www.w3.org/2005/xpath-functions) for the purpose
-// of streamability analysis. For function calls an empty prefix defaults to
-// that namespace, and "fn" is the conventional reserved prefix bound to it, so
-// both lexical forms name the same built-in. Streamability special-cases
-// functions such as last()/position()/current-group() by local-name and must
-// therefore treat the unprefixed and "fn:"-prefixed spellings identically.
-//
-// This is a deliberately lexical check, not a namespace-resolved one: XSLT
-// streamability is computed at compile time before any static namespace context
-// is bound, so resolving "fn" properly would mean threading the prefix->URI map
-// through the whole compile path. We make the same assumption the xpath3
-// evaluator already makes (see xpath3 isFnNamespacePrefix and eval_path.go
-// positionCall: Prefix == "" || Prefix == "fn"), keeping the layers consistent.
-// Rebinding the reserved "fn" prefix to a custom namespace is pathological and
-// unsupported here.
+// isFnNamespacePrefix delegates to lexicon.IsFnNamespacePrefix, the shared
+// streamability helper used across xpath3, xslt3 and internal/xpathstream.
 func isFnNamespacePrefix(prefix string) bool {
-	return prefix == "" || prefix == "fn"
+	return lexicon.IsFnNamespacePrefix(prefix)
 }
 
 // isContextItemArg returns true if the expression is a simple context item
