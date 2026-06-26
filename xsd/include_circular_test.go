@@ -179,3 +179,63 @@ func TestCompile_CircularInclude_AlreadyResolvedURLLocalBase(t *testing.T) {
 	require.NoError(t, err, "circular include with an already-BaseDir-relative URL must not double-resolve and must compile cleanly")
 	require.NotNil(t, schema)
 }
+
+// The Compile path must close the cycle when doc.URL() carries a directory
+// ("schemas/main.xsd") and NO BaseDir is configured. With an unset BaseDir,
+// nested includes resolve against "" (the directory embedded in doc.URL() is
+// NOT a base), so a back-reference to the root lands on the root's FULL relative
+// URL "schemas/main.xsd" — not its basename "main.xsd". Seeding the guard with
+// the basename would (a) miss the back-reference and re-parse the root into
+// spurious duplicate components, and (b) wrongly skip a DISTINCT real include of
+// "main.xsd". Here the root includes both "inc.xsd" (which back-references
+// "schemas/main.xsd") and a separate top-level "main.xsd" that must still load.
+func TestCompile_CircularInclude_DirURLNoBase(t *testing.T) {
+	const ns = "urn:c"
+
+	// Root lives at "schemas/main.xsd"; it includes inc.xsd (cycles back to the
+	// root) and a DISTINCT top-level main.xsd (defines TopType). root uses a type
+	// from each, so both includes must resolve.
+	mainBytes := []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="` + ns + `" targetNamespace="` + ns + `">
+  <xs:include schemaLocation="inc.xsd"/>
+  <xs:include schemaLocation="main.xsd"/>
+  <xs:element name="root" type="t:LeafType"/>
+  <xs:element name="root2" type="t:TopType"/>
+</xs:schema>`)
+	incBytes := []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="` + ns + `">
+  <xs:include schemaLocation="schemas/main.xsd"/>
+  <xs:complexType name="LeafType">
+    <xs:sequence>
+      <xs:element name="x" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`)
+	// Distinct top-level main.xsd: a real include that must NOT be skipped.
+	topMainBytes := []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="` + ns + `">
+  <xs:complexType name="TopType">
+    <xs:sequence>
+      <xs:element name="y" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`)
+
+	const rootKey = "schemas/main.xsd"
+	fsys := uriReadFS{
+		// The back-reference key: present so a broken guard re-parses it into
+		// spurious duplicates (the bug) rather than failing with not-found.
+		rootKey:   mainBytes,
+		"inc.xsd": incBytes,
+		// The distinct real include keyed by its bare basename.
+		"main.xsd": topMainBytes,
+	}
+
+	// doc.URL() carries the directory; the compiler has NO BaseDir configured.
+	doc, err := helium.NewParser().BaseURI(rootKey).Parse(t.Context(), mainBytes)
+	require.NoError(t, err)
+	require.Equal(t, rootKey, doc.URL())
+
+	schema, err := xsd.NewCompiler().
+		FS(fsys).
+		Compile(t.Context(), doc)
+	require.NoError(t, err, "dir URL with no BaseDir must guard the cycle yet still load a distinct real main.xsd include")
+	require.NotNil(t, schema)
+}

@@ -67,17 +67,29 @@ func schemaURIIsAbsolute(s string) bool {
 //
 //   - An absolute/URI docURL already addresses its own location; it is resolved
 //     with an empty base, so ResolveSchemaURI returns it unchanged.
-//   - A relative docURL is joined onto baseDir, but only its LAST segment is
-//     used. Because baseDir is the root's directory, a back-reference lands on
-//     "<baseDir>/<root filename>". Using the basename (not the full docURL)
-//     means a docURL that already carries the baseDir prefix — an already
-//     resolved fs key like "schemas/main.xsd" under BaseDir("schemas") — is not
-//     re-joined onto baseDir, which would otherwise double the prefix to
-//     "schemas/schemas/main.xsd" and miss the cycle. This mirrors CompileFile's
-//     historical filepath.Base(path) seeding.
+//   - A relative docURL with an EMPTY baseDir is resolved by its FULL value
+//     against "". An unset baseDir means nested includes resolve against ""
+//     too (the directory embedded in docURL is NOT a resolution base), so a
+//     back-reference to the root lands on the root's full relative URL — e.g.
+//     a root URL "schemas/main.xsd" is re-included as "schemas/main.xsd", not
+//     "main.xsd". Taking the basename here would seed "main.xsd", wrongly
+//     skipping a real include of "main.xsd" AND missing the real back-reference
+//     to "schemas/main.xsd".
+//   - A relative docURL with a NON-EMPTY baseDir is joined onto baseDir, but
+//     only its LAST segment is used. Because baseDir is the root's directory, a
+//     back-reference lands on "<baseDir>/<root filename>". Using the basename
+//     (not the full docURL) means a docURL that already carries the baseDir
+//     prefix — an already resolved fs key like "schemas/main.xsd" under
+//     BaseDir("schemas") — is not re-joined onto baseDir, which would otherwise
+//     double the prefix to "schemas/schemas/main.xsd" and miss the cycle. This
+//     mirrors CompileFile's historical filepath.Base(path) seeding.
 //   - When docURL is empty, a URI-scheme baseDir IS the full root URI (the URI
 //     convention treats the base as the schema's own location); it is the key
 //     verbatim.
+//
+// In every branch the key is produced by the SAME ResolveSchemaURI call
+// loadInclude/loadRedefine use for a back-reference href, so the seeded key and
+// the computed key cannot diverge.
 //
 // The bool result is false when no key can be derived (no docURL and a
 // non-URI/empty baseDir), in which case the caller leaves the guard unseeded.
@@ -85,6 +97,9 @@ func rootSchemaKey(docURL, baseDir string) (string, bool) {
 	switch {
 	case schemaURIIsAbsolute(docURL):
 		key, err := ResolveSchemaURI(docURL, "")
+		return key, err == nil
+	case docURL != "" && baseDir == "":
+		key, err := ResolveSchemaURI(uripath.ToSlash(docURL), "")
 		return key, err == nil
 	case docURL != "":
 		key, err := ResolveSchemaURI(path.Base(uripath.ToSlash(docURL)), baseDir)
