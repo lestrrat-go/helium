@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/url"
 	"slices"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
@@ -135,7 +136,12 @@ func checkRelativeNamespaceURI(e *helium.Element, ns *helium.Namespace) error {
 	// relative unless it carries a scheme, so parse it and require a non-empty
 	// scheme rather than testing for a stray ":" (which a relative reference such
 	// as "a/b:c" also contains). Mirrors libxml2's xmlC14NCheckForRelativeNamespaces
-	// (xmlParseURI + scheme==NULL).
+	// (xmlParseURI + scheme==NULL). url.Parse tolerates a raw space inside an
+	// opaque part (e.g. "urn:foo bar") that libxml2's parser rejects, so reject
+	// any whitespace/control byte up front — a valid URI never contains one.
+	if strings.IndexFunc(uri, func(r rune) bool { return r <= ' ' || r == 0x7f }) >= 0 {
+		return fmt.Errorf("c14n: invalid namespace URI %q on element %s", uri, e.Name())
+	}
 	parsed, err := url.Parse(uri)
 	if err != nil || parsed.Scheme == "" {
 		return fmt.Errorf("c14n: relative namespace URI %q on element %s", uri, e.Name())

@@ -596,3 +596,17 @@ func TestRelativeNamespaceColonRejected(t *testing.T) {
 	require.Error(t, err, "relative namespace URI with a non-scheme colon must be rejected")
 	require.Contains(t, err.Error(), "relative namespace URI")
 }
+
+// TestMalformedNamespaceURIRejected verifies a scheme-bearing but malformed
+// namespace URI containing a raw space (which url.Parse tolerates in an opaque
+// part but libxml2 rejects) is rejected.
+func TestMalformedNamespaceURIRejected(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root xmlns:p="urn:foo bar"><p:child/></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.Error(t, err, "namespace URI with a raw space must be rejected")
+	require.Contains(t, err.Error(), "namespace URI")
+}
