@@ -21,6 +21,8 @@ const (
 	typeNMToken       = "NMTOKEN"
 	typeID            = "ID"
 	typeEntity        = "ENTITY"
+	typeHexBinary     = "hexBinary"
+	typeBase64Binary  = "base64Binary"
 )
 
 const (

@@ -1039,10 +1039,13 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 // W3C XML Schema Part 2 type hierarchy. It is used to decide builtin-to-builtin
 // restriction validity (e.g. xs:int restricts xs:integer), which the *TypeDef
 // pointer chain cannot express because builtin types carry no BaseType links.
-// The two roots (string, decimal) point at anySimpleType, which terminates the
-// chain. Only atomic types are listed; list builtins (IDREFS/ENTITIES/NMTOKENS)
-// are intentionally absent so their derivation is treated as "unknown" (and the
-// caller stays conservative).
+// Every atomic primitive (string, decimal, boolean, float, double, the
+// date/time/g* family, duration, the binary types, anyURI, QName, NOTATION)
+// is rooted at anySimpleType, which terminates the chain — so a cross-family
+// pair is decided ("known") and REJECTED rather than treated as "unknown" and
+// silently accepted. Only atomic types are listed; list builtins
+// (IDREFS/ENTITIES/NMTOKENS) are intentionally absent so their derivation is
+// treated as "unknown" (and the caller stays conservative).
 var builtinRestrictionParent = map[string]string{
 	// string family
 	lexicon.TypeString:           typeAnySimpleType,
@@ -1070,6 +1073,28 @@ var builtinRestrictionParent = map[string]string{
 	lexicon.TypeUnsignedShort:      lexicon.TypeUnsignedInt,
 	lexicon.TypeUnsignedByte:       lexicon.TypeUnsignedShort,
 	lexicon.TypePositiveInteger:    lexicon.TypeNonNegativeInteger,
+	// remaining atomic primitives — each parented directly to anySimpleType.
+	// Listing them (rather than leaving them "unknown") lets builtinDerivesFrom
+	// REJECT an invalid builtin redeclaration whose derived type lives outside
+	// the string/decimal families (e.g. base xs:int restricted by derived
+	// xs:boolean), instead of returning "unknown" and silently accepting it.
+	lexicon.TypeBoolean:    typeAnySimpleType,
+	lexicon.TypeFloat:      typeAnySimpleType,
+	lexicon.TypeDouble:     typeAnySimpleType,
+	lexicon.TypeDuration:   typeAnySimpleType,
+	lexicon.TypeDateTime:   typeAnySimpleType,
+	lexicon.TypeTime:       typeAnySimpleType,
+	lexicon.TypeDate:       typeAnySimpleType,
+	lexicon.TypeGYearMonth: typeAnySimpleType,
+	lexicon.TypeGYear:      typeAnySimpleType,
+	lexicon.TypeGMonthDay:  typeAnySimpleType,
+	lexicon.TypeGDay:       typeAnySimpleType,
+	lexicon.TypeGMonth:     typeAnySimpleType,
+	typeHexBinary:          typeAnySimpleType,
+	typeBase64Binary:       typeAnySimpleType,
+	lexicon.TypeAnyURI:     typeAnySimpleType,
+	lexicon.TypeQName:      typeAnySimpleType,
+	lexicon.TypeNotation:   typeAnySimpleType,
 }
 
 // builtinDerivesFrom reports whether the builtin type named derived is the same
@@ -1106,12 +1131,15 @@ func isAtomicBuiltinName(local string) bool {
 
 // simpleTypeValidlyRestricts reports whether the derived simple type is a valid
 // restriction of (same as, or derived by restriction from) the base simple
-// type. It first consults the *TypeDef pointer chain (isDerivedFrom) and falls
-// back to the builtin restriction hierarchy for the builtin-to-builtin case the
-// pointer chain cannot see. It is CONSERVATIVE: it returns true (valid) whenever
-// derivation cannot be decided (unresolved types, list/union carriers, or a
-// builtin pair the table does not cover), so it only ever rejects a clearly
-// invalid restriction and never false-rejects a legitimate one.
+// type. It first consults the *TypeDef pointer chain (isDerivedFrom). When that
+// fails it falls back to the builtin restriction hierarchy, but ONLY when the
+// BASE is an actual XSD builtin — a user simple type that restricts a builtin
+// must be derived from through the pointer chain, because widening it back to
+// its builtin ancestor would drop the user-added facets. It is CONSERVATIVE: it
+// returns true (valid) whenever derivation cannot be decided (unresolved types,
+// list/union carriers, or a builtin pair the table does not cover), so it only
+// ever rejects a clearly invalid restriction and never false-rejects a
+// legitimate one.
 func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	if derived == nil || base == nil {
 		return true
@@ -1124,11 +1152,40 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	if db == "" || bb == "" {
 		return true
 	}
+	// The builtin restriction hierarchy may stand in for the missing builtin
+	// BaseType links ONLY when the BASE type is an ACTUAL XSD builtin. Walking
+	// the DERIVED side to its builtin ancestor is sound (a user restriction only
+	// narrows), but treating a user simple type that RESTRICTS a builtin (e.g.
+	// xs:int with maxInclusive="10") as that builtin would WIDEN the base back to
+	// its ancestor and wrongly accept a derived type that drops the user-added
+	// facets. When the base is a user-restricted type, the only valid derivation
+	// is through the pointer chain (isDerivedFrom, already checked above) — so
+	// reject.
+	if base.Name.NS != lexicon.NamespaceXSD {
+		return false
+	}
 	ok, known := builtinDerivesFrom(db, bb)
 	if !known {
 		return true
 	}
 	return ok
+}
+
+// fixedConstraintRestricts reports whether a derived attribute use's 'fixed'
+// value is value-equal to the base attribute use's 'fixed' value
+// (derivation-ok-restriction.2.1.3). The two lexicals may be typed DIFFERENTLY
+// when the restriction validly narrows the type (base xs:decimal fixed="1.0",
+// derived xs:int fixed="1": equal values, but "1.0" is not a valid xs:int
+// lexical), so each lexical must be compared under ITS OWN simple type. A
+// same-type (or unresolved) fast path uses fixedValueMatches directly (so
+// derived "01" still matches base "1" for xs:integer, and a nil type falls back
+// to raw lexical equality); a cross-type pair is compared in its shared
+// primitive value space via crossMemberValueEqual.
+func fixedConstraintRestricts(ctx context.Context, derivedFixed, baseFixed string, derivedTD, baseTD *TypeDef, derivedNS, baseNS map[string]string) bool {
+	if derivedTD == nil || baseTD == nil || derivedTD == baseTD {
+		return fixedValueMatches(ctx, derivedFixed, baseFixed, derivedTD, derivedNS, baseNS)
+	}
+	return crossMemberValueEqual(ctx, derivedFixed, baseFixed, derivedTD, baseTD, derivedNS, baseNS)
 }
 
 // checkRestrictionAttrs validates that a restriction-derived type's attributes
@@ -1192,11 +1249,14 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			// derivation-ok-restriction.2.1.3: a base 'fixed' value constraint
 			// forces the derived attribute to carry a value-space-equal 'fixed'
 			// value (a default, or no constraint, would admit values the base
-			// pins). Compare in value space (so base "1" accepts derived "01" for
-			// xs:integer); fixedValueMatches falls back to lexical equality when
-			// the type is unresolved.
+			// pins). Each lexical is compared under ITS OWN type so a valid
+			// narrowing across types is not false-rejected (base xs:decimal
+			// fixed="1.0" narrowed by derived xs:int fixed="1": equal values, but
+			// "1.0" is not a valid xs:int lexical). fixedConstraintRestricts uses a
+			// same-type fast path (so base "1" accepts derived "01" for xs:integer)
+			// and falls back to the cross-type value-equality helper otherwise.
 			if baseAU.Fixed != nil {
-				if au.Fixed == nil || !fixedValueMatches(ctx, *au.Fixed, *baseAU.Fixed, derivedTD, au.FixedNS, baseAU.FixedNS) {
+				if au.Fixed == nil || !fixedConstraintRestricts(ctx, *au.Fixed, *baseAU.Fixed, derivedTD, baseTD, au.FixedNS, baseAU.FixedNS) {
 					msg := fmt.Sprintf("The effective value constraint of the attribute use is inconsistent with the 'fixed' value constraint of the corresponding attribute use of the base complex type definition %s.", baseQualified)
 					c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
 						component+", attribute use '"+au.Name.Local+"'", msg))

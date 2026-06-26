@@ -150,4 +150,110 @@ func TestRestrictionAttrType(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	t.Run("rejects derived builtin widening base named restricted type", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is a USER simple type (SmallInt) that restricts xs:int with
+		// maxInclusive="10". The derived restriction redeclares @a as xs:int —
+		// widening the base back to its builtin ancestor and admitting values
+		// (11, 12, ...) the base forbids. Must be rejected: walking the BASE side
+		// to its builtin ancestor is unsound.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:simpleType name="SmallInt">
+    <xs:restriction base="xs:int">
+      <xs:maxInclusive value="10"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="t:SmallInt"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects derived builtin widening base inline restricted type", func(t *testing.T) {
+		t.Parallel()
+		// Same widening, but the base attribute's restricted simple type is an
+		// inline (anonymous) <xs:simpleType> rather than a named one.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a">
+      <xs:simpleType>
+        <xs:restriction base="xs:int">
+          <xs:maxInclusive value="10"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("rejects derived attr type from a different builtin family", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is xs:int; the derived restriction redeclares @a as xs:boolean.
+		// boolean is not derived from int (a non-string/non-numeric builtin pair),
+		// so the builtin hierarchy must DECIDE this case and reject it, not treat
+		// it as "unknown" and accept it.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="xs:int"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:boolean"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), notValidRestriction)
+	})
+
+	t.Run("accepts narrowing fixed value across types", func(t *testing.T) {
+		t.Parallel()
+		// Base @a is xs:decimal fixed="1.0"; the derived restriction narrows @a to
+		// xs:int fixed="1". The two fixed lexicals are value-equal (1.0 == 1), but
+		// "1.0" is not a valid xs:int lexical — so each must be compared under its
+		// OWN type. A valid narrowing must be accepted.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:attribute name="a" type="xs:decimal" fixed="1.0"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="a" type="xs:int" fixed="1"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
 }
