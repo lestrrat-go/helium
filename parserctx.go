@@ -481,7 +481,13 @@ func (pctx *parserCtx) deliverCharacters(ctx context.Context, handler func(conte
 
 		switch err := handler(ctx, data[:end]); err {
 		case nil, sax.ErrHandlerUnspecified:
-			// no op
+			// The handler may have requested a stop on this chunk's callback
+			// (including the final chunk, where the loop would otherwise exit
+			// with nil). Report the stop so the caller terminates promptly and
+			// emits no further chunks.
+			if pctx.stopped {
+				return errParserStopped
+			}
 		default:
 			return pctx.error(ctx, err)
 		}

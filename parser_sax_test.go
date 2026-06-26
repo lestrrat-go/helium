@@ -425,6 +425,49 @@ func TestStopParser(t *testing.T) {
 		require.NoError(t, err, "StopParser should not produce an error")
 	})
 
+	t.Run("on final chunk of a multi-chunk char-data run", func(t *testing.T) {
+		t.Parallel()
+		// Regression: a SAX handler that stops on the LAST sub-chunk of a
+		// chunked character-data callback must not let the parser scan/emit any
+		// further chunk. A pure-whitespace prefix larger than the blank-prefix
+		// budget is reclassified as character data and flushed via a single
+		// multi-chunk callback, then the rest of the run is streamed in bounded
+		// chunks. Stopping on the final sub-chunk of that flush previously
+		// returned nil, so the streaming tail still read and emitted one more
+		// chunk after the stop.
+		//
+		// With CharBufferSize(8) the budget floor is 64 KiB, so the prefix is
+		// reclassified once the buffered blanks first exceed 64 KiB: the first
+		// multiple of 8 strictly greater than 65536 is 65544. Stop exactly when
+		// that prefix has been delivered (its final sub-chunk).
+		const prefix = 65544
+		input := "<root>" + strings.Repeat(" ", prefix+4000) + "<child/></root>"
+
+		var total int
+		var stopped bool
+		var afterStop int
+
+		s := sax.New()
+		s.SetOnCharacters(sax.CharactersFunc(func(ctx context.Context, ch []byte) error {
+			if stopped {
+				afterStop += len(ch)
+			}
+			total += len(ch)
+			if !stopped && total == prefix {
+				helium.StopParser(ctx)
+				stopped = true
+			}
+			return nil
+		}))
+
+		p := helium.NewParser().SAXHandler(s).CharBufferSize(8)
+
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "StopParser should not produce an error")
+		require.True(t, stopped, "StopParser should have fired on the prefix's final sub-chunk")
+		require.Zero(t, afterStop, "no character data should be emitted after StopParser")
+	})
+
 	t.Run("in StartElementNS", func(t *testing.T) {
 		t.Parallel()
 		const input = `<?xml version="1.0"?>

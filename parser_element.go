@@ -277,6 +277,12 @@ const minPendingBlankBytes = 1 << 16 // 64 KiB
 // EOF (handled by the caller) rather than an error.
 func (pctx *parserCtx) streamCharDataChunks(ctx context.Context, u8 *strcursor.UTF8Cursor, limit int, handler func(context.Context, []byte) error) error {
 	for {
+		// A SAX handler may have requested a stop on the previous chunk's
+		// callback. Bail before scanning or advancing so no further chunk is
+		// emitted after the stop.
+		if pctx.stopped {
+			return errParserStopped
+		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
