@@ -478,9 +478,10 @@ func coerceFuncallArg(arg Sequence, st SequenceType, fnName string, idx int, ec 
 }
 
 func evalMapConstructorExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e MapConstructorExpr) (Sequence, error) {
-	entries := make([]MapEntry, len(e.Pairs))
+	maxNodes := ec.maxNodes
+	entries := make([]MapEntry, 0, len(e.Pairs))
 	seen := make(map[mapKey]struct{}, len(e.Pairs))
-	for i, pair := range e.Pairs {
+	for _, pair := range e.Pairs {
 		keySeq, err := evalFn(ctx, ec, pair.Key)
 		if err != nil {
 			return nil, err
@@ -502,25 +503,45 @@ func evalMapConstructorExpr(evalFn exprEvaluator, ctx context.Context, ec *evalC
 		if err != nil {
 			return nil, err
 		}
-		entries[i] = MapEntry{Key: ka, Value: valSeq}
+		// NewMap clones every value (materializing it), so bound the value length
+		// against maxNodes and charge its length (min 1) of ops — honoring
+		// OpLimit / context cancellation — BEFORE storing the entry. A huge/lazy
+		// value is rejected here via the O(1) seqLen check instead of OOMing the
+		// engine when NewMap materializes it.
+		vLen := seqLen(valSeq)
+		if maxNodes > 0 && vLen > maxNodes {
+			return nil, ErrNodeSetLimit
+		}
+		if err := fnCountOps(ctx, ec, max(vLen, 1)); err != nil {
+			return nil, err
+		}
+		entries = append(entries, MapEntry{Key: ka, Value: valSeq})
 	}
 	return ItemSlice{NewMap(entries)}, nil
 }
 
 func evalArrayConstructorExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e ArrayConstructorExpr) (Sequence, error) {
+	maxNodes := ec.maxNodes
 	if e.SquareBracket {
-		// [a, b, c] — each expr is one member
-		members := make([]Sequence, len(e.Items))
-		for i, item := range e.Items {
+		// [a, b, c] — each expr is one member. appendArrayMember bounds both the
+		// member count and the total item count (NewArray clones every member,
+		// materializing it) and charges the per-member op cost, so a huge/lazy
+		// member cannot OOM the engine or bypass OpLimit / context cancellation.
+		var members []Sequence
+		total := 0
+		for _, item := range e.Items {
 			seq, err := evalFn(ctx, ec, item)
 			if err != nil {
 				return nil, err
 			}
-			members[i] = seq
+			members, total, err = appendArrayMember(ctx, ec, maxNodes, members, total, seq)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return ItemSlice{NewArray(members)}, nil
 	}
-	// array { expr } — evaluate as sequence, each item is singleton member
+	// array { expr } — evaluate as sequence, each item is a singleton member.
 	if len(e.Items) == 0 {
 		return ItemSlice{NewArray(nil)}, nil
 	}
@@ -528,9 +549,16 @@ func evalArrayConstructorExpr(evalFn exprEvaluator, ctx context.Context, ec *eva
 	if err != nil {
 		return nil, err
 	}
-	members := make([]Sequence, seqLen(seq))
-	for i := range seqLen(seq) {
-		members[i] = ItemSlice{seq.Get(i)}
+	// Drain the source lazily and bound each appended member: a huge/lazy source
+	// is rejected once the member count would exceed maxNodes (or OpLimit /
+	// cancellation fires) rather than materializing the whole structure up front.
+	var members []Sequence
+	total := 0
+	for item := range seqItems(seq) {
+		members, total, err = appendArrayMember(ctx, ec, maxNodes, members, total, ItemSlice{item})
+		if err != nil {
+			return nil, err
+		}
 	}
 	return ItemSlice{NewArray(members)}, nil
 }
