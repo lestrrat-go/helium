@@ -375,7 +375,7 @@ type resultDocumentInst struct {
 	SuppressIndentation     []string   // suppress-indentation element names
 	ParameterDocAVT         *avt       // parameter-document avt
 	ParameterDocOutputDef   *OutputDef // resolved output def from parameter-document (compile-time)
-	BuildTree               *bool      // build-tree: nil=default(true), true/false
+	BuildTree               *avt       // build-tree avt: nil=default(true); evaluated as xs:boolean
 }
 
 func (*resultDocumentInst) instructionTag() {}

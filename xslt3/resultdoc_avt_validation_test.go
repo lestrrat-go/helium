@@ -93,6 +93,7 @@ func TestResultDocumentInvalidBooleanAVTRaisesSEPM0016(t *testing.T) {
 		{name: "escape-uri-attributes", attr: `escape-uri-attributes="{'bogus'}"`},
 		{name: "omit-xml-declaration", attr: `omit-xml-declaration="{'bogus'}"`},
 		{name: "undeclare-prefixes", attr: `undeclare-prefixes="{'bogus'}"`},
+		{name: "build-tree", attr: `build-tree="{'bogus'}"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ss := compileStylesheetString(t, `
@@ -110,4 +111,47 @@ func TestResultDocumentInvalidBooleanAVTRaisesSEPM0016(t *testing.T) {
 			require.ErrorContains(t, err, "SEPM0016")
 		})
 	}
+}
+
+// build-tree is an AVT, not a static compile-time bool. A build-tree AVT whose
+// evaluation raises a dynamic error must surface that error instead of being
+// silently ignored (which is what happened when build-tree was parsed only with
+// parseXSDBool at compile time and dropped on a non-constant value).
+func TestResultDocumentBuildTreeAVTEvaluated(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document build-tree="{1 idiv 0}">
+      <out/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.Error(t, err,
+		"a build-tree AVT that raises a dynamic error must not be silently ignored")
+	require.ErrorContains(t, err, "FOAR0001")
+}
+
+// A primary xsl:result-document whose ONLY serialization attribute is
+// suppress-indentation must still contribute that override. Before the fix the
+// hasAny preflight gate omitted suppress-indentation, so evalResultDocOutputDef
+// returned nil overrides and the attribute was silently dropped. With the base
+// xsl:output indenting, suppress-indentation must keep the named element's
+// children on a single line.
+func TestResultDocumentSoleSuppressIndentationHonored(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output indent="yes"/>
+  <xsl:template match="/">
+    <xsl:result-document suppress-indentation="p">
+      <doc><p><b>x</b><i>y</i></p></doc>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "<p><b>x</b><i>y</i></p>",
+		"sole suppress-indentation override must be honored (p children not indented)")
 }

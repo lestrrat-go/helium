@@ -713,7 +713,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			}
 		}
 		// Validate boolean output attributes on xsl:result-document.
-		for _, boolAttr := range []string{paramAllowDuplicateNames, paramByteOrderMark, paramEscapeURIAttributes,
+		for _, boolAttr := range []string{paramAllowDuplicateNames, paramBuildTree, paramByteOrderMark, paramEscapeURIAttributes,
 			paramIncludeContentType, paramIndent, paramOmitXMLDeclaration, paramUndeclarePrefixes} {
 			if v := getAttr(elem, boolAttr); v != "" {
 				if !strings.ContainsAny(v, "{}") {
@@ -794,6 +794,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			{paramEscapeURIAttributes, &inst.EscapeURIAttributes},
 			{paramJSONNodeOutputMethod, &inst.JSONNodeOutputMethodAVT},
 			{paramNormalizationForm, &inst.NormalizationForm},
+			{paramBuildTree, &inst.BuildTree},
 		} {
 			if v := getAttr(elem, sp.attr); v != "" {
 				avt, err := compileAVT(v, c.nsBindings)
@@ -840,11 +841,6 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 				resolved[i] = resolveQName(n, c.nsBindings)
 			}
 			inst.SuppressIndentation = resolved
-		}
-		if v := getAttr(elem, paramBuildTree); v != "" {
-			if b, ok := parseXSDBool(v); ok {
-				inst.BuildTree = &b
-			}
 		}
 		body, err := c.compileChildren(ctx, elem)
 		if err != nil {

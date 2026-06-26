@@ -629,7 +629,13 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			return nil
 		}
 		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
-		buildTreeNo := inst.BuildTree != nil && !*inst.BuildTree
+		// Drive build-tree from the EVALUATED effective output def (primaryOverrides),
+		// not a static compile-time bool: build-tree may be an AVT (e.g.
+		// build-tree="{false()}") and may also be inherited from the named format or
+		// parameter-document folded into the overrides. primaryOverrides is nil only
+		// when no serialization params (build-tree included) were set, in which case
+		// build-tree defaults to true.
+		buildTreeNo := primaryOverrides != nil && primaryOverrides.BuildTree != nil && !*primaryOverrides.BuildTree
 
 		// When build-tree="no", execute into a temporary document,
 		// then extract children and pending items as a raw sequence
@@ -974,7 +980,8 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		inst.AllowDuplicateNames != nil || inst.UndeclarePrefixes != nil ||
 		inst.JSONNodeOutputMethodAVT != nil || inst.NormalizationForm != nil ||
 		ec.getParamDocOutputDef(inst) != nil ||
-		inst.ItemSeparatorSet || inst.BuildTree != nil
+		inst.ItemSeparatorSet || inst.BuildTree != nil ||
+		len(inst.SuppressIndentation) > 0
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
 	if fmtErr != nil {
 		return nil, fmtErr
@@ -1172,10 +1179,11 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 		}
 	}
 	if inst.BuildTree != nil {
-		// Copy the pointee so a derived/handler-delivered OutputDef cannot mutate
-		// the compiled instruction's BuildTree value.
-		v := *inst.BuildTree
-		base.BuildTree = &v
+		b, err := ec.evalBoolSerializationAVT(ctx, inst.BuildTree, paramBuildTree)
+		if err != nil {
+			return nil, err
+		}
+		base.BuildTree = &b
 	}
 	return &base, nil
 }
