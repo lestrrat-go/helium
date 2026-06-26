@@ -20,19 +20,26 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // the parse fails rather than emitting a truncated node and leaking the
 // remainder as stray text.
 //
-// It is also returned from the RCDATA path for ANY unresolved named
-// character-reference literal — an "&"-prefixed sequence that does not resolve
-// to a known entity or legacy prefix — whether short, semicolon-terminated, or
-// unbounded, once the literal bytes it would emit ("&" + name + optional ";")
-// exceed the cap. A known-entity (';'-terminated) reference is exempt: it is
-// resolved within a fixed lookahead window and never charged against the cap. A
-// no-';' LEGACY resolution — a full legacy entity (e.g. "&amp") OR a
-// legacy-PREFIX match (e.g. "&ampZ", where "amp" resolves and "Z" is echoed) —
-// is exempt only when its whole consumed run ("&" + name) fits within the cap;
-// over the cap it hard-fails with this error and emits NOTHING. This holds
-// uniformly for both a SHORT within-lookahead run (e.g. "&ampZ" under a cap of 2)
-// and a saturated ambiguous run (e.g. "&amp" followed by a long alphanumeric
-// tail).
+// It is also returned — in normal data-state text as well as the RCDATA path —
+// for ANY unresolved named character-reference literal — an "&"-prefixed
+// sequence that does not resolve to a known entity or legacy prefix — whether
+// short, semicolon-terminated, or unbounded, once the literal bytes it would
+// emit ("&" + name + optional ";") exceed the cap. A known-entity
+// (';'-terminated) reference is exempt: it is resolved within a fixed lookahead
+// window and never charged against the cap. A no-';' LEGACY resolution — a full
+// legacy entity (e.g. "&amp") OR a legacy-PREFIX match (e.g. "&ampZ", where
+// "amp" resolves and "Z" is echoed) — is exempt only when its whole consumed
+// run ("&" + name) fits within the cap; over the cap it hard-fails with this
+// error and emits NOTHING. This holds uniformly for both a SHORT
+// within-lookahead run (e.g. "&ampZ" under a cap of 2) and a saturated ambiguous
+// run (e.g. "&amp" followed by a long alphanumeric tail).
+//
+// Finally, it is returned for one normal-text whitespace case under
+// [Parser.StripBlanks](true): a run is suppressed only when entirely whitespace,
+// so the scanner cannot flush a run whose leading whitespace prefix reaches the
+// cap with yet more whitespace beyond it without buffering the run unbounded to
+// learn whether it is significant — such a run fails rather than parsing
+// successfully.
 var ErrContentSizeExceeded = errors.New("content size limit exceeded")
 
 // DocumentLocator is an alias for [sax.DocumentLocator].

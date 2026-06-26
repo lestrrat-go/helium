@@ -18,7 +18,8 @@ type parseConfig struct {
 	// the cap is emitted whole. For comment/bogus-comment/PI it is a hard cap:
 	// exceeding it fails the parse with ErrContentSizeExceeded, since those
 	// constructs cannot be chunked without corrupting the document. It is also a
-	// hard cap for an unresolved named character-reference literal in RCDATA: ANY
+	// hard cap for an unresolved named character-reference literal in normal
+	// data-state text as well as RCDATA: ANY
 	// "&"-prefixed run that does not resolve (whether short, semicolon-terminated,
 	// or unbounded) fails the parse with ErrContentSizeExceeded once the literal
 	// bytes it would emit ("&" + name + optional ";") exceed the cap. A known
