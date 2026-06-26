@@ -56,6 +56,12 @@ func joinURIReference(base, ref string) (string, bool) {
 		return ref, false
 	}
 	basePath := decodedBasePath(baseURL)
+	// url.Parse lowercases the scheme; libxml2 preserves its original case, so
+	// inherit the raw lexical scheme rather than baseURL.Scheme.
+	baseScheme := ""
+	if baseURL.Scheme != "" {
+		baseScheme = rawScheme(base)
+	}
 
 	// Work on the decoded path (like libxml2, which unescapes on parse): an
 	// encoded delimiter such as %2F acts as "/", and %2E as ".". The result is
@@ -76,7 +82,7 @@ func joinURIReference(base, ref string) (string, bool) {
 		// Step 2: empty path and no authority → reference to the base document.
 		// Inherit the base scheme, authority and path; take the reference's
 		// query/fragment when present, else the base's query.
-		r.scheme = baseURL.Scheme
+		r.scheme = baseScheme
 		r.hasAuthority = uriHasAuthority(base)
 		r.authority = authorityOf(baseURL)
 		r.path = basePath
@@ -89,7 +95,7 @@ func joinURIReference(base, ref string) (string, bool) {
 
 	case refHasAuthority:
 		// Step 4: network-path reference → keep its authority and path verbatim.
-		r.scheme = baseURL.Scheme
+		r.scheme = baseScheme
 		r.hasAuthority = true
 		r.authority = authorityOf(refURL)
 		r.path = refPath
@@ -98,7 +104,7 @@ func joinURIReference(base, ref string) (string, bool) {
 
 	case strings.HasPrefix(refPath, "/"):
 		// Step 5: absolute-path reference → replace the path, keep base authority.
-		r.scheme = baseURL.Scheme
+		r.scheme = baseScheme
 		r.hasAuthority = uriHasAuthority(base)
 		r.authority = authorityOf(baseURL)
 		r.path = refPath
@@ -109,7 +115,7 @@ func joinURIReference(base, ref string) (string, bool) {
 		// Step 6: relative-path reference → merge with the base path, then
 		// normalize away dot segments.
 		baseHasAuthority := uriHasAuthority(base)
-		r.scheme = baseURL.Scheme
+		r.scheme = baseScheme
 		r.hasAuthority = baseHasAuthority
 		r.authority = authorityOf(baseURL)
 		r.path = normalizeURIPath(mergePaths(basePath, refPath, baseHasAuthority))
@@ -204,6 +210,16 @@ func uriHasAuthority(raw string) bool {
 		raw = raw[i+1:]
 	}
 	return strings.HasPrefix(raw, "//")
+}
+
+// rawScheme returns the scheme of a URI reference with its original case (url.Parse
+// lowercases it), or "" when there is no scheme.
+func rawScheme(s string) string {
+	i := strings.IndexByte(s, ':')
+	if i <= 0 || strings.ContainsAny(s[:i], "/?#") {
+		return ""
+	}
+	return s[:i]
 }
 
 // decodedBasePath returns a parsed base's path in decoded form. Go parses a

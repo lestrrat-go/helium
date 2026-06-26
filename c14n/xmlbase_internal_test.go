@@ -59,6 +59,11 @@ func TestJoinURIReference(t *testing.T) {
 		{"opaque-base-empty-ref", urnBase, "", urnBase},
 		{"opaque-base-query", urnBase, "?q=1", "urn:base?q=1"},
 		{"opaque-base-relative", urnBase, "x", "urn:x"},
+		// Scheme case is preserved (url.Parse lowercases it; libxml2 keeps it).
+		{"uppercase-scheme", "HTTP://H/a/", "b", "HTTP://H/a/b"},
+		{"mixed-case-scheme", "Http://Host/a/", "b", "Http://Host/a/b"},
+		{"uppercase-file-scheme", "FILE:///a/", "b", "FILE:///a/b"},
+		{"uppercase-urn-scheme", "URN:Foo/a/", "b", "URN:Foo/a/b"},
 	}
 
 	for _, tt := range tests {
