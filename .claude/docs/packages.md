@@ -332,6 +332,7 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
 - Key transport: RSA-OAEP (1.0 + 1.1 with configurable digest/MGF)
 - Key wrapping: AES-128/256-KeyWrap (RFC 3394)
 - Key sizes are bound to the declared algorithm URI on encrypt and decrypt (incl. after unwrap/key transport); mismatch → `KeySizeError`
+- Multi-recipient: `EncryptedData.EncryptedKeys []*EncryptedKey` holds one EncryptedKey per recipient; decrypt tries each candidate through full block decryption + plaintext validation (a bogus prepended key cannot mask the real one). `EncryptedData.EncryptedKey` is the **deprecated** single-key field — `EncryptedKeys` wins when non-empty, else the single field is treated as a one-element list; parse populates both
 - Files: `xmlenc1.go` (API), `constants.go`, `block.go`, `keytransport.go`, `keywrap.go`, `types.go`, `serialize.go`, `parse.go`, `errors.go`
 - Imports: helium
 

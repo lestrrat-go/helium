@@ -37,8 +37,10 @@ func marshalEncryptedData(doc *helium.Document, ed *EncryptedData) (*helium.Elem
 		}
 	}
 
-	// KeyInfo with EncryptedKey
-	if ed.EncryptedKey != nil {
+	// KeyInfo with one EncryptedKey per recipient. EncryptedKeys takes
+	// precedence over the deprecated single EncryptedKey field.
+	encKeys := ed.effectiveEncryptedKeys()
+	if len(encKeys) > 0 {
 		keyInfo := doc.CreateElement("KeyInfo")
 		if err := keyInfo.DeclareNamespace(nsPrefixDSig, NamespaceDSig); err != nil {
 			return nil, err
@@ -47,12 +49,14 @@ func marshalEncryptedData(doc *helium.Document, ed *EncryptedData) (*helium.Elem
 			return nil, err
 		}
 
-		ek, err := marshalEncryptedKey(doc, ed.EncryptedKey)
-		if err != nil {
-			return nil, err
-		}
-		if err := keyInfo.AddChild(ek); err != nil {
-			return nil, err
+		for _, k := range encKeys {
+			ek, err := marshalEncryptedKey(doc, k)
+			if err != nil {
+				return nil, err
+			}
+			if err := keyInfo.AddChild(ek); err != nil {
+				return nil, err
+			}
 		}
 		if err := root.AddChild(keyInfo); err != nil {
 			return nil, err
