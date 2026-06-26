@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -761,7 +762,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// run), so an invalid schema must fail to compile rather than validate
 	// documents as if no constraint were present.
 	if idc.Selector != "" {
-		compiled, err := xpath1.Compile(idc.Selector)
+		compiled, err := compileIDCXPath(idc.Selector, false)
 		if err != nil {
 			c.reportIDCXPathError(ctx, elemSelector, selectorLine, idc.Selector, err)
 		} else {
@@ -775,7 +776,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// constraint.
 	idc.FieldExprs = make([]*xpath1.Expression, len(idc.Fields))
 	for i, f := range idc.Fields {
-		compiled, err := xpath1.Compile(f)
+		compiled, err := compileIDCXPath(f, true)
 		if err != nil {
 			line := 0
 			if i < len(fieldLines) {
@@ -835,4 +836,92 @@ func (c *compiler) reportIDCXPathError(ctx context.Context, kind string, line in
 	msg := fmt.Sprintf("The %s XPath '%s' is not a valid %s expression: %s.", noun, xpath, noun, cause)
 	c.schemaError(ctx,
 		schemaParserErrorAttr(c.filename, line, kind, kind, attrXPath, msg))
+}
+
+// compileIDCXPath compiles an identity-constraint selector/field XPath and
+// additionally verifies it conforms to the restricted XPath subset that XSD
+// (Structures 3.11.6) permits for selectors and fields. The full XPath 1.0
+// grammar accepted by xpath1.Compile is broader than that subset, so a syntax
+// check alone would wrongly accept expressions such as string/number literal
+// steps, function calls, variable references, operators, or predicates that the
+// subset forbids. allowAttribute is true for <field> (which may end in an
+// attribute step) and false for <selector> (where the attribute axis is not
+// permitted).
+func compileIDCXPath(expr string, allowAttribute bool) (*xpath1.Expression, error) {
+	compiled, err := xpath1.Compile(expr)
+	if err != nil {
+		return nil, err
+	}
+	// Re-parse to inspect the AST; the expression already compiled, so this
+	// cannot fail. The subset gate only runs at schema-compile time.
+	ast, err := xpath1.Parse(expr)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateIDCXPathSubset(ast, allowAttribute); err != nil {
+		return nil, err
+	}
+	return compiled, nil
+}
+
+// validateIDCXPathSubset reports an error if expr falls outside the XSD
+// identity-constraint XPath subset. The subset is a union ('|') of relative
+// location paths whose steps use only the child axis (with a name test), the
+// self axis (the abbreviated '.'), the descendant-or-self step of the './/'
+// prefix, and — for fields only — a trailing attribute step. Anything else
+// (literals, function calls, variables, arithmetic/boolean operators, filter
+// expressions, predicates, absolute paths) is rejected.
+func validateIDCXPathSubset(expr xpath1.Expr, allowAttribute bool) error {
+	switch e := expr.(type) {
+	case xpath1.UnionExpr:
+		if err := validateIDCXPathSubset(e.Left, allowAttribute); err != nil {
+			return err
+		}
+		return validateIDCXPathSubset(e.Right, allowAttribute)
+	case *xpath1.LocationPath:
+		return validateIDCLocationPath(e, allowAttribute)
+	case xpath1.LocationPath:
+		return validateIDCLocationPath(&e, allowAttribute)
+	default:
+		return errors.New("the expression is outside the identity-constraint XPath subset")
+	}
+}
+
+// validateIDCLocationPath checks a single location path against the IDC subset.
+func validateIDCLocationPath(lp *xpath1.LocationPath, allowAttribute bool) error {
+	if lp.Absolute {
+		return errors.New("absolute location paths are not permitted")
+	}
+	last := len(lp.Steps) - 1
+	for i, step := range lp.Steps {
+		if len(step.Predicates) > 0 {
+			return errors.New("predicates are not permitted")
+		}
+		switch step.Axis {
+		case xpath1.AxisSelf, xpath1.AxisDescendantOrSelf:
+			// Only the abbreviated '.' and './/' steps (axis::node()) are
+			// allowed; a name or other node-type test on these axes is not.
+			tt, ok := step.NodeTest.(xpath1.TypeTest)
+			if !ok || tt.Type != xpath1.NodeTestNode {
+				return fmt.Errorf("the %s axis is only permitted as the abbreviated '.' or './/' step", step.Axis)
+			}
+		case xpath1.AxisChild:
+			if _, ok := step.NodeTest.(xpath1.NameTest); !ok {
+				return errors.New("only name tests are permitted on the child axis")
+			}
+		case xpath1.AxisAttribute:
+			if !allowAttribute {
+				return errors.New("the attribute axis is not permitted in a selector")
+			}
+			if i != last {
+				return errors.New("the attribute axis is only permitted in the final step")
+			}
+			if _, ok := step.NodeTest.(xpath1.NameTest); !ok {
+				return errors.New("only name tests are permitted on the attribute axis")
+			}
+		default:
+			return fmt.Errorf("the %s axis is not permitted", step.Axis)
+		}
+	}
+	return nil
 }

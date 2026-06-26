@@ -48,7 +48,7 @@ func TestValidateNilDocument(t *testing.T) {
 }
 
 // TestValidateNilContext asserts that Validate normalizes a nil context.Context
-// rather than panicking through IDC XPath function evaluation.
+// rather than panicking while evaluating an identity-constraint XPath.
 func TestValidateNilContext(t *testing.T) {
 	const schemaSrc = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -63,7 +63,7 @@ func TestValidateNilContext(t *testing.T) {
       </xs:sequence>
     </xs:complexType>
     <xs:unique name="itemKey">
-      <xs:selector xpath="item[normalize-space(@n)]"/>
+      <xs:selector xpath="item"/>
       <xs:field xpath="@n"/>
     </xs:unique>
   </xs:element>
