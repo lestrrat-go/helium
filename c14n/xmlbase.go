@@ -229,11 +229,23 @@ func faithfulXMLBaseValue(v string) bool {
 	if v == "" {
 		return true
 	}
+	// url.Parse tolerates a raw space or control byte (e.g. "a b", "urn:foo bar")
+	// that a valid URI reference never contains and libxml2 rejects; screen those
+	// out first.
+	if hasURIControlChar(v) {
+		return false
+	}
 	u, err := url.Parse(v)
 	if err != nil {
 		return false
 	}
 	return !degenerateBaseAuthority(v, u, decodedBasePath(u))
+}
+
+// hasURIControlChar reports whether s contains a byte that cannot appear
+// unescaped in a URI reference (ASCII space, any control character, or DEL).
+func hasURIControlChar(s string) bool {
+	return strings.IndexFunc(s, func(r rune) bool { return r <= ' ' || r == 0x7f }) >= 0
 }
 
 // emptyAuthority reports whether a URI reference carries a "//" authority marker

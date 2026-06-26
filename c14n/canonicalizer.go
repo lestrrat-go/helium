@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/url"
 	"slices"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
@@ -139,7 +138,7 @@ func checkRelativeNamespaceURI(e *helium.Element, ns *helium.Namespace) error {
 	// (xmlParseURI + scheme==NULL). url.Parse tolerates a raw space inside an
 	// opaque part (e.g. "urn:foo bar") that libxml2's parser rejects, so reject
 	// any whitespace/control byte up front — a valid URI never contains one.
-	if strings.IndexFunc(uri, func(r rune) bool { return r <= ' ' || r == 0x7f }) >= 0 {
+	if hasURIControlChar(uri) {
 		return fmt.Errorf("c14n: invalid namespace URI %q on element %s", uri, e.Name())
 	}
 	parsed, err := url.Parse(uri)
@@ -482,6 +481,11 @@ func (c *canonicalizer) renderOmittedAttributes(e *helium.Element) error {
 	for _, attr := range attrs {
 		if !c.isVisible(attr) {
 			continue
+		}
+		// An omitted element emits its xml:base verbatim (no fixup); strict mode
+		// still rejects a value it could not canonicalize faithfully.
+		if c.strict() && attr.URI() == lexicon.NamespaceXML && attr.LocalName() == xmlBaseLocalName && !faithfulXMLBaseValue(attr.Value()) {
+			return fmt.Errorf("c14n: xml:base on element %s cannot be canonicalized faithfully", e.Name())
 		}
 		entries = append(entries, attrSortEntry{
 			attr:      attr,

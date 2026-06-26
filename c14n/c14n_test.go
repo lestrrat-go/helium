@@ -546,6 +546,25 @@ func TestC14N11StrictFailClosedSingleValue(t *testing.T) {
 	require.Error(t, err, "strict mode must reject a lone degenerate xml:base")
 }
 
+// TestC14N11StrictFailClosedOmittedAttr verifies the strict guard also covers an
+// xml:base carried in the node set on an omitted element (rendered verbatim via
+// the attribute axis, not the fixup path).
+func TestC14N11StrictFailClosedOmittedAttr(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><root><hidden xml:base="//"><child>t</child></hidden></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	// hidden is omitted but its xml:base attribute is in the node set.
+	nodes := evaluateNodeSet(t, doc, "//hidden/@xml:base | //child | //child/text()", nil)
+
+	gotDefault, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err, "default mode emits the omitted-element attribute verbatim")
+	require.Contains(t, string(gotDefault), `xml:base="//"`)
+
+	_, err = c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).StrictXMLAttributes().CanonicalizeTo(doc)
+	require.Error(t, err, "strict mode must reject a degenerate xml:base on an omitted element")
+}
+
 // TestC14N10ExcludedOwnXMLLang covers the C14N 1.0 inheritance-blocking
 // divergence. With a rendered element's own xml:lang excluded from the node set,
 // the default (libxml2) blocks only on rendered attributes and so imports the
