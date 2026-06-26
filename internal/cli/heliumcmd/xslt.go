@@ -123,7 +123,22 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 	}
 
 	ssParser := helium.NewParser().BaseURI(absSS)
-	if cfg.substituteEntities {
+	// Expand the stylesheet's INTERNAL general entities by default. NewParser's
+	// secure default leaves SubstituteEntities off, which not only blocks XXE but
+	// also stops a perfectly safe internal-subset entity (e.g.
+	// <!DOCTYPE xsl:stylesheet [<!ENTITY msg "ok">]> ... &msg;) from expanding:
+	// xslt3 only compiles text/CDATA in sequence constructors, so an unexpanded
+	// EntityRefNode silently drops the value. SubstituteEntities(true) on top of
+	// the still-default BlockXXE(true)/LoadExternalDTD(false) expands internal
+	// entities while external DTD/entity content stays blocked, mirroring xslt3's
+	// own secure parser (xslt3/xslt3.go). The XXE block is what keeps a SYSTEM
+	// entity's external replacement text from loading even with substitution on.
+	//
+	// --loaddtd loads the external DTD subset (its declarations / default
+	// attributes) but, on its own, must NOT substitute external-DTD-defined
+	// general entities; that remains an explicit --noent opt-in. So suppress the
+	// internal-substitution default when --loaddtd is given without --noent.
+	if cfg.substituteEntities || !cfg.loadExternalDTD {
 		ssParser = ssParser.SubstituteEntities(true)
 	}
 	if cfg.loadExternalDTD {

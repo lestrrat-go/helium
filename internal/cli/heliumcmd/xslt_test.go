@@ -140,6 +140,46 @@ func TestXSLTStylesheetSystemEntityXXE(t *testing.T) {
 	})
 }
 
+// TestXSLTStylesheetInternalEntityExpands verifies that the secure default
+// still expands a stylesheet's INTERNAL general entities (the entity is
+// declared in the internal subset, no external resource involved) while a
+// SYSTEM entity that would read a local file remains blocked. NewParser's
+// secure default leaves SubstituteEntities off; without re-enabling it the
+// internal entity surfaces as an unexpanded EntityRefNode and xslt3 drops the
+// value, since it only compiles text/CDATA in sequence constructors.
+func TestXSLTStylesheetInternalEntityExpands(t *testing.T) {
+	t.Run("internal entity expands under default", func(t *testing.T) {
+		dir := t.TempDir()
+		ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>
+<!DOCTYPE xsl:stylesheet [ <!ENTITY msg "ok"> ]>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root"><out>&msg;</out></xsl:template>
+</xsl:stylesheet>`)
+		xmlFile := writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
+
+		out, errOut, code := executeArgs(t, strings.NewReader(""), "xslt", ssFile, xmlFile)
+		require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
+		require.Contains(t, out, "<out>ok</out>",
+			"an internal-subset entity must expand under the secure default")
+	})
+
+	t.Run("SYSTEM entity does not leak under default", func(t *testing.T) {
+		const secret = "TOPSECRETINTERNAL"
+		dir := t.TempDir()
+		writeFile(t, dir, "secret.txt", secret)
+		ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>
+<!DOCTYPE xsl:stylesheet [ <!ENTITY x SYSTEM "secret.txt"> ]>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root"><out>&x;</out></xsl:template>
+</xsl:stylesheet>`)
+		xmlFile := writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
+
+		out, _, _ := executeArgs(t, strings.NewReader(""), "xslt", ssFile, xmlFile)
+		require.NotContains(t, out, secret,
+			"enabling internal-entity substitution must not let a SYSTEM entity read a local file")
+	})
+}
+
 // fileURIForPath builds a file: URI from a local filesystem path that is
 // correct cross-platform. On Windows, filepath.ToSlash yields "C:/..." which,
 // without a leading slash, serializes as "file://C:/..." (host "C:") and is
