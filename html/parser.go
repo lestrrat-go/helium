@@ -579,6 +579,12 @@ func (p *parser) parseStartTag(ctx context.Context) {
 	// Parse attributes
 	attrs := p.parseAttributes()
 
+	// An over-cap attribute value is unrecoverable; abort without emitting a
+	// truncated start element. The main loop surfaces fatalErr.
+	if p.fatalErr != nil {
+		return
+	}
+
 	// Skip whitespace and close
 	p.skipWhitespace()
 	if p.cur.Peek() == '/' {
@@ -2009,7 +2015,9 @@ func (p *parser) parseAttributes() []Attribute {
 	var attrs []Attribute
 	var seen map[string]struct{}
 
-	for {
+	// An over-cap attribute value sets fatalErr; stop scanning immediately so the
+	// main loop surfaces it rather than buffering further attributes.
+	for p.fatalErr == nil {
 		p.skipWhitespace()
 		if p.cur.Done() || p.cur.Peek() == '>' || p.cur.Peek() == '/' {
 			break
@@ -2085,9 +2093,18 @@ func (p *parser) parseAttrValue() string {
 // parseQuotedAttrValue parses a quoted attribute value with entity expansion.
 func (p *parser) parseQuotedAttrValue(quote byte) string {
 	_ = p.cur.Advance(1) // skip opening quote
+	limit := p.cfg.contentLimit()
 	var buf bytes.Buffer
 
 	for !p.cur.Done() && p.cur.Peek() != quote {
+		// An attribute value is part of an indivisible start-tag event and cannot
+		// be chunked, so enforce the content limit as a HARD cap: an unbounded
+		// (e.g. unterminated) value must not buffer without limit. Fail before
+		// accepting a byte that would push the accumulated value past the cap.
+		if buf.Len() >= limit {
+			p.fatalErr = fmt.Errorf("attribute value exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return ""
+		}
 		if p.cur.Peek() == '&' {
 			buf.WriteString(p.resolveEntityInAttr())
 		} else {
@@ -2103,12 +2120,19 @@ func (p *parser) parseQuotedAttrValue(quote byte) string {
 
 // parseUnquotedAttrValue parses an unquoted attribute value.
 func (p *parser) parseUnquotedAttrValue() string {
+	limit := p.cfg.contentLimit()
 	var buf bytes.Buffer
 
 	for !p.cur.Done() {
 		b := p.cur.Peek()
 		if b == '>' || b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' {
 			break
+		}
+		// Hard-cap the accumulated value the same way as the quoted form so an
+		// unbounded unquoted value cannot buffer without limit.
+		if buf.Len() >= limit {
+			p.fatalErr = fmt.Errorf("attribute value exceeds %d bytes before terminator: %w", limit, ErrContentSizeExceeded)
+			return ""
 		}
 		if b == '&' {
 			buf.WriteString(p.resolveEntityInAttr())
