@@ -43,7 +43,23 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	// Fast path: UTF8Cursor can scan directly into a []byte slice,
 	// avoiding the bytes.Buffer intermediate.
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
-		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0])
+		// Streaming SAX consumers that configured a char-buffer size get
+		// bounded memory: scan and deliver the run in fixed-size chunks rather
+		// than buffering the whole delimiter-free run (which would also grow the
+		// cursor's internal buffer) before chunking only the delivery.
+		// pctx.doc == nil ensures no DOM is being built. A SAX wrapper that
+		// delegates to a TreeBuilder has pctx.treeBuilder == nil (it is not the
+		// concrete *TreeBuilder) yet pctx.doc is populated (TreeBuilder.StartDocument
+		// set it). Such wrappers must use the single-shot classification path so a
+		// large whitespace run is classified over the whole run and delivered via
+		// IgnorableWhitespace (which StripBlanks drops) rather than being downgraded
+		// to Characters by the chunked path's blankBudget cap.
+		if pctx.charBufferSize > 0 && pctx.treeBuilder == nil && pctx.doc == nil &&
+			pctx.sax != nil && !pctx.disableSAX {
+			return pctx.parseCharDataChunkedSAX(ctx, u8)
+		}
+
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], 0)
 		if i <= 0 {
 			if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 				return pctx.error(ctx, ErrMisplacedCDATAEnd)
@@ -122,6 +138,176 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// parseCharDataChunkedSAX scans and delivers a character-data run to a streaming
+// SAX consumer in chunks of at most pctx.charBufferSize bytes. Unlike the
+// single-shot fast path it never materializes the whole delimiter-free run, so a
+// huge run delivers with bounded memory. Context cancellation is checked between
+// chunks. Used only when charBufferSize > 0 and no DOM is being built (the DOM
+// path must classify blank-vs-text over the whole run to drive whitespace
+// stripping, so it stays single-shot).
+//
+// Whitespace classification must match the single-shot path, which classifies
+// the WHOLE run as one unit: <root>  text</root> is character data (the leading
+// blanks are not ignorable whitespace), while <root>   </root> is ignorable
+// whitespace. The chunked path therefore must NOT emit any IgnorableWhitespace
+// event until it has proven the whole run is blank — an early per-chunk
+// IgnorableWhitespace that a later non-blank byte contradicts cannot be taken
+// back. Two cases keep this bounded:
+//
+//   - When the context makes whitespace non-ignorable here (xml:space="preserve",
+//     mixed content, no open element), the run is character data regardless of
+//     its bytes, so it is streamed in fixed-size chunks directly. This covers the
+//     unbounded-text DoS in those contexts.
+//   - Otherwise the leading blank run is accumulated while every byte seen is
+//     whitespace. The first non-blank byte proves character data: the accumulated
+//     prefix plus the rest of the run is delivered as Characters and the tail is
+//     streamed in bounded chunks. A run that stays blank to its end is delivered
+//     as IgnorableWhitespace. The realistic huge run (non-blank text) commits to
+//     Characters on its first chunk and never accumulates; only a pathological
+//     multi-megabyte run of pure whitespace buffers (it cannot be classified
+//     without seeing its end), and that is whitespace, not the text DoS vector.
+func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcursor.UTF8Cursor) error {
+	s := pctx.sax
+	limit := pctx.charBufferSize
+
+	// blankBudget bounds the as-yet-unclassified all-whitespace prefix that may
+	// be buffered before it is downgraded to character data. A blank run cannot
+	// be proven ignorable whitespace until its end is in view, so without a cap
+	// a pathological multi-megabyte run of pure whitespace would accumulate
+	// whole in acc before the first callback. The budget is a small multiple of
+	// the configured chunk size with a fixed floor, so realistic indentation
+	// runs still classify as ignorable whitespace while memory stays bounded.
+	blankBudget := max(limit*8, minPendingBlankBytes)
+
+	// blank tracks whether the run could still be ignorable whitespace. When the
+	// context makes whitespace non-ignorable, it starts false so the first chunk
+	// commits to Characters immediately (no blank-prefix accumulation).
+	blank := pctx.whitespaceContextIgnorable()
+
+	acc := pctx.charBuf[:0]
+	first := true
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		prev := len(acc)
+		var i int
+		acc, i = u8.ScanCharDataSlice(acc, limit)
+		if i <= 0 {
+			if first {
+				if u8.Peek() == ']' && u8.PeekAt(1) == ']' && u8.PeekAt(2) == '>' {
+					return pctx.error(ctx, ErrMisplacedCDATAEnd)
+				}
+				return errors.New("invalid char data")
+			}
+			// The run ended; everything accumulated is blank (a non-blank byte
+			// would have returned via the Characters branch below). Deliver it
+			// as ignorable whitespace or character data per the final
+			// classification below.
+			break
+		}
+		first = false
+
+		if err := u8.AdvanceFast(i); err != nil {
+			return err
+		}
+		pctx.charBuf = acc
+
+		if blank && !allBlankBytes(acc[prev:]) {
+			blank = false
+		}
+
+		// Bounded-whitespace policy: an unclassified blank prefix that grows
+		// past the budget is downgraded to character data so memory stays
+		// bounded for a pathological pure-whitespace run.
+		//
+		// DOCUMENTED POLICY (intentional reclassification, not a silent quirk):
+		// an all-whitespace run can only be classified as IgnorableWhitespace
+		// once its end-of-run delimiter is in view, so a still-blank prefix must
+		// be buffered until then. To bound memory against a pathological multi-MiB
+		// run of pure whitespace, once the buffered blank prefix grows past
+		// blankBudget we stop treating it as ignorable and deliver it (and the
+		// rest of the run) as Characters rather than IgnorableWhitespace. Only
+		// abnormally large pure-blank runs are affected — realistic indentation /
+		// pretty-printing whitespace is far below blankBudget (see
+		// minPendingBlankBytes) and is still delivered as IgnorableWhitespace.
+		if blank && len(acc) > blankBudget {
+			blank = false
+		}
+
+		if !blank {
+			// Proven to be (or downgraded to) character data: flush the
+			// accumulated prefix (which includes this chunk) as Characters, then
+			// stream the rest of the run in bounded chunks.
+			if err := pctx.deliverCharacters(ctx, s.Characters, acc); err != nil {
+				return err
+			}
+			return pctx.streamCharDataChunks(ctx, u8, limit, s.Characters)
+		}
+	}
+
+	pctx.charBuf = acc
+	if len(acc) == 0 {
+		return nil
+	}
+
+	// The run was blank to its end. Match the single-shot areBlanksBytes
+	// classification: when no DOM document drives the decision, a blank run is
+	// ignorable whitespace only if the delimiter that ended it is '<' or CR. A
+	// run ending at '&' (an entity reference) or any other delimiter is
+	// character data — the delimiter check whitespaceContextIgnorable omits is
+	// re-applied here, now that the end of the run (and thus the delimiter) is
+	// in view.
+	handler := s.IgnorableWhitespace
+	if pctx.doc == nil {
+		if c := u8.Peek(); c != '<' && c != 0xD {
+			handler = s.Characters
+		}
+	}
+	return pctx.deliverCharacters(ctx, handler, acc)
+}
+
+// minPendingBlankBytes is the floor for the blank-prefix budget in
+// parseCharDataChunkedSAX: a blank character-data run up to this size is
+// buffered and classified as ignorable whitespace even when the configured
+// chunk size is tiny, so realistic indentation is never downgraded to
+// character data by the bounded-whitespace policy.
+const minPendingBlankBytes = 1 << 16 // 64 KiB
+
+// streamCharDataChunks scans the remainder of a character-data run and delivers
+// it via handler in chunks of at most limit bytes, with bounded memory. It is
+// called once the run's classification is known and at least one chunk has
+// already been consumed, so an empty scan means the run ended at a delimiter or
+// EOF (handled by the caller) rather than an error.
+func (pctx *parserCtx) streamCharDataChunks(ctx context.Context, u8 *strcursor.UTF8Cursor, limit int, handler func(context.Context, []byte) error) error {
+	for {
+		// A SAX handler may have requested a stop on the previous chunk's
+		// callback. Bail before scanning or advancing so no further chunk is
+		// emitted after the stop.
+		if pctx.stopped {
+			return errParserStopped
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], limit)
+		if i <= 0 {
+			return nil
+		}
+
+		if err := u8.AdvanceFast(i); err != nil {
+			return err
+		}
+		pctx.charBuf = data
+
+		if err := pctx.deliverCharacters(ctx, handler, data); err != nil {
+			return err
+		}
+	}
 }
 
 func (pctx *parserCtx) parseElement(ctx context.Context) error {
