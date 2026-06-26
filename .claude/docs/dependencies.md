@@ -20,7 +20,7 @@ c14n           → helium, internal/lexicon, internal/domutil
 xmldsig1       → helium, c14n, internal/lexicon, internal/domutil
 xmlenc1        → helium, internal/domutil
 html           → helium, sax, push, internal/xmlchar
-catalog        → helium, internal/catalog, internal/lexicon, internal/xmlchar
+catalog        → helium, internal/catalog, internal/iofs, internal/lexicon, internal/xmlchar
 stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
 helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath, internal/iofs

@@ -158,6 +158,20 @@ func TestCatalogFilePathUNCRejected(t *testing.T) {
 	require.Error(t, err)
 }
 
+// url.Parse percent-decodes u.Path, so a "%5C"/"%5c" encoded backslash decodes
+// to "/\server/share" which still becomes the UNC path \\server\share on
+// Windows. catalogFilePath must reject these encoded forms too.
+func TestCatalogFilePathEncodedBackslashUNCRejected(t *testing.T) {
+	for _, ref := range []string{
+		"file:///%5Cserver/share/catalog.xml",
+		"file:///%5cserver/share/catalog.xml",
+		"file:///%5C%5Cserver/share/catalog.xml",
+	} {
+		_, _, err := catalogFilePath(ref)
+		require.Error(t, err, ref)
+	}
+}
+
 // catalogFilePath must keep a POSIX "file:///C:/..." path absolute. The
 // drive-letter slash strip is Windows-only; on POSIX "/C:/tmp/..." is a valid
 // absolute path, so this asserts deterministically on the Linux CI host.

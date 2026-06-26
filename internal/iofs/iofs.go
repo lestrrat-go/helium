@@ -89,14 +89,39 @@ func FileURIToPath(ref string) (string, error) {
 	}
 
 	// A "file:////server/share" URI parses to an empty host with a path that
-	// begins with "//"; on Windows filepath.FromSlash would turn that into a UNC
-	// path (\\server\share) reaching a remote SMB host, defeating the local-only
-	// policy. Reject the UNC form outright.
-	if strings.HasPrefix(u.Path, "//") {
+	// begins with two separators; on Windows filepath.FromSlash would turn that
+	// into a UNC path (\\server\share) reaching a remote SMB host, defeating the
+	// local-only policy. Reject every UNC form outright.
+	if IsUNCFileURIPath(u.Path) {
 		return "", fmt.Errorf("UNC file URI %q is not a local path", ref)
 	}
 
 	return fileURIPathFor(runtime.GOOS, u.Path), nil
+}
+
+// IsUNCFileURIPath reports whether p — the (already percent-decoded) path
+// component of a "file:" URI — denotes a UNC path. A UNC path begins with two
+// path separators ("\\server\share"); on Windows filepath.FromSlash turns such
+// a path into a remote SMB reference, defeating the local-only policy applied by
+// the "file:" URI loaders.
+//
+// url.Parse percent-decodes u.Path, so the two leading separators may appear as
+// any mix of forward slash and backslash: "//" (from "file:////server/share"),
+// "/\" (from "file:///%5Cserver/share", since %5C/%5c decode to a backslash), or
+// "\\" (from doubly-encoded forms). All such forms are detected here so a single
+// encoded backslash cannot smuggle a UNC path past the "//"-only check.
+//
+// This is the single source of truth for the UNC rejection shared by
+// [FileURIToPath], package catalog, and the helium CLI safety helpers.
+func IsUNCFileURIPath(p string) bool {
+	return len(p) >= 2 && isPathSep(p[0]) && isPathSep(p[1])
+}
+
+// isPathSep reports whether c is a path separator in either POSIX ("/") or
+// Windows ("\") form. A decoded "file:" URI path may contain backslashes when
+// the URI percent-encoded them as %5C/%5c.
+func isPathSep(c byte) bool {
+	return c == '/' || c == '\\'
 }
 
 // fileURIPathFor is the OS-parameterized conversion of a "file:" URI path
