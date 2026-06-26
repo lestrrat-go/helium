@@ -475,6 +475,14 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// the redefined (base) schema loaded in Phase A. Restore c.includeFile to
 	// the redefining file's label so duplicate-override diagnostics report the
 	// correct source file and line; Phase A above needed the base label.
+	// Likewise restore the per-document defaults to the REDEFINING schema's
+	// values: override-local declarations must use the redefining schema's
+	// elementFormDefault/attributeFormDefault/blockDefault/finalDefault (per
+	// XSD), not the redefined document's values applied for Phase A above.
+	c.schema.elemFormQualified = savedElemForm
+	c.schema.attrFormQualified = savedAttrForm
+	c.schema.blockDefault = savedBlockDefault
+	c.schema.finalDefault = savedFinalDefault
 	c.includeFile = savedIncludeFile
 	for child := range helium.Children(redefineElem) {
 		if child.Type() != helium.ElementNode {
