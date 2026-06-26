@@ -40,8 +40,11 @@ type Cursor interface {
 	// PeekString returns n bytes from the current position as a string.
 	PeekString(int) string
 	// ScanCharDataInto scans XML character data into dst with EOL normalization.
-	// Returns the number of bytes consumed. Does not advance — call AdvanceFast after.
-	ScanCharDataInto(dst *bytes.Buffer) int
+	// Returns the number of units consumed. Does not advance — call AdvanceFast
+	// after. When maxBytes > 0 the scan stops once dst holds that many bytes, so
+	// a caller can bound a delimiter-free run instead of materializing it whole;
+	// maxBytes <= 0 means unbounded.
+	ScanCharDataInto(dst *bytes.Buffer, maxBytes int) int
 	Unused() io.Reader
 }
 
@@ -442,7 +445,7 @@ func (c *RuneCursor) AdvanceFast(n int) error {
 // and writes it into dst with XML §2.11 EOL normalization applied inline
 // (\r\n → \n, lone \r → \n). It stops at '<', '&', ']]>', or any non-XML-char.
 // Returns the rune count consumed. The caller should call AdvanceFast(nRunes).
-func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) int {
+func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer, maxBytes int) int {
 	if c.count == 0 {
 		if err := c.ensure(1); err != nil {
 			return 0
@@ -459,6 +462,9 @@ func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) int {
 	dst.Grow(count)
 
 	for nRunes < count {
+		if maxBytes > 0 && dst.Len() >= maxBytes {
+			break
+		}
 		e := ring[(head+nRunes)&mask]
 		r := e.val
 		// A real U+FFFD is stored as RuneError with width 3 (valid XML char);
@@ -791,12 +797,15 @@ func (c *ByteCursor) AdvanceFast(n int) error {
 }
 
 // ScanCharDataInto scans XML character data into dst with EOL normalization.
-func (c *ByteCursor) ScanCharDataInto(dst *bytes.Buffer) int {
+func (c *ByteCursor) ScanCharDataInto(dst *bytes.Buffer, maxBytes int) int {
 	if c.fillBuffer(1) != nil {
 		return 0
 	}
 	i := 0
 	for c.bufpos+i < c.buflen {
+		if maxBytes > 0 && dst.Len() >= maxBytes {
+			break
+		}
 		b := c.buf[c.bufpos+i]
 		if b == '<' || b == '&' {
 			break

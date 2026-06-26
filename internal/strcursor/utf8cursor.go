@@ -822,7 +822,7 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte, maxBytes int) ([]byte, int) {
 	return dst, off
 }
 
-func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
+func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer, maxBytes int) int {
 	if c.fillBuffer(1) != nil {
 		return 0
 	}
@@ -830,7 +830,8 @@ func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
 	off := 0
 	dst.Grow(c.buflen - c.bufpos)
 
-	for {
+	// The loop condition bounds dst to maxBytes (maxBytes <= 0 = unbounded).
+	for maxBytes <= 0 || dst.Len() < maxBytes {
 		if c.bufpos+off >= c.buflen {
 			if c.fillBuffer(off+1) != nil {
 				break

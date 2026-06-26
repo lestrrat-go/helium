@@ -130,6 +130,7 @@ type parserCtx struct {
 	maxNameLength    int               // max element/attribute/NCName length (0 = unlimited)
 	maxCMDepth       int               // max DTD content-model declaration depth (0 = unlimited)
 	maxExtDTDSize    int               // max bytes read from an external DTD subset (<= 0 = MaxExternalDTDSize)
+	maxNodeContent   int               // max bytes of a single CDATA/comment/PI/char-data run (0 = unlimited)
 	currentEntityURI string            // URI of the external entity currently being replayed (for base-uri tracking)
 	nameCache        map[string]string // per-parse string interning for element/attribute names
 	charBuf          []byte            // reusable buffer for parseCharDataContent
@@ -374,6 +375,25 @@ func (ctx *parserCtx) nameTooLong(n int) bool {
 	return ctx.maxNameLength > 0 && n > ctx.maxNameLength
 }
 
+// nodeContentTooLong reports whether an indivisible content run of n bytes
+// exceeds the configured maximum node-content size. A maxNodeContent of zero
+// means no limit is enforced. Exactly maxNodeContent bytes is allowed; one more
+// fails (strict-greater).
+func (ctx *parserCtx) nodeContentTooLong(n int) bool {
+	return ctx.maxNodeContent > 0 && n > ctx.maxNodeContent
+}
+
+// nodeContentScanBudget returns the byte budget to hand a bounded char-data
+// scan so it stops just past the cap (cap + utf8.UTFMax guarantees a run longer
+// than the cap is detected even when a multi-byte rune straddles the boundary).
+// Zero means unbounded.
+func (ctx *parserCtx) nodeContentScanBudget() int {
+	if ctx.maxNodeContent <= 0 {
+		return 0
+	}
+	return ctx.maxNodeContent + utf8.UTFMax
+}
+
 func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.pushInput(strcursor.NewByteCursor(in))
 	ctx.detectedEncoding = encUTF8
@@ -392,6 +412,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.maxAmpl = DefaultMaxEntityAmplification
 	ctx.maxNameLength = DefaultMaxNameLength
 	ctx.maxCMDepth = DefaultMaxContentModelDepth
+	ctx.maxNodeContent = DefaultMaxNodeContentSize
 	if p != nil {
 		ctx.sax = p.sax
 		if tb, ok := p.sax.(*TreeBuilder); ok {
@@ -424,6 +445,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 		ctx.maxAmpl = resolveLimit(p.maxEntityAmpl, DefaultMaxEntityAmplification)
 		ctx.maxNameLength = resolveLimit(p.maxNameLength, DefaultMaxNameLength)
 		ctx.maxCMDepth = resolveLimit(p.maxCMDepth, DefaultMaxContentModelDepth)
+		ctx.maxNodeContent = resolveLimit(p.maxNodeContent, DefaultMaxNodeContentSize)
 	}
 	if ctx.fsys == nil {
 		ctx.fsys = iofs.DenyAll{}

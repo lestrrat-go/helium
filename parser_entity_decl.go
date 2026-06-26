@@ -546,6 +546,10 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	// XML_PARSE_HUGE; the granular limit knobs store them as separate fields.)
 	newctx.maxNameLength = pctx.maxNameLength
 	newctx.maxCMDepth = pctx.maxCMDepth
+	// Carry the node-content cap so a configured Parser.MaxNodeContentSize is
+	// enforced on the CDATA/comment/PI/char-data runs of entity-expansion
+	// sub-parses too, not just the top-level document.
+	newctx.maxNodeContent = pctx.maxNodeContent
 	// Carry both the element-depth limit and the current depth so nesting that
 	// crosses the entity boundary keeps counting toward MaxDepth.
 	newctx.maxElemDepth = pctx.maxElemDepth

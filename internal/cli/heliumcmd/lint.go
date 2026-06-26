@@ -486,6 +486,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 			MaxNameLength(-1).
 			MaxEntityAmplification(-1).
 			MaxContentModelDepth(-1).
+			MaxNodeContentSize(-1).
 			MaxDepth(0)
 	}
 	if cfg.maxDepth >= 0 {
