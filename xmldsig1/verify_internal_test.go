@@ -269,6 +269,48 @@ func TestParseReferenceElement(t *testing.T) {
 			})
 		}
 	})
+
+	// An unknown child element under a Transform is an algorithm parameter we
+	// cannot honor. Digesting as if it were absent would be fail-open, so any
+	// unrecognized Transform child must be rejected — both under an exclusive
+	// c14n transform (where ec:InclusiveNamespaces is the only valid child) and
+	// under a non-exclusive one (where no child is valid at all).
+	t.Run("unknown Transform child rejected", func(t *testing.T) {
+		for _, alg := range []string{ExcC14N10, C14N10} {
+			t.Run(alg, func(t *testing.T) {
+				r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+					`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+					`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + alg + `">` +
+					`<ds:XPath xmlns:ds="` + dsigNS + `">/foo</ds:XPath>` +
+					`</ds:Transform></ds:Transforms>` +
+					`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+					`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+					`</ds:Reference>`
+				doc := mustParse(t, r)
+				_, err := parseReferenceElement(doc.DocumentElement())
+				require.ErrorIs(t, err, ErrUnsupportedTransform)
+				require.Contains(t, err.Error(), "Transform parameter")
+			})
+		}
+	})
+
+	// A second ec:InclusiveNamespaces under an exclusive Transform must be
+	// rejected rather than silently letting the last one win.
+	t.Run("multiple InclusiveNamespaces rejected", func(t *testing.T) {
+		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
+			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
+			`<ds:Transform xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `">` +
+			`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="a"/>` +
+			`<ec:InclusiveNamespaces xmlns:ec="` + ExcC14N10 + `" PrefixList="b"/>` +
+			`</ds:Transform></ds:Transforms>` +
+			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
+			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
+			`</ds:Reference>`
+		doc := mustParse(t, r)
+		_, err := parseReferenceElement(doc.DocumentElement())
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Contains(t, err.Error(), "multiple ec:InclusiveNamespaces")
+	})
 }
 
 // TestEmptyReferencesRejected guards against a SignedInfo that carries zero

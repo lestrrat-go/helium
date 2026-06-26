@@ -341,35 +341,20 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 					continue
 				}
 				alg, _ := te.GetAttribute("Algorithm")
-				t := parsedTransform{algorithm: alg}
-				// Parse InclusiveNamespaces for Exclusive C14N. A
-				// foreign-namespace look-alike contributes no prefixes (it is
-				// silently ignored here rather than rejected, because an unknown
-				// child of a per-Reference Transform is not necessarily fatal).
-				var hasInclusiveNS bool
-				for inc := te.FirstChild(); inc != nil; inc = inc.NextSibling() {
-					incElem, ok := helium.AsNode[*helium.Element](inc)
-					if !ok {
-						continue
-					}
-					if px, ok := excInclusiveNamespacePrefixes(incElem); ok {
-						t.prefixes = px
-						hasInclusiveNS = true
-					}
+				// Validate the Transform's child elements by algorithm. For a
+				// supported transform those children are algorithm parameters;
+				// accepting an unknown one while digesting as if it were absent
+				// would be fail-open. The only parameter helium honors is
+				// ec:InclusiveNamespaces under the exclusive c14n transforms;
+				// every other child — and ec:InclusiveNamespaces under a
+				// non-exclusive algorithm (enveloped-signature/C14N10/C14N11/...)
+				// — is rejected fail-closed, mirroring the SignedInfo
+				// CanonicalizationMethod handling.
+				prefixes, err := parseInclusiveNamespaceParameters(te, alg, "Transform")
+				if err != nil {
+					return ref, err
 				}
-				// ec:InclusiveNamespaces is an Exclusive C14N parameter; it is
-				// only honored for the exclusive c14n transforms. Under any other
-				// transform algorithm (C14N10/C14N11/enveloped-signature/...) the
-				// prefixes are silently dropped during canonicalization, so the
-				// Reference would digest bytes that differ from what the signer
-				// declared — a fail-open gap. Reject it fail-closed, including an
-				// empty PrefixList, mirroring the SignedInfo gating.
-				if hasInclusiveNS {
-					if err := gateInclusiveNamespaces(alg); err != nil {
-						return ref, err
-					}
-				}
-				ref.transforms = append(ref.transforms, t)
+				ref.transforms = append(ref.transforms, parsedTransform{algorithm: alg, prefixes: prefixes})
 			}
 		case "DigestMethod":
 			alg, ok := e.GetAttribute("Algorithm")
@@ -411,16 +396,28 @@ func excInclusiveNamespacePrefixes(elem *helium.Element) ([]string, bool) {
 // element, which would be a canonicalization parameter we cannot honor. Silently
 // ignoring an unknown parameter would canonicalize SignedInfo differently from
 // what the signer intended, so it is rejected.
-//
-// ec:InclusiveNamespaces is an Exclusive XML Canonicalization parameter and is
-// only meaningful for the exclusive c14n algorithms (ExcC14N10 /
-// ExcC14N10Comments); canonicalize() only honors the PrefixList for exclusive
-// modes. If it appeared under a non-exclusive method (C14N10/C14N11), the
-// verifier would silently ignore it, canonicalizing SignedInfo differently from
-// what the signer declared. To keep parameter handling fail-closed, reject an
-// ec:InclusiveNamespaces parameter on any non-exclusive c14n method.
 func parseCanonicalizationParameters(elem *helium.Element, alg string) ([]string, error) {
+	return parseInclusiveNamespaceParameters(elem, alg, "CanonicalizationMethod")
+}
+
+// parseInclusiveNamespaceParameters validates the child elements of a
+// CanonicalizationMethod (SignedInfo) or per-Reference Transform element and
+// returns the ec:InclusiveNamespaces PrefixList when one is present. It is the
+// single fail-closed gate for both call sites so they behave identically.
+//
+// The only honored child is ec:InclusiveNamespaces, and only under the
+// exclusive c14n algorithms (ExcC14N10 / ExcC14N10Comments); canonicalize()
+// honors the PrefixList for exclusive modes alone. Under any other algorithm
+// (enveloped-signature/C14N10/C14N11/...) the prefixes are silently dropped
+// during canonicalization, so an ec:InclusiveNamespaces there — even with an
+// empty PrefixList — is rejected. Any other child element is an unknown
+// parameter we cannot honor; accepting it while digesting as if absent would be
+// fail-open, so it too is rejected. A second ec:InclusiveNamespaces is rejected
+// rather than silently letting the last one win. The context label
+// ("CanonicalizationMethod" / "Transform") only shapes the error message.
+func parseInclusiveNamespaceParameters(elem *helium.Element, alg, context string) ([]string, error) {
 	var prefixes []string
+	var seen bool
 	for c := elem.FirstChild(); c != nil; c = c.NextSibling() {
 		ce, ok := helium.AsNode[*helium.Element](c)
 		if !ok {
@@ -428,11 +425,15 @@ func parseCanonicalizationParameters(elem *helium.Element, alg string) ([]string
 		}
 		px, matched := excInclusiveNamespacePrefixes(ce)
 		if !matched {
-			return nil, fmt.Errorf("%w: unsupported CanonicalizationMethod parameter %s", ErrUnsupportedTransform, domutil.LocalName(ce))
+			return nil, fmt.Errorf("%w: unsupported %s parameter %s", ErrUnsupportedTransform, context, domutil.LocalName(ce))
 		}
 		if err := gateInclusiveNamespaces(alg); err != nil {
 			return nil, err
 		}
+		if seen {
+			return nil, fmt.Errorf("%w: multiple ec:InclusiveNamespaces under %s", ErrUnsupportedTransform, context)
+		}
+		seen = true
 		prefixes = px
 	}
 	return prefixes, nil
