@@ -107,6 +107,33 @@ func TestDataOrderingFacets(t *testing.T) {
 </element>`
 		require.NotEmpty(t, compileErrorsFor(t, schema), "invalid integer bound must be a compile error")
 	})
+
+	t.Run("ordering facet on bare built-in token is not a compile error", func(t *testing.T) {
+		t.Parallel()
+		// With NO datatypeLibrary declared, "token" is the EMPTY built-in RELAX NG
+		// datatype: matchData resolves it first and accepts any text, applying no XSD
+		// ordering facets. The compile-time facet check must therefore agree and not
+		// raise a spurious "non-ordered datatype" error, even though XSD's xs:token
+		// would reject an ordering facet. The facet is inert at runtime.
+		schema := `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0">
+  <data type="token"><param name="minInclusive">1</param></data>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"ordering facet on bare built-in token must not be a compile error")
+		require.NoError(t, validateWith(t, schema, `<r>anything</r>`),
+			"bare built-in token accepts any text regardless of the inert facet")
+	})
+
+	t.Run("ordering facet on bare built-in string is not a compile error", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0">
+  <data type="string"><param name="minInclusive">b</param></data>
+</element>`
+		require.Empty(t, compileErrorsFor(t, schema),
+			"ordering facet on bare built-in string must not be a compile error")
+		require.NoError(t, validateWith(t, schema, `<r>anything</r>`),
+			"bare built-in string accepts any text regardless of the inert facet")
+	})
 }
 
 // TestDataDigitFacets covers the XSD totalDigits/fractionDigits <param> facets on

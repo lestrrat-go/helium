@@ -1850,10 +1850,13 @@ var xsdDatatypeNames = map[string]struct{}{
 
 // effectiveXSDDatatype returns the XSD builtin datatype local name a <data>
 // dataType resolves to for facet-applicability purposes, and whether it is an
-// XSD-validated type. It mirrors matchData's resolution: an explicit XSD datatype
-// library names an XSD type directly, and — when no datatypeLibrary was declared
-// anywhere — a bare recognized XSD name resolves to its XSD type (the libxml2
-// compatibility fallback). Anything else (the built-in string/token library, an
+// XSD-validated type. It mirrors matchData's resolution exactly so the
+// compile-time facet check (checkDataFacets) and runtime validation agree: an
+// explicit XSD datatype library names an XSD type directly, and — when no
+// datatypeLibrary was declared anywhere — a bare recognized XSD name resolves to
+// its XSD type (the libxml2 compatibility fallback) EXCEPT bare "string"/"token",
+// which matchData resolves first as the EMPTY built-in RELAX NG library (accept
+// any text, no XSD facets). Anything else (the built-in string/token library, an
 // explicit datatypeLibrary="" reset, or an unknown name) is not an XSD-validated
 // type and returns ("", false).
 func effectiveXSDDatatype(dt *dataType) (string, bool) {
@@ -1865,6 +1868,15 @@ func effectiveXSDDatatype(dt *dataType) (string, bool) {
 		_, ok := xsdDatatypeNames[dt.name]
 		return dt.name, ok
 	case "":
+		// matchData resolves bare "string"/"token" as the EMPTY built-in RELAX NG
+		// library FIRST (they accept any text and apply no XSD facets), before the
+		// libxml2 bare-XSD fallback. So those two names are never XSD-validated at
+		// runtime — treating them as XSD here would raise spurious facet errors at
+		// compile time (e.g. an ordering facet on the built-in "token"). Only the
+		// other bare recognized XSD names take the fallback path.
+		if dt.name == lexicon.TypeString || dt.name == lexicon.TypeToken {
+			return "", false
+		}
 		if _, ok := xsdDatatypeNames[dt.name]; ok && !dt.libraryDeclared {
 			return dt.name, true
 		}
