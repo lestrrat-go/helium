@@ -255,6 +255,14 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				if attvalue != lexicon.NamespaceXML {
 					return pctx.namespaceError(ctx, errors.New("xml namespace prefix mapped to wrong URI"))
 				}
+				// Record the explicitly-declared reserved prefix before the
+				// SkipNS shortcut so a conflicting DTD-supplied default for the
+				// same prefix (e.g. <!ATTLIST r xmlns:xml CDATA "urn:dtd">) is
+				// suppressed by the nsDeclared check during attribute
+				// defaulting. Without this, the explicit binding takes the early
+				// goto and is never recorded, letting the DTD default override
+				// the reserved xml namespace.
+				nsDeclared = append(nsDeclared, attname)
 				goto SkipNS
 			}
 			if attname == lexicon.PrefixXMLNS {

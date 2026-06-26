@@ -234,6 +234,34 @@ func TestDTDDefaultNamespaceDoesNotOverrideExplicit(t *testing.T) {
 		require.NotNil(t, root)
 		require.Equal(t, "urn:dtd", root.URI())
 	})
+
+	t.Run("explicit reserved xml prefix wins over DTD default", func(t *testing.T) {
+		t.Parallel()
+		// An explicit reserved-prefix declaration (xmlns:xml=...) takes an
+		// early SkipNS shortcut during parsing. The fix records it in
+		// nsDeclared so a conflicting DTD default for the same prefix is
+		// suppressed; otherwise xml:lang would bind to "urn:dtd" instead of
+		// the reserved XML namespace.
+		xml := `<!DOCTYPE r [<!ATTLIST r xmlns:xml CDATA "urn:dtd">]>` +
+			`<r xmlns:xml="http://www.w3.org/XML/1998/namespace" xml:lang="en"/>`
+
+		p := helium.NewParser().DefaultDTDAttributes(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+
+		var lang *helium.Attribute
+		for _, a := range root.Attributes() {
+			if a.Name() == "xml:lang" {
+				lang = a
+				break
+			}
+		}
+		require.NotNil(t, lang)
+		require.Equal(t, "http://www.w3.org/XML/1998/namespace", lang.URI())
+	})
 }
 
 func TestGetAttribute(t *testing.T) {
