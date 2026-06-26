@@ -13,14 +13,14 @@ xpath1         → helium, internal/lexicon, internal/domutil
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil
 xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, xslt3/internal/elements
 xsd            → helium, xpath1, internal/lexicon, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs
-relaxng        → helium, internal/lexicon, internal/iofs, internal/xsd/value, internal/xmlchar, internal/uripath
-schematron     → helium, xpath1
+relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xmlchar, internal/uripath
+schematron     → helium, xpath1, internal/xpath
 xpointer       → helium, xpath1, internal/xmlchar
 c14n           → helium, internal/lexicon, internal/domutil
 xmldsig1       → helium, c14n, internal/lexicon, internal/domutil
 xmlenc1        → helium, internal/domutil
 html           → helium, sax, push, internal/xmlchar
-catalog        → helium, internal/catalog, internal/lexicon, internal/xmlchar
+catalog        → helium, internal/catalog, internal/iofs, internal/lexicon, internal/xmlchar
 stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
 helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath, internal/iofs
@@ -38,7 +38,7 @@ internal/uripath → (none)
 internal/xsdregex → (none)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, internal/lexicon, internal/xmlchar
-internal/xpathstream → xpath3
+internal/xpathstream → xpath3, internal/lexicon
 test           → helium
 ```
 
@@ -55,7 +55,7 @@ c14n, xpath1, xpath3, html, catalog, relaxng, stream, xmlenc1
 xmldsig1 (root + c14n + internal/lexicon)
 
 ## Composition layer (depends on processing)
-xsd (root + xpath1 + internal/lexicon), xpointer (root + xpath1 + internal/xmlchar), schematron (root + xpath1), xinclude (root + xpointer + internal/encoding + internal/iofs + internal/lexicon), xslt3 (root + xpath3 + xsd + html + internal/elements), shim (root + stream)
+xsd (root + xpath1 + internal/lexicon), xpointer (root + xpath1 + internal/xmlchar), schematron (root + xpath1 + internal/xpath), xinclude (root + xpointer + internal/encoding + internal/iofs + internal/lexicon), xslt3 (root + xpath3 + xsd + html + internal/elements), shim (root + stream)
 
 ## Application layer
 internal/cli/heliumcmd (CLI implementation)

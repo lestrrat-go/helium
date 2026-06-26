@@ -105,20 +105,21 @@ type execContext struct {
 	atomicTextNodes              map[helium.Node]struct{}      // text nodes created from atomic item serialization
 	nodeMemoIDs                  map[helium.Node]uint64        // stable per-transform node identities for function caching
 	nextNodeMemoID               uint64
-	paramDocOutputDefs           map[*resultDocumentInst]*OutputDef // per-invocation cache for parameter-document output defs
-	primaryCharacterMaps         []string                           // character map names from xsl:result-document targeting primary output
-	primaryResolvedCharMap       map[rune]string                    // resolved character map from parameter-document for primary output
-	primaryOutputOverrides       *OutputDef                         // serialization param overrides from primary xsl:result-document
-	rawResultSequence            xpath3.Sequence                    // raw XDM result sequence (set when initial template has as="...")
-	nsFixupAllowed               map[*helium.Element]struct{}       // elements whose prefix NS was auto-generated (fixup eligible)
-	overridingTemplate           *template                          // currently executing overriding template (for xsl:original)
-	overridingVarDef             *variable                          // currently evaluating overriding variable (for $xsl:original)
-	originalFunc                 xpath3.Function                    // current xsl:original function (set during overriding function call)
-	currentAttrSetOriginal       *attributeSetDef                   // original attribute-set for use-attribute-sets="xsl:original"
-	docOrderCache                *xpath3.DocOrderCache              // shared document-order cache for consistent cross-document ordering
-	packageVarCache              map[*variable]xpath3.Sequence      // cache for package-scoped variable evaluations
-	globalContextAbsent          bool                               // true when global context item is absent (select evaluated to empty)
-	traceWriter                  io.Writer                          // destination for fn:trace output (nil = os.Stderr)
+	paramDocOutputDefs           map[*resultDocumentInst]*OutputDef       // per-invocation cache for parameter-document output defs
+	paramDocPresences            map[*resultDocumentInst]paramDocPresence // per-invocation cache for parameter-document plain-boolean presence flags
+	primaryCharacterMaps         []string                                 // character map names from xsl:result-document targeting primary output
+	primaryResolvedCharMap       map[rune]string                          // resolved character map from parameter-document for primary output
+	primaryOutputOverrides       *OutputDef                               // serialization param overrides from primary xsl:result-document
+	rawResultSequence            xpath3.Sequence                          // raw XDM result sequence (set when initial template has as="...")
+	nsFixupAllowed               map[*helium.Element]struct{}             // elements whose prefix NS was auto-generated (fixup eligible)
+	overridingTemplate           *template                                // currently executing overriding template (for xsl:original)
+	overridingVarDef             *variable                                // currently evaluating overriding variable (for $xsl:original)
+	originalFunc                 xpath3.Function                          // current xsl:original function (set during overriding function call)
+	currentAttrSetOriginal       *attributeSetDef                         // original attribute-set for use-attribute-sets="xsl:original"
+	docOrderCache                *xpath3.DocOrderCache                    // shared document-order cache for consistent cross-document ordering
+	packageVarCache              map[*variable]xpath3.Sequence            // cache for package-scoped variable evaluations
+	globalContextAbsent          bool                                     // true when global context item is absent (select evaluated to empty)
+	traceWriter                  io.Writer                                // destination for fn:trace output (nil = os.Stderr)
 
 	// cached base XPath evaluator — rebuilt when invalidation keys change
 	cachedBaseEval                  xpath3.Evaluator

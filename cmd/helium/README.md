@@ -138,6 +138,8 @@ it. `--max-input-bytes` caps the bytes read per input (default 100 MiB;
 | `--param NAME VALUE` | Set stylesheet parameter to XPath expression |
 | `--stringparam NAME VALUE` | Set stylesheet parameter to string value |
 | `--noout` | Run transformation without producing output (rejected with `--output`) |
+| `--noent` | Substitute entities, loading the stylesheet's external entities (opt-in; off by default). External loading is confined to the stylesheet's directory |
+| `--loaddtd` | Load the stylesheet's external DTD subset (opt-in; off by default). External loading is confined to the stylesheet's directory |
 | `--timing` | Print compile/parse/transform timing to stderr |
 | `--max-input-bytes N` | Cap bytes read per input (default 100 MiB; `0` = unlimited) |
 | `--max-depth N` | Cap element nesting depth (default `256`, `0` = unlimited) |

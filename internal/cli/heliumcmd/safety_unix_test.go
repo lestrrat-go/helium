@@ -33,6 +33,34 @@ func TestLintOutputSelfTruncateRejectedViaSymlink(t *testing.T) {
 	require.Equal(t, content, string(got))
 }
 
+func TestXSLTConfinedFSBlocksSymlinkEscape(t *testing.T) {
+	// A symlink living INSIDE the stylesheet directory but pointing OUTSIDE it
+	// must not let --noent exfiltrate the linked-to file. A purely lexical
+	// containment check passes the symlink (its own path is inside the root) and
+	// os.Open would then follow it; os.Root confinement rejects the escaping
+	// link, so the secret never reaches the output.
+	const secret = "TOPSECRETSYMLINK"
+
+	outsideDir := t.TempDir()
+	secretFile := writeFile(t, outsideDir, "secret.txt", secret)
+
+	dir := t.TempDir()
+	link := filepath.Join(dir, "leak")
+	require.NoError(t, os.Symlink(secretFile, link))
+
+	ssFile := writeFile(t, dir, "main.xsl", `<?xml version="1.0"?>
+<!DOCTYPE xsl:stylesheet [ <!ENTITY x SYSTEM "leak"> ]>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root"><out>&x;</out></xsl:template>
+</xsl:stylesheet>`)
+	xmlFile := writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
+
+	out, _, _ := executeArgs(t, strings.NewReader(""),
+		"xslt", "--noent", ssFile, xmlFile)
+	require.NotContains(t, out, secret,
+		"a symlink inside the stylesheet directory must not escape the confined FS")
+}
+
 func TestLintOutputThroughSymlink(t *testing.T) {
 	// --output onto a symlink must write THROUGH to the real target: the linked
 	// file's content is updated and the link stays a link. os.Rename would

@@ -154,9 +154,21 @@ caller should also:
   `MaxNameLength`, or `MaxContentModelDepth` removes that guard.
 - Be cautious enabling XInclude, catalogs, DTD validation, or
   default-DTD-attribute processing for untrusted input; when you do, keep every
-  external resource allowlisted and size-bounded. `xinclude.Processor.MaxIncludeDepth`
-  bounds the nesting depth of included documents, and `MaxIncludeSize` caps the
-  bytes read per included resource.
+  external resource allowlisted and size-bounded. The `xinclude` processor is
+  also secure by default — with no resolver configured it denies all filesystem
+  access; grant access with `Resolver(xinclude.NewFSResolver(fsys))` backed by a
+  confined `fs.FS` (`os.Root.FS`), or restore historical OS-path access with
+  `xinclude.NewFSResolver(helium.PermissiveFS())`.
+  `xinclude.Processor.MaxIncludeDepth` bounds the nesting depth of included
+  documents, and `MaxIncludeSize` caps the bytes read per included resource.
+
+The `xsd` schema compiler is likewise **secure by default**: `xsd.NewCompiler()`
+denies all nested-schema filesystem access, so an untrusted schema cannot
+disclose local files or exhaust resources through a hostile
+`xs:include`/`xs:import`/`xs:redefine` `schemaLocation`. Each nested schema is
+read through a fixed byte cap regardless of the `fs.FS` in use. Opt into host
+access with `Compiler.FS(helium.PermissiveFS())` or a confined `fs.FS`;
+`Compiler.FS(nil)` restores the deny-all default.
 
 **Caveat:** a permissive or directory-rooted `FS` is not yet a complete sandbox.
 External-resource paths are joined against the document base URI and may be

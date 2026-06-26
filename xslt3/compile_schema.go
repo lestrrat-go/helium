@@ -31,7 +31,13 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// (Compiler.AllowExternalEntities) does NOT extend to schema documents.
 	// External DTDs / general entities in a schema are neither loaded nor
 	// substituted regardless of the compiler's allowExternalEntities setting.
-	doc, err := parseExternalXML(ctx, c.parser, data, "", false, nil, nil)
+	//
+	// Parse with the schema's own URI as the base so doc.URL() carries the
+	// canonical location. The xsd compiler's Compile derives the circular-include
+	// root key from doc.URL(), so a nested xs:include/xs:redefine that points back
+	// at this schema (main -> inc -> main) is recognized as already-loaded instead
+	// of being re-parsed into duplicate components.
+	doc, err := parseExternalXML(ctx, c.parser, data, uri, false, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse schema %q: %w", uri, err)
 	}

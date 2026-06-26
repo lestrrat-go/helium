@@ -368,10 +368,15 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		outDef.JSONNodeOutputMethod = strings.TrimSpace(v)
 	}
 
+	// adnExplicit tracks whether allow-duplicate-names was supplied by either the
+	// xsl:output attribute or the parameter document. It is compile-time merge
+	// bookkeeping only and is deliberately kept off the public OutputDef type.
+	var adnExplicit bool
 	if b, present, err := outputBoolAttr(elem, paramAllowDuplicateNames); err != nil {
 		return err
 	} else if present {
 		outDef.AllowDuplicateNames = b
+		adnExplicit = true
 	}
 
 	if v := getAttr(elem, paramSuppressIndentation); v != "" {
@@ -392,7 +397,11 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 	if v := getAttr(elem, paramParameterDocument); v != "" {
 		outDef.ParameterDocument = v
 		baseURI := stylesheetBaseURI(elem, c.baseURI)
-		if err := c.loadParameterDocument(ctx, outDef, baseURI, v); err != nil {
+		var err error
+		// This applies the parameter-document directly onto the xsl:output's
+		// OutputDef (not a delta to be folded later), so the boolean presence
+		// flags are not needed here and are discarded.
+		if adnExplicit, _, err = c.loadParameterDocument(ctx, outDef, baseURI, v, adnExplicit); err != nil {
 			return err
 		}
 	}
@@ -483,16 +492,31 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		if getAttr(elem, paramJSONNodeOutputMethod) == "" {
 			outDef.JSONNodeOutputMethod = existing.JSONNodeOutputMethod
 		}
+		// Preserve the earlier declaration's value only when neither the
+		// attribute nor the parameter document of this declaration supplied
+		// allow-duplicate-names; a parameter-document supplied value sets
+		// adnExplicit and must not be clobbered.
+		if !adnExplicit {
+			outDef.AllowDuplicateNames = existing.AllowDuplicateNames
+			adnExplicit = c.outputAllowDupExplicit[name]
+		}
 	}
 
 	c.stylesheet.outputs[name] = outDef
+	if c.outputAllowDupExplicit == nil {
+		c.outputAllowDupExplicit = make(map[string]bool)
+	}
+	c.outputAllowDupExplicit[name] = adnExplicit
 	return nil
 }
 
 // loadParameterDocument loads a serialization parameter document (XSLT 3.0 §9.2)
 // and applies its settings to the given OutputDef. Parameters explicitly set on
 // the xsl:output element take precedence; the parameter document provides defaults.
-func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef, baseURI, href string) error {
+// adnExplicit carries the allow-duplicate-names explicitness in and out so the
+// parameter document does not override a value already set on xsl:output and the
+// caller can fold the result into its compile-time merge bookkeeping.
+func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef, baseURI, href string, adnExplicit bool) (bool, paramDocPresence, error) {
 	// Compile-time loading is opt-in: a URIResolver must be configured via
 	// Compiler.URIResolver. There is no implicit filesystem access.
 	loadBytes := func(_ context.Context, uri string) ([]byte, error) {
@@ -506,7 +530,7 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 		defer func() { _ = rc.Close() }()
 		return readResourceBounded(rc, c.maxResourceBytes)
 	}
-	return loadParameterDocumentFromFile(ctx, c.parser, outDef, baseURI, href, loadBytes, false)
+	return loadParameterDocumentFromFile(ctx, c.parser, outDef, baseURI, href, loadBytes, false, adnExplicit)
 }
 
 // loadParameterDocumentFromFile loads a serialization parameter document and
@@ -520,7 +544,21 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 // A runtime failure must NOT also satisfy errors.Is(err, ErrStaticError), so the
 // runtime path never applies the static wrapper. A distinguishable cause such as
 // [ErrResourceTooLarge] survives either way via errors.Join.
-func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser, outDef *OutputDef, baseURI, href string, loadBytes func(context.Context, string) ([]byte, error), runtime bool) error {
+//
+// adnExplicit (allow-duplicate-names explicitness) is threaded in and out rather
+// than stored on the public OutputDef: when already true on input the parameter
+// document must not override the value, and the returned value reports whether
+// the parameter document supplied it so the caller can fold it into its own
+// compile-time merge bookkeeping.
+//
+// The returned paramDocPresence reports which plain-boolean serialization
+// parameters this parameter-document explicitly supplied. These presence flags
+// are kept off the public OutputDef (a plain bool cannot distinguish "omitted"
+// from "explicit false") and travel alongside the resulting delta so
+// foldParamDocOverrides leaves an inherited xsl:output default intact for any
+// boolean the parameter-document omits.
+func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser, outDef *OutputDef, baseURI, href string, loadBytes func(context.Context, string) ([]byte, error), runtime bool, adnExplicit bool) (bool, paramDocPresence, error) {
+	var presence paramDocPresence
 	// Decide absoluteness with xsd.URIScheme (RFC 3986), not filepath.IsAbs or a
 	// "://" substring check: an absolute-URI href may carry a scheme with no
 	// "//" authority (e.g. "urn:params", "file:/p/p.xml") and must pass through
@@ -552,15 +590,15 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 		// than returning the static wrapper. The cause (e.g. ErrResourceTooLarge)
 		// survives the join either way.
 		if runtime {
-			return dynamicErrorCause(errCodeFODC0002, err, "cannot read parameter-document %q: %v", href, err)
+			return adnExplicit, presence, dynamicErrorCause(errCodeFODC0002, err, "cannot read parameter-document %q: %v", href, err)
 		}
 		// The compile-time loader already returns an *XSLTError (XTSE0090);
 		// return it as-is rather than wrapping it in a second XTSE0090.
 		var xe *XSLTError
 		if errors.As(err, &xe) {
-			return err
+			return adnExplicit, presence, err
 		}
-		return staticErrorCause(errCodeXTSE0090, err, "cannot read parameter-document %q: %v", href, err)
+		return adnExplicit, presence, staticErrorCause(errCodeXTSE0090, err, "cannot read parameter-document %q: %v", href, err)
 	}
 	// Serialization parameter documents have a fixed W3C schema and never use
 	// external entities; parse with the injected base parser (or XXE blocked by
@@ -568,16 +606,16 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 	doc, err := secureXMLParser(injected, "").Parse(ctx, data)
 	if err != nil {
 		if runtime {
-			return dynamicError(errCodeFODC0002, "cannot parse parameter-document %q: %v", href, err)
+			return adnExplicit, presence, dynamicError(errCodeFODC0002, "cannot parse parameter-document %q: %v", href, err)
 		}
-		return staticError(errCodeXTSE0090, "cannot parse parameter-document %q: %v", href, err)
+		return adnExplicit, presence, staticError(errCodeXTSE0090, "cannot parse parameter-document %q: %v", href, err)
 	}
 	root := doc.DocumentElement()
 	if root == nil || root.LocalName() != "serialization-parameters" || root.URI() != lexicon.NamespaceSerialization {
 		if runtime {
-			return dynamicError(errCodeFODC0002, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
+			return adnExplicit, presence, dynamicError(errCodeFODC0002, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
 		}
-		return staticError(errCodeXTSE0090, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
+		return adnExplicit, presence, staticError(errCodeXTSE0090, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
 	}
 
 	for child := range helium.Children(root) {
@@ -599,6 +637,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 			if outDef.IndentRaw == "" && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.Indent = b
+					presence.indent = true
 				}
 			}
 		case paramOmitXMLDeclaration:
@@ -644,6 +683,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 			if val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.UndeclarePrefixes = b
+					presence.undeclarePrefixes = true
 				}
 			}
 		case paramUseCharacterMaps:
@@ -670,9 +710,11 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 				}
 			}
 		case paramAllowDuplicateNames:
-			if val != "" {
+			if !adnExplicit && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.AllowDuplicateNames = b
+					presence.allowDuplicateNames = true
+					adnExplicit = true
 				}
 			}
 		case paramItemSeparator:
@@ -683,6 +725,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 			if val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.ByteOrderMark = b
+					presence.byteOrderMark = true
 				}
 			}
 		case paramEscapeURIAttributes:
@@ -721,7 +764,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 			}
 		}
 	}
-	return nil
+	return adnExplicit, presence, nil
 }
 
 func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element) error {

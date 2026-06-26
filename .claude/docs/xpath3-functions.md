@@ -59,7 +59,7 @@ to `ec.schemaDeclarations.IsSubtypeOf` for user-defined schema types.
 `codepoints-to-string`, `string-to-codepoints`, `compare`, `codepoint-equal`, `concat`, `string-join`, `substring`, `string-length`, `normalize-space`, `normalize-unicode`, `upper-case`, `lower-case`, `translate`, `contains`, `starts-with`, `ends-with`, `substring-before`, `substring-after`, `matches`, `replace`, `tokenize`, `analyze-string` (partial; result DOM built with helium)
 
 Regex: use Go `regexp` package by default; fall back to `github.com/dlclark/regexp2` for patterns requiring backreferences, character class subtraction, or large quantifiers. Map XPath flags (`i`,`m`,`s`,`x`) to Go equivalents.
-Compiled regexes are cached by pattern + flags pair so repeated literal calls do not repay translation/compilation cost.
+Compiled regexes are cached by pattern + flags pair so repeated literal calls do not repay translation/compilation cost. The cache (`regexLRUCache` in `regex_cache.go`) is a bounded LRU with a 1024-entry cap and least-recently-used eviction, replacing the old unbounded `sync.Map` so many distinct dynamic patterns can no longer grow process memory without limit.
 
 ### `functions_numeric.go`
 `abs`, `ceiling`, `floor`, `round`, `round-half-to-even`

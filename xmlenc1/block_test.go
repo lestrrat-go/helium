@@ -74,9 +74,11 @@ func TestKeySize(t *testing.T) {
 		ed := &xmlenc1.EncryptedData{
 			Type:             xmlenc1.TypeElement,
 			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM}, // declares 256
-			EncryptedKey: &xmlenc1.EncryptedKey{
-				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES128KeyWrap},
-				CipherValue:      wrapped,
+			EncryptedKeys: []*xmlenc1.EncryptedKey{
+				{
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES128KeyWrap},
+					CipherValue:      wrapped,
+				},
 			},
 			CipherValue: cipher,
 		}

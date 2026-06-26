@@ -680,3 +680,87 @@ func TestExtensionAllGroupPlacement(t *testing.T) {
 </xs:schema>`)
 	})
 }
+
+// TestInlineAllGroupPlacement verifies that an inline xs:all model group nested
+// directly inside an xs:sequence or xs:choice is rejected (cos-all-limited /
+// Schema Component Constraint: All Group Limited, XSD Part 1 §3.8.6): an 'all'
+// group may only constitute the whole content model of a complex type, never be
+// nested under another compositor. Before the fix these compiled with zero
+// diagnostics; /usr/bin/xmllint rejects them, citing the enclosing compositor.
+// An xs:all that IS the sole content model must still compile cleanly.
+func TestInlineAllGroupPlacement(t *testing.T) {
+	t.Parallel()
+
+	compileErrors := func(t *testing.T, schemaXML string) string {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+		requireCompileResultErr(t, err)
+		_, errors := partitionCompileErrors(collector.Errors())
+		return errors
+	}
+
+	const wantMsg = "The content is not valid. Expected is (annotation?, (element | group | choice | sequence | any)*)."
+
+	t.Run("rejects", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name   string
+			schema string
+		}{
+			{
+				name: "all nested in sequence",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:sequence>
+      <xs:all><xs:element name="a" type="xs:string"/></xs:all>
+    </xs:sequence>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "all nested in choice",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:choice>
+      <xs:all><xs:element name="a" type="xs:string"/></xs:all>
+    </xs:choice>
+  </xs:complexType></xs:element>
+</xs:schema>`,
+			},
+			{
+				name: "all nested in a named group's sequence",
+				schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="g"><xs:sequence>
+    <xs:all><xs:element name="a" type="xs:string"/></xs:all>
+  </xs:sequence></xs:group>
+  <xs:element name="root"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>
+</xs:schema>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				require.Contains(t, compileErrors(t, tc.schema), wantMsg)
+			})
+		}
+	})
+
+	// An xs:all that constitutes the entire content model of a complex type is
+	// the only legal placement and must compile cleanly.
+	t.Run("accepts all as sole content model", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root"><xs:complexType>
+    <xs:all><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:all>
+  </xs:complexType></xs:element>
+</xs:schema>`))
+		require.NoError(t, err)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.NewCompiler().Label("test.xsd").ErrorHandler(collector).Compile(t.Context(), doc)
+		require.NoError(t, err)
+		_, errors := partitionCompileErrors(collector.Errors())
+		require.Empty(t, errors)
+	})
+}

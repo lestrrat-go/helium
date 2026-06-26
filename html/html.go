@@ -91,15 +91,17 @@ func (p Parser) Strict(v bool) Parser {
 
 // MaxContentSize bounds, in bytes, the size of a single content section.
 //
-// For raw-text (script/style), RCDATA (title/textarea), and plaintext content
-// it bounds the streaming scanner's per-chunk working set: the parser flushes
-// accumulated content to SAX in temporary chunks that target this size, so the
-// scanner's own peak memory stays bounded even for a gigantic or unterminated
-// section, which still parses successfully. A chunk may slightly exceed the cap
-// because an indivisible token is never split: a whole multi-byte UTF-8 rune (or
-// a resolved character reference) is always emitted intact, so a single rune
-// larger than the cap is emitted whole. An unresolved RCDATA named-reference
-// literal hard-fails with [ErrContentSizeExceeded] when the bytes it would emit
+// For normal data-state text (ordinary element content), raw-text
+// (script/style), RCDATA (title/textarea), and plaintext content it bounds the
+// streaming scanner's per-chunk working set: the parser flushes accumulated
+// content to SAX in temporary chunks that target this size, so the scanner's
+// own peak memory stays bounded even for a gigantic or unterminated section,
+// which still parses successfully. A chunk may slightly exceed the cap because
+// an indivisible token is never split: a whole multi-byte UTF-8 rune (or a
+// resolved character reference) is always emitted intact, so a single rune
+// larger than the cap is emitted whole. An unresolved named-reference literal —
+// in normal data-state text as well as RCDATA — hard-fails with
+// [ErrContentSizeExceeded] when the bytes it would emit
 // ("&" + name + optional ";") exceed the cap — this applies to ANY unresolved
 // literal, whether short, semicolon-terminated, or unbounded. A known-entity
 // (';'-terminated) reference is exempt: it is resolved within a fixed lookahead
@@ -125,6 +127,26 @@ func (p Parser) Strict(v bool) Parser {
 // [ErrContentSizeExceeded] rather than emitting a truncated node. The attribute
 // cap is enforced per byte and also covers '&'-led entity and '&#'-led numeric
 // runs, so an unterminated value cannot buffer without limit.
+//
+// Whitespace-deferral exception: the soft cap on normal data-state text has a
+// HARD-fail case whenever a text run's leading whitespace must be DEFERRED
+// because its insertion target or significance is still undecided. This happens
+// in two situations: under [Parser.StripBlanks](true) (a run is suppressed only
+// when EVERY byte is whitespace, a decision that cannot be made until the run's
+// first non-whitespace byte or its end is seen), and during implied-<body>
+// deferral (the body subtree has not been entered, mode < insertInBody, AND
+// implied insertion is enabled, so the next non-whitespace byte would open the
+// implied <body> and the run's parent is undecided). In either case the scanner
+// refuses to flush a run whose leading whitespace prefix alone reaches the cap
+// with yet more whitespace beyond it, because doing so would require buffering
+// the run unbounded to learn its significance or parent. Such a run fails the
+// parse with [ErrContentSizeExceeded] rather than parsing successfully. Once a
+// non-whitespace byte is seen the run is known significant and is chunked
+// normally (its leading whitespace, including the whole first non-whitespace
+// rune even when the cap splits it, rides along in the first chunk). Default-mode
+// whitespace with a fixed insertion target and no StripBlanks — including under
+// [Parser.SuppressImplied](true) once an element is open — stays a pure soft-cap
+// stream with no hard-fail.
 //
 // A value <= 0 selects the default (16 MiB).
 //

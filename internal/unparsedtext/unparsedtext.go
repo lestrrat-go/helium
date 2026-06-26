@@ -714,6 +714,13 @@ func (r *fsResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
 		return nil, fmt.Errorf("path %q escapes the FS root", name)
 	}
+	// path.Clean and fs.ValidPath only recognize '/' as a separator, so a
+	// backslash-based traversal such as "..\\secret" survives the check above
+	// and could escape the root on a filesystem that treats '\' as a separator.
+	// Re-run the containment check with backslashes normalized to slashes.
+	if slashed := path.Clean(strings.ReplaceAll(name, `\`, "/")); slashed == ".." || strings.HasPrefix(slashed, "../") {
+		return nil, fmt.Errorf("path %q escapes the FS root", name)
+	}
 	return r.fsys.Open(cleaned)
 }
 

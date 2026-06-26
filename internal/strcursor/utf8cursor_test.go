@@ -75,7 +75,7 @@ func TestUTF8CursorScanCharDataSliceSpansBufferEdge(t *testing.T) {
 		chunk: 2,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil)
+	data, n := cur.ScanCharDataSlice(nil, 0)
 	require.Equal(t, 4, n)
 	require.Equal(t, "    ", string(data))
 }
@@ -86,7 +86,7 @@ func TestUTF8CursorScanCharDataSliceConsumesCRLFAcrossBufferEdge(t *testing.T) {
 		chunk: 1,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil)
+	data, n := cur.ScanCharDataSlice(nil, 0)
 	require.Equal(t, 2, n)
 	require.Equal(t, "\n", string(data))
 }
@@ -97,9 +97,23 @@ func TestUTF8CursorScanCharDataSlicePreservesWhitespaceRunAcrossBufferEdge(t *te
 		chunk: 3,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil)
+	data, n := cur.ScanCharDataSlice(nil, 0)
 	require.Equal(t, 7, n)
 	require.Equal(t, strings.Repeat(" ", 7), string(data))
+}
+
+func TestUTF8CursorScanCharDataSliceReturnsOverBudgetRuneWhole(t *testing.T) {
+	// A 3-byte rune with a 1-byte budget: the scan must return the rune whole
+	// (never a partial rune) so the caller makes progress without emitting
+	// invalid UTF-8.
+	cur := strcursor.NewUTF8Cursor(&chunkedReader{
+		data:  []byte("世<"),
+		chunk: 1,
+	})
+
+	data, n := cur.ScanCharDataSlice(nil, 1)
+	require.Equal(t, 3, n, "a lone rune wider than maxBytes is returned whole")
+	require.Equal(t, "世", string(data))
 }
 
 func TestUTF8CursorScanQNameBytesASCIIUnprefixed(t *testing.T) {

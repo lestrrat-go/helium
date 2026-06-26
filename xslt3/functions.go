@@ -737,7 +737,12 @@ func (ec *execContext) resolveDocumentURI(uri string, baseDir string) string {
 		if p, err := iofs.FileURIToPath(cleanURI); err == nil {
 			return uripath.ToSlash(p)
 		}
-		return cleanURI[len("file://"):]
+		// On conversion failure (e.g. a "file:////server/share" UNC URI that
+		// FileURIToPath rejects) do NOT strip the "file://" prefix: that would
+		// yield "//server/share/..." which becomes a UNC path on Windows,
+		// bypassing the local-only policy. Return the original file: URI so a
+		// downstream local-path loader rejects it.
+		return cleanURI
 	}
 	// Decide absoluteness with xsd.URIScheme (RFC 3986), not a "://" substring
 	// check or filepath.IsAbs: an absolute-URI ref may carry a scheme with no

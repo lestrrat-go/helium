@@ -127,6 +127,18 @@ func nameClassesOverlap(a, b *nameClass) bool {
 		return false
 	}
 
+	// ncChoice: overlap if either branch overlaps. Decompose choices before the
+	// anyName handling below so each ncName leaf is tested against the other
+	// class's <except>. Otherwise a choice of names that are all excluded by an
+	// anyName <except> would be wrongly flagged as overlapping, because the
+	// anyName branch short-circuits before reaching the choice decomposition.
+	if a.kind == ncChoice {
+		return nameClassesOverlap(a.left, b) || nameClassesOverlap(a.right, b)
+	}
+	if b.kind == ncChoice {
+		return nameClassesOverlap(a, b.left) || nameClassesOverlap(a, b.right)
+	}
+
 	// anyName: check if except clause excludes the other name class
 	if a.kind == ncAnyName {
 		if a.except != nil && b.kind == ncName {
@@ -143,14 +155,6 @@ func nameClassesOverlap(a, b *nameClass) bool {
 			}
 		}
 		return true
-	}
-
-	// ncChoice: overlap if either branch overlaps
-	if a.kind == ncChoice {
-		return nameClassesOverlap(a.left, b) || nameClassesOverlap(a.right, b)
-	}
-	if b.kind == ncChoice {
-		return nameClassesOverlap(a, b.left) || nameClassesOverlap(a, b.right)
 	}
 
 	// nsName vs nsName
