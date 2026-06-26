@@ -14,6 +14,11 @@ const (
 
 	// MaxDelegates is the maximum number of delegate catalogs per resolution.
 	MaxDelegates = 50
+
+	// MaxNextCatalogs is the maximum number of nextCatalog targets actually
+	// loaded per resolution. It bounds the sibling fan-out so a catalog with
+	// many unique nextCatalog entries cannot trigger an unbounded load.
+	MaxNextCatalogs = 50
 )
 
 // Prefer controls whether public or system identifiers take precedence
