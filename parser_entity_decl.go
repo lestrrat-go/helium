@@ -388,13 +388,18 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				return pctx.error(ctx, err)
 			}
 		} else {
+			// parseExternalID returns (systemURI, publicID). Mirror the external
+			// general-entity path below: guard on the system URI (a SYSTEM
+			// declaration carries no public ID, so guarding on the public ID would
+			// drop every SYSTEM parameter entity), and pass publicID/systemID to
+			// EntityDecl in that order.
 			literal, uri, err = pctx.parseExternalID(ctx)
 			if err != nil {
 				return pctx.error(ctx, ErrValueRequired)
 			}
 
-			if uri != "" {
-				u, err := url.Parse(uri)
+			if literal != "" {
+				u, err := url.Parse(literal)
 				if err != nil {
 					return pctx.error(ctx, err)
 				}
@@ -402,7 +407,7 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 				if u.Fragment != "" {
 					return pctx.error(ctx, errors.New("err uri fragment"))
 				} else if s := pctx.sax; s != nil {
-					switch err := s.EntityDecl(ctx, name, enum.ExternalParameterEntity, literal, uri, ""); err {
+					switch err := s.EntityDecl(ctx, name, enum.ExternalParameterEntity, uri, literal, ""); err {
 					case nil, sax.ErrHandlerUnspecified:
 					default:
 						return pctx.error(ctx, err)
