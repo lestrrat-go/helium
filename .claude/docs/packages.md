@@ -264,7 +264,7 @@ OASIS XML Catalog resolution for public/system IDs and URIs.
 - Const `MaxCatalogSize`; sentinel `ErrCatalogTooLarge`
 - Catalog chaining via nextCatalog; URN urn:publicid: support
 - Files: `catalog.go`, `load.go`
-- Imports: helium, internal/catalog/, internal/lexicon/
+- Imports: helium, internal/catalog/, internal/iofs/, internal/lexicon/, internal/xmlchar/
 
 ## stream/
 
