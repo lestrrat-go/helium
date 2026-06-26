@@ -1106,7 +1106,7 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
 		} else {
 			// 4.2: Derived namespace must be subset of base namespace.
-			if !wildcardNSSubset(td.AnyAttribute, td.BaseType.AnyAttribute) {
+			if !wildcardConstraintSubset(td.AnyAttribute, td.BaseType.AnyAttribute) {
 				msg := fmt.Sprintf("The attribute wildcard is not a valid subset of the wildcard in the base complex type definition %s.", baseQualified)
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component, msg))
 			}
@@ -1126,28 +1126,6 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			}
 		}
 	}
-}
-
-// wildcardNSSubset checks whether the namespace constraint of sub is a subset
-// of the namespace constraint of super, per XSD §3.10.6.
-func wildcardNSSubset(sub, super *Wildcard) bool {
-	// ##any is a superset of everything.
-	if super.Namespace == WildcardNSAny {
-		return true
-	}
-	// If sub is ##any but super is not, sub is not a subset.
-	if sub.Namespace == WildcardNSAny {
-		return false
-	}
-	// Both are specific namespace sets — sub must be contained in super.
-	subSet := wildcardNSSet(sub)
-	superSet := wildcardNSSet(super)
-	for ns := range subSet {
-		if !superSet[ns] {
-			return false
-		}
-	}
-	return true
 }
 
 // wildcardNSSet expands a wildcard's namespace constraint into a set of URIs.
