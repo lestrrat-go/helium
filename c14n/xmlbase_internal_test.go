@@ -72,8 +72,12 @@ func TestJoinURIReference(t *testing.T) {
 
 func TestFaithfulXMLBaseValue(t *testing.T) {
 	// Degenerate / malformed standalone values are rejected, even as a lone term.
-	// Includes raw whitespace, which url.Parse tolerates but libxml2 rejects.
-	for _, v := range []string{"//", "///", "urn://", "http://%", "a b", "urn:foo bar", "http://h/a b"} {
+	// url.Parse tolerates raw whitespace, the "unwise" set, and truncated escapes
+	// that libxml2 rejects.
+	for _, v := range []string{
+		"//", "///", "urn://", "http://%", "a b", "urn:foo bar", "http://h/a b",
+		"a{b}", "a|b", "a\\b", "a^b", "a`b", "a[b]", "a%2", "a%2g",
+	} {
 		require.False(t, faithfulXMLBaseValue(v), "%q should be unfaithful", v)
 	}
 	// Well-formed values (including empty-authority file:/// and protocol-relative

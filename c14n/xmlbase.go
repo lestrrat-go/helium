@@ -229,10 +229,10 @@ func faithfulXMLBaseValue(v string) bool {
 	if v == "" {
 		return true
 	}
-	// url.Parse tolerates a raw space or control byte (e.g. "a b", "urn:foo bar")
-	// that a valid URI reference never contains and libxml2 rejects; screen those
-	// out first.
-	if hasURIControlChar(v) {
+	// url.Parse tolerates raw characters a URI reference may not contain (spaces,
+	// the "unwise" set, bad %-encoding) that libxml2 rejects; validate the lexical
+	// form first, then check for a degenerate empty authority.
+	if !validURIReference(v) {
 		return false
 	}
 	u, err := url.Parse(v)
@@ -242,10 +242,44 @@ func faithfulXMLBaseValue(v string) bool {
 	return !degenerateBaseAuthority(v, u, decodedBasePath(u))
 }
 
-// hasURIControlChar reports whether s contains a byte that cannot appear
-// unescaped in a URI reference (ASCII space, any control character, or DEL).
-func hasURIControlChar(s string) bool {
-	return strings.IndexFunc(s, func(r rune) bool { return r <= ' ' || r == 0x7f }) >= 0
+// validURIReference reports whether s is lexically a URI reference per RFC 2396
+// (the grammar libxml2's parser enforces): every byte is unreserved, reserved,
+// "#", or part of a well-formed "%"HEXHEX escape. This rejects the "unwise" set
+// ("{}|\\^`[]"), spaces, control bytes, and truncated escapes — values libxml2
+// canonicalization fails on.
+func validURIReference(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '%' {
+			if i+2 >= len(s) || !isHexDigit(s[i+1]) || !isHexDigit(s[i+2]) {
+				return false
+			}
+			i += 2
+			continue
+		}
+		if !validURIChar(c) {
+			return false
+		}
+	}
+	return true
+}
+
+func validURIChar(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return true
+	}
+	switch c {
+	case '-', '_', '.', '!', '~', '*', '\'', '(', ')': // unreserved marks
+		return true
+	case ';', '/', '?', ':', '@', '&', '=', '+', '$', ',', '#': // reserved + fragment
+		return true
+	}
+	return false
+}
+
+func isHexDigit(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 // emptyAuthority reports whether a URI reference carries a "//" authority marker

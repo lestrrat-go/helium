@@ -565,6 +565,31 @@ func TestC14N11StrictFailClosedOmittedAttr(t *testing.T) {
 	require.Error(t, err, "strict mode must reject a degenerate xml:base on an omitted element")
 }
 
+// TestC14N10StrictFailClosedXMLBase verifies the strict fail-closed guard also
+// covers C14N 1.0, where xml:base is an ordinary (visible or inherited) attribute
+// rather than a fixup result — caught at the shared writeAttribute chokepoint.
+func TestC14N10StrictFailClosedXMLBase(t *testing.T) {
+	t.Parallel()
+	// Visible own degenerate xml:base.
+	xml := `<?xml version="1.0"?><root><child xml:base="urn://">t</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	nodes := evaluateNodeSet(t, doc, "//child | //child/@xml:base | //child/text()", nil)
+
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err, "default C14N 1.0 stays permissive")
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).StrictXMLAttributes().CanonicalizeTo(doc)
+	require.Error(t, err, "strict C14N 1.0 must reject a degenerate visible xml:base")
+
+	// Inherited degenerate xml:base from an omitted ancestor across a gap.
+	xml2 := `<?xml version="1.0"?><a xml:base="urn://"><hidden><child>t</child></hidden></a>`
+	doc2, err := helium.NewParser().Parse(t.Context(), []byte(xml2))
+	require.NoError(t, err)
+	nodes2 := collectDescendantElements(t, doc2)
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes2).StrictXMLAttributes().CanonicalizeTo(doc2)
+	require.Error(t, err, "strict C14N 1.0 must reject a degenerate inherited xml:base")
+}
+
 // TestC14N10ExcludedOwnXMLLang covers the C14N 1.0 inheritance-blocking
 // divergence. With a rendered element's own xml:lang excluded from the node set,
 // the default (libxml2) blocks only on rendered attributes and so imports the

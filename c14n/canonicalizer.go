@@ -138,7 +138,7 @@ func checkRelativeNamespaceURI(e *helium.Element, ns *helium.Namespace) error {
 	// (xmlParseURI + scheme==NULL). url.Parse tolerates a raw space inside an
 	// opaque part (e.g. "urn:foo bar") that libxml2's parser rejects, so reject
 	// any whitespace/control byte up front — a valid URI never contains one.
-	if hasURIControlChar(uri) {
+	if !validURIReference(uri) {
 		return fmt.Errorf("c14n: invalid namespace URI %q on element %s", uri, e.Name())
 	}
 	parsed, err := url.Parse(uri)
@@ -481,11 +481,6 @@ func (c *canonicalizer) renderOmittedAttributes(e *helium.Element) error {
 	for _, attr := range attrs {
 		if !c.isVisible(attr) {
 			continue
-		}
-		// An omitted element emits its xml:base verbatim (no fixup); strict mode
-		// still rejects a value it could not canonicalize faithfully.
-		if c.strict() && attr.URI() == lexicon.NamespaceXML && attr.LocalName() == xmlBaseLocalName && !faithfulXMLBaseValue(attr.Value()) {
-			return fmt.Errorf("c14n: xml:base on element %s cannot be canonicalized faithfully", e.Name())
 		}
 		entries = append(entries, attrSortEntry{
 			attr:      attr,
@@ -920,11 +915,10 @@ func (c *canonicalizer) processXMLBase11(e *helium.Element, entries *[]attrSortE
 	// attribute (if visible) but never seeds a fixup. An empty value is dropped,
 	// matching the join's empty result.
 	if c.strict() && !hiddenHasBase {
+		// No omitted-ancestor base: own xml:base renders as an ordinary attribute
+		// (validated at the writeAttribute chokepoint), never seeding a fixup.
 		if hasOwn && c.isVisible(ownAttr) {
 			if v := ownAttr.Value(); v != "" {
-				if !faithfulXMLBaseValue(v) {
-					return fmt.Errorf("c14n: xml:base on element %s cannot be canonicalized faithfully", e.Name())
-				}
 				c.setXMLBaseEntry(entries, v)
 			}
 		}
@@ -979,6 +973,22 @@ func (c *canonicalizer) setXMLBaseEntry(entries *[]attrSortEntry, value string) 
 }
 
 func (c *canonicalizer) writeAttribute(entry attrSortEntry) error {
+	// Strict mode is fail-closed on xml:base: every emitted value — an ordinary
+	// or inherited attribute (C14N 1.0 and exclusive), an omitted-element
+	// attribute, or a synthetic 1.1 fixup result — must be canonicalizable
+	// faithfully. This is the single emission chokepoint; the chain-term check in
+	// reduceXMLBase additionally catches a degenerate input that joins into a
+	// faithful-looking result.
+	if c.strict() && entry.nsURI == lexicon.NamespaceXML && entry.localName == xmlBaseLocalName {
+		v := entry.fixupValue
+		if !entry.hasFixup && entry.attr != nil {
+			v = entry.attr.Value()
+		}
+		if !faithfulXMLBaseValue(v) {
+			return fmt.Errorf("c14n: xml:base %q cannot be canonicalized faithfully", v)
+		}
+	}
+
 	if _, err := io.WriteString(c.out, " "); err != nil {
 		return err
 	}
