@@ -462,6 +462,70 @@ func TestEntityValueMalformedGeneralRefViaPE(t *testing.T) {
 	})
 }
 
+// TestExternalSystemParameterEntityCaptured proves that an external SYSTEM
+// parameter entity declared in the external subset is registered. parseExternalID
+// returns (systemURI, publicID); the external-PE declaration path must guard on
+// the systemURI and record it. Guarding on the publicID instead drops a SYSTEM PE
+// entirely (a SYSTEM declaration has no public ID), so it would never be stored.
+//
+// A control general entity declared on the line before proves the external subset
+// is loaded; only the SYSTEM external PE was being dropped.
+func TestExternalSystemParameterEntityCaptured(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		"d.dtd": {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe SYSTEM "pe.ent">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	_, ctrlOK := doc.GetEntity("ctrl")
+	require.True(t, ctrlOK, "control general entity must be stored, proving the external subset loaded")
+
+	ent, ok := doc.GetParameterEntity("pe")
+	require.True(t, ok, "external SYSTEM parameter entity must be registered")
+	require.Equal(t, enum.ExternalParameterEntity, ent.EntityType())
+	require.Equal(t, "pe.ent", ent.SystemID(), "the SYSTEM literal must be recorded as the system ID")
+	require.Empty(t, ent.ExternalID(), "a SYSTEM declaration has no public ID")
+}
+
+// TestExternalPublicParameterEntityCaptured proves the PUBLIC external parameter
+// entity path records the public and system IDs in the correct fields rather than
+// swapping them.
+func TestExternalPublicParameterEntityCaptured(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		"d.dtd": {Data: []byte(
+			`<!ENTITY ctrl "control">` + "\n" +
+				`<!ENTITY % pe PUBLIC "-//x//pe" "pe.ent">`)},
+	}
+	const input = `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+	doc, err := helium.NewParser().BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	ent, ok := doc.GetParameterEntity("pe")
+	require.True(t, ok, "external PUBLIC parameter entity must be registered")
+	require.Equal(t, enum.ExternalParameterEntity, ent.EntityType())
+	require.Equal(t, "pe.ent", ent.SystemID(), "the system literal must be the system ID")
+	require.Equal(t, "-//x//pe", ent.ExternalID(), "the public ID must be the external ID")
+}
+
 // TestEntityValueRefValidationIsSideEffectFree proves that the reference
 // validation in parseEntityValue does NOT perturb the entity-amplification
 // accounting. validateEntityValueRefs PE-expands the literal to scan for
