@@ -1076,8 +1076,9 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
 					component+", attribute use '"+au.Name.Local+"'", msg))
 			}
-		} else if td.BaseType.AnyAttribute == nil {
-			// No matching attribute and no wildcard in base.
+		} else if td.BaseType.AnyAttribute == nil || !wildcardMatches(td.BaseType.AnyAttribute, au.Name.NS) {
+			// No matching attribute, and no base wildcard whose namespace
+			// constraint admits this derived attribute's namespace.
 			msg := fmt.Sprintf("Neither a matching attribute use, nor a matching wildcard exists in the base complex type definition %s.", baseQualified)
 			c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType",
 				component+", attribute use '"+au.Name.Local+"'", msg))

@@ -68,4 +68,55 @@ func TestRestrictionAttrNamespace(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	t.Run("rejects derived attr outside base wildcard namespace", func(t *testing.T) {
+		t.Parallel()
+		// Base has an attribute wildcard restricted to ##targetNamespace
+		// (urn:t). The derived restriction declares an unqualified ({}foo)
+		// attribute, whose absent namespace is NOT admitted by the base
+		// wildcard, so the derivation must be rejected: no matching base
+		// attribute use and no base wildcard that covers {}foo.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t" attributeFormDefault="unqualified">
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##targetNamespace"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute name="foo" type="xs:string"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, schema), noMatchingUse)
+	})
+
+	t.Run("accepts derived attr admitted by base wildcard namespace", func(t *testing.T) {
+		t.Parallel()
+		// Base has an attribute wildcard covering ##targetNamespace (urn:t).
+		// The derived restriction declares a {urn:t}foo attribute (a global,
+		// hence target-namespace, attribute), which the base wildcard admits,
+		// so the derivation is valid.
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t" attributeFormDefault="qualified">
+  <xs:attribute name="foo" type="xs:string"/>
+  <xs:complexType name="Base">
+    <xs:sequence/>
+    <xs:anyAttribute namespace="##targetNamespace"/>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:restriction base="t:Base">
+        <xs:sequence/>
+        <xs:attribute ref="t:foo"/>
+        <xs:anyAttribute namespace="##targetNamespace"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="t:Derived"/>
+</xs:schema>`
+		require.Empty(t, compileFatalErrors(t, schema))
+	})
 }
