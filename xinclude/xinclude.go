@@ -1015,6 +1015,9 @@ func checkMultiRootInclusion(inc *helium.Element, nodes []helium.Node) error {
 
 // ownerDocument returns the document owning n, or n itself when n is a Document.
 func ownerDocument(n helium.Node) *helium.Document {
+	if n == nil {
+		return nil
+	}
 	if doc, ok := helium.AsNode[*helium.Document](n); ok {
 		return doc
 	}

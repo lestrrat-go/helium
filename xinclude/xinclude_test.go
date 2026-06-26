@@ -380,6 +380,13 @@ func TestXIncludeBasicXML(t *testing.T) {
 	require.True(t, found, "included <chapter> element not found")
 }
 
+func TestXIncludeProcessTreeNilNode(t *testing.T) {
+	t.Parallel()
+	count, err := xinclude.NewProcessor().ProcessTree(t.Context(), nil)
+	require.NoError(t, err)
+	require.Equal(t, 0, count)
+}
+
 func TestXIncludeText(t *testing.T) {
 	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
