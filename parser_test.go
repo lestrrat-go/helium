@@ -492,6 +492,21 @@ func TestParseExternalEntityMalformedEncoding(t *testing.T) {
 	require.Error(t, err, "malformed UTF-16 external entity must fail rather than inserting U+FFFD")
 }
 
+func TestParseUSASCIIStrict(t *testing.T) {
+	t.Parallel()
+
+	// A document declaring US-ASCII is strictly 7-bit; a byte >= 0x80 is
+	// malformed even when it forms a valid UTF-8 multibyte sequence.
+	highByte := "<?xml version=\"1.0\" encoding=\"US-ASCII\"?><root>\xc3\xa9</root>"
+	_, err := helium.NewParser().Parse(t.Context(), []byte(highByte))
+	require.Error(t, err, "US-ASCII document with a byte >= 0x80 must be rejected")
+
+	// Valid 7-bit US-ASCII still parses.
+	valid := `<?xml version="1.0" encoding="US-ASCII"?><root>hello</root>`
+	_, err = helium.NewParser().Parse(t.Context(), []byte(valid))
+	require.NoError(t, err, "valid 7-bit US-ASCII must parse")
+}
+
 func TestParseExternalDTDSizeLimit(t *testing.T) {
 	t.Parallel()
 
