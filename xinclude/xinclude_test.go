@@ -1880,6 +1880,92 @@ func TestXIncludeSameDocumentXPointerNoResolver(t *testing.T) {
 		"same-document XPointer must copy the referenced node")
 }
 
+// TestXIncludeShorthandPointerDefaultResolver verifies that a same-document
+// shorthand pointer (href="#a", which selects an element by ID) succeeds under
+// the deny-all default resolver even when a BaseURI is configured: the bare
+// fragment has no document part, so it must be evaluated against the in-memory
+// snapshot rather than re-loaded through the (deny-all) resolver.
+func TestXIncludeShorthandPointerDefaultResolver(t *testing.T) {
+	t.Parallel()
+
+	t.Run("xml:id", func(t *testing.T) {
+		t.Parallel()
+		doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<source><item xml:id="a">hello</item></source>
+			<target><xi:include href="#a"/></target>
+		</root>`)
+
+		count, err := xinclude.NewProcessor().
+			BaseURI("main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err, `href="#a" is a same-document reference and must not go through the resolver`)
+		require.Equal(t, 1, count)
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.Equal(t, 2, strings.Count(s, "hello"),
+			"the shorthand pointer must copy the xml:id-selected element into target")
+	})
+
+	t.Run("internal DTD ID rebuild", func(t *testing.T) {
+		t.Parallel()
+		// An internal-subset ATTLIST ID populates the document's interned ID
+		// table; the snapshot must rebuild that table mapped onto its own copied
+		// elements so GetElementByID (and thus the shorthand pointer) resolves.
+		doc := parseXML(t, `<!DOCTYPE root [
+			<!ATTLIST item id ID #IMPLIED>
+		]>
+		<root xmlns:xi="http://www.w3.org/2001/XInclude">
+			<source><item id="a">hello</item></source>
+			<target><xi:include href="#a"/></target>
+		</root>`)
+		require.NotEmpty(t, doc.IDTable(), "internal DTD ID should be interned")
+
+		count, err := xinclude.NewProcessor().
+			BaseURI("main.xml").
+			NoXIncludeMarkers().NoBaseFixup().
+			Process(t.Context(), doc)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		s, werr := helium.WriteString(doc)
+		require.NoError(t, werr)
+		require.Equal(t, 2, strings.Count(s, "hello"),
+			"the snapshot's rebuilt ID table must resolve the shorthand pointer")
+	})
+}
+
+// TestXIncludeShorthandPointerSkipIDs verifies that the same-document snapshot
+// honors the source document's SkipIDs state: a source parsed with SkipIDs(true)
+// resolves NO ids, so a shorthand pointer must resolve nothing in the snapshot
+// too — it must NOT start resolving xml:id in the copy (which the previous
+// helium.CopyDoc-based snapshot would wrongly do).
+func TestXIncludeShorthandPointerSkipIDs(t *testing.T) {
+	t.Parallel()
+
+	src := `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<source><item xml:id="a">hello</item></source>
+		<target><xi:include href="#a"/></target>
+	</root>`
+	doc, err := helium.NewParser().SkipIDs(true).Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	require.True(t, doc.SkipIDs())
+	require.Nil(t, doc.GetElementByID("a"), "SkipIDs source must resolve no ids")
+
+	count, perr := xinclude.NewProcessor().
+		BaseURI("main.xml").
+		NoXIncludeMarkers().NoBaseFixup().
+		Process(t.Context(), doc)
+	require.NoError(t, perr)
+	require.Equal(t, 1, count, "the include resolves to nothing and is removed")
+
+	s, werr := helium.WriteString(doc)
+	require.NoError(t, werr)
+	require.Equal(t, 1, strings.Count(s, "hello"),
+		"SkipIDs snapshot must not resolve the shorthand pointer, leaving target empty")
+}
+
 // TestXIncludeParserInjection verifies that a parser injected via
 // Processor.Parser governs the resource limits used to parse included
 // documents (here, the element-name-length cap), while XInclude continues to
