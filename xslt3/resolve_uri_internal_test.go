@@ -156,6 +156,11 @@ func TestResolveDocumentURIAbsolute(t *testing.T) {
 		// GOOS-dependent via FileURIToPath, so it is not asserted in this
 		// cross-OS table.)
 		{"file triple slash", "file:///abs/x.xml", testDocsDir, "/abs/x.xml"},
+		// A "file:////server/share" UNC URI is rejected by FileURIToPath; the
+		// fallback must NOT strip "file://" (which would yield the UNC path
+		// "//server/share/x.xml" and reach a remote SMB host on Windows). The
+		// original file: URI is returned unchanged so a local-path loader rejects it.
+		{"file unc rejected not stripped", "file:////server/share/x.xml", testDocsDir, "file:////server/share/x.xml"},
 		// Windows-shaped local base resolves with forward-slash output on any OS
 		// (a plain string here, so the Windows behavior is exercised on Linux).
 		{"windows base relative ref", testChildXML, `C:\docs`, "C:/docs/child.xml"},

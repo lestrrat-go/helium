@@ -189,6 +189,14 @@ func catalogFilePath(ref string) (string, bool, error) {
 		return "", false, fmt.Errorf("catalog: invalid file URI %q: no local path", ref)
 	}
 
+	// A "file:////server/share" URI parses to an empty host with a path that
+	// begins with "//"; on Windows fileURIPath would turn that into a UNC path
+	// (\\server\share) reaching a remote SMB host, defeating the local-only
+	// policy. Reject the UNC form outright (matching iofs.FileURIToPath).
+	if strings.HasPrefix(u.Path, "//") {
+		return "", false, fmt.Errorf("catalog: UNC file URI %q is not a local path", ref)
+	}
+
 	return fileURIPath(u.Path), true, nil
 }
 

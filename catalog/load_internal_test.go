@@ -150,6 +150,14 @@ func TestCatalogFilePathEmptyPathRejected(t *testing.T) {
 	require.Error(t, err)
 }
 
+// catalogFilePath must reject a "file:////server/share" UNC URI. Its path
+// component begins with "//"; on Windows fileURIPath would produce the UNC path
+// \\server\share reaching a remote SMB host, defeating the local-only policy.
+func TestCatalogFilePathUNCRejected(t *testing.T) {
+	_, _, err := catalogFilePath("file:////server/share/catalog.xml")
+	require.Error(t, err)
+}
+
 // catalogFilePath must keep a POSIX "file:///C:/..." path absolute. The
 // drive-letter slash strip is Windows-only; on POSIX "/C:/tmp/..." is a valid
 // absolute path, so this asserts deterministically on the Linux CI host.
