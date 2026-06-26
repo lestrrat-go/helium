@@ -910,12 +910,20 @@ func (p *parser) parseCharacters() {
 	limit := p.cfg.contentLimit()
 	// Blank-stripping (StripBlanks/noBlanks) decides whether a text node is
 	// significant by inspecting the WHOLE logical run: a run is suppressed only
-	// when every byte is whitespace. Capping the run at MaxContentSize here would
-	// split a run like " a" into a leading whitespace-only chunk and "a"; the
-	// whitespace chunk would then be suppressed independently by emitCharacters,
-	// dropping significant leading whitespace. When noBlanks is active, read the
-	// whole run so the run-level decision stays correct.
-	capChunk := !p.cfg.noBlanks
+	// when every byte is whitespace. Capping the run at MaxContentSize naively
+	// would split a run like " a" into a leading whitespace-only chunk and "a";
+	// the whitespace chunk would then be suppressed independently by
+	// emitCharacters, dropping significant leading whitespace. So under noBlanks
+	// the cap must not split a run before its significance is known. It must still
+	// stay bounded, though: once a non-whitespace byte appears the run is known
+	// significant and is chunked normally (the leading whitespace rides along in
+	// the first chunk, so it is never emitted — and suppressed — on its own); but
+	// a run whose whitespace prefix alone reaches the cap with yet more
+	// whitespace beyond it HARD-FAILS with ErrContentSizeExceeded rather than
+	// buffer unbounded, matching how the cap behaves for indivisible constructs
+	// elsewhere.
+	noBlanks := p.cfg.noBlanks
+	sawNonWS := false
 	n := 0
 	for {
 		b := p.cur.PeekAt(n)
@@ -927,10 +935,41 @@ func (p *parser) parseCharacters() {
 			// the preceding whitespace in head, then handle the rest
 			break
 		}
+		if !isWhitespaceByte(b) {
+			sawNonWS = true
+		}
 		n++
-		if capChunk && n >= limit {
+		if n < limit {
+			continue
+		}
+		if !noBlanks {
 			break
 		}
+		// The run has reached the cap. Under noBlanks the cap may not split a
+		// run before its whitespace-significance is decided.
+		if sawNonWS {
+			// Already known significant: this chunk holds a non-whitespace byte
+			// (plus any leading whitespace) so emitCharacters will not suppress
+			// it. Chunk here; the main loop re-enters for the remainder.
+			break
+		}
+		// Still all-whitespace at the cap. Peek the next byte to decide.
+		nb := p.cur.PeekAt(n)
+		if nb == 0 || nb == '<' || nb == '&' || (inHead && !isWhitespaceByte(nb)) {
+			// The run ends at the cap and was entirely whitespace; emit
+			// suppresses it.
+			break
+		}
+		if isWhitespaceByte(nb) {
+			// More whitespace beyond the cap: the run's significance cannot be
+			// decided without unbounded buffering. Fail rather than buffer.
+			p.fatalErr = fmt.Errorf("character data exceeds %d bytes before its whitespace significance can be determined: %w", limit, ErrContentSizeExceeded)
+			return
+		}
+		// nb is non-whitespace: the run IS significant but its leading whitespace
+		// prefix has filled the cap. Continue so the first non-whitespace byte
+		// joins this chunk, keeping the leading whitespace from being emitted (and
+		// suppressed) on its own. The next cap check sees sawNonWS and chunks.
 	}
 	// A cap-truncated run may land mid-rune; back off to a whole-rune boundary
 	// so the emitted chunk is valid UTF-8.

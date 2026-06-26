@@ -198,6 +198,21 @@ func TestOptionsNoBlanksTinyChunkPreservesLeadingSpace(t *testing.T) {
 		"significant leading whitespace must survive tiny-chunk StripBlanks")
 }
 
+func TestOptionsNoBlanksOverCapHardErrors(t *testing.T) {
+	// Under StripBlanks a text run's whitespace-significance can only be decided
+	// after the whole run is known, so the cap may not split it early. But a run
+	// whose leading whitespace prefix alone overruns the cap (with yet more
+	// whitespace beyond it) cannot be decided without unbounded buffering, so it
+	// must HARD-FAIL with ErrContentSizeExceeded rather than buffer the run whole.
+	input := `<p>  a</p>`
+	_, err := html.NewParser().
+		StripBlanks(true).
+		MaxContentSize(1).
+		Parse(t.Context(), []byte(input))
+	require.ErrorIs(t, err, html.ErrContentSizeExceeded,
+		"over-cap whitespace prefix under StripBlanks must fail, not buffer unbounded")
+}
+
 func TestOptionsNoError(t *testing.T) {
 	var errorCalled bool
 	sax := &html.SAXCallbacks{}
