@@ -45,6 +45,7 @@ func TraverseAxis(ctx context.Context, axis AxisType, node helium.Node, maxNodes
 type DocOrderCache struct { ... }
 func (c *DocOrderCache) BuildFrom(root helium.Node)
 func (c *DocOrderCache) Position(n helium.Node) int
+func (c *DocOrderCache) Reset() // clear cache; callers MUST call after mutating the document
 func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
 func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
 func DocumentRoot(n helium.Node) helium.Node
